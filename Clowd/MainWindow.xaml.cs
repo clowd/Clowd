@@ -109,13 +109,13 @@ namespace Clowd
             if (textPassword.Password == "********" && savedPassword != null)
                 pass = savedPassword;
             else
-                pass = Helpers.PasswordHelper.GetHashFromPassword(textPassword.Password);
+                pass = Utilities.PasswordHelper.GetHashFromPassword(textPassword.Password);
             var details = new Tuple<string, string>(textUsername.Text, pass);
             var login = await UploadManager.Login(details);
 
             if (login == LoginResult.Valid)
             {
-                Helpers.PasswordHelper.SaveUserAndHash(details.Item1, details.Item2);
+                //Helpers.PasswordHelper.SaveUserAndHash(details.Item1, details.Item2);
                 closeHintPanel.Visibility = Visibility.Visible;
 
                 LoginCallback();

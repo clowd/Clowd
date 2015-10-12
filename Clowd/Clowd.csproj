@@ -120,12 +120,11 @@
     <Compile Include="CustomWindow.xaml.cs">
       <DependentUpon>CustomWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Helpers\Hotkey.cs" />
-    <Compile Include="Helpers\PasswordHelper.cs" />
+    <Compile Include="Utilities\Hotkey.cs" />
+    <Compile Include="Utilities\PasswordHelper.cs" />
     <Compile Include="Capture\ScreenUtil.cs" />
-    <Compile Include="Helpers\SysInfo.cs" />
-    <Compile Include="Helpers\Taskbar.cs" />
-    <Compile Include="Helpers\VisualTreeHelperEx.cs" />
+    <Compile Include="Utilities\SysInfo.cs" />
+    <Compile Include="Utilities\VisualTreeHelperEx.cs" />
     <Compile Include="HomePage.xaml.cs">
       <DependentUpon>HomePage.xaml</DependentUpon>
     </Compile>
@@ -170,8 +169,6 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Helpers\GlobalHook.cs" />
-    <Compile Include="Helpers\WindowHelper.cs" />
     <Page Include="CustomMetroWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -202,9 +199,6 @@
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Helpers\MouseHook.cs" />
-    <Compile Include="Helpers\NotifyArea.cs" />
-    <Compile Include="Helpers\NotifyIcon.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>

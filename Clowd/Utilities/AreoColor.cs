@@ -11,13 +11,15 @@ namespace Clowd.Utilities
 {
     public class AreoColor
     {
-        public static Color GetAeroColor()
+        /// <summary>
+        /// Returns an exciting color based on the current system accent color, or the default clowd one 
+        /// if the DWM is turned off or the color is boring.
+        /// </summary>
+        public static Color GetColor()
         {
-            bool dwm_enabled;
-            Interop.DwmApi.DWMAPI.DwmIsCompositionEnabled(out dwm_enabled);
-            if (dwm_enabled)
+            if (SysInfo.IsDWMEnabled)
             {
-                if (Environment.OSVersion.Version >= new Version(6, 2)) //windows 8 or greater
+                if (SysInfo.IsWindows8OrLater) 
                 {
                     var selected = GetImmersiveColor("ImmersiveStartSelectionBackground");
                     var hsl = HSLColor.FromRGB(selected);
@@ -32,7 +34,7 @@ namespace Clowd.Utilities
                     }
                     return hsl.ToRGB();
                 }
-                else //windows 7 (lower than windows 7 not supported)
+                else 
                 {
                     DWM_COLORIZATION_PARAMS parameters;
                     DwmGetColorizationParameters(out parameters);
@@ -51,6 +53,7 @@ namespace Clowd.Utilities
                 return GetAeroColorFromNumeric();
             }
         }
+
         private static Color GetImmersiveColor(string immersiveColorName)
         {
             IntPtr pElementName = Marshal.StringToHGlobalUni(immersiveColorName);

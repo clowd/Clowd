@@ -45,6 +45,7 @@ namespace NotifyIconLib
         private MouseHook dragHook = null;
         private Clowd.DropWindow dropWindow = null;
         private Point mouseDownPoint = default(Point);
+        private DateTime mouseDownTime;
         private bool leftMouseDown = false;
         private DateTime lastStateRefresh;
         private TaskbarIconData stateCache;
@@ -152,14 +153,15 @@ namespace NotifyIconLib
         {
             var point = new Point(e.Location.X, e.Location.Y);
             var mouseDown = leftMouseDown;
-            if (mouseDown && DateTime.Now - lastStateRefresh > TimeSpan.FromSeconds(3))
+            var dragging = leftMouseDown && DateTime.Now - mouseDownTime > TimeSpan.FromMilliseconds(300);
+            if (dragging && DateTime.Now - lastStateRefresh > TimeSpan.FromSeconds(2))
             {
                 stateCache = GetNotifyIconState();
                 taskbarCache = GetTaskBarData();
                 UpdateDropWindowFromCache();
                 lastStateRefresh = DateTime.Now;
             }
-            if (mouseDown && stateCache.Location.Contains(point) && stateCache.State == TaskbarIconState.Pinned)
+            if (dragging && stateCache.Location.Contains(point) && stateCache.State == TaskbarIconState.Pinned)
             {
                 if (leftMouseDown && !((Rect)taskbarCache.rc).Contains(mouseDownPoint) && !dropWindow.IsVisible)
                 {
@@ -190,8 +192,9 @@ namespace NotifyIconLib
                 var wndClass = Clowd.Interop.USER32EX.GetWindowClassName(hWnd);
                 if (wndClass != "ToolbarWindow32")
                 {
-                    leftMouseDown = true;
+                    mouseDownTime = DateTime.Now;
                     mouseDownPoint = new Point(e.Location.X, e.Location.Y);
+                    leftMouseDown = true;
                 }
             }
         }
