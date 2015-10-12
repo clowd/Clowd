@@ -59,6 +59,7 @@
     </Compile>
     <Compile Include="Interop\Point.cs" />
     <Compile Include="Interop\WindowClass.cs" />
+    <Compile Include="NotifyArea.cs" />
     <Compile Include="PopupActivationMode.cs" />
     <Compile Include="RoutedEventHelper.cs" />
     <Compile Include="Interop\WinApi.cs" />
@@ -73,6 +74,7 @@
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Taskbar.cs" />
     <Compile Include="TaskbarIcon.cs" />
     <Compile Include="TaskbarIcon.Declarations.cs" />
     <Compile Include="TaskbarIcon.DragDrop.cs" />

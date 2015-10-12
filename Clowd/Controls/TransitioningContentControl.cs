@@ -12,6 +12,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Controls;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using Clowd.Utilities;
 
 namespace Clowd.Controls
 {
