@@ -27,6 +27,11 @@ namespace Clowd.Capture
         public Cursor CanvasCursor { get; private set; } = Cursors.Cross;
         public bool ShowTips { get; private set; } = true;
         public bool ShowMagnifier { get; private set; } = true;
+        public double PixelSizeX { get { return DpiScale.DownScaleX(1); } }
+        public double PixelSizeY { get { return DpiScale.DownScaleY(1); } }
+        public Thickness TopRightThickness { get { return new Thickness(PixelSizeX, 0, 0, PixelSizeY); } }
+        public Thickness BottomLeftThickness { get { return new Thickness(0, PixelSizeY, PixelSizeX, 0); } }
+        public Thickness NormalThickness { get { return new Thickness(PixelSizeX, PixelSizeY, PixelSizeX, PixelSizeY); } }
         public IntPtr Handle { get; private set; }
 
         private bool draggingArea = false;
@@ -157,9 +162,19 @@ namespace Clowd.Capture
                 capturing = true;
                 areaSizeIndicator.Visibility = Visibility.Visible;
                 ShowTips = true;
-                CanvasCursor = Cursors.Cross;
+                CanvasCursor = Cursors.None;
                 _magnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Hidden;
                 toolActionBar.Visibility = Visibility.Hidden;
+                crosshairBottomLeft.Width = rootGrid.ActualWidth;
+                crosshairBottomLeft.Height = rootGrid.ActualHeight;
+                crosshairTopRight.Width = rootGrid.ActualWidth;
+                crosshairTopRight.Height = rootGrid.ActualHeight;
+                //Canvas.SetLeft(crosshairBottomLeft, -10);
+                //Canvas.SetBottom(crosshairBottomLeft, rootGrid.Height + 10);
+                //Canvas.SetTop(crosshairTopRight, -10);
+                //Canvas.SetRight(crosshairTopRight, rootGrid.Width + 10);
+                crosshairBottomLeft.Visibility = Visibility.Visible;
+                crosshairTopRight.Visibility = Visibility.Visible;
             }
             else
             {
@@ -171,9 +186,12 @@ namespace Clowd.Capture
                 }
                 areaSizeIndicator.Visibility = Visibility.Hidden;
                 _magnifier.Visibility = Visibility.Hidden;
+                crosshairBottomLeft.Visibility = Visibility.Hidden;
+                crosshairTopRight.Visibility = Visibility.Hidden;
                 ShowTips = false;
                 CanvasCursor = Cursors.Arrow;
                 toolActionBar.Visibility = Visibility.Visible;
+
             }
             UpdateCanvasPlacement();
         }
@@ -214,6 +232,7 @@ namespace Clowd.Capture
 
                 AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
                 ResizingAdorner myAdorner = new ResizingAdorner(selectionBorder, style);
+                myAdorner.SetupCustomResizeHandling(UpdateCanvasSelection);
                 adornerLayer.Add(myAdorner);
 
                 Point mouseDownPos = default(Point);
@@ -258,7 +277,7 @@ namespace Clowd.Capture
                 selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseDownEvent);
                 selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseMoveEvent);
                 selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseUpEvent);
-                selectionBorder.Cursor = Cursors.Cross;
+                selectionBorder.Cursor = Cursors.None;
             }
         }
 
@@ -282,6 +301,12 @@ namespace Clowd.Capture
         private void RootGrid_MouseMove(object sender, MouseEventArgs e)
         {
             var currentPoint = e.GetPosition(rootGrid);
+
+            Canvas.SetLeft(crosshairTopRight, currentPoint.X - 1);
+            Canvas.SetBottom(crosshairTopRight, (rootGrid.ActualHeight - currentPoint.Y));
+            Canvas.SetTop(crosshairBottomLeft, currentPoint.Y - 1);
+            Canvas.SetRight(crosshairBottomLeft, (rootGrid.ActualWidth - currentPoint.X));
+
             if (draggingArea)
             {
                 double x, y, width, height;

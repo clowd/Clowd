@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:metro="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro" 
         xmlns:local="clr-namespace:Clowd" Icon="Images/default.ico"
+        xmlns:controls="clr-namespace:Clowd.Controls"
         mc:Ignorable="d" BorderBrush="{StaticResource WindowTitleColorBrush}"
         BorderThickness="1" ResizeMode="CanResizeWithGrip">
     <metro:MetroWindow.IconTemplate>
@@ -26,5 +27,7 @@
             </Grid>
         </DataTemplate>
     </metro:MetroWindow.IconTemplate>
+    <controls:TransitioningContentControl Margin="0,0,0,0" x:Name="transitioningContent">
 
+    </controls:TransitioningContentControl>
 </metro:MetroWindow>

@@ -1,5 +1,4 @@
 ﻿using Ionic.Zip;
-using Clowd.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -35,9 +34,9 @@ namespace Clowd
         public static App Singleton { get; private set; }
         public AppSettings Settings { get; private set; }
 
-        private TaskbarIcon taskbarIcon;
-        private bool prtscrWindowOpen = false;
-        private HotKey prntscrHotkey;
+        private TaskbarIcon _taskbarIcon;
+        private bool _prtscrWindowOpen = false;
+        private HotKey _captureHotkey;
         private System.Timers.Timer _updateTimer;
         private NAppUpdate.Framework.UpdateManager _updateManager;
         private ResourceDictionary _lightBase;
@@ -46,21 +45,28 @@ namespace Clowd
         public Window CreateThemedWindowForControl(string title, Control content)
         {
             Window window;
+            double titleHeight, borderWidth;
             if (Settings.UseCustomWindowChrome)
             {
-                window = new CustomMetroWindow();
-                window.Content = content;
+                var mw = new CustomMetroWindow();
+                mw.WindowTransitionsEnabled = false;
+                mw.transitioningContent.Content = content;
+                window = mw;
+                titleHeight = DpiScale.UpScaleY(40);
+                borderWidth = 1;
             }
             else
             {
                 var cw = new CustomWindow();
                 cw.transitioningContent.Content = content;
                 window = cw;
+                titleHeight = SystemParameters.WindowCaptionHeight + SystemParameters.ResizeFrameHorizontalBorderHeight;
+                borderWidth = SystemParameters.ResizeFrameVerticalBorderWidth;
             }
 
             window.Title = title;
-            window.Height = content.Height;
-            window.Width = content.Width;
+            window.Height = content.Height + titleHeight + borderWidth;
+            window.Width = content.Width + borderWidth * 2;
             content.Width = Double.NaN;
             content.Height = Double.NaN;
             content.VerticalAlignment = VerticalAlignment.Stretch;
@@ -79,10 +85,10 @@ namespace Clowd
             SetupDpiScaling();
             //SetupTrayIcon();
             LoadSettings();
-            Settings.UseCustomWindowChrome = false;
             SetupAccentColors(Settings.AccentColorScheme == AccentScheme.System ? Settings.SystemAccentColor : Settings.UserAccentColor, Settings.ColorScheme);
             var window = CreateThemedWindowForControl("Clowd", new LoginPage());
             window.Show();
+            new Capture.CaptureWindow().Show();
             if (Settings.FirstRun)
             {
                 // there were no settings to load, so save a new settings file.
@@ -123,6 +129,7 @@ namespace Clowd
             //        this.Shutdown();
             //};
         }
+
         private void LoadSettings()
         {
             AppSettings tmp;
@@ -246,11 +253,11 @@ namespace Clowd
         }
         private void SetupTrayIcon()
         {
-            taskbarIcon = new TaskbarIcon();
-            taskbarIcon.IconSource = new BitmapImage(new Uri("pack://application:,,,/Images/default.ico"));
-            taskbarIcon.ToolTipText = "Clowd\nClick me or drop something on me\nto see what I can do!";
-            taskbarIcon.TrayDropEnabled = true;
-            taskbarIcon.TrayDrop += taskbarIcon_Drop;
+            _taskbarIcon = new TaskbarIcon();
+            _taskbarIcon.IconSource = new BitmapImage(new Uri("pack://application:,,,/Images/default.ico"));
+            _taskbarIcon.ToolTipText = "Clowd\nClick me or drop something on me\nto see what I can do!";
+            _taskbarIcon.TrayDropEnabled = true;
+            _taskbarIcon.TrayDrop += taskbarIcon_Drop;
 
             //this is left for reference, not sure if the new notification icon will have the same problem or not.
 
@@ -263,10 +270,25 @@ namespace Clowd
         }
         private void SetupGlobalHotkeys()
         {
-            prntscrHotkey = new HotKey(System.Windows.Input.Key.PrintScreen, KeyModifier.None, PrintScreenPressed, false);
-            if (!prntscrHotkey.Register())
+            var capture = Settings.CaptureSettings.StartCaptureShortcut;
+            _captureHotkey = new HotKey(capture.Key, capture.Modifiers, (key) =>
+            {
+                //if (prtscrWindowOpen) return;
+                //mouseHook.Stop();
+                //ScreenshotWindow scw = new ScreenshotWindow();
+                //scw.LoadBitmap(ScreenUtil.Capture());
+                //prtscrWindowOpen = true;
+                //scw.Show();
+                //scw.Closed += (s, e) =>
+                //{
+                //    mouseHook.Start();
+                //    prtscrWindowOpen = false;
+                //};
+            }, false);
+            if (!_captureHotkey.Register())
             {
                 //hotkey was not registered, because some other application already has registered it or it is reserved.
+                //TODO: Show some kind of error message here.
             }
         }
         private void SetupUpdateTimer()
@@ -277,7 +299,7 @@ namespace Clowd
             _updateManager.ReinstateIfRestarted();
             _updateManager.CleanUp();
 
-            _updateTimer = new System.Timers.Timer(1000 * 60 * 60 * 3);
+            _updateTimer = new System.Timers.Timer(Settings.UpdateCheckInterval.TotalMilliseconds);
             _updateTimer.Elapsed += OnCheckForUpdates;
             OnCheckForUpdates(null, null);
             _updateTimer.Start();
@@ -285,9 +307,9 @@ namespace Clowd
 
         protected override void OnExit(ExitEventArgs e)
         {
-            taskbarIcon.Dispose();
-            if (prntscrHotkey != null)
-                prntscrHotkey.Dispose();
+            _taskbarIcon.Dispose();
+            if (_captureHotkey != null)
+                _captureHotkey.Dispose();
             base.OnExit(e);
         }
         private async void OnCheckForUpdates(object sender, System.Timers.ElapsedEventArgs e)
@@ -310,31 +332,15 @@ namespace Clowd
             //await Task.Factory.FromAsync(upd.BeginPrepareUpdates, upd.EndPrepareUpdates, null);
             await Clowd.Shared.Extensions.ToTask(() => _updateManager.PrepareUpdates());
 
-            while (prtscrWindowOpen || UploadManager.UploadsInProgress > 0 || UploadManager.UploadWindowVisible
-                   || Application.Current.Windows.Cast<Window>().Any(w => w is MainWindow))
+            while (UploadManager.UploadsInProgress > 0 || Application.Current.Windows.Cast<Window>().Any(w => w.IsVisible))
             {
                 await Task.Delay(10000);
             }
 
-
-            prntscrHotkey.Dispose();
+            OnExit(null);
             _updateManager.ApplyUpdates(true, false, false);
         }
 
-        private void PrintScreenPressed(HotKey hotKey)
-        {
-            //if (prtscrWindowOpen) return;
-            //mouseHook.Stop();
-            //ScreenshotWindow scw = new ScreenshotWindow();
-            //scw.LoadBitmap(ScreenUtil.Capture());
-            //prtscrWindowOpen = true;
-            //scw.Show();
-            //scw.Closed += (s, e) =>
-            //{
-            //    mouseHook.Start();
-            //    prtscrWindowOpen = false;
-            //};
-        }
         private void loginStatusButtonPressed(object sender, EventArgs e)
         {
             foreach (Window w in Application.Current.Windows)
