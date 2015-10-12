@@ -63,8 +63,8 @@
                 </CombinedGeometry>
             </Path.Data>
         </Path>
-        <Canvas HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-            <UserControl Name="selectionBorder" Cursor="Cross"
+        <Canvas Name="dynamicCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <UserControl Name="selectionBorder" Cursor="None"
                      Width="{Binding CroppingRectangle.Width }"
                      Height="{Binding CroppingRectangle.Height }"
                      Canvas.Left="{Binding CroppingRectangle.X }"
@@ -113,6 +113,29 @@
                     </TextBlock>
                 </StackPanel>
             </Border>
+            <Grid Name="crosshairTopRight" Visibility="Hidden" SnapsToDevicePixels="True">
+                <Border BorderThickness="{Binding NormalThickness}" BorderBrush="{StaticResource HighlightBrush}" Opacity=".7" SnapsToDevicePixels="True" />
+                <Rectangle Stroke="#A5FFFFFF" StrokeThickness="{Binding NormalThickness}" StrokeDashArray="8 8" Opacity=".6" SnapsToDevicePixels="True"  />
+                <Border BorderThickness="{Binding TopRightThickness}" BorderBrush="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"
+                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Width="150" Height="150"/>
+                <Rectangle Width="75" Height="5" VerticalAlignment="Bottom" HorizontalAlignment="Left" SnapsToDevicePixels="True"
+                           Margin="75,0,0,-2" Fill="{StaticResource HighlightBrush}" />
+                <Rectangle Width="5" Height="75" VerticalAlignment="Bottom" HorizontalAlignment="Left" SnapsToDevicePixels="True"
+                           Margin="-2,0,0,75" Fill="{StaticResource HighlightBrush}" />
+            </Grid>
+            <Grid Name="crosshairBottomLeft" Visibility="Hidden" SnapsToDevicePixels="True">
+                <Border BorderThickness="{Binding NormalThickness}" BorderBrush="{StaticResource HighlightBrush}" Opacity=".7" SnapsToDevicePixels="True"/>
+                <Rectangle Stroke="#A5FFFFFF" StrokeThickness="{Binding NormalThickness}" StrokeDashArray="8 8" Opacity=".6"   SnapsToDevicePixels="True"/>
+                <Border BorderThickness="{Binding BottomLeftThickness}" BorderBrush="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Width="150" Height="150" />
+                <Rectangle Width="75" Height="5" VerticalAlignment="Top" HorizontalAlignment="Right"
+                           Margin="0,-2,75,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"/>
+                <Rectangle Width="5" Height="75" VerticalAlignment="Top" HorizontalAlignment="Right"
+                           Margin="0,75,-2,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True" />
+            </Grid>
+            <!--<Viewbox Width="100" Height="100">
+                <Path Width="60.85" Height="61.1" Fill="Red" Data="M15,32.05H0v-3h15V32.05z M31.8,61.1v-15h-3v15H31.8z M60.851,29.05h-15v3h15V29.05z M31.8,15V0h-3v15H31.8z M45.851,30.05 H15v1h30.851V30.05z M30.8,45.975V15.125h-1v30.851H30.8z" />
+            </Viewbox>-->
             <Border Name="toolActionBar" Background="{StaticResource HighlightBrush}" Visibility="Hidden">
                 <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
                     <Border Width="50" Height="50">
@@ -246,7 +269,7 @@
             <controls:Magnifier x:Name="_magnifier"
                                 Visibility="{Binding ShowMagnifier, Converter={StaticResource BoolToVis}}"
                                 Radius="55"
-                                MouseOffset="60,60"
+                                MouseOffset="70,70"
                                 ZoomFactor="0.2"
                                 FrameType="Circle"
                                 BorderBrush="{StaticResource HighlightBrush}"

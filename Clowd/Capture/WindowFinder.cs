@@ -1,5 +1,4 @@
-﻿using Clowd.Helpers;
-using System;
+﻿using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -53,7 +52,7 @@ namespace Clowd.Capture
                 if (window.WindowRect.IntersectsWith(w.WindowRect))
                 {
                     //only return true if the covering handle is owned by a different process.
-                    //this is not 100% accurate, but is satisfactory until a new method can be made
+                    //this is not 100% accurate, but is satisfactory until a new method can be designed
                     if (window.ProcessID != w.ProcessID)
                         return true;
                 }
