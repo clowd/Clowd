@@ -1,0 +1,34 @@
+﻿<UserControl x:Class="Clowd.LoginPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+            xmlns:metro="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro" 
+             xmlns:local="clr-namespace:Clowd"
+             DataContext="{Binding RelativeSource={RelativeSource Self}}"
+             mc:Ignorable="d" 
+             Width="500" Height="450">
+    <Grid>
+        <StackPanel Orientation="Vertical"  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Width="200">
+            <Viewbox Width="150">
+                <Path Fill="{StaticResource AccentColorBrush}" Width="75.15" Height="53.70" Data="{StaticResource N44}" />
+            </Viewbox>
+            <TextBlock FontSize="20" Margin="0,20,0,0" HorizontalAlignment="Center">Login</TextBlock>
+            <TextBox x:Name="textUsername" Margin="0,10,0,0" FontSize="12"
+                     metro:TextBoxHelper.Watermark="Username"
+                     metro:TextBoxHelper.UseFloatingWatermark="True">
+            </TextBox>
+            <PasswordBox x:Name="textPassword" Margin="0,5,0,0" FontSize="12"
+                     metro:TextBoxHelper.Watermark="Password"
+                     metro:TextBoxHelper.UseFloatingWatermark="True">
+            </PasswordBox>
+            <Button x:Name="loginButton" Content="Login" HorizontalAlignment="Center" FontSize="12" Click="loginButton_Click" VerticalAlignment="Top" Width="75" Margin="0,10,0,0" Cursor="Hand"/>
+            <Label Margin="0,10,0,0" Padding="2" Foreground="{Binding Foreground}" HorizontalAlignment="Center" Cursor="Hand" MouseDown="register_Click">
+                <TextBlock TextDecorations="Underline">Register an account</TextBlock>
+            </Label>
+            <Label MouseDown="useAnon_Click" Margin="0,5,0,0" FontSize="12" Padding="2" Foreground="{Binding Foreground}" HorizontalAlignment="Center" Cursor="Hand">
+                <TextBlock TextDecorations="Underline">Use Clowd anonymously</TextBlock>
+            </Label>
+        </StackPanel>
+    </Grid>
+</UserControl>

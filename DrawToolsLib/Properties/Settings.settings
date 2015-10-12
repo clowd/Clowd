@@ -1,0 +1,21 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="DrawToolsLib.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="ConvertBackNotSupported" Type="System.String" Scope="User">
+      <Value Profile="(Default)">.ConvertBack function is not supported</Value>
+    </Setting>
+    <Setting Name="UnknownException" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Unknown exception</Value>
+    </Setting>
+    <Setting Name="UnknownText" Type="System.String" Scope="User">
+      <Value Profile="(Default)">??</Value>
+    </Setting>
+    <Setting Name="DefaultFontFamily" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Tahoma</Value>
+    </Setting>
+    <Setting Name="NoInfoInXMLFile" Type="System.String" Scope="User">
+      <Value Profile="(Default)">XML file doesn't contain required information</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

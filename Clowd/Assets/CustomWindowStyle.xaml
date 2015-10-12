@@ -1,0 +1,35 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:Clowd.Controls">
+    <Style TargetType="Window" x:Key="CustomWindowTitleBar">
+        <Setter Property="WindowChrome.WindowChrome">
+            <Setter.Value>
+                <WindowChrome CaptionHeight="{x:Static SystemParameters.CaptionHeight}" />
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Window">
+                    <DockPanel LastChildFill="True">
+                        <Border Background="LightBlue" DockPanel.Dock="Top" 
+                            Height="{x:Static SystemParameters.CaptionHeight}" x:Name="titlebar">
+                            <Grid>
+                                <TextBlock Text="{TemplateBinding Title}" 
+                                        Margin="10,0,0,0"
+                                        VerticalAlignment="Center">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect Color="White" ShadowDepth="3"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                            </Grid>
+                        </Border>
+                        <Border Background="{TemplateBinding Background}" BorderBrush="LightGray" 
+                            BorderThickness="1" Padding="4">
+                            <ContentPresenter/>
+                        </Border>
+                    </DockPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

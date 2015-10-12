@@ -1,0 +1,346 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{24FDFCC0-C491-412E-8EFA-E6CC352523DA}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Clowd</RootNamespace>
+    <AssemblyName>Clowd</AssemblyName>
+    <TargetFrameworkVersion>v4.5.1</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <WarningLevel>4</WarningLevel>
+    <TargetFrameworkProfile />
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>Images\default.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Ionic.Zip">
+      <HintPath>..\packages\DotNetZip.1.9.2\lib\net20\Ionic.Zip.dll</HintPath>
+    </Reference>
+    <Reference Include="MahApps.Metro, Version=1.1.2.0, Culture=neutral, PublicKeyToken=f4fb5a3c4d1e5b4f, processorArchitecture=MSIL">
+      <HintPath>..\packages\MahApps.Metro.1.1.2.0\lib\net45\MahApps.Metro.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="NAppUpdate.Framework, Version=0.3.0.0, Culture=neutral, PublicKeyToken=d1f1d1f19f9e5a56, processorArchitecture=MSIL">
+      <HintPath>..\packages\NAppUpdate.Framework.0.3.0.0\lib\net20\NAppUpdate.Framework.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="PropertyChanged, Version=1.50.3.0, Culture=neutral, PublicKeyToken=ee3ee20bcf148ddd, processorArchitecture=MSIL">
+      <HintPath>..\packages\PropertyChanged.Fody.1.50.3\lib\dotnet\PropertyChanged.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="RT.Util">
+      <HintPath>..\lib\RT.Util.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Threading.Tasks.Dataflow, Version=4.5.14.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Microsoft.Tpl.Dataflow.4.5.14\lib\portable-net45+win8\System.Threading.Tasks.Dataflow.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Windows.Interactivity, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\packages\MahApps.Metro.1.1.2.0\lib\net45\System.Windows.Interactivity.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Xml" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Xaml">
+      <RequiredTargetFramework>4.0</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+  </ItemGroup>
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Compile Include="Capture\CaptureWindow.xaml.cs">
+      <DependentUpon>CaptureWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Capture\WindowFinder.cs" />
+    <Compile Include="Controls\FadingScrollViewer.cs" />
+    <Compile Include="Controls\MagnifierAdorner.cs" />
+    <Compile Include="Controls\OutlinedText.cs" />
+    <Compile Include="Controls\OutlinedTextBlock.cs" />
+    <Compile Include="Controls\ProgressRing.cs" />
+    <Compile Include="Controls\ResizingAdorner.cs" />
+    <Compile Include="Controls\SizeAwareProgressBar.cs" />
+    <Compile Include="Controls\TransitioningContentControl.cs" />
+    <Compile Include="Controls\UploadProgressBar.cs" />
+    <Compile Include="Converters\BoolToInverseConverter.cs" />
+    <Compile Include="Converters\BoolToVisibilityConverter2.cs" />
+    <Compile Include="Converters\BorderThicknessToStrokeThicknessConverter.cs" />
+    <Compile Include="Converters\ColorToBrushConverter.cs" />
+    <Compile Include="Converters\DoubleToDecimalConverter.cs" />
+    <Compile Include="Converters\DoubleToIntegerConverter.cs" />
+    <Compile Include="Converters\FontSizeConverter.cs" />
+    <Compile Include="Converters\IsEqualOrGreaterThanConverter.cs" />
+    <Compile Include="Converters\MathConverter.cs" />
+    <Compile Include="Converters\MethodToValueConverter.cs" />
+    <Compile Include="Converters\RaduisConverter.cs" />
+    <Compile Include="Converters\RectConverter.cs" />
+    <Compile Include="Converters\StringNullOrEmptyToVisibilityConverter.cs" />
+    <Compile Include="Converters\ValueConverterGroup.cs" />
+    <Compile Include="CustomMetroWindow.xaml.cs">
+      <DependentUpon>CustomMetroWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="CustomWindow.xaml.cs">
+      <DependentUpon>CustomWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Helpers\Hotkey.cs" />
+    <Compile Include="Helpers\PasswordHelper.cs" />
+    <Compile Include="Capture\ScreenUtil.cs" />
+    <Compile Include="Helpers\SysInfo.cs" />
+    <Compile Include="Helpers\Taskbar.cs" />
+    <Compile Include="Helpers\VisualTreeHelperEx.cs" />
+    <Compile Include="HomePage.xaml.cs">
+      <DependentUpon>HomePage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="LoginPage.xaml.cs">
+      <DependentUpon>LoginPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="MainWindow.xaml.cs">
+      <DependentUpon>MainWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="ScreenshotWindow.xaml.cs">
+      <DependentUpon>ScreenshotWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UploadManager.cs" />
+    <Compile Include="UploadsWindow.xaml.cs">
+      <DependentUpon>UploadsWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Settings.cs" />
+    <Compile Include="Utilities\AreoColor.cs" />
+    <Compile Include="Utilities\Extensions.cs" />
+    <Compile Include="Utilities\HSLColor.cs" />
+    <Page Include="Assets\CustomWindowStyle.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Assets\Magnifier.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Assets\ProgressRing.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Assets\TransitioningContentControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Capture\CaptureWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Helpers\GlobalHook.cs" />
+    <Compile Include="Helpers\WindowHelper.cs" />
+    <Page Include="CustomMetroWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="CustomWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="HomePage.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="LoginPage.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="MainWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="ScreenshotWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UploadsWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Helpers\MouseHook.cs" />
+    <Compile Include="Helpers\NotifyArea.cs" />
+    <Compile Include="Helpers\NotifyIcon.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <None Include="packages.config" />
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <AppDesigner Include="Properties\" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Screenshot\Print-26.png" />
+    <Resource Include="Images\Info-50white.png" />
+    <Resource Include="Images\Info-50.png" />
+    <Resource Include="Images\Screenshot\picker.png" />
+    <Resource Include="Images\Screenshot\Edit-26.png" />
+    <Resource Include="Images\Screenshot\Ellipse-26.png" />
+    <Resource Include="Images\Screenshot\External-26.png" />
+    <Resource Include="Images\Screenshot\Line-26.png" />
+    <Resource Include="Images\Screenshot\Process-26.png" />
+    <Resource Include="Images\Screenshot\Rectangle-26.png" />
+    <Resource Include="Images\Screenshot\Save-26.png" />
+    <Resource Include="Images\Screenshot\Search-26.png" />
+    <Resource Include="Images\Screenshot\Undo-26.png" />
+    <Resource Include="Images\Screenshot\Text.png" />
+    <Resource Include="FodyWeavers.xml" />
+    <Resource Include="Images\Screenshot\Cancel-26.png" />
+    <Resource Include="Images\Screenshot\Clipboard-26.png" />
+    <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Clowd.ComServer\Clowd.ComServer.csproj">
+      <Project>{a2c9e886-d1fe-4ca9-8e9c-209adab0040c}</Project>
+      <Name>Clowd.ComServer</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj">
+      <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
+      <Name>Clowd.Interop</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ColorPickerLib\ColorPickerLib.csproj">
+      <Project>{99e90579-62fc-4898-b168-24f7dbd3a34d}</Project>
+      <Name>ColorPickerLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj">
+      <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>
+      <Name>DrawToolsLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NotifyIconLib\NotifyIconLib.csproj">
+      <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>
+      <Name>NotifyIconLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\PhotoLoaderLib\PhotoLoaderLib.csproj">
+      <Project>{7c68c43b-0e5c-4b9f-9f49-045caa39d8b3}</Project>
+      <Name>PhotoLoaderLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
+      <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
+      <Name>Clowd.Shared</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\upload-basket.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Screenshot\Copy-26.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\External Link-26.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Checkmark-26.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Double Down-26.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Screenshot\View File-26.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\defaultold.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\icon-white.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Clowd-250.png" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <Resource Include="Images\Key-24.png" />
+    <Resource Include="Images\Visible-24.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Image File-50.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Settings-32.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\External Link-32.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\default.ico" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="..\packages\Fody.1.29.3\build\dotnet\Fody.targets" Condition="Exists('..\packages\Fody.1.29.3\build\dotnet\Fody.targets')" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Fody.1.29.3\build\dotnet\Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Fody.1.29.3\build\dotnet\Fody.targets'))" />
+    <Error Condition="!Exists('..\packages\PropertyChanged.Fody.1.50.3\build\dotnet\PropertyChanged.Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\PropertyChanged.Fody.1.50.3\build\dotnet\PropertyChanged.Fody.targets'))" />
+  </Target>
+  <Import Project="..\packages\PropertyChanged.Fody.1.50.3\build\dotnet\PropertyChanged.Fody.targets" Condition="Exists('..\packages\PropertyChanged.Fody.1.50.3\build\dotnet\PropertyChanged.Fody.targets')" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
