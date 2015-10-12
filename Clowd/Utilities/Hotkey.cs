@@ -27,12 +27,12 @@ namespace Clowd.Utilities
         private bool _disposed = false;
 
         public Key Key { get; private set; }
-        public KeyModifier KeyModifiers { get; private set; }
+        public ModifierKeys KeyModifiers { get; private set; }
         public Action<HotKey> Action { get; private set; }
         public int Id { get; set; }
 
         // ******************************************************************
-        public HotKey(Key k, KeyModifier keyModifiers, Action<HotKey> action, bool register = true)
+        public HotKey(Key k, ModifierKeys keyModifiers, Action<HotKey> action, bool register = true)
         {
             Key = k;
             KeyModifiers = keyModifiers;
