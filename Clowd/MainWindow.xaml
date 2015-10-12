@@ -1,0 +1,200 @@
+﻿<metro:MetroWindow x:Class="Clowd.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Clowd"
+        xmlns:metro="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro" 
+        xmlns:controls="clr-namespace:Clowd.Controls"
+        xmlns:conv="clr-namespace:Clowd.Converters"
+        xmlns:phloader="clr-namespace:PhotoLoader;assembly=PhotoLoader"                  
+        WindowTitleBrush="{Binding Foreground}"  IconEdgeMode="Aliased" BorderThickness="1" BorderBrush="{Binding Foreground}"
+        DataContext="{Binding RelativeSource={RelativeSource Self}}" ResizeMode="CanResizeWithGrip" Foreground="#3b96d2"
+        Title="Clowd" Height="600" Width="500" Icon="Images/default.ico" FontFamily="Microsoft Sans Serif">
+    <metro:MetroWindow.Resources>
+        <ResourceDictionary>
+            <BooleanToVisibilityConverter x:Key="bool2vis" />
+            <conv:StringNullOrEmptyToVisibilityConverter x:Key="strnull2vis" />
+            <ControlTemplate x:Key="NoScroll">
+                <ItemsPresenter></ItemsPresenter>
+            </ControlTemplate>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Colors.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Accents/Blue.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Accents/BaseLight.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </metro:MetroWindow.Resources>
+    <metro:MetroWindow.IconTemplate>
+        <DataTemplate>
+            <Grid Width="{TemplateBinding Width}"
+                 Height="{TemplateBinding Height}"
+                 RenderOptions.EdgeMode="Aliased"
+                 RenderOptions.BitmapScalingMode="HighQuality">
+                <Image Margin="5" Source="Images/icon-white.ico"></Image>
+            </Grid>
+        </DataTemplate>
+    </metro:MetroWindow.IconTemplate>
+    <metro:MetroWindow.RightWindowCommands>
+        <metro:WindowCommands>
+            <Button Content="global settings" Click="globalSettings_Click" />
+        </metro:WindowCommands>
+    </metro:MetroWindow.RightWindowCommands>
+    <metro:MetroWindow.Flyouts>
+        <metro:FlyoutsControl x:Name="flyoutsControl" >
+            <metro:Flyout Header="Global Settings" Theme="Accent"
+                          Position="Right" IsModal="True" IsOpenChanged="Flyout_IsOpenChanged">
+                <Grid Margin="10" 
+                      Width="300">
+                    <StackPanel Margin="20,0,20,0">
+                        <StackPanel.Resources>
+                            <Thickness x:Key="cntMargin" Bottom="10"></Thickness>
+                        </StackPanel.Resources>
+                        <CheckBox Foreground="{DynamicResource IdealForegroundColorBrush}" IsChecked="True" Margin="{StaticResource cntMargin}">Start Clowd with windows</CheckBox>
+                        <CheckBox Foreground="{DynamicResource IdealForegroundColorBrush}" IsChecked="False" Margin="{StaticResource cntMargin}">Close window upon login</CheckBox>
+                        <Button Padding="10,5,10,5" Width="150" HorizontalAlignment="Left" Style="{DynamicResource SquareButtonStyle}" Margin="{StaticResource cntMargin}">Check for updates</Button>
+                    </StackPanel>
+                </Grid>
+            </metro:Flyout>
+        </metro:FlyoutsControl>
+    </metro:MetroWindow.Flyouts>
+    <Grid Name="contentGrid">
+        <StackPanel Name="homeGrid" Visibility="Collapsed" Orientation="Vertical" HorizontalAlignment="Stretch" VerticalAlignment="Top" Margin="30,20,30,0">
+            <TextBlock FontSize="20"  HorizontalAlignment="Left">My Clowd</TextBlock>
+            <controls:FadingScrollViewer HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Hidden" Margin="0,10,0,0" FadedEdgeThickness="40" FadedEdgeOpacity="0" FadedEdgeFalloffSpeed="4">
+                <controls:FadingScrollViewer.Template>
+                    <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                        <Grid x:Name="Grid" Background="{TemplateBinding Background}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Border x:Name="PART_ScrollContentPresenterContainer">
+                                <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" CanContentScroll="{TemplateBinding CanContentScroll}" CanHorizontallyScroll="False" CanVerticallyScroll="False" ContentTemplate="{TemplateBinding ContentTemplate}" Content="{TemplateBinding Content}" Grid.Column="0" Margin="{TemplateBinding Padding}" Grid.Row="0"/>
+                            </Border>
+                            <ScrollBar x:Name="PART_VerticalScrollBar" AutomationProperties.AutomationId="VerticalScrollBar" Cursor="Arrow" Grid.Column="1" Maximum="{TemplateBinding ScrollableHeight}" Minimum="0" Grid.Row="0" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" Value="{Binding VerticalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}" ViewportSize="{TemplateBinding ViewportHeight}"/>
+                            <ScrollBar x:Name="PART_HorizontalScrollBar" AutomationProperties.AutomationId="HorizontalScrollBar" Cursor="Arrow" Grid.Column="0" Maximum="{TemplateBinding ScrollableWidth}" Minimum="0" Orientation="Horizontal" Grid.Row="1" Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}" Value="{Binding HorizontalOffset, Mode=OneWay, RelativeSource={RelativeSource TemplatedParent}}" ViewportSize="{TemplateBinding ViewportWidth}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </controls:FadingScrollViewer.Template>
+                <ListBox Name="itemListBox" BorderThickness="0" ItemsSource="{Binding Uploads}" Template="{StaticResource NoScroll}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Height="214">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Background="#e9e9e9" Width="100" Margin="0,0,5,5" Height="100" Effect="{StaticResource z-depth1}">
+                                <Border HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                    <Image HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="None"
+                                           phloader:Loader.Source="{Binding PreviewImgUrl}" phloader:Loader.SourceType="ExternalResource"
+                                           phloader:Loader.DisplayOption="FullResolution" RenderOptions.BitmapScalingMode="HighQuality"
+                                           RenderOptions.EdgeMode="Aliased" phloader:Loader.DisplayWaitingAnimationDuringLoading="True"/>
+                                </Border>
+                                <Border Margin="3" HorizontalAlignment="Center" VerticalAlignment="Top" Padding="6,3,6,3" CornerRadius="10" Background="#BBe9e9e9">
+                                    <TextBlock FontSize="12" Padding="0" Foreground="#333333" Text="{Binding DisplayName}"/>
+                                </Border>
+                                <Border Background="#AAe9e9e9" Grid.Row="0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                    <Border.Style>
+                                        <Style TargetType="{x:Type Border}">
+                                            <Setter Property="Visibility" Value="Hidden" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource Mode=FindAncestor,AncestorType={x:Type ListBoxItem}},Path=IsMouseOver}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Height="32" VerticalAlignment="Center" HorizontalAlignment="Center" Orientation="Horizontal">
+                                        <Image Opacity="0.8" Height="32" Width="32" Source="Images/Settings-32.png" Cursor="Hand" ToolTip="Edit" MouseDown="uploadEdit_Click" Margin="0,0,10,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <Image Opacity="0.8" Height="32" Width="32" Source="Images/External Link-32.png" Cursor="Hand" ToolTip="Open" MouseDown="uploadOpen_Click" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#e9e9e9" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Height="20" Padding="3,0,3,0">
+                                    <!--Background="#BBDEFB"-->
+                                    <DockPanel HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                        <Image DockPanel.Dock="Right" Width="20" Source="Images/Visible-24.png" Margin="1">
+                                            <Image.ToolTip>
+                                                <TextBlock><Run Text="{Binding Views}"/><Run Text=" views"/></TextBlock>
+                                            </Image.ToolTip>
+                                        </Image>
+                                        <Image DockPanel.Dock="Right" Width="20" Source="Images/Key-24.png" Margin="1" ToolTip="Password Protected" Visibility="{Binding Password, Converter={StaticResource strnull2vis}}"/>
+                                        <Label HorizontalAlignment="Stretch" VerticalAlignment="Center" Foreground="#333333" FontWeight="Bold" Padding="0" Content="{Binding Key}" />
+                                    </DockPanel>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Vertical"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.Resources>
+                        <Style TargetType="{x:Type ListBoxItem}">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="HorizontalContentAlignment" Value="{Binding HorizontalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"/>
+                            <Setter Property="VerticalContentAlignment" Value="{Binding VerticalContentAlignment, RelativeSource={RelativeSource AncestorType={x:Type ItemsControl}}}"/>
+                            <Setter Property="Padding" Value="2,0,0,0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                        <Border x:Name="Bd" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="true">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsEnabled" Value="false">
+                                                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.Resources>
+                </ListBox>
+            </controls:FadingScrollViewer>
+        </StackPanel>
+
+
+        <controls:TransitioningContentControl Margin="0,0,0,50" x:Name="transitioningContent">
+            <StackPanel Orientation="Vertical"  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Width="200">
+                <Image Source="Images/Clowd-250.png" Width="150" Stretch="Uniform" />
+                <TextBlock FontSize="20" Margin="0,20,0,0" HorizontalAlignment="Center">Login</TextBlock>
+                <TextBox x:Name="textUsername" Margin="0,10,0,0" FontSize="12"
+                     metro:TextBoxHelper.Watermark="Username"
+                     metro:TextBoxHelper.UseFloatingWatermark="True">
+                </TextBox>
+                <PasswordBox x:Name="textPassword" Margin="0,5,0,0" FontSize="12"
+                     metro:TextBoxHelper.Watermark="Password"
+                     metro:TextBoxHelper.UseFloatingWatermark="True">
+                </PasswordBox>
+                <Button x:Name="loginButton" Content="Login" HorizontalAlignment="Center" FontSize="12" Click="loginButton_Click" VerticalAlignment="Top" Width="75" Margin="0,10,0,0" Cursor="Hand"/>
+                <Label Margin="0,10,0,0" Padding="2" Foreground="{Binding Foreground}" HorizontalAlignment="Center" Cursor="Hand">
+                    <TextBlock TextDecorations="Underline">Register an account</TextBlock>
+                </Label>
+                <Label MouseDown="useAnon_Click" Margin="0,5,0,0" FontSize="12" Padding="2" Foreground="{Binding Foreground}" HorizontalAlignment="Center" Cursor="Hand">
+                    <TextBlock TextDecorations="Underline">Use Clowd anonymously</TextBlock>
+                </Label>
+            </StackPanel>
+        </controls:TransitioningContentControl>
+
+        <Viewbox HorizontalAlignment="Stretch" VerticalAlignment="Bottom" MaxHeight="150">
+            <Path Fill="{Binding Foreground}" Data="M254.794,20.534c-0.99,0.903-1.646,0.944-2.815,0.364
+	            c-7.707-3.812-15.482-3.857-23.262-0.157c-0.293,0.14-0.596,0.259-0.897,0.38c0.009,0.017,0.016,0.032,0.024,0.048
+	            c-0.063-0.011-0.094-0.015-0.113-0.016c0.008-0.001,0.016-0.001,0.023-0.004c0.022-0.009,0.044-0.019,0.065-0.028
+	            c-1.632-3.091-2.93-6.217-4.807-8.943c-4.693-6.816-11.224-10.799-19.481-11.995C203.13,0.125,202.739,0,202.344,0
+	            c-1.869,0-3.739,0-5.608,0c-1.305,0-2.623,0.41-3.915,0.744c-6.572,1.7-11.886,5.263-15.945,10.672
+	            c-0.8,1.066-1.416,1.388-2.82,1.07c-10.216-2.302-19.16,0.159-26.741,7.432c-0.332,0.319-0.676,0.62-1.04,0.957
+	            c-12.672-8.585-25.345-8.645-38.138-0.144c-3.424-4.214-7.707-7.408-12.849-9.284c-11.82-4.312-23.052-2.639-33.715,3.702
+	            c-1.138,0.677-1.922,0.775-3.122,0.083c-12.178-7.021-27.503-4.648-37.158,5.677c-2.319,2.479-2.288,2.392-5.501,1.271
+	            C10.084,20.192,4.83,20.143,0,21.771V51h277V13.049C269.222,12.079,261.188,14.706,254.794,20.534z" />
+        </Viewbox>
+        <DockPanel Name="closeHintPanel" VerticalAlignment="Bottom" HorizontalAlignment="Center" Height="30" Margin="5" Visibility="Collapsed">
+            <Image DockPanel.Dock="Left" Source="Images/info-50white.png" />
+            <TextBlock VerticalAlignment="Center" Padding="0" Foreground="White" FontSize="12" Margin="10,0,0,0" TextOptions.TextFormattingMode="Ideal">You can close this window. Clowd lives in the system tray</TextBlock>
+        </DockPanel>
+    </Grid>
+</metro:MetroWindow>

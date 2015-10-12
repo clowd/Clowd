@@ -1,0 +1,18 @@
+﻿<UserControl x:Class="Clowd.HomePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Clowd"
+             xmlns:metro="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro" 
+             xmlns:controls="clr-namespace:Clowd.Controls"
+             mc:Ignorable="d" Background="White"
+             d:DesignHeight="300" d:DesignWidth="300">
+    <Grid>
+        <metro:Tile Title="Hello!" 
+                    TiltFactor="2"
+                    Width="100" Height="100" 
+                    Count="1" />
+        <Path Fill="{StaticResource AccentColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Data="{StaticResource N45}" />
+    </Grid>
+</UserControl>

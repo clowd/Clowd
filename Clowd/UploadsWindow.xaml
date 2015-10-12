@@ -1,0 +1,129 @@
+﻿<Window x:Class="Clowd.UploadsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Clowd"
+        xmlns:controls="clr-namespace:Clowd.Controls"
+        xmlns:math="clr-namespace:IKriv.Wpf"
+        xmlns:conv="clr-namespace:Clowd.Converters"
+        DataContext="{Binding RelativeSource={RelativeSource Self}}"
+        mc:Ignorable="d" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" 
+        Title="UploadsWindow" SizeToContent="Height" Width="300" Topmost="True">
+    <Window.Resources>
+        <conv:ValueConverterGroup x:Key="progToInverseVis">
+            <conv:IsEqualOrGreaterThanConverter />
+            <conv:BoolToInverseConverter />
+            <conv:BoolToVisibilityConverter2 />
+        </conv:ValueConverterGroup>
+    </Window.Resources>
+    <Border BorderThickness="1,1,0,0" BorderBrush="LightGray">
+        <Grid SnapsToDevicePixels="True">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="30"/>
+                <RowDefinition Height="1*"/>
+            </Grid.RowDefinitions>
+            <Border Background="#3b96d2" Width="40" HorizontalAlignment="Left">
+                <Image Margin="5"  Source="Images/upload-basket.png" />
+            </Border>
+            <TextBlock Margin="50,0" FontFamily="Microsoft Sans Serif" FontSize="17px" FontWeight="Bold" Foreground="#000000" Opacity=".8" VerticalAlignment="Center">
+            Uploads
+            </TextBlock>
+            <Border Width="30" ToolTip="Hide Window" HorizontalAlignment="Right" MouseDown="Hide_MouseDown">
+                <Border.Style>
+                    <Style>
+                        <Setter Property="Border.Background" Value="Transparent"/>
+                        <Style.Triggers>
+                            <Trigger Property="Border.IsMouseOver" Value="True">
+                                <Setter Property="Border.Background" Value="#e96d6d" />
+                                <Setter Property="Border.Cursor" Value="Hand" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Image Margin="5,4,5,6" Source="Images/Double Down-26.png" Opacity=".8" />
+            </Border>
+            <ListBox Name="UploadListbox" Grid.Row="1" Margin="10" BorderThickness="0">
+                <ListBox.Resources>
+                    <conv:ValueConverterGroup x:Key="progToVis">
+                        <conv:IsEqualOrGreaterThanConverter />
+                        <conv:BoolToVisibilityConverter2 />
+                    </conv:ValueConverterGroup>
+                    <conv:ValueConverterGroup x:Key="progToInverseVis">
+                        <conv:IsEqualOrGreaterThanConverter />
+                        <conv:BoolToInverseConverter />
+                        <conv:BoolToVisibilityConverter2 />
+                    </conv:ValueConverterGroup>
+                    <conv:BoolToVisibilityConverter2 x:Key="bool2vis" />
+                    <Style TargetType="{x:Type controls:UploadProgressBar}">
+                        <Setter Property="Foreground" Value="PaleGreen" />
+                        <Setter Property="Background" Value="White" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="{x:Type controls:UploadProgressBar}">
+                                    <Grid x:Name="container" Height="30" Background="{TemplateBinding Background}" Margin="0,0,0,5" ClipToBounds="True">
+                                        <Border Width="30" HorizontalAlignment="Left" Padding="5" Background="{TemplateBinding Foreground}" >
+                                            <!--{TemplateBinding Progress, Converter={StaticResource progToInverseBool}}-->
+                                            <Canvas>
+                                                <Viewbox Width="20" Height="20" Visibility="{TemplateBinding Progress, Converter={StaticResource progToInverseVis}}">
+                                                    <controls:ProgressRing Foreground="Black" Opacity=".8" IsActive="True" Style="{StaticResource ChasingDotsProgressRingStyle}" />
+                                                </Viewbox>
+                                                <Image Width="20" Height="20" Source="Images/Checkmark-26.png" Visibility="{TemplateBinding Progress, Converter={StaticResource progToVis}}"/>
+                                            </Canvas>
+                                        </Border>
+                                        <controls:SizeAwareProgressBar Margin="32,0,0,0" Value="{TemplateBinding Progress}" Foreground="{TemplateBinding Foreground}" CurrentSizeDisplay="{TemplateBinding CurrentSizeDisplay}" SnapsToDevicePixels="True">
+                                            <controls:SizeAwareProgressBar.Style>
+                                                <Style TargetType="ProgressBar">
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="{x:Type controls:SizeAwareProgressBar}">
+                                                                <Grid>
+                                                                    <Grid x:Name="PART_Track">
+                                                                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}">
+                                                                            <Border Background="#CCFFFFFF" CornerRadius="2,0,0,0" Width="34" Height="10" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                                                                <TextBlock Foreground="#CC000000" Text="{TemplateBinding CurrentSizeDisplay}" FontSize="8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                            </Border>
+                                                                        </Border>
+                                                                    </Grid>
+                                                                </Grid>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </controls:SizeAwareProgressBar.Style>
+                                        </controls:SizeAwareProgressBar>
+                                        <TextBlock Foreground="#CC000000" Text="{TemplateBinding DisplayText}" Margin="43,0,0,4" VerticalAlignment="Center" />
+                                        <Border BorderBrush="{TemplateBinding Background}" BorderThickness="0,2,0,2" Width="10" Margin="26,8" HorizontalAlignment="Left" SnapsToDevicePixels="True" />
+                                        <Border BorderBrush="DarkGray" BorderThickness="0,0,1,1" Height="6" Width="6" VerticalAlignment="Bottom"  HorizontalAlignment="Right" SnapsToDevicePixels="True"/>
+                                        <Border BorderBrush="DarkGray" BorderThickness="0,1,1,0" Height="6" Width="6" VerticalAlignment="Top"  HorizontalAlignment="Right" SnapsToDevicePixels="True"/>
+                                        <Border BorderBrush="DarkGray" BorderThickness="1,1,0,0" Height="6" Width="6" VerticalAlignment="Top"  HorizontalAlignment="Left" SnapsToDevicePixels="True"/>
+                                        <Border BorderBrush="DarkGray" BorderThickness="1,0,0,1" Height="6" Width="6" VerticalAlignment="Bottom"  HorizontalAlignment="Left" SnapsToDevicePixels="True"/>
+                                        <Border Background="{TemplateBinding Foreground}" Cursor="Hand" MouseDown="Border_MouseDown" BorderBrush="DarkGray"  Visibility="{TemplateBinding ActionAvailable, Converter={StaticResource bool2vis}}" BorderThickness="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" SnapsToDevicePixels="True">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Opacity" Value="0" />
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Opacity" Value="1" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Height="20" Width="20" Margin="5,0,5,0" Source="Images/External Link-26.png"/>
+                                                <TextBlock Foreground="Black" VerticalAlignment="Center">Copy link to clipboard</TextBlock>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.Resources>
+            </ListBox>
+            <TextBlock Grid.Row="1" Margin="10" Visibility="{Binding Uploads.Count, Converter={StaticResource progToInverseVis}, ConverterParameter=1}">
+            Nothing to see here. Try uploading a file!
+            </TextBlock>
+        </Grid>
+    </Border>
+</Window>
