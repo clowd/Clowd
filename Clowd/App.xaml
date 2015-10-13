@@ -42,7 +42,7 @@
                 <Grid Width="{TemplateBinding Width}"
                  Height="{TemplateBinding Height}">
                     <Viewbox Margin="5">
-                        <Path Fill="{StaticResource IdealForegroundColorBrush}" Width="16" Height="16"  Data="{StaticResource N43}" />
+                        <Path Fill="{DynamicResource IdealForegroundColorBrush}" Width="16" Height="16"  Data="{StaticResource N43}" />
                     </Viewbox>
                 </Grid>
             </DataTemplate>
