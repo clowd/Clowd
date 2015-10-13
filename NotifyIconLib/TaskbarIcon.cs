@@ -1,4 +1,27 @@
-﻿using System;
+﻿// hardcodet.net NotifyIcon for WPF
+// Copyright (c) 2009 - 2013 Philipp Sumi
+// Contact and Information: http://www.hardcodet.net
+//
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the Code Project Open License (CPOL);
+// either version 1.0 of the License, or (at your option) any later
+// version.
+// 
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+// OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+// OTHER DEALINGS IN THE SOFTWARE.
+//
+// THIS COPYRIGHT NOTICE MAY NOT BE REMOVED FROM THIS FILE
+
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
@@ -19,6 +42,8 @@ namespace NotifyIconLib
     /// </summary>
     public partial class TaskbarIcon : FrameworkElement, IDisposable
     {
+        public event Action<uint> WndProcMessageRecieved = delegate { };
+
         #region Members
 
         /// <summary>
@@ -110,6 +135,7 @@ namespace NotifyIconLib
             messageSink.TaskbarCreated += OnTaskbarCreated;
             messageSink.ChangeToolTipStateRequest += OnToolTipChange;
             messageSink.BalloonToolTipChanged += OnBalloonToolTipChanged;
+            messageSink.WndProcMessageRecieved += OnWndProcMessageRecieved;
 
             //init single click / balloon timers
             singleClickTimer = new Timer(DoSingleClickAction);
@@ -117,6 +143,11 @@ namespace NotifyIconLib
 
             //register listener in order to get notified when the application closes
             if (Application.Current != null) Application.Current.Exit += OnExit;
+        }
+
+        private void OnWndProcMessageRecieved(uint obj)
+        {
+            WndProcMessageRecieved(obj);
         }
 
         #endregion
@@ -1071,26 +1102,3 @@ namespace NotifyIconLib
         #endregion
     }
 }
-
-// hardcodet.net NotifyIcon for WPF
-// Copyright (c) 2009 - 2013 Philipp Sumi
-// Contact and Information: http://www.hardcodet.net
-//
-// This library is free software; you can redistribute it and/or
-// modify it under the terms of the Code Project Open License (CPOL);
-// either version 1.0 of the License, or (at your option) any later
-// version.
-// 
-// The above copyright notice and this permission notice shall be
-// included in all copies or substantial portions of the Software.
-// 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-// OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-// HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-// OTHER DEALINGS IN THE SOFTWARE.
-//
-// THIS COPYRIGHT NOTICE MAY NOT BE REMOVED FROM THIS FILE

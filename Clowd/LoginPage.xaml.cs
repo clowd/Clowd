@@ -25,10 +25,13 @@ namespace Clowd
             InitializeComponent();
         }
 
-        private void loginButton_Click(object sender, RoutedEventArgs e)
+        private async void loginButton_Click(object sender, RoutedEventArgs e)
         {
-            var parentWindow = Window.GetWindow(this);
-            parentWindow.Content = new HomePage();
+            var window = Window.GetWindow(this);
+            TemplatedWindow.SetContentToSpinner(window);
+            await Task.Delay(200);
+            //TemplatedWindow.SetContent(window, this);
+            TemplatedWindow.SetContent(window, new HomePage());
         }
 
         private void useAnon_Click(object sender, MouseButtonEventArgs e)

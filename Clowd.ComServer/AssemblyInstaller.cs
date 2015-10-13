@@ -92,46 +92,46 @@ namespace Clowd.ComServer
                         success = success && UninstallComType(typeof(DShowVideoFilter.ScreenCaptureFilter), clsid32);
                 }
             }
-            using (var view32 = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry32))
-            using (var clsid32 = view32.OpenSubKey(@"Software\Classes\", true))
-            {
-                using (var catchAll = clsid32.CreateSubKey(@"*\shell"))
-                using (var directoryAll = clsid32.CreateSubKey(@"Directory\shell"))
-                    if (install)
-                    {
-                        success = success && InstallContextMenu(catchAll);
-                        success = success && InstallContextMenu(directoryAll);
-                    }
-                    else
-                    {
-                        UninstallContextMenu(catchAll);
-                        UninstallContextMenu(directoryAll);
-                    }
-            }
+            //using (var view32 = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry32))
+            //using (var clsid32 = view32.OpenSubKey(@"Software\Classes\", true))
+            //{
+            //    using (var catchAll = clsid32.CreateSubKey(@"*\shell"))
+            //    using (var directoryAll = clsid32.CreateSubKey(@"Directory\shell"))
+            //        if (install)
+            //        {
+            //            success = success && InstallContextMenu(catchAll);
+            //            success = success && InstallContextMenu(directoryAll);
+            //        }
+            //        else
+            //        {
+            //            UninstallContextMenu(catchAll);
+            //            UninstallContextMenu(directoryAll);
+            //        }
+            //}
             return success;
         }
-        private static bool InstallContextMenu(RegistryKey shellRoot)
-        {
-            var directory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            var file = Path.Combine(directory, "Clowd.exe");
-            if (!File.Exists(file))
-                return false;
-            using (var clowd = shellRoot.CreateSubKey(strContextMenuShellName))
-            {
-                clowd.SetValue("Icon", file, RegistryValueKind.String);
-                using (var command = clowd.CreateSubKey("command"))
-                {
-                    command.SetValue("", file);
-                }
-            }
+        //private static bool InstallContextMenu(RegistryKey shellRoot)
+        //{
+        //    var directory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        //    var file = Path.Combine(directory, "Clowd.exe");
+        //    if (!File.Exists(file))
+        //        return false;
+        //    using (var clowd = shellRoot.CreateSubKey(strContextMenuShellName))
+        //    {
+        //        clowd.SetValue("Icon", file, RegistryValueKind.String);
+        //        using (var command = clowd.CreateSubKey("command"))
+        //        {
+        //            command.SetValue("", file);
+        //        }
+        //    }
 
-            return true;
-        }
-        private static bool UninstallContextMenu(RegistryKey shellRoot)
-        {
-            shellRoot.DeleteSubKeyTree(strContextMenuShellName, false);
-            return true;
-        }
+        //    return true;
+        //}
+        //private static bool UninstallContextMenu(RegistryKey shellRoot)
+        //{
+        //    shellRoot.DeleteSubKeyTree(strContextMenuShellName, false);
+        //    return true;
+        //}
         private static bool InstallComType(Type type, RegistryKey classRoot)
         {
             Assembly assy = Assembly.GetExecutingAssembly();
