@@ -42,38 +42,6 @@ namespace Clowd
         private ResourceDictionary _lightBase;
         private ResourceDictionary _darkBase;
 
-        public Window CreateThemedWindowForControl(string title, Control content)
-        {
-            Window window;
-            double titleHeight, borderWidth;
-            if (Settings.UseCustomWindowChrome)
-            {
-                var mw = new CustomMetroWindow();
-                mw.WindowTransitionsEnabled = false;
-                mw.transitioningContent.Content = content;
-                window = mw;
-                titleHeight = DpiScale.UpScaleY(40);
-                borderWidth = 1;
-            }
-            else
-            {
-                var cw = new CustomWindow();
-                cw.transitioningContent.Content = content;
-                window = cw;
-                titleHeight = SystemParameters.WindowCaptionHeight + SystemParameters.ResizeFrameHorizontalBorderHeight;
-                borderWidth = SystemParameters.ResizeFrameVerticalBorderWidth;
-            }
-
-            window.Title = title;
-            window.Height = content.Height + titleHeight + borderWidth;
-            window.Width = content.Width + borderWidth * 2;
-            content.Width = Double.NaN;
-            content.Height = Double.NaN;
-            content.VerticalAlignment = VerticalAlignment.Stretch;
-            content.HorizontalAlignment = HorizontalAlignment.Stretch;
-            return window;
-        }
-
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
@@ -83,20 +51,19 @@ namespace Clowd
             if (System.Diagnostics.Debugger.IsAttached)
                 await Task.Delay(3000);
             SetupDpiScaling();
-            //SetupTrayIcon();
+            SetupTrayIcon();
             LoadSettings();
-            SetupAccentColors(Settings.AccentColorScheme == AccentScheme.System ? Settings.SystemAccentColor : Settings.UserAccentColor, Settings.ColorScheme);
-            var window = CreateThemedWindowForControl("Clowd", new LoginPage());
+            Settings.ColorScheme = ColorScheme.Light;
+            SetupAccentColors();
+            var window = TemplatedWindow.CreateWindow(Settings.UseCustomWindowChrome, "Clowd", new Capture.ImageEditorPage());
             window.Show();
-            new Capture.CaptureWindow().Show();
+            //new Capture.CaptureWindow().Show();
             if (Settings.FirstRun)
             {
                 // there were no settings to load, so save a new settings file.
                 Settings.FirstRun = false;
                 Settings.Save();
             }
-
-
 
             if (!System.Diagnostics.Debugger.IsAttached)
                 SetupUpdateTimer();
@@ -136,8 +103,12 @@ namespace Clowd
             RT.Util.SettingsUtil.LoadSettings<AppSettings>(out tmp);
             Settings = tmp;
         }
-        private void SetupAccentColors(Color baseColor, ColorScheme scheme)
+
+        private void SetupAccentColors()
         {
+            var scheme = Settings.ColorScheme;
+            var baseColor = Settings.AccentScheme == AccentScheme.User ? Settings.UserAccentColor : AreoColor.GetColor();
+
             if (_lightBase == null)
             {
                 _lightBase = new ResourceDictionary
@@ -256,8 +227,10 @@ namespace Clowd
             _taskbarIcon = new TaskbarIcon();
             _taskbarIcon.IconSource = new BitmapImage(new Uri("pack://application:,,,/Images/default.ico"));
             _taskbarIcon.ToolTipText = "Clowd\nClick me or drop something on me\nto see what I can do!";
-            _taskbarIcon.TrayDropEnabled = true;
+            //_taskbarIcon.TrayDropEnabled = true;
             _taskbarIcon.TrayDrop += taskbarIcon_Drop;
+            _taskbarIcon.WndProcMessageRecieved += WndProcMessageRecieved;
+
 
             //this is left for reference, not sure if the new notification icon will have the same problem or not.
 
@@ -341,6 +314,13 @@ namespace Clowd
             _updateManager.ApplyUpdates(true, false, false);
         }
 
+        private void WndProcMessageRecieved(uint obj)
+        {
+            if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED && Settings?.AccentScheme == AccentScheme.System)
+            {
+                SetupAccentColors();
+            }
+        }
         private void loginStatusButtonPressed(object sender, EventArgs e)
         {
             foreach (Window w in Application.Current.Windows)
@@ -391,7 +371,6 @@ namespace Clowd
                 url = await UploadManager.Upload(File.ReadAllBytes(filePaths[0]), Path.GetFileName(filePaths[0]));
             }
         }
-
         private void taskbarIcon_Drop(object sender, DragEventArgs e)
         {
             var formats = e.Data.GetFormats();
@@ -435,6 +414,5 @@ namespace Clowd
                 FilesRecieved(fileArray);
             }
         }
-
     }
 }

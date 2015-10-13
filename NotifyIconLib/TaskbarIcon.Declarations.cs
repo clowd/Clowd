@@ -1,4 +1,5 @@
-﻿// hardcodet.net NotifyIcon for WPF
+﻿
+// hardcodet.net NotifyIcon for WPF
 // Copyright (c) 2009 - 2013 Philipp Sumi
 // Contact and Information: http://www.hardcodet.net
 //
@@ -20,8 +21,6 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 // THIS COPYRIGHT NOTICE MAY NOT BE REMOVED FROM THIS FILE
-
-
 using System;
 using System.ComponentModel;
 using System.Drawing;

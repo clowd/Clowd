@@ -5,6 +5,9 @@
     <Application.Resources>
         <ResourceDictionary>
             <SolidColorBrush x:Key="AccentColorBrush" Color="#3b96d2" />
+            <Color x:Key="IdealForegroundColor">White</Color>
+            <SolidColorBrush x:Key="IdealForegroundColorBrush" Color="{StaticResource IdealForegroundColor}" />
+            
             <DropShadowEffect x:Key="z-depth1" BlurRadius="5" ShadowDepth="1" Direction="270" Color="#CCCCCC"/>
             <DropShadowEffect x:Key="z-depth2" BlurRadius="8" ShadowDepth="2.5" Direction="270" Color="#BBBBBB"/>
             <DropShadowEffect x:Key="z-depth3" BlurRadius="14" ShadowDepth="4.5" Direction="270" Color="#BBBBBB"/>
@@ -25,6 +28,24 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <StreamGeometry x:Key="N43">M3.759,9.556C3.603,10.012,3.5,10.492,3.5,11c0,0.248,0.035,0.487,0.073,0.726C2.072,11.148,1,9.702,1,8
+	s1.073-3.149,2.573-3.726C3.534,4.512,3.5,4.751,3.5,5c0,0.508,0.103,0.988,0.259,1.444C3.3,6.811,3,7.368,3,8
+	C3,8.631,3.3,9.188,3.759,9.556z M6.76,6.552C6.302,6.185,6,5.631,6,5c0-1.103,0.897-2,2-2c0.632,0,1.189,0.3,1.556,0.759
+	C10.012,3.603,10.492,3.5,11,3.5c0.248,0,0.487,0.034,0.726,0.073C11.148,2.072,9.702,1,8,1C5.794,1,4,2.794,4,5
+	c0,1.02,0.395,1.941,1.025,2.649C5.507,7.221,6.079,6.902,6.71,6.712C6.727,6.659,6.742,6.605,6.76,6.552z M11,4
+	C9.299,4,7.853,5.072,7.275,6.572C7.513,6.533,7.752,6.499,8,6.499c0.508,0,0.989,0.104,1.444,0.259C9.812,6.3,10.369,6,11,6
+	c1.103,0,2,0.897,2,2c0,0.631-0.3,1.189-0.759,1.556C12.396,10.012,12.5,10.492,12.5,11c0,0.248-0.034,0.488-0.073,0.726
+	C13.928,11.148,15,9.702,15,8C15,5.794,13.206,4,11,4z M12,11c0-2.206-1.794-4.001-4-4.001S4,8.794,4,11s1.794,4,4,4
+	S12,13.206,12,11z M10,11c0,1.103-0.897,2-2,2c-1.103,0-2-0.897-2-2c0-1.104,0.897-2.001,2-2.001C9.103,8.999,10,9.896,10,11z</StreamGeometry>
+            <DataTemplate x:Key="MetroIconTemplate">
+                <Grid Width="{TemplateBinding Width}"
+                 Height="{TemplateBinding Height}">
+                    <Viewbox Margin="5">
+                        <Path Fill="{StaticResource IdealForegroundColorBrush}" Width="16" Height="16"  Data="{StaticResource N43}" />
+                    </Viewbox>
+                </Grid>
+            </DataTemplate>
             <StreamGeometry x:Key="N44">M24.55,44.841c0.284,0.605,0.602,1.189,0.952,1.753c-2.379,1.202-5.058,1.896-7.901,1.896
 	C7.896,48.49,0,40.594,0,30.89c0-9.035,6.847-16.494,15.623-17.481c-0.161,0.68-0.29,1.371-0.373,2.077
 	c-0.08,0.671-0.128,1.352-0.135,2.042C8.8,18.7,4,24.24,4,30.89c0,7.499,6.101,13.6,13.601,13.6c2.233,0,4.337-0.551,6.199-1.51
