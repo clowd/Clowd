@@ -21,9 +21,8 @@ namespace Clowd
         public string PasswordHash { get; set; }
         public Color UserAccentColor { get; set; } = Color.FromRgb(59, 151, 210);
         [RT.Util.Serialization.ClassifyIgnore]
-        public Color SystemAccentColor { get { return Utilities.AreoColor.GetColor(); } }
         public ColorScheme ColorScheme { get; set; } = ColorScheme.Light;
-        public AccentScheme AccentColorScheme { get; set; } = AccentScheme.System;
+        public AccentScheme AccentScheme { get; set; } = AccentScheme.System;
         public TimeSpan UpdateCheckInterval { get; set; } = TimeSpan.FromHours(6);
         public CaptureSettings CaptureSettings { get; set; } = new CaptureSettings();
 

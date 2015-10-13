@@ -7,11 +7,11 @@
              xmlns:local="clr-namespace:Clowd"
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
              mc:Ignorable="d" 
-             Width="500" Height="450">
+             Width="434" Height="450">
     <Grid>
         <StackPanel Orientation="Vertical"  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Width="200">
             <Viewbox Width="150">
-                <Path Fill="{StaticResource AccentColorBrush}" Width="75.15" Height="53.70" Data="{StaticResource N44}" />
+                <Path Fill="{DynamicResource AccentColorBrush}" Width="75.15" Height="53.70" Data="{StaticResource N44}" />
             </Viewbox>
             <TextBlock FontSize="20" Margin="0,20,0,0" HorizontalAlignment="Center">Login</TextBlock>
             <TextBox x:Name="textUsername" Margin="0,10,0,0" FontSize="12"

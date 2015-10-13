@@ -90,6 +90,9 @@
     <Compile Include="Capture\CaptureWindow.xaml.cs">
       <DependentUpon>CaptureWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Capture\ImageEditorPage.xaml.cs">
+      <DependentUpon>ImageEditorPage.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Capture\WindowFinder.cs" />
     <Compile Include="Controls\FadingScrollViewer.cs" />
     <Compile Include="Controls\MagnifierAdorner.cs" />
@@ -114,15 +117,11 @@
     <Compile Include="Converters\RectConverter.cs" />
     <Compile Include="Converters\StringNullOrEmptyToVisibilityConverter.cs" />
     <Compile Include="Converters\ValueConverterGroup.cs" />
-    <Compile Include="CustomMetroWindow.xaml.cs">
-      <DependentUpon>CustomMetroWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="CustomWindow.xaml.cs">
-      <DependentUpon>CustomWindow.xaml</DependentUpon>
-    </Compile>
+    <Compile Include="TemplatedWindow.cs" />
     <Compile Include="Utilities\Hotkey.cs" />
     <Compile Include="Utilities\PasswordHelper.cs" />
     <Compile Include="Capture\ScreenUtil.cs" />
+    <Compile Include="Utilities\RegistryOptions.cs" />
     <Compile Include="Utilities\SysInfo.cs" />
     <Compile Include="Utilities\VisualTreeHelperEx.cs" />
     <Compile Include="HomePage.xaml.cs">
@@ -169,11 +168,7 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Page Include="CustomMetroWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="CustomWindow.xaml">
+    <Page Include="Capture\ImageEditorPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

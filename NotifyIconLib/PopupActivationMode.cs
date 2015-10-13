@@ -20,8 +20,6 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 // THIS COPYRIGHT NOTICE MAY NOT BE REMOVED FROM THIS FILE
-
-
 namespace NotifyIconLib
 {
     /// <summary>
