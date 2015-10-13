@@ -22,15 +22,16 @@ namespace DrawToolsLib
         protected double graphicsActualScale;
         protected bool selected;
 
+        public static SolidColorBrush HandleBrush { get; set; } = new SolidColorBrush(Color.FromRgb(0, 0, 255));
+
         // Allows to write Undo - Redo functions and don't care about
         // objects order in the list.
         int objectId;
 
-        protected const double HitTestWidth = 8.0;
+        protected const double HitTestWidth = 12.0;
 
         protected const double HandleSize = 12.0;
 
-        static SolidColorBrush handleBrush1 = new SolidColorBrush(Color.FromArgb(255, 0, 0, 255));
         static SolidColorBrush handleBrush2 = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
 
         #endregion Class Members
@@ -259,9 +260,9 @@ namespace DrawToolsLib
         static void DrawTrackerRectangle(DrawingContext drawingContext, Rect rectangle)
         {
             //used to be a rectangle, circle looks better.
-            drawingContext.DrawEllipse(handleBrush1, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
+            drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
             drawingContext.DrawEllipse(handleBrush2, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 2, rectangle.Height / 2 - 2);
-            drawingContext.DrawEllipse(handleBrush1, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 3, rectangle.Height / 2 - 3);
+            drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 3, rectangle.Height / 2 - 3);
         }
 
 

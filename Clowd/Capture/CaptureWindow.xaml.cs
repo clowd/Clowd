@@ -373,5 +373,10 @@ namespace Clowd.Capture
         {
             this.Close();
         }
+
+        private void Search_Clicked(object sender, RoutedEventArgs e)
+        {
+
+        }
     }
 }

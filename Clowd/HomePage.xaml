@@ -23,7 +23,7 @@
             <RowDefinition />
             <RowDefinition  Height="51" />
         </Grid.RowDefinitions>
-        <TextBlock Margin="20,10,20,0" VerticalAlignment="Center" FontSize="20">Welcome, caesay</TextBlock>
+        <TextBlock Margin="20,10,20,0" VerticalAlignment="Center" FontSize="20" Opacity="0.7">Welcome, caesay</TextBlock>
         <WrapPanel Grid.Row="1" Margin="20">
             <metro:Tile Title="Capture" Background="{DynamicResource HighlightBrush}" Width="256" Click="Capture_Click">
                 <Viewbox Width="70" Height="70">

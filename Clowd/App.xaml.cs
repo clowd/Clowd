@@ -55,9 +55,9 @@ namespace Clowd
             LoadSettings();
             Settings.ColorScheme = ColorScheme.Light;
             SetupAccentColors();
-            var window = TemplatedWindow.CreateWindow(Settings.UseCustomWindowChrome, "Clowd", new Capture.ImageEditorPage());
+            var window = TemplatedWindow.CreateWindow(Settings.UseCustomWindowChrome, "Clowd", new Capture.ImageEditorPage(null));
             window.Show();
-            //new Capture.CaptureWindow().Show();
+            new Capture.CaptureWindow().Show();
             if (Settings.FirstRun)
             {
                 // there were no settings to load, so save a new settings file.

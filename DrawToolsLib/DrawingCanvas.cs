@@ -31,6 +31,7 @@ namespace DrawToolsLib
 
         public static readonly DependencyProperty LineWidthProperty;
         public static readonly DependencyProperty ObjectColorProperty;
+        public static readonly DependencyProperty HandleColorProperty;
 
         public static readonly DependencyProperty TextFontFamilyNameProperty;
         public static readonly DependencyProperty TextFontStyleProperty;
@@ -50,7 +51,6 @@ namespace DrawToolsLib
         public static readonly DependencyProperty CanSetPropertiesProperty;
 
         public static readonly RoutedEvent IsDirtyChangedEvent;
-
 
         private Tool[] tools;                   // Array of tools
 
@@ -153,6 +153,10 @@ namespace DrawToolsLib
                 "ObjectColor", typeof(Color), typeof(DrawingCanvas),
                 metaData);
 
+            // HandleColor
+            HandleColorProperty = DependencyProperty.Register(
+                "HandleColor", typeof(Color), typeof(DrawingCanvas),
+                new PropertyMetadata(Color.FromRgb(37, 97, 163), HandleColorChanged));
 
             // TextFontFamilyName
             metaData = new PropertyMetadata(
@@ -593,6 +597,20 @@ namespace DrawToolsLib
 
         #endregion ObjectColor
 
+        #region HandleColor
+        public Color HandleColor
+        {
+            get { return (Color)GetValue(HandleColorProperty); }
+            set { SetValue(HandleColorProperty, value); }
+        }
+
+        private static void HandleColorChanged(DependencyObject property, DependencyPropertyChangedEventArgs e)
+        {
+            DrawingCanvas d = property as DrawingCanvas;
+            GraphicsBase.HandleBrush = new SolidColorBrush(d.HandleColor);
+        }
+        #endregion
+
         #region TextFontFamilyName
 
         /// <summary>
@@ -780,7 +798,7 @@ namespace DrawToolsLib
 
             int i = 0;
 
-            foreach(GraphicsBase g in graphicsList)
+            foreach (GraphicsBase g in graphicsList)
             {
                 result[i++] = g.CreateSerializedObject();
             }
@@ -813,7 +831,7 @@ namespace DrawToolsLib
 
             foreach (GraphicsBase b in graphicsList)
             {
-                if ( ! withSelection )
+                if (!withSelection)
                 {
                     // Keep selection state and unselect
                     oldSelection = b.IsSelected;
@@ -822,7 +840,7 @@ namespace DrawToolsLib
 
                 b.Draw(drawingContext);
 
-                if ( ! withSelection )
+                if (!withSelection)
                 {
                     // Restore selection state
                     b.IsSelected = oldSelection;
@@ -915,7 +933,7 @@ namespace DrawToolsLib
             {
                 throw new DrawingCanvasException(e.Message, e);
             }
-            catch(ArgumentNullException e)
+            catch (ArgumentNullException e)
             {
                 throw new DrawingCanvasException(e.Message, e);
             }
@@ -1040,7 +1058,7 @@ namespace DrawToolsLib
         {
             get
             {
-                if ( index >= 0  &&  index < Count )
+                if (index >= 0 && index < Count)
                 {
                     return (GraphicsBase)graphicsList[index];
                 }
@@ -1064,22 +1082,22 @@ namespace DrawToolsLib
         /// Get number of selected graphic objects
         /// </summary>
 		internal int SelectionCount
-		{
-			get
-			{
-				int n = 0;
+        {
+            get
+            {
+                int n = 0;
 
-				foreach (GraphicsBase g in this.graphicsList)
-				{
-					if ( g.IsSelected )
-					{
-						n++;
-					}
-				}
+                foreach (GraphicsBase g in this.graphicsList)
+                {
+                    if (g.IsSelected)
+                    {
+                        n++;
+                    }
+                }
 
-				return n;
-			}
-		}
+                return n;
+            }
+        }
 
         /// <summary>
         /// Return list of graphics
@@ -1121,11 +1139,11 @@ namespace DrawToolsLib
         /// </summary>
         protected override int VisualChildrenCount
         {
-            get 
-            { 
-                int n = graphicsList.Count; 
+            get
+            {
+                int n = graphicsList.Count;
 
-                if ( toolText.TextBox != null )
+                if (toolText.TextBox != null)
                 {
                     n++;
                 }
@@ -1140,9 +1158,9 @@ namespace DrawToolsLib
         /// </summary>
         protected override Visual GetVisualChild(int index)
         {
-            if (index < 0 || index >= graphicsList.Count )
+            if (index < 0 || index >= graphicsList.Count)
             {
-                if (toolText.TextBox != null && index == graphicsList.Count )
+                if (toolText.TextBox != null && index == graphicsList.Count)
                 {
                     return toolText.TextBox;
                 }
@@ -1173,9 +1191,9 @@ namespace DrawToolsLib
             this.Focus();
 
 
-            if ( e.ChangedButton == MouseButton.Left )
+            if (e.ChangedButton == MouseButton.Left)
             {
-                if ( e.ClickCount == 2 )
+                if (e.ClickCount == 2)
                 {
                     HandleDoubleClick(e);        // special case for GraphicsText
                 }
@@ -1204,7 +1222,7 @@ namespace DrawToolsLib
                 return;
             }
 
-            if ( e.MiddleButton == MouseButtonState.Released  &&  e.RightButton == MouseButtonState.Released )
+            if (e.MiddleButton == MouseButtonState.Released && e.RightButton == MouseButtonState.Released)
             {
                 tools[(int)Tool].OnMouseMove(this, e);
 
@@ -1255,14 +1273,14 @@ namespace DrawToolsLib
         {
             MenuItem item = sender as MenuItem;
 
-            if ( item == null )
+            if (item == null)
             {
                 return;
             }
 
             ContextMenuCommand command = (ContextMenuCommand)item.Tag;
 
-            switch ( command )
+            switch (command)
             {
                 case ContextMenuCommand.SelectAll:
                     SelectAll();
@@ -1300,7 +1318,7 @@ namespace DrawToolsLib
         /// </summary>
         void DrawingCanvas_LostMouseCapture(object sender, MouseEventArgs e)
         {
-            if ( this.IsMouseCaptured )
+            if (this.IsMouseCaptured)
             {
                 CancelCurrentOperation();
                 UpdateState();
@@ -1313,7 +1331,7 @@ namespace DrawToolsLib
         void DrawingCanvas_KeyDown(object sender, KeyEventArgs e)
         {
             // Esc key stops currently active operation
-            if ( e.Key == Key.Escape )
+            if (e.Key == Key.Escape)
             {
                 if (this.IsMouseCaptured)
                 {
@@ -1432,7 +1450,7 @@ namespace DrawToolsLib
                     break;
                 }
             }
-            
+
             if (o != null)
             {
                 if (!o.IsSelected)
@@ -1453,11 +1471,11 @@ namespace DrawToolsLib
             MenuItem item;
 
             /// Enable/disable menu items.
-            foreach(object obj in contextMenu.Items)
+            foreach (object obj in contextMenu.Items)
             {
                 item = obj as MenuItem;
 
-                if ( item != null )
+                if (item != null)
                 {
                     ContextMenuCommand command = (ContextMenuCommand)item.Tag;
 
@@ -1549,7 +1567,7 @@ namespace DrawToolsLib
         /// </summary>
         internal void HideTextbox(GraphicsText graphicsText)
         {
-            if (toolText.TextBox == null )
+            if (toolText.TextBox == null)
             {
                 return;
             }
@@ -1561,7 +1579,7 @@ namespace DrawToolsLib
             {
                 // Textbox is empty: remove text object.
 
-                if ( ! String.IsNullOrEmpty(toolText.OldText) )  // existing text was edited
+                if (!String.IsNullOrEmpty(toolText.OldText))  // existing text was edited
                 {
                     // Since text object is removed now,
                     // Add Delete command to the history
@@ -1575,7 +1593,7 @@ namespace DrawToolsLib
             {
                 if (!String.IsNullOrEmpty(toolText.OldText))  // existing text was edited
                 {
-                    if ( toolText.TextBox.Text.Trim() != toolText.OldText )     // text was really changed
+                    if (toolText.TextBox.Text.Trim() != toolText.OldText)     // text was really changed
                     {
                         // Create command
                         CommandChangeState command = new CommandChangeState(this);
@@ -1594,7 +1612,7 @@ namespace DrawToolsLib
                     // Make change in the text object
                     graphicsText.Text = toolText.TextBox.Text.Trim();
                     graphicsText.UpdateRectangle();
-                        
+
                     // Add command to the history
                     undoManager.AddCommandToHistory(new CommandAdd(graphicsText));
                 }
@@ -1617,13 +1635,13 @@ namespace DrawToolsLib
             Point point = e.GetPosition(this);
 
             // Enumerate all text objects
-            for(int i = graphicsList.Count - 1; i >= 0; i--)
+            for (int i = graphicsList.Count - 1; i >= 0; i--)
             {
                 GraphicsText t = graphicsList[i] as GraphicsText;
 
-                if ( t != null )
+                if (t != null)
                 {
-                    if ( t.Contains(point) )
+                    if (t.Contains(point))
                     {
                         toolText.CreateTextBox(t, this);
                         return;
