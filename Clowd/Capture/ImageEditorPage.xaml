@@ -186,9 +186,10 @@
                     <Setter Property="Width" Value="16" />
                 </Style>
             </StackPanel.Resources>
-            <ToggleButton  Tag="None" IsEnabled="False"
+            <ToggleButton  ToolTip="Pan Mode (D)"
                            IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
                                       Converter={StaticResource convToolType}, ConverterParameter=None}"
+                          Command="{StaticResource Commands.SelectTool}" CommandParameter="None"
                            Style="{StaticResource ToggleToolButtonStyle}">
                 <Viewbox>
                     <Path Data="M 12.8125 0 C 12.7375 0.0125 12.64375 0.04375 12.59375 0.09375 C 12.49375 0.19375 9.9125 2.6 8.3125 5 C 8.2125 5.2 8.2125 5.39375 8.3125 5.59375 C 8.4125 5.89375 8.6125 6 8.8125 6 L 11 6 L 11 11 L 6 11 L 6 8.8125 C 6 8.6125 5.8875 8.4125 5.6875 8.3125 C 5.4875 8.2125 5.2 8.2125 5 8.3125 C 2.6 9.9125 0.19375 12.49375 0.09375 12.59375 C 0.09375 12.69375 9.2518585e-18 12.9 0 13 C 0 13.1 -0.00625 13.30625 0.09375 13.40625 C 0.19375 13.50625 2.5 16.0875 5 17.6875 C 5.2 17.7875 5.4875 17.7875 5.6875 17.6875 C 5.8875 17.5875 6 17.3875 6 17.1875 L 6 15 L 11 15 L 11 20 L 8.8125 20 C 8.6125 20 8.4125 20.1125 8.3125 20.3125 C 8.2125 20.5125 8.2125 20.70625 8.3125 20.90625 C 9.9125 23.30625 12.49375 25.7125 12.59375 25.8125 C 12.69375 25.9125 12.8 25.90625 13 25.90625 C 13.2 25.90625 13.30625 25.9125 13.40625 25.8125 C 13.50625 25.7125 16.0875 23.40625 17.6875 20.90625 C 17.7875 20.80625 17.7875 20.5125 17.6875 20.3125 C 17.5875 20.1125 17.3875 20 17.1875 20 L 15 20 L 15 15 L 20 15 L 20 17.1875 C 20 17.3875 20.1125 17.5875 20.3125 17.6875 C 20.5125 17.7875 20.70625 17.7875 20.90625 17.6875 C 23.30625 16.0875 25.7125 13.50625 25.8125 13.40625 C 25.9125 13.30625 25.90625 13.2 25.90625 13 C 25.90625 12.8 25.9125 12.69375 25.8125 12.59375 C 25.7125 12.49375 23.40625 9.9125 20.90625 8.3125 C 20.70625 8.2125 20.5125 8.2125 20.3125 8.3125 C 20.1125 8.4125 20 8.6125 20 8.8125 L 20 11 L 15 11 L 15 6 L 17.1875 6 C 17.3875 6 17.5875 5.8875 17.6875 5.6875 C 17.7875 5.4875 17.7875 5.29375 17.6875 5.09375 C 16.0875 2.69375 13.50625 0.2875 13.40625 0.1875 C 13.30625 0.0875 13.1 0 13 0 C 12.95 0 12.8875 -0.0125 12.8125 0 z" />
@@ -288,6 +289,7 @@
                             </DrawingBrush>
                         </Rectangle.Fill>
                     </Rectangle>
+                    <Rectangle x:Name="artworkBounds" Fill="White" />
                     <lib:DrawingCanvas x:Name="drawingCanvas" LineWidth="{Binding LineWidth}" 
                                        ObjectColor="{Binding ObjectColor}" Background="#00000000"
                                        Width="{Binding ActualWidth, ElementName=objectCanvas}"
@@ -295,30 +297,42 @@
                 </Canvas>
             </controls:ZoomBorderControl>
         </Grid>
-        <Border Width="70" Margin="30" Height="250" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Right" 
-                Background="#70707a" CornerRadius="10" Opacity=".8">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="180" />
-                    <RowDefinition />
-                    <RowDefinition />
-                </Grid.RowDefinitions>
-                <Grid Margin="7,10,-7,10">
+        <StackPanel Width="70" Margin="30"  Orientation="Vertical" Grid.Row="1" 
+                    VerticalAlignment="Center" HorizontalAlignment="Right" >
+            <Border x:Name="shiftIndicator" Background="#70707a" Height="40" Margin="0,0,0,10" CornerRadius="10" Opacity=".7">
+                <StackPanel Orientation="Horizontal">
+                    <Viewbox Height="20" HorizontalAlignment="Left" Margin="9,0,5,0">
+                        <Path Fill="White" Data="M 12.8125 0 C 12.7375 0.0125 12.64375 0.04375 12.59375 0.09375 C 12.49375 0.19375 9.9125 2.6 8.3125 5 C 8.2125 5.2 8.2125 5.39375 8.3125 5.59375 C 8.4125 5.89375 8.6125 6 8.8125 6 L 11 6 L 11 11 L 6 11 L 6 8.8125 C 6 8.6125 5.8875 8.4125 5.6875 8.3125 C 5.4875 8.2125 5.2 8.2125 5 8.3125 C 2.6 9.9125 0.19375 12.49375 0.09375 12.59375 C 0.09375 12.69375 9.2518585e-18 12.9 0 13 C 0 13.1 -0.00625 13.30625 0.09375 13.40625 C 0.19375 13.50625 2.5 16.0875 5 17.6875 C 5.2 17.7875 5.4875 17.7875 5.6875 17.6875 C 5.8875 17.5875 6 17.3875 6 17.1875 L 6 15 L 11 15 L 11 20 L 8.8125 20 C 8.6125 20 8.4125 20.1125 8.3125 20.3125 C 8.2125 20.5125 8.2125 20.70625 8.3125 20.90625 C 9.9125 23.30625 12.49375 25.7125 12.59375 25.8125 C 12.69375 25.9125 12.8 25.90625 13 25.90625 C 13.2 25.90625 13.30625 25.9125 13.40625 25.8125 C 13.50625 25.7125 16.0875 23.40625 17.6875 20.90625 C 17.7875 20.80625 17.7875 20.5125 17.6875 20.3125 C 17.5875 20.1125 17.3875 20 17.1875 20 L 15 20 L 15 15 L 20 15 L 20 17.1875 C 20 17.3875 20.1125 17.5875 20.3125 17.6875 C 20.5125 17.7875 20.70625 17.7875 20.90625 17.6875 C 23.30625 16.0875 25.7125 13.50625 25.8125 13.40625 C 25.9125 13.30625 25.90625 13.2 25.90625 13 C 25.90625 12.8 25.9125 12.69375 25.8125 12.59375 C 25.7125 12.49375 23.40625 9.9125 20.90625 8.3125 C 20.70625 8.2125 20.5125 8.2125 20.3125 8.3125 C 20.1125 8.4125 20 8.6125 20 8.8125 L 20 11 L 15 11 L 15 6 L 17.1875 6 C 17.3875 6 17.5875 5.8875 17.6875 5.6875 C 17.7875 5.4875 17.7875 5.29375 17.6875 5.09375 C 16.0875 2.69375 13.50625 0.2875 13.40625 0.1875 C 13.30625 0.0875 13.1 0 13 0 C 12.95 0 12.8875 -0.0125 12.8125 0 z" />
+                    </Viewbox>
+                    <TextBlock Foreground="White" VerticalAlignment="Center">
+                        Hold<LineBreak/><Run FontWeight="SemiBold">Shift</Run> 
+                    </TextBlock>
+                </StackPanel>
+                
+            </Border>
+            <Border Background="#70707a" CornerRadius="10" Opacity=".7" Height="250">
+                <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="0.8*"/>
-                        <RowDefinition Height="2*"/>
-                        <RowDefinition/>
-                        <RowDefinition/>
+                        <RowDefinition Height="180" />
+                        <RowDefinition />
+                        <RowDefinition />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" VerticalAlignment="Top" Foreground="White" FontWeight="SemiBold">&#160;3x -</TextBlock>
-                    <TextBlock Grid.Row="0" VerticalAlignment="Top" HorizontalAlignment="Right" 
+                    <Grid Margin="7,10,-7,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="0.8*"/>
+                            <RowDefinition Height="2*"/>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" VerticalAlignment="Top" Foreground="White" FontWeight="SemiBold">&#160;3x -</TextBlock>
+                        <TextBlock Grid.Row="0" VerticalAlignment="Top" HorizontalAlignment="Right" 
                            Foreground="White" FontWeight="SemiBold" Margin="0,0,15,0">+</TextBlock>
-                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold">&#160;2x -</TextBlock>
-                    <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold">&#160;1x -</TextBlock>
-                    <TextBlock Grid.Row="3" VerticalAlignment="Bottom" Foreground="White" FontWeight="SemiBold">.2x -</TextBlock>
-                    <TextBlock Grid.Row="3" VerticalAlignment="Bottom" HorizontalAlignment="Right" 
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold">&#160;2x -</TextBlock>
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold">&#160;1x -</TextBlock>
+                        <TextBlock Grid.Row="3" VerticalAlignment="Bottom" Foreground="White" FontWeight="SemiBold">.2x -</TextBlock>
+                        <TextBlock Grid.Row="3" VerticalAlignment="Bottom" HorizontalAlignment="Right" 
                            Foreground="White" FontWeight="SemiBold" Margin="0,0,15,0">-</TextBlock>
-                    <Slider Orientation="Vertical" Height="160"
+                        <Slider Orientation="Vertical" Height="160"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Grid.RowSpan="4"  
@@ -326,10 +340,11 @@
                             Minimum="0.2" Maximum="3" 
                             TickFrequency="0.2"
                             Value="{Binding ElementName=zoomControl, Path=ContentScale}"/>
+                    </Grid>
+                    <Button Grid.Row="1" Margin="5" Click="ZoomFit_Clicked">Fit</Button>
+                    <Button Grid.Row="2" Margin="5,0,5,10" Click="ZoomActual_Clicked">Actual</Button>
                 </Grid>
-                <Button Grid.Row="1" Margin="5" Click="ZoomFit_Clicked">Fit</Button>
-                <Button Grid.Row="2" Margin="5,0,5,10" Click="ZoomActual_Clicked">Actual</Button>
-            </Grid>
-        </Border>
+            </Border>
+        </StackPanel>
     </Grid>
 </UserControl>

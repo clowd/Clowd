@@ -871,6 +871,34 @@ namespace DrawToolsLib
             }
             return -1;
         }
+        public void AddImageGraphic(string filename, Rect rect)
+        {
+            HelperFunctions.UnselectAll(this);
+            var o = new GraphicsImage(filename, rect.Left, rect.Top, rect.Right, rect.Bottom, LineWidth, ObjectColor, 1d);
+            o.IsSelected = true;
+            o.Clip = new RectangleGeometry(new Rect(0, 0, this.ActualWidth, this.ActualHeight));
+            this.GraphicsList.Add(o);
+        }
+        public Rect GetArtworkBounds()
+        {
+            if (this.GraphicsList.Count == 1)
+            {
+                return this[0].ContentBounds;
+            }
+            else if (this.GraphicsList.Count > 1)
+            {
+                var rect = this[0].ContentBounds;
+                for (int i = 1; i < this.GraphicsList.Count; i++)
+                {
+                    rect.Union(this[i].ContentBounds);
+                }
+                return rect;
+            }
+            else
+            {
+                return new Rect(0, 0, 0, 0);
+            }
+        }
 
         /// <summary>
         /// Clear graphics list

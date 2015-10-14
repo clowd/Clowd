@@ -77,7 +77,7 @@ namespace DrawToolsLib
 
                 GraphicsText t = drawingCanvas[drawingCanvas.Count - 1] as GraphicsText;
 
-                if ( t != null )
+                if (t != null)
                 {
                     // Create textbox for editing of graphics object which is just created
                     CreateTextBox(t, drawingCanvas);
@@ -197,7 +197,7 @@ namespace DrawToolsLib
                 xOffset = offset.X;
                 yOffset = offset.Y;
             }
-            catch(ArgumentException e)
+            catch (ArgumentException e)
             {
                 System.Diagnostics.Trace.WriteLine("ComputeTextOffset: " + e.Message);
             }
@@ -228,6 +228,33 @@ namespace DrawToolsLib
 
                 e.Handled = true;
                 return;
+            }
+            // Handle A-Z here, so that keybindings to those keys will not be handled later on.
+            if ((int)e.Key >= 44 && (int)e.Key <= 69)
+            {
+                var key = (char)KeyInterop.VirtualKeyFromKey(e.Key);
+                string str = "";
+                if (Keyboard.Modifiers == ModifierKeys.None)
+                {
+                    if (Console.CapsLock) str = key.ToString();
+                    else str = key.ToString().ToLower();
+                }
+                else if (Keyboard.Modifiers == ModifierKeys.Shift)
+                {
+                    if (Console.CapsLock) str = key.ToString().ToLower();
+                    else str = key.ToString();
+                }
+
+                if (!String.IsNullOrWhiteSpace(str))
+                {
+                    var comp = new TextComposition(InputManager.Current, textBox, str);
+                    textBox.RaiseEvent(new TextCompositionEventArgs(InputManager.Current.PrimaryKeyboardDevice, comp)
+                    {
+                        RoutedEvent = TextCompositionManager.TextInputEvent
+                    });
+                    e.Handled = true;
+                    return;
+                }
             }
         }
 

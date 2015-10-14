@@ -168,7 +168,7 @@ namespace DrawToolsLib
             {
                 Cursor cursor = null;
 
-                for (int i = 0; i < drawingCanvas.Count; i++)
+                for (int i = drawingCanvas.Count - 1; i >= 0; i--)
                 {
                     int n = drawingCanvas[i].MakeHitTest(point);
 
