@@ -165,10 +165,10 @@
 	c-2.319,2.479-2.288,2.392-5.501,1.271C10.084,20.191,4.83,20.143,0,21.771V51h129.75h123.778H496h31h98.75h123.777H992h31h98.75
 	h123.777H1488h31h98.75h123.777H1920V12.856z</StreamGeometry>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Assets/ProgressRing.xaml"/>
+                <ResourceDictionary Source="Assets/ProgressRingControl.xaml"/>
                 <ResourceDictionary Source="Assets/TransitioningContentControl.xaml"/>
                 <ResourceDictionary Source="Assets/CustomWindowStyle.xaml"/>
-                <ResourceDictionary Source="Assets/Magnifier.xaml"/>
+                <ResourceDictionary Source="Assets/MagnifierControl.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Colors.xaml" />
