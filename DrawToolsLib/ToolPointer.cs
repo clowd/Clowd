@@ -18,7 +18,7 @@ namespace DrawToolsLib
             None,
             Move,           // object(s) are moved
             Size,           // object is resized
-            GroupSelection  
+            GroupSelection
         }
 
         private SelectionMode selectMode = SelectionMode.None;
@@ -61,7 +61,7 @@ namespace DrawToolsLib
             {
                 o = drawingCanvas[i];
 
-                if ( o.IsSelected )
+                if (o.IsSelected)
                 {
                     handleNumber = o.MakeHitTest(point);
 
@@ -103,7 +103,7 @@ namespace DrawToolsLib
                     selectMode = SelectionMode.Move;
 
                     // Unselect all if Ctrl is not pressed and clicked object is not selected yet
-                    if (Keyboard.Modifiers != ModifierKeys.Control  && ! movedObject.IsSelected)
+                    if (Keyboard.Modifiers != ModifierKeys.Control && !movedObject.IsSelected)
                     {
                         HelperFunctions.UnselectAll(drawingCanvas);
                     }
@@ -154,8 +154,8 @@ namespace DrawToolsLib
         public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)
         {
             // Exclude all cases except left button on/off.
-            if ( e.MiddleButton == MouseButtonState.Pressed  ||
-                 e.RightButton == MouseButtonState.Pressed )
+            if (e.MiddleButton == MouseButtonState.Pressed ||
+                 e.RightButton == MouseButtonState.Pressed)
             {
                 drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
                 return;
@@ -164,7 +164,7 @@ namespace DrawToolsLib
             Point point = e.GetPosition(drawingCanvas);
 
             // Set cursor when left button is not pressed
-            if ( e.LeftButton == MouseButtonState.Released )
+            if (e.LeftButton == MouseButtonState.Released)
             {
                 Cursor cursor = null;
 
@@ -172,7 +172,12 @@ namespace DrawToolsLib
                 {
                     int n = drawingCanvas[i].MakeHitTest(point);
 
-                    if (n > 0)
+                    if (n == 0)
+                    {
+                        cursor = Cursors.Hand;
+                        break;
+                    }
+                    else if (n > 0)
                     {
                         cursor = drawingCanvas[i].GetHandleCursor(n);
                         break;
@@ -188,7 +193,7 @@ namespace DrawToolsLib
 
             }
 
-            if ( ! drawingCanvas.IsMouseCaptured )
+            if (!drawingCanvas.IsMouseCaptured)
             {
                 return;
             }
@@ -202,25 +207,25 @@ namespace DrawToolsLib
             lastPoint = point;
 
             // Resize
-            if ( selectMode == SelectionMode.Size )
+            if (selectMode == SelectionMode.Size)
             {
-                if ( resizedObject != null )
+                if (resizedObject != null)
                 {
                     resizedObject.MoveHandleTo(point, resizedObjectHandle);
                 }
             }
 
             // Move
-            if ( selectMode == SelectionMode.Move )
+            if (selectMode == SelectionMode.Move)
             {
-                foreach(GraphicsBase o in drawingCanvas.Selection)
+                foreach (GraphicsBase o in drawingCanvas.Selection)
                 {
                     o.Move(dx, dy);
                 }
             }
 
             // Group selection
-            if ( selectMode == SelectionMode.GroupSelection )
+            if (selectMode == SelectionMode.GroupSelection)
             {
                 // Resize selection rectangle
                 drawingCanvas[drawingCanvas.Count - 1].MoveHandleTo(
@@ -234,7 +239,7 @@ namespace DrawToolsLib
         /// </summary>
         public override void OnMouseUp(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
-            if ( ! drawingCanvas.IsMouseCaptured )
+            if (!drawingCanvas.IsMouseCaptured)
             {
                 drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
                 selectMode = SelectionMode.None;
@@ -255,7 +260,7 @@ namespace DrawToolsLib
                 resizedObject = null;
             }
 
-            if ( selectMode == SelectionMode.GroupSelection )
+            if (selectMode == SelectionMode.GroupSelection)
             {
                 GraphicsSelectionRectangle r = (GraphicsSelectionRectangle)drawingCanvas[drawingCanvas.Count - 1];
                 r.Normalize();
@@ -263,9 +268,9 @@ namespace DrawToolsLib
 
                 drawingCanvas.GraphicsList.Remove(r);
 
-                foreach(GraphicsBase g in drawingCanvas.GraphicsList)
+                foreach (GraphicsBase g in drawingCanvas.GraphicsList)
                 {
-                    if ( g.IntersectsWith(rect) )
+                    if (g.IntersectsWith(rect))
                     {
                         g.IsSelected = true;
                     }

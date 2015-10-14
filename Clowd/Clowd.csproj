@@ -81,6 +81,9 @@
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
+    <Reference Include="ZoomAndPan">
+      <HintPath>..\lib\ZoomAndPan.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
@@ -103,6 +106,7 @@
     <Compile Include="Controls\SizeAwareProgressBar.cs" />
     <Compile Include="Controls\TransitioningContentControl.cs" />
     <Compile Include="Controls\UploadProgressBar.cs" />
+    <Compile Include="Controls\ZoomBorderControl.cs" />
     <Compile Include="Converters\BoolToInverseConverter.cs" />
     <Compile Include="Converters\BoolToVisibilityConverter2.cs" />
     <Compile Include="Converters\BorderThicknessToStrokeThicknessConverter.cs" />
@@ -148,11 +152,11 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Assets\Magnifier.xaml">
+    <Page Include="Assets\MagnifierControl.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Assets\ProgressRing.xaml">
+    <Page Include="Assets\ProgressRingControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

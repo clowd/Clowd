@@ -13,10 +13,8 @@
       Orientation="Horizontal"
       HorizontalAlignment="Right" 
       Margin="10">
-                <Button Name="OKButton" Padding="5" Margin="5,0,5,0"
-        Click="okButtonClicked"
-        IsEnabled="False">OK</Button>
-                <Button Click="cancelButtonClicked" Margin="5,0,5,0" Padding="5">Cancel</Button>
+                <Button Name="OKButton" Padding="10,5" Margin="5,0,5,0" Click="okButtonClicked" IsEnabled="False">OK</Button>
+                <Button Click="cancelButtonClicked" Margin="5,0,5,0" Padding="10,5">Cancel</Button>
             </StackPanel>
 
             <customControls:ColorPicker 

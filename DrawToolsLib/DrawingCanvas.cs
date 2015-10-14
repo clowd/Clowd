@@ -299,7 +299,9 @@ namespace DrawToolsLib
                     SetValue(ToolProperty, value);
 
                     // Set cursor immediately - important when tool is selected from the menu
-                    tools[(int)Tool].SetCursor(this);
+                    var tmp = tools[(int)Tool];
+                    if (tmp != null)
+                        tmp.SetCursor(this);
                 }
             }
         }
@@ -848,6 +850,27 @@ namespace DrawToolsLib
             }
         }
 
+        /// <summary>
+        /// Hit test.
+        /// Return value: -1 - no hit
+        ///                0 - hit anywhere
+        ///               +1 - hit handle
+        /// </summary>
+        public int HitTestGraphics(Point p)
+        {
+            for (int i = this.GraphicsList.Count - 1; i >= 0; i--)
+            {
+                var o = this[i];
+
+                var handleNumber = o.MakeHitTest(p);
+
+                if (handleNumber > -1)
+                {
+                    return Math.Max(handleNumber, 1);
+                }
+            }
+            return -1;
+        }
 
         /// <summary>
         /// Clear graphics list
