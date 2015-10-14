@@ -20,6 +20,10 @@ namespace Clowd.Capture
     {
         public ImageSource ScreenImage { get; set; }
         public bool ShowActionLabels { get; set; } = true;
+
+        private bool _autoPanning = false;
+        private bool _shiftPressed = false;
+
         public ImageEditorPage(ImageSource image)
         {
             InitializeComponent();
@@ -50,37 +54,93 @@ namespace Clowd.Capture
             }
         }
 
+        private void RefreshArtworkBounds()
+        {
+            var rect = drawingCanvas.GetArtworkBounds();
+            if (rect == Rect.Empty)
+                return;
+            artworkBounds.Width = rect.Width;
+            artworkBounds.Height = rect.Height;
+            Canvas.SetLeft(artworkBounds, rect.Left);
+            Canvas.SetTop(artworkBounds, rect.Top);
+        }
+
         private void ImageEditorPage_Loaded(object sender, RoutedEventArgs e)
         {
             zoomControl.PreviewMouseLeftButtonDown += ZoomControl_PreviewMouseLeftButtonDown;
             zoomControl.PreviewMouseLeftButtonUp += ZoomControl_PreviewMouseLeftButtonUp;
+            this.PreviewKeyDown += ZoomControl_PreviewKeyDown;
+            this.PreviewKeyUp += ZoomControl_PreviewKeyUp;
+            drawingCanvas.MouseMove += DrawingCanvas_MouseMove;
             ZoomFit_Clicked(null, null);
 
             // you need to focus a button, or some other control that holds focus within the usercontrol.
             // if you don't do this, input bindings / keyboard shortcuts won't work.
             Keyboard.Focus(uploadButton);
         }
+
+        private void ZoomControl_PreviewKeyUp(object sender, KeyEventArgs e)
+        {
+            if (_shiftPressed && (e.Key == Key.LeftShift || e.Key == Key.RightShift))
+            {
+                _shiftPressed = false;
+                shiftIndicator.Background = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                shiftIndicator.Opacity = 0.8;
+                drawingCanvas.Cursor = Cursors.Arrow;
+                drawingCanvas.Tool = DrawToolsLib.ToolType.Pointer;
+            }
+        }
+
+        private void ZoomControl_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.FocusedElement is TextBox)
+                return;
+            if (e.Key == Key.LeftShift || e.Key == Key.RightShift)
+            {
+                _shiftPressed = true;
+                shiftIndicator.Background = (Brush)App.Singleton.Resources["AccentColorBrush"];
+                shiftIndicator.Opacity = 1;
+                drawingCanvas.Cursor = Cursors.SizeAll;
+                drawingCanvas.Tool = DrawToolsLib.ToolType.None;
+            }
+        }
+
+        private void DrawingCanvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!zoomControl.Panning && e.LeftButton == MouseButtonState.Pressed)
+            {
+                RefreshArtworkBounds();
+            }
+        }
+
         private void ZoomControl_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (zoomControl.Panning)
             {
                 zoomControl.StopPanning();
+                if (_autoPanning)
+                    drawingCanvas.Tool = DrawToolsLib.ToolType.Pointer;
+                _autoPanning = false;
                 e.Handled = true;
-                drawingCanvas.Tool = DrawToolsLib.ToolType.Pointer;
             }
+            RefreshArtworkBounds();
         }
         private void ZoomControl_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (drawingCanvas.Tool == DrawToolsLib.ToolType.Pointer)
+            if (_shiftPressed || drawingCanvas.Tool == DrawToolsLib.ToolType.None || (
+                drawingCanvas.Tool == DrawToolsLib.ToolType.Pointer
+                    && drawingCanvas.HitTestGraphics(e.GetPosition(drawingCanvas)) < 0))
             {
-                if (drawingCanvas.HitTestGraphics(e.GetPosition(drawingCanvas)) < 0)
+                if (drawingCanvas.Tool == DrawToolsLib.ToolType.Pointer)
                 {
+                    _autoPanning = true;
                     drawingCanvas.Tool = DrawToolsLib.ToolType.None;
-                    zoomControl.StartPanning();
-                    e.Handled = true;
-                    drawingCanvas.UnselectAll();
                 }
+                zoomControl.StartPanning();
+                e.Handled = true;
+                drawingCanvas.UnselectAll();
             }
+            RefreshArtworkBounds();
         }
 
         private void Font_Clicked(object sender, RoutedEventArgs e)
@@ -141,10 +201,12 @@ namespace Clowd.Capture
         private void UndoCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Undo();
+            RefreshArtworkBounds();
         }
         private void RedoCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Redo();
+            RefreshArtworkBounds();
         }
         private void CopyCommand(object sender, ExecutedRoutedEventArgs e)
         {

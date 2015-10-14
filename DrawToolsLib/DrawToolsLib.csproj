@@ -72,7 +72,9 @@
     <Compile Include="DrawingCanvasException.cs" />
     <Compile Include="FontConversions.cs" />
     <Compile Include="GraphicsBase.cs" />
+    <Compile Include="GraphicsImage.cs" />
     <Compile Include="GraphicsText.cs" />
+    <Compile Include="PropertiesGraphicsImage.cs" />
     <Compile Include="Properties\Settings.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
