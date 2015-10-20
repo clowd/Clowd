@@ -76,6 +76,10 @@ namespace DrawToolsLib
                 drawingCanvas[drawingCanvas.Count - 1].Normalize();
 
                 GraphicsText t = drawingCanvas[drawingCanvas.Count - 1] as GraphicsText;
+                if (t.Rectangle.Width < 150)
+                    t.Right = t.Left + 150;
+                if (t.Rectangle.Height < 100)
+                    t.Bottom = t.Top + 150;
 
                 if (t != null)
                 {
@@ -229,6 +233,7 @@ namespace DrawToolsLib
                 e.Handled = true;
                 return;
             }
+
             // Handle A-Z here, so that keybindings to those keys will not be handled later on.
             if ((int)e.Key >= 44 && (int)e.Key <= 69)
             {

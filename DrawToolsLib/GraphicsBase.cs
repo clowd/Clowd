@@ -30,7 +30,7 @@ namespace DrawToolsLib
 
         protected const double HitTestWidth = 12.0;
 
-        protected const double HandleSize = 12.0;
+        public const double HandleSize = 12.0;
 
         static SolidColorBrush handleBrush2 = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
 

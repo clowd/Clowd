@@ -15,7 +15,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Clowd.Utilities;
-using Clowd.Capture;
 
 namespace Clowd
 {
@@ -325,7 +324,7 @@ namespace Clowd
                     b = br.ReadBytes(Convert.ToInt32(ms.Length));
                 }
                 this.Close();
-                var url = await UploadManager.Upload(b, "clowd-default.png", new UploadOptions() { Direct = true });
+                var url = await UploadManager.Upload(b, "clowd-default.png", new UploadOptions() { DirectEnabled = true });
                 UploadManager.RemoveUpload(url, true);
                 Process.Start("http://www.google.com/searchbyimage?image_url=" + url);
             }
@@ -391,7 +390,6 @@ namespace Clowd
         {
             var enc = new PngBitmapEncoder();
             enc.Frames.Add(BitmapFrame.Create(GetRenderedBitmap()));
-
             string filename = "";
             Microsoft.Win32.SaveFileDialog dlg = new Microsoft.Win32.SaveFileDialog();
             dlg.FileName = "Screenshot"; // Default file name
