@@ -20,18 +20,16 @@ namespace Clowd
     /// </summary>
     public partial class LoginPage : UserControl
     {
+
         public LoginPage()
         {
             InitializeComponent();
+            this.Loaded += LoginPage_Loaded;
         }
 
-        private async void loginButton_Click(object sender, RoutedEventArgs e)
+        private void LoginPage_Loaded(object sender, RoutedEventArgs e)
         {
-            var window = Window.GetWindow(this);
-            TemplatedWindow.SetContentToSpinner(window);
-            await Task.Delay(200);
-            //TemplatedWindow.SetContent(window, this);
-            TemplatedWindow.SetContent(window, new HomePage());
+            Keyboard.Focus(textUsername);
         }
 
         private void useAnon_Click(object sender, MouseButtonEventArgs e)
@@ -45,6 +43,36 @@ namespace Clowd
             WebBrowser wb = new WebBrowser();
             this.Content = wb;
             wb.Navigate("http://example.com");
+        }
+
+        private async void LoginExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            var window = Window.GetWindow(this);
+            TemplatedWindow.SetContentToSpinner(window);
+            AuthResult result;
+            using (var details = new Credentials(textUsername.Text, textPassword.SecurePassword))
+            {
+                result = await UploadManager.Login(details);
+            }
+
+            if (result == AuthResult.Success)
+            {
+                TemplatedWindow.SetContent(window, new HomePage());
+            }
+            else if (result == AuthResult.InvalidCredentials)
+            {
+                this.invalidText.Text = "Invalid Username/Password";
+                TemplatedWindow.SetContent(window, this);
+                this.invalidIndicator.Visibility = Visibility.Visible;
+                Keyboard.Focus(textUsername);
+            }
+            else if (result == AuthResult.NetworkError)
+            {
+                this.invalidText.Text = "Network Error";
+                TemplatedWindow.SetContent(window, this);
+                this.invalidIndicator.Visibility = Visibility.Visible;
+                Keyboard.Focus(textUsername);
+            }
         }
     }
 }

@@ -172,11 +172,12 @@ namespace DrawToolsLib
 
             drawingContext.PushClip(new RectangleGeometry(rect));
 
+            drawingContext.DrawRectangle(Brushes.LightYellow, new Pen(Brushes.Black, 1), rect);
             drawingContext.DrawText(formattedText, new Point(rect.Left, rect.Top));
 
             drawingContext.Pop();
 
-            if (IsSelected )
+            if (IsSelected)
             {
                 drawingContext.DrawRectangle(
                     null,

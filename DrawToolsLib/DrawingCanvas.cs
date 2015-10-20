@@ -881,22 +881,32 @@ namespace DrawToolsLib
         }
         public Rect GetArtworkBounds()
         {
-            if (this.GraphicsList.Count == 1)
+            if (this.GraphicsList.Count > 0)
             {
-                return this[0].ContentBounds;
-            }
-            else if (this.GraphicsList.Count > 1)
-            {
-                var rect = this[0].ContentBounds;
+                var rect = GetGraphicRect(this[0]);
                 for (int i = 1; i < this.GraphicsList.Count; i++)
                 {
-                    rect.Union(this[i].ContentBounds);
+                    rect.Union(GetGraphicRect(this[i]));
                 }
                 return rect;
             }
             else
             {
                 return new Rect(0, 0, 0, 0);
+            }
+        }
+        private Rect GetGraphicRect(GraphicsBase g)
+        {
+            var rect = g.ContentBounds;
+            if (g.IsSelected)
+            {
+                var trim = GraphicsBase.HandleSize / 2 - LineWidth;
+                return new Rect(rect.X + trim, rect.Y + trim, 
+                    Math.Max(0, rect.Width - (trim * 2)), Math.Max(0, rect.Height - (trim * 2)));
+            }
+            else
+            {
+                return rect;
             }
         }
 

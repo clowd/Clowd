@@ -29,15 +29,15 @@ namespace Clowd
         {
             var window = TemplatedWindow.GetWindow(this);
             window.WindowState = WindowState.Minimized;
-            Capture.CaptureWindow capture = new Capture.CaptureWindow();
-            await Task.Delay(500);
-            EventHandler close = null;
+            CaptureWindow capture = new CaptureWindow();
+            await Task.Delay(600);
+            System.ComponentModel.CancelEventHandler close = null;
             close = (s, evargs) =>
             {
                 window.WindowState = WindowState.Normal;
-                capture.Closed -= close;
+                capture.Closing -= close;
             };
-            capture.Closed += close;
+            capture.Closing += close;
             capture.Show();
         }
 
@@ -51,14 +51,14 @@ namespace Clowd
 
         }
 
-        private void Paste_Click(object sender, RoutedEventArgs e)
+        private void Settings_Click(object sender, RoutedEventArgs e)
         {
 
         }
 
-        private void Settings_Click(object sender, RoutedEventArgs e)
+        private void PasteExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-
+            App.Singleton.Paste();
         }
     }
 }
