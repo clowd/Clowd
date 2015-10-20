@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Clowd.Utilities;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,26 +15,40 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-namespace Clowd.Capture
+namespace Clowd
 {
     [PropertyChanged.ImplementPropertyChanged]
     public partial class ImageEditorPage : UserControl
     {
-        public ImageSource ScreenImage { get; set; }
         public bool ShowActionLabels { get; set; } = true;
 
         private bool _autoPanning = false;
         private bool _shiftPressed = false;
+        private string _imagePath;
 
-        public ImageEditorPage(ImageSource image)
+        public ImageEditorPage(string initImagePath)
         {
             InitializeComponent();
-            ScreenImage = image;
             drawingCanvas.SetResourceReference(DrawToolsLib.DrawingCanvas.HandleColorProperty, "AccentColor");
             drawingCanvas.ObjectColor = Colors.Red;
             drawingCanvas.LineWidth = 2;
             this.Loaded += ImageEditorPage_Loaded;
+            _imagePath = initImagePath;
             //http://www.1001fonts.com/honey-script-font.html
+
+            if (!String.IsNullOrEmpty(_imagePath) && File.Exists(_imagePath))
+            {
+                double width, height;
+                using (var stream = new FileStream(_imagePath, FileMode.Open, FileAccess.Read))
+                {
+                    var bitmapFrame = BitmapFrame.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+                    width = DpiScale.DownScaleX(bitmapFrame.PixelWidth);
+                    height = DpiScale.DownScaleY(bitmapFrame.PixelHeight);
+                }
+                objectCanvas.Width = width * 1.5;
+                objectCanvas.Height = height * 1.5;
+                drawingCanvas.AddImageGraphic(_imagePath, new Rect(width / 4, height / 4, width, height));
+            }
         }
 
         private void MoveCommandsToChrome()
@@ -53,7 +69,6 @@ namespace Clowd.Capture
                 rootGrid.RowDefinitions[0].Height = new GridLength(0);
             }
         }
-
         private void RefreshArtworkBounds()
         {
             var rect = drawingCanvas.GetArtworkBounds();
@@ -64,6 +79,56 @@ namespace Clowd.Capture
             Canvas.SetLeft(artworkBounds, rect.Left);
             Canvas.SetTop(artworkBounds, rect.Top);
         }
+        private bool VerifyArtworkExists()
+        {
+            var b = drawingCanvas.GetArtworkBounds();
+            if (b.Height < 10 || b.Width < 10)
+            {
+                //TODO: Show an error saying that there is nothing on the canvas.
+                return false;
+            }
+            return true;
+        }
+        private DrawingVisual GetRenderedVisual()
+        {
+            var bounds = drawingCanvas.GetArtworkBounds();
+
+            DrawingVisual vs = new DrawingVisual();
+            DrawingContext dc = vs.RenderOpen();
+
+            drawingCanvas.RemoveClip();
+
+            var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+            dc.PushClip(new RectangleGeometry(bounds, 0, 0, transform));
+            dc.PushTransform(transform);
+
+            dc.DrawRectangle(Brushes.White, null, bounds);
+            drawingCanvas.Draw(dc);
+            drawingCanvas.RefreshClip();
+
+            dc.Pop();
+            dc.Close();
+
+            return vs;
+        }
+        private RenderTargetBitmap GetRenderedBitmap()
+        {
+            var drawingVisual = GetRenderedVisual();
+            RenderTargetBitmap bmp = new RenderTargetBitmap(
+                (int)DpiScale.UpScaleX(drawingVisual.ContentBounds.Width),
+                (int)DpiScale.UpScaleY(drawingVisual.ContentBounds.Height),
+                DpiScale.DpiX,
+                DpiScale.DpiY,
+                PixelFormats.Pbgra32);
+            bmp.Render(drawingVisual);
+            return bmp;
+        }
+        private PngBitmapEncoder GetRenderedPng()
+        {
+            var enc = new PngBitmapEncoder();
+            enc.Frames.Add(BitmapFrame.Create(GetRenderedBitmap()));
+            return enc;
+        }
 
         private void ImageEditorPage_Loaded(object sender, RoutedEventArgs e)
         {
@@ -72,11 +137,15 @@ namespace Clowd.Capture
             this.PreviewKeyDown += ZoomControl_PreviewKeyDown;
             this.PreviewKeyUp += ZoomControl_PreviewKeyUp;
             drawingCanvas.MouseMove += DrawingCanvas_MouseMove;
-            ZoomFit_Clicked(null, null);
 
-            // you need to focus a button, or some other control that holds focus within the usercontrol.
+            // you need to focus a button, or some other control that holds keyboard focus.
             // if you don't do this, input bindings / keyboard shortcuts won't work.
             Keyboard.Focus(uploadButton);
+
+
+
+            drawingCanvas.RefreshClip();
+            ZoomFit_Clicked(null, null);
         }
 
         private void ZoomControl_PreviewKeyUp(object sender, KeyEventArgs e)
@@ -90,7 +159,6 @@ namespace Clowd.Capture
                 drawingCanvas.Tool = DrawToolsLib.ToolType.Pointer;
             }
         }
-
         private void ZoomControl_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (Keyboard.FocusedElement is TextBox)
@@ -104,7 +172,6 @@ namespace Clowd.Capture
                 drawingCanvas.Tool = DrawToolsLib.ToolType.None;
             }
         }
-
         private void DrawingCanvas_MouseMove(object sender, MouseEventArgs e)
         {
             if (!zoomControl.Panning && e.LeftButton == MouseButtonState.Pressed)
@@ -112,7 +179,6 @@ namespace Clowd.Capture
                 RefreshArtworkBounds();
             }
         }
-
         private void ZoomControl_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (zoomControl.Panning)
@@ -145,7 +211,7 @@ namespace Clowd.Capture
 
         private void Font_Clicked(object sender, RoutedEventArgs e)
         {
-
+            drawingCanvas.RefreshClip();
         }
         private void Brush_Clicked(object sender, RoutedEventArgs e)
         {
@@ -188,7 +254,16 @@ namespace Clowd.Capture
 
         private void PrintCommand(object sender, ExecutedRoutedEventArgs e)
         {
-
+            if (!VerifyArtworkExists())
+                return;
+            var c = objectCanvas;
+            PrintDialog dlg = new PrintDialog();
+            var image = GetRenderedVisual();
+            if (dlg.ShowDialog().GetValueOrDefault() != true)
+            {
+                return;
+            }
+            dlg.PrintVisual(image, "Graphics");
         }
         private void CloseCommand(object sender, ExecutedRoutedEventArgs e)
         {
@@ -196,7 +271,44 @@ namespace Clowd.Capture
         }
         private void SaveCommand(object sender, ExecutedRoutedEventArgs e)
         {
+            if (!VerifyArtworkExists())
+                return;
+            string directory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string defaultName = "screenshot";
+            string extension = ".png";
+            if (File.Exists(System.IO.Path.Combine(directory, $"{defaultName}{extension}")))
+            {
+                int i = 1;
+                while (File.Exists(System.IO.Path.Combine(directory, $"{defaultName}{i}{extension}")))
+                {
+                    i++;
+                }
+                defaultName = defaultName + i.ToString();
+            }
+            Microsoft.Win32.SaveFileDialog dlg = new Microsoft.Win32.SaveFileDialog();
+            dlg.FileName = defaultName; // Default file name
+            dlg.DefaultExt = extension; // Default file extension
+            dlg.Filter = $"Images ({extension})|*{extension}"; // Filter files by extension
+            dlg.OverwritePrompt = true;
+            dlg.InitialDirectory = directory;
 
+            // Show save file dialog box
+            Nullable<bool> result = dlg.ShowDialog();
+            // Process save file dialog box results
+            string filename = "";
+            if (result == true)
+            {
+                // Save document
+                filename = dlg.FileName;
+            }
+            else return;
+
+            if (File.Exists(filename))
+                File.Delete(filename);
+            using (var fs = new FileStream(filename, FileMode.Create, FileAccess.Write))
+            {
+                GetRenderedPng().Save(fs);
+            }
         }
         private void UndoCommand(object sender, ExecutedRoutedEventArgs e)
         {
@@ -210,20 +322,45 @@ namespace Clowd.Capture
         }
         private void CopyCommand(object sender, ExecutedRoutedEventArgs e)
         {
-
+            if (!VerifyArtworkExists())
+                return;
+            using (var ms = new MemoryStream())
+            {
+                GetRenderedPng().Save(ms);
+                var img = System.Drawing.Image.FromStream(ms);
+                System.Windows.Forms.Clipboard.SetImage(img);
+            }
         }
         private void DeleteCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Delete();
+            RefreshArtworkBounds();
         }
         private void UploadCommand(object sender, ExecutedRoutedEventArgs e)
         {
-            MessageBox.Show("upload");
+            if (!VerifyArtworkExists())
+                return;
+            using (var ms = new MemoryStream())
+            {
+                GetRenderedPng().Save(ms);
+                ms.Position = 0;
+                byte[] b;
+                using (BinaryReader br = new BinaryReader(ms))
+                {
+                    b = br.ReadBytes(Convert.ToInt32(ms.Length));
+                }
+                var task = UploadManager.Upload(b, "clowd-default.png");
+            }
         }
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)
         {
             var tool = (DrawToolsLib.ToolType)Enum.Parse(typeof(DrawToolsLib.ToolType), (string)e.Parameter);
             drawingCanvas.Tool = tool;
+            if (tool == DrawToolsLib.ToolType.None)
+            {
+                drawingCanvas.UnselectAll();
+                drawingCanvas.Cursor = Cursors.SizeAll;
+            }
         }
     }
 }
