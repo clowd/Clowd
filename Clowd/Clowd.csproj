@@ -297,9 +297,7 @@
   <ItemGroup>
     <Resource Include="Images\Clowd-250.png" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Capture\" />
-  </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
     <Resource Include="Images\Key-24.png" />
     <Resource Include="Images\Visible-24.png" />
