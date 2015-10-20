@@ -2,6 +2,7 @@
 using Clowd.Utilities;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,7 +16,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 
-namespace Clowd.Capture
+namespace Clowd
 {
     [PropertyChanged.ImplementPropertyChanged]
     public partial class CaptureWindow : Window
@@ -93,6 +94,7 @@ namespace Clowd.Capture
             var bottomSpace = Math.Max(primaryScreen.Bottom - selection.Bottom, 0);
             if (capturing == true)
             {
+                var c = this;
                 areaSizeIndicatorWidth.Text = Math.Round(DpiScale.UpScaleX(selection.Width)).ToString();
                 areaSizeIndicatorHeight.Text = Math.Round(DpiScale.UpScaleY(selection.Height)).ToString();
                 double indLeft, indTop;
@@ -163,16 +165,12 @@ namespace Clowd.Capture
                 areaSizeIndicator.Visibility = Visibility.Visible;
                 ShowTips = true;
                 CanvasCursor = Cursors.None;
-                _magnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Hidden;
+                //_magnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Hidden;
                 toolActionBar.Visibility = Visibility.Hidden;
                 crosshairBottomLeft.Width = rootGrid.ActualWidth;
                 crosshairBottomLeft.Height = rootGrid.ActualHeight;
                 crosshairTopRight.Width = rootGrid.ActualWidth;
                 crosshairTopRight.Height = rootGrid.ActualHeight;
-                //Canvas.SetLeft(crosshairBottomLeft, -10);
-                //Canvas.SetBottom(crosshairBottomLeft, rootGrid.Height + 10);
-                //Canvas.SetTop(crosshairTopRight, -10);
-                //Canvas.SetRight(crosshairTopRight, rootGrid.Width + 10);
                 crosshairBottomLeft.Visibility = Visibility.Visible;
                 crosshairTopRight.Visibility = Visibility.Visible;
             }
@@ -185,7 +183,7 @@ namespace Clowd.Capture
                     capturing = false;
                 }
                 areaSizeIndicator.Visibility = Visibility.Hidden;
-                _magnifier.Visibility = Visibility.Hidden;
+                //_magnifier.Visibility = Visibility.Hidden;
                 crosshairBottomLeft.Visibility = Visibility.Hidden;
                 crosshairTopRight.Visibility = Visibility.Hidden;
                 ShowTips = false;
@@ -312,7 +310,6 @@ namespace Clowd.Capture
                 double x, y, width, height;
                 if (currentPoint.X > draggingOrigin.X)
                 {
-
                     x = draggingOrigin.X;
                     width = currentPoint.X - draggingOrigin.X;
                 }
@@ -353,30 +350,57 @@ namespace Clowd.Capture
             }
         }
 
-        private void Photo_Clicked(object sender, RoutedEventArgs e)
+        private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-
+            Rect croppingRect = DpiScale.TranslateUpScaleRect(CroppingRectangle);
+            var i32r = new Int32Rect((int)croppingRect.X, (int)croppingRect.Y, (int)croppingRect.Width, (int)croppingRect.Height);
+            var cropped = new CroppedBitmap(ScreenImage, i32r);
+            BitmapEncoder encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(cropped));
+            var path = System.IO.Path.GetTempFileName() + ".png";
+            using (var fileStream = new System.IO.FileStream(path, System.IO.FileMode.Create))
+            {
+                encoder.Save(fileStream);
+            }
+            this.Close();
+            TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(path)).Show();
         }
 
-        private void Video_Clicked(object sender, RoutedEventArgs e)
+        private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-
+            MessageBox.Show("This feature is temporarily disabled.");
         }
 
-        private void Reset_Clicked(object sender, RoutedEventArgs e)
+        private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             UpdateCanvasSelection(new Rect(0, 0, 0, 0));
             UpdateCanvasMode(true);
         }
 
-        private void Close_Clicked(object sender, RoutedEventArgs e)
+        private void CloseExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
         }
 
-        private void Search_Clicked(object sender, RoutedEventArgs e)
+        private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-
+            Rect croppingRect = DpiScale.TranslateUpScaleRect(CroppingRectangle);
+            var i32r = new Int32Rect((int)croppingRect.X, (int)croppingRect.Y, (int)croppingRect.Width, (int)croppingRect.Height);
+            var cropped = new CroppedBitmap(ScreenImage, i32r);
+            BitmapEncoder encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(cropped));
+            using (var ms = new MemoryStream())
+            {
+                encoder.Save(ms);
+                ms.Position = 0;
+                byte[] b;
+                using (BinaryReader br = new BinaryReader(ms))
+                {
+                    b = br.ReadBytes(Convert.ToInt32(ms.Length));
+                }
+                var task = UploadManager.Upload(b, "clowd-default.png");
+            }
+            this.Close();
         }
     }
 }

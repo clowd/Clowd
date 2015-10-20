@@ -1,4 +1,4 @@
-﻿<Window x:Class="Clowd.Capture.CaptureWindow"
+﻿<Window x:Class="Clowd.CaptureWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -10,8 +10,8 @@
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         DataContext="{Binding RelativeSource={RelativeSource Self}}"
         mc:Ignorable="d" SnapsToDevicePixels="True"
-        Icon="../Images/default.ico"
-        WindowStyle="None" ResizeMode="NoResize" Topmost="False"
+        Icon="/Images/default.ico"
+        WindowStyle="None" ResizeMode="NoResize" Topmost="True"
         Title="Capture" Height="500" Width="500">
     <Window.Resources>
         <lib:ToolTypeConverter x:Key="convToolType"/>
@@ -41,7 +41,27 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <RoutedCommand x:Key="Command.Upload" />
+        <RoutedCommand x:Key="Command.Photo" />
+        <RoutedCommand x:Key="Command.Video" />
+        <RoutedCommand x:Key="Command.Reset" />
     </Window.Resources>
+    <Window.InputBindings>
+        <KeyBinding Key="U" Command="{StaticResource Command.Upload}" />
+        <KeyBinding Key="P" Command="{StaticResource Command.Photo}" />
+        <KeyBinding Key="Enter" Command="{StaticResource Command.Photo}" />
+        <KeyBinding Key="V" Command="{StaticResource Command.Video}" />
+        <KeyBinding Key="R" Command="{StaticResource Command.Reset}" />
+        <KeyBinding Key="C" Command="ApplicationCommands.Close" />
+        <KeyBinding Key="Esc" Command="ApplicationCommands.Close" />
+    </Window.InputBindings>
+    <Window.CommandBindings>
+        <CommandBinding Command="{StaticResource Command.Upload}" Executed="UploadExecuted" />
+        <CommandBinding Command="{StaticResource Command.Photo}" Executed="PhotoExecuted" />
+        <CommandBinding Command="{StaticResource Command.Video}" Executed="VideoExecuted" />
+        <CommandBinding Command="{StaticResource Command.Reset}" Executed="ResetExecuted" />
+        <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
+    </Window.CommandBindings>
     <Grid Name="rootGrid" Cursor="{Binding CanvasCursor}">
         <Image Name="imageBackground"  Source="{Binding ScreenImage}" Stretch="Fill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
         <Path Name="surroundFill"  Fill="#99000000" Cursor="{Binding CanvasCursor}">
@@ -117,79 +137,44 @@
                 <Border BorderThickness="{Binding NormalThickness}" BorderBrush="{StaticResource HighlightBrush}" Opacity=".7" SnapsToDevicePixels="True" />
                 <Rectangle Stroke="#A5FFFFFF" StrokeThickness="{Binding NormalThickness}" StrokeDashArray="8 8" Opacity=".6" SnapsToDevicePixels="True"  />
                 <Border BorderThickness="{Binding TopRightThickness}" BorderBrush="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"
-                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Width="150" Height="150"/>
-                <Rectangle Width="75" Height="5" VerticalAlignment="Bottom" HorizontalAlignment="Left" SnapsToDevicePixels="True"
-                           Margin="75,0,0,-2" Fill="{StaticResource HighlightBrush}" />
-                <Rectangle Width="5" Height="75" VerticalAlignment="Bottom" HorizontalAlignment="Left" SnapsToDevicePixels="True"
-                           Margin="-2,0,0,75" Fill="{StaticResource HighlightBrush}" />
+                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Width="120" Height="120"/>
+                <Rectangle Width="60" Height="5" VerticalAlignment="Bottom" HorizontalAlignment="Left" SnapsToDevicePixels="True"
+                           Margin="60,0,0,-2" Fill="{StaticResource HighlightBrush}" />
+                <Rectangle Width="5" Height="60" VerticalAlignment="Bottom" HorizontalAlignment="Left" SnapsToDevicePixels="True"
+                           Margin="-2,0,0,60" Fill="{StaticResource HighlightBrush}" />
             </Grid>
             <Grid Name="crosshairBottomLeft" Visibility="Hidden" SnapsToDevicePixels="True">
                 <Border BorderThickness="{Binding NormalThickness}" BorderBrush="{StaticResource HighlightBrush}" Opacity=".7" SnapsToDevicePixels="True"/>
                 <Rectangle Stroke="#A5FFFFFF" StrokeThickness="{Binding NormalThickness}" StrokeDashArray="8 8" Opacity=".6"   SnapsToDevicePixels="True"/>
                 <Border BorderThickness="{Binding BottomLeftThickness}" BorderBrush="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"
-                        HorizontalAlignment="Right" VerticalAlignment="Top" Width="150" Height="150" />
-                <Rectangle Width="75" Height="5" VerticalAlignment="Top" HorizontalAlignment="Right"
-                           Margin="0,-2,75,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"/>
-                <Rectangle Width="5" Height="75" VerticalAlignment="Top" HorizontalAlignment="Right"
-                           Margin="0,75,-2,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True" />
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Width="120" Height="120" />
+                <Rectangle Width="60" Height="5" VerticalAlignment="Top" HorizontalAlignment="Right"
+                           Margin="0,-2,60,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"/>
+                <Rectangle Width="5" Height="60" VerticalAlignment="Top" HorizontalAlignment="Right"
+                           Margin="0,60,-2,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True" />
             </Grid>
             <!--<Viewbox Width="100" Height="100">
                 <Path Width="60.85" Height="61.1" Fill="Red" Data="M15,32.05H0v-3h15V32.05z M31.8,61.1v-15h-3v15H31.8z M60.851,29.05h-15v3h15V29.05z M31.8,15V0h-3v15H31.8z M45.851,30.05 H15v1h30.851V30.05z M30.8,45.975V15.125h-1v30.851H30.8z" />
             </Viewbox>-->
             <Border Name="toolActionBar" Background="{StaticResource HighlightBrush}" Visibility="Hidden">
                 <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
-                    <Border Width="50" Height="50">
-                        <!--<Border.Resources>
-                            <SolidColorBrush x:Key="circleFg" Color="White" />
-                        </Border.Resources>-->
+                    <!--<Border Width="50" Height="50">
                         <Viewbox Width="35" Height="35">
                             <Path Width="16" Height="16" Fill="White" Data="M3.759,9.556C3.603,10.012,3.5,10.492,3.5,11c0,0.248,0.035,0.487,0.073,0.726C2.072,11.148,1,9.702,1,8 s1.073-3.149,2.573-3.726C3.534,4.512,3.5,4.751,3.5,5c0,0.508,0.103,0.988,0.259,1.444C3.3,6.811,3,7.368,3,8 C3,8.631,3.3,9.188,3.759,9.556z M6.76,6.552C6.302,6.185,6,5.631,6,5c0-1.103,0.897-2,2-2c0.632,0,1.189,0.3,1.556,0.759 C10.012,3.603,10.492,3.5,11,3.5c0.248,0,0.487,0.034,0.726,0.073C11.148,2.072,9.702,1,8,1C5.794,1,4,2.794,4,5 c0,1.02,0.395,1.941,1.025,2.649C5.507,7.221,6.079,6.902,6.71,6.712C6.727,6.659,6.742,6.605,6.76,6.552z M11,4 C9.299,4,7.853,5.072,7.275,6.572C7.513,6.533,7.752,6.499,8,6.499c0.508,0,0.989,0.104,1.444,0.259C9.812,6.3,10.369,6,11,6 c1.103,0,2,0.897,2,2c0,0.631-0.3,1.189-0.759,1.556C12.396,10.012,12.5,10.492,12.5,11c0,0.248-0.034,0.488-0.073,0.726 C13.928,11.148,15,9.702,15,8C15,5.794,13.206,4,11,4z M12,11c0-2.206-1.794-4.001-4-4.001S4,8.794,4,11s1.794,4,4,4 S12,13.206,12,11z M10,11c0,1.103-0.897,2-2,2c-1.103,0-2-0.897-2-2c0-1.104,0.897-2.001,2-2.001C9.103,8.999,10,9.896,10,11z" />
-                            <!--<Grid Width="16" Height="16">
-                                <Path Stroke="{StaticResource HighlightBrush}" Fill="{StaticResource HighlightBrush}" StrokeThickness="3">
-                                    <Path.Data>
-                                        <EllipseGeometry  Center="5,8"  RadiusX="3"  RadiusY="3" />
-                                    </Path.Data>
-                                </Path>
-                                <Path Stroke="{StaticResource circleFg}" StrokeThickness="2">
-                                    <Path.Data>
-                                        <EllipseGeometry  Center="5,8"  RadiusX="3"  RadiusY="3" />
-                                    </Path.Data>
-                                </Path>
-                                <Path Stroke="{StaticResource HighlightBrush}" Fill="{StaticResource HighlightBrush}" StrokeThickness="3">
-                                    <Path.Data>
-                                        <EllipseGeometry  Center="8,5"  RadiusX="3"  RadiusY="3" />
-                                    </Path.Data>
-                                </Path>
-                                <Path Stroke="{StaticResource circleFg}" StrokeThickness="2">
-                                    <Path.Data>
-                                        <EllipseGeometry  Center="8,5"  RadiusX="3"  RadiusY="3" />
-                                    </Path.Data>
-                                </Path>
-                                <Path Stroke="{StaticResource HighlightBrush}" Fill="{StaticResource HighlightBrush}" StrokeThickness="3">
-                                    <Path.Data>
-                                        <EllipseGeometry  Center="11,8"  RadiusX="3"  RadiusY="3" />
-                                    </Path.Data>
-                                </Path>
-                                <Path Stroke="{StaticResource circleFg}" StrokeThickness="2">
-                                    <Path.Data>
-                                        <EllipseGeometry  Center="11,8"  RadiusX="3"  RadiusY="3" />
-                                    </Path.Data>
-                                </Path>
-                                <Path Stroke="{StaticResource HighlightBrush}" Fill="{StaticResource HighlightBrush}" StrokeThickness="3">
-                                    <Path.Data>
-                                        <EllipseGeometry  Center="8,11"  RadiusX="3"  RadiusY="3" />
-                                    </Path.Data>
-                                </Path>
-                                <Path Stroke="{StaticResource circleFg}" StrokeThickness="2">
-                                    <Path.Data>
-                                        <EllipseGeometry  Center="8,11"  RadiusX="3"  RadiusY="3" />
-                                    </Path.Data>
-                                </Path>
-                            </Grid>-->
                         </Viewbox>
-                    </Border>
-                    <Rectangle Fill="#373737" MinWidth="2" MinHeight="2" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
-                    <Button Style="{StaticResource ButtonTool}" Width="50" Click="Photo_Clicked" >
+                    </Border>-->
+                    <Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Upload}" >
+                        <StackPanel Orientation="Vertical" Margin="5">
+                            <Viewbox Height="26" Width="26">
+                                <Path Width="16" Height="16" Fill="White" Data="{StaticResource N43}" />
+                            </Viewbox>
+                            <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
+                                <Run TextDecorations="Underline">U</Run>PLOAD
+                            </TextBlock>
+                        </StackPanel>
+                    </Button>
+                    <Rectangle Fill="#373737" MinWidth="3" MinHeight="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
+                    <Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Photo}" >
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Path Width="26" Height="26" Fill="White" Data="M 9.5 3 C 8.791 3 8.32075 3.2885 8.09375 3.6875 L 6.8125 6 L 4.9375 6 C 1.9975 6 5.9211895e-16 8.059 0 11 L 0 19.125 C 0 21.818 2.182 24 4.875 24 L 21.125 24 C 23.818 24 26 21.818 26 19.125 L 26 10.875 C 26 8.182 23.818 6 21.125 6 L 19.1875 6 L 17.90625 3.6875 C 17.68025 3.2885 17.18 3 16.5 3 L 9.5 3 z M 4 7.875 C 4.628 7.875 5.125 8.372 5.125 9 C 5.125 9.628 4.628 10.125 4 10.125 C 3.372 10.125 2.875 9.628 2.875 9 C 2.875 8.372 3.372 7.875 4 7.875 z M 13 7.9375 C 16.9 7.9375 20.0625 11.1 20.0625 15 C 20.0625 18.9 16.9 22.0625 13 22.0625 C 9.1 22.0625 5.9375 18.901 5.9375 15 C 5.9375 11.099 9.1 7.9375 13 7.9375 z M 13 10.1875 C 10.341853 10.1875 8.1875 12.341853 8.1875 15 C 8.1875 17.658147 10.341853 19.8125 13 19.8125 C 15.658147 19.8125 17.8125 17.658147 17.8125 15 C 17.8125 12.341853 15.658147 10.1875 13 10.1875 z" />
                             <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
@@ -197,7 +182,7 @@
                             </TextBlock>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource ButtonTool}" Width="50" Click="Video_Clicked">
+                    <Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Video}">
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Path Width="26" Height="26" Fill="White" Data="M 8.5 6 C 2.5 6 0 6.81275 0 7.46875 L 0 18.5 C 0 19.141 2.5 20 8.5 20 C 14.5 20 17 19.18725 17 18.53125 L 17 7.5 C 17 6.859 14.5 6 8.5 6 z M 25.375 6.03125 C 25.199951 6.0388086 25.019125 6.102 24.90625 6.1875 L 18.40625 10.375 C 18.15625 10.563 18 10.8725 18 11.1875 L 18 14.8125 C 18 15.1265 18.15625 15.436 18.40625 15.625 L 24.90625 19.8125 C 25.08225 19.9455 25.9375 20.363 25.9375 19 L 25.9375 7 C 25.9375 6.2125 25.666748 6.0186523 25.375 6.03125 z" />
                             <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
@@ -205,15 +190,15 @@
                             </TextBlock>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource ButtonTool}" Width="50" Click="Search_Clicked">
+                    <!--<Button Style="{StaticResource ButtonTool}" Width="50" Click="Search_Clicked">
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Path Width="26" Height="26" Fill="White" Data="M 10 0.1875 C 4.58 0.1875 0.1875 4.58 0.1875 10 C 0.1875 15.42 4.58 19.8125 10 19.8125 C 12.28995 19.8125 14.393062 19.001996 16.0625 17.6875 L 16.9375 18.5625 C 16.571328 19.252523 16.699291 20.136791 17.28125 20.71875 L 21.875 25.34375 C 22.588 26.05775 23.75475 26.05775 24.46875 25.34375 L 25.34375 24.46875 C 26.05675 23.75475 26.05675 22.588 25.34375 21.875 L 20.71875 17.28125 C 20.134554 16.697054 19.254632 16.595625 18.5625 16.96875 L 17.6875 16.09375 C 19.011378 14.421193 19.8125 12.298983 19.8125 10 C 19.8125 4.58 15.42 0.1875 10 0.1875 z M 10 2 C 14.418 2 18 5.582 18 10 C 18 14.418 14.418 18 10 18 C 5.582 18 2 14.418 2 10 C 2 5.582 5.582 2 10 2 z M 4.9375 7.46875 C 4.4205 8.30475 4.125 9.28975 4.125 10.34375 C 4.125 13.37075 6.56775 15.8125 9.59375 15.8125 C 10.76275 15.8125 11.859 15.4355 12.75 14.8125 C 12.511 14.8385 12.245 14.84375 12 14.84375 C 8.086 14.84375 4.9375 11.69625 4.9375 7.78125 C 4.9375 7.67725 4.9325 7.57275 4.9375 7.46875 z" />
                             <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
                                 <Run TextDecorations="Underline">S</Run>EARCH
                             </TextBlock>
                         </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ButtonTool}" Width="50" Background="#373737" Click="Reset_Clicked">
+                    </Button>-->
+                    <Button Style="{StaticResource ButtonTool}" Width="50" Background="#373737" Command="{StaticResource Command.Reset}">
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Path Width="26" Height="26" Fill="White" Data="M 16.15625 0 C 16.02925 0 15.89825 0.03575 15.78125 0.09375 L 11.53125 4.28125 C 11.27725 4.52125 11.0625 4.692 11.0625 5 C 11.0625 5.307 11.24725 5.46675 11.53125 5.71875 L 15.78125 9.90625 C 16.03525 10.03625 16.35075 10.022 16.59375 9.875 C 16.83875 9.729 17 9.4695 17 9.1875 L 17 7 L 19 7 C 20.681623 7 22 8.3183765 22 10 L 22 16 C 22 17.681623 20.681623 19 19 19 A 2.0002 2.0002 0 1 0 19 23 C 22.842377 23 26 19.842377 26 16 L 26 10 C 26 6.1576235 22.842377 3 19 3 L 17 3 L 17 0.8125 C 17 0.5315 16.83975 0.271 16.59375 0.125 C 16.46275 0.045 16.30725 0 16.15625 0 z M 7 3 C 3.1576235 3 0 6.1576235 0 10 L 0 16 C 0 19.842377 3.1576235 23 7 23 L 9 23 L 9 25.1875 C 9 25.4685 9.16025 25.729 9.40625 25.875 C 9.53725 25.956 9.69275 26 9.84375 26 C 9.97075 26 10.10175 25.96425 10.21875 25.90625 L 14.46875 21.71875 C 14.72275 21.47875 14.9375 21.308 14.9375 21 C 14.9385 20.694 14.75275 20.53325 14.46875 20.28125 L 10.21875 16.09375 C 9.96475 15.96375 9.64925 15.978 9.40625 16.125 C 9.16125 16.271 9 16.5305 9 16.8125 L 9 19 L 7 19 C 5.3183765 19 4 17.681623 4 16 L 4 10 C 4 8.3183765 5.3183765 7 7 7 A 2.0002 2.0002 0 1 0 7 3 z" />
                             <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
@@ -221,7 +206,7 @@
                             </TextBlock>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource ButtonTool}" Width="50" Background="#373737" Click="Close_Clicked">
+                    <Button Style="{StaticResource ButtonTool}" Width="50" Background="#373737" Command="ApplicationCommands.Close">
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Path Width="26" Height="26" Fill="White" Data="M 6.65625 4 C 6.36875 4 6.10625 4.1125 5.90625 4.3125 L 4.3125 5.90625 C 3.9125 6.30625 3.9125 7 4.3125 7.5 L 9.8125 13 L 4.3125 18.5 C 3.9125 19 3.9125 19.69375 4.3125 20.09375 L 5.90625 21.6875 C 6.40625 22.0875 7.1 22.0875 7.5 21.6875 L 13 16.1875 L 18.5 21.6875 C 19 22.0875 19.69375 22.0875 20.09375 21.6875 L 21.6875 20.09375 C 22.0875 19.59375 22.0875 18.9 21.6875 18.5 L 16.1875 13 L 21.6875 7.5 C 22.0875 7 22.0875 6.30625 21.6875 5.90625 L 20.09375 4.3125 C 19.59375 3.9125 18.9 3.9125 18.5 4.3125 L 13 9.8125 L 7.5 4.3125 C 7.25 4.1125 6.94375 4 6.65625 4 z" />
                             <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
@@ -272,16 +257,5 @@
                 </BulletDecorator>
             </StackPanel>
         </Grid>
-
-        <controls:MagnifierManager.Magnifier>
-            <controls:Magnifier x:Name="_magnifier"
-                                Visibility="{Binding ShowMagnifier, Converter={StaticResource BoolToVis}}"
-                                Radius="55"
-                                MouseOffset="70,70"
-                                ZoomFactor="0.2"
-                                FrameType="Circle"
-                                BorderBrush="{StaticResource HighlightBrush}"
-                                BorderThickness="2" />
-        </controls:MagnifierManager.Magnifier>
     </Grid>
 </Window>
