@@ -100,7 +100,8 @@ namespace NotifyIconLib
             dragDropStatus = true;
 
             // we want to be notified of global mouse button changes so we can see where the user has 
-            //started dragging from. So we install a global mouse hook. Not super ideal.
+            // started dragging from and when they are over our icon. So we install a global mouse hook. 
+            // Not super ideal but no better ideas atm.
             dragHook = new MouseHook();
             dragHook.MouseDown += DragHook_MouseDown;
             dragHook.MouseUp += DragHook_MouseUp;
@@ -187,7 +188,7 @@ namespace NotifyIconLib
                 POINT p;
                 p.x = e.Location.X;
                 p.y = e.Location.Y;
-                //we dont want to interfere with drag operations that originate from the tray area (could be in the flyout).
+                //we dont want to interfere with drag operations that originate from the tray area (could be  starting in the flyout).
                 var hWnd = Clowd.Interop.USER32.WindowFromPoint(p);
                 var wndClass = Clowd.Interop.USER32EX.GetWindowClassName(hWnd);
                 if (wndClass != "ToolbarWindow32")

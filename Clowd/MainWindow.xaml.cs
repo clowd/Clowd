@@ -33,7 +33,7 @@ namespace Clowd
         private StackPanel homeContent = null;
         private bool startLoggedIn = false;
         private string savedPassword = null;
-        private LoginResult? appError = null;
+        private AuthResult? appError = null;
 
         public MainWindow()
         {
@@ -69,7 +69,7 @@ namespace Clowd
         //    };
         //    Uploads = new ObservableCollection<UploadDTO>(uploads);
         //}
-        public MainWindow(Tuple<string, string> loginDetails, LoginResult error)
+        public MainWindow(Tuple<string, string> loginDetails, AuthResult error)
             :this()
         {
             if (loginDetails != null)
@@ -105,32 +105,32 @@ namespace Clowd
             pr.VerticalAlignment = VerticalAlignment.Center;
             transitioningContent.Content = pr;
 
-            string pass;
-            if (textPassword.Password == "********" && savedPassword != null)
-                pass = savedPassword;
-            else
-                pass = Utilities.PasswordHelper.GetHashFromPassword(textPassword.Password);
-            var details = new Tuple<string, string>(textUsername.Text, pass);
-            var login = await UploadManager.Login(details);
+            //string pass;
+            //if (textPassword.Password == "********" && savedPassword != null)
+            //    pass = savedPassword;
+            //else
+            //    pass = Utilities.PasswordHelper.GetHashFromPassword(textPassword.Password);
+            //var details = new Tuple<string, string>(textUsername.Text, pass);
+            //var login = await UploadManager.Login(details);
 
-            if (login == LoginResult.Valid)
-            {
-                //Helpers.PasswordHelper.SaveUserAndHash(details.Item1, details.Item2);
-                closeHintPanel.Visibility = Visibility.Visible;
+            //if (login == AuthResult.Success)
+            //{
+            //    //Helpers.PasswordHelper.SaveUserAndHash(details.Item1, details.Item2);
+            //    closeHintPanel.Visibility = Visibility.Visible;
 
-                LoginCallback();
-                LoginCallback = null;
-                var uploads = await UploadManager.MyUploads();
-                Uploads = new ObservableCollection<UploadDTO>(uploads);
-                transitioningContent.Content = homeGrid;
-            }
-            else
-            {
-                transitioningContent.Content = loginContent;
-                ShowLoginError(login);
-            }
+            //    LoginCallback();
+            //    LoginCallback = null;
+            //    var uploads = await UploadManager.MyUploads();
+            //    Uploads = new ObservableCollection<UploadDTO>(uploads);
+            //    transitioningContent.Content = homeGrid;
+            //}
+            //else
+            //{
+            //    transitioningContent.Content = loginContent;
+            //    ShowLoginError(login);
+            //}
         }
-        private async void ShowLoginError(LoginResult login)
+        private async void ShowLoginError(AuthResult login)
         {
             var mySettings = new MetroDialogSettings()
             {
@@ -138,19 +138,14 @@ namespace Clowd
                 ColorScheme = MetroDialogColorScheme.Accented
             };
 
-            if (login == LoginResult.InvalidUserOrPass)
+            if (login == AuthResult.InvalidCredentials)
             {
                 MessageDialogResult result = await this.ShowMessageAsync("Login Failed", "The login details are incorrect.",
                     MessageDialogStyle.Affirmative, mySettings);
             }
-            else if (login == LoginResult.NetworkError)
+            else if (login == AuthResult.NetworkError)
             {
                 MessageDialogResult result = await this.ShowMessageAsync("Login Failed", "The internet seems to be taking a nap, try again later.",
-                    MessageDialogStyle.Affirmative, mySettings);
-            }
-            else if (login == LoginResult.NoLoginSaved)
-            {
-                MessageDialogResult result = await this.ShowMessageAsync("Login Failed", "Please ensure both username and password are filled out.",
                     MessageDialogStyle.Affirmative, mySettings);
             }
         }

@@ -30,7 +30,8 @@ namespace Clowd
     /// </summary>
     public partial class App : Application
     {
-        public static readonly string ServerHost = System.Diagnostics.Debugger.IsAttached ? "localhost" : "clowd.ga";
+        //public static readonly string ServerHost = System.Diagnostics.Debugger.IsAttached ? "localhost" : "clowd.ga";
+        public static readonly string ServerHost = "clowd.ga";
         public static App Singleton { get; private set; }
         public AppSettings Settings { get; private set; }
 
@@ -45,7 +46,7 @@ namespace Clowd
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            //CCA0B223572D50502AF4BEC0F705A7EC
+
             Singleton = this;
             // this is for testing purposes, so the localhost server has time to start.
             if (System.Diagnostics.Debugger.IsAttached)
@@ -55,14 +56,17 @@ namespace Clowd
             LoadSettings();
             Settings.ColorScheme = ColorScheme.Light;
             SetupAccentColors();
-            var window = TemplatedWindow.CreateWindow(Settings.UseCustomWindowChrome, "Clowd", new Capture.ImageEditorPage(null));
-            window.Show();
+
             //new Capture.CaptureWindow().Show();
-            if (Settings.FirstRun)
+
+            //if (Settings.FirstRun)
             {
                 // there were no settings to load, so save a new settings file.
                 Settings.FirstRun = false;
                 Settings.Save();
+                var page = new LoginPage();
+                var login = TemplatedWindow.CreateWindow("CLOWD", page);
+                login.Show();
             }
 
             if (!System.Diagnostics.Debugger.IsAttached)
@@ -161,22 +165,6 @@ namespace Clowd
                 this.Resources["IdealForegroundColor"] = Colors.White;
             }
 
-            //this provides more accurate accent colors when compared to the method below
-            //but it also causes some visual bugs in MetroWindow specifically with the min/max/close buttons. 
-            //will need to dig into this further....
-
-            //var hsl = HSLColor.FromRGB(baseColor);
-            //hsl.Lightness = hsl.Lightness - 10;
-            //this.Resources["HighlightColor"] = hsl.ToRGB();
-            //hsl.Lightness = hsl.Lightness + 10;
-            //this.Resources["AccentColor"] = hsl.ToRGB();
-            //hsl.Lightness = hsl.Lightness + 10;
-            //this.Resources["AccentColor2"] = hsl.ToRGB();
-            //hsl.Lightness = hsl.Lightness + 10;
-            //this.Resources["AccentColor3"] = hsl.ToRGB();
-            //hsl.Lightness = hsl.Lightness + 10;
-            //this.Resources["AccentColor4"] = hsl.ToRGB();
-
             this.Resources["HighlightColor"] = baseColor;
             this.Resources["AccentColor"] = Color.FromArgb(204, baseColor.R, baseColor.G, baseColor.B); //80%
             this.Resources["AccentColor2"] = Color.FromArgb(153, baseColor.R, baseColor.G, baseColor.B); //60%
@@ -197,8 +185,8 @@ namespace Clowd
             ((Freezable)this.Resources["WindowTitleColorBrush"]).Freeze();
             var gstops = new GradientStopCollection()
             {
-                new GradientStop((Color)this.Resources["HighlightColor"],0),
-                new GradientStop((Color)this.Resources["AccentColor3"],1),
+                new GradientStop((Color)this.Resources["HighlightColor"], 0),
+                new GradientStop((Color)this.Resources["AccentColor3"], 1),
             };
             this.Resources["ProgressBrush"] = new LinearGradientBrush(gstops, new Point(1.002, 0.5), new Point(0.001, 0.5));
             ((Freezable)this.Resources["ProgressBrush"]).Freeze();
@@ -269,6 +257,7 @@ namespace Clowd
             _updateManager = NAppUpdate.Framework.UpdateManager.Instance;
             var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ServerHost}/app_updates/feed.xml");
             _updateManager.UpdateSource = source;
+
             _updateManager.ReinstateIfRestarted();
             _updateManager.CleanUp();
 
@@ -312,6 +301,7 @@ namespace Clowd
 
             OnExit(null);
             _updateManager.ApplyUpdates(true, false, false);
+
         }
 
         private void WndProcMessageRecieved(uint obj)
@@ -320,20 +310,6 @@ namespace Clowd
             {
                 SetupAccentColors();
             }
-        }
-        private void loginStatusButtonPressed(object sender, EventArgs e)
-        {
-            foreach (Window w in Application.Current.Windows)
-            {
-                if (w is MainWindow)
-                {
-                    w.Show();
-                    w.Activate();
-                    return;
-                }
-            }
-            MainWindow mw = new Clowd.MainWindow(UploadManager.SignedIn);
-            mw.Show();
         }
         async Task FilesRecieved(string[] filePaths)
         {
@@ -385,7 +361,7 @@ namespace Clowd
                 UploadManager.Upload(data.ToUtf8(), "clowd-default.txt");
             }
         }
-        private void miPaste2_Click(object sender, EventArgs e)
+        public void Paste()
         {
             if (Clipboard.ContainsImage())
             {

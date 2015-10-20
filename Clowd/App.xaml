@@ -168,7 +168,6 @@
                 <ResourceDictionary Source="Assets/ProgressRingControl.xaml"/>
                 <ResourceDictionary Source="Assets/TransitioningContentControl.xaml"/>
                 <ResourceDictionary Source="Assets/CustomWindowStyle.xaml"/>
-                <ResourceDictionary Source="Assets/MagnifierControl.xaml"/>
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Colors.xaml" />

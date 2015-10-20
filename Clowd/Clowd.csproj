@@ -26,6 +26,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -90,15 +91,14 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="Capture\CaptureWindow.xaml.cs">
+    <Compile Include="CaptureWindow.xaml.cs">
       <DependentUpon>CaptureWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Capture\ImageEditorPage.xaml.cs">
+    <Compile Include="ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Capture\WindowFinder.cs" />
+    <Compile Include="Utilities\WindowFinder.cs" />
     <Compile Include="Controls\FadingScrollViewer.cs" />
-    <Compile Include="Controls\MagnifierAdorner.cs" />
     <Compile Include="Controls\OutlinedText.cs" />
     <Compile Include="Controls\OutlinedTextBlock.cs" />
     <Compile Include="Controls\ProgressRing.cs" />
@@ -123,8 +123,7 @@
     <Compile Include="Converters\ValueConverterGroup.cs" />
     <Compile Include="TemplatedWindow.cs" />
     <Compile Include="Utilities\Hotkey.cs" />
-    <Compile Include="Utilities\PasswordHelper.cs" />
-    <Compile Include="Capture\ScreenUtil.cs" />
+    <Compile Include="Utilities\ScreenUtil.cs" />
     <Compile Include="Utilities\RegistryOptions.cs" />
     <Compile Include="Utilities\SysInfo.cs" />
     <Compile Include="Utilities\VisualTreeHelperEx.cs" />
@@ -152,10 +151,6 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Assets\MagnifierControl.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
     <Page Include="Assets\ProgressRingControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -164,7 +159,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="Capture\CaptureWindow.xaml">
+    <Page Include="CaptureWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -172,7 +167,7 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Page Include="Capture\ImageEditorPage.xaml">
+    <Page Include="ImageEditorPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -302,7 +297,9 @@
   <ItemGroup>
     <Resource Include="Images\Clowd-250.png" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Folder Include="Capture\" />
+  </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\Key-24.png" />
     <Resource Include="Images\Visible-24.png" />

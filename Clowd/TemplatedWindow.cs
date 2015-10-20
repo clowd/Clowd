@@ -14,7 +14,11 @@ namespace Clowd
 {
     public class TemplatedWindow
     {
-        public static Window CreateWindow(bool customChrome, string title, Control content)
+        public static Window CreateWindow(string title, Control content)
+        {
+            return CreateWindow(title, content, App.Singleton.Settings.UseCustomWindowChrome);
+        }
+        public static Window CreateWindow(string title, Control content, bool customChrome)
         {
             double titleHeight, borderWidth;
             Window window;
