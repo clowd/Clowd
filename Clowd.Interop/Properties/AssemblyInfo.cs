@@ -6,9 +6,9 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("Clowd.Interop")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Provides P/Invoke declarations and helpers for Clowd")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Caesa Consulting Ltd.")]
 [assembly: AssemblyProduct("Clowd.Interop")]
 [assembly: AssemblyCopyright("Copyright ©  2015")]
 [assembly: AssemblyTrademark("")]

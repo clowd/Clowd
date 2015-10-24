@@ -23,7 +23,6 @@ namespace Clowd.Interop
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
 
-
         [DllImport("user32.dll")]
         public static extern bool IsZoomed(IntPtr hWnd);
 
@@ -35,6 +34,10 @@ namespace Clowd.Interop
 
         [DllImport("user32.dll")]
         public static extern IntPtr CopyIcon(IntPtr hIcon);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool DestroyIcon(IntPtr hIcon);
+
 
         [DllImport("user32.dll")]
         public static extern bool DrawIcon(IntPtr hdc, int x, int y, IntPtr hIcon);

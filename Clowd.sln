@@ -18,6 +18,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "lib", "lib", "{EC965981-D673-45B7-8B89-C8BA8FD7E1B8}"
 	ProjectSection(SolutionItems) = preProject
 		lib\NAppUpdate.Framework.dll = lib\NAppUpdate.Framework.dll
+		lib\NReco.VideoConverter.dll = lib\NReco.VideoConverter.dll
 		lib\RT.Servers.dll = lib\RT.Servers.dll
 		lib\RT.Servers.pdb = lib\RT.Servers.pdb
 		lib\RT.Servers.xml = lib\RT.Servers.xml
@@ -49,6 +50,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Interop", "Clowd.Interop\Clowd.Interop.csproj", "{A2DA076B-EEBA-4D4A-88EC-9BB9C960F552}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NotifyIconLib", "NotifyIconLib\NotifyIconLib.csproj", "{7AC63864-7638-41C4-969C-D3197EF2BED9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Installer", "Installer\Installer.csproj", "{A91DFD2B-CEF6-4296-924A-366B6557B4C2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Screeney", "Screeney\Screeney.csproj", "{AF84F83B-28C3-4298-B388-C31DB95A6790}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -200,6 +205,38 @@ Global
 		{7AC63864-7638-41C4-969C-D3197EF2BED9}.Release|x64.Build.0 = Release|Any CPU
 		{7AC63864-7638-41C4-969C-D3197EF2BED9}.Release|x86.ActiveCfg = Release|Any CPU
 		{7AC63864-7638-41C4-969C-D3197EF2BED9}.Release|x86.Build.0 = Release|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Debug|ARM.ActiveCfg = Debug|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Debug|ARM.Build.0 = Debug|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Debug|x64.Build.0 = Debug|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Debug|x86.Build.0 = Debug|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Release|ARM.ActiveCfg = Release|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Release|ARM.Build.0 = Release|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Release|x64.ActiveCfg = Release|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Release|x64.Build.0 = Release|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Release|x86.ActiveCfg = Release|Any CPU
+		{A91DFD2B-CEF6-4296-924A-366B6557B4C2}.Release|x86.Build.0 = Release|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Debug|ARM.ActiveCfg = Debug|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Debug|ARM.Build.0 = Debug|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Debug|x64.Build.0 = Debug|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Debug|x86.Build.0 = Debug|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Release|ARM.ActiveCfg = Release|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Release|ARM.Build.0 = Release|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Release|x64.ActiveCfg = Release|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Release|x64.Build.0 = Release|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Release|x86.ActiveCfg = Release|Any CPU
+		{AF84F83B-28C3-4298-B388-C31DB95A6790}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
