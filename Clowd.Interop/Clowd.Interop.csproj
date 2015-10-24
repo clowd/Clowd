@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Clowd.Interop</RootNamespace>
     <AssemblyName>Clowd.Interop</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -49,6 +49,7 @@
     <Compile Include="DwmApi\MARGINS.cs" />
     <Compile Include="Gdi32\DEVICECAP.cs" />
     <Compile Include="Gdi32\GDI32.cs" />
+    <Compile Include="Gdi32\TernaryRasterOperations.cs" />
     <Compile Include="Kernel32\KERNEL32.cs" />
     <Compile Include="Kernel32\TBBUTTON.cs" />
     <Compile Include="Shell32\APPBARDATA.cs" />

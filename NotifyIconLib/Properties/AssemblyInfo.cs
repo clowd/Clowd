@@ -9,7 +9,7 @@ using System.Windows.Markup;
 // associated with an assembly.
 
 [assembly: AssemblyTitle("NotifyIcon for WPF")]
-[assembly: AssemblyDescription("NotifyIcon implementation for the WPF platform.")]
+[assembly: AssemblyDescription("NotifyIcon implementation edited specifically for use with Clowd features.")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("hardcodet.net")]
 [assembly: AssemblyProduct("NotifyIcon WPF")]

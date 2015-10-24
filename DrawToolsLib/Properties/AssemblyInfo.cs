@@ -7,11 +7,11 @@ using System;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("DrawToolsLib")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Drawing Canvas for Clowd")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("-")]
-[assembly: AssemblyProduct("DrawToolsLib")]
-[assembly: AssemblyCopyright("")]
+[assembly: AssemblyCompany("Caesa Consulting Ltd.")]
+[assembly: AssemblyProduct("Clowd")]
+[assembly: AssemblyCopyright("Copyright (c) 2015")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
