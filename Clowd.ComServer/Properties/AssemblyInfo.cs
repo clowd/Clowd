@@ -6,9 +6,9 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("Clowd.ComServer")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Provides COM components for Clowd")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Caesa Consulting Ltd.")]
 [assembly: AssemblyProduct("Clowd.ComServer")]
 [assembly: AssemblyCopyright("Copyright ©  2015")]
 [assembly: AssemblyTrademark("")]
