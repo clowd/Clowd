@@ -28,12 +28,12 @@ namespace Clowd.Installer
         private void Install_Click(object sender, RoutedEventArgs e)
         {
             NavigationService nav = NavigationService.GetNavigationService(this);
-            nav?.Navigate(new LocationsPage());
+            InstallOptions.InstallLocation = InstallMode.System;
+            nav?.Navigate(new FeaturesPage());
         }
 
         private void Modify_Click(object sender, RoutedEventArgs e)
         {
-
         }
 
         private void Repair_Click(object sender, RoutedEventArgs e)

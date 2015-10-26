@@ -19,16 +19,6 @@
                 Choose Install Location
             </TextBlock>
             <Rectangle Fill="{StaticResource PrimaryColor}" Height="1" Margin="0,5,0,15"/>
-            <Button Style="{StaticResource ActionButtonStyle}" Width="250" Click="Local_Click">
-                <Grid Margin="10,0,0,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition />
-                        <RowDefinition />
-                    </Grid.RowDefinitions>
-                    <TextBlock VerticalAlignment="Bottom" Foreground="White" FontWeight="Bold">Local</TextBlock>
-                    <TextBlock Grid.Row="1" VerticalAlignment="Top" Foreground="White">Installs Clowd for the current user.</TextBlock>
-                </Grid>
-            </Button>
             <Button Style="{StaticResource ActionButtonStyle}" Width="250" Click="Global_Click">
                 <Grid Margin="10,0,0,0">
                     <Grid.RowDefinitions>
@@ -37,10 +27,18 @@
                     </Grid.RowDefinitions>
                     <TextBlock VerticalAlignment="Bottom" Foreground="White" FontWeight="Bold">Global</TextBlock>
                     <TextBlock Grid.Row="1" VerticalAlignment="Top" Foreground="White">
-                        Installs Clowd for 
-                        <Run FontWeight="Bold">all</Run>
-                        users.
+                        Installs Clowd for all users.
                     </TextBlock>
+                </Grid>
+            </Button>
+            <Button Style="{StaticResource ActionButtonStyle}" Width="250" Click="Local_Click" IsEnabled="False">
+                <Grid Margin="10,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Bottom" Foreground="White" FontWeight="Bold">Local</TextBlock>
+                    <TextBlock Grid.Row="1" VerticalAlignment="Top" Foreground="White">(not supported yet)</TextBlock>
                 </Grid>
             </Button>
             <Button Style="{StaticResource ActionButtonStyle}" Width="250" IsEnabled="False">
@@ -49,9 +47,9 @@
                         <RowDefinition />
                         <RowDefinition />
                     </Grid.RowDefinitions>
-                    <TextBlock VerticalAlignment="Bottom" Foreground="White" FontWeight="Bold">Custom</TextBlock>
+                    <TextBlock VerticalAlignment="Bottom" Foreground="White" FontWeight="Bold">Portable</TextBlock>
                     <TextBlock Grid.Row="1" VerticalAlignment="Top" Foreground="White">
-                        This is for advanced users only.
+                        (not supported yet)
                     </TextBlock>
                 </Grid>
             </Button>

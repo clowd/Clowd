@@ -368,6 +368,8 @@ namespace Clowd
 
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            //var rec = new Screeney.ScreeneyRecorder(new System.Drawing.Rectangle(0, 0, 100, 100));
+            //rec.GetVideoSources();
             MessageBox.Show("This feature is temporarily disabled.");
         }
 

@@ -18,7 +18,7 @@
         <CommandBinding Command="{StaticResource Command.Login}" Executed="LoginExecuted" />
     </UserControl.CommandBindings>
     <Grid>
-        <StackPanel Orientation="Vertical"  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Width="200" Background="White">
+        <StackPanel Orientation="Vertical"  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Width="200">
             <Viewbox Width="150">
                 <Path Fill="{DynamicResource AccentColorBrush}" Width="75.15" Height="53.70" Data="{StaticResource N44}" />
             </Viewbox>
