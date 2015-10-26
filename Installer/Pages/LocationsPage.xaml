@@ -1,0 +1,58 @@
+﻿<Page x:Class="Clowd.Installer.LocationsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:local="clr-namespace:Clowd.Installer"
+      mc:Ignorable="d" 
+      d:DesignHeight="300" d:DesignWidth="500"
+      Title="LocationsPage">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition />
+            <ColumnDefinition Width="50"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel Orientation="Vertical" Margin="30,30,30,30">
+            <TextBlock Foreground="{StaticResource PrimaryColor}" Opacity="0.9" TextWrapping="Wrap"
+                       HorizontalAlignment="Left" VerticalAlignment="Top" FontSize="20" FontWeight="Thin">
+                Choose Install Location
+            </TextBlock>
+            <Rectangle Fill="{StaticResource PrimaryColor}" Height="1" Margin="0,5,0,15"/>
+            <Button Style="{StaticResource ActionButtonStyle}" Width="250" Click="Global_Click">
+                <Grid Margin="10,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Bottom" Foreground="White" FontWeight="Bold">Global</TextBlock>
+                    <TextBlock Grid.Row="1" VerticalAlignment="Top" Foreground="White">
+                        Installs Clowd for all users.
+                    </TextBlock>
+                </Grid>
+            </Button>
+            <Button Style="{StaticResource ActionButtonStyle}" Width="250" Click="Local_Click" IsEnabled="False">
+                <Grid Margin="10,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Bottom" Foreground="White" FontWeight="Bold">Local</TextBlock>
+                    <TextBlock Grid.Row="1" VerticalAlignment="Top" Foreground="White">(not supported yet)</TextBlock>
+                </Grid>
+            </Button>
+            <Button Style="{StaticResource ActionButtonStyle}" Width="250" IsEnabled="False">
+                <Grid Margin="10,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition />
+                        <RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Bottom" Foreground="White" FontWeight="Bold">Portable</TextBlock>
+                    <TextBlock Grid.Row="1" VerticalAlignment="Top" Foreground="White">
+                        (not supported yet)
+                    </TextBlock>
+                </Grid>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Page>

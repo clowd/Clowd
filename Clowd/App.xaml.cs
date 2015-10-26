@@ -57,48 +57,44 @@ namespace Clowd
             Settings.ColorScheme = ColorScheme.Light;
             SetupAccentColors();
 
-            //new Capture.CaptureWindow().Show();
 
-            //if (Settings.FirstRun)
+            new CaptureWindow().Show();
+
+            if (Settings.FirstRun)
             {
                 // there were no settings to load, so save a new settings file.
-                Settings.FirstRun = false;
+                Settings = new AppSettings() { FirstRun = false };
                 Settings.Save();
                 var page = new LoginPage();
                 var login = TemplatedWindow.CreateWindow("CLOWD", page);
                 login.Show();
             }
+            else
+            {
+                if (String.IsNullOrEmpty(Settings.Username) && String.IsNullOrEmpty(Settings.PasswordHash))
+                {
+                    //use clowd anonymously.
+                    FinishInit();
+                }
+                else
+                {
+                    using (var details = new Credentials(Settings.Username, Settings.PasswordHash, true))
+                    {
+                        var result = await UploadManager.Login(details);
+                        if (result == AuthResult.Success)
+                            FinishInit();
+                        else
+                        {
+                            var page = new LoginPage(result, Settings.Username);
+                            var login = TemplatedWindow.CreateWindow("CLOWD", page);
+                            login.Show();
+                        }
+                    }
+                }
+            }
 
             if (!System.Diagnostics.Debugger.IsAttached)
                 SetupUpdateTimer();
-
-
-
-            //LoginResult loginResult = LoginResult.NoLoginSaved;
-            //var savedPassword = PasswordHelper.GetSavedUserAndHash();
-            //if (savedPassword != null)
-            //{
-            //    loginResult = await UploadManager.Login(savedPassword);
-            //    if (loginResult == LoginResult.Valid)
-            //    {
-            //        OnStartupContinue();
-            //        return;
-            //    }
-            //}
-
-            //MainWindow mw;
-            ////mw = new QuickShare.MainWindow("asd", true);
-            //if (loginResult != LoginResult.NoLoginSaved)
-            //    mw = new Clowd.MainWindow(savedPassword, loginResult);
-            //else
-            //    mw = new Clowd.MainWindow();
-            //mw.LoginCallback = OnStartupContinue;
-            //mw.Show();
-            //mw.Closed += (s, ev) =>
-            //{
-            //    if (!initialized)
-            //        this.Shutdown();
-            //};
         }
 
         private void LoadSettings()
@@ -265,6 +261,11 @@ namespace Clowd
             _updateTimer.Elapsed += OnCheckForUpdates;
             OnCheckForUpdates(null, null);
             _updateTimer.Start();
+        }
+
+        public void FinishInit()
+        {
+            _taskbarIcon.TrayDropEnabled = true;
         }
 
         protected override void OnExit(ExitEventArgs e)
