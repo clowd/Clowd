@@ -58,8 +58,8 @@ namespace Clowd
             SetupAccentColors();
 
 
-            new CaptureWindow().Show();
-
+           // new CaptureWindow().Show();
+           
             if (Settings.FirstRun)
             {
                 // there were no settings to load, so save a new settings file.
@@ -85,6 +85,7 @@ namespace Clowd
                             FinishInit();
                         else
                         {
+                            //show login page, wont happen if its not the first run and the settings were saved. 
                             var page = new LoginPage(result, Settings.Username);
                             var login = TemplatedWindow.CreateWindow("CLOWD", page);
                             login.Show();
