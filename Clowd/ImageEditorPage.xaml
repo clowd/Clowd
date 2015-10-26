@@ -7,7 +7,6 @@
              xmlns:conv="clr-namespace:Clowd.Converters"
              xmlns:controls="clr-namespace:Clowd.Controls"
              xmlns:local="clr-namespace:Clowd"
-             xmlns:zoom="clr-namespace:ZoomAndPan;assembly=ZoomAndPan"
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
              mc:Ignorable="d" Background="Transparent"
              d:DesignHeight="300" d:DesignWidth="800">
