@@ -52,10 +52,6 @@
       <HintPath>..\packages\NAppUpdate.Framework.0.3.0.0\lib\net20\NAppUpdate.Framework.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="PropertyChanged, Version=1.50.3.0, Culture=neutral, PublicKeyToken=ee3ee20bcf148ddd, processorArchitecture=MSIL">
-      <HintPath>..\packages\PropertyChanged.Fody.1.50.3\lib\dotnet\PropertyChanged.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="RT.Util">
       <HintPath>..\lib\RT.Util.dll</HintPath>
     </Reference>
@@ -97,6 +93,12 @@
     <Compile Include="ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="PropertyChanged\AlsoNotifyForAttribute.cs" />
+    <Compile Include="PropertyChanged\DependsOnAttribute.cs" />
+    <Compile Include="PropertyChanged\DoNotCheckEqualityAttribute.cs" />
+    <Compile Include="PropertyChanged\DoNotNotifyAttribute.cs" />
+    <Compile Include="PropertyChanged\DoNotSetChangedAttribute.cs" />
+    <Compile Include="PropertyChanged\ImplementPropertyChangedAttribute.cs" />
     <Compile Include="Utilities\WindowFinder.cs" />
     <Compile Include="Controls\FadingScrollViewer.cs" />
     <Compile Include="Controls\OutlinedText.cs" />
@@ -132,12 +134,6 @@
     </Compile>
     <Compile Include="LoginPage.xaml.cs">
       <DependentUpon>LoginPage.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="MainWindow.xaml.cs">
-      <DependentUpon>MainWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="ScreenshotWindow.xaml.cs">
-      <DependentUpon>ScreenshotWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="UploadManager.cs" />
     <Compile Include="UploadsWindow.xaml.cs">
@@ -176,14 +172,6 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="LoginPage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="MainWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="ScreenshotWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -268,6 +256,10 @@
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
       <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
       <Name>Clowd.Shared</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Screeney\Screeney.csproj">
+      <Project>{af84f83b-28c3-4298-b388-c31db95a6790}</Project>
+      <Name>Screeney</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

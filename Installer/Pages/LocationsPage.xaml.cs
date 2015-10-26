@@ -25,6 +25,8 @@ namespace Clowd.Installer
             InitializeComponent();
         }
 
+
+
         private void Local_Click(object sender, RoutedEventArgs e)
         {
             NavigationService nav = NavigationService.GetNavigationService(this);

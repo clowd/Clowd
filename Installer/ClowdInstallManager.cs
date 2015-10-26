@@ -40,5 +40,6 @@ namespace Clowd.Installer
                 return InstallQuery.OtherUsers;
             return InstallQuery.None;
         }
+
     }
 }
