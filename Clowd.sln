@@ -29,15 +29,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{146C3FD8
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "installer", "installer", "{3D42A167-79FD-4414-A464-8F618F79D1E5}"
 	ProjectSection(SolutionItems) = preProject
-		tools\installer\Clowd-Installer.exe = tools\installer\Clowd-Installer.exe
-		tools\installer\Clowd.aip = tools\installer\Clowd.aip
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "updatebuilder", "updatebuilder", "{30E714CC-8574-43E9-BF96-C32D310FF00E}"
-	ProjectSection(SolutionItems) = preProject
-		tools\updatebuilder\Clowd.config = tools\updatebuilder\Clowd.config
-		tools\updatebuilder\FeedBuilder.exe = tools\updatebuilder\FeedBuilder.exe
-		tools\updatebuilder\NAppUpdate.Framework.dll = tools\updatebuilder\NAppUpdate.Framework.dll
+		tools\installer\clowd.iss = tools\installer\clowd.iss
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.ComServer", "Clowd.ComServer\Clowd.ComServer.csproj", "{A2C9E886-D1FE-4CA9-8E9C-209ADAB0040C}"
@@ -47,6 +39,19 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NotifyIconLib", "NotifyIconLib\NotifyIconLib.csproj", "{7AC63864-7638-41C4-969C-D3197EF2BED9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Screeney", "Screeney\Screeney.csproj", "{AF84F83B-28C3-4298-B388-C31DB95A6790}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "images", "images", "{653A10B8-7627-4805-9FEC-2DCDD516A0EC}"
+	ProjectSection(SolutionItems) = preProject
+		tools\installer\images\clowd-120.bmp = tools\installer\images\clowd-120.bmp
+		tools\installer\images\clowd-144.bmp = tools\installer\images\clowd-144.bmp
+		tools\installer\images\clowd-168.bmp = tools\installer\images\clowd-168.bmp
+		tools\installer\images\clowd-96.bmp = tools\installer\images\clowd-96.bmp
+		tools\installer\images\clowd-small-120.bmp = tools\installer\images\clowd-small-120.bmp
+		tools\installer\images\clowd-small-144.bmp = tools\installer\images\clowd-small-144.bmp
+		tools\installer\images\clowd-small-168.bmp = tools\installer\images\clowd-small-168.bmp
+		tools\installer\images\clowd-small-96.bmp = tools\installer\images\clowd-small-96.bmp
+		tools\installer\images\clowd.ico = tools\installer\images\clowd.ico
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -222,6 +227,6 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{3D42A167-79FD-4414-A464-8F618F79D1E5} = {146C3FD8-4884-4306-A2FC-15A2646F660D}
-		{30E714CC-8574-43E9-BF96-C32D310FF00E} = {146C3FD8-4884-4306-A2FC-15A2646F660D}
+		{653A10B8-7627-4805-9FEC-2DCDD516A0EC} = {3D42A167-79FD-4414-A464-8F618F79D1E5}
 	EndGlobalSection
 EndGlobal
