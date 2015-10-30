@@ -21,12 +21,12 @@ namespace Clowd.Utilities
 
         public static bool GetAutoStart()
         {
-            RegistryKey registryKey = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+            RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
             return registryKey.GetValue(AppName) != null;
         }
         public static void SetAutoStart(bool startWithWindows)
         {
-            RegistryKey registryKey = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+            RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
             if (startWithWindows)
             {
                 registryKey.SetValue(AppName, Assembly.GetExecutingAssembly().Location);
@@ -38,7 +38,7 @@ namespace Clowd.Utilities
         }
         public static bool GetContextMenu()
         {
-            using (var view32 = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry32))
+            using (var view32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
             using (var clsid32 = view32.OpenSubKey(@"Software\Classes\", true))
             {
                 foreach (var location in ContextMenuInstallLocations)
@@ -54,7 +54,7 @@ namespace Clowd.Utilities
         }
         public static void SetContextMenu(bool enabled)
         {
-            using (var view32 = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Registry32))
+            using (var view32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
             using (var clsid32 = view32.OpenSubKey(@"Software\Classes\", true))
             {
                 foreach (var location in ContextMenuInstallLocations)

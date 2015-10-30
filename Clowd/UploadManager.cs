@@ -495,6 +495,8 @@ namespace Clowd
             }
             set
             {
+                if (disposedValue)
+                    throw new ObjectDisposedException("Credentials");
                 if (String.IsNullOrWhiteSpace(value))
                     throw new InvalidOperationException("Username can not be empty.");
                 _username = value;
@@ -577,11 +579,14 @@ namespace Clowd
 
         public Credentials Clone()
         {
-            return new Credentials(Username, _password.Copy());
+            if (!String.IsNullOrWhiteSpace(_preHashed))
+                return new Credentials(Username, _preHashed, true);
+            else
+                return new Credentials(Username, _password.Copy());
         }
         object ICloneable.Clone()
         {
-            return new Credentials(Username, _password.Copy());
+            return this.Clone();
         }
 
         #region IDisposable Support
@@ -593,8 +598,11 @@ namespace Clowd
             {
                 if (disposing)
                 {
-                    _password.Dispose();
-                    _password = null;
+                    if (_password != null)
+                    {
+                        _password.Dispose();
+                        _password = null;
+                    }
                     _username = null;
                     _preHashed = null;
                 }

@@ -16,13 +16,14 @@ namespace Clowd
     {
         public event PropertyChangedEventHandler PropertyChanged;
         public bool FirstRun { get; set; } = true;
+        public bool ConfirmClose { get; set; } = true;
         public bool UseCustomWindowChrome { get; set; } = true;
         public string Username { get; set; }
         public string PasswordHash { get; set; }
         public Color UserAccentColor { get; set; } = Color.FromRgb(59, 151, 210);
         [RT.Util.Serialization.ClassifyIgnore]
         public ColorScheme ColorScheme { get; set; } = ColorScheme.Light;
-        public AccentScheme AccentScheme { get; set; } = AccentScheme.System;
+        public AccentScheme AccentScheme { get; set; } = AccentScheme.User;
         public TimeSpan UpdateCheckInterval { get; set; } = TimeSpan.FromHours(6);
         public CaptureSettings CaptureSettings { get; set; } = new CaptureSettings();
 

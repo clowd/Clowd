@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("CaptureLib")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("Screeney")]
+[assembly: AssemblyDescription("Screen capture library")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("CaptureLib")]
-[assembly: AssemblyCopyright("Copyright ©  2015")]
+[assembly: AssemblyCompany("Caesa Consulting Ltd.")]
+[assembly: AssemblyProduct("Screeney")]
+[assembly: AssemblyCopyright("Copyright © Caesa Consulting Ltd.  2015")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

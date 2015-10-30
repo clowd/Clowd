@@ -402,7 +402,10 @@ namespace NotifyIconLib
                 WinApi.GetCursorPos(ref cursorPosition);
             }
 
-            cursorPosition = GetDeviceCoordinates(cursorPosition);
+            //cursorPosition = GetDeviceCoordinates(cursorPosition);
+            var dpiPoint = Clowd.Utilities.DpiScale.DownScalePoint(new System.Windows.Point(cursorPosition.X, cursorPosition.Y));
+            cursorPosition.X = (int)dpiPoint.X;
+            cursorPosition.Y = (int)dpiPoint.Y;
 
             bool isLeftClickCommandInvoked = false;
 

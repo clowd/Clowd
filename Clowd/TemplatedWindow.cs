@@ -54,6 +54,16 @@ namespace Clowd
         public static void SetContent(Window window, Control content)
         {
             var tcc = (Controls.TransitioningContentControl)window.Content;
+            content.Width = Double.NaN;
+            content.Height = Double.NaN;
+            tcc.Content = content;
+        }
+        public static void SetContent(Control currentHost, Control content)
+        {
+            var window = GetWindow(currentHost);
+            var tcc = (Controls.TransitioningContentControl)window.Content;
+            content.Width = Double.NaN;
+            content.Height = Double.NaN;
             tcc.Content = content;
         }
         public static void SetContentToSpinner(Window window)
@@ -73,6 +83,20 @@ namespace Clowd
         public static Window GetWindow(Control content)
         {
             return Window.GetWindow(content);
+        }
+        public static Window GetWindow(Type contentType)
+        {
+            foreach(Window wnd in Application.Current.Windows)
+            {
+
+                var tcc = wnd.Content as Controls.TransitioningContentControl;
+                if(tcc != null)
+                {
+                    if (tcc.Content.GetType() == contentType)
+                        return wnd;
+                }
+            }
+            return null;
         }
 
         private static MetroWindow CreateMetroWindow()

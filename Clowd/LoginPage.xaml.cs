@@ -55,15 +55,17 @@ namespace Clowd
 
         private void useAnon_Click(object sender, MouseButtonEventArgs e)
         {
-
+            TemplatedWindow.SetContent(this, new HomePage());
+            App.Singleton.Settings.Username = "anon";
+            App.Singleton.FinishInit();
         }
 
         private void register_Click(object sender, MouseButtonEventArgs e)
         {
-            var cache = this.Content;
-            WebBrowser wb = new WebBrowser();
-            this.Content = wb;
-            wb.Navigate("http://example.com");
+            //var cache = this.Content;
+            //WebBrowser wb = new WebBrowser();
+            //this.Content = wb;
+            //wb.Navigate("http://example.com");
         }
 
         private async void LoginExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -80,7 +82,7 @@ namespace Clowd
                     TemplatedWindow.SetContent(window, new HomePage());
                     App.Singleton.Settings.Username = details.Username;
                     App.Singleton.Settings.PasswordHash = details.PasswordHash;
-                    App.Singleton.Settings.Save();
+                    App.Singleton.FinishInit();
                 }
                 else if (result == AuthResult.InvalidCredentials)
                 {

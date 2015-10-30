@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Clowd.Interop;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -31,6 +32,17 @@ namespace Clowd
             // Iteratively remove all routed event handlers from the element.
             foreach (var routedEventHandler in routedEventHandlers)
                 element.RemoveHandler(routedEvent, routedEventHandler.Handler);
+        }
+        public static void MakeForeground(this Window wnd)
+        {
+            var handle = new System.Windows.Interop.WindowInteropHelper(wnd).Handle;
+            USER32.SetForegroundWindow(handle);
+        }
+
+        private static Action EmptyDelegate = delegate () { };
+        public static void DoRender(this UIElement element)
+        {
+            element.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, EmptyDelegate);
         }
     }
 }

@@ -22,6 +22,9 @@ using Clowd.Utilities;
 using NotifyIconLib;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
+using System.Threading;
+using System.ServiceModel;
+using System.Windows.Threading;
 
 namespace Clowd
 {
@@ -31,64 +34,112 @@ namespace Clowd
     public partial class App : Application
     {
         //public static readonly string ServerHost = System.Diagnostics.Debugger.IsAttached ? "localhost" : "clowd.ga";
-        public static readonly string ServerHost = "clowd.ga";
+        public static readonly string ServerHost = "clowd.ca";
         public static App Singleton { get; private set; }
         public AppSettings Settings { get; private set; }
 
+        private const string NamedPipeString = "PipeClowdRunning";
+        private const string MutexString = "ClowdMutex000";
+
         private TaskbarIcon _taskbarIcon;
         private bool _prtscrWindowOpen = false;
+        private bool _initialized = false;
         private HotKey _captureHotkey;
         private System.Timers.Timer _updateTimer;
         private NAppUpdate.Framework.UpdateManager _updateManager;
         private ResourceDictionary _lightBase;
         private ResourceDictionary _darkBase;
+        private Mutex _mutex;
+        private ServiceHost _host;
+        private string[] _args;
+        private DispatcherTimer _cmdBatchTimer;
+        private List<string> _cmdCache;
+
 
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
+            bool running = false;
+            try
+            {
+                _mutex = Mutex.OpenExisting(MutexString);
+                //if we're here, clowd is running already.
+                running = true;
+                if (e.Args.Length > 0)
+                {
+                    ChannelFactory<ICommandLineProxy> pipeFactory = new ChannelFactory<ICommandLineProxy>(
+                                    new NetNamedPipeBinding(),
+                                    new EndpointAddress("net.pipe://localhost/" + NamedPipeString));
+
+                    ICommandLineProxy pipeProxy = pipeFactory.CreateChannel();
+                    pipeProxy.PassArgs(e.Args);
+                    pipeFactory.Close();
+                }
+                Thread.Sleep(2000);
+                Environment.Exit(0);
+                return;
+            }
+            catch
+            {
+                if (running)
+                    Environment.Exit(0);
+                _mutex = new Mutex(true, MutexString);
+                if (e.Args.Length > 0)
+                {
+                    _args = e.Args;
+                }
+            }
+
             Singleton = this;
+            SetupServiceHost();
             // this is for testing purposes, so the localhost server has time to start.
             if (System.Diagnostics.Debugger.IsAttached)
                 await Task.Delay(3000);
             SetupDpiScaling();
             SetupTrayIcon();
-            LoadSettings();
+            SetupSettings();
             Settings.ColorScheme = ColorScheme.Light;
             SetupAccentColors();
 
 
-           // new CaptureWindow().Show();
-           
             if (Settings.FirstRun)
             {
-                // there were no settings to load, so save a new settings file.
+                // there were no settings to load, show login window.
                 Settings = new AppSettings() { FirstRun = false };
-                Settings.Save();
                 var page = new LoginPage();
                 var login = TemplatedWindow.CreateWindow("CLOWD", page);
                 login.Show();
             }
             else
             {
-                if (String.IsNullOrEmpty(Settings.Username) && String.IsNullOrEmpty(Settings.PasswordHash))
+                if (Settings.Username == "anon" && String.IsNullOrEmpty(Settings.PasswordHash))
                 {
                     //use clowd anonymously.
                     FinishInit();
                 }
                 else
                 {
-                    using (var details = new Credentials(Settings.Username, Settings.PasswordHash, true))
+                    if (String.IsNullOrEmpty(Settings.Username) && String.IsNullOrEmpty(Settings.PasswordHash))
                     {
-                        var result = await UploadManager.Login(details);
-                        if (result == AuthResult.Success)
-                            FinishInit();
-                        else
+                        var page = new LoginPage();
+                        var login = TemplatedWindow.CreateWindow("CLOWD", page);
+                        login.Show();
+                    }
+                    else
+                    {
+                        using (var details = new Credentials(Settings.Username, Settings.PasswordHash, true))
                         {
-                            //show login page, wont happen if its not the first run and the settings were saved. 
-                            var page = new LoginPage(result, Settings.Username);
-                            var login = TemplatedWindow.CreateWindow("CLOWD", page);
-                            login.Show();
+                            var result = await UploadManager.Login(details);
+                            if (result == AuthResult.Success)
+                                FinishInit();
+                            else
+                            {
+                                //show login page, wont happen if its not the first run and the settings were saved. 
+                                var page = new LoginPage(result, Settings.Username);
+                                var login = TemplatedWindow.CreateWindow("CLOWD", page);
+                                login.Show();
+                            }
                         }
                     }
                 }
@@ -98,13 +149,24 @@ namespace Clowd
                 SetupUpdateTimer();
         }
 
-        private void LoadSettings()
+        private void SetupServiceHost()
+        {
+            var inf = new CommandLineProxy();
+            inf.CommandLineExecutedEvent += OnCommandLineArgsRecieved;
+            _host = new ServiceHost(inf, new[] { new Uri("net.pipe://localhost") });
+
+            var behaviour = _host.Description.Behaviors.Find<ServiceBehaviorAttribute>();
+            behaviour.InstanceContextMode = InstanceContextMode.Single;
+
+            _host.AddServiceEndpoint(typeof(ICommandLineProxy), new NetNamedPipeBinding(), NamedPipeString);
+            _host.Open();
+        }
+        private void SetupSettings()
         {
             AppSettings tmp;
             RT.Util.SettingsUtil.LoadSettings<AppSettings>(out tmp);
             Settings = tmp;
         }
-
         private void SetupAccentColors()
         {
             var scheme = Settings.ColorScheme;
@@ -210,39 +272,26 @@ namespace Clowd
         private void SetupTrayIcon()
         {
             _taskbarIcon = new TaskbarIcon();
-            _taskbarIcon.IconSource = new BitmapImage(new Uri("pack://application:,,,/Images/default.ico"));
-            _taskbarIcon.ToolTipText = "Clowd\nClick me or drop something on me\nto see what I can do!";
-            //_taskbarIcon.TrayDropEnabled = true;
-            _taskbarIcon.TrayDrop += taskbarIcon_Drop;
-            _taskbarIcon.WndProcMessageRecieved += WndProcMessageRecieved;
+            //_taskbarIcon.IconSource = new BitmapImage(new Uri("pack://application:,,,/Images/default.ico"));
+            _taskbarIcon.TrayDrop += OnTaskbarIconDrop;
+            _taskbarIcon.WndProcMessageRecieved += OnWndProcMessageRecieved;
 
-
-            //this is left for reference, not sure if the new notification icon will have the same problem or not.
-
-            //System.Windows.Resources.StreamResourceInfo sri = Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico"));
-            //var desiredSize = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
-            //var avaliableSizes = new[] { 64, 48, 32, 24, 20, 16 };
-            //var nearest = avaliableSizes.OrderBy(x => Math.Abs(x - desiredSize)).First();
-            //notifyIcon.Icon = new System.Drawing.Icon(sri.Stream, new System.Drawing.Size(nearest, nearest));
-            //notifyIcon.Visible = true;
+            //force the correct icon size
+            System.Windows.Resources.StreamResourceInfo sri = Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico"));
+            var desiredSize = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
+            var avaliableSizes = new[] { 64, 48, 32, 24, 20, 16 };
+            var nearest = avaliableSizes.OrderBy(x => Math.Abs(x - desiredSize)).First();
+            var icon = new System.Drawing.Icon(sri.Stream, new System.Drawing.Size(nearest, nearest));
+            _taskbarIcon.Icon = icon;
         }
         private void SetupGlobalHotkeys()
         {
             var capture = Settings.CaptureSettings.StartCaptureShortcut;
             _captureHotkey = new HotKey(capture.Key, capture.Modifiers, (key) =>
             {
-                //if (prtscrWindowOpen) return;
-                //mouseHook.Stop();
-                //ScreenshotWindow scw = new ScreenshotWindow();
-                //scw.LoadBitmap(ScreenUtil.Capture());
-                //prtscrWindowOpen = true;
-                //scw.Show();
-                //scw.Closed += (s, e) =>
-                //{
-                //    mouseHook.Start();
-                //    prtscrWindowOpen = false;
-                //};
+                StartCapture();
             }, false);
+
             if (!_captureHotkey.Register())
             {
                 //hotkey was not registered, because some other application already has registered it or it is reserved.
@@ -252,7 +301,9 @@ namespace Clowd
         private void SetupUpdateTimer()
         {
             _updateManager = NAppUpdate.Framework.UpdateManager.Instance;
-            var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ServerHost}/app_updates/feed.xml");
+            _updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
+            _updateManager.Config.UpdateProcessName = "ClowdUpdate";
+            var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ServerHost}/app_updates/feed.aspx");
             _updateManager.UpdateSource = source;
 
             _updateManager.ReinstateIfRestarted();
@@ -263,18 +314,142 @@ namespace Clowd
             OnCheckForUpdates(null, null);
             _updateTimer.Start();
         }
+        private void SetupTrayContextMenu()
+        {
+            ContextMenu context = new ContextMenu();
+            var capture = new MenuItem() { Header = "Capture Screen" };
+            capture.Click += async (s, e) =>
+            {
+                //wait long enough for context menu to disappear.
+                await Task.Delay(500);
+                StartCapture();
+            };
+            context.Items.Add(capture);
+
+            var paste = new MenuItem() { Header = "Paste" };
+            paste.Click += (s, e) =>
+            {
+                Paste();
+            };
+            context.Items.Add(paste);
+            context.Items.Add(new Separator());
+
+            var home = new MenuItem() { Header = "Clowd Home" };
+            home.Click += (s, e) =>
+            {
+                var wnd = TemplatedWindow.GetWindow(typeof(HomePage));
+                if (wnd == null)
+                {
+                    wnd = TemplatedWindow.CreateWindow("CLOWD", new HomePage());
+                }
+                wnd.Show();
+                wnd.MakeForeground();
+            };
+            context.Items.Add(home);
+
+            var exit = new MenuItem() { Header = "Exit" };
+            exit.Click += (s, e) =>
+            {
+                if (Settings.ConfirmClose)
+                {
+                    var config = new TaskDialogInterop.TaskDialogOptions();
+                    config.Title = "Question";
+                    config.MainInstruction = "Are you sure you wish to close Clowd?";
+                    config.Content = "If you close clowd, it will stop any in-progress uploads and you will be unable to upload anything new.";
+                    config.VerificationText = "Don't ask me this again";
+                    config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.YesNo;
+                    config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Warning;
+
+                    var res = TaskDialogInterop.TaskDialog.Show(config);
+                    if (res.Result == TaskDialogInterop.TaskDialogSimpleResult.Yes)
+                    {
+                        if (res.VerificationChecked == true)
+                            Settings.ConfirmClose = false;
+                        Settings.Save();
+                        Application.Current.Shutdown();
+                    }
+                }
+                else
+                {
+                    Settings.Save();
+                    Application.Current.Shutdown();
+                }
+            };
+            context.Items.Add(exit);
+
+            _taskbarIcon.ContextMenu = context;
+        }
 
         public void FinishInit()
         {
+            if (_initialized)
+                return;
+            _initialized = true;
+            _taskbarIcon.ToolTipText = "Clowd\nClick me or drop something on me\nto see what I can do!";
             _taskbarIcon.TrayDropEnabled = true;
+            SetupTrayContextMenu();
+            SetupGlobalHotkeys();
+            Settings.Save();
+            _cmdCache = new List<string>();
+            _cmdBatchTimer = new DispatcherTimer();
+            _cmdBatchTimer.Interval = TimeSpan.FromSeconds(1);
+            _cmdBatchTimer.Tick += OnCommandLineBatchTimerTick;
+            if (_args != null)
+            {
+                OnCommandLineArgsRecieved(this, new CommandLineEventArgs(_args));
+            }
+        }
+
+        public void StartCapture()
+        {
+            if (_prtscrWindowOpen)
+                return;
+
+            var wnd = new CaptureWindow();
+            wnd.Closed += (s, e) =>
+            {
+                _prtscrWindowOpen = false;
+            };
+            wnd.Show();
+        }
+        public void Paste()
+        {
+            if (Clipboard.ContainsImage())
+            {
+                var img = System.Windows.Forms.Clipboard.GetImage();
+                byte[] b;
+                using (var ms = new MemoryStream())
+                {
+                    img.Save(ms, ImageFormat.Png);
+                    ms.Position = 0;
+                    using (BinaryReader br = new BinaryReader(ms))
+                    {
+                        b = br.ReadBytes(Convert.ToInt32(ms.Length));
+                    }
+                }
+                UploadManager.Upload(b, "clowd-default.png");
+            }
+            if (Clipboard.ContainsText())
+            {
+                UploadManager.Upload(Clipboard.GetText().ToUtf8(), "clowd-default.txt");
+            }
+            if (Clipboard.ContainsFileDropList())
+            {
+                var collection = Clipboard.GetFileDropList();
+                string[] fileArray = new string[collection.Count];
+                collection.CopyTo(fileArray, 0);
+                OnFilesRecieved(fileArray);
+            }
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
+            base.OnExit(e);
+            _mutex.ReleaseMutex();
+            _host.Close();
             _taskbarIcon.Dispose();
             if (_captureHotkey != null)
                 _captureHotkey.Dispose();
-            base.OnExit(e);
         }
         private async void OnCheckForUpdates(object sender, System.Timers.ElapsedEventArgs e)
         {
@@ -301,19 +476,49 @@ namespace Clowd
                 await Task.Delay(10000);
             }
 
-            OnExit(null);
-            _updateManager.ApplyUpdates(true, false, false);
+            var config = new TaskDialogInterop.TaskDialogOptions();
+            config.Title = "Updates";
+            config.MainInstruction = "Updates are available for Clowd";
+            config.Content = "Would you like to install these crucial updates now?"
+                + Environment.NewLine + Environment.NewLine +
+                "If you decline, we'll ask again in 6 hours, or after you restart Clowd.";
+            config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.YesNo;
+            config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Shield;
 
+            var res = TaskDialogInterop.TaskDialog.Show(config);
+            if (res.Result == TaskDialogInterop.TaskDialogSimpleResult.Yes)
+            {
+                OnExit(null);
+                _updateManager.ApplyUpdates(true, false, false);
+            }
         }
-
-        private void WndProcMessageRecieved(uint obj)
+        private void OnCommandLineArgsRecieved(object sender, CommandLineEventArgs e)
+        {
+            if (_cmdBatchTimer.IsEnabled)
+            {
+                //restart timer.
+                _cmdBatchTimer.IsEnabled = false;
+            }
+            _cmdCache.AddRange(e.Args);
+            _cmdBatchTimer.IsEnabled = true;
+        }
+        private void OnCommandLineBatchTimerTick(object sender, EventArgs e)
+        {
+            _cmdBatchTimer.IsEnabled = false;
+            if (_cmdCache.Count > 0)
+            {
+                OnFilesRecieved(_cmdCache.ToArray());
+                _cmdCache.Clear();
+            }
+        }
+        private void OnWndProcMessageRecieved(uint obj)
         {
             if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED && Settings?.AccentScheme == AccentScheme.System)
             {
                 SetupAccentColors();
             }
         }
-        async Task FilesRecieved(string[] filePaths)
+        private async Task OnFilesRecieved(string[] filePaths)
         {
             string url;
             if (filePaths.Length > 1 || (filePaths.Length == 1 && Directory.Exists(filePaths[0]))
@@ -349,47 +554,18 @@ namespace Clowd
                 url = await UploadManager.Upload(File.ReadAllBytes(filePaths[0]), Path.GetFileName(filePaths[0]));
             }
         }
-        private void taskbarIcon_Drop(object sender, DragEventArgs e)
+        private void OnTaskbarIconDrop(object sender, DragEventArgs e)
         {
             var formats = e.Data.GetFormats();
             if (formats.Contains(DataFormats.FileDrop))
             {
                 var data = (string[])e.Data.GetData(DataFormats.FileDrop);
-                FilesRecieved(data);
+                OnFilesRecieved(data);
             }
             else if (formats.Contains(DataFormats.Text))
             {
                 var data = (string)e.Data.GetData(DataFormats.Text);
                 UploadManager.Upload(data.ToUtf8(), "clowd-default.txt");
-            }
-        }
-        public void Paste()
-        {
-            if (Clipboard.ContainsImage())
-            {
-                var img = System.Windows.Forms.Clipboard.GetImage();
-                byte[] b;
-                using (var ms = new MemoryStream())
-                {
-                    img.Save(ms, ImageFormat.Png);
-                    ms.Position = 0;
-                    using (BinaryReader br = new BinaryReader(ms))
-                    {
-                        b = br.ReadBytes(Convert.ToInt32(ms.Length));
-                    }
-                }
-                UploadManager.Upload(b, "clowd-default.png");
-            }
-            if (Clipboard.ContainsText())
-            {
-                UploadManager.Upload(Clipboard.GetText().ToUtf8(), "clowd-default.txt");
-            }
-            if (Clipboard.ContainsFileDropList())
-            {
-                var collection = Clipboard.GetFileDropList();
-                string[] fileArray = new string[collection.Count];
-                collection.CopyTo(fileArray, 0);
-                FilesRecieved(fileArray);
             }
         }
     }
