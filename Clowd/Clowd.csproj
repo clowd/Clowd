@@ -50,8 +50,8 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="NAppUpdate.Framework, Version=0.3.0.0, Culture=neutral, PublicKeyToken=d1f1d1f19f9e5a56, processorArchitecture=MSIL">
-      <HintPath>..\packages\NAppUpdate.Framework.0.3.0.0\lib\net20\NAppUpdate.Framework.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\lib\NAppUpdate.Framework.dll</HintPath>
     </Reference>
     <Reference Include="RT.Util">
       <HintPath>..\lib\RT.Util.dll</HintPath>
