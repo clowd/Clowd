@@ -109,6 +109,9 @@
   <ItemGroup>
     <Compile Include="Client.cs" />
     <Compile Include="ConsoleInputLogger.cs" />
+    <Content Include="feed.aspx">
+      <SubType>ASPXCodeBehind</SubType>
+    </Content>
     <Compile Include="MimeHandlers\MimeImageHandler.cs" />
     <Compile Include="MimeHandlers\MimeFileHandler.cs" />
     <Compile Include="MimeHandlers\MimeTextHandler.cs" />

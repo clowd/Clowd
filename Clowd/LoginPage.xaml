@@ -7,7 +7,7 @@
              xmlns:local="clr-namespace:Clowd"
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
              mc:Ignorable="d" 
-             Width="434" Height="450">
+             Width="436" Height="450">
     <UserControl.Resources>
         <RoutedCommand x:Key="Command.Login" />
     </UserControl.Resources>
@@ -18,6 +18,13 @@
         <CommandBinding Command="{StaticResource Command.Login}" Executed="LoginExecuted" />
     </UserControl.CommandBindings>
     <Grid>
+        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="{StaticResource AccentColorBrush}"
+                   FontFamily="pack://application:,,,/Assets/#Raleway" FontWeight="Normal" FontSize="40" TextAlignment="Center">
+            CLOWD
+            <TextBlock.LayoutTransform>
+                <RotateTransform Angle="90" />
+            </TextBlock.LayoutTransform>
+        </TextBlock>
         <StackPanel Orientation="Vertical"  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Width="200">
             <Viewbox Width="150">
                 <Path Fill="{DynamicResource AccentColorBrush}" Width="75.15" Height="53.70" Data="{StaticResource N44}" />

@@ -111,6 +111,7 @@ namespace NotifyIconLib
             dropWindow = new Clowd.DropWindow();
             UpdateDropWindowFromCache();
             //we want to make sure the window is loaded completely.
+            dropWindow.ShowActivated = false;
             dropWindow.Show();
             dropWindow.Hide();
             dropWindow.Topmost = true;

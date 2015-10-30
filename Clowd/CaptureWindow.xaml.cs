@@ -123,24 +123,28 @@ namespace Clowd
                 if (bottomSpace >= 50)
                 {
                     toolActionBarStackPanel.Orientation = Orientation.Horizontal;
+                    this.DoRender();
                     indLeft = intersecting.Left + intersecting.Width / 2 - toolActionBar.ActualWidth / 2;
                     indTop = bottomSpace >= 60 ? intersecting.Bottom + 5 : intersecting.Bottom;
                 }
                 else if (rightSpace >= 50)
                 {
                     toolActionBarStackPanel.Orientation = Orientation.Vertical;
+                    this.DoRender();
                     indLeft = rightSpace >= 60 ? intersecting.Right + 5 : intersecting.Right;
                     indTop = intersecting.Bottom - toolActionBar.ActualHeight;
                 }
                 else if (leftSpace >= 50)
                 {
                     toolActionBarStackPanel.Orientation = Orientation.Vertical;
+                    this.DoRender();
                     indLeft = leftSpace >= 60 ? intersecting.Left - 55 : intersecting.Left - 50;
                     indTop = intersecting.Bottom - toolActionBar.ActualHeight;
                 }
                 else
                 {
                     toolActionBarStackPanel.Orientation = Orientation.Horizontal;
+                    this.DoRender();
                     indLeft = intersecting.Left + intersecting.Width / 2 - toolActionBar.ActualWidth / 2;
                     indTop = intersecting.Bottom - 70;
                 }
