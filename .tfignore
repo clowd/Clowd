@@ -1,2 +1,2 @@
-tools\*
+tools\installer\*.exe
 packages\*
