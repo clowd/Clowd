@@ -135,7 +135,6 @@ namespace Clowd
                                 FinishInit();
                             else
                             {
-                                //show login page, wont happen if its not the first run and the settings were saved. 
                                 var page = new LoginPage(result, Settings.Username);
                                 var login = TemplatedWindow.CreateWindow("CLOWD", page);
                                 login.Show();
@@ -479,9 +478,7 @@ namespace Clowd
             var config = new TaskDialogInterop.TaskDialogOptions();
             config.Title = "Updates";
             config.MainInstruction = "Updates are available for Clowd";
-            config.Content = "Would you like to install these crucial updates now?"
-                + Environment.NewLine + Environment.NewLine +
-                "If you decline, we'll ask again in 6 hours, or after you restart Clowd.";
+            config.Content = "Would you like to install these crucial updates now?";
             config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.YesNo;
             config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Shield;
 
@@ -499,7 +496,11 @@ namespace Clowd
                 //restart timer.
                 _cmdBatchTimer.IsEnabled = false;
             }
-            _cmdCache.AddRange(e.Args);
+            foreach(var f in e.Args)
+            {
+                if (File.Exists(f))
+                    _cmdCache.Add(f);
+            }
             _cmdBatchTimer.IsEnabled = true;
         }
         private void OnCommandLineBatchTimerTick(object sender, EventArgs e)
