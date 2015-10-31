@@ -52,11 +52,13 @@
     <Compile Include="Gdi32\TernaryRasterOperations.cs" />
     <Compile Include="Kernel32\KERNEL32.cs" />
     <Compile Include="Kernel32\TBBUTTON.cs" />
+    <Compile Include="Shcore\SHCORE.cs" />
     <Compile Include="Shell32\APPBARDATA.cs" />
     <Compile Include="Shell32\NOTIFYICONIDENTIFIER.cs" />
     <Compile Include="POINT.cs" />
     <Compile Include="RECT.cs" />
     <Compile Include="Shell32\SHELL32.cs" />
+    <Compile Include="User32\MonitorHelper.cs" />
     <Compile Include="SIZE.cs" />
     <Compile Include="User32\ShowWindowCmd.cs" />
     <Compile Include="User32\SystemMetric.cs" />

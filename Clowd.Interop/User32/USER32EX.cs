@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Clowd.Interop
 {
-    public class USER32EX
+    public partial class USER32EX
     {
         /// <summary>
         /// Returns a list of handles for windows of the class 'ToolbarWindow32'.

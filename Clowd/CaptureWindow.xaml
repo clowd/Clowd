@@ -11,7 +11,7 @@
         DataContext="{Binding RelativeSource={RelativeSource Self}}"
         mc:Ignorable="d" SnapsToDevicePixels="True"
         Icon="/Images/default.ico"
-        WindowStyle="None" ResizeMode="NoResize" Topmost="True"
+        WindowStyle="None" ResizeMode="NoResize" Topmost="False"
         Title="Capture" Height="500" Width="500">
     <Window.Resources>
         <lib:ToolTypeConverter x:Key="convToolType"/>
@@ -64,7 +64,7 @@
     </Window.CommandBindings>
     <Grid Name="rootGrid" Cursor="{Binding CanvasCursor}">
         <Image Name="imageBackground"  Source="{Binding ScreenImage}" Stretch="Fill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-        <Path Name="surroundFill"  Fill="#99000000" Cursor="{Binding CanvasCursor}">
+        <!--<Path Name="surroundFill"  Fill="#99000000" Cursor="{Binding CanvasCursor}">
             <Path.Data>
                 <CombinedGeometry GeometryCombineMode="Xor">
                     <CombinedGeometry.Geometry1>
@@ -82,9 +82,9 @@
                     </CombinedGeometry.Geometry2>
                 </CombinedGeometry>
             </Path.Data>
-        </Path>
+        </Path>-->
         <Canvas Name="dynamicCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-            <UserControl Name="selectionBorder" Cursor="None"
+            <UserControl Name="selectionBorder" Cursor="Cross"
                      Width="{Binding CroppingRectangle.Width }"
                      Height="{Binding CroppingRectangle.Height }"
                      Canvas.Left="{Binding CroppingRectangle.X }"
@@ -133,7 +133,7 @@
                     </TextBlock>
                 </StackPanel>
             </Border>
-            <Grid Name="crosshairTopRight" Visibility="Hidden" SnapsToDevicePixels="True">
+            <!--<Grid Name="crosshairTopRight" Visibility="Hidden" SnapsToDevicePixels="True">
                 <Border BorderThickness="{Binding NormalThickness}" BorderBrush="{StaticResource HighlightBrush}" Opacity=".7" SnapsToDevicePixels="True" />
                 <Rectangle Stroke="#A5FFFFFF" StrokeThickness="{Binding NormalThickness}" StrokeDashArray="8 8" Opacity=".6" SnapsToDevicePixels="True"  />
                 <Border BorderThickness="{Binding TopRightThickness}" BorderBrush="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"
@@ -152,7 +152,7 @@
                            Margin="0,-2,60,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"/>
                 <Rectangle Width="5" Height="60" VerticalAlignment="Top" HorizontalAlignment="Right"
                            Margin="0,60,-2,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True" />
-            </Grid>
+            </Grid>-->
             <!--<Viewbox Width="100" Height="100">
                 <Path Width="60.85" Height="61.1" Fill="Red" Data="M15,32.05H0v-3h15V32.05z M31.8,61.1v-15h-3v15H31.8z M60.851,29.05h-15v3h15V29.05z M31.8,15V0h-3v15H31.8z M45.851,30.05 H15v1h30.851V30.05z M30.8,45.975V15.125h-1v30.851H30.8z" />
             </Viewbox>-->

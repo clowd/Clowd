@@ -23,7 +23,10 @@ namespace Clowd.Utilities
         {
             get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(6, 2, 0); }
         }
-        //this will only return true if the correct manifest is included (which it is not right now 2015-10-12)
+        public static bool IsWindows8_1OrLater
+        {
+            get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(6, 3, 0); }
+        }
         public static bool IsWindows10OrLater
         {
             get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(10, 0, 0); }
