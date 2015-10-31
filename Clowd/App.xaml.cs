@@ -76,7 +76,7 @@ namespace Clowd
                     pipeProxy.PassArgs(e.Args);
                     pipeFactory.Close();
                 }
-                Thread.Sleep(2000);
+                Thread.Sleep(2001);
                 Environment.Exit(0);
                 return;
             }
@@ -261,7 +261,7 @@ namespace Clowd
         }
         private void SetupDpiScaling()
         {
-            Interop.USER32.SetProcessDPIAware();
+            //Interop.USER32.SetProcessDPIAware();
             IntPtr dC = Interop.USER32.GetDC(IntPtr.Zero);
             double logX = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSX);
             double logY = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSY);
@@ -306,6 +306,16 @@ namespace Clowd
             _updateManager.UpdateSource = source;
 
             _updateManager.ReinstateIfRestarted();
+            if (_updateManager.State == NAppUpdate.Framework.UpdateManager.UpdateProcessState.AfterRestart)
+            {
+                var config = new TaskDialogInterop.TaskDialogOptions();
+                config.Title = "Clowd";
+                config.MainInstruction = "Updates were installed successfully.";
+                config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
+                config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Information;
+
+                TaskDialogInterop.TaskDialog.Show(config);
+            }
             _updateManager.CleanUp();
 
             _updateTimer = new System.Timers.Timer(Settings.UpdateCheckInterval.TotalMilliseconds);
@@ -352,7 +362,7 @@ namespace Clowd
                 if (Settings.ConfirmClose)
                 {
                     var config = new TaskDialogInterop.TaskDialogOptions();
-                    config.Title = "Question";
+                    config.Title = "Clowd";
                     config.MainInstruction = "Are you sure you wish to close Clowd?";
                     config.Content = "If you close clowd, it will stop any in-progress uploads and you will be unable to upload anything new.";
                     config.VerificationText = "Don't ask me this again";
@@ -384,7 +394,7 @@ namespace Clowd
             if (_initialized)
                 return;
             _initialized = true;
-            _taskbarIcon.ToolTipText = "Clowd\nClick me or drop something on me\nto see what I can do!";
+            _taskbarIcon.ToolTipText = "Clowd\nRight click me or drop something on me\nto see what I can do!";
             _taskbarIcon.TrayDropEnabled = true;
             SetupTrayContextMenu();
             SetupGlobalHotkeys();
@@ -410,6 +420,7 @@ namespace Clowd
                 _prtscrWindowOpen = false;
             };
             wnd.Show();
+            _prtscrWindowOpen = true;
         }
         public void Paste()
         {
@@ -476,7 +487,7 @@ namespace Clowd
             }
 
             var config = new TaskDialogInterop.TaskDialogOptions();
-            config.Title = "Updates";
+            config.Title = "Clowd";
             config.MainInstruction = "Updates are available for Clowd";
             config.Content = "Would you like to install these crucial updates now?";
             config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.YesNo;
@@ -496,7 +507,7 @@ namespace Clowd
                 //restart timer.
                 _cmdBatchTimer.IsEnabled = false;
             }
-            foreach(var f in e.Args)
+            foreach (var f in e.Args)
             {
                 if (File.Exists(f))
                     _cmdCache.Add(f);

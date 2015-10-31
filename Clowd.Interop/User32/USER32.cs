@@ -8,8 +8,11 @@ using System.Threading.Tasks;
 
 namespace Clowd.Interop
 {
-    public class USER32
+    public partial class USER32
     {
+        [DllImport("gdi32.dll")]
+        public static extern IntPtr CreateDC(string lpszDriver, string lpszDevice, string lpszOutput, IntPtr lpInitData);
+
         /// <summary>
         /// An application-defined callback function used with the EnumWindows or EnumDesktopWindows function. It receives top-level window handles. The WNDENUMPROC type defines a pointer to this callback function. EnumWindowsProc is a placeholder for the application-defined function name.
         /// </summary>
@@ -279,8 +282,10 @@ namespace Clowd.Interop
         public static extern IntPtr ReleaseDC(IntPtr hWnd, IntPtr hDC);
         [DllImport("user32.dll")]
         public static extern int GetAsyncKeyState(int vKey);
+
         [DllImport("user32.dll")]
         public static extern bool SetProcessDPIAware();
+
         [DllImport("USER32.dll")]
         public static extern short GetKeyState(VirtualKeyStates nVirtKey);
         [DllImport("user32.dll")]
@@ -289,6 +294,9 @@ namespace Clowd.Interop
         [DllImport("user32.dll")]
         public static extern IntPtr GetDC(IntPtr hWnd);
 
+        public delegate bool MonitorEnumDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+        [DllImport("user32.dll")]
+        public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumDelegate lpfnEnum, IntPtr dwData);
     }
 
     [Flags]

@@ -8,6 +8,7 @@ using System.Windows.Forms;
 using Clowd.Interop;
 using Clowd.Utilities;
 using Clowd.Interop.DwmApi;
+using Clowd.Interop.Shcore;
 
 namespace Clowd.Utilities
 {
@@ -30,13 +31,13 @@ namespace Clowd.Utilities
         }
         public CachedWindow GetWindowThatContainsPoint(Point point)
         {
-            point.Offset(DpiScale.UpScaleX(SystemParameters.VirtualScreenLeft), DpiScale.UpScaleY(SystemParameters.VirtualScreenTop));
+            //point.Offset(DpiScale.UpScaleX(SystemParameters.VirtualScreenLeft), DpiScale.UpScaleY(SystemParameters.VirtualScreenTop));
             foreach (var window in _cachedWindows)
             {
                 if (window.WindowRect.Contains(point))
                 {
                     var temp = window;
-                    temp.WindowRect.Offset(-DpiScale.UpScaleX(SystemParameters.VirtualScreenLeft), -DpiScale.UpScaleY(SystemParameters.VirtualScreenTop));
+                    //temp.WindowRect.Offset(-DpiScale.UpScaleX(SystemParameters.VirtualScreenLeft), -DpiScale.UpScaleY(SystemParameters.VirtualScreenTop));
                     return temp;
                 }
             }
@@ -185,21 +186,46 @@ namespace Clowd.Utilities
         }
         public Rect GetBoundsOfScreenContainingRect(Rect bounds, bool returnWorkingAreaOnly = true)
         {
-            var point = new System.Drawing.Point((int)(bounds.Left + bounds.Width / 2), (int)(bounds.Top + bounds.Height / 2));
-            Rect retval = Rect.Empty;
-            Screen[] allScreens = Screen.AllScreens;
-            for (int i = 0; i < (int)allScreens.Length; i++)
+            RECT rect = bounds;
+            var hMonitor = USER32.MonitorFromRect(ref rect, 2);
+            MONITORINFO mi = new MONITORINFO();
+            mi.cbSize = (uint)Marshal.SizeOf(mi);
+            bool success = USER32.GetMonitorInfo(hMonitor, ref mi);
+            if (success)
             {
-                Screen screen = allScreens[i];
-                if (screen.Bounds.Contains(point))
-                {
-                    if (returnWorkingAreaOnly)
-                        retval = new Rect(screen.WorkingArea.X, screen.WorkingArea.Y, screen.WorkingArea.Width, screen.WorkingArea.Height);
-                    else
-                        retval = new Rect(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height);
-                }
+                if (mi.rcWork.HasSize() && returnWorkingAreaOnly)
+                    return mi.rcWork;
+                return mi.rcMonitor;
             }
-            return retval;
+            var rectangle = SystemInformation.VirtualScreen;
+            return new Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
+
+            //if (SysInfo.IsWindows8_1OrLater)
+            //{
+            //    uint dpiX = 0, dpiY = 0;
+            //    if (!SHCORE.GetDpiForMonitor(hMonitor, MONITOR_DPI_TYPE.MDT_EFFECTIVE_DPI, ref dpiX, ref dpiY))
+            //    {
+            //        dpiX = dpiY = 96;
+            //    }
+
+            //}
+
+            //var point = new System.Drawing.Point((int)(bounds.Left + bounds.Width / 2), (int)(bounds.Top + bounds.Height / 2));
+            //Rect retval = Rect.Empty;
+            //Screen[] allScreens = Screen.AllScreens;
+            //for (int i = 0; i < (int)allScreens.Length; i++)
+            //{
+            //    Screen screen = allScreens[i];
+
+            //    if (screen.Bounds.Contains(point))
+            //    {
+            //        if (returnWorkingAreaOnly)
+            //            retval = new Rect(screen.WorkingArea.X, screen.WorkingArea.Y, screen.WorkingArea.Width, screen.WorkingArea.Height);
+            //        else
+            //            retval = new Rect(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height);
+            //    }
+            //}
+            //return retval;
         }
         private Rect GetWindowBoundsClippedToParentWindow(Rect windowBounds)
         {
