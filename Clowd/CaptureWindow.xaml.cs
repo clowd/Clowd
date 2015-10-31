@@ -30,9 +30,9 @@ namespace Clowd
         public bool ShowMagnifier { get; private set; } = true;
         public double PixelSizeX { get { return DpiScale.DownScaleX(1); } }
         public double PixelSizeY { get { return DpiScale.DownScaleY(1); } }
-        public Thickness TopRightThickness { get { return new Thickness(PixelSizeX, 0, 0, PixelSizeY); } }
-        public Thickness BottomLeftThickness { get { return new Thickness(0, PixelSizeY, PixelSizeX, 0); } }
-        public Thickness NormalThickness { get { return new Thickness(PixelSizeX, PixelSizeY, PixelSizeX, PixelSizeY); } }
+        //public Thickness TopRightThickness { get { return new Thickness(PixelSizeX, 0, 0, PixelSizeY); } }
+        //public Thickness BottomLeftThickness { get { return new Thickness(0, PixelSizeY, PixelSizeX, 0); } }
+        //public Thickness NormalThickness { get { return new Thickness(PixelSizeX, PixelSizeY, PixelSizeX, PixelSizeY); } }
         public IntPtr Handle { get; private set; }
 
         private bool draggingArea = false;
@@ -55,8 +55,8 @@ namespace Clowd
 
         private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            this.Left = 0;
-            this.Top = 0;
+            this.Left = SystemParameters.VirtualScreenLeft;
+            this.Top = SystemParameters.VirtualScreenTop;
             this.Width = SystemParameters.VirtualScreenWidth;
             this.Height = SystemParameters.VirtualScreenHeight;
             Interop.USER32.SetForegroundWindow(this.Handle);
@@ -65,7 +65,7 @@ namespace Clowd
 
         private void CaptureBitmap()
         {
-            var source = ScreenUtil.Capture(new System.Drawing.Rectangle(0, 0, System.Windows.Forms.SystemInformation.VirtualScreen.Width, System.Windows.Forms.SystemInformation.VirtualScreen.Height));
+            var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen);
             IntPtr ip = source.GetHbitmap();
             BitmapSource bs = null;
             try
@@ -90,7 +90,16 @@ namespace Clowd
         private void UpdateCanvasPlacement()
         {
             var selection = CroppingRectangle;
-            var primaryScreen = DpiScale.TranslateDownScaleRect(windowFinder.GetBoundsOfScreenContainingRect(selection, false));
+            //translate the selction to real screen coordinates.
+            var realSelection = DpiScale.TranslateUpScaleRect(selection);
+            realSelection.X = realSelection.X + System.Windows.Forms.SystemInformation.VirtualScreen.X;
+            realSelection.Y = realSelection.Y + System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+            //get bounds of primary screen, in relation to the current window.
+            var primaryScreen = windowFinder.GetBoundsOfScreenContainingRect(realSelection, false);
+            primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
+            primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+            primaryScreen = DpiScale.TranslateDownScaleRect(primaryScreen);
+
             var bottomSpace = Math.Max(primaryScreen.Bottom - selection.Bottom, 0);
             if (capturing == true)
             {
@@ -168,15 +177,15 @@ namespace Clowd
                 capturing = true;
                 areaSizeIndicator.Visibility = Visibility.Visible;
                 ShowTips = true;
-                CanvasCursor = Cursors.None;
+                CanvasCursor = Cursors.Cross;
                 //_magnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Hidden;
                 toolActionBar.Visibility = Visibility.Hidden;
-                crosshairBottomLeft.Width = rootGrid.ActualWidth;
-                crosshairBottomLeft.Height = rootGrid.ActualHeight;
-                crosshairTopRight.Width = rootGrid.ActualWidth;
-                crosshairTopRight.Height = rootGrid.ActualHeight;
-                crosshairBottomLeft.Visibility = Visibility.Visible;
-                crosshairTopRight.Visibility = Visibility.Visible;
+                //crosshairBottomLeft.Width = rootGrid.ActualWidth;
+                //crosshairBottomLeft.Height = rootGrid.ActualHeight;
+                //crosshairTopRight.Width = rootGrid.ActualWidth;
+                //crosshairTopRight.Height = rootGrid.ActualHeight;
+                //crosshairBottomLeft.Visibility = Visibility.Visible;
+                //crosshairTopRight.Visibility = Visibility.Visible;
             }
             else
             {
@@ -188,8 +197,8 @@ namespace Clowd
                 }
                 areaSizeIndicator.Visibility = Visibility.Hidden;
                 //_magnifier.Visibility = Visibility.Hidden;
-                crosshairBottomLeft.Visibility = Visibility.Hidden;
-                crosshairTopRight.Visibility = Visibility.Hidden;
+                //crosshairBottomLeft.Visibility = Visibility.Hidden;
+                //crosshairTopRight.Visibility = Visibility.Hidden;
                 ShowTips = false;
                 CanvasCursor = Cursors.Arrow;
                 toolActionBar.Visibility = Visibility.Visible;
@@ -296,7 +305,19 @@ namespace Clowd
             {
                 var wfMouse = new Point(System.Windows.Forms.Cursor.Position.X, System.Windows.Forms.Cursor.Position.Y);
                 var window = windowFinder.GetWindowThatContainsPoint(wfMouse);
-                UpdateCanvasSelection(DpiScale.TranslateDownScaleRect(window.WindowRect));
+                if (window.WindowRect == Rect.Empty)
+                {
+                    UpdateCanvasSelection(new Rect(0, 0, 0, 0));
+                }
+
+                else
+                {
+                    var rect = window.WindowRect;
+                    rect.X = rect.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
+                    rect.Y = rect.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+                    rect = DpiScale.TranslateDownScaleRect(rect);
+                    UpdateCanvasSelection(rect);
+                }
             }
         }
 
@@ -304,10 +325,10 @@ namespace Clowd
         {
             var currentPoint = e.GetPosition(rootGrid);
 
-            Canvas.SetLeft(crosshairTopRight, currentPoint.X - 1);
-            Canvas.SetBottom(crosshairTopRight, (rootGrid.ActualHeight - currentPoint.Y));
-            Canvas.SetTop(crosshairBottomLeft, currentPoint.Y - 1);
-            Canvas.SetRight(crosshairBottomLeft, (rootGrid.ActualWidth - currentPoint.X));
+            //Canvas.SetLeft(crosshairTopRight, currentPoint.X - 1);
+            //Canvas.SetBottom(crosshairTopRight, (rootGrid.ActualHeight - currentPoint.Y));
+            //Canvas.SetTop(crosshairBottomLeft, currentPoint.Y - 1);
+            //Canvas.SetRight(crosshairBottomLeft, (rootGrid.ActualWidth - currentPoint.X));
 
             if (draggingArea)
             {
@@ -338,7 +359,19 @@ namespace Clowd
             {
                 var wfMouse = new Point(System.Windows.Forms.Cursor.Position.X, System.Windows.Forms.Cursor.Position.Y);
                 var window = windowFinder.GetWindowThatContainsPoint(wfMouse);
-                UpdateCanvasSelection(DpiScale.TranslateDownScaleRect(window.WindowRect));
+
+                if (window.WindowRect == Rect.Empty)
+                {
+                    UpdateCanvasSelection(new Rect(0, 0, 0, 0));
+                }
+                else
+                {
+                    var rect = window.WindowRect;
+                    rect.X = rect.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
+                    rect.Y = rect.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+                    rect = DpiScale.TranslateDownScaleRect(rect);
+                    UpdateCanvasSelection(rect);
+                }
             }
         }
 
