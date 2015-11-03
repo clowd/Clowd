@@ -178,7 +178,9 @@ namespace DShowVideoFilter
                 if (m_dwAdviseToken == 0)
                 {
                     m_pClock.GetTime(out m_rtClockStart);
+#pragma warning disable 0612, 0618
                     hr = (HRESULT)m_pClock.AdvisePeriodic(m_rtClockStart + rtLatency, rtLatency, m_hSemaphore.Handle, out m_dwAdviseToken);
+#pragma warning restore 0612, 0618
                     hr.Assert();
                 }
                 else

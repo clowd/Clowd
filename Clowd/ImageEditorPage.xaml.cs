@@ -166,7 +166,7 @@ namespace Clowd
             if (e.Key == Key.LeftShift || e.Key == Key.RightShift)
             {
                 _shiftPressed = true;
-                shiftIndicator.Background = (Brush)App.Singleton.Resources["AccentColorBrush"];
+                shiftIndicator.Background = (Brush)App.Current.Resources["AccentColorBrush"];
                 shiftIndicator.Opacity = 1;
                 drawingCanvas.Cursor = Cursors.SizeAll;
                 drawingCanvas.Tool = DrawToolsLib.ToolType.None;

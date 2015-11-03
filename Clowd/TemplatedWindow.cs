@@ -16,7 +16,7 @@ namespace Clowd
     {
         public static Window CreateWindow(string title, Control content)
         {
-            return CreateWindow(title, content, App.Singleton.Settings.UseCustomWindowChrome);
+            return CreateWindow(title, content, App.Current.Settings.UseCustomWindowChrome);
         }
         public static Window CreateWindow(string title, Control content, bool customChrome)
         {
@@ -102,7 +102,7 @@ namespace Clowd
         private static MetroWindow CreateMetroWindow()
         {
             MetroWindow mw = new MetroWindow();
-            mw.IconTemplate = (DataTemplate)App.Singleton.FindResource("MetroIconTemplate");
+            mw.IconTemplate = (DataTemplate)App.Current.FindResource("MetroIconTemplate");
             mw.ResizeMode = ResizeMode.CanResizeWithGrip;
             mw.BorderThickness = new Thickness(1, 1, 1, 1);
             mw.SetResourceReference(MetroWindow.BorderBrushProperty, "WindowTitleColorBrush");

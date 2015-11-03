@@ -1,4 +1,5 @@
 ﻿using Clowd.Interop;
+using Clowd.Interop.Gdi32;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -14,128 +15,77 @@ namespace Clowd.Utilities
 {
     public static class ScreenUtil
     {
-        public static Rectangle ScreenBounds => new Rectangle(0, 0, SystemInformation.VirtualScreen.Width, SystemInformation.VirtualScreen.Height);
+        public static Rectangle VirtualScreenBounds => new Rectangle(0, 0, SystemInformation.VirtualScreen.Width, SystemInformation.VirtualScreen.Height);
 
-        public static IEnumerable<CapturedWindow> GetVisibleWindows()
-        {
-            var visibleWindows = new List<CapturedWindow>();
-            var windows = GetCapturedWindows().OrderBy(win => win.ZOrder).ToArray();
-            for (int i = 0; i < windows.Count(); i++)
-            {
-                if (!visibleWindows.Any(win => win.WindowRect.Contains(windows[i].WindowRect)))
-                {
-                    visibleWindows.Add(windows[i]);
-                }
-
-            }
-            return visibleWindows;
-        }
-
-        public static IEnumerable<CapturedWindow> GetCapturedWindows()
-        {
-            IntPtr shellWindow = USER32.GetShellWindow();
-
-            List<CapturedWindow> windows = new List<CapturedWindow>();
-            USER32.EnumWindows(delegate (IntPtr hWnd, IntPtr lParam)
-            {
-                if (hWnd == shellWindow) return true;
-                if (!USER32.IsWindowVisible(hWnd)) return true;
-
-                int length = USER32.GetWindowTextLength(hWnd);
-                if (length == 0) return true;
-
-                WINDOWPLACEMENT placement = new WINDOWPLACEMENT();
-                placement.length = Marshal.SizeOf(placement);
-                USER32.GetWindowPlacement(hWnd, ref placement);
-
-                if (placement.showCmd == (uint)ShowWindowCmd.SW_HIDE || placement.showCmd == (uint)ShowWindowCmd.SW_MINIMIZE)
-                    return true;
-
-                StringBuilder builder = new StringBuilder(length);
-                USER32.GetWindowText(hWnd, builder, length + 1);
-                int zorder = USER32EX.GetWindowZOrder(hWnd);
-                var rect = USER32EX.GetWindowRectangle(hWnd);
-                if (rect.X < 0 && placement.showCmd == (uint)ShowWindowCmd.SW_MAXIMIZE)
-                {
-                    int diff = rect.X / -1;
-                    rect = new Rectangle(rect.X + diff, rect.Y + diff, rect.Width - (diff * 2), rect.Height - (diff * 2));
-                }
-                windows.Add(new CapturedWindow(builder.ToString(), zorder, rect));
-                return true;
-
-            }, IntPtr.Zero);
-            return windows;
-        }
-        public class CapturedWindow
-        {
-            public CapturedWindow(string title, int zorder, Rectangle bounds)
-            {
-                Title = title;
-                ZOrder = zorder;
-                WindowRect = bounds;
-            }
-            public string Title { get; private set; }
-            public Rectangle WindowRect { get; private set; }
-            public int ZOrder { get; private set; }
-
-            public override string ToString()
-            {
-                return $"{Title} - [{ZOrder}] [x:{WindowRect.X} y:{WindowRect.Y} w:{WindowRect.Width} h: {WindowRect.Height}]";
-            }
-        }
         public static Bitmap Capture(Rectangle? bounds = null, bool captureCursor = false)
         {
-            var rect = bounds == null ? ScreenBounds : bounds.GetValueOrDefault();
+            var rect = bounds == null ? VirtualScreenBounds : bounds.GetValueOrDefault();
 
-            if (captureCursor)
-            {
-                return CaptureCursor(rect.X, rect.Y, rect.Width, rect.Height);
-            }
-            else
-            {
-                return CaptureRegular(rect.X, rect.Y, rect.Width, rect.Height);
-            }
-        }
-        private static Bitmap CaptureRegular(int x, int y, int width, int height)
-        {
-            var bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb);
+            var bitmap = new Bitmap(rect.Width, rect.Height, PixelFormat.Format24bppRgb);
             using (Graphics g = Graphics.FromImage(bitmap))
             {
-                g.CopyFromScreen(x, y, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
-            }
-            return bitmap;
-        }
-        private static Bitmap CaptureCursor(int x, int y, int width, int height)
-        {
-            var bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb);
-            using (Graphics g = Graphics.FromImage(bitmap))
-            {
-                g.CopyFromScreen(x, y, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
-
-                CURSORINFO cursorInfo;
-                cursorInfo.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
-
-                if (USER32.GetCursorInfo(out cursorInfo))
+                g.CopyFromScreen(rect.X, rect.Y, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
+                if (captureCursor)
                 {
-                    if (cursorInfo.flags == (uint)CURSORFLAGS.CURSOR_SHOWING)
-                    {
-                        var iconPointer = USER32.CopyIcon(cursorInfo.hCursor);
-                        ICONINFO iconInfo;
-                        int iconX, iconY;
-
-                        if (USER32.GetIconInfo(iconPointer, out iconInfo))
-                        {
-                            iconX = cursorInfo.ptScreenPos.x - ((int)iconInfo.xHotspot);
-                            iconY = cursorInfo.ptScreenPos.y - ((int)iconInfo.yHotspot);
-
-                            USER32.DrawIcon(g.GetHdc(), iconX, iconY, cursorInfo.hCursor);
-
-                            g.ReleaseHdc();
-                        }
-                    }
+                    DrawCursor(g, new System.Drawing.Point(rect.X, rect.Y));
                 }
             }
             return bitmap;
         }
+
+        private static void DrawCursor(Graphics g, System.Drawing.Point origin)
+        {
+            CURSORINFO cursorInfo;
+            cursorInfo.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
+            if (USER32.GetCursorInfo(out cursorInfo) && cursorInfo.flags == 0x00000001 /*CURSOR_SHOWING*/)
+            {
+                var hicon = USER32.CopyIcon(cursorInfo.hCursor);
+                ICONINFO iconInfo;
+                int iconX, iconY;
+                if (USER32.GetIconInfo(hicon, out iconInfo))
+                {
+                    iconX = cursorInfo.ptScreenPos.x - ((int)iconInfo.xHotspot) - origin.X;
+                    iconY = cursorInfo.ptScreenPos.y - ((int)iconInfo.yHotspot) - origin.Y;
+
+                    // Is this a monochrome cursor?
+                    if (iconInfo.hbmColor != IntPtr.Zero)
+                    {
+                        using (Icon curIcon = Icon.FromHandle(hicon))
+                        using (Bitmap curBitmap = curIcon.ToBitmap())
+                            g.DrawImage(curBitmap, iconX, iconY);
+                    }
+                    else
+                    {
+                        //According to the ICONINFO documentation, monochrome cursors (such as I-Beam cursor):
+                        //The top half of the mask bitmap is the AND mask, and the bottom half of the mask bitmap is the XOR bitmap. 
+                        //When Windows draws the I-Beam cursor, the top half of this bitmap is first drawn over the desktop with an AND raster operation. 
+                        //The bottom half of the bitmap is then drawn over top with an XOR raster operation. 
+                        //Onscreen, The cursor should will appear as the inverse of the content behind it.
+#warning This cursor should appear as the inverse of the content behind, but is currently being rendered completely white regardless of background.
+                        using (Bitmap maskBitmap = Bitmap.FromHbitmap(iconInfo.hbmMask))
+                        {
+                            Graphics desktopGraphics = Graphics.FromHwnd(USER32.GetDesktopWindow());
+                            IntPtr desktopHdc = desktopGraphics.GetHdc();
+                            IntPtr maskHdc = GDI32.CreateCompatibleDC(desktopHdc);
+                            IntPtr oldPtr = GDI32.SelectObject(maskHdc, maskBitmap.GetHbitmap());
+
+                            var resultHdc = g.GetHdc();
+                            var size = maskBitmap.Width;
+                            GDI32.BitBlt(resultHdc, iconX, iconY, size, size, maskHdc, 0, 0, (int)TernaryRasterOperations.SRCAND);
+                            GDI32.BitBlt(resultHdc, iconX, iconY, size, size, maskHdc, 0, size, (int)TernaryRasterOperations.SRCINVERT);
+                            g.ReleaseHdc(resultHdc);
+
+                            IntPtr newPtr = GDI32.SelectObject(maskHdc, oldPtr);
+                            GDI32.DeleteObject(newPtr);
+                            GDI32.DeleteDC(maskHdc);
+
+                            desktopGraphics.ReleaseHdc(desktopHdc);
+                        }
+                    }
+                    USER32.DestroyIcon(hicon);
+                }
+            }
+        }
+
     }
 }

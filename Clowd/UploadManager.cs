@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using RT.Util.ExtensionMethods;
 using Clowd.Shared;
+using Exceptionless;
 
 namespace Clowd
 {
@@ -159,17 +160,24 @@ namespace Clowd
             {
                 if (session == null)
                     return AuthResult.NetworkError;
-
-                var result = await session.CheckCredentials(login);
-                if (result.Item1 == AuthResult.Success)
+                try
                 {
-                    _cache = new SessionCredentialStore()
+                    var result = await session.CheckCredentials(login);
+                    if (result.Item1 == AuthResult.Success)
                     {
-                        Credentials = login.Clone(),
-                        SessionKey = result.Item2
-                    };
+                        _cache = new SessionCredentialStore()
+                        {
+                            Credentials = login.Clone(),
+                            SessionKey = result.Item2
+                        };
+                    }
+                    return result.Item1;
                 }
-                return result.Item1;
+                catch (Exception e)
+                {
+                    e.ToExceptionless().Submit();
+                    return AuthResult.NetworkError;
+                }
             }
         }
         public static void Logout()
@@ -313,7 +321,7 @@ namespace Clowd
                 TcpClient tcp = new TcpClient();
                 try
                 {
-                    await tcp.ConnectAsync(App.ServerHost, 12998);
+                    await tcp.ConnectAsync(App.ClowdServerDomain, 12998);
                 }
                 catch
                 {

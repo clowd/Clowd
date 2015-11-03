@@ -24,21 +24,18 @@ namespace Clowd
         //Disclaimer, I started writing this using MVVM and then ditched that idea, so code is kind of inconsistant.
 
         public BitmapSource ScreenImage { get; private set; }
+        public BitmapSource GrayScreenImage { get; private set; }
         public Rect CroppingRectangle { get; private set; } = new Rect(0, 0, 0, 0);
         public Cursor CanvasCursor { get; private set; } = Cursors.Cross;
         public bool ShowTips { get; private set; } = true;
         public bool ShowMagnifier { get; private set; } = true;
-        public double PixelSizeX { get { return DpiScale.DownScaleX(1); } }
-        public double PixelSizeY { get { return DpiScale.DownScaleY(1); } }
-        //public Thickness TopRightThickness { get { return new Thickness(PixelSizeX, 0, 0, PixelSizeY); } }
-        //public Thickness BottomLeftThickness { get { return new Thickness(0, PixelSizeY, PixelSizeX, 0); } }
-        //public Thickness NormalThickness { get { return new Thickness(PixelSizeX, PixelSizeY, PixelSizeX, PixelSizeY); } }
         public IntPtr Handle { get; private set; }
 
         private bool draggingArea = false;
         private Point draggingOrigin = default(Point);
         private WindowFinder2 windowFinder = new WindowFinder2();
         private bool? capturing = null;
+
         public CaptureWindow()
         {
             InitializeComponent();
@@ -55,6 +52,8 @@ namespace Clowd
 
         private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            if (System.Diagnostics.Debugger.IsAttached)
+                this.Topmost = false;
             this.Left = SystemParameters.VirtualScreenLeft;
             this.Top = SystemParameters.VirtualScreenTop;
             this.Width = SystemParameters.VirtualScreenWidth;
@@ -65,8 +64,14 @@ namespace Clowd
 
         private void CaptureBitmap()
         {
-            var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen);
-            IntPtr ip = source.GetHbitmap();
+            var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen, true);
+            ScreenImage = GetBitmapSource(source);
+            GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
+        }
+
+        public static BitmapSource GetBitmapSource(System.Drawing.Bitmap original)
+        {
+            IntPtr ip = original.GetHbitmap();
             BitmapSource bs = null;
             try
             {
@@ -78,8 +83,42 @@ namespace Clowd
             {
                 Interop.Gdi32.GDI32.DeleteObject(ip);
             }
+            return bs;
+        }
 
-            ScreenImage = bs;
+        public static System.Drawing.Bitmap MakeGrayscale3(System.Drawing.Bitmap original)
+        {
+            //create a blank bitmap the same size as original
+            var newBitmap = new System.Drawing.Bitmap(original.Width, original.Height);
+
+            //get a graphics object from the new image
+            var g = System.Drawing.Graphics.FromImage(newBitmap);
+
+            //create the grayscale ColorMatrix
+            var colorMatrix = new System.Drawing.Imaging.ColorMatrix(
+               new float[][]
+               {
+                 new float[] {.3f, .3f, .3f, 0, 0},
+                 new float[] {.59f, .59f, .59f, 0, 0},
+                 new float[] {.11f, .11f, .11f, 0, 0},
+                 new float[] {0, 0, 0, 1, 0},
+                 new float[] {0, 0, 0, 0, 1}
+               });
+
+            //create some image attributes
+            var attributes = new System.Drawing.Imaging.ImageAttributes();
+
+            //set the color matrix attribute
+            attributes.SetColorMatrix(colorMatrix);
+
+            //draw the original image on the new image
+            //using the grayscale color matrix
+            g.DrawImage(original, new System.Drawing.Rectangle(0, 0, original.Width, original.Height),
+               0, 0, original.Width, original.Height, System.Drawing.GraphicsUnit.Pixel, attributes);
+
+            //dispose the Graphics object
+            g.Dispose();
+            return newBitmap;
         }
 
         private void UpdateCanvasSelection(Rect selection)
@@ -87,6 +126,7 @@ namespace Clowd
             CroppingRectangle = selection;
             UpdateCanvasPlacement();
         }
+
         private void UpdateCanvasPlacement()
         {
             var selection = CroppingRectangle;
@@ -94,12 +134,13 @@ namespace Clowd
             var realSelection = DpiScale.TranslateUpScaleRect(selection);
             realSelection.X = realSelection.X + System.Windows.Forms.SystemInformation.VirtualScreen.X;
             realSelection.Y = realSelection.Y + System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-            //get bounds of primary screen, in relation to the current window.
+            //get bounds of current screen, in relation to the current window.
             var primaryScreen = windowFinder.GetBoundsOfScreenContainingRect(realSelection, false);
             primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
             primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
             primaryScreen = DpiScale.TranslateDownScaleRect(primaryScreen);
-
+            if (primaryScreen == Rect.Empty)
+                return;
             var bottomSpace = Math.Max(primaryScreen.Bottom - selection.Bottom, 0);
             if (capturing == true)
             {
@@ -129,31 +170,47 @@ namespace Clowd
                 //where the primary screen is the screen that contains the center of the cropping rectangle
                 var intersecting = primaryScreen;
                 intersecting.Intersect(CroppingRectangle);
+                if (intersecting == Rect.Empty)
+                    return;
                 if (bottomSpace >= 50)
                 {
-                    toolActionBarStackPanel.Orientation = Orientation.Horizontal;
-                    this.DoRender();
+                    if (toolActionBarStackPanel.Orientation == Orientation.Vertical)
+                    {
+                        toolActionBarStackPanel.Orientation = Orientation.Horizontal;
+                        //this will cause wpf to render the pending changes, so that we can calculate the correct
+                        //toolbar size below.
+                        this.DoRender();
+                    }
                     indLeft = intersecting.Left + intersecting.Width / 2 - toolActionBar.ActualWidth / 2;
                     indTop = bottomSpace >= 60 ? intersecting.Bottom + 5 : intersecting.Bottom;
                 }
                 else if (rightSpace >= 50)
                 {
-                    toolActionBarStackPanel.Orientation = Orientation.Vertical;
-                    this.DoRender();
+                    if (toolActionBarStackPanel.Orientation == Orientation.Horizontal)
+                    {
+                        toolActionBarStackPanel.Orientation = Orientation.Vertical;
+                        this.DoRender();
+                    }
                     indLeft = rightSpace >= 60 ? intersecting.Right + 5 : intersecting.Right;
                     indTop = intersecting.Bottom - toolActionBar.ActualHeight;
                 }
                 else if (leftSpace >= 50)
                 {
-                    toolActionBarStackPanel.Orientation = Orientation.Vertical;
-                    this.DoRender();
+                    if (toolActionBarStackPanel.Orientation == Orientation.Horizontal)
+                    {
+                        toolActionBarStackPanel.Orientation = Orientation.Vertical;
+                        this.DoRender();
+                    }
                     indLeft = leftSpace >= 60 ? intersecting.Left - 55 : intersecting.Left - 50;
                     indTop = intersecting.Bottom - toolActionBar.ActualHeight;
                 }
                 else
                 {
-                    toolActionBarStackPanel.Orientation = Orientation.Horizontal;
-                    this.DoRender();
+                    if (toolActionBarStackPanel.Orientation == Orientation.Vertical)
+                    {
+                        toolActionBarStackPanel.Orientation = Orientation.Horizontal;
+                        this.DoRender();
+                    }
                     indLeft = intersecting.Left + intersecting.Width / 2 - toolActionBar.ActualWidth / 2;
                     indTop = intersecting.Bottom - 70;
                 }
@@ -238,7 +295,7 @@ namespace Clowd
                 Style style = new Style(typeof(Thumb));
                 //style.Setters.Add(new Setter(Thumb.OpacityProperty, 0.7));
                 //new SolidColorBrush(Color.FromRgb(59, 151, 210) clowd color
-                style.Setters.Add(new Setter(Thumb.BackgroundProperty, App.Singleton.Resources["HighlightBrush"]));
+                style.Setters.Add(new Setter(Thumb.BackgroundProperty, App.Current.Resources["HighlightBrush"]));
                 style.Setters.Add(new Setter(Thumb.TemplateProperty, (ControlTemplate)System.Windows.Markup.XamlReader.Parse(template)));
 
                 AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
@@ -288,7 +345,7 @@ namespace Clowd
                 selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseDownEvent);
                 selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseMoveEvent);
                 selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseUpEvent);
-                selectionBorder.Cursor = Cursors.None;
+                selectionBorder.Cursor = Cursors.Cross;
             }
         }
 
@@ -412,8 +469,8 @@ namespace Clowd
 
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            UpdateCanvasSelection(new Rect(0, 0, 0, 0));
             UpdateCanvasMode(true);
+            //UpdateCanvasSelection(new Rect(0, 0, 0, 0));
         }
 
         private void CloseExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -440,6 +497,20 @@ namespace Clowd
                 var task = UploadManager.Upload(b, "clowd-default.png");
             }
             this.Close();
+        }
+
+        private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            Point p = new Point();
+            p.X = System.Windows.Forms.Cursor.Position.X;
+            p.Y = System.Windows.Forms.Cursor.Position.Y;
+            var primaryScreen = windowFinder.GetBoundsOfScreenContainingPoint(p, false);
+            primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
+            primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+            primaryScreen = DpiScale.TranslateDownScaleRect(primaryScreen);
+
+            UpdateCanvasMode(false);
+            UpdateCanvasSelection(primaryScreen);
         }
     }
 }
