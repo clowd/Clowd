@@ -11,7 +11,7 @@
         DataContext="{Binding RelativeSource={RelativeSource Self}}"
         mc:Ignorable="d" SnapsToDevicePixels="True"
         Icon="/Images/default.ico"
-        WindowStyle="None" ResizeMode="NoResize" Topmost="False"
+        WindowStyle="None" ResizeMode="NoResize" Topmost="True"
         Title="Capture" Height="500" Width="500">
     <Window.Resources>
         <lib:ToolTypeConverter x:Key="convToolType"/>
@@ -45,6 +45,7 @@
         <RoutedCommand x:Key="Command.Photo" />
         <RoutedCommand x:Key="Command.Video" />
         <RoutedCommand x:Key="Command.Reset" />
+        <RoutedCommand x:Key="Command.SelectScreen" />
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="U" Command="{StaticResource Command.Upload}" />
@@ -52,6 +53,7 @@
         <KeyBinding Key="Enter" Command="{StaticResource Command.Photo}" />
         <KeyBinding Key="V" Command="{StaticResource Command.Video}" />
         <KeyBinding Key="R" Command="{StaticResource Command.Reset}" />
+        <KeyBinding Key="F" Command="{StaticResource Command.SelectScreen}" />
         <KeyBinding Key="C" Command="ApplicationCommands.Close" />
         <KeyBinding Key="Esc" Command="ApplicationCommands.Close" />
     </Window.InputBindings>
@@ -60,31 +62,20 @@
         <CommandBinding Command="{StaticResource Command.Photo}" Executed="PhotoExecuted" />
         <CommandBinding Command="{StaticResource Command.Video}" Executed="VideoExecuted" />
         <CommandBinding Command="{StaticResource Command.Reset}" Executed="ResetExecuted" />
+        <CommandBinding Command="{StaticResource Command.SelectScreen}" Executed="SelectScreenExecuted" />
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
     </Window.CommandBindings>
     <Grid Name="rootGrid" Cursor="{Binding CanvasCursor}">
-        <Image Name="imageBackground"  Source="{Binding ScreenImage}" Stretch="Fill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
-        <!--<Path Name="surroundFill"  Fill="#99000000" Cursor="{Binding CanvasCursor}">
-            <Path.Data>
-                <CombinedGeometry GeometryCombineMode="Xor">
-                    <CombinedGeometry.Geometry1>
-                        <RectangleGeometry>
-                            <RectangleGeometry.Rect>
-                                <MultiBinding Converter="{StaticResource rectConv}">
-                                    <Binding ElementName="rootGrid" Path="ActualWidth"/>
-                                    <Binding ElementName="rootGrid" Path="ActualHeight"/>
-                                </MultiBinding>
-                            </RectangleGeometry.Rect>
-                        </RectangleGeometry>
-                    </CombinedGeometry.Geometry1>
-                    <CombinedGeometry.Geometry2>
-                        <RectangleGeometry x:Name="transparentRect" Rect="{Binding CroppingRectangle}" />
-                    </CombinedGeometry.Geometry2>
-                </CombinedGeometry>
-            </Path.Data>
-        </Path>-->
+        <Image Name="imageBackground"  Source="{Binding GrayScreenImage}" Stretch="Fill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+        <Rectangle Fill="#77000000" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+        <Image Name="imageForeground"  Source="{Binding ScreenImage}" Stretch="Fill"
+               ClipToBounds="True" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Image.Clip>
+                <RectangleGeometry Rect="{Binding CroppingRectangle}"/>
+            </Image.Clip>
+        </Image>
         <Canvas Name="dynamicCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-            <UserControl Name="selectionBorder" Cursor="Cross"
+            <UserControl Name="selectionBorder"
                      Width="{Binding CroppingRectangle.Width }"
                      Height="{Binding CroppingRectangle.Height }"
                      Canvas.Left="{Binding CroppingRectangle.X }"
@@ -92,7 +83,7 @@
                 <UserControl.Template>
                     <ControlTemplate TargetType="{x:Type UserControl}">
                         <ControlTemplate.Resources>
-                            <Storyboard x:Key="BorderDashAnimation" RepeatBehavior="Forever">
+                            <Storyboard x:Key="BorderDashAnimation" x:Name="BorderDashAnimation" RepeatBehavior="Forever">
                                 <DoubleAnimationUsingKeyFrames BeginTime="00:00:00"
                                  Storyboard.TargetName="rectangle"
                                  Storyboard.TargetProperty="(Shape.StrokeDashOffset)">
@@ -166,7 +157,7 @@
                     <Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Upload}" >
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Viewbox Height="26" Width="26">
-                                <Path Width="16" Height="16" Fill="White" Data="{StaticResource N43}" />
+                                <Path Width="16" Height="16" Fill="White" Data="{StaticResource PathLogoSmall16}" />
                             </Viewbox>
                             <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
                                 <Run TextDecorations="Underline">U</Run>PLOAD

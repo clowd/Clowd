@@ -1,45 +1,37 @@
-﻿using Ionic.Zip;
+﻿using Clowd.Utilities;
+using Exceptionless;
+using Exceptionless.Logging;
+using Ionic.Zip;
+using NotifyIconLib;
+using RT.Util.ExtensionMethods;
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Configuration;
 using System.Data;
-using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Runtime.InteropServices;
-using System.Text;
+using System.ServiceModel;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Reflection;
-using RT.Util.ExtensionMethods;
-using Clowd.Utilities;
-using NotifyIconLib;
+using System.Windows.Threading;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
-using System.Threading;
-using System.ServiceModel;
-using System.Windows.Threading;
 
 namespace Clowd
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
     public partial class App : Application
     {
-        //public static readonly string ServerHost = System.Diagnostics.Debugger.IsAttached ? "localhost" : "clowd.ga";
-        public static readonly string ServerHost = "clowd.ca";
-        public static App Singleton { get; private set; }
-        public AppSettings Settings { get; private set; }
+        public static new App Current { get { return (App)Application.Current; } }
 
-        private const string NamedPipeString = "PipeClowdRunning";
-        private const string MutexString = "ClowdMutex000";
+        public AppSettings Settings { get; private set; }
+        public string AppDataDirectory { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
+
+        public const string ClowdServerDomain = "clowd.ca";
+        public const string ClowdNamedPipe = "ClowdRunningPipe";
+        public const string ClowdMutex = "ClowdMutex000";
 
         private TaskbarIcon _taskbarIcon;
         private bool _prtscrWindowOpen = false;
@@ -55,22 +47,31 @@ namespace Clowd
         private DispatcherTimer _cmdBatchTimer;
         private List<string> _cmdCache;
 
-
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            bool running = false;
+            // initialize custom exceptionless server at https://exless.caesa.ca if not debugging.
+            var exless = ExceptionlessClient.Default;
+            var exconf = exless.Configuration;
+            exconf.ApiKey = "Vpcq6Hv9C7qh9qJpSsnet4ALPlilrIeKq2zBtL3v";
+            exconf.ServerUrl = "https://exless.caesa.ca";
+            exconf.UseFolderStorage(Path.Combine(AppDataDirectory, "exless"));
+            // only want to report and potentially swallow errors if we're not debugging
+            if (!System.Diagnostics.Debugger.IsAttached)
+                exless.Register(false);
+            else
+                exconf.Enabled = false;
+
             try
             {
-                _mutex = Mutex.OpenExisting(MutexString);
-                //if we're here, clowd is running already.
-                running = true;
+                _mutex = Mutex.OpenExisting(ClowdMutex);
+                // if we're here, clowd is running already, so pass our command line args and exit.
                 if (e.Args.Length > 0)
                 {
                     ChannelFactory<ICommandLineProxy> pipeFactory = new ChannelFactory<ICommandLineProxy>(
                                     new NetNamedPipeBinding(),
-                                    new EndpointAddress("net.pipe://localhost/" + NamedPipeString));
+                                    new EndpointAddress("net.pipe://localhost/" + ClowdNamedPipe));
 
                     ICommandLineProxy pipeProxy = pipeFactory.CreateChannel();
                     pipeProxy.PassArgs(e.Args);
@@ -80,22 +81,27 @@ namespace Clowd
                 Environment.Exit(0);
                 return;
             }
-            catch
+            catch (WaitHandleCannotBeOpenedException)
             {
-                if (running)
-                    Environment.Exit(0);
-                _mutex = new Mutex(true, MutexString);
+                _mutex = new Mutex(true, ClowdMutex);
                 if (e.Args.Length > 0)
                 {
                     _args = e.Args;
                 }
             }
+            catch (Exception ex)
+            {
+                // we still want to report this, beacuse it was unexpected, but because we successfully opened the mutex
+                // we know there is another Clowd instance running (or uninstaller) and we should close.
+                ex.ToExceptionless().Submit();
+                Environment.Exit(0);
+            }
 
-            Singleton = this;
+            //Singleton = this;
             SetupServiceHost();
             // this is for testing purposes, so the localhost server has time to start.
-            if (System.Diagnostics.Debugger.IsAttached)
-                await Task.Delay(3000);
+            //if (System.Diagnostics.Debugger.IsAttached)
+            //    await Task.Delay(3000);
             SetupDpiScaling();
             SetupTrayIcon();
             SetupSettings();
@@ -147,6 +153,15 @@ namespace Clowd
             if (!System.Diagnostics.Debugger.IsAttached)
                 SetupUpdateTimer();
         }
+        protected override void OnExit(ExitEventArgs e)
+        {
+            base.OnExit(e);
+            _mutex.ReleaseMutex();
+            _host.Close();
+            _taskbarIcon.Dispose();
+            if (_captureHotkey != null)
+                _captureHotkey.Dispose();
+        }
 
         private void SetupServiceHost()
         {
@@ -157,7 +172,7 @@ namespace Clowd
             var behaviour = _host.Description.Behaviors.Find<ServiceBehaviorAttribute>();
             behaviour.InstanceContextMode = InstanceContextMode.Single;
 
-            _host.AddServiceEndpoint(typeof(ICommandLineProxy), new NetNamedPipeBinding(), NamedPipeString);
+            _host.AddServiceEndpoint(typeof(ICommandLineProxy), new NetNamedPipeBinding(), ClowdNamedPipe);
             _host.Open();
         }
         private void SetupSettings()
@@ -261,7 +276,6 @@ namespace Clowd
         }
         private void SetupDpiScaling()
         {
-            //Interop.USER32.SetProcessDPIAware();
             IntPtr dC = Interop.USER32.GetDC(IntPtr.Zero);
             double logX = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSX);
             double logY = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSY);
@@ -301,8 +315,10 @@ namespace Clowd
         {
             _updateManager = NAppUpdate.Framework.UpdateManager.Instance;
             _updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
+            _updateManager.Config.TempFolder = Path.Combine(AppDataDirectory, "update");
+            _updateManager.Config.BackupFolder = Path.Combine(AppDataDirectory, "backup");
             _updateManager.Config.UpdateProcessName = "ClowdUpdate";
-            var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ServerHost}/app_updates/feed.aspx");
+            var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ClowdServerDomain}/app_updates/feed.aspx");
             _updateManager.UpdateSource = source;
 
             _updateManager.ReinstateIfRestarted();
@@ -313,7 +329,6 @@ namespace Clowd
                 config.MainInstruction = "Updates were installed successfully.";
                 config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
                 config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Information;
-
                 TaskDialogInterop.TaskDialog.Show(config);
             }
             _updateManager.CleanUp();
@@ -341,6 +356,13 @@ namespace Clowd
                 Paste();
             };
             context.Items.Add(paste);
+
+            var uploads = new MenuItem() { Header = "Uploads" };
+            uploads.Click += (s, e) =>
+            {
+                UploadManager.ShowUploadsWindow();
+            };
+            context.Items.Add(uploads);
             context.Items.Add(new Separator());
 
             var home = new MenuItem() { Header = "Clowd Home" };
@@ -389,13 +411,22 @@ namespace Clowd
             _taskbarIcon.ContextMenu = context;
         }
 
+#pragma warning disable 4014
         public void FinishInit()
         {
             if (_initialized)
+            {
+                ExceptionlessClient.Default.SubmitLog(nameof(App), "FinishInit() called more than once.", LogLevel.Warn);
                 return;
+            }
             _initialized = true;
             _taskbarIcon.ToolTipText = "Clowd\nRight click me or drop something on me\nto see what I can do!";
-            _taskbarIcon.TrayDropEnabled = true;
+
+            // because of the mouse hook in the tray drop mechanism, hitting a breakpoint will cause clowd to stop 
+            // responding to message events, which will lock up the mouse cursor - so we disable it if debugging.
+            if (!System.Diagnostics.Debugger.IsAttached)
+                _taskbarIcon.TrayDropEnabled = true;
+
             SetupTrayContextMenu();
             SetupGlobalHotkeys();
             Settings.Save();
@@ -408,7 +439,6 @@ namespace Clowd
                 OnCommandLineArgsRecieved(this, new CommandLineEventArgs(_args));
             }
         }
-
         public void StartCapture()
         {
             if (_prtscrWindowOpen)
@@ -452,15 +482,6 @@ namespace Clowd
             }
         }
 
-        protected override void OnExit(ExitEventArgs e)
-        {
-            base.OnExit(e);
-            _mutex.ReleaseMutex();
-            _host.Close();
-            _taskbarIcon.Dispose();
-            if (_captureHotkey != null)
-                _captureHotkey.Dispose();
-        }
         private async void OnCheckForUpdates(object sender, System.Timers.ElapsedEventArgs e)
         {
             if (System.Diagnostics.Debugger.IsAttached)
@@ -580,5 +601,6 @@ namespace Clowd
                 UploadManager.Upload(data.ToUtf8(), "clowd-default.txt");
             }
         }
+#pragma warning restore 4014
     }
 }
