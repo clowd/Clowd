@@ -229,7 +229,11 @@ namespace Clowd.Interop
         /// <returns>If the rectangle intersects one or more display monitor rectangles, the return value is an HMONITOR handle to the display monitor that has the largest area of intersection with the rectangle.
         /// If the rectangle does not intersect a display monitor, the return value depends on the value of dwFlags.</returns>
         [DllImport("user32.dll", SetLastError = true)]
-        public static extern IntPtr MonitorFromRect(ref RECT lprc, uint dwFlags);
+        public static extern IntPtr MonitorFromRect(ref RECT lprc, MonitorOptions dwFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr MonitorFromPoint(POINT pt, MonitorOptions dwFlags);
+
 
         /// <summary>
         /// Retrieves information about a display monitor.
@@ -297,6 +301,12 @@ namespace Clowd.Interop
         public delegate bool MonitorEnumDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
         [DllImport("user32.dll")]
         public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumDelegate lpfnEnum, IntPtr dwData);
+    }
+    public enum MonitorOptions : uint
+    {
+        MONITOR_DEFAULTTONULL = 0x00000000,
+        MONITOR_DEFAULTTOPRIMARY = 0x00000001,
+        MONITOR_DEFAULTTONEAREST = 0x00000002
     }
 
     [Flags]

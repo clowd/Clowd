@@ -184,10 +184,28 @@ namespace Clowd.Utilities
             }
             return USER32.IsZoomed(hWnd);
         }
+        public Rect GetBoundsOfScreenContainingPoint(Point point, bool workingAreaOnly = true)
+        {
+            POINT p;
+            p.x = (int)point.X;
+            p.y = (int)point.Y;
+            var hMonitor = USER32.MonitorFromPoint(p, MonitorOptions.MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = new MONITORINFO();
+            mi.cbSize = (uint)Marshal.SizeOf(mi);
+            bool success = USER32.GetMonitorInfo(hMonitor, ref mi);
+            if (success)
+            {
+                if (mi.rcWork.HasSize() && workingAreaOnly)
+                    return mi.rcWork;
+                return mi.rcMonitor;
+            }
+            var rectangle = SystemInformation.VirtualScreen;
+            return new Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
+        }
         public Rect GetBoundsOfScreenContainingRect(Rect bounds, bool returnWorkingAreaOnly = true)
         {
             RECT rect = bounds;
-            var hMonitor = USER32.MonitorFromRect(ref rect, 2);
+            var hMonitor = USER32.MonitorFromRect(ref rect, MonitorOptions.MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi = new MONITORINFO();
             mi.cbSize = (uint)Marshal.SizeOf(mi);
             bool success = USER32.GetMonitorInfo(hMonitor, ref mi);

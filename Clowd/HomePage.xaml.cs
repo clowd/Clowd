@@ -58,7 +58,7 @@ namespace Clowd
 
         private void PasteExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            App.Singleton.Paste();
+            App.Current.Paste();
         }
     }
 }

@@ -55,6 +55,6 @@
             </metro:Tile>
         </WrapPanel>
 
-        <Path Grid.Row="2" Fill="{DynamicResource AccentColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Data="{StaticResource N45}" />
+        <Path Grid.Row="2" Fill="{DynamicResource AccentColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Data="{StaticResource PathWindowFooter}" />
     </Grid>
 </UserControl>

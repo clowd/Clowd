@@ -48,36 +48,6 @@ Name: "autostart"; Description: "Start Clowd With Windows"; Types: full
 [Files]
 Source: "{#MyBuildDirectory}\images\*"; DestDir: "{tmp}"; Flags: dontcopy nocompression;
 Source: "{#MySourceDirectory}\*"; DestDir: "{app}"; Flags: ignoreversion 
-;Source: "{#MySourceDirectory}\Clowd.exe"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Accord.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Accord.Video.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Accord.Video.FFMPEG.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\avcodec-53.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\avdevice-53.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\avformat-53.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\avutil-51.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Clowd.exe"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Clowd.Interop.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Clowd.Shared.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\ColorPickerLib.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\DrawToolsLib.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Hardcodet.Wpf.TaskbarNotification.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Ionic.Zip.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\MahApps.Metro.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\NAppUpdate.Framework.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\NAudio.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\NReco.VideoConverter.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\PhotoLoader.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\postproc-52.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\RT.Util.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\Screeney.exe"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\SharpDX.Direct3D11.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\SharpDX.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\SharpDX.DXGI.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\swresample-0.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\swscale-2.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\System.Threading.Tasks.Dataflow.dll"; DestDir: "{app}"; Flags: ignoreversion
-;Source: "{#MySourceDirectory}\System.Windows.Interactivity.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

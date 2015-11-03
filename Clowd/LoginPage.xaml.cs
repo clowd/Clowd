@@ -56,8 +56,8 @@ namespace Clowd
         private void useAnon_Click(object sender, MouseButtonEventArgs e)
         {
             TemplatedWindow.SetContent(this, new HomePage());
-            App.Singleton.Settings.Username = "anon";
-            App.Singleton.FinishInit();
+            App.Current.Settings.Username = "anon";
+            App.Current.FinishInit();
         }
 
         private void register_Click(object sender, MouseButtonEventArgs e)
@@ -80,9 +80,9 @@ namespace Clowd
                 if (result == AuthResult.Success)
                 {
                     TemplatedWindow.SetContent(window, new HomePage());
-                    App.Singleton.Settings.Username = details.Username;
-                    App.Singleton.Settings.PasswordHash = details.PasswordHash;
-                    App.Singleton.FinishInit();
+                    App.Current.Settings.Username = details.Username;
+                    App.Current.Settings.PasswordHash = details.PasswordHash;
+                    App.Current.FinishInit();
                 }
                 else if (result == AuthResult.InvalidCredentials)
                 {
