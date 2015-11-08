@@ -36,14 +36,25 @@ namespace Clowd
         private WindowFinder2 windowFinder = new WindowFinder2();
         private bool? capturing = null;
 
-        public CaptureWindow()
+        private CaptureWindow()
         {
             InitializeComponent();
             this.SourceInitialized += CaptureWindow_SourceInitialized;
             this.Loaded += CaptureWindow_Loaded;
         }
 
-        private void CaptureWindow_SourceInitialized(object sender, EventArgs e)
+        public static async Task<CaptureWindow> ShowNew()
+        {
+            var c = new CaptureWindow();
+            if (TaskWindow.Current?.IsVisible == true)
+            {
+                await TaskWindow.Current.Hide();
+            }
+            c.Show();
+            return c;
+        }
+
+        private async void CaptureWindow_SourceInitialized(object sender, EventArgs e)
         {
             this.Handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             CaptureBitmap();
@@ -64,7 +75,8 @@ namespace Clowd
 
         private void CaptureBitmap()
         {
-            var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen, true);
+            var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen,
+                App.Current.Settings.CaptureSettings.ScreenshotWithCursor);
             ScreenImage = GetBitmapSource(source);
             GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
         }

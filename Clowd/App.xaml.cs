@@ -97,7 +97,6 @@ namespace Clowd
                 Environment.Exit(0);
             }
 
-            //Singleton = this;
             SetupServiceHost();
             // this is for testing purposes, so the localhost server has time to start.
             //if (System.Diagnostics.Debugger.IsAttached)
@@ -345,7 +344,7 @@ namespace Clowd
             capture.Click += async (s, e) =>
             {
                 //wait long enough for context menu to disappear.
-                await Task.Delay(500);
+                await Task.Delay(400);
                 StartCapture();
             };
             context.Items.Add(capture);
@@ -360,7 +359,7 @@ namespace Clowd
             var uploads = new MenuItem() { Header = "Uploads" };
             uploads.Click += (s, e) =>
             {
-                UploadManager.ShowUploadsWindow();
+                UploadManager.ShowWindow();
             };
             context.Items.Add(uploads);
             context.Items.Add(new Separator());
@@ -439,17 +438,16 @@ namespace Clowd
                 OnCommandLineArgsRecieved(this, new CommandLineEventArgs(_args));
             }
         }
-        public void StartCapture()
+        public async void StartCapture()
         {
             if (_prtscrWindowOpen)
                 return;
 
-            var wnd = new CaptureWindow();
+            var wnd = await CaptureWindow.ShowNew();
             wnd.Closed += (s, e) =>
             {
                 _prtscrWindowOpen = false;
             };
-            wnd.Show();
             _prtscrWindowOpen = true;
         }
         public void Paste()
@@ -502,8 +500,9 @@ namespace Clowd
             //await Task.Factory.FromAsync(upd.BeginPrepareUpdates, upd.EndPrepareUpdates, null);
             await Clowd.Shared.Extensions.ToTask(() => _updateManager.PrepareUpdates());
 
-            while (UploadManager.UploadsInProgress > 0 || Application.Current.Windows.Cast<Window>().Any(w => w.IsVisible))
+            while (Application.Current.Windows.Cast<Window>().Any(w => w.IsVisible))
             {
+#warning also need to check for in-progress uploads
                 await Task.Delay(10000);
             }
 

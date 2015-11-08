@@ -16,22 +16,38 @@ namespace Clowd
 {
     public static class UploadManager
     {
-        public static int UploadsInProgress { get { return _window.Value.Uploads.Where(up => up.Progress < 100 && up.UploadFailed == false).Count(); } }
-        public static bool UploadWindowVisible { get { return _window.Value.IsVisible; } }
         public static bool Authenticated { get { return _cache != null && (_cache.Credentials != null || !String.IsNullOrWhiteSpace(_cache.SessionKey)); } }
 
-        private const string _contentHeader = "CONTENT-LENGTH";
-        private static Lazy<UploadsWindow> _window = new Lazy<UploadsWindow>();
+        private static TaskWindow _window
+        {
+            get
+            {
+                if (_windowBacking == null)
+                {
+                    _windowBacking = new TaskWindow();
+                    //_windowBacking.Show();
+                }
+                return _windowBacking;
+            }
+        }
         private static SessionCredentialStore _cache;
+        private static TaskWindow _windowBacking;
         public static async Task<string> Upload(byte[] data, string displayName, UploadOptions options = null)
         {
-            var uploadBar = CreateNewUpload(displayName);
+            string viewName = displayName;
+            if (displayName.StartsWith("clowd-default", StringComparison.InvariantCultureIgnoreCase))
+                viewName = "Upload";
+            var view = new UploadTaskViewItem(viewName, "Connecting...");
+            _window.AddTask(view);
+
             UploadSession context;
             try
             {
                 using (context = await GetSession(true))
                 {
+                    view.SecondaryText = "Uploading...";
                     Packet p = new Packet();
+
                     p.Command = "UPLOAD";
                     p.Headers.Add("content-type", "file");
                     p.Headers.Add("data-hash", MD5.Compute(data));
@@ -46,6 +62,7 @@ namespace Clowd
 
                     const int chunk_size = 65535;
                     int data_size = data.Count();
+                    view.ProgressTargetText = ((long)data_size).ToPrettySizeString(0);
 
                     if (data_size > chunk_size)
                     {
@@ -60,6 +77,11 @@ namespace Clowd
                             double progress = ((double)i + size) / data_size * 100;
                             Buffer.BlockCopy(data, i, buffer, 0, size);
 
+                            if (p == null)
+                            {
+                                System.Diagnostics.Debugger.Break();
+                            }
+
                             if (i == 0)
                             {
                                 p.PayloadBytes = buffer;
@@ -68,9 +90,8 @@ namespace Clowd
                                 if (initial.Command != "CONTINUE")
                                     throw new NotImplementedException();
                                 if (initial.Headers.ContainsKey("display-name"))
-                                    uploadBar.DisplayText = initial.Headers["display-name"];
-                                uploadBar.ActionLink = initial.Payload;
-                                uploadBar.ActionAvailable = true;
+                                    view.PrimaryText = initial.Headers["display-name"];
+                                view.UploadURL = initial.Payload;
                             }
                             else
                             {
@@ -81,25 +102,27 @@ namespace Clowd
                                 chk.PayloadBytes = buffer;
                                 await context.WriteAsync(chk);
                             }
-                            UpdateUploadProgress(uploadBar, progress > 98 ? 98 : progress, i + chunk_size);
+                            view.ProgressCurrentText = ((long)Math.Min(i + chunk_size, data_size)).ToPrettySizeString(0);
+                            view.Progress = progress > 98 ? 98 : progress;
                         }
                     }
                     else
                     {
                         p.PayloadBytes = data;
-                        UpdateUploadProgress(uploadBar, 50, data.Length / 2);
+                        view.ProgressCurrentText = ((long)data.Length / 3).ToPrettySizeString(0);
+                        view.Progress = 33;
                         await context.WriteAsync(p);
                     }
                     var response = await context.WaitPacketAsync();
                     if (response.Command == "COMPLETE" && response.HasPayload)
                     {
                         if (response.Headers.ContainsKey("display-name"))
-                            uploadBar.DisplayText = response.Headers["display-name"];
-                        UpdateUploadProgress(uploadBar, 100, data.Length);
-                        if (!UploadWindowVisible)
-                            ShowUploadsWindow();
-                        uploadBar.ActionLink = response.Payload;
-                        uploadBar.ActionAvailable = true;
+                            view.PrimaryText = response.Headers["display-name"];
+                        view.Progress = 100;
+                        view.ProgressCurrentText = ((long)data.Length).ToPrettySizeString(0);
+                        _window.Notify();
+                        view.SecondaryText = "Complete";
+                        view.UploadURL = response.Payload;
                         return response.Payload;
                     }
                     else
@@ -108,7 +131,9 @@ namespace Clowd
             }
             catch (Exception e)
             {
-                ErrorUploadProgress(uploadBar, e.Message);
+                view.Status = TaskViewItem.TaskStatus.Error;
+                view.SecondaryText = e.Message;
+                //ErrorUploadProgress(uploadBar, e.Message);
                 return null;
             }
         }
@@ -132,27 +157,6 @@ namespace Clowd
                 return null;
             }
         }
-
-
-        public static void RemoveUpload(string url, bool closeWindowIfOnly = true)
-        {
-            var search = _window.Value.Uploads.SingleOrDefault(up => up.ActionLink == url);
-            if (search != null)
-            {
-                _window.Value.Uploads.Remove(search);
-                if (closeWindowIfOnly && !_window.Value.Uploads.Any(up => up.Progress < 100))
-                {
-                    _window.Value.Hide();
-                }
-            }
-        }
-        public static void ShowUploadsWindow()
-        {
-            _window.Value.Show();
-            if (!_window.Value.Uploads.Any(up => up.Progress < 100))
-                _window.Value.CloseTimerEnabled = true;
-        }
-
 
         public static async Task<AuthResult> Login(Credentials login)
         {
@@ -186,11 +190,18 @@ namespace Clowd
             _cache = null;
         }
 
+        public static void ShowWindow()
+        {
+            _window.Show();
+        }
+
         private static async Task<UploadSession> GetSession(bool login = true)
         {
             var session = await UploadSession.GetSession();
             if (session == null)
                 return null;
+            if (session.Authenticated)
+                return session;
 
             if (login && _cache != null)
             {
@@ -216,42 +227,12 @@ namespace Clowd
                     session.Dispose();
                     return null;
                 }
-                //TODO: unable to auto-login with cached credentials...
-                //show error? prompt for login if credentials are incorrect?
+#warning unable to auto-login with cached credentials...
+//show error? prompt for login if credentials are incorrect?
                 _cache = null;
             }
 
             return session;
-        }
-
-
-
-        private static Controls.UploadProgressBar CreateNewUpload(string display)
-        {
-            var cnt = new Controls.UploadProgressBar();
-            cnt.Foreground = System.Windows.Media.Brushes.PaleGoldenrod;
-            cnt.DisplayText = "Connecting...";
-            _window.Value.Uploads.Add(cnt);
-            _window.Value.Show();
-            _window.Value.CloseTimerEnabled = false;
-            return cnt;
-        }
-        private static void UpdateUploadProgress(Controls.UploadProgressBar upload, double progress, long bytesWritten)
-        {
-            if (progress >= 100)
-            {
-                upload.ActionAvailable = true;
-                upload.Foreground = System.Windows.Media.Brushes.PaleGreen;
-            }
-            upload.Progress = progress;
-            upload.CurrentSizeDisplay = bytesWritten.ToPrettySizeString(0);
-        }
-        private static void ErrorUploadProgress(Controls.UploadProgressBar upload, string message)
-        {
-            upload.Foreground = System.Windows.Media.Brushes.PaleVioletRed;
-            upload.UploadFailed = true;
-            upload.ActionClicked = true;
-            upload.Progress = 100;
         }
 
         private class SessionCredentialStore
@@ -264,7 +245,7 @@ namespace Clowd
         {
             public CancellationTokenSource CancelToken { get; private set; }
             public NetworkStream WriteStream { get; private set; }
-            private BufferBlock<Packet> PacketBuffer { get; set; }
+            public BufferBlock<Packet> PacketBuffer { get; set; }
 
             public bool Connected
             {
@@ -275,6 +256,7 @@ namespace Clowd
 
             private TcpClient _client;
             private Task _readLoop;
+            private string _session;
             private static UploadSession _keep;
             private static readonly object _keepLock = new object();
             private static System.Windows.Threading.DispatcherTimer _idle;
@@ -303,15 +285,15 @@ namespace Clowd
                     {
                         if (_keep != null)
                         {
+                            _idle.Stop();
                             local = _keep;
                             _keep = null;
-                            _idle.Stop();
                             _idle = null;
                         }
                     }
                     if (local != null)
                     {
-                        if (local.Connected)
+                        if (local.Connected && !local._readLoop.IsCompleted)
                             return local;
                         else
                             local.Dispose(true);
@@ -363,6 +345,8 @@ namespace Clowd
             }
             public async Task<AuthResult> CheckSessionKey(string session)
             {
+                if (Authenticated && _session == session)
+                    return AuthResult.Success;
                 try
                 {
                     if (!String.IsNullOrEmpty(session))
@@ -374,6 +358,7 @@ namespace Clowd
                         if (check.Headers.ContainsKey("valid") && (check.Headers["valid"] == "1" || check.Headers["valid"] == "true"))
                         {
                             Authenticated = true;
+                            _session = session;
                             return AuthResult.Success;
                         }
                     }
@@ -385,13 +370,17 @@ namespace Clowd
 
             public Task WriteAsync(Packet p)
             {
+                if (p == null || WriteStream == null)
+                {
+                    System.Diagnostics.Debugger.Break();
+                }
                 var data = p.Serialize();
                 return WriteStream.WriteAsync(data, 0, data.Length);
             }
 
             public Task<Packet> WaitPacketAsync()
             {
-                return WaitPacketAsync(TimeSpan.FromSeconds(10));
+                return WaitPacketAsync(TimeSpan.FromSeconds(20));
             }
             public Task<Packet> WaitPacketAsync(TimeSpan time)
             {
@@ -434,6 +423,7 @@ namespace Clowd
 
             private Task ReadLoopTcpClient(TcpClient client, CancellationToken token, BufferBlock<Packet> handlePacket)
             {
+                const string _contentHeader = "CONTENT-LENGTH";
                 return Task.Factory.StartNew(() =>
                 {
                     using (client)
