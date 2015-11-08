@@ -18,7 +18,7 @@
     </NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -66,6 +66,7 @@
       <HintPath>..\packages\MahApps.Metro.1.1.2.0\lib\net45\MahApps.Metro.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="Microsoft.Expression.Interactions, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL" />
     <Reference Include="NAppUpdate.Framework, Version=0.3.0.0, Culture=neutral, PublicKeyToken=d1f1d1f19f9e5a56, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\lib\NAppUpdate.Framework.dll</HintPath>
@@ -110,6 +111,7 @@
     <Compile Include="CaptureWindow.xaml.cs">
       <DependentUpon>CaptureWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Controls\CornerClippingBorder.cs" />
     <Compile Include="ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
     </Compile>
@@ -119,7 +121,13 @@
     <Compile Include="PropertyChanged\DoNotNotifyAttribute.cs" />
     <Compile Include="PropertyChanged\DoNotSetChangedAttribute.cs" />
     <Compile Include="PropertyChanged\ImplementPropertyChangedAttribute.cs" />
+    <Compile Include="TaskWindow.xaml.cs">
+      <DependentUpon>TaskWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Utilities\ButtonClickContextBehavior.cs" />
     <Compile Include="Utilities\ICommandLineProxy.cs" />
+    <Compile Include="Utilities\RelayCommand.cs" />
+    <Compile Include="Utilities\TrulyObservableCollection.cs" />
     <Compile Include="Utilities\WindowFinder.cs" />
     <Compile Include="Controls\FadingScrollViewer.cs" />
     <Compile Include="Controls\OutlinedText.cs" />
@@ -168,6 +176,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Assets\MetroControls.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Assets\ProgressRingControl.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -197,6 +209,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="LoginPage.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="TaskWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -256,10 +272,6 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.ComServer\Clowd.ComServer.csproj">
-      <Project>{a2c9e886-d1fe-4ca9-8e9c-209adab0040c}</Project>
-      <Name>Clowd.ComServer</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj">
       <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
       <Name>Clowd.Interop</Name>
@@ -283,10 +295,6 @@
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
       <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
       <Name>Clowd.Shared</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Screeney\Screeney.csproj">
-      <Project>{af84f83b-28c3-4298-b388-c31db95a6790}</Project>
-      <Name>Screeney</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

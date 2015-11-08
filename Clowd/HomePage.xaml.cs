@@ -29,8 +29,8 @@ namespace Clowd
         {
             var window = TemplatedWindow.GetWindow(this);
             window.WindowState = WindowState.Minimized;
-            CaptureWindow capture = new CaptureWindow();
             await Task.Delay(600);
+            var capture = await CaptureWindow.ShowNew();
             System.ComponentModel.CancelEventHandler close = null;
             close = (s, evargs) =>
             {
@@ -38,7 +38,6 @@ namespace Clowd
                 capture.Closing -= close;
             };
             capture.Closing += close;
-            capture.Show();
         }
 
         private void History_Click(object sender, RoutedEventArgs e)
