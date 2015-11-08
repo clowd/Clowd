@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using RT.Util.ExtensionMethods;
+using System.Net.Sockets;
 
 namespace Clowd.Shared
 {
@@ -108,7 +109,7 @@ namespace Clowd.Shared
                 {
                     cast = stream.ReadByte();
                 }
-                catch
+                catch (Exception ex) when (ex is SocketException || ex is IOException)
                 {
                     if (index == 0) return null;
                     Array.Resize(ref buffer, index);
@@ -184,7 +185,7 @@ namespace Clowd.Shared
 
         public static string ToPrettySizeString(this long bytes, int decimalPlaces = 2)
         {
-            if (bytes < 1000) return bytes + " Bytes";
+            if (bytes < 1000) return bytes + " B";
             if (bytes < 1000000) return Math.Round(bytes / (double)1000, decimalPlaces) + " KB";
             if (bytes < 1000000000) return Math.Round(bytes / (double)1000000, decimalPlaces) + " MB";
             return Math.Round(bytes / (double)1000000000, decimalPlaces) + " GB";

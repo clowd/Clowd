@@ -37,7 +37,7 @@ namespace Clowd
         private bool _prtscrWindowOpen = false;
         private bool _initialized = false;
         private HotKey _captureHotkey;
-        private System.Timers.Timer _updateTimer;
+        private DispatcherTimer _updateTimer;
         private NAppUpdate.Framework.UpdateManager _updateManager;
         private ResourceDictionary _lightBase;
         private ResourceDictionary _darkBase;
@@ -332,8 +332,9 @@ namespace Clowd
             }
             _updateManager.CleanUp();
 
-            _updateTimer = new System.Timers.Timer(Settings.UpdateCheckInterval.TotalMilliseconds);
-            _updateTimer.Elapsed += OnCheckForUpdates;
+            _updateTimer = new DispatcherTimer();
+            _updateTimer.Interval = Settings.UpdateCheckInterval;
+            _updateTimer.Tick += OnCheckForUpdates;
             OnCheckForUpdates(null, null);
             _updateTimer.Start();
         }
@@ -480,7 +481,7 @@ namespace Clowd
             }
         }
 
-        private async void OnCheckForUpdates(object sender, System.Timers.ElapsedEventArgs e)
+        private async void OnCheckForUpdates(object sender, EventArgs e)
         {
             if (System.Diagnostics.Debugger.IsAttached)
             {
@@ -502,7 +503,7 @@ namespace Clowd
 
             while (Application.Current.Windows.Cast<Window>().Any(w => w.IsVisible))
             {
-#warning also need to check for in-progress uploads
+#warning also should check for in-progress uploads before prompting
                 await Task.Delay(10000);
             }
 
