@@ -33,7 +33,7 @@ namespace Clowd
         {
             get
             {
-                if (TaskList?.Count < 1)
+                if (TaskList == null || TaskList.Count < 1)
                     return 0;
                 var weights = from t in TaskList
                               let ovr = t.OverallWeight
@@ -80,35 +80,6 @@ namespace Clowd
                 Canvas.SetTop(containerGrid, this.Height - containerGrid.DesiredSize.Height);
                 _idle.IsEnabled = true;
             };
-        }
-
-        private void Idle_Tick(object sender, EventArgs e)
-        {
-            if (!this.IsVisible)
-                return;
-            if (!this.IsMouseOver && !IsMinimized && AutoMinimizeEnabled)
-            {
-                this.AutoMinimize();
-            }
-            else if (IsMinimized && Notifing)
-            {
-                NotifyBounce();
-            }
-        }
-        private void Idle_PreProcessInput(object sender, PreProcessInputEventArgs e)
-        {
-            if (!this.IsVisible)
-                return;
-            if (IsMinimized && this.IsMouseOver)
-            {
-                this.Show();
-            }
-            if (_idle.IsEnabled)
-            {
-                //restart idle timer
-                _idle.IsEnabled = false;
-                _idle.IsEnabled = true;
-            }
         }
 
         public new async void Show()
@@ -183,7 +154,44 @@ namespace Clowd
             TaskList.Add(item);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("OverallProgress"));
         }
+        public void RemoveTask(TaskViewItem item)
+        {
+            if (!TaskList.Contains(item))
+                return;
+            TaskList.Remove(item);
+            if (!IsMinimized)
+                this.Show();
+            item.PropertyChanged -= Item_PropertyChanged;
+        }
 
+        private void Idle_Tick(object sender, EventArgs e)
+        {
+            if (!this.IsVisible)
+                return;
+            if (!this.IsMouseOver && !IsMinimized && AutoMinimizeEnabled)
+            {
+                this.AutoMinimize();
+            }
+            else if (IsMinimized && Notifing)
+            {
+                NotifyBounce();
+            }
+        }
+        private void Idle_PreProcessInput(object sender, PreProcessInputEventArgs e)
+        {
+            if (!this.IsVisible)
+                return;
+            if (IsMinimized && this.IsMouseOver)
+            {
+                this.Show();
+            }
+            if (_idle.IsEnabled)
+            {
+                //restart idle timer
+                _idle.IsEnabled = false;
+                _idle.IsEnabled = true;
+            }
+        }
         private async void Item_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == "Progress")
@@ -205,17 +213,6 @@ namespace Clowd
                 }
             }
         }
-
-        public void RemoveTask(TaskViewItem item)
-        {
-            if (!TaskList.Contains(item))
-                return;
-            TaskList.Remove(item);
-            if (!IsMinimized)
-                this.Show();
-            item.PropertyChanged -= Item_PropertyChanged;
-        }
-
         private void MinimizeExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Hide();
