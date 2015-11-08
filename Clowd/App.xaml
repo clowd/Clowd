@@ -9,11 +9,11 @@
                 <ResourceDictionary Source="Assets/TransitioningContentControl.xaml"/>
                 <ResourceDictionary Source="Assets/CustomWindowStyle.xaml"/>
                 <ResourceDictionary Source="Assets/VectorGeometries.xaml"/>
-                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
+                <ResourceDictionary Source="Assets/MetroControls.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Colors.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            
+
             <SolidColorBrush x:Key="AccentColorBrush" Color="#3b96d2" />
             <Color x:Key="IdealForegroundColor">White</Color>
             <SolidColorBrush x:Key="IdealForegroundColorBrush" Color="{StaticResource IdealForegroundColor}" />
@@ -38,13 +38,53 @@
                 </Setter>
             </Style>
             <DataTemplate x:Key="MetroIconTemplate">
-                <Grid Width="{TemplateBinding Width}"
-                 Height="{TemplateBinding Height}">
-                    <Viewbox Margin="5">
+                <Grid>
+                    <Viewbox Margin="4">
                         <Path Fill="{DynamicResource IdealForegroundColorBrush}" Width="16" Height="16"  Data="{StaticResource PathLogoSmall16}" />
                     </Viewbox>
                 </Grid>
             </DataTemplate>
+            <Style x:Key="ToolButtonStyle" TargetType="{x:Type Button}">
+                <Setter Property="Background" Value="#55FFFFFF" />
+                <Setter Property="SnapsToDevicePixels" Value="True" />
+                <Setter Property="Width" Value="30" />
+                <Setter Property="Height" Value="30" />
+                <Setter Property="Padding" Value="5" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type Button}">
+                            <Grid>
+                                <Rectangle Name="_bg" Fill="{TemplateBinding Background}" Opacity="0"  HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                                <Border Padding="{TemplateBinding Padding}" Opacity="0.8">
+                                    <ContentPresenter x:Name="MyContentPresenter" Content="{TemplateBinding Content}"  />
+                                </Border>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetName="_bg" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.2" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard FillBehavior="Stop">
+                                                <DoubleAnimation Storyboard.TargetName="_bg" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.ExitActions>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Value="0.3" TargetName="MyContentPresenter" Property="Opacity" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

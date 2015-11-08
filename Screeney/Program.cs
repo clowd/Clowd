@@ -1,5 +1,5 @@
 ﻿using AForge.Video;
-using AForge.Video.FFMPEG;
+using Accord.Video.FFMPEG;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NReco.VideoConverter;
