@@ -25,7 +25,7 @@ namespace Clowd
     public partial class App : Application
     {
         public static new App Current
-        { get { return (App) Application.Current; } }
+        { get { return (App)Application.Current; } }
 
         public AppSettings Settings
         { get; private set; }
@@ -247,40 +247,40 @@ namespace Clowd
             this.Resources["AccentColor4"] = Color.FromArgb(51, baseColor.R, baseColor.G, baseColor.B); //20%
 
             this.Resources["HighlightBrush"] = new SolidColorBrush(baseColor);
-            ((Freezable) this.Resources["HighlightBrush"]).Freeze();
-            this.Resources["AccentColorBrush"] = new SolidColorBrush((Color) this.Resources["AccentColor"]);
-            ((Freezable) this.Resources["AccentColorBrush"]).Freeze();
-            this.Resources["AccentColorBrush2"] = new SolidColorBrush((Color) this.Resources["AccentColor2"]);
-            ((Freezable) this.Resources["AccentColorBrush2"]).Freeze();
-            this.Resources["AccentColorBrush3"] = new SolidColorBrush((Color) this.Resources["AccentColor3"]);
-            ((Freezable) this.Resources["AccentColorBrush3"]).Freeze();
-            this.Resources["AccentColorBrush4"] = new SolidColorBrush((Color) this.Resources["AccentColor4"]);
-            ((Freezable) this.Resources["AccentColorBrush4"]).Freeze();
-            this.Resources["WindowTitleColorBrush"] = new SolidColorBrush((Color) this.Resources["AccentColor"]);
-            ((Freezable) this.Resources["WindowTitleColorBrush"]).Freeze();
+            ((Freezable)this.Resources["HighlightBrush"]).Freeze();
+            this.Resources["AccentColorBrush"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
+            ((Freezable)this.Resources["AccentColorBrush"]).Freeze();
+            this.Resources["AccentColorBrush2"] = new SolidColorBrush((Color)this.Resources["AccentColor2"]);
+            ((Freezable)this.Resources["AccentColorBrush2"]).Freeze();
+            this.Resources["AccentColorBrush3"] = new SolidColorBrush((Color)this.Resources["AccentColor3"]);
+            ((Freezable)this.Resources["AccentColorBrush3"]).Freeze();
+            this.Resources["AccentColorBrush4"] = new SolidColorBrush((Color)this.Resources["AccentColor4"]);
+            ((Freezable)this.Resources["AccentColorBrush4"]).Freeze();
+            this.Resources["WindowTitleColorBrush"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
+            ((Freezable)this.Resources["WindowTitleColorBrush"]).Freeze();
             var gstops = new GradientStopCollection()
             {
                 new GradientStop((Color)this.Resources["HighlightColor"], 0),
                 new GradientStop((Color)this.Resources["AccentColor3"], 1),
             };
             this.Resources["ProgressBrush"] = new LinearGradientBrush(gstops, new Point(1.002, 0.5), new Point(0.001, 0.5));
-            ((Freezable) this.Resources["ProgressBrush"]).Freeze();
-            this.Resources["CheckmarkFill"] = new SolidColorBrush((Color) this.Resources["AccentColor"]);
-            ((Freezable) this.Resources["CheckmarkFill"]).Freeze();
-            this.Resources["RightArrowFill"] = new SolidColorBrush((Color) this.Resources["AccentColor"]);
-            ((Freezable) this.Resources["RightArrowFill"]).Freeze();
-            this.Resources["IdealForegroundColorBrush"] = new SolidColorBrush((Color) this.Resources["IdealForegroundColor"]);
-            ((Freezable) this.Resources["IdealForegroundColorBrush"]).Freeze();
-            this.Resources["IdealForegroundDisabledBrush"] = new SolidColorBrush((Color) this.Resources["IdealForegroundColor"]) { Opacity = 0.4 };
-            ((Freezable) this.Resources["IdealForegroundDisabledBrush"]).Freeze();
-            this.Resources["AccentSelectedColorBrush"] = new SolidColorBrush((Color) this.Resources["IdealForegroundColor"]);
-            ((Freezable) this.Resources["AccentSelectedColorBrush"]).Freeze();
+            ((Freezable)this.Resources["ProgressBrush"]).Freeze();
+            this.Resources["CheckmarkFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
+            ((Freezable)this.Resources["CheckmarkFill"]).Freeze();
+            this.Resources["RightArrowFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
+            ((Freezable)this.Resources["RightArrowFill"]).Freeze();
+            this.Resources["IdealForegroundColorBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
+            ((Freezable)this.Resources["IdealForegroundColorBrush"]).Freeze();
+            this.Resources["IdealForegroundDisabledBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]) { Opacity = 0.4 };
+            ((Freezable)this.Resources["IdealForegroundDisabledBrush"]).Freeze();
+            this.Resources["AccentSelectedColorBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
+            ((Freezable)this.Resources["AccentSelectedColorBrush"]).Freeze();
         }
         private void SetupDpiScaling()
         {
             IntPtr dC = Interop.USER32.GetDC(IntPtr.Zero);
-            double logX = (double) Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSX);
-            double logY = (double) Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSY);
+            double logX = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSX);
+            double logY = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSY);
             Interop.USER32.ReleaseDC(IntPtr.Zero, dC);
             DpiScale.ScaleUISetup(logX, logY);
         }
@@ -566,7 +566,7 @@ namespace Clowd
         }
         private void OnWndProcMessageReceived(uint obj)
         {
-            if (obj == (uint) Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED && Settings?.AccentScheme == AccentScheme.System)
+            if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED && Settings?.AccentScheme == AccentScheme.System)
             {
                 SetupAccentColors();
             }
@@ -598,7 +598,7 @@ namespace Clowd
                     });
                     ms.Position = 0;
                     byte[] barr = new byte[ms.Length];
-                    ms.Read(barr, 0, (int) ms.Length);
+                    ms.Read(barr, 0, (int)ms.Length);
                     url = await UploadManager.Upload(barr, archiveName);
                 }
             }
@@ -612,12 +612,12 @@ namespace Clowd
             var formats = e.Data.GetFormats();
             if (formats.Contains(DataFormats.FileDrop))
             {
-                var data = (string[]) e.Data.GetData(DataFormats.FileDrop);
+                var data = (string[])e.Data.GetData(DataFormats.FileDrop);
                 OnFilesReceived(data);
             }
             else if (formats.Contains(DataFormats.Text))
             {
-                var data = (string) e.Data.GetData(DataFormats.Text);
+                var data = (string)e.Data.GetData(DataFormats.Text);
                 UploadManager.Upload(data.ToUtf8(), "clowd-default.txt");
             }
         }
