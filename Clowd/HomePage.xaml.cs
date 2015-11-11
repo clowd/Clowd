@@ -47,7 +47,7 @@ namespace Clowd
 
         private void Upload_Click(object sender, RoutedEventArgs e)
         {
-
+            App.Current.UploadFile(TemplatedWindow.GetWindow(this));
         }
 
         private void Settings_Click(object sender, RoutedEventArgs e)
