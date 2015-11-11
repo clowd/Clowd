@@ -461,15 +461,35 @@ namespace Clowd
             };
             _prtscrWindowOpen = true;
         }
-        public async void UploadFile()
+        public void UploadFile(Window owner = null)
         {
             var dlg = new Microsoft.Win32.OpenFileDialog();
             if (Settings.LastUploadPath != null)
                 dlg.InitialDirectory = Settings.LastUploadPath;
             dlg.Multiselect = true;
-            var result = dlg.ShowDialog();
+            // we need to create a temporary (and invisible) window to act as the parent to the file selection dialog
+            // on windows 8+. this has the added and unintential bonus of adding a taskbar item for the dialog.
+            bool temp = false;
+            if (owner == null)
+            {
+                owner = new Window()
+                {
+                    ShowActivated = false,
+                    Opacity = 0,
+                    WindowStyle = WindowStyle.None,
+                    ResizeMode = ResizeMode.NoResize,
+                    AllowsTransparency = true,
+                    Width = 1,
+                    Height = 1
+                };
+                owner.Show();
+                temp = true;
+            }
+            var result = dlg.ShowDialog(owner);
+            if (temp)
+                owner.Close();
             if (result == true)
-                await OnFilesReceived(dlg.FileNames);
+                OnFilesReceived(dlg.FileNames);
         }
         public void Paste()
         {
