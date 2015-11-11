@@ -233,13 +233,17 @@ namespace NotifyIconLib.Interop
         /// <param name="lParam">Provides information about the event.</param>
         private void ProcessWindowMessage(uint msg, IntPtr wParam, IntPtr lParam)
         {
-            if(WndProcMessageReceived != null)
+            if (WndProcMessageReceived != null)
                 WndProcMessageReceived(msg);
 
             if (msg != CallbackMessageId) return;
 
             switch (lParam.ToInt32())
             {
+                case 0x7B:
+                    MouseEventReceived(MouseEvent.ContextMenu);
+                    break;
+
                 case 0x200:
                     MouseEventReceived(MouseEvent.MouseMove);
                     break;
@@ -277,12 +281,17 @@ namespace NotifyIconLib.Interop
                     MouseEventReceived(MouseEvent.IconMiddleMouseDown);
                     break;
 
-                case 520:
+                case 0x208:
                     MouseEventReceived(MouseEvent.IconMiddleMouseUp);
                     break;
 
                 case 0x209:
                     //double click with middle mouse button - do not trigger event
+                    break;
+
+                case 0x400:
+                case 0x401:
+                    MouseEventReceived(MouseEvent.Activated);
                     break;
 
                 case 0x402:
@@ -307,7 +316,7 @@ namespace NotifyIconLib.Interop
                     break;
 
                 default:
-                    Debug.WriteLine("Unhandled NotifyIcon message ID: " + lParam);
+                    Debug.WriteLine(string.Format("Unhandled NotifyIcon message ID: {0} (0x{0:X})", lParam.ToInt32()));
                     break;
             }
         }
