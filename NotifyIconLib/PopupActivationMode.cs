@@ -24,7 +24,7 @@ namespace NotifyIconLib
 {
     /// <summary>
     /// Defines flags that define when a popup
-    /// is being displyed.
+    /// is being displayed.
     /// </summary>
     public enum PopupActivationMode
     {
