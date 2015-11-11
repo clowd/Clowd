@@ -98,7 +98,7 @@ namespace NotifyIconLib.Interop
         /// <summary>
         /// Occurs after recieving a wndproc message from the OS.
         /// </summary>
-        public event Action<uint> WndProcMessageRecieved;
+        public event Action<uint> WndProcMessageReceived;
 
         /// <summary>
         /// Fired if a balloon ToolTip was either displayed
@@ -233,8 +233,8 @@ namespace NotifyIconLib.Interop
         /// <param name="lParam">Provides information about the event.</param>
         private void ProcessWindowMessage(uint msg, IntPtr wParam, IntPtr lParam)
         {
-            if(WndProcMessageRecieved != null)
-                WndProcMessageRecieved(msg);
+            if(WndProcMessageReceived != null)
+                WndProcMessageReceived(msg);
 
             if (msg != CallbackMessageId) return;
 
