@@ -26,7 +26,7 @@ namespace Clowd
         public AccentScheme AccentScheme { get; set; } = AccentScheme.User;
         public TimeSpan UpdateCheckInterval { get; set; } = TimeSpan.FromHours(6);
         public CaptureSettings CaptureSettings { get; set; } = new CaptureSettings();
-
+        public string LastUploadPath { get; set; }
     }
     [PropertyChanged.ImplementPropertyChanged]
     public class CaptureSettings
