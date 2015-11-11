@@ -211,19 +211,50 @@ namespace Clowd
 
         private void Font_Clicked(object sender, RoutedEventArgs e)
         {
-            drawingCanvas.RefreshClip();
+            System.Windows.Forms.FontDialog dlg = new System.Windows.Forms.FontDialog();
+            float wfSize = (float)DpiScale.UpScaleX(drawingCanvas.TextFontSize) / 96 * 72;
+            System.Drawing.FontStyle wfStyle;
+            if (drawingCanvas.TextFontStyle == FontStyles.Italic)
+                wfStyle = System.Drawing.FontStyle.Italic;
+            else
+                wfStyle = System.Drawing.FontStyle.Regular;
+            dlg.Font = new System.Drawing.Font(drawingCanvas.TextFontFamilyName, wfSize, wfStyle);
+            dlg.FontMustExist = true;
+            dlg.MaxSize = 64;
+            dlg.MinSize = 8;
+            dlg.ShowColor = false;
+            dlg.ShowEffects = false;
+            dlg.ShowHelp = false;
+            dlg.AllowVerticalFonts = false;
+            dlg.AllowVectorFonts = true;
+            dlg.AllowScriptChange = false;
+            if (dlg.ShowDialog(Window.GetWindow(this)) == System.Windows.Forms.DialogResult.OK)
+            {
+                drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
+                drawingCanvas.TextFontSize = DpiScale.DownScaleX(dlg.Font.Size / 72 * 96);
+                switch(dlg.Font.Style)
+                {
+                    case System.Drawing.FontStyle.Italic:
+                        drawingCanvas.TextFontStyle = FontStyles.Italic;
+                        break;
+                    default:
+                        drawingCanvas.TextFontStyle = FontStyles.Normal;
+                        break;
+                }
+            }
         }
         private void Brush_Clicked(object sender, RoutedEventArgs e)
         {
-            Microsoft.Samples.CustomControls.ColorPickerDialog cPicker = new Microsoft.Samples.CustomControls.ColorPickerDialog();
-
-            cPicker.StartingColor = drawingCanvas.ObjectColor;
-            cPicker.Owner = Window.GetWindow(this);
-
-            bool? dialogResult = cPicker.ShowDialog();
-            if (dialogResult != null && (bool)dialogResult == true)
+            System.Windows.Forms.ColorDialog dlg = new System.Windows.Forms.ColorDialog();
+            dlg.AnyColor = true;
+            dlg.FullOpen = true;
+            dlg.ShowHelp = false;
+            var initial = drawingCanvas.ObjectColor;
+            dlg.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
+            if (dlg.ShowDialog(Window.GetWindow(this)) == System.Windows.Forms.DialogResult.OK)
             {
-                drawingCanvas.ObjectColor = cPicker.SelectedColor;
+                var final = dlg.Color;
+                drawingCanvas.ObjectColor = Color.FromArgb(final.A, final.R, final.G, final.B);
             }
         }
         private void ZoomFit_Clicked(object sender, RoutedEventArgs e)

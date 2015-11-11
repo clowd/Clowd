@@ -269,10 +269,6 @@
       <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
       <Name>Clowd.Interop</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ColorPickerLib\ColorPickerLib.csproj">
-      <Project>{99e90579-62fc-4898-b168-24f7dbd3a34d}</Project>
-      <Name>ColorPickerLib</Name>
-    </ProjectReference>
     <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj">
       <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>
       <Name>DrawToolsLib</Name>

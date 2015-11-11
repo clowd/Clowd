@@ -485,7 +485,7 @@ namespace Clowd
             var result = dlg.ShowDialog(owner);
             if (temp)
                 owner.Close();
-            if (result == true)
+            if (result == true && dlg.FileNames.Length > 0)
                 OnFilesReceived(dlg.FileNames);
         }
         public void Paste()
