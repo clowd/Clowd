@@ -28,6 +28,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using NotifyIconLib.Interop;
@@ -37,7 +38,7 @@ using Point = NotifyIconLib.Interop.Point;
 namespace NotifyIconLib
 {
     /// <summary>
-    /// A WPF proxy to for a taskbar icon (NotifyIcon) that sits in the system's
+    /// A WPF proxy for a taskbar icon (NotifyIcon) that sits in the system's
     /// taskbar notification area ("system tray").
     /// </summary>
     public partial class TaskbarIcon : FrameworkElement, IDisposable
@@ -352,12 +353,38 @@ namespace NotifyIconLib
         {
             if (IsDisposed) return;
 
+            //get mouse coordinates
+            Point cursorPosition = new Point();
+            if (messageSink.Version == NotifyIconVersion.Vista)
+            {
+                //physical cursor position is supported for Vista and above
+                WinApi.GetPhysicalCursorPos(ref cursorPosition);
+            }
+            else
+            {
+                WinApi.GetCursorPos(ref cursorPosition);
+            }
+
+            var dpiPoint = Clowd.Utilities.DpiScale.DownScalePoint(new System.Windows.Point(cursorPosition.X, cursorPosition.Y));
+            cursorPosition.X = (int)dpiPoint.X;
+            cursorPosition.Y = (int)dpiPoint.Y;
+
             switch (me)
             {
+                case MouseEvent.ContextMenu:
+                    ShowContextMenu(cursorPosition);
+                    //immediately return - there's nothing left to evaluate
+                    return;
+
+                case MouseEvent.Activated:
+                    RaiseTrayActivatedEvent();
+                    break;
+
                 case MouseEvent.MouseMove:
                     RaiseTrayMouseMoveEvent();
                     //immediately return - there's nothing left to evaluate
                     return;
+
                 case MouseEvent.IconRightMouseDown:
                     RaiseTrayRightMouseDownEvent();
                     break;
@@ -390,23 +417,6 @@ namespace NotifyIconLib
             }
 
 
-            //get mouse coordinates
-            Point cursorPosition = new Point();
-            if (messageSink.Version == NotifyIconVersion.Vista)
-            {
-                //physical cursor position is supported for Vista and above
-                WinApi.GetPhysicalCursorPos(ref cursorPosition);
-            }
-            else
-            {
-                WinApi.GetCursorPos(ref cursorPosition);
-            }
-
-            //cursorPosition = GetDeviceCoordinates(cursorPosition);
-            var dpiPoint = Clowd.Utilities.DpiScale.DownScalePoint(new System.Windows.Point(cursorPosition.X, cursorPosition.Y));
-            cursorPosition.X = (int)dpiPoint.X;
-            cursorPosition.Y = (int)dpiPoint.Y;
-
             bool isLeftClickCommandInvoked = false;
 
             //show popup, if requested
@@ -430,37 +440,14 @@ namespace NotifyIconLib
                 }
             }
 
-
-            //show context menu, if requested
-            if (me.IsMatch(MenuActivation))
-            {
-                if (me == MouseEvent.IconLeftMouseUp)
-                {
-                    //show context menu once we are sure it's not a double click
-                    singleClickTimerAction = () =>
-                    {
-                        LeftClickCommand.ExecuteIfEnabled(LeftClickCommandParameter, LeftClickCommandTarget ?? this);
-                        ShowContextMenu(cursorPosition);
-                    };
-                    singleClickTimer.Change(WinApi.GetDoubleClickTime(), Timeout.Infinite);
-                    isLeftClickCommandInvoked = true;
-                }
-                else
-                {
-                    //show context menu immediately
-                    ShowContextMenu(cursorPosition);
-                }
-            }
-
             //make sure the left click command is invoked on mouse clicks
             if (me == MouseEvent.IconLeftMouseUp && !isLeftClickCommandInvoked)
             {
                 //show context menu once we are sure it's not a double click
-                singleClickTimerAction =
-                    () =>
-                    {
-                        LeftClickCommand.ExecuteIfEnabled(LeftClickCommandParameter, LeftClickCommandTarget ?? this);
-                    };
+                singleClickTimerAction = () =>
+                {
+                    LeftClickCommand.ExecuteIfEnabled(LeftClickCommandParameter, LeftClickCommandTarget ?? this);
+                };
                 singleClickTimer.Change(WinApi.GetDoubleClickTime(), Timeout.Infinite);
             }
         }
@@ -744,6 +731,8 @@ namespace NotifyIconLib
                 //does not close if the user clicks somewhere else. With the message window
                 //fallback, the context menu can't receive keyboard events - should not happen though
                 WinApi.SetForegroundWindow(handle);
+
+                Keyboard.Focus(ContextMenu);
 
                 //bubble event
                 RaiseTrayContextMenuOpenEvent();

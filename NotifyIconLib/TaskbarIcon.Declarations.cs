@@ -829,6 +829,94 @@ namespace NotifyIconLib
 
         //EVENTS
 
+        #region TrayActivated
+
+        /// <summary>
+        /// TrayActivated Routed Event
+        /// </summary>
+        public static readonly RoutedEvent TrayActivatedEvent = EventManager.RegisterRoutedEvent(
+            "TrayActivated",
+            RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(TaskbarIcon));
+
+        /// <summary>
+        /// Occurs when the user presses the left mouse button.
+        /// </summary>
+        [Category(CategoryName)]
+        public event RoutedEventHandler TrayActivated
+        {
+            add { AddHandler(TrayActivatedEvent, value); }
+            remove { RemoveHandler(TrayActivatedEvent, value); }
+        }
+
+        /// <summary>
+        /// A helper method to raise the TrayActivated event.
+        /// </summary>
+        protected RoutedEventArgs RaiseTrayActivatedEvent()
+        {
+            RoutedEventArgs args = RaiseTrayActivatedEvent(this);
+            return args;
+        }
+
+        /// <summary>
+        /// A static helper method to raise the TrayActivated event on a target element.
+        /// </summary>
+        /// <param name="target">UIElement or ContentElement on which to raise the event</param>
+        internal static RoutedEventArgs RaiseTrayActivatedEvent(DependencyObject target)
+        {
+            if (target == null) return null;
+
+            RoutedEventArgs args = new RoutedEventArgs();
+            args.RoutedEvent = TrayActivatedEvent;
+            RoutedEventHelper.RaiseEvent(target, args);
+            return args;
+        }
+
+        #endregion
+
+        #region TrayContextMenu
+
+        /// <summary>
+        /// TrayContextMenu Routed Event
+        /// </summary>
+        public static readonly RoutedEvent TrayContextMenuEvent = EventManager.RegisterRoutedEvent(
+            "TrayContextMenu",
+            RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(TaskbarIcon));
+
+        /// <summary>
+        /// Occurs when the user presses the left mouse button.
+        /// </summary>
+        [Category(CategoryName)]
+        public event RoutedEventHandler TrayContextMenu
+        {
+            add { AddHandler(TrayContextMenuEvent, value); }
+            remove { RemoveHandler(TrayContextMenuEvent, value); }
+        }
+
+        /// <summary>
+        /// A helper method to raise the TrayContextMenu event.
+        /// </summary>
+        protected RoutedEventArgs RaiseTrayContextMenuEvent()
+        {
+            RoutedEventArgs args = RaiseTrayContextMenuEvent(this);
+            return args;
+        }
+
+        /// <summary>
+        /// A static helper method to raise the TrayContextMenu event on a target element.
+        /// </summary>
+        /// <param name="target">UIElement or ContentElement on which to raise the event</param>
+        internal static RoutedEventArgs RaiseTrayContextMenuEvent(DependencyObject target)
+        {
+            if (target == null) return null;
+
+            RoutedEventArgs args = new RoutedEventArgs();
+            args.RoutedEvent = TrayContextMenuEvent;
+            RoutedEventHelper.RaiseEvent(target, args);
+            return args;
+        }
+
+        #endregion
+
         #region TrayLeftMouseDown
 
         /// <summary>
