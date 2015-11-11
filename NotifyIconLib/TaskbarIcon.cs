@@ -42,7 +42,7 @@ namespace NotifyIconLib
     /// </summary>
     public partial class TaskbarIcon : FrameworkElement, IDisposable
     {
-        public event Action<uint> WndProcMessageRecieved = delegate { };
+        public event Action<uint> WndProcMessageReceived = delegate { };
 
         #region Members
 
@@ -135,7 +135,7 @@ namespace NotifyIconLib
             messageSink.TaskbarCreated += OnTaskbarCreated;
             messageSink.ChangeToolTipStateRequest += OnToolTipChange;
             messageSink.BalloonToolTipChanged += OnBalloonToolTipChanged;
-            messageSink.WndProcMessageRecieved += OnWndProcMessageRecieved;
+            messageSink.WndProcMessageReceived += OnWndProcMessageReceived;
 
             //init single click / balloon timers
             singleClickTimer = new Timer(DoSingleClickAction);
@@ -145,9 +145,9 @@ namespace NotifyIconLib
             if (Application.Current != null) Application.Current.Exit += OnExit;
         }
 
-        private void OnWndProcMessageRecieved(uint obj)
+        private void OnWndProcMessageReceived(uint obj)
         {
-            WndProcMessageRecieved(obj);
+            WndProcMessageReceived(obj);
         }
 
         #endregion

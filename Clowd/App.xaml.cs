@@ -289,7 +289,7 @@ namespace Clowd
             _taskbarIcon = new TaskbarIcon();
             //_taskbarIcon.IconSource = new BitmapImage(new Uri("pack://application:,,,/Images/default.ico"));
             _taskbarIcon.TrayDrop += OnTaskbarIconDrop;
-            _taskbarIcon.WndProcMessageRecieved += OnWndProcMessageReceived;
+            _taskbarIcon.WndProcMessageReceived += OnWndProcMessageReceived;
 
             //force the correct icon size
             System.Windows.Resources.StreamResourceInfo sri = Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico"));
