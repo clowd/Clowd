@@ -24,10 +24,13 @@ namespace Clowd
 {
     public partial class App : Application
     {
-        public static new App Current { get { return (App)Application.Current; } }
+        public static new App Current
+        { get { return (App) Application.Current; } }
 
-        public AppSettings Settings { get; private set; }
-        public string AppDataDirectory { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
+        public AppSettings Settings
+        { get; private set; }
+        public string AppDataDirectory
+        { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
 
         public const string ClowdServerDomain = "clowd.ca";
         public const string ClowdNamedPipe = "ClowdRunningPipe";
@@ -165,7 +168,7 @@ namespace Clowd
         private void SetupServiceHost()
         {
             var inf = new CommandLineProxy();
-            inf.CommandLineExecutedEvent += OnCommandLineArgsRecieved;
+            inf.CommandLineExecutedEvent += OnCommandLineArgsReceived;
             _host = new ServiceHost(inf, new[] { new Uri("net.pipe://localhost") });
 
             var behaviour = _host.Description.Behaviors.Find<ServiceBehaviorAttribute>();
@@ -244,40 +247,40 @@ namespace Clowd
             this.Resources["AccentColor4"] = Color.FromArgb(51, baseColor.R, baseColor.G, baseColor.B); //20%
 
             this.Resources["HighlightBrush"] = new SolidColorBrush(baseColor);
-            ((Freezable)this.Resources["HighlightBrush"]).Freeze();
-            this.Resources["AccentColorBrush"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
-            ((Freezable)this.Resources["AccentColorBrush"]).Freeze();
-            this.Resources["AccentColorBrush2"] = new SolidColorBrush((Color)this.Resources["AccentColor2"]);
-            ((Freezable)this.Resources["AccentColorBrush2"]).Freeze();
-            this.Resources["AccentColorBrush3"] = new SolidColorBrush((Color)this.Resources["AccentColor3"]);
-            ((Freezable)this.Resources["AccentColorBrush3"]).Freeze();
-            this.Resources["AccentColorBrush4"] = new SolidColorBrush((Color)this.Resources["AccentColor4"]);
-            ((Freezable)this.Resources["AccentColorBrush4"]).Freeze();
-            this.Resources["WindowTitleColorBrush"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
-            ((Freezable)this.Resources["WindowTitleColorBrush"]).Freeze();
+            ((Freezable) this.Resources["HighlightBrush"]).Freeze();
+            this.Resources["AccentColorBrush"] = new SolidColorBrush((Color) this.Resources["AccentColor"]);
+            ((Freezable) this.Resources["AccentColorBrush"]).Freeze();
+            this.Resources["AccentColorBrush2"] = new SolidColorBrush((Color) this.Resources["AccentColor2"]);
+            ((Freezable) this.Resources["AccentColorBrush2"]).Freeze();
+            this.Resources["AccentColorBrush3"] = new SolidColorBrush((Color) this.Resources["AccentColor3"]);
+            ((Freezable) this.Resources["AccentColorBrush3"]).Freeze();
+            this.Resources["AccentColorBrush4"] = new SolidColorBrush((Color) this.Resources["AccentColor4"]);
+            ((Freezable) this.Resources["AccentColorBrush4"]).Freeze();
+            this.Resources["WindowTitleColorBrush"] = new SolidColorBrush((Color) this.Resources["AccentColor"]);
+            ((Freezable) this.Resources["WindowTitleColorBrush"]).Freeze();
             var gstops = new GradientStopCollection()
             {
                 new GradientStop((Color)this.Resources["HighlightColor"], 0),
                 new GradientStop((Color)this.Resources["AccentColor3"], 1),
             };
             this.Resources["ProgressBrush"] = new LinearGradientBrush(gstops, new Point(1.002, 0.5), new Point(0.001, 0.5));
-            ((Freezable)this.Resources["ProgressBrush"]).Freeze();
-            this.Resources["CheckmarkFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
-            ((Freezable)this.Resources["CheckmarkFill"]).Freeze();
-            this.Resources["RightArrowFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
-            ((Freezable)this.Resources["RightArrowFill"]).Freeze();
-            this.Resources["IdealForegroundColorBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
-            ((Freezable)this.Resources["IdealForegroundColorBrush"]).Freeze();
-            this.Resources["IdealForegroundDisabledBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]) { Opacity = 0.4 };
-            ((Freezable)this.Resources["IdealForegroundDisabledBrush"]).Freeze();
-            this.Resources["AccentSelectedColorBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
-            ((Freezable)this.Resources["AccentSelectedColorBrush"]).Freeze();
+            ((Freezable) this.Resources["ProgressBrush"]).Freeze();
+            this.Resources["CheckmarkFill"] = new SolidColorBrush((Color) this.Resources["AccentColor"]);
+            ((Freezable) this.Resources["CheckmarkFill"]).Freeze();
+            this.Resources["RightArrowFill"] = new SolidColorBrush((Color) this.Resources["AccentColor"]);
+            ((Freezable) this.Resources["RightArrowFill"]).Freeze();
+            this.Resources["IdealForegroundColorBrush"] = new SolidColorBrush((Color) this.Resources["IdealForegroundColor"]);
+            ((Freezable) this.Resources["IdealForegroundColorBrush"]).Freeze();
+            this.Resources["IdealForegroundDisabledBrush"] = new SolidColorBrush((Color) this.Resources["IdealForegroundColor"]) { Opacity = 0.4 };
+            ((Freezable) this.Resources["IdealForegroundDisabledBrush"]).Freeze();
+            this.Resources["AccentSelectedColorBrush"] = new SolidColorBrush((Color) this.Resources["IdealForegroundColor"]);
+            ((Freezable) this.Resources["AccentSelectedColorBrush"]).Freeze();
         }
         private void SetupDpiScaling()
         {
             IntPtr dC = Interop.USER32.GetDC(IntPtr.Zero);
-            double logX = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSX);
-            double logY = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSY);
+            double logX = (double) Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSX);
+            double logY = (double) Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSY);
             Interop.USER32.ReleaseDC(IntPtr.Zero, dC);
             DpiScale.ScaleUISetup(logX, logY);
         }
@@ -286,7 +289,7 @@ namespace Clowd
             _taskbarIcon = new TaskbarIcon();
             //_taskbarIcon.IconSource = new BitmapImage(new Uri("pack://application:,,,/Images/default.ico"));
             _taskbarIcon.TrayDrop += OnTaskbarIconDrop;
-            _taskbarIcon.WndProcMessageRecieved += OnWndProcMessageRecieved;
+            _taskbarIcon.WndProcMessageRecieved += OnWndProcMessageReceived;
 
             //force the correct icon size
             System.Windows.Resources.StreamResourceInfo sri = Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico"));
@@ -341,7 +344,7 @@ namespace Clowd
         private void SetupTrayContextMenu()
         {
             ContextMenu context = new ContextMenu();
-            var capture = new MenuItem() { Header = "Capture Screen" };
+            var capture = new MenuItem() { Header = "_Capture Screen" };
             capture.Click += async (s, e) =>
             {
                 //wait long enough for context menu to disappear.
@@ -350,14 +353,21 @@ namespace Clowd
             };
             context.Items.Add(capture);
 
-            var paste = new MenuItem() { Header = "Paste" };
+            var paste = new MenuItem() { Header = "_Paste" };
             paste.Click += (s, e) =>
             {
                 Paste();
             };
             context.Items.Add(paste);
 
-            var uploads = new MenuItem() { Header = "Uploads" };
+            var uploadFile = new MenuItem() { Header = "Upload _Files" };
+            uploadFile.Click += (s, e) =>
+            {
+                UploadFile();
+            };
+            context.Items.Add(uploadFile);
+
+            var uploads = new MenuItem() { Header = "Show _Uploads" };
             uploads.Click += (s, e) =>
             {
                 UploadManager.ShowWindow();
@@ -365,7 +375,7 @@ namespace Clowd
             context.Items.Add(uploads);
             context.Items.Add(new Separator());
 
-            var home = new MenuItem() { Header = "Clowd Home" };
+            var home = new MenuItem() { Header = "Clowd _Home" };
             home.Click += (s, e) =>
             {
                 var wnd = TemplatedWindow.GetWindow(typeof(HomePage));
@@ -378,7 +388,7 @@ namespace Clowd
             };
             context.Items.Add(home);
 
-            var exit = new MenuItem() { Header = "Exit" };
+            var exit = new MenuItem() { Header = "E_xit" };
             exit.Click += (s, e) =>
             {
                 if (Settings.ConfirmClose)
@@ -436,7 +446,7 @@ namespace Clowd
             _cmdBatchTimer.Tick += OnCommandLineBatchTimerTick;
             if (_args != null)
             {
-                OnCommandLineArgsRecieved(this, new CommandLineEventArgs(_args));
+                OnCommandLineArgsReceived(this, new CommandLineEventArgs(_args));
             }
         }
         public async void StartCapture()
@@ -450,6 +460,16 @@ namespace Clowd
                 _prtscrWindowOpen = false;
             };
             _prtscrWindowOpen = true;
+        }
+        public async void UploadFile()
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog();
+            if (Settings.LastUploadPath != null)
+                dlg.InitialDirectory = Settings.LastUploadPath;
+            dlg.Multiselect = true;
+            var result = dlg.ShowDialog();
+            if (result == true)
+                await OnFilesReceived(dlg.FileNames);
         }
         public void Paste()
         {
@@ -468,16 +488,16 @@ namespace Clowd
                 }
                 UploadManager.Upload(b, "clowd-default.png");
             }
-            if (Clipboard.ContainsText())
+            else if (Clipboard.ContainsText())
             {
                 UploadManager.Upload(Clipboard.GetText().ToUtf8(), "clowd-default.txt");
             }
-            if (Clipboard.ContainsFileDropList())
+            else if (Clipboard.ContainsFileDropList())
             {
                 var collection = Clipboard.GetFileDropList();
                 string[] fileArray = new string[collection.Count];
                 collection.CopyTo(fileArray, 0);
-                OnFilesRecieved(fileArray);
+                OnFilesReceived(fileArray);
             }
         }
 
@@ -521,7 +541,7 @@ namespace Clowd
                 _updateManager.ApplyUpdates(true, false, false);
             }
         }
-        private void OnCommandLineArgsRecieved(object sender, CommandLineEventArgs e)
+        private void OnCommandLineArgsReceived(object sender, CommandLineEventArgs e)
         {
             if (_cmdBatchTimer.IsEnabled)
             {
@@ -540,18 +560,18 @@ namespace Clowd
             _cmdBatchTimer.IsEnabled = false;
             if (_cmdCache.Count > 0)
             {
-                OnFilesRecieved(_cmdCache.ToArray());
+                OnFilesReceived(_cmdCache.ToArray());
                 _cmdCache.Clear();
             }
         }
-        private void OnWndProcMessageRecieved(uint obj)
+        private void OnWndProcMessageReceived(uint obj)
         {
-            if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED && Settings?.AccentScheme == AccentScheme.System)
+            if (obj == (uint) Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED && Settings?.AccentScheme == AccentScheme.System)
             {
                 SetupAccentColors();
             }
         }
-        private async Task OnFilesRecieved(string[] filePaths)
+        private async Task OnFilesReceived(string[] filePaths)
         {
             string url;
             if (filePaths.Length > 1 || (filePaths.Length == 1 && Directory.Exists(filePaths[0]))
@@ -578,7 +598,7 @@ namespace Clowd
                     });
                     ms.Position = 0;
                     byte[] barr = new byte[ms.Length];
-                    ms.Read(barr, 0, (int)ms.Length);
+                    ms.Read(barr, 0, (int) ms.Length);
                     url = await UploadManager.Upload(barr, archiveName);
                 }
             }
@@ -592,12 +612,12 @@ namespace Clowd
             var formats = e.Data.GetFormats();
             if (formats.Contains(DataFormats.FileDrop))
             {
-                var data = (string[])e.Data.GetData(DataFormats.FileDrop);
-                OnFilesRecieved(data);
+                var data = (string[]) e.Data.GetData(DataFormats.FileDrop);
+                OnFilesReceived(data);
             }
             else if (formats.Contains(DataFormats.Text))
             {
-                var data = (string)e.Data.GetData(DataFormats.Text);
+                var data = (string) e.Data.GetData(DataFormats.Text);
                 UploadManager.Upload(data.ToUtf8(), "clowd-default.txt");
             }
         }
