@@ -24,13 +24,10 @@ namespace Clowd
 {
     public partial class App : Application
     {
-        public static new App Current
-        { get { return (App)Application.Current; } }
+        public static new App Current { get { return (App)Application.Current; } }
 
-        public AppSettings Settings
-        { get; private set; }
-        public string AppDataDirectory
-        { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
+        public AppSettings Settings { get; private set; }
+        public string AppDataDirectory { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
 
         public const string ClowdServerDomain = "clowd.ca";
         public const string ClowdNamedPipe = "ClowdRunningPipe";
