@@ -66,10 +66,6 @@
       <HintPath>..\packages\Newtonsoft.Json.6.0.8\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="NReco.VideoConverter, Version=1.0.7.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\NReco.VideoConverter.1.0.7.0\lib\net20\NReco.VideoConverter.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="PrettyTime.NET">
       <HintPath>lib\PrettyTime.NET.dll</HintPath>
     </Reference>

@@ -27,11 +27,11 @@ namespace QuickShareServer
         public const string ThumbCacheDirectory = "thumb_cache";
         public const string AzureUploadBlobContainerName = "uploads";
         public static CloudBlobContainer AzureUploadBlobContainer;
-        public const string AzureBlobEndpoint = "storage.clowd.ga";
+        public const string AzureBlobEndpoint = "storage.clowd.ca";
         public const int HttpPort = 12999;
         private const int TcpPort = 12998;
         private const string TemplatePath = "template.html";
-        public static readonly string ExternalHost = Debugger.IsAttached ? "localhost:12999" : "clowd.ga";
+        public static readonly string ExternalHost = Debugger.IsAttached ? "localhost:12999" : "clowd.ca";
         private static readonly IPAddress ListenIP = IPAddress.Parse("127.0.0.1");
 
         private static LightSpeedContext<QuickShareModelUnitOfWork> _dbContext;
@@ -97,7 +97,6 @@ namespace QuickShareServer
 
             CloudStorageAccount account = CloudStorageAccount.Parse(storageString);
             CloudBlobClient client = account.CreateCloudBlobClient();
-            var ffmpeg = new NReco.VideoConverter.FFMpegConverter();
             
             //var blobServiceProperties = new Microsoft.WindowsAzure.Storage.Shared.Protocol.ServiceProperties()
             //{
@@ -195,9 +194,16 @@ namespace QuickShareServer
             }
 
             progress.DbObject.Views++;
-            HttpResponseHeaders hed = new HttpResponseHeaders();
-            hed.ContentLength = progress.FileSize;
-            hed.ContentDisposition = new HttpContentDisposition() { Filename = progress.DbObject.DisplayName, Mode = HttpContentDispositionMode.Attachment };
+            HttpResponseHeaders hed = new HttpResponseHeaders
+            {
+                ContentLength = progress.FileSize,
+                ContentDisposition =
+                    new HttpContentDisposition()
+                    {
+                        Filename = progress.DbObject.DisplayName,
+                        Mode = HttpContentDispositionMode.Attachment
+                    }
+            };
             var hr = HttpResponse.Create(progress.PayloadStream.CloneStream(), "application/octet-stream", headers: hed);
             hr.UseGzip = UseGzipOption.DontUseGzip;
             return hr;
