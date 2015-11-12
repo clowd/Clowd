@@ -116,7 +116,7 @@ namespace QuickShareServer
             public PacketHandlerAttribute(string command, bool callOnce)
             {
                 this.Command = command;
-                this.CallOnce = CallOnce;
+                this.CallOnce = callOnce;
             }
         }
         [AttributeUsage(AttributeTargets.Method)]
@@ -133,14 +133,14 @@ namespace QuickShareServer
             public bool CallOnce { get; private set; }
             public bool Called { get; private set; }
 
-            private readonly HandlerMethodDelegate methodDelegate;
+            private readonly HandlerMethodDelegate _methodDelegate;
 
             public PacketHandlerIntermediate(PacketHandlerAttribute attribute, MethodInfo method)
             {
                 this.Called = false;
                 this.Command = attribute.Command;
                 this.CallOnce = attribute.CallOnce;
-                this.methodDelegate = GenerateDelegate(method);
+                this._methodDelegate = GenerateDelegate(method);
             }
 
             public void Call(object sender, Packet p)
@@ -148,7 +148,7 @@ namespace QuickShareServer
                 if (Called && CallOnce) return;
                 Called = true;
                 object[] args = { p };
-                this.methodDelegate(sender, args);
+                this._methodDelegate(sender, args);
             }
         }
     }
