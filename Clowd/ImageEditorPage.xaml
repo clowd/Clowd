@@ -53,7 +53,7 @@
     </UserControl.Resources>
     <UserControl.InputBindings>
         <KeyBinding Key="Enter" Command="{StaticResource Commands.Upload}" />
-        <KeyBinding Key="Esc" Command="ApplicationCommands.Close" />
+        <KeyBinding Key="Esc" Command="{StaticResource Commands.SelectTool}" CommandParameter="None"/>
         <KeyBinding Key="D" Command="{StaticResource Commands.SelectTool}" CommandParameter="None"/>
         <KeyBinding Key="S" Command="{StaticResource Commands.SelectTool}" CommandParameter="Pointer"/>
         <KeyBinding Key="R" Command="{StaticResource Commands.SelectTool}" CommandParameter="Rectangle"/>
