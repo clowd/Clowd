@@ -59,6 +59,7 @@
         <KeyBinding Key="R" Command="{StaticResource Commands.SelectTool}" CommandParameter="Rectangle"/>
         <KeyBinding Key="E" Command="{StaticResource Commands.SelectTool}" CommandParameter="Ellipse"/>
         <KeyBinding Key="L" Command="{StaticResource Commands.SelectTool}" CommandParameter="Line"/>
+        <KeyBinding Key="A" Command="{StaticResource Commands.SelectTool}" CommandParameter="Arrow"/>
         <KeyBinding Key="P" Command="{StaticResource Commands.SelectTool}" CommandParameter="PolyLine"/>
         <KeyBinding Key="T" Command="{StaticResource Commands.SelectTool}" CommandParameter="Text"/>
     </UserControl.InputBindings>
@@ -205,7 +206,9 @@
                 </Viewbox>
             </ToggleButton>
             <ToggleButton ToolTip="Arrow (A)"
-                          IsChecked="False" IsEnabled="False"
+                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
+                                     Converter={StaticResource convToolType}, ConverterParameter=Arrow}"
+                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Arrow"
                           Style="{StaticResource ToggleToolButtonStyle}">
                 <Viewbox>
                     <Path Data="M6.938,20.681l4.236,4.236H1.083V14.825l4.253,4.254L24.165,0.25l1.616,1.586L6.938,20.681z" />
