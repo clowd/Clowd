@@ -74,6 +74,7 @@ namespace DrawToolsLib
             var lineLength = lineVector.Length;
             lineVector.Normalize();
 
+            tipLength = Math.Min(lineLength / 3, tipLength);
             lineLength -= tipLength / 2;
             if (lineLength > 0)
             {
