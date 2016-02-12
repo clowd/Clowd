@@ -82,6 +82,7 @@ namespace DrawToolsLib
             tools[(int)ToolType.Rectangle] = new ToolRectangle();
             tools[(int)ToolType.Ellipse] = new ToolEllipse();
             tools[(int)ToolType.Line] = new ToolLine();
+            tools[(int)ToolType.Arrow] = new ToolArrow();
             tools[(int)ToolType.PolyLine] = new ToolPolyLine();
 
             toolText = new ToolText(this);

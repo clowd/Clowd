@@ -14,6 +14,7 @@ namespace DrawToolsLib
         Rectangle,
         Ellipse,
         Line,
+        Arrow,
         PolyLine,
         Text,
         Max
