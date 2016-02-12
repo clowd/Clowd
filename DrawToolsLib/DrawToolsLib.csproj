@@ -75,8 +75,10 @@
     <Compile Include="FontConversions.cs" />
     <Compile Include="GraphicsBase.cs" />
     <Compile Include="GraphicsImage.cs" />
+    <Compile Include="GraphicsArrow.cs" />
     <Compile Include="GraphicsText.cs" />
     <Compile Include="PropertiesGraphicsImage.cs" />
+    <Compile Include="PropertiesGraphicsArrow.cs" />
     <Compile Include="Properties\Settings.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
@@ -85,6 +87,7 @@
     <Compile Include="SerializationHelper.cs" />
     <Compile Include="PropertiesGraphicsText.cs" />
     <Compile Include="ToolEllipse.cs" />
+    <Compile Include="ToolArrow.cs" />
     <Compile Include="ToolLine.cs" />
     <Compile Include="ToolObject.cs" />
     <Compile Include="ToolPointer.cs" />
