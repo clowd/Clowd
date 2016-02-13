@@ -53,9 +53,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "images", "images", "{653A10
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NReco.VideoConverter", "NReco.VideoConverter\NReco.VideoConverter.csproj", "{13C49A14-1CE3-40B9-AE9E-20FB37D5D8A7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NAppUpdate.Framework", "..\NAppUpdate.Framework\NAppUpdate.Framework.csproj", "{5C07EBDF-D43F-4BE9-B560-D7A443C0EDCE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NAppUpdate.Framework", "NAppUpdate.Framework\NAppUpdate.Framework.csproj", "{5C07EBDF-D43F-4BE9-B560-D7A443C0EDCE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NAppUpdate.Updater", "..\NAppUpdate.Updater\NAppUpdate.Updater.csproj", "{7D4D18D4-DBD2-4ADC-9D82-397D6C5E9F40}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NAppUpdate.Updater", "NAppUpdate.Updater\NAppUpdate.Updater.csproj", "{7D4D18D4-DBD2-4ADC-9D82-397D6C5E9F40}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
