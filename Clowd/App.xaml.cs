@@ -312,6 +312,8 @@ namespace Clowd
         }
         private void SetupUpdateTimer()
         {
+            // NAppUpdater uses relative paths, so the current directory must be set accordingly.
+            Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
             _updateManager = NAppUpdate.Framework.UpdateManager.Instance;
             _updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
             _updateManager.Config.TempFolder = Path.Combine(AppDataDirectory, "update");
