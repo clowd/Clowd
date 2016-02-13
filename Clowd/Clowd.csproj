@@ -261,10 +261,6 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
-      <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
-      <Name>NAppUpdate.Framework</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj">
       <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
       <Name>Clowd.Interop</Name>
@@ -272,6 +268,10 @@
     <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj">
       <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>
       <Name>DrawToolsLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
+      <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
+      <Name>NAppUpdate.Framework</Name>
     </ProjectReference>
     <ProjectReference Include="..\NotifyIconLib\NotifyIconLib.csproj">
       <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>
