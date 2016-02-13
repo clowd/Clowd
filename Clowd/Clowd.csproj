@@ -67,10 +67,6 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.Expression.Interactions, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL" />
-    <Reference Include="NAppUpdate.Framework, Version=0.3.0.0, Culture=neutral, PublicKeyToken=d1f1d1f19f9e5a56, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\lib\NAppUpdate.Framework.dll</HintPath>
-    </Reference>
     <Reference Include="RT.Util">
       <HintPath>..\lib\RT.Util.dll</HintPath>
     </Reference>
@@ -265,6 +261,10 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
+      <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
+      <Name>NAppUpdate.Framework</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj">
       <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
       <Name>Clowd.Interop</Name>
