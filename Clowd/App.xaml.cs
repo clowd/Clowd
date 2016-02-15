@@ -7,9 +7,11 @@ using RT.Util.ExtensionMethods;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.Remoting.Channels;
 using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +19,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Exceptionless.Dependency;
+using Exceptionless.Plugins;
+using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
 
@@ -29,6 +34,7 @@ namespace Clowd
         public AppSettings Settings { get; private set; }
         public string AppDataDirectory { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
 
+        public const string ClowdAppName = "Clowd";
         public const string ClowdServerDomain = "clowd.ca";
         public const string ClowdNamedPipe = "ClowdRunningPipe";
         public const string ClowdMutex = "ClowdMutex000";
@@ -50,39 +56,71 @@ namespace Clowd
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-
-            // initialize custom exceptionless server at https://exless.caesa.ca if not debugging.
-            var exless = ExceptionlessClient.Default;
-            var exconf = exless.Configuration;
-            exconf.ApiKey = "Vpcq6Hv9C7qh9qJpSsnet4ALPlilrIeKq2zBtL3v";
-            exconf.ServerUrl = "https://exless.caesa.ca";
-            exconf.UseFolderStorage(Path.Combine(AppDataDirectory, "exless"));
-            // only want to report and potentially swallow errors if we're not debugging
-            if (!System.Diagnostics.Debugger.IsAttached)
-                exless.Register(false);
-            else
-                exconf.Enabled = false;
+            SetupExless();
 
             try
             {
                 _mutex = Mutex.OpenExisting(ClowdMutex);
-                // if we're here, clowd is running already, so pass our command line args and exit.
-                if (e.Args.Length > 0)
+                // if we're here, clowd is running already, so pass our command line args and check heartbeat.
+                try
                 {
                     ChannelFactory<ICommandLineProxy> pipeFactory = new ChannelFactory<ICommandLineProxy>(
-                                    new NetNamedPipeBinding(),
-                                    new EndpointAddress("net.pipe://localhost/" + ClowdNamedPipe));
+                        new NetNamedPipeBinding(),
+                        new EndpointAddress("net.pipe://localhost/" + ClowdNamedPipe));
 
                     ICommandLineProxy pipeProxy = pipeFactory.CreateChannel();
-                    pipeProxy.PassArgs(e.Args);
+                    if (!pipeProxy.Heartbeat())
+                        throw new Exception($"{ClowdAppName} unresponsive. This exception shouldnt happen.");
+
+                    if (e.Args.Length > 0)
+                    {
+                        pipeProxy.PassArgs(e.Args);
+                    }
                     pipeFactory.Close();
+                    Thread.Sleep(2001);
+                    Environment.Exit(0);
                 }
-                Thread.Sleep(2001);
-                Environment.Exit(0);
-                return;
+                catch
+                {
+                    var current = Process.GetCurrentProcess();
+                    var processes = Process.GetProcessesByName("Clowd").Where(p => p.Id != current.Id).ToArray();
+                    if (!processes.Any())
+                    {
+                        var ex = new InvalidOperationException("The mutex was opened successfully, " +
+                                                              $"but there are no {ClowdAppName} processes running. Uninstaller?");
+                        var dic = new Dictionary<string, object>();
+                        dic.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
+                        ContextData cd = new ContextData(dic);
+                        ex.ToExceptionless(cd).Submit();
+                        Environment.Exit(1);
+                    }
+                    var config = new TaskDialogInterop.TaskDialogOptions();
+                    config.Title = $"{ClowdAppName}";
+                    config.MainInstruction = $"{ClowdAppName} Unresponsive";
+                    config.Content =
+                        $"{ClowdAppName} is already running but seems to be unresponsive. " +
+                        $"Would you like to restart {ClowdAppName}?";
+                    config.FooterText = "You may lose anything in-progress work.";
+                    config.FooterIcon = VistaTaskDialogIcon.Information;
+                    config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.YesNo;
+                    config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Warning;
+                    var response = TaskDialogInterop.TaskDialog.Show(config);
+                    if (response.Result == TaskDialogSimpleResult.Yes)
+                    {
+                        foreach (var p in processes)
+                            p.Kill();
+                        _mutex = Mutex.OpenExisting(ClowdMutex);
+                    }
+                    else
+                    {
+                        Environment.Exit(0);
+                    }
+                }
             }
             catch (WaitHandleCannotBeOpenedException)
             {
+                // the mutex could not be opened, means it does not exist and there is no other clowd
+                // instances running. Open a new mutex.
                 _mutex = new Mutex(true, ClowdMutex);
                 if (e.Args.Length > 0)
                 {
@@ -94,19 +132,15 @@ namespace Clowd
                 // we still want to report this, beacuse it was unexpected, but because we successfully opened the mutex
                 // we know there is another Clowd instance running (or uninstaller) and we should close.
                 ex.ToExceptionless().Submit();
-                Environment.Exit(0);
+                Environment.Exit(1);
             }
 
             SetupServiceHost();
-            // this is for testing purposes, so the localhost server has time to start.
-            //if (System.Diagnostics.Debugger.IsAttached)
-            //    await Task.Delay(3000);
             SetupDpiScaling();
             SetupTrayIcon();
             SetupSettings();
             Settings.ColorScheme = ColorScheme.Light;
             SetupAccentColors();
-
 
             if (Settings.FirstRun)
             {
@@ -162,6 +196,104 @@ namespace Clowd
                 _captureHotkey.Dispose();
         }
 
+        private void SetupExless()
+        {
+            // initialize custom exceptionless server at https://exless.caesa.ca if not debugging.
+            var exless = ExceptionlessClient.Default;
+            var exconf = exless.Configuration;
+            exconf.ApiKey = "Vpcq6Hv9C7qh9qJpSsnet4ALPlilrIeKq2zBtL3v";
+            exconf.ServerUrl = "https://exless.caesa.ca";
+            exconf.UseFolderStorage(Path.Combine(AppDataDirectory, "exless"));
+
+
+            // only want to report and potentially swallow errors if we're not debugging
+            if (System.Diagnostics.Debugger.IsAttached)
+            {
+                exconf.Enabled = false;
+                return;
+            }
+
+            exless.Startup();
+
+            // create event handlers for unhandled exceptions
+            Func<EventSubmittingEventArgs, bool> ShowDialog = (e) =>
+            {
+                var dialog = new Exceptionless.Dialogs.CrashReportDialog(e.Client, e.Event);
+                bool? result = dialog.ShowDialog();
+                return result.HasValue && result.Value;
+            };
+            EventHandler<EventSubmittingEventArgs> OnSubmitting = (sender, e) =>
+            {
+                if (!e.IsUnhandledError)
+                    return;
+
+                // we want to show an error dialog, give the user a chance to add details, but we will want to 
+                // send the error regardless of what the users chooses to do.
+                if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+                {
+                    //e.Cancel = !(bool)Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog),
+                    //            DispatcherPriority.Send, e);
+                    Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog),
+                        DispatcherPriority.Send, e);
+                }
+                else
+                {
+                    //e.Cancel = !ShowDialog(e);
+                    ShowDialog(e);
+                }
+            };
+            EventHandler<EventSubmittedEventArgs> OnSubmitted = (sender, e) =>
+            {
+                if (e.IsUnhandledError)
+                    Environment.Exit(1);
+            };
+            ThreadExceptionEventHandler OnApplicationThreadException = (sender, args) =>
+            {
+                var contextData = new Exceptionless.Plugins.ContextData();
+                contextData.MarkAsUnhandledError();
+                contextData.SetSubmissionMethod("ApplicationThreadException");
+                args.Exception.ToExceptionless(contextData, exless).Submit();
+            };
+            DispatcherUnhandledExceptionEventHandler OnApplicationDispatcherUnhandledException = (sender, args) =>
+            {
+                var contextData = new Exceptionless.Plugins.ContextData();
+                contextData.MarkAsUnhandledError();
+                contextData.SetSubmissionMethod("DispatcherUnhandledException");
+                args.Exception.ToExceptionless(contextData, exless).Submit();
+                args.Handled = true;
+            };
+
+            try
+            {
+                System.Windows.Forms.Application.ThreadException += OnApplicationThreadException;
+            }
+            catch (Exception ex)
+            {
+                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessClientExtensions), ex,
+                    "An error occurred while wiring up to the application thread exception event.");
+            }
+            try
+            {
+                Application.Current.DispatcherUnhandledException += OnApplicationDispatcherUnhandledException;
+            }
+            catch (Exception ex)
+            {
+                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessClientExtensions), ex,
+                    "An error occurred while wiring up to the application dispatcher exception event.");
+            }
+            try
+            {
+                AppDomain.CurrentDomain.ProcessExit += (sender, e) => exless.ProcessQueue();
+            }
+            catch (Exception ex)
+            {
+                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessWpfExtensions), ex,
+                    "An error occurred while wiring up to the process exit event.");
+            }
+
+            exless.SubmittingEvent += OnSubmitting;
+            exless.SubmittedEvent += OnSubmitted;
+        }
         private void SetupServiceHost()
         {
             var inf = new CommandLineProxy();
@@ -420,7 +552,6 @@ namespace Clowd
             _taskbarIcon.ContextMenu = context;
         }
 
-#pragma warning disable 4014
         public void FinishInit()
         {
             if (_initialized)
@@ -640,6 +771,5 @@ namespace Clowd
                 UploadManager.Upload(data.ToUtf8(), "clowd-default.txt");
             }
         }
-#pragma warning restore 4014
     }
 }

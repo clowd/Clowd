@@ -12,6 +12,9 @@ namespace Clowd.Utilities
     {
         [OperationContract]
         void PassArgs(string[] args);
+
+        [OperationContract]
+        bool Heartbeat();
     }
     public class CommandLineProxy : ICommandLineProxy
     {
@@ -19,6 +22,11 @@ namespace Clowd.Utilities
         public void PassArgs(string[] args)
         {
             CommandLineExecutedEvent?.Invoke(this, new CommandLineEventArgs(args));
+        }
+
+        public bool Heartbeat()
+        {
+            return true;
         }
     }
     public class CommandLineEventArgs  :EventArgs
