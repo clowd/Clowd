@@ -129,13 +129,13 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
-      <Project>{5C07EBDF-D43F-4BE9-B560-D7A443C0EDCE}</Project>
-      <Name>NAppUpdate.Framework</Name>
-    </ProjectReference>
+    <Resource Include="updateicon.ico" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="updateicon.ico" />
+    <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
+      <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
+      <Name>NAppUpdate.Framework</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
