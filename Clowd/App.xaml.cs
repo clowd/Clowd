@@ -11,6 +11,7 @@ using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Runtime.Remoting.Channels;
 using System.ServiceModel;
 using System.Threading;
@@ -659,7 +660,18 @@ namespace Clowd
             }
 
             //await Task.Factory.FromAsync(upd.BeginCheckForUpdates, upd.EndCheckForUpdates, null);
-            await Clowd.Shared.Extensions.ToTask(() => _updateManager.CheckForUpdates());
+            await Clowd.Shared.Extensions.ToTask(() =>
+            {
+                try
+                {
+                    _updateManager.CheckForUpdates();
+                }
+                catch (WebException)
+                {
+                    // doesnt matter, reset the update manager and wait until next update check.
+                    _updateManager.CleanUp();
+                }
+            });
 
             if (_updateManager.UpdatesAvailable == 0)
             {
