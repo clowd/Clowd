@@ -660,18 +660,17 @@ namespace Clowd
             }
 
             //await Task.Factory.FromAsync(upd.BeginCheckForUpdates, upd.EndCheckForUpdates, null);
-            await Clowd.Shared.Extensions.ToTask(() =>
+            try
             {
-                try
-                {
-                    _updateManager.CheckForUpdates();
-                }
-                catch (WebException)
-                {
-                    // doesnt matter, reset the update manager and wait until next update check.
-                    _updateManager.CleanUp();
-                }
-            });
+                await Task.Factory.StartNew(() => _updateManager.CheckForUpdates());
+            }
+            catch (Exception ex)
+            when (ex is WebException || (ex as AggregateException)?.InnerException is WebException)
+            {
+                // web exception doesnt matter here. 
+                _updateManager.CleanUp();
+                return;
+            }
 
             if (_updateManager.UpdatesAvailable == 0)
             {
@@ -681,7 +680,7 @@ namespace Clowd
             _updateTimer.Stop();
 
             //await Task.Factory.FromAsync(upd.BeginPrepareUpdates, upd.EndPrepareUpdates, null);
-            await Clowd.Shared.Extensions.ToTask(() => _updateManager.PrepareUpdates());
+            await Task.Factory.StartNew(() => _updateManager.PrepareUpdates());
 
             while (Application.Current.Windows.Cast<Window>().Any(w => w.IsVisible))
             {
