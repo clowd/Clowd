@@ -298,7 +298,7 @@ namespace Clowd
         }
         private void CloseCommand(object sender, ExecutedRoutedEventArgs e)
         {
-            Window.GetWindow(this).Close();
+            Window.GetWindow(this)?.Close();
         }
         private void SaveCommand(object sender, ExecutedRoutedEventArgs e)
         {
@@ -307,6 +307,7 @@ namespace Clowd
             string directory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             string defaultName = "screenshot";
             string extension = ".png";
+            // generate unique file name (screenshot1.png, screenshot2.png etc)
             if (File.Exists(System.IO.Path.Combine(directory, $"{defaultName}{extension}")))
             {
                 int i = 1;
