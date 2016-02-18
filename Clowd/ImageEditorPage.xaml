@@ -7,6 +7,7 @@
              xmlns:conv="clr-namespace:Clowd.Converters"
              xmlns:controls="clr-namespace:Clowd.Controls"
              xmlns:local="clr-namespace:Clowd"
+             xmlns:util="clr-namespace:Clowd.Utilities"
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
              mc:Ignorable="d" Background="Transparent"
              d:DesignHeight="300" d:DesignWidth="800">
@@ -251,7 +252,8 @@
                     <Rectangle Width="{Binding ActualWidth, ElementName=objectCanvas}"
                                Height="{Binding ActualHeight, ElementName=objectCanvas}">
                         <Rectangle.Fill>
-                            <DrawingBrush Stretch="None" TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute">
+                            <util:CheckeredBrush BlockSize="24" Foreground="{StaticResource AccentColorBrush4}" Background="White" />
+                            <!--<DrawingBrush Stretch="None" TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute">
                                 <DrawingBrush.Drawing>
                                     <DrawingGroup>
                                         <GeometryDrawing Brush="White">
@@ -269,7 +271,7 @@
                                         </GeometryDrawing>
                                     </DrawingGroup>
                                 </DrawingBrush.Drawing>
-                            </DrawingBrush>
+                            </DrawingBrush>-->
                         </Rectangle.Fill>
                     </Rectangle>
                     <Rectangle x:Name="artworkBounds" Fill="White" />

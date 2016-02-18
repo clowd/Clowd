@@ -727,7 +727,8 @@ namespace Clowd
         }
         private void OnWndProcMessageReceived(uint obj)
         {
-            if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED && Settings?.AccentScheme == AccentScheme.System)
+            if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED 
+                && Settings?.AccentScheme == AccentScheme.System)
             {
                 SetupAccentColors();
             }

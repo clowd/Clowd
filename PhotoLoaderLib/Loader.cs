@@ -9,7 +9,6 @@ namespace PhotoLoader
 {
     public static class Loader
     {
-
         [AttachedPropertyBrowsableForType(typeof(Image))]
         public static SourceType GetSourceType(Image obj)
         {
@@ -116,7 +115,5 @@ namespace PhotoLoader
         public static readonly DependencyProperty ErrorDetectedProperty =
             DependencyProperty.RegisterAttached("ErrorDetected", typeof(bool), typeof(Loader), new UIPropertyMetadata(false));
 
-        
-        
     }
 }
