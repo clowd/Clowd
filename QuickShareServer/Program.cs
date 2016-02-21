@@ -15,6 +15,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Clowd.Shared;
+using CS.Util;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 
@@ -97,7 +98,7 @@ namespace QuickShareServer
 
             CloudStorageAccount account = CloudStorageAccount.Parse(storageString);
             CloudBlobClient client = account.CreateCloudBlobClient();
-            
+
             //var blobServiceProperties = new Microsoft.WindowsAzure.Storage.Shared.Protocol.ServiceProperties()
             //{
             //    HourMetrics = null,
@@ -253,8 +254,7 @@ namespace QuickShareServer
 
             template.WindowTitle = upload.DisplayName;
             template.Views = upload.Views.ToString("N0");
-            using (var pretty = new PrettyTime.PrettyTime())
-                template.TimePassed = pretty.format(upload.UploadDate);
+            template.TimePassed = PrettyTime.Format(upload.UploadDate);
 
             var resp = RazorEngine.Razor.Parse(_templateHtml, template, "templateHtml");
             return HttpResponse.Html(resp);
