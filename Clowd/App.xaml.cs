@@ -12,8 +12,10 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Runtime.Remoting.Channels;
 using System.ServiceModel;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -35,8 +37,9 @@ namespace Clowd
         public AppSettings Settings { get; private set; }
         public string AppDataDirectory { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
 
+        // static instead of const for debugging purposes.
+        public static string ClowdServerDomain { get; private set; } = "clowd.ca"; 
         public const string ClowdAppName = "Clowd";
-        public const string ClowdServerDomain = "clowd.ca";
         public const string ClowdNamedPipe = "ClowdRunningPipe";
         public const string ClowdMutex = "ClowdMutex000";
 
@@ -134,6 +137,23 @@ namespace Clowd
                 // we know there is another Clowd instance running (or uninstaller) and we should close.
                 ex.ToExceptionless().Submit();
                 Environment.Exit(1);
+            }
+
+            // if running from a debug location, offer prompt to target remote or local clowd server.
+            if (Debugger.IsAttached ||
+                Regex.IsMatch(Assembly.GetExecutingAssembly().Location, 
+                @"^(.*)bin\\(Debug|Release)\\Clowd\.exe$",
+                RegexOptions.IgnoreCase))
+            {
+                var config = new TaskDialogOptions();
+                config.Title = "Clowd";
+                config.MainInstruction = "Clowd running in debug mode.";
+                config.Content = "Choose to target either a local or remote server location.";
+                config.CustomButtons = new[] {"Remote (clowd.ca)", "Local"};
+                config.MainIcon = VistaTaskDialogIcon.Information;
+                var result = TaskDialog.Show(config);
+                if (result.CustomButtonResult == 1)
+                    ClowdServerDomain = "localhost";
             }
 
             SetupServiceHost();
