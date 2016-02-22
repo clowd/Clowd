@@ -4,7 +4,7 @@ using Mindscape.LightSpeed;
 using Mindscape.LightSpeed.Validation;
 using Mindscape.LightSpeed.Linq;
 
-namespace QuickShareServer
+namespace ClowdSvc
 {
   [Serializable]
   [System.CodeDom.Compiler.GeneratedCode("LightSpeedModelGenerator", "1.0.0.0")]
