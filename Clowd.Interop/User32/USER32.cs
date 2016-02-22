@@ -27,6 +27,9 @@ namespace Clowd.Interop
         public static extern bool SetForegroundWindow(IntPtr hWnd);
 
         [DllImport("user32.dll")]
+        public static extern IntPtr SetActiveWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
         public static extern bool IsZoomed(IntPtr hWnd);
 
         [DllImport("user32.dll", CharSet = CharSet.None, ExactSpelling = false)]
@@ -73,6 +76,10 @@ namespace Clowd.Interop
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetScrollInfo(IntPtr hwnd, int fnBar, ref SCROLLINFO lpsi);
 
         /// <summary>
         /// Retrieves the show state and the restored, minimized, and maximized positions of the specified window.
@@ -534,5 +541,25 @@ namespace Clowd.Interop
         /// A set of flags that represent attributes of the display monitor.
         /// </summary>
         public uint dwFlags;
+    }
+    [Serializable, StructLayout(LayoutKind.Sequential)]
+    public struct SCROLLINFO
+    {
+        public uint cbSize;
+        public uint fMask;
+        public int nMin;
+        public int nMax;
+        public uint nPage;
+        public int nPos;
+        public int nTrackPos;
+    }
+    public enum ScrollInfoMask : uint
+    {
+        SIF_RANGE = 0x1,
+        SIF_PAGE = 0x2,
+        SIF_POS = 0x4,
+        SIF_DISABLENOSCROLL = 0x8,
+        SIF_TRACKPOS = 0x10,
+        SIF_ALL = SIF_RANGE | SIF_PAGE | SIF_POS | SIF_TRACKPOS
     }
 }
