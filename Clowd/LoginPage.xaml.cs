@@ -27,30 +27,23 @@ namespace Clowd
             this.Loaded += LoginPage_Loaded;
         }
         public LoginPage(AuthResult result, string username)
-            : base()
         {
+            InitializeComponent();
             textUsername.Text = username;
             prevResult = result;
-
+            this.Loaded += LoginPage_Loaded;
         }
 
         private void LoginPage_Loaded(object sender, RoutedEventArgs e)
         {
-            Keyboard.Focus(textUsername);
             if (prevResult != null)
             {
-                var window = Window.GetWindow(this);
                 if (prevResult == AuthResult.InvalidCredentials)
-                {
-                    this.invalidText.Text = "Invalid Username/Password";
-                }
+                    ShowError("Invalid username or password.");
                 else if (prevResult == AuthResult.NetworkError)
-                {
-                    this.invalidText.Text = "Network Error";
-                }
-                this.invalidIndicator.Visibility = Visibility.Visible;
-                Keyboard.Focus(textUsername);
+                    ShowError("Network error - try again later.");
             }
+            RefocusKeyboard();
         }
 
         private void useAnon_Click(object sender, MouseButtonEventArgs e)
@@ -70,6 +63,17 @@ namespace Clowd
 
         private async void LoginExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (String.IsNullOrWhiteSpace(textUsername.Text))
+            {
+                ShowError("Username can not be empty");
+                return;
+            }
+            if (textPassword.SecurePassword.Length <= 0)
+            {
+                ShowError("Password can not be empty");
+                return;
+            }
+
             var window = Window.GetWindow(this);
             TemplatedWindow.SetContentToSpinner(window);
             AuthResult result;
@@ -86,19 +90,31 @@ namespace Clowd
                 }
                 else if (result == AuthResult.InvalidCredentials)
                 {
-                    this.invalidText.Text = "Invalid Username/Password";
                     TemplatedWindow.SetContent(window, this);
-                    this.invalidIndicator.Visibility = Visibility.Visible;
-                    Keyboard.Focus(textUsername);
+                    ShowError("Invalid username or password.");
                 }
                 else if (result == AuthResult.NetworkError)
                 {
-                    this.invalidText.Text = "Network Error";
                     TemplatedWindow.SetContent(window, this);
-                    this.invalidIndicator.Visibility = Visibility.Visible;
-                    Keyboard.Focus(textUsername);
+                    ShowError("Network error - try again later.");
                 }
             }
+        }
+
+        private void ShowError(string message)
+        {
+            this.invalidIndicator.Visibility = Visibility.Hidden;
+            this.invalidText.Text = message;
+            this.invalidIndicator.Visibility = Visibility.Visible;
+            RefocusKeyboard();
+        }
+
+        private void RefocusKeyboard()
+        {
+            if (String.IsNullOrEmpty(textUsername.Text))
+                Keyboard.Focus(textUsername);
+            else
+                Keyboard.Focus(textPassword);
         }
     }
 }

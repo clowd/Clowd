@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Clowd.Shared;
 
-namespace Clowd.Server
+namespace Clowd.Server.Util
 {
     public class PacketHandlerFactory
     {

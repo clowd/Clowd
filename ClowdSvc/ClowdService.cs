@@ -75,9 +75,10 @@ namespace Clowd.Server
 
             HttpServerOptions hso = new HttpServerOptions();
             hso.AddEndpoint("default", conf.ListenIP, conf.HttpPort);
-            hso.CertificatePath = "clowd.pfx";
+            //hso.CertificatePath = "clowd.pfx";
             _httpServer = new HttpServer(hso);
-            _httpServer.PropagateExceptions = true;
+            if (Debugger.IsAttached)
+                _httpServer.PropagateExceptions = true;
 
             UrlMapping uploadHook = new UrlMapping(HandleUploadRequest, null, conf.HttpPort, "/u", false, false, false);
             UrlMapping directHook = new UrlMapping(HandleDirectRequest, null, conf.HttpPort, "/d", false, false, false);
@@ -87,7 +88,6 @@ namespace Clowd.Server
 
             _cancellationSource = new CancellationTokenSource();
 
-            //todo: fix this
             _templateHtml = File.ReadAllText("template.html");
             RazorEngine.Razor.Compile(_templateHtml, typeof(RazorUploadTemplate), "templateHtml");
             LogTo.Info("Razor template compiled successfully");
@@ -95,10 +95,9 @@ namespace Clowd.Server
             if (_httpServer.PropagateExceptions)
                 LogTo.Warn("Http server PropagateExceptions = true");
 
-            //TODO: do stuff!!
             _tcpServer = new TcpListener(IPAddress.Any, conf.ServicePort);
-            ListenForTcpClients(_tcpServer, _cancellationSource.Token);
             _tcpServer.Start();
+            var task = ListenForTcpClients(_tcpServer, _cancellationSource.Token);
             LogTo.Info("TCP listening on port " + conf.ServicePort);
 
             _httpServer.StartListening(false);
@@ -106,12 +105,12 @@ namespace Clowd.Server
             LogTo.Info("Ready");
             return true;
         }
-
         public bool Stop(HostControl hostControl)
         {
             LogTo.Warn("Starting Shutdown (requested)");
             _cancellationSource.Cancel();
             _httpServer.StopListening(blocking: true);
+            _tcpServer.Stop();
             return true;
         }
 
@@ -173,7 +172,6 @@ namespace Clowd.Server
         {
             return HttpResponse.Create("501 Not Implemented", "text/plain", RT.Servers.HttpStatusCode._501_NotImplemented);
         }
-
         private HttpResponse HandleUploadRequest(HttpRequest req)
         {
             string key = req.Url.Path.Trim('/');
@@ -221,6 +219,7 @@ namespace Clowd.Server
             var resp = RazorEngine.Razor.Parse(_templateHtml, template, "templateHtml");
             return HttpResponse.Html(resp);
         }
+
         private async Task ListenForTcpClients(TcpListener server, CancellationToken token)
         {
             while (!token.IsCancellationRequested)
