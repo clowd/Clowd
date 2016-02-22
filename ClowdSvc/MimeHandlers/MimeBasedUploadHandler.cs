@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ClowdSvc
+namespace Clowd.Server
 {
     public class MimeBasedUploadHandler
     {

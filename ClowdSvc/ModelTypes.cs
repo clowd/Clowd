@@ -4,15 +4,21 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ClowdSvc
+namespace Clowd.Server
 {
-    public class ModelUserDefinedTypes
+    public class ModelTypes
     {
         public enum SubscriptionType
         {
             Free  = 1,
             Pro = 2,
             Lifetime = 3
+        }
+
+        public enum AzureContainer
+        {
+            Private = 1,
+            Public = 2,
         }
     }
 }

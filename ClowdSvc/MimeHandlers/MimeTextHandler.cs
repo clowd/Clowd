@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ClowdSvc
+namespace Clowd.Server
 {
     public class MimeTextHandler : IMimeTypeHandler
     {
@@ -27,16 +27,8 @@ namespace ClowdSvc
 
         public void PopulateRazorTemplate(string mimeType, string displayName, RazorUploadTemplate template, CloudBlockBlob blob)
         {
-            var accessPolicy = new SharedAccessBlobPolicy()
-            {
-                Permissions = SharedAccessBlobPermissions.Read,
-                SharedAccessExpiryTime = DateTime.UtcNow.AddHours(1),
-                SharedAccessStartTime = DateTime.UtcNow.AddMinutes(-5)
-            };
-            string sasBlobToken = blob.GetSharedAccessSignature(accessPolicy);
-
+            string directSrc = blob.GetPublicAccessUrl();
             template.Type = "Text Upload";
-            string directSrc = "http://" + Program.AzureBlobEndpoint + blob.Uri.AbsolutePath + sasBlobToken;
             template.HtmlContent = "<pre><code class=\"result\"></code></pre>";
             template.HtmlAfterHead = "<link href='http://cdnjs.cloudflare.com/ajax/libs/highlight.js/8.7/styles/default.min.css' rel='stylesheet' type='text/css'>";
             template.HtmlAfterBody = "<script type='text/javascript' src='http://cdnjs.cloudflare.com/ajax/libs/highlight.js/8.7/highlight.min.js'></script>\n";

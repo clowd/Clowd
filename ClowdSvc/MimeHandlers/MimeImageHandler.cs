@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ClowdSvc
+namespace Clowd.Server
 {
     public class MimeImageHandler : IMimeTypeHandler
     {
@@ -30,7 +30,7 @@ namespace ClowdSvc
                 using (var thumb = img.GetThumbnailImage(150, 150, () => false, IntPtr.Zero))
                 {
                     thumb.Save(tmpStream, System.Drawing.Imaging.ImageFormat.Jpeg);
-                    var prevBlob = Program.AzureUploadBlobContainer.GetBlockBlobReference(blob.Name + "/thumb");
+                    var prevBlob = blob.Container.GetBlockBlobReference(blob.Name + "/thumb");
                     tmpStream.Position = 0;
                     prevBlob.UploadFromStream(tmpStream);
                     prevBlob.Properties.ContentType = "image/jpeg";
@@ -44,7 +44,7 @@ namespace ClowdSvc
                     using (var preview = CreatePreviewImage(img))
                     {
                         preview.Save(prevMs, System.Drawing.Imaging.ImageFormat.Jpeg);
-                        var prevBlob = Program.AzureUploadBlobContainer.GetBlockBlobReference(blob.Name + "/preview");
+                        var prevBlob = blob.Container.GetBlockBlobReference(blob.Name + "/preview");
                         prevMs.Position = 0;
                         prevBlob.UploadFromStream(prevMs);
                         prevBlob.Properties.ContentType = "image/jpeg";
@@ -59,14 +59,7 @@ namespace ClowdSvc
 
         public void PopulateRazorTemplate(string mimeType, string displayName, RazorUploadTemplate template, CloudBlockBlob blob)
         {
-            var accessPolicy = new SharedAccessBlobPolicy()
-            {
-                Permissions = SharedAccessBlobPermissions.Read,
-                SharedAccessExpiryTime = DateTime.UtcNow.AddHours(4),
-                SharedAccessStartTime = DateTime.UtcNow.AddMinutes(-5)
-            };
-            string sasBlobToken = blob.GetSharedAccessSignature(accessPolicy);
-            string directSrc = "http://" + Program.AzureBlobEndpoint + blob.Uri.AbsolutePath + sasBlobToken;
+            string directSrc = blob.GetPublicAccessUrl(validFor: TimeSpan.FromHours(3));
 
             template.Type = "Image Upload";
             bool fancyBox = false;
@@ -77,10 +70,11 @@ namespace ClowdSvc
                 fancyBox = Convert.ToInt32(metaData["dimensions"].Split('x')[0]) > MaxImageWidth; // if width is over max
             if (metaData.ContainsKey("preview"))
             {
-                preview = "http://" + Program.AzureBlobEndpoint + metaData["preview"];
+                //preview = "http://" + Program.AzureBlobEndpoint + metaData["preview"];
                 string blobName = String.Join("/", metaData["preview"].TrimStart('/').Split('/').Skip(1));
-                var previewBlob = Program.AzureUploadBlobContainer.GetBlobReference(blobName);
-                preview = preview + previewBlob.GetSharedAccessSignature(accessPolicy);
+                var previewBlob = blob.Container.GetBlockBlobReference(blobName);
+                //preview = preview + previewBlob.GetSharedAccessSignature(accessPolicy);
+                preview = previewBlob.GetPublicAccessUrl();
             }
             template.DownloadLink = directSrc;
             template.HtmlContent = "<div style=\"text-align: center;\"><img style=\"max-width:100%;\" ";

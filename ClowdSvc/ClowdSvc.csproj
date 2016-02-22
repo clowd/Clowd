@@ -7,7 +7,7 @@
     <ProjectGuid>{3EBE40C9-1F6F-4375-B87C-39CC7FA3C37C}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>ClowdSvc</RootNamespace>
+    <RootNamespace>Clowd.Server</RootNamespace>
     <AssemblyName>ClowdSvc</AssemblyName>
     <TargetFrameworkVersion>v4.5.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -115,6 +115,7 @@
       <HintPath>..\lib\RT.Util.dll</HintPath>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Runtime.Caching" />
@@ -144,8 +145,14 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AzureStorageClient.cs" />
     <Compile Include="Client.cs" />
-    <Compile Include="ConsoleInputLogger.cs" />
+    <Compile Include="ClowdService.cs" />
+    <Compile Include="Config\AzureEndpointSection.cs" />
+    <Compile Include="Config\ClowdConfigSection.cs" />
+    <Compile Include="MimeHandlers\MimeHelper.cs" />
+    <Compile Include="ModelTypes.cs" />
+    <Compile Include="Util\Extensions.cs" />
     <Content Include="feed.aspx">
       <SubType>ASPXCodeBehind</SubType>
     </Content>
@@ -153,30 +160,29 @@
     <Compile Include="MimeHandlers\MimeFileHandler.cs" />
     <Compile Include="MimeHandlers\MimeTextHandler.cs" />
     <Compile Include="MimeHandlers\IMimeTypeHandler.cs" />
-    <Compile Include="ModelUserDefinedTypes.cs" />
     <Compile Include="MultiStream.cs" />
     <Compile Include="PacketHandlerFactory.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="QuickShareModel.cs">
+    <Compile Include="DatabaseModel.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
-      <DependentUpon>QuickShareModel.lsmodel</DependentUpon>
+      <DependentUpon>DatabaseModel.lsmodel</DependentUpon>
     </Compile>
-    <Compile Include="QuickShareServer.cs" />
     <Compile Include="RazorUploadTemplate.cs" />
-    <Compile Include="ThumbnailProvider.cs" />
     <Compile Include="MimeHandlers\MimeBasedUploadHandler.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="clowd.pfx" />
+    <None Include="mime.types" />
     <None Include="packages.config" />
-    <None Include="QuickShareModel.lsmodel">
+    <None Include="DatabaseModel.lsmodel">
       <Generator>LightSpeedModelGenerator</Generator>
-      <LastGenOutput>QuickShareModel.cs</LastGenOutput>
+      <LastGenOutput>DatabaseModel.cs</LastGenOutput>
     </None>
-    <None Include="QuickShareModel.lsmodel.diagram">
-      <DependentUpon>QuickShareModel.lsmodel</DependentUpon>
+    <None Include="DatabaseModel.lsmodel.diagram">
+      <DependentUpon>DatabaseModel.lsmodel</DependentUpon>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -188,9 +194,6 @@
   <ItemGroup>
     <Content Include="FodyWeavers.xml" />
     <Content Include="template.html">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="mimelist.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

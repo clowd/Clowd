@@ -4,7 +4,7 @@ using Mindscape.LightSpeed;
 using Mindscape.LightSpeed.Validation;
 using Mindscape.LightSpeed.Linq;
 
-namespace ClowdSvc
+namespace Clowd.Server
 {
   [Serializable]
   [System.CodeDom.Compiler.GeneratedCode("LightSpeedModelGenerator", "1.0.0.0")]
@@ -24,6 +24,8 @@ namespace ClowdSvc
     private string _mimeType;
     private string _storageKey;
     private System.Nullable<System.DateTime> _validUntil;
+    [ValueField]
+    private ModelTypes.AzureContainer _container;
     private System.Nullable<long> _ownerId;
     #pragma warning restore 169
 
@@ -49,6 +51,8 @@ namespace ClowdSvc
     public const string StorageKeyField = "StorageKey";
     /// <summary>Identifies the ValidUntil entity attribute.</summary>
     public const string ValidUntilField = "ValidUntil";
+    /// <summary>Identifies the Container entity attribute.</summary>
+    public const string ContainerField = "Container";
     /// <summary>Identifies the OwnerId entity attribute.</summary>
     public const string OwnerIdField = "OwnerId";
 
@@ -136,6 +140,13 @@ namespace ClowdSvc
       set { Set(ref _validUntil, value, "ValidUntil"); }
     }
 
+    [System.Diagnostics.DebuggerNonUserCode]
+    public ModelTypes.AzureContainer Container
+    {
+      get { return Get(ref _container, "Container"); }
+      set { Set(ref _container, value, "Container"); }
+    }
+
     /// <summary>Gets or sets the ID for the <see cref="Owner" /> property.</summary>
     [System.Diagnostics.DebuggerNonUserCode]
     public System.Nullable<long> OwnerId
@@ -161,7 +172,7 @@ namespace ClowdSvc
     private string _password;
     private string _salt;
     [ValueField]
-    private ModelUserDefinedTypes.SubscriptionType _subscription;
+    private ModelTypes.SubscriptionType _subscription;
     private System.DateTime _subscriptionPeriod;
     private System.DateTime _createdDate;
     private string _email;
@@ -228,7 +239,7 @@ namespace ClowdSvc
     }
 
     [System.Diagnostics.DebuggerNonUserCode]
-    public ModelUserDefinedTypes.SubscriptionType Subscription
+    public ModelTypes.SubscriptionType Subscription
     {
       get { return Get(ref _subscription, "Subscription"); }
       set { Set(ref _subscription, value, "Subscription"); }
@@ -262,10 +273,10 @@ namespace ClowdSvc
 
 
   /// <summary>
-  /// Provides a strong-typed unit of work for working with the QuickShareModel model.
+  /// Provides a strong-typed unit of work for working with the DatabaseModel model.
   /// </summary>
   [System.CodeDom.Compiler.GeneratedCode("LightSpeedModelGenerator", "1.0.0.0")]
-  public partial class QuickShareModelUnitOfWork : Mindscape.LightSpeed.UnitOfWork
+  public partial class DatabaseModelUnitOfWork : Mindscape.LightSpeed.UnitOfWork
   {
 
     public System.Linq.IQueryable<Upload> Uploads

@@ -12,18 +12,20 @@ using RT.Util;
 using RT.Util.ExtensionMethods;
 using RT.Util.Streams;
 using System.Runtime.Caching;
+using Anotar.NLog;
 using Clowd.Shared;
+using CS.Util;
 using Microsoft.WindowsAzure.Storage.Blob;
 
-namespace ClowdSvc
+namespace Clowd.Server
 {
     public class Client
     {
         private TcpClient _tcp;
         private CancellationToken _token;
         private const string contentHeader = "CONTENT-LENGTH";
-        private LightSpeedContext<QuickShareModelUnitOfWork> _dbContext;
-        private QuickShareModelUnitOfWork _uow;
+        private LightSpeedContext<DatabaseModelUnitOfWork> _dbContext;
+        private DatabaseModelUnitOfWork _uow;
         private bool _validConnection = false;
         private string _nextPacket = null;
         private string _remoteIP = null;
@@ -31,18 +33,20 @@ namespace ClowdSvc
         private User _user;
         private string _tempAuthStr = null;
         private User _tempAuthUsr = null;
+        private ServiceContext _svcContext;
 
         private static List<UploadContext> _uploadsInProgress = new List<UploadContext>();
         private static MemoryCache _sessionCache = new MemoryCache("sessionCache");
 
-        public Client(TcpClient tcp, CancellationToken token, LightSpeedContext<QuickShareModelUnitOfWork> context)
+        public Client(TcpClient tcp, ServiceContext context)
         {
             _tcp = tcp;
-            _token = token;
-            _dbContext = context;
+            _svcContext = context;
+            _token = context.Token;
+            _dbContext = context.Database;
             _remoteIP = ((IPEndPoint)tcp.Client.RemoteEndPoint).Address.ToString();
             _validConnection = true;
-            Program.Log.Info(2, _remoteIP + ": Client Connected");
+            LogTo.Info(_remoteIP + ": Client Connected");
 
             var handlePacket = PacketHandlerFactory.InitializeHandlerForObject(this);
             Action<Packet> inm = (p) =>
@@ -74,7 +78,7 @@ namespace ClowdSvc
                 var ex = read.Exception;
                 _tcp.Close();
                 _uow.Dispose();
-                Program.Log.Info(2, _remoteIP + ": Client Disconnected");
+                LogTo.Info(_remoteIP + ": Client Disconnected");
             });
         }
 
@@ -101,7 +105,7 @@ namespace ClowdSvc
                 if (_user != null && _user != getuser)
                     throw new InvalidOperationException("User tried to authenticate as two different users in the same session.");
 
-                Program.Log.Info(2, _remoteIP + $": Authenticated as: {getuser.Username}");
+                LogTo.Info(_remoteIP + $": Authenticated as: {getuser.Username}");
                 _user = getuser;
             }
             var pr = new Packet { Command = "SESSIONCKRESP" };
@@ -122,7 +126,7 @@ namespace ClowdSvc
             var usr = _uow.Users.SingleOrDefault(u => u.Username.ToUpper() == p.Payload.ToUpper());
             if (usr == null)
             {
-                Program.Log.Info(_remoteIP + $": Failed LOGIN: {p.Payload}, no such user");
+                LogTo.Info(_remoteIP + $": Failed LOGIN: {p.Payload}, no such user");
                 resp.Headers.Add("error", "no user");
                 Write(resp);
                 return;
@@ -159,11 +163,11 @@ namespace ClowdSvc
                 resp.Headers["subscription"] = ((int)_user.Subscription).ToString();
                 resp.Headers["uploads"] = _user.Uploads.Count().ToString();
                 Write(resp);
-                Program.Log.Info(2, _remoteIP + $": Logged in as: {_tempAuthUsr.Username}");
+                LogTo.Info(_remoteIP + $": Logged in as: {_tempAuthUsr.Username}");
             }
             else
             {
-                Program.Log.Info(_remoteIP + $": Failed AUTH: {_tempAuthUsr.Username}, incorrect password");
+                LogTo.Info(_remoteIP + $": Failed AUTH: {_tempAuthUsr.Username}, incorrect password");
                 resp.Headers.Add("error", "invalid password");
                 Write(resp);
             }
@@ -195,13 +199,12 @@ namespace ClowdSvc
                 count = Math.Min(ExactConvert.To<int>(p.Headers["count"]), 50);
 
 
-
             var uploads = from up in _user.Uploads.OrderByDescending(up => up.UploadDate).Skip(offset).Take(count)
                           let displaykey = up.Id.ToArbitraryBase(36)
                           select new UploadDTO()
                           {
                               Key = displaykey,
-                              Url = $"http://{Program.ExternalHost}/u/{displaykey}",
+                              Url = $"http://{_svcContext.Config.ExternalEndpoint}/u/{displaykey}",
                               //PreviewImgUrl = $"http://{Program.ExternalHost}/d/{displaykey}?preview=",
                               Hidden = up.Hidden,
                               DisplayName = up.DisplayName,
@@ -250,7 +253,9 @@ namespace ClowdSvc
                 upload.DisplayName = displayName;
 
             string azureKey = RandomEx.GetCryptoUniqueString(32);
-            CloudBlockBlob blockUpload = Program.AzureUploadBlobContainer.GetBlockBlobReference(azureKey);
+            
+            CloudBlockBlob blockUpload = AzureStorageClient.Current[ModelTypes.AzureContainer.Private]
+                .GetBlockBlobReference(azureKey);
             upload.StorageKey = azureKey;
             blockUpload.Properties.ContentDisposition = "attachment; filename=" + upload.DisplayName;
             blockUpload.Properties.ContentType = mimetype;
@@ -270,11 +275,11 @@ namespace ClowdSvc
                 _uploadsInProgress.Add(contx);
                 _context = contx;
                 _nextPacket = "CHUNK";
-                Program.Log.Info(2, _remoteIP + ": (" + displayKey + ") File upload in progress");
+                LogTo.Debug(_remoteIP + ": (" + displayKey + ") File upload in progress");
                 Packet re = new Packet { Command = "CONTINUE" };
                 re.Headers.Add("display-name", upload.DisplayName);
                 re.Headers.Add("display-key", displayKey);
-                re.Payload = "http://" + Program.ExternalHost + "/u/" + displayKey;
+                re.Payload = "http://" + _svcContext.Config.ExternalEndpoint + "/u/" + displayKey;
                 Write(re);
             }
             else
@@ -287,12 +292,12 @@ namespace ClowdSvc
                 resp.Command = "COMPLETE";
                 resp.Headers.Add("display-name", upload.DisplayName);
                 resp.Headers.Add("display-key", displayKey);
-                resp.Payload = String.Format("http://{0}/{1}/{2}", Program.ExternalHost, direct ? "d" : "u", upload.Id.ToArbitraryBase(36));
+                resp.Payload = String.Format("http://{0}/{1}/{2}", _svcContext.Config.ExternalEndpoint, direct ? "d" : "u", upload.Id.ToArbitraryBase(36));
                 if (_user != null)
                     _user.Uploads.Add(upload);
                 _uow.SaveChanges();
                 Write(resp);
-                Program.Log.Info(_remoteIP + ": (" + displayKey + ") New file uploaded.");
+                LogTo.Info(_remoteIP + ": (" + displayKey + ") New file uploaded.");
                 MimeBasedUploadHandler.FinalizeUploadMetadata(upload.MimeType, upload.DisplayName, content, blockUpload, true);
             }
         }
@@ -308,7 +313,7 @@ namespace ClowdSvc
 
             var last = ExactConvert.To<bool>(p.Headers["last"]);
 
-            Program.Log.Info(3, _remoteIP + ": (" + _context.DbObject.Id.ToArbitraryBase(36) + ") File upload in progress");
+            LogTo.Trace(_remoteIP + ": (" + _context.DbObject.Id.ToArbitraryBase(36) + ") File upload in progress");
 
             if (!last) // if not last chunk
             {
@@ -330,12 +335,12 @@ namespace ClowdSvc
                 resp.Command = "COMPLETE";
                 resp.Headers.Add("display-name", _context.DbObject.DisplayName);
                 resp.Headers.Add("display-key", displayKey);
-                resp.Payload = String.Format("http://{0}/{1}/{2}", Program.ExternalHost, _context.Direct ? "d" : "u", displayKey);
+                resp.Payload = String.Format("http://{0}/{1}/{2}", _svcContext.Config.ExternalEndpoint, _context.Direct ? "d" : "u", displayKey);
                 if (_user != null)
                     _user.Uploads.Add(_context.DbObject);
                 _uow.SaveChanges();
                 Write(resp);
-                Program.Log.Info(_remoteIP + ": (" + displayKey + ") New file uploaded.");
+                LogTo.Debug(_remoteIP + ": (" + displayKey + ") New file uploaded.");
                 MimeBasedUploadHandler.FinalizeUploadMetadata(_context.DbObject.MimeType, _context.DbObject.DisplayName, content, _context.AzureBlob, true);
                 _uploadsInProgress.Remove(_context);
                 _context = null;
@@ -354,7 +359,7 @@ namespace ClowdSvc
             Write(err, false);
             if (logError)
             {
-                Program.Log.Warn(_remoteIP + ": Error - " + error);
+                LogTo.Warn(_remoteIP + ": Error - " + error);
             }
             if (_context != null && _uploadsInProgress.Contains(_context))
             {
@@ -375,7 +380,7 @@ namespace ClowdSvc
             catch (Exception e)
             {
                 if (logException)
-                    Program.Log.Warn(_remoteIP + ": Write Exception - " + e.Message);
+                    LogTo.Warn(_remoteIP + ": Write Exception - " + e.Message);
                 _validConnection = false;
                 return false;
             }
