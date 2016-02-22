@@ -15,7 +15,7 @@ using System.Runtime.Caching;
 using Clowd.Shared;
 using Microsoft.WindowsAzure.Storage.Blob;
 
-namespace QuickShareServer
+namespace ClowdSvc
 {
     public class Client
     {

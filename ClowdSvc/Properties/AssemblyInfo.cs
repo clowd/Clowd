@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("QuickShareServer")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("ClowdSvc")]
+[assembly: AssemblyDescription("Clowd service host")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("Caesa Consulting Ltd.")]
 [assembly: AssemblyProduct("QuickShareServer")]
-[assembly: AssemblyCopyright("Copyright ©  2014")]
+[assembly: AssemblyCopyright("Copyright © Caesa Consulting Ltd. 2016")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
