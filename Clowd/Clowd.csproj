@@ -124,7 +124,9 @@
     <Compile Include="Utilities\ButtonClickContextBehavior.cs" />
     <Compile Include="Utilities\ICommandLineProxy.cs" />
     <Compile Include="Utilities\RelayCommand.cs" />
+    <Compile Include="Utilities\ScrollingCapture.cs" />
     <Compile Include="Utilities\TrulyObservableCollection.cs" />
+    <Compile Include="Utilities\UnsafeBitmap.cs" />
     <Compile Include="Utilities\WindowFinder.cs" />
     <Compile Include="Controls\FadingScrollViewer.cs" />
     <Compile Include="Controls\OutlinedText.cs" />
