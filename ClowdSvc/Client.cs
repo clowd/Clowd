@@ -13,6 +13,7 @@ using RT.Util.ExtensionMethods;
 using RT.Util.Streams;
 using System.Runtime.Caching;
 using Anotar.NLog;
+using Clowd.Server.Util;
 using Clowd.Shared;
 using CS.Util;
 using Microsoft.WindowsAzure.Storage.Blob;
@@ -204,7 +205,7 @@ namespace Clowd.Server
                           select new UploadDTO()
                           {
                               Key = displaykey,
-                              Url = $"http://{_svcContext.Config.ExternalEndpoint}/u/{displaykey}",
+                              Url = $"{_svcContext.Config.ExternalEndpoint}/u/{displaykey}",
                               //PreviewImgUrl = $"http://{Program.ExternalHost}/d/{displaykey}?preview=",
                               Hidden = up.Hidden,
                               DisplayName = up.DisplayName,
@@ -235,6 +236,7 @@ namespace Clowd.Server
             bool hidden = p.Headers.ContainsKey("direct") && ExactConvert.To<bool>(p.Headers["direct"]);
             string displayName = p.Headers["display-name"];
             string mimetype = System.Web.MimeMapping.GetMimeMapping(displayName);
+            //string mimetype = MimeHandlers.MimeHelper.GetMimeType()
             upload.Hidden = hidden;
             upload.LastAccessed = DateTime.Now;
             upload.UploadDate = DateTime.Now;
@@ -253,11 +255,13 @@ namespace Clowd.Server
                 upload.DisplayName = displayName;
 
             string azureKey = RandomEx.GetCryptoUniqueString(32);
-            
-            CloudBlockBlob blockUpload = AzureStorageClient.Current[ModelTypes.AzureContainer.Private]
+
+            ModelTypes.AzureContainer container = ModelTypes.AzureContainer.Private;
+            upload.Container = container;
+            CloudBlockBlob blockUpload = AzureStorageClient.Current[container]
                 .GetBlockBlobReference(azureKey);
             upload.StorageKey = azureKey;
-            blockUpload.Properties.ContentDisposition = "attachment; filename=" + upload.DisplayName;
+            //blockUpload.Properties.ContentDisposition = "attachment; filename=" + upload.DisplayName;
             blockUpload.Properties.ContentType = mimetype;
             if (p.Headers.ContainsKey("partitioned") && ExactConvert.To<bool>(p.Headers["partitioned"]))
             {
@@ -279,7 +283,7 @@ namespace Clowd.Server
                 Packet re = new Packet { Command = "CONTINUE" };
                 re.Headers.Add("display-name", upload.DisplayName);
                 re.Headers.Add("display-key", displayKey);
-                re.Payload = "http://" + _svcContext.Config.ExternalEndpoint + "/u/" + displayKey;
+                re.Payload = _svcContext.Config.ExternalEndpoint + "/u/" + displayKey;
                 Write(re);
             }
             else
@@ -292,7 +296,7 @@ namespace Clowd.Server
                 resp.Command = "COMPLETE";
                 resp.Headers.Add("display-name", upload.DisplayName);
                 resp.Headers.Add("display-key", displayKey);
-                resp.Payload = String.Format("http://{0}/{1}/{2}", _svcContext.Config.ExternalEndpoint, direct ? "d" : "u", upload.Id.ToArbitraryBase(36));
+                resp.Payload = String.Format("{0}/{1}/{2}", _svcContext.Config.ExternalEndpoint, direct ? "d" : "u", upload.Id.ToArbitraryBase(36));
                 if (_user != null)
                     _user.Uploads.Add(upload);
                 _uow.SaveChanges();
@@ -335,7 +339,7 @@ namespace Clowd.Server
                 resp.Command = "COMPLETE";
                 resp.Headers.Add("display-name", _context.DbObject.DisplayName);
                 resp.Headers.Add("display-key", displayKey);
-                resp.Payload = String.Format("http://{0}/{1}/{2}", _svcContext.Config.ExternalEndpoint, _context.Direct ? "d" : "u", displayKey);
+                resp.Payload = String.Format("{0}/{1}/{2}", _svcContext.Config.ExternalEndpoint, _context.Direct ? "d" : "u", displayKey);
                 if (_user != null)
                     _user.Uploads.Add(_context.DbObject);
                 _uow.SaveChanges();

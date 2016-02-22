@@ -88,7 +88,6 @@ namespace Clowd
         {
             foreach(Window wnd in Application.Current.Windows)
             {
-
                 var tcc = wnd.Content as Controls.TransitioningContentControl;
                 if(tcc != null)
                 {
