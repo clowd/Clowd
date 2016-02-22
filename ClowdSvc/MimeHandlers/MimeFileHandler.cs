@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RT.Util.ExtensionMethods;
 
-namespace QuickShareServer
+namespace ClowdSvc
 {
     public class MimeFileHandler : IMimeTypeHandler
     {

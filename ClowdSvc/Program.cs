@@ -19,7 +19,7 @@ using CS.Util;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 
-namespace QuickShareServer
+namespace ClowdSvc
 {
     public class Program
     {

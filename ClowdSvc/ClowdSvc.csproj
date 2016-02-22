@@ -7,8 +7,8 @@
     <ProjectGuid>{3EBE40C9-1F6F-4375-B87C-39CC7FA3C37C}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>QuickShareServer</RootNamespace>
-    <AssemblyName>QuickShareServer</AssemblyName>
+    <RootNamespace>ClowdSvc</RootNamespace>
+    <AssemblyName>ClowdSvc</AssemblyName>
     <TargetFrameworkVersion>v4.5.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />

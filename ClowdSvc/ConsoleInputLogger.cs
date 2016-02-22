@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using RT.Util;
 using RT.Util.Consoles;
 
-namespace QuickShareServer
+namespace ClowdSvc
 {
     /// <summary>
     /// Implements a logger which is an extension to <see cref="ConsoleLogger"/>. Outputs messages to the console, word-wraps

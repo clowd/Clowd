@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<model xmlns:dm0="http://schemas.microsoft.com/VisualStudio/2008/DslTools/Core" dslVersion="1.1.0.0" name="QuickShareModel" targetNamespace="QuickShareServer" databaseProvider="SqlServer2005" connectionString="Server=tcp:tmot89649z.database.windows.net,1433;Database=QuickShareDatabase;User ID=caesay@tmot89649z;Password=He9pat4a;Trusted_Connection=False;Encrypt=True;Connection Timeout=30;" pluralizedInDatabase="false" mediumTrustCompatibility="false" xmlns="http://namespaces.mindscape.co.nz/lightspeed">
+<model xmlns:dm0="http://schemas.microsoft.com/VisualStudio/2008/DslTools/Core" dslVersion="1.1.0.0" name="QuickShareModel" targetNamespace="ClowdSvc" databaseProvider="SqlServer2005" connectionString="Server=tcp:tmot89649z.database.windows.net,1433;Database=QuickShareDatabase;User ID=caesay@tmot89649z;Password=He9pat4a;Trusted_Connection=False;Encrypt=True;Connection Timeout=30;" pluralizedInDatabase="false" mediumTrustCompatibility="false" xmlns="http://namespaces.mindscape.co.nz/lightspeed">
   <entities>
     <entity name="Upload" identityType="Int64" cacheExpiry="0" tableName="Uploads">
       <entityProperties>

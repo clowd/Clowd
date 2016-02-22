@@ -4,7 +4,7 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.IO;
 
-namespace QuickShareServer.Thumbnail
+namespace ClowdSvc.Thumbnail
 {
     [Flags]
     public enum ThumbnailOptions
@@ -78,9 +78,9 @@ namespace QuickShareServer.Thumbnail
             AccessDenied = unchecked((int)0x80030005)
         }
 
-        [ComImportAttribute()]
-        [GuidAttribute("bcc18b79-ba16-442f-80c4-8a59c30c463b")]
-        [InterfaceTypeAttribute(ComInterfaceType.InterfaceIsIUnknown)]
+        [ComImport()]
+        [Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         internal interface IShellItemImageFactory
         {
             [PreserveSig]
