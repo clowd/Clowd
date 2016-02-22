@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RT.Util.ExtensionMethods;
 
-namespace ClowdSvc
+namespace Clowd.Server
 {
     public class MimeFileHandler : IMimeTypeHandler
     {
@@ -39,12 +39,10 @@ namespace ClowdSvc
                 SharedAccessStartTime = DateTime.UtcNow.AddMinutes(-5)
             };
 
-            string sasBlobToken = blob.GetSharedAccessSignature(accessPolicy, new SharedAccessBlobHeaders()
+            string directSrc = blob.GetPublicAccessUrl(new SharedAccessBlobHeaders()
             {
                 ContentDisposition = "attachment; filename=" + displayName
             });
-
-            string directSrc = "http://" + Program.AzureBlobEndpoint + blob.Uri.AbsolutePath + sasBlobToken;
             string extention = Path.GetExtension(displayName).Trim('.').ToUpper();
             //http://www.freeformatter.com/java-dotnet-escape.html
             string downloadHtml = String.Format("<div style=\"height: 100px; max-width:300px; margin:100px auto; text-align:center;\">\r\n<span class=\"text-muted\">{0}</span>\r\n<a href=\"{1}\" style=\"text-decoration: none;\">\r\n<div class=\"button\" style=\"height:50px;\">\r\n<div class=\"button-fill\" style=\"float:left; height:100%; width:50px;\">\r\n<span style=\"line-height:50px;\" class=\"fa fa-2x fa-download\"></span>\r\n</div>\r\n<span style=\"display:block; margin:7px 40px 0 0;\">\r\n<span style=\"font-weight: 600;\">Download File</span>\r\n<br />\r\n<span style=\"font-size:13px;\">{2}</span>\r\n</span>\r\n</div>\r\n</a>\r\n</div>"
