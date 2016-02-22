@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<model xmlns:dm0="http://schemas.microsoft.com/VisualStudio/2008/DslTools/Core" dslVersion="1.1.0.0" name="QuickShareModel" targetNamespace="ClowdSvc" databaseProvider="SqlServer2005" connectionString="Server=tcp:tmot89649z.database.windows.net,1433;Database=QuickShareDatabase;User ID=caesay@tmot89649z;Password=He9pat4a;Trusted_Connection=False;Encrypt=True;Connection Timeout=30;" pluralizedInDatabase="false" mediumTrustCompatibility="false" xmlns="http://namespaces.mindscape.co.nz/lightspeed">
+<model xmlns:dm0="http://schemas.microsoft.com/VisualStudio/2008/DslTools/Core" dslVersion="1.1.0.0" name="DatabaseModel" targetNamespace="Clowd.Server" databaseProvider="SqlServer2005" connectionString="Server=tcp:tmot89649z.database.windows.net,1433;Database=QuickShareDatabase;User ID=caesay@tmot89649z;Password=He9pat4a;Trusted_Connection=False;Encrypt=True;Connection Timeout=30;" pluralizedInDatabase="false" mediumTrustCompatibility="false" xmlns="http://namespaces.mindscape.co.nz/lightspeed">
   <entities>
     <entity name="Upload" identityType="Int64" cacheExpiry="0" tableName="Uploads">
       <entityProperties>
@@ -12,6 +12,7 @@
         <entityProperty name="MimeType" privateSetter="false" />
         <entityProperty name="StorageKey" privateSetter="false" />
         <entityProperty name="ValidUntil" dataType="DateTime" isNullable="true" privateSetter="false" />
+        <entityProperty name="Container" dataType="AzureContainer" privateSetter="false" />
       </entityProperties>
     </entity>
     <entity name="User" identityType="Int64" cacheExpiry="0" tableName="Users">
@@ -26,12 +27,13 @@
       </entityProperties>
       <oneToManyAssociations>
         <oneToManyAssociation Id="a5ee37b5-7937-4bec-90bf-c473abaf40f6" collectionName="Uploads" backreferenceName="Owner" isNullable="true">
-          <entityMoniker name="/QuickShareModel/Upload" />
+          <entityMoniker name="/DatabaseModel/Upload" />
         </oneToManyAssociation>
       </oneToManyAssociations>
     </entity>
   </entities>
   <userDefinedTypes>
-    <userDefinedType name="SubscriptionType" clrTypeName="ModelUserDefinedTypes.SubscriptionType" />
+    <userDefinedType name="SubscriptionType" clrTypeName="ModelTypes.SubscriptionType" />
+    <userDefinedType name="AzureContainer" clrTypeName="ModelTypes.AzureContainer" />
   </userDefinedTypes>
 </model>
