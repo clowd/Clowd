@@ -13,7 +13,7 @@ namespace Clowd.Controls
         public Style ThumbStyle { get; set; }
         // Resizing adorner uses Thumbs for visual elements.  
         // The Thumbs have built-in mouse input handling.
-        Thumb topLeft, topRight, bottomLeft, bottomRight;
+        Thumb topLeft, topRight, bottomLeft, bottomRight, topMiddle, rightMiddle, leftMiddle, bottomMiddle;
         Action<Rect> customResizeHandler = null;
 
 
@@ -25,24 +25,9 @@ namespace Clowd.Controls
             customResizeHandler = newSizeHandler;
         }
 
-        // Initialize the ResizingAdorner.
         public ResizingAdorner(UIElement adornedElement)
-            : base(adornedElement)
+            : this(adornedElement, null)
         {
-            visualChildren = new VisualCollection(this);
-
-            // Call a helper method to initialize the Thumbs
-            // with a customized cursors.
-            BuildAdornerCorner(ref topLeft, Cursors.SizeNWSE);
-            BuildAdornerCorner(ref topRight, Cursors.SizeNESW);
-            BuildAdornerCorner(ref bottomLeft, Cursors.SizeNESW);
-            BuildAdornerCorner(ref bottomRight, Cursors.SizeNWSE);
-
-            // Add handlers for resizing.
-            bottomLeft.DragDelta += new DragDeltaEventHandler(HandleBottomLeft);
-            bottomRight.DragDelta += new DragDeltaEventHandler(HandleBottomRight);
-            topLeft.DragDelta += new DragDeltaEventHandler(HandleTopLeft);
-            topRight.DragDelta += new DragDeltaEventHandler(HandleTopRight);
         }
         public ResizingAdorner(UIElement adornedElement, Style thumbStyle)
             : base(adornedElement)
@@ -50,27 +35,33 @@ namespace Clowd.Controls
             ThumbStyle = thumbStyle;
             visualChildren = new VisualCollection(this);
 
-            // Call a helper method to initialize the Thumbs
-            // with a customized cursors.
             BuildAdornerCorner(ref topLeft, Cursors.SizeNWSE);
             BuildAdornerCorner(ref topRight, Cursors.SizeNESW);
             BuildAdornerCorner(ref bottomLeft, Cursors.SizeNESW);
             BuildAdornerCorner(ref bottomRight, Cursors.SizeNWSE);
-            // Add handlers for resizing.
+
+            BuildAdornerCorner(ref topMiddle, Cursors.SizeNS);
+            BuildAdornerCorner(ref rightMiddle, Cursors.SizeWE);
+            BuildAdornerCorner(ref leftMiddle, Cursors.SizeWE);
+            BuildAdornerCorner(ref bottomMiddle, Cursors.SizeNS);
+
             bottomLeft.DragDelta += new DragDeltaEventHandler(HandleBottomLeft);
             bottomRight.DragDelta += new DragDeltaEventHandler(HandleBottomRight);
             topLeft.DragDelta += new DragDeltaEventHandler(HandleTopLeft);
             topRight.DragDelta += new DragDeltaEventHandler(HandleTopRight);
+
+            topMiddle.DragDelta += new DragDeltaEventHandler(HandleTopMiddle);
+            rightMiddle.DragDelta += new DragDeltaEventHandler(HandleRightMiddle);
+            leftMiddle.DragDelta += new DragDeltaEventHandler(HandleLeftMiddle);
+            bottomMiddle.DragDelta += new DragDeltaEventHandler(HandleBottomMiddle);
         }
 
-        // Handler for resizing from the bottom-right.
-        void HandleBottomRight(object sender, DragDeltaEventArgs args)
+        private void HandleBottomRight(object sender, DragDeltaEventArgs args)
         {
             FrameworkElement adornedElement = this.AdornedElement as FrameworkElement;
             Thumb hitThumb = sender as Thumb;
 
             if (adornedElement == null || hitThumb == null) return;
-            FrameworkElement parentElement = adornedElement.Parent as FrameworkElement;
 
             // Ensure that the Width and Height are properly initialized after the resize.
             EnforceSize(adornedElement);
@@ -90,15 +81,12 @@ namespace Clowd.Controls
                 customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), width, height));
             }
         }
-
-        // Handler for resizing from the top-right.
-        void HandleTopRight(object sender, DragDeltaEventArgs args)
+        private void HandleTopRight(object sender, DragDeltaEventArgs args)
         {
             FrameworkElement adornedElement = this.AdornedElement as FrameworkElement;
             Thumb hitThumb = sender as Thumb;
 
             if (adornedElement == null || hitThumb == null) return;
-            FrameworkElement parentElement = adornedElement.Parent as FrameworkElement;
 
             // Ensure that the Width and Height are properly initialized after the resize.
             EnforceSize(adornedElement);
@@ -120,9 +108,7 @@ namespace Clowd.Controls
                 customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), top_new, new_width, height_new));
             }
         }
-
-        // Handler for resizing from the top-left.
-        void HandleTopLeft(object sender, DragDeltaEventArgs args)
+        private void HandleTopLeft(object sender, DragDeltaEventArgs args)
         {
             FrameworkElement adornedElement = AdornedElement as FrameworkElement;
             Thumb hitThumb = sender as Thumb;
@@ -142,7 +128,6 @@ namespace Clowd.Controls
             double left_old = Canvas.GetLeft(adornedElement);
             double left_new = left_old - (width_new - width_old);
 
-
             double height_old = adornedElement.Height;
             double height_new = Math.Max(adornedElement.Height - args.VerticalChange, hitThumb.DesiredSize.Height);
             double top_old = Canvas.GetTop(adornedElement);
@@ -160,9 +145,7 @@ namespace Clowd.Controls
                 customResizeHandler(new Rect(left_new, top_new, width_new, height_new));
             }
         }
-
-        // Handler for resizing from the bottom-left.
-        void HandleBottomLeft(object sender, DragDeltaEventArgs args)
+        private void HandleBottomLeft(object sender, DragDeltaEventArgs args)
         {
             FrameworkElement adornedElement = AdornedElement as FrameworkElement;
             Thumb hitThumb = sender as Thumb;
@@ -195,6 +178,106 @@ namespace Clowd.Controls
             }
         }
 
+        private void HandleBottomMiddle(object sender, DragDeltaEventArgs args)
+        {
+            FrameworkElement adornedElement = this.AdornedElement as FrameworkElement;
+            Thumb hitThumb = sender as Thumb;
+
+            if (adornedElement == null || hitThumb == null) return;
+
+            // Ensure that the Width and Height are properly initialized after the resize.
+            EnforceSize(adornedElement);
+
+            // Change the size by the amount the user drags the mouse, as long as it's larger 
+            // than the width or height of an adorner, respectively.
+            var height = Math.Max(args.VerticalChange + adornedElement.Height, hitThumb.DesiredSize.Height);
+
+            if (customResizeHandler == null)
+            {
+                adornedElement.Height = height;
+            }
+            else
+            {
+                customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), adornedElement.Width, height));
+            }
+        }
+        private void HandleLeftMiddle(object sender, DragDeltaEventArgs args)
+        {
+            FrameworkElement adornedElement = AdornedElement as FrameworkElement;
+            Thumb hitThumb = sender as Thumb;
+
+            if (adornedElement == null || hitThumb == null) return;
+
+            // Ensure that the Width and Height are properly initialized after the resize.
+            EnforceSize(adornedElement);
+
+            // Change the size by the amount the user drags the mouse, as long as it's larger 
+            // than the width or height of an adorner, respectively.
+
+            double width_old = adornedElement.Width;
+            double width_new = Math.Max(adornedElement.Width - args.HorizontalChange, hitThumb.DesiredSize.Width);
+            double left_old = Canvas.GetLeft(adornedElement);
+            double left_new = left_old - (width_new - width_old);
+
+            if (customResizeHandler == null)
+            {
+                Canvas.SetLeft(adornedElement, left_new);
+                adornedElement.Width = width_new;
+            }
+            else
+            {
+                customResizeHandler(new Rect(left_new, Canvas.GetTop(adornedElement), width_new, adornedElement.Height));
+            }
+        }
+        private void HandleRightMiddle(object sender, DragDeltaEventArgs args)
+        {
+            FrameworkElement adornedElement = this.AdornedElement as FrameworkElement;
+            Thumb hitThumb = sender as Thumb;
+
+            if (adornedElement == null || hitThumb == null) return;
+
+            // Ensure that the Width and Height are properly initialized after the resize.
+            EnforceSize(adornedElement);
+
+            // Change the size by the amount the user drags the mouse, as long as it's larger 
+            // than the width or height of an adorner, respectively.
+            var width = Math.Max(adornedElement.Width + args.HorizontalChange, hitThumb.DesiredSize.Width);
+
+            if (customResizeHandler == null)
+            {
+                adornedElement.Width = width;
+            }
+            else
+            {
+                customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), width, adornedElement.Height));
+            }
+        }
+        private void HandleTopMiddle(object sender, DragDeltaEventArgs args)
+        {
+            FrameworkElement adornedElement = this.AdornedElement as FrameworkElement;
+            Thumb hitThumb = sender as Thumb;
+
+            if (adornedElement == null || hitThumb == null) return;
+
+            // Ensure that the Width and Height are properly initialized after the resize.
+            EnforceSize(adornedElement);
+
+            double height_old = adornedElement.Height;
+            double height_new = Math.Max(adornedElement.Height - args.VerticalChange, hitThumb.DesiredSize.Height);
+            double top_old = Canvas.GetTop(adornedElement);
+            double top_new = top_old - (height_new - height_old);
+
+            if (customResizeHandler == null)
+            {
+                adornedElement.Height = height_new;
+                Canvas.SetTop(adornedElement, top_new);
+            }
+            else
+            {
+                customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), top_new, adornedElement.Width, height_new));
+            }
+        }
+
         // Arrange the Adorners.
         protected override Size ArrangeOverride(Size finalSize)
         {
@@ -203,21 +286,18 @@ namespace Clowd.Controls
             double desiredWidth = AdornedElement.DesiredSize.Width;
             double desiredHeight = AdornedElement.DesiredSize.Height;
             // adornerWidth & adornerHeight are used for placement as well.
-            double adornerWidth = this.DesiredSize.Width;
-            double adornerHeight = this.DesiredSize.Height;
+            double adornerWidth = 10;
+            double adornerHeight = 10;
 
-            var tl = new Rect(-adornerWidth / 2, -adornerHeight / 2, adornerWidth, adornerHeight);
-            var tr = new Rect(desiredWidth - adornerWidth / 2, -adornerHeight / 2, adornerWidth, adornerHeight);
-            var bl = new Rect(-adornerWidth / 2, desiredHeight - adornerHeight / 2, adornerWidth, adornerHeight);
-            var br = new Rect(desiredWidth - adornerWidth / 2, desiredHeight - adornerHeight / 2, adornerWidth, adornerHeight);
-            //tl.Offset(1, 1);
-            //tr.Offset(-1, 1);
-            //bl.Offset(1, -1);
-            //br.Offset(-1, -1);
-            topLeft.Arrange(tl);
-            topRight.Arrange(tr);
-            bottomLeft.Arrange(bl);
-            bottomRight.Arrange(br);
+            topLeft.Arrange(new Rect(-adornerWidth / 2, -adornerHeight / 2, adornerWidth, adornerHeight));
+            topRight.Arrange(new Rect(desiredWidth - adornerWidth / 2, -adornerHeight / 2, adornerWidth, adornerHeight));
+            bottomLeft.Arrange(new Rect(-adornerWidth / 2, desiredHeight - adornerHeight / 2, adornerWidth, adornerHeight));
+            bottomRight.Arrange(new Rect(desiredWidth - adornerWidth / 2, desiredHeight - adornerHeight / 2, adornerWidth, adornerHeight));
+
+            topMiddle.Arrange(new Rect((desiredWidth / 2) - (adornerWidth / 2), -adornerHeight / 2, adornerWidth, adornerHeight));
+            rightMiddle.Arrange(new Rect(desiredWidth - (adornerWidth / 2), desiredHeight / 2 - (adornerHeight / 2), adornerWidth, adornerHeight));
+            leftMiddle.Arrange(new Rect(-adornerWidth / 2, desiredHeight / 2 - (adornerHeight / 2), adornerWidth, adornerHeight));
+            bottomMiddle.Arrange(new Rect(desiredWidth / 2 - (adornerWidth / 2), desiredHeight - adornerHeight / 2, adornerWidth, adornerHeight));
 
             // Return the final size.
             return finalSize;
@@ -225,7 +305,7 @@ namespace Clowd.Controls
 
         // Helper method to instantiate the corner Thumbs, set the Cursor property, 
         // set some appearance properties, and add the elements to the visual tree.
-        void BuildAdornerCorner(ref Thumb cornerThumb, Cursor customizedCursor)
+        private void BuildAdornerCorner(ref Thumb cornerThumb, Cursor customizedCursor)
         {
             if (cornerThumb != null) return;
 
@@ -243,7 +323,7 @@ namespace Clowd.Controls
         // This method ensures that the Widths and Heights are initialized.  Sizing to content produces
         // Width and Height values of Double.NaN.  Because this Adorner explicitly resizes, the Width and Height
         // need to be set first.  It also sets the maximum size of the adorned element.
-        void EnforceSize(FrameworkElement adornedElement)
+        private void EnforceSize(FrameworkElement adornedElement)
         {
             if (adornedElement.Width.Equals(Double.NaN))
                 adornedElement.Width = adornedElement.DesiredSize.Width;
