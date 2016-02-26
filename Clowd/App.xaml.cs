@@ -25,6 +25,8 @@ using System.Windows.Threading;
 using CS.Wpf;
 using Exceptionless.Dependency;
 using Exceptionless.Plugins;
+using RT.Util;
+using RT.Util.Serialization;
 using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
@@ -339,6 +341,13 @@ namespace Clowd
             //var baseColor = Settings.AccentScheme == AccentScheme.User ? Settings.UserAccentColor : AreoColor.GetColor();
             var baseColor = Settings.AccentScheme == AccentScheme.User ? Settings.UserAccentColor : AreoColor.GetColor();
 
+
+            _lightBase = new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/MahApps.Metro;component/Styles/Accents/BaseLight.xaml", UriKind.RelativeOrAbsolute)
+            };
+            if (!this.Resources.MergedDictionaries.Contains(_lightBase))
+                this.Resources.MergedDictionaries.Add(_lightBase);
             //if (_lightBase == null)
             //{
             //    _lightBase = new ResourceDictionary
