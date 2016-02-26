@@ -97,7 +97,8 @@ namespace Clowd
     [ImplementPropertyChanged]
     public class CaptureSettings
     {
-        [DisplayName("Capture cursor")]
+        [DisplayName("Capture with cursor")]
+        [Description("If this is enabled, the cursor will be shown in screenshots")]
         public bool ScreenshotWithCursor { get; set; } = false;
 
         [Description("This controls the default state of the pixel magnifier in the capture window")]
@@ -119,10 +120,16 @@ namespace Clowd
     [ImplementPropertyChanged]
     public class EditorSettings
     {
+        [DisplayName("Object Color")]
         public Color DefaultDrawingColor { get; set; } = Colors.Red;
 
-        //[PData.FontPreview(16)]
-        //public FontFamily DefaultFont { get; set; } = new FontFamily("Arial");
+        [PData.FontPreview(16), ClassifyIgnore]
+        public FontFamily DefaultFont
+        {
+            get { return new FontFamily(_defaultFontString); }
+            set { _defaultFontString = value.Source; }
+        }
+        private string _defaultFontString = "Arial";
 
         [PData.Spinnable(1, 2, 1, 10)]
         public int ObjectLineWidth { get; set; } = 2;
