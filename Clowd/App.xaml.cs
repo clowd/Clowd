@@ -34,7 +34,7 @@ namespace Clowd
     {
         public static new App Current { get { return (App)Application.Current; } }
 
-        public AppSettings Settings { get; private set; }
+        public GeneralSettings Settings { get; private set; }
         public string AppDataDirectory { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
 
         // static instead of const for debugging purposes.
@@ -160,13 +160,12 @@ namespace Clowd
             SetupDpiScaling();
             SetupTrayIcon();
             SetupSettings();
-            Settings.ColorScheme = ColorScheme.Light;
             SetupAccentColors();
 
             if (Settings.FirstRun)
             {
                 // there were no settings to load, show login window.
-                Settings = new AppSettings() { FirstRun = false };
+                Settings = new GeneralSettings() { FirstRun = false };
                 var page = new LoginPage();
                 var login = TemplatedWindow.CreateWindow("CLOWD", page);
                 login.Show();
@@ -329,48 +328,49 @@ namespace Clowd
         }
         private void SetupSettings()
         {
-            AppSettings tmp;
-            RT.Util.SettingsUtil.LoadSettings<AppSettings>(out tmp);
+            GeneralSettings tmp;
+            RT.Util.SettingsUtil.LoadSettings<GeneralSettings>(out tmp);
             Settings = tmp;
         }
         private void SetupAccentColors()
         {
-            var scheme = Settings.ColorScheme;
+            //var scheme = Settings.ColorScheme;
+            //var baseColor = Settings.AccentScheme == AccentScheme.User ? Settings.UserAccentColor : AreoColor.GetColor();
             var baseColor = Settings.AccentScheme == AccentScheme.User ? Settings.UserAccentColor : AreoColor.GetColor();
 
-            if (_lightBase == null)
-            {
-                _lightBase = new ResourceDictionary
-                {
-                    Source = new Uri("pack://application:,,,/MahApps.Metro;component/Styles/Accents/BaseLight.xaml", UriKind.RelativeOrAbsolute)
-                };
-            }
-            if (_darkBase == null)
-            {
-                _darkBase = new ResourceDictionary
-                {
-                    Source = new Uri("pack://application:,,,/MahApps.Metro;component/Styles/Accents/BaseDark.xaml", UriKind.RelativeOrAbsolute)
-                };
-            }
+            //if (_lightBase == null)
+            //{
+            //    _lightBase = new ResourceDictionary
+            //    {
+            //        Source = new Uri("pack://application:,,,/MahApps.Metro;component/Styles/Accents/BaseLight.xaml", UriKind.RelativeOrAbsolute)
+            //    };
+            //}
+            //if (_darkBase == null)
+            //{
+            //    _darkBase = new ResourceDictionary
+            //    {
+            //        Source = new Uri("pack://application:,,,/MahApps.Metro;component/Styles/Accents/BaseDark.xaml", UriKind.RelativeOrAbsolute)
+            //    };
+            //}
 
-            if (scheme == ColorScheme.Light)
-            {
-                //remove dark base dictionary
-                if (this.Resources.MergedDictionaries.Contains(_darkBase))
-                    this.Resources.MergedDictionaries.Remove(_darkBase);
-                //add light base dictionary
-                if (!this.Resources.MergedDictionaries.Contains(_lightBase))
-                    this.Resources.MergedDictionaries.Add(_lightBase);
-            }
-            else if (scheme == ColorScheme.Dark)
-            {
-                //remove light base dictionary
-                if (this.Resources.MergedDictionaries.Contains(_lightBase))
-                    this.Resources.MergedDictionaries.Remove(_lightBase);
-                //add dark base dictionary
-                if (!this.Resources.MergedDictionaries.Contains(_darkBase))
-                    this.Resources.MergedDictionaries.Add(_darkBase);
-            }
+            //if (scheme == ColorScheme.Light)
+            //{
+            //    //remove dark base dictionary
+            //    if (this.Resources.MergedDictionaries.Contains(_darkBase))
+            //        this.Resources.MergedDictionaries.Remove(_darkBase);
+            //    //add light base dictionary
+            //    if (!this.Resources.MergedDictionaries.Contains(_lightBase))
+            //        this.Resources.MergedDictionaries.Add(_lightBase);
+            //}
+            //else if (scheme == ColorScheme.Dark)
+            //{
+            //    //remove light base dictionary
+            //    if (this.Resources.MergedDictionaries.Contains(_lightBase))
+            //        this.Resources.MergedDictionaries.Remove(_lightBase);
+            //    //add dark base dictionary
+            //    if (!this.Resources.MergedDictionaries.Contains(_darkBase))
+            //        this.Resources.MergedDictionaries.Add(_darkBase);
+            //}
 
             var hsl = HSLColor.FromRGB(baseColor);
             hsl.Lightness = hsl.Lightness - 10;
@@ -451,7 +451,7 @@ namespace Clowd
         }
         private void SetupGlobalHotkeys()
         {
-            var capture = Settings.CaptureSettings.StartCaptureShortcut;
+            var capture = Settings.CaptureSettings.CaptureRegionShortcut;
             _captureHotkey = new HotKey(capture.Key, capture.Modifiers, (key) =>
             {
                 StartCapture();
