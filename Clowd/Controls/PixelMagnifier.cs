@@ -25,12 +25,12 @@ namespace Clowd.Controls
             set { SetValue(ImageProperty, value); }
         }
 
-        public Size FinderSize 
+        public Size FinderSize
         {
             get
             {
                 var pix = DpiScale.UpScaleX(10);
-                return new Size(pix*_size, pix*_size);
+                return new Size(pix * _size, pix * _size);
             }
         }
 
@@ -42,7 +42,8 @@ namespace Clowd.Controls
         private DispatcherTimer _timer = new DispatcherTimer();
         private Point _lastPoint = default(Point);
         private int _size = 13;
-
+        private byte[] croppedBytes = new byte[0];
+        private byte[] writableBytes = new byte[0];
         public PixelMagnifier()
         {
             AddVisualChild(_visual);
@@ -126,7 +127,7 @@ namespace Clowd.Controls
 
             return new Size(enlarged.PixelWidth, enlarged.PixelHeight);
         }
-        private static BitmapSource EnlargeImage(BitmapSource source, int pixelSize)
+        private BitmapSource EnlargeImage(BitmapSource source, int pixelSize)
         {
             // force the pixel format to bgra32
             if (source.Format != PixelFormats.Bgra32)
@@ -138,11 +139,18 @@ namespace Clowd.Controls
                 96, 96, source.Format, null);
 
             var bytesPerPixel = (source.Format.BitsPerPixel + 7) / 8;
-            var croppedBytes = new byte[bytesPerPixel * source.PixelWidth * source.PixelHeight];
             int stride = 4 * ((source.PixelWidth * bytesPerPixel + 3) / 4);
-            source.CopyPixels(new Int32Rect(0, 0, source.PixelWidth, source.PixelHeight), croppedBytes, stride, 0);
 
-            var writableBytes = new byte[croppedBytes.Length * pixelSize * pixelSize];
+            // prepare arrays
+            var croppedBytesLength = bytesPerPixel * source.PixelWidth * source.PixelHeight;
+            if (croppedBytes.Length != croppedBytesLength)
+                croppedBytes = new byte[croppedBytesLength];
+
+            var writableBytesLength = croppedBytes.Length * pixelSize * pixelSize;
+            if (writableBytes.Length != writableBytesLength)
+                writableBytes = new byte[writableBytesLength];
+
+            source.CopyPixels(new Int32Rect(0, 0, source.PixelWidth, source.PixelHeight), croppedBytes, stride, 0);
             int writableIndex = 0;
 
             // for each row of pixels
@@ -165,10 +173,11 @@ namespace Clowd.Controls
                             Buffer.BlockCopy(croppedBytes, srcIndex, writableBytes, desIndex, bytesPerPixel);
                         }
 
-                        //Buffer.BlockCopy(sepBytes, 0, writableBytes, writableIndex, 4);
+                        //we skip the last pixel in each segment of pixels to create a separation of pixels
                         writableIndex += bytesPerPixel;
                     }
                 }
+                //we skip the last row of pixels in each segment of rows to create a separation of pixels
                 writableIndex += stride * pixelSize;
             }
 
