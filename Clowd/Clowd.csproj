@@ -76,14 +76,6 @@
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.Expression.Interactions, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL" />
-    <Reference Include="PropertyTools, Version=2015.2.0.0, Culture=neutral, PublicKeyToken=ea0c9f2b460934d0, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\PropertyTools\Source\PropertyTools.Wpf\bin\Debug\NET45\PropertyTools.dll</HintPath>
-    </Reference>
-    <Reference Include="PropertyTools.Wpf, Version=0.0.0.0, Culture=neutral, PublicKeyToken=ea0c9f2b460934d0, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\PropertyTools\Source\PropertyTools.Wpf\bin\Debug\NET45\PropertyTools.Wpf.dll</HintPath>
-    </Reference>
     <Reference Include="RT.Util">
       <HintPath>..\lib\RT.Util.dll</HintPath>
     </Reference>
@@ -308,6 +300,10 @@
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
       <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
       <Name>Clowd.Shared</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\PropertyTools.Wpf\PropertyTools.Wpf.csproj">
+      <Project>{7168f82f-288a-42c4-9eb1-fbbe5112f211}</Project>
+      <Name>PropertyTools.Wpf</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
