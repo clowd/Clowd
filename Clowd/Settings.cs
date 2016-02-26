@@ -121,8 +121,8 @@ namespace Clowd
     {
         public Color DefaultDrawingColor { get; set; } = Colors.Red;
 
-        [PData.FontPreview(16)]
-        public FontFamily DefaultFont { get; set; } = new FontFamily("Arial");
+        //[PData.FontPreview(16)]
+        //public FontFamily DefaultFont { get; set; } = new FontFamily("Arial");
 
         [PData.Spinnable(1, 2, 1, 10)]
         public int ObjectLineWidth { get; set; } = 2;

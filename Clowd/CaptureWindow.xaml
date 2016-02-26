@@ -46,6 +46,7 @@
         <RoutedCommand x:Key="Command.Video" />
         <RoutedCommand x:Key="Command.Reset" />
         <RoutedCommand x:Key="Command.SelectScreen" />
+        <RoutedCommand x:Key="Command.ToggleMagnifier" />
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="U" Command="{StaticResource Command.Upload}" />
@@ -54,6 +55,7 @@
         <KeyBinding Key="V" Command="{StaticResource Command.Video}" />
         <KeyBinding Key="R" Command="{StaticResource Command.Reset}" />
         <KeyBinding Key="F" Command="{StaticResource Command.SelectScreen}" />
+        <KeyBinding Key="M" Command="{StaticResource Command.ToggleMagnifier}" />
         <KeyBinding Key="C" Command="ApplicationCommands.Close" />
         <KeyBinding Key="Esc" Command="ApplicationCommands.Close" />
     </Window.InputBindings>
@@ -63,6 +65,7 @@
         <CommandBinding Command="{StaticResource Command.Video}" Executed="VideoExecuted" />
         <CommandBinding Command="{StaticResource Command.Reset}" Executed="ResetExecuted" />
         <CommandBinding Command="{StaticResource Command.SelectScreen}" Executed="SelectScreenExecuted" />
+        <CommandBinding Command="{StaticResource Command.ToggleMagnifier}" Executed="ToggleMagnifierExecuted" />
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
     </Window.CommandBindings>
     <Grid Name="rootGrid" Cursor="{Binding CanvasCursor}">
@@ -124,6 +127,7 @@
                     </TextBlock>
                 </StackPanel>
             </Border>
+            <controls:PixelMagnifier x:Name="pixelMagnifier" Image="{Binding ScreenImage}"></controls:PixelMagnifier>
             <!--<Grid Name="crosshairTopRight" Visibility="Hidden" SnapsToDevicePixels="True">
                 <Border BorderThickness="{Binding NormalThickness}" BorderBrush="{StaticResource HighlightBrush}" Opacity=".7" SnapsToDevicePixels="True" />
                 <Rectangle Stroke="#A5FFFFFF" StrokeThickness="{Binding NormalThickness}" StrokeDashArray="8 8" Opacity=".6" SnapsToDevicePixels="True"  />
