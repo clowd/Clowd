@@ -540,10 +540,13 @@ namespace Clowd
         private void ToggleMagnifierExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             ShowMagnifier = !ShowMagnifier;
-            pixelMagnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Collapsed;
-            var args = new MouseEventArgs(Mouse.PrimaryDevice, 0);
-            args.RoutedEvent = MouseMoveEvent;
-            rootGrid.RaiseEvent(args);
+            if (capturing == true)
+            {
+                pixelMagnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Collapsed;
+                var args = new MouseEventArgs(Mouse.PrimaryDevice, 0);
+                args.RoutedEvent = MouseMoveEvent;
+                rootGrid.RaiseEvent(args);
+            }
         }
     }
 }
