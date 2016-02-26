@@ -211,6 +211,24 @@ namespace Clowd
             }
         }
 
+        private Point CalculateOptimalOffset(Size objectSize, Point targetPoint, Point desiredOffsetFromCenter)
+        {
+            var primaryScreen = windowFinder.GetBoundsOfScreenContainingPoint(targetPoint, false);
+            //primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
+            //primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+            primaryScreen = DpiScale.TranslateDownScaleRect(primaryScreen);
+
+            bool fitsX = primaryScreen.Width > targetPoint.X + (objectSize.Width / 2) + desiredOffsetFromCenter.X;
+            bool fitsY = primaryScreen.Height > targetPoint.Y + (objectSize.Height / 2) + desiredOffsetFromCenter.Y;
+
+            double newX, newY;
+
+            newX = fitsX ? desiredOffsetFromCenter.X : -desiredOffsetFromCenter.X;
+            newY = fitsY ? desiredOffsetFromCenter.Y : -desiredOffsetFromCenter.Y;
+
+            return new Point(newX, newY);
+        }
+
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             Rect croppingRect = DpiScale.TranslateUpScaleRect(CroppingRectangle);
@@ -295,6 +313,16 @@ namespace Clowd
             //Canvas.SetTop(crosshairBottomLeft, currentPoint.Y - 1);
             //Canvas.SetRight(crosshairBottomLeft, (rootGrid.ActualWidth - currentPoint.X));
 
+            if (ShowMagnifier)
+            {
+                var offset = CalculateOptimalOffset(
+                    pixelMagnifier.FinderSize,
+                    currentPoint,
+                    new Point(pixelMagnifier.FinderSize.Width / 2 + 20, pixelMagnifier.FinderSize.Height / 2 + 20));
+                Canvas.SetLeft(pixelMagnifier, currentPoint.X - pixelMagnifier.FinderSize.Width / 2 + offset.X);
+                Canvas.SetTop(pixelMagnifier, currentPoint.Y - pixelMagnifier.FinderSize.Width / 2 + offset.Y);
+            }
+
             if (draggingArea)
             {
                 double x, y, width, height;
@@ -322,8 +350,7 @@ namespace Clowd
             }
             else
             {
-                var wfMouse = new Point(System.Windows.Forms.Cursor.Position.X, System.Windows.Forms.Cursor.Position.Y);
-                var window = windowFinder.GetWindowThatContainsPoint(wfMouse);
+                var window = windowFinder.GetWindowThatContainsPoint(DpiScale.UpScalePoint(currentPoint));
 
                 if (window.WindowRect == Rect.Empty)
                 {
@@ -379,7 +406,7 @@ namespace Clowd
                 areaSizeIndicator.Visibility = Visibility.Visible;
                 ShowTips = true;
                 CanvasCursor = Cursors.Cross;
-                //_magnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Hidden;
+                pixelMagnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Hidden;
                 toolActionBar.Visibility = Visibility.Hidden;
                 //crosshairBottomLeft.Width = rootGrid.ActualWidth;
                 //crosshairBottomLeft.Height = rootGrid.ActualHeight;
@@ -397,7 +424,7 @@ namespace Clowd
                     capturing = false;
                 }
                 areaSizeIndicator.Visibility = Visibility.Hidden;
-                //_magnifier.Visibility = Visibility.Hidden;
+                pixelMagnifier.Visibility = Visibility.Hidden;
                 //crosshairBottomLeft.Visibility = Visibility.Hidden;
                 //crosshairTopRight.Visibility = Visibility.Hidden;
                 ShowTips = false;
@@ -405,6 +432,10 @@ namespace Clowd
                 toolActionBar.Visibility = Visibility.Visible;
             }
             UpdateCanvasPlacement();
+
+            var args = new MouseEventArgs(Mouse.PrimaryDevice, 0);
+            args.RoutedEvent = MouseMoveEvent;
+            rootGrid.RaiseEvent(args);
         }
         private void UpdateCanvasPlacement()
         {
@@ -504,6 +535,15 @@ namespace Clowd
         {
             CroppingRectangle = selection;
             UpdateCanvasPlacement();
+        }
+
+        private void ToggleMagnifierExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            ShowMagnifier = !ShowMagnifier;
+            pixelMagnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Collapsed;
+            var args = new MouseEventArgs(Mouse.PrimaryDevice, 0);
+            args.RoutedEvent = MouseMoveEvent;
+            rootGrid.RaiseEvent(args);
         }
     }
 }
