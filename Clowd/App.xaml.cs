@@ -22,6 +22,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using CS.Wpf;
 using Exceptionless.Dependency;
 using Exceptionless.Plugins;
 using TaskDialogInterop;
@@ -59,11 +60,6 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
-            SetupSettings();
-            SetupDpiScaling();
-            TemplatedWindow.CreateWindow("test", new SettingsPage() {SelectedItem = Settings}).Show();
-            return;
-
             base.OnStartup(e);
             SetupExless();
 

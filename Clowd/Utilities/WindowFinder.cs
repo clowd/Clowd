@@ -9,6 +9,7 @@ using Clowd.Interop;
 using Clowd.Utilities;
 using Clowd.Interop.DwmApi;
 using Clowd.Interop.Shcore;
+using CS.Wpf;
 
 namespace Clowd.Utilities
 {
