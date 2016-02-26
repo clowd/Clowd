@@ -139,7 +139,7 @@ namespace NotifyIconLib
         {
             if (stateCache.State != TaskbarIconState.Pinned)
                 return;
-            var scale = Clowd.Utilities.DpiScale.TranslateDownScaleRect(stateCache.Location);
+            var scale = CS.Wpf.DpiScale.TranslateDownScaleRect(stateCache.Location);
             dropWindow.Left = scale.Left;
             dropWindow.Top = scale.Top;
             dropWindow.Width = scale.Width;
