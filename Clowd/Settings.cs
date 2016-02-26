@@ -11,6 +11,7 @@ using PropertyChanged;
 using System.ComponentModel.DataAnnotations;
 using System.Windows;
 using Clowd.Controls;
+using Clowd.Utilities;
 using PropertyTools.Wpf;
 using RT.Util.Serialization;
 using PData = PropertyTools.DataAnnotations;
@@ -79,6 +80,12 @@ namespace Clowd
         [Description("This controls whether the settings window is separated into tabbed content" +
                      "or as a single scrolling page.")]
         public SettingsDisplayMode DisplayMode { get; set; } = SettingsDisplayMode.Tabbed;
+
+        [Category("Hotkeys"), DisplayName("General - File Upload")]
+        public KeyGesture FileUploadShortcut { get; set; } = null;
+
+        [Category("Hotkeys"), DisplayName("General - Open Clowd")]
+        public KeyGesture OpenHomeShortcut { get; set; } = null;
 
         [ExpandAsCategory("Capture")]
         public CaptureSettings CaptureSettings { get; set; } = new CaptureSettings();
