@@ -135,7 +135,6 @@
       <DependentUpon>SettingsPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Utilities\CheckeredBrush.cs" />
-    <Compile Include="Utilities\PropertyChanged.Fody.cs" />
     <Compile Include="TaskWindow.xaml.cs">
       <DependentUpon>TaskWindow.xaml</DependentUpon>
     </Compile>
