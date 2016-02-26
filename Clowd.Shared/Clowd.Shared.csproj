@@ -54,7 +54,6 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DpiScale.cs" />
     <Compile Include="ExtensionMethods.cs" />
     <Compile Include="ImageSizeHelper.cs" />
     <Compile Include="Hashing.cs" />
