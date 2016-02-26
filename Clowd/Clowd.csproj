@@ -47,6 +47,14 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="CS.Util, Version=1.0.6.23, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\CS.Util.1.0.6.23\lib\net45\CS.Util.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="CS.Wpf, Version=1.0.6.23, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\CS.Wpf.1.0.6.23\lib\net45\CS.Wpf.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="Exceptionless.Extras, Version=3.3.1575.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\Exceptionless.Wpf.3.3.1575\lib\net45\Exceptionless.Extras.dll</HintPath>
       <Private>True</Private>
@@ -119,6 +127,7 @@
     </Compile>
     <Compile Include="Controls\CornerClippingBorder.cs" />
     <Compile Include="Controls\KeyGestureEditor.cs" />
+    <Compile Include="Controls\PixelMagnifier.cs" />
     <Compile Include="ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
     </Compile>

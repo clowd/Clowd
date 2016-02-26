@@ -6,6 +6,7 @@
              xmlns:local="clr-namespace:Clowd"
              xmlns:metro="http://metro.mahapps.com/winfx/xaml/controls"
              xmlns:ptools="http://propertytools.org/wpf"
+             xmlns:controls="clr-namespace:Clowd.Controls"
              mc:Ignorable="d" 
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
              Height="500" Width="450">

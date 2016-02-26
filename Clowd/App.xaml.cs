@@ -59,6 +59,11 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+            SetupSettings();
+            SetupDpiScaling();
+            TemplatedWindow.CreateWindow("test", new SettingsPage() {SelectedItem = Settings}).Show();
+            return;
+
             base.OnStartup(e);
             SetupExless();
 
