@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Text;
@@ -9,6 +10,7 @@ using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Clowd.Utilities;
 using CS.Wpf;
 
@@ -17,24 +19,59 @@ namespace Clowd.Controls
 {
     public class PixelMagnifier : FrameworkElement
     {
-        private DrawingVisual visual = new MyDrawingVisual();
+        public BitmapSource Image
+        {
+            get { return (BitmapSource)GetValue(ImageProperty); }
+            set { SetValue(ImageProperty, value); }
+        }
+
+        public Size FinderSize 
+        {
+            get
+            {
+                var pix = DpiScale.UpScaleX(10);
+                return new Size(pix*_size, pix*_size);
+            }
+        }
+
+        public static readonly DependencyProperty ImageProperty =
+            DependencyProperty.Register("Image", typeof(BitmapSource), typeof(PixelMagnifier), new PropertyMetadata(null));
+
+
+        private DrawingVisual _visual = new MyDrawingVisual();
+        private DispatcherTimer _timer = new DispatcherTimer();
+        private Point _lastPoint = default(Point);
+        private int _size = 13;
 
         public PixelMagnifier()
         {
-            AddVisualChild(visual);
+            AddVisualChild(_visual);
+            _timer.Interval = TimeSpan.FromMilliseconds(30);
+            _timer.Tick += (sender, args) =>
+            {
+                if (this.Visibility != Visibility.Visible)
+                    return;
+                var wfMouse = System.Windows.Forms.Cursor.Position;
+                var wpfMouse = new Point(wfMouse.X, wfMouse.Y);
+                if (_lastPoint == wpfMouse)
+                    return;
+                _lastPoint = wpfMouse;
+                DrawMagnifier(Image, wpfMouse);
+            };
+            _timer.IsEnabled = true;
         }
 
-        public void DrawMagnifier(BitmapSource source, Point location)
+        private void DrawMagnifier(BitmapSource source, Point location)
         {
-            using (DrawingContext dc = visual.RenderOpen())
+            using (DrawingContext dc = _visual.RenderOpen())
             {
                 var pixSize = (int)Math.Ceiling((double)10 / 96 * DpiScale.DpiX);
-                Size size = new Size(0,0);
+                Size size = new Size(0, 0);
                 if (source != null && location != default(Point))
                 {
-                    size = CreateMagnifier(dc, source, location, 13, 13, pixSize);
+                    size = CreateMagnifier(dc, source, location, _size, _size, pixSize);
                     Pen pen = new Pen(Brushes.DarkGray, 2);
-                    dc.DrawEllipse(null, pen, new Point(size.Width/2, size.Height/2), size.Width/2, size.Height/2);
+                    dc.DrawEllipse(null, pen, new Point(size.Width / 2, size.Height / 2), size.Width / 2, size.Height / 2);
                     size = new Size(DpiScale.DownScaleX(size.Width), DpiScale.DownScaleY(size.Height));
                 }
                 this.Clip = new EllipseGeometry(new Point(size.Width / 2, size.Height / 2), size.Width / 2, size.Height / 2);
@@ -50,7 +87,7 @@ namespace Clowd.Controls
 
         protected override Visual GetVisualChild(int index)
         {
-            return visual;
+            return _visual;
         }
 
         private Size CreateMagnifier(DrawingContext g, BitmapSource source, Point position, int horizontalPixelCount,
@@ -146,7 +183,8 @@ namespace Clowd.Controls
             {
                 VisualBitmapScalingMode = BitmapScalingMode.NearestNeighbor;
                 VisualEdgeMode = EdgeMode.Unspecified;
-                Transform = DpiScale.DownScaleTransform;
+                if (!DesignerProperties.GetIsInDesignMode(this))
+                    Transform = DpiScale.DownScaleTransform;
             }
         }
     }
