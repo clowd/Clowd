@@ -52,7 +52,7 @@ namespace Clowd
 
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
-
+            TemplatedWindow.SetContent(this, new SettingsPage());
         }
 
         private void PasteExecuted(object sender, ExecutedRoutedEventArgs e)
