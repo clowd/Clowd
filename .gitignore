@@ -25,6 +25,9 @@ bld/
 # Visual Studio 2015 cache/options directory
 .vs/
 
+# Nuget directory (VS downloads packages automatically, no need to include them in the repo)
+packages/
+
 # MSTest test Results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
