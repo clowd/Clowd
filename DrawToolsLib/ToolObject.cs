@@ -59,7 +59,6 @@ namespace DrawToolsLib
             HelperFunctions.UnselectAll(drawingCanvas);
 
             o.IsSelected = true;
-            o.Clip = new RectangleGeometry(new Rect(0, 0, drawingCanvas.ActualWidth, drawingCanvas.ActualHeight));
 
             drawingCanvas.GraphicsList.Add(o);
             drawingCanvas.CaptureMouse();

@@ -133,8 +133,6 @@ namespace DrawToolsLib
                     point.X + 1, point.Y + 1,
                     drawingCanvas.ActualScale);
 
-                r.Clip = new RectangleGeometry(new Rect(0, 0, drawingCanvas.ActualWidth, drawingCanvas.ActualHeight));
-
                 drawingCanvas.GraphicsList.Add(r);
 
                 selectMode = SelectionMode.GroupSelection;

@@ -23,8 +23,7 @@ namespace Clowd
     {
         public bool ShowActionLabels { get; set; } = true;
 
-        private bool _autoPanning = false;
-        private bool _shiftPressed = false;
+        private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private string _imagePath;
 
         public ImageEditorPage(string initImagePath)
@@ -46,9 +45,7 @@ namespace Clowd
                     width = DpiScale.DownScaleX(bitmapFrame.PixelWidth);
                     height = DpiScale.DownScaleY(bitmapFrame.PixelHeight);
                 }
-                objectCanvas.Width = width * 1.5;
-                objectCanvas.Height = height * 1.5;
-                drawingCanvas.AddImageGraphic(_imagePath, new Rect(width / 4, height / 4, width, height));
+                drawingCanvas.AddImageGraphic(_imagePath, new Rect(0, 0, width, height));
             }
         }
 
@@ -70,16 +67,6 @@ namespace Clowd
                 rootGrid.RowDefinitions[0].Height = new GridLength(0);
             }
         }
-        private void RefreshArtworkBounds()
-        {
-            var rect = drawingCanvas.GetArtworkBounds();
-            if (rect == Rect.Empty)
-                return;
-            artworkBounds.Width = rect.Width;
-            artworkBounds.Height = rect.Height;
-            Canvas.SetLeft(artworkBounds, rect.Left);
-            Canvas.SetTop(artworkBounds, rect.Top);
-        }
         private bool VerifyArtworkExists()
         {
             var b = drawingCanvas.GetArtworkBounds();
@@ -97,17 +84,12 @@ namespace Clowd
             DrawingVisual vs = new DrawingVisual();
             DrawingContext dc = vs.RenderOpen();
 
-            drawingCanvas.RemoveClip();
-
-            var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
-            dc.PushClip(new RectangleGeometry(bounds, 0, 0, transform));
+            var transform = new TranslateTransform(Math.Floor(-bounds.Left), Math.Floor(-bounds.Top));
             dc.PushTransform(transform);
 
             dc.DrawRectangle(Brushes.White, null, bounds);
             drawingCanvas.Draw(dc);
-            drawingCanvas.RefreshClip();
 
-            dc.Pop();
             dc.Close();
 
             return vs;
@@ -133,81 +115,11 @@ namespace Clowd
 
         private void ImageEditorPage_Loaded(object sender, RoutedEventArgs e)
         {
-            zoomControl.PreviewMouseLeftButtonDown += ZoomControl_PreviewMouseLeftButtonDown;
-            zoomControl.PreviewMouseLeftButtonUp += ZoomControl_PreviewMouseLeftButtonUp;
-            this.PreviewKeyDown += ZoomControl_PreviewKeyDown;
-            this.PreviewKeyUp += ZoomControl_PreviewKeyUp;
-            drawingCanvas.MouseMove += DrawingCanvas_MouseMove;
-
             // you need to focus a button, or some other control that holds keyboard focus.
             // if you don't do this, input bindings / keyboard shortcuts won't work.
             Keyboard.Focus(uploadButton);
 
-
-
-            drawingCanvas.RefreshClip();
             ZoomFit_Clicked(null, null);
-        }
-
-        private void ZoomControl_PreviewKeyUp(object sender, KeyEventArgs e)
-        {
-            if (_shiftPressed && (e.Key == Key.LeftShift || e.Key == Key.RightShift))
-            {
-                _shiftPressed = false;
-                shiftIndicator.Background = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-                shiftIndicator.Opacity = 0.8;
-                drawingCanvas.Cursor = Cursors.Arrow;
-                drawingCanvas.Tool = DrawToolsLib.ToolType.Pointer;
-            }
-        }
-        private void ZoomControl_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (Keyboard.FocusedElement is TextBox)
-                return;
-            if (e.Key == Key.LeftShift || e.Key == Key.RightShift)
-            {
-                _shiftPressed = true;
-                shiftIndicator.Background = (Brush)App.Current.Resources["AccentColorBrush"];
-                shiftIndicator.Opacity = 1;
-                drawingCanvas.Cursor = Cursors.SizeAll;
-                drawingCanvas.Tool = DrawToolsLib.ToolType.None;
-            }
-        }
-        private void DrawingCanvas_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (!zoomControl.Panning && e.LeftButton == MouseButtonState.Pressed)
-            {
-                RefreshArtworkBounds();
-            }
-        }
-        private void ZoomControl_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (zoomControl.Panning)
-            {
-                zoomControl.StopPanning();
-                if (_autoPanning)
-                    drawingCanvas.Tool = DrawToolsLib.ToolType.Pointer;
-                _autoPanning = false;
-                e.Handled = true;
-            }
-            RefreshArtworkBounds();
-        }
-        private void ZoomControl_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (_shiftPressed || drawingCanvas.Tool == DrawToolsLib.ToolType.None || (
-                drawingCanvas.Tool == DrawToolsLib.ToolType.Pointer
-                    && drawingCanvas.HitTestGraphics(e.GetPosition(drawingCanvas)) < 0))
-            {
-                if (drawingCanvas.Tool == DrawToolsLib.ToolType.Pointer)
-                {
-                    _autoPanning = true;
-                    drawingCanvas.Tool = DrawToolsLib.ToolType.None;
-                }
-                zoomControl.StartPanning();
-                e.Handled = true;
-                drawingCanvas.UnselectAll();
-            }
-            RefreshArtworkBounds();
         }
 
         private void Font_Clicked(object sender, RoutedEventArgs e)
@@ -244,6 +156,7 @@ namespace Clowd
                 }
             }
         }
+
         private void Brush_Clicked(object sender, RoutedEventArgs e)
         {
             System.Windows.Forms.ColorDialog dlg = new System.Windows.Forms.ColorDialog();
@@ -258,37 +171,21 @@ namespace Clowd
                 drawingCanvas.ObjectColor = Color.FromArgb(final.A, final.R, final.G, final.B);
             }
         }
+
         private void ZoomFit_Clicked(object sender, RoutedEventArgs e)
         {
-            var rect = zoomControl.GetActualContentRect();
-            var scaleX = zoomControl.ActualWidth / rect.Width;
-            var scaleY = zoomControl.ActualHeight / rect.Height;
-            var scale = Math.Min(scaleX, scaleY);
-            zoomControl.ContentScale = scale;
-            var x = zoomControl.ActualWidth / 2 - rect.Width * scale / 2;
-            var y = zoomControl.ActualHeight / 2 - rect.Height * scale / 2;
-            zoomControl.ContentOffset = new Point(x, y);
+            drawingCanvas.ZoomPanFit();
         }
+
         private void ZoomActual_Clicked(object sender, RoutedEventArgs e)
         {
-            var pt = zoomControl.ContentOffset;
-            var originRect = zoomControl.GetRenderedContentRect();
-            var originCenter = new Point(originRect.Width / 2, originRect.Height / 2);
-            zoomControl.ContentScale = 1;
-            var newRect = zoomControl.GetRenderedContentRect();
-            var newCenter = new Point(newRect.Width / 2, newRect.Height / 2);
-
-            var offsetX = originCenter.X - newCenter.X;
-            var offsetY = originCenter.Y - newCenter.Y;
-            pt.Offset(offsetX, offsetY);
-            zoomControl.ContentOffset = pt;
+            drawingCanvas.ZoomPanActualSize();
         }
 
         private void PrintCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
                 return;
-            var c = objectCanvas;
             PrintDialog dlg = new PrintDialog();
             var image = GetRenderedVisual();
             if (dlg.ShowDialog().GetValueOrDefault() != true)
@@ -297,10 +194,12 @@ namespace Clowd
             }
             dlg.PrintVisual(image, "Graphics");
         }
+
         private void CloseCommand(object sender, ExecutedRoutedEventArgs e)
         {
             Window.GetWindow(this)?.Close();
         }
+
         private void SaveCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
@@ -343,16 +242,17 @@ namespace Clowd
                 GetRenderedPng().Save(fs);
             }
         }
+
         private void UndoCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Undo();
-            RefreshArtworkBounds();
         }
+
         private void RedoCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Redo();
-            RefreshArtworkBounds();
         }
+
         private void CopyCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
@@ -364,11 +264,12 @@ namespace Clowd
                 System.Windows.Forms.Clipboard.SetImage(img);
             }
         }
+
         private void DeleteCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Delete();
-            RefreshArtworkBounds();
         }
+
         private void UploadCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
@@ -385,14 +286,34 @@ namespace Clowd
                 var task = UploadManager.Upload(b, "clowd-default.png");
             }
         }
+
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)
         {
             var tool = (DrawToolsLib.ToolType)Enum.Parse(typeof(DrawToolsLib.ToolType), (string)e.Parameter);
             drawingCanvas.Tool = tool;
-            if (tool == DrawToolsLib.ToolType.None)
+        }
+
+        private void rootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.FocusedElement is TextBox)
+                return;
+            if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool == null)
             {
-                drawingCanvas.UnselectAll();
-                drawingCanvas.Cursor = Cursors.SizeAll;
+                _shiftPanPreviousTool = drawingCanvas.Tool;
+                drawingCanvas.Tool = DrawToolsLib.ToolType.None;
+                shiftIndicator.Background = (Brush) App.Current.Resources["AccentColorBrush"];
+                shiftIndicator.Opacity = 1;
+            }
+        }
+
+        private void rootGrid_PreviewKeyUp(object sender, KeyEventArgs e)
+        {
+            if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool != null)
+            {
+                drawingCanvas.Tool = _shiftPanPreviousTool.Value;
+                _shiftPanPreviousTool = null;
+                shiftIndicator.Background = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                shiftIndicator.Opacity = 0.8;
             }
         }
     }
