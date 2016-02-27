@@ -67,8 +67,6 @@ namespace DrawToolsLib
 
                 currentIndex++;
             }
-
-            drawingCanvas.RefreshClip();
         }
 
         /// <summary>
