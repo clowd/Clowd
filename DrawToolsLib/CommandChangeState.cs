@@ -49,8 +49,6 @@ namespace DrawToolsLib
         {
             // Replace all objects in the list with objects from listBefore
             ReplaceObjects(drawingCanvas.GraphicsList, listBefore);
-
-            drawingCanvas.RefreshClip();
         }
 
         /// <summary>
@@ -60,8 +58,6 @@ namespace DrawToolsLib
         {
             // Replace all objects in the list with objects from listAfter
             ReplaceObjects(drawingCanvas.GraphicsList, listAfter);
-
-            drawingCanvas.RefreshClip();
         }
 
         // Replace objects in graphicsList with objects from clone list

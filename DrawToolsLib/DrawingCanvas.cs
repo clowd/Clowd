@@ -7,8 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Xml.Serialization;
 using System.Collections.Generic;
-
-
+using System.Linq;
 
 namespace DrawToolsLib
 {
@@ -99,8 +98,19 @@ namespace DrawToolsLib
             this.MouseDown += new MouseButtonEventHandler(DrawingCanvas_MouseDown);
             this.MouseMove += new MouseEventHandler(DrawingCanvas_MouseMove);
             this.MouseUp += new MouseButtonEventHandler(DrawingCanvas_MouseUp);
+            this.MouseWheel += DrawingCanvas_MouseWheel;
             this.KeyDown += new KeyEventHandler(DrawingCanvas_KeyDown);
             this.LostMouseCapture += new MouseEventHandler(DrawingCanvas_LostMouseCapture);
+
+            InitializeZoom();
+
+            _clickable = new Border();
+            _clickable.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+            Children.Add(_clickable);
+
+            _artworkRectangle = new Border();
+            _artworkRectangle.Background = new SolidColorBrush(Colors.White);
+            Children.Add(_artworkRectangle);
         }
 
 
@@ -301,7 +311,9 @@ namespace DrawToolsLib
 
                     // Set cursor immediately - important when tool is selected from the menu
                     var tmp = tools[(int)Tool];
-                    if (tmp != null)
+                    if (tmp == null)
+                        Cursor = Cursors.SizeAll;
+                    else
                         tmp.SetCursor(this);
                 }
             }
@@ -877,24 +889,22 @@ namespace DrawToolsLib
             HelperFunctions.UnselectAll(this);
             var o = new GraphicsImage(filename, rect.Left, rect.Top, rect.Right, rect.Bottom, LineWidth, ObjectColor, 1d);
             o.IsSelected = true;
-            o.Clip = new RectangleGeometry(new Rect(0, 0, this.ActualWidth, this.ActualHeight));
             this.GraphicsList.Add(o);
         }
         public Rect GetArtworkBounds()
         {
-            if (this.GraphicsList.Count > 0)
+            var artwork = GraphicsList.Cast<GraphicsBase>().Where(g => !(g is GraphicsSelectionRectangle));
+            Rect result = new Rect(0, 0, 0, 0);
+            bool first = true;
+            foreach (var item in artwork)
             {
-                var rect = GetGraphicRect(this[0]);
-                for (int i = 1; i < this.GraphicsList.Count; i++)
-                {
-                    rect.Union(GetGraphicRect(this[i]));
-                }
-                return rect;
+                if (first)
+                    result = GetGraphicRect(item);
+                else
+                    result.Union(GetGraphicRect(item));
+                first = false;
             }
-            else
-            {
-                return new Rect(0, 0, 0, 0);
-            }
+            return result;
         }
         private Rect GetGraphicRect(GraphicsBase g)
         {
@@ -902,7 +912,7 @@ namespace DrawToolsLib
             if (g.IsSelected)
             {
                 var trim = GraphicsBase.HandleSize / 2 - LineWidth;
-                return new Rect(rect.X + trim, rect.Y + trim, 
+                return new Rect(rect.X + trim, rect.Y + trim,
                     Math.Max(0, rect.Width - (trim * 2)), Math.Max(0, rect.Height - (trim * 2)));
             }
             else
@@ -981,9 +991,6 @@ namespace DrawToolsLib
                     graphicsList.Add(g.CreateGraphics());
                 }
 
-                // Update clip for all loaded objects.
-                RefreshClip();
-
                 ClearHistory();
                 UpdateState();
             }
@@ -1027,6 +1034,7 @@ namespace DrawToolsLib
         {
             HelperFunctions.DeleteSelection(this);
             UpdateState();
+            RefreshBounds();
         }
 
         /// <summary>
@@ -1036,6 +1044,7 @@ namespace DrawToolsLib
         {
             HelperFunctions.DeleteAll(this);
             UpdateState();
+            RefreshBounds();
         }
 
         /// <summary>
@@ -1063,33 +1072,9 @@ namespace DrawToolsLib
         {
             HelperFunctions.ApplyProperties(this);
             UpdateState();
+            RefreshBounds();
         }
 
-
-        /// <summary>
-        /// Set clip for all graphics objects.
-        /// </summary>
-        public void RefreshClip()
-        {
-            foreach (GraphicsBase b in graphicsList)
-            {
-                b.Clip = new RectangleGeometry(new Rect(0, 0, this.ActualWidth, this.ActualHeight));
-
-                // Good chance to refresh actual scale
-                b.ActualScale = this.ActualScale;
-            }
-        }
-
-        /// <summary>
-        /// Remove clip for all graphics objects.
-        /// </summary>
-        public void RemoveClip()
-        {
-            foreach (GraphicsBase b in graphicsList)
-            {
-                b.Clip = null;
-            }
-        }
 
         /// <summary>
         /// Undo
@@ -1098,6 +1083,7 @@ namespace DrawToolsLib
         {
             undoManager.Undo();
             UpdateState();
+            RefreshBounds();
         }
 
         /// <summary>
@@ -1107,6 +1093,7 @@ namespace DrawToolsLib
         {
             undoManager.Redo();
             UpdateState();
+            RefreshBounds();
         }
 
         #endregion Public Functions
@@ -1195,15 +1182,15 @@ namespace DrawToolsLib
 
         #region Visual Children Overrides
 
-        /// <summary>
-        /// Get number of children: VisualCollection count.
-        /// If in-place editing textbox is active, add 1.
-        /// </summary>
+        private Border _clickable;
+        private Border _artworkRectangle;
+        private const int _extraVisualsCount = 2; // only includes the permanent extra visuals
+
         protected override int VisualChildrenCount
         {
             get
             {
-                int n = graphicsList.Count;
+                int n = _extraVisualsCount + graphicsList.Count;
 
                 if (toolText.TextBox != null)
                 {
@@ -1214,23 +1201,33 @@ namespace DrawToolsLib
             }
         }
 
-        /// <summary>
-        /// Get visual child - one of GraphicsBase objects
-        /// or in-place editing textbox, if it is active.
-        /// </summary>
         protected override Visual GetVisualChild(int index)
         {
-            if (index < 0 || index >= graphicsList.Count)
+            if (index == 0)
             {
-                if (toolText.TextBox != null && index == graphicsList.Count)
+                if (_clickable != null && ActualWidth > 0 && _scaleTransform.ScaleX > 0)
                 {
-                    return toolText.TextBox;
+                    Canvas.SetLeft(_clickable, -_translateTransform.X / _scaleTransform.ScaleX);
+                    Canvas.SetTop(_clickable, -_translateTransform.Y / _scaleTransform.ScaleY);
+                    _clickable.Width = ActualWidth / _scaleTransform.ScaleX;
+                    _clickable.Height = ActualHeight / _scaleTransform.ScaleY;
                 }
-
-                throw new ArgumentOutOfRangeException("index");
+                return _clickable;
+            }
+            else if (index == 1)
+            {
+                return _artworkRectangle;
+            }
+            else if (index - _extraVisualsCount < graphicsList.Count)
+            {
+                return graphicsList[index - _extraVisualsCount];
+            }
+            else if (index == _extraVisualsCount + graphicsList.Count && toolText.TextBox != null)
+            {
+                return toolText.TextBox;
             }
 
-            return graphicsList[index];
+            throw new ArgumentOutOfRangeException("index");
         }
 
         #endregion Visual Children Overrides
@@ -1244,20 +1241,20 @@ namespace DrawToolsLib
         /// </summary>
         void DrawingCanvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (tools[(int)Tool] == null)
-            {
+            if (IsPanning)
                 return;
-            }
-
 
             this.Focus();
-
 
             if (e.ChangedButton == MouseButton.Left)
             {
                 if (e.ClickCount == 2)
                 {
                     HandleDoubleClick(e);        // special case for GraphicsText
+                }
+                else if (Tool == ToolType.None || tools[(int) Tool] == null)
+                {
+                    StartPanning(e);
                 }
                 else
                 {
@@ -1279,6 +1276,12 @@ namespace DrawToolsLib
         /// </summary>
         void DrawingCanvas_MouseMove(object sender, MouseEventArgs e)
         {
+            if (IsPanning)
+            {
+                ContinuePanning(e);
+                return;
+            }
+
             if (tools[(int)Tool] == null)
             {
                 return;
@@ -1294,6 +1297,9 @@ namespace DrawToolsLib
             {
                 this.Cursor = HelperFunctions.DefaultCursor;
             }
+
+            if (e.LeftButton == MouseButtonState.Pressed)
+                RefreshBounds();
         }
 
         /// <summary>
@@ -1302,11 +1308,16 @@ namespace DrawToolsLib
         /// </summary>
         void DrawingCanvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
+            if (IsPanning)
+            {
+                StopPanning(e);
+                return;
+            }
+
             if (tools[(int)Tool] == null)
             {
                 return;
             }
-
 
             if (e.ChangedButton == MouseButton.Left)
             {
@@ -1314,6 +1325,32 @@ namespace DrawToolsLib
 
                 UpdateState();
             }
+        }
+
+        /// <summary>
+        /// Mouse wheel event.
+        /// Change zoom, except if panning.
+        /// </summary>
+        void DrawingCanvas_MouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (IsPanning)
+                return;
+
+            double zoom = e.Delta > 0 ? .2 : -.2;
+            if (!(e.Delta > 0) && (_scaleTransform.ScaleX < .3 || _scaleTransform.ScaleY < .3))
+                return;
+            if (e.Delta > 0 && (_scaleTransform.ScaleX > 2.9 || _scaleTransform.ScaleY > 2.9))
+                return;
+
+            Point relative = e.GetPosition(this);
+            double absoluteX;
+            double absoluteY;
+
+            absoluteX = relative.X * _scaleTransform.ScaleX + _translateTransform.X;
+            absoluteY = relative.Y * _scaleTransform.ScaleY + _translateTransform.Y;
+
+            ContentScale += zoom;
+            ContentOffset = new Point(absoluteX - relative.X * _scaleTransform.ScaleX, absoluteY - relative.Y * _scaleTransform.ScaleY);
         }
 
         #endregion Mouse Event Handlers
@@ -1751,7 +1788,116 @@ namespace DrawToolsLib
             CanSetProperties = HelperFunctions.CanApplyProperties(this);
         }
 
+        private void RefreshBounds()
+        {
+            var bounds = GetArtworkBounds();
+            Canvas.SetLeft(_artworkRectangle, bounds.Left);
+            Canvas.SetTop(_artworkRectangle, bounds.Top);
+            _artworkRectangle.Width = bounds.Width;
+            _artworkRectangle.Height = bounds.Height;
+        }
+
 
         #endregion Other Functions
+
+        #region Zooming and panning
+
+        public bool IsPanning { get; private set; }
+
+        public Point ContentOffset
+        {
+            get { return (Point) GetValue(ContentOffsetProperty); }
+            set { SetValue(ContentOffsetProperty, value); }
+        }
+        public static readonly DependencyProperty ContentOffsetProperty =
+            DependencyProperty.Register("ContentOffset", typeof(Point), typeof(DrawingCanvas),
+                new PropertyMetadata(new Point(0, 0), ContentOffsetChanged));
+
+        public double ContentScale
+        {
+            get { return (double) GetValue(ContentScaleProperty); }
+            set { SetValue(ContentScaleProperty, value); }
+        }
+        public static readonly DependencyProperty ContentScaleProperty =
+            DependencyProperty.Register("ContentScale", typeof(double), typeof(DrawingCanvas),
+                new PropertyMetadata(1d, ContentScaleChanged));
+
+        private static void ContentScaleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var me = (DrawingCanvas) d;
+            var scale = (double) e.NewValue;
+            me._scaleTransform.ScaleX = scale;
+            me._scaleTransform.ScaleY = scale;
+        }
+        private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var me = (DrawingCanvas) d;
+            var pt = (Point) e.NewValue;
+            me._translateTransform.X = pt.X;
+            me._translateTransform.Y = pt.Y;
+        }
+
+        private ScaleTransform _scaleTransform;
+        private TranslateTransform _translateTransform;
+
+        private void InitializeZoom()
+        {
+            TransformGroup group = new TransformGroup();
+            _scaleTransform = new ScaleTransform();
+            group.Children.Add(_scaleTransform);
+            _translateTransform = new TranslateTransform();
+            group.Children.Add(_translateTransform);
+            RenderTransform = group;
+            RenderTransformOrigin = new Point(0.0, 0.0);
+        }
+
+        private Point panStart;
+
+        private void StartPanning(MouseEventArgs e)
+        {
+            IsPanning = true;
+            panStart = e.GetPosition(this);
+            CaptureMouse();
+        }
+
+        private void ContinuePanning(MouseEventArgs e)
+        {
+            ContentOffset += (e.GetPosition(this) - panStart) * ContentScale;
+            panStart = e.GetPosition(this);
+        }
+
+        private void StopPanning(MouseEventArgs e)
+        {
+            IsPanning = false;
+            ReleaseMouseCapture();
+        }
+
+        public void ZoomPanFit()
+        {
+            var rect = GetArtworkBounds();
+            ContentScale = Math.Min(ActualWidth / rect.Width, ActualHeight / rect.Height);
+            ZoomPanCenter();
+        }
+
+        public void ZoomPanActualSize()
+        {
+            var rect = GetArtworkBounds();
+            ContentScale = 1;
+            ZoomPanCenter();
+        }
+
+        public void ZoomPanCenter()
+        {
+            var rect = GetArtworkBounds();
+            var x = ActualWidth / 2 - rect.Width * ContentScale / 2 - rect.Left * ContentScale;
+            var y = ActualHeight / 2 - rect.Height * ContentScale / 2 - rect.Top * ContentScale;
+            if (ContentScale == 1)
+                ContentOffset = new Point(Math.Round(x), Math.Round(y));
+            else
+                ContentOffset = new Point(x, y);
+
+        }
+
+        #endregion
     }
 }
