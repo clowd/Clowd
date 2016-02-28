@@ -185,6 +185,8 @@ namespace Clowd.Utilities
             }
             return USER32.IsZoomed(hWnd);
         }
+        /// <param name="point">The point must be in screen bounds units (relative to the top left of the primary monitor rather than the entire virtual screen)</param>
+        /// <returns>A rectangle in screen bounds units  (relative to the top left of the primary monitor rather than the entire virtual screen)</returns>
         public Rect GetBoundsOfScreenContainingPoint(Point point, bool workingAreaOnly = true)
         {
             POINT p;
