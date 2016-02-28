@@ -60,10 +60,6 @@ namespace DrawToolsLib
 
             // Create full object from the clone and add it to list
             drawingCanvas.GraphicsList.Add(newObjectClone.CreateGraphics());
-
-            // Object created from the clone doesn't contain clip information,
-            // refresh it.
-            drawingCanvas.RefreshClip();
         }
     }
 }
