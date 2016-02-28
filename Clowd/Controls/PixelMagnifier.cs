@@ -50,7 +50,7 @@ namespace Clowd.Controls
             _timer.Interval = TimeSpan.FromMilliseconds(30);
             _timer.Tick += (sender, args) =>
             {
-                if (this.Visibility != Visibility.Visible)
+                if (!this.IsVisible)
                     return;
                 var wfMouse = System.Windows.Forms.Cursor.Position;
                 var wpfMouse = new Point(
@@ -62,6 +62,8 @@ namespace Clowd.Controls
                 DrawMagnifier(Image, wpfMouse);
             };
             _timer.IsEnabled = true;
+
+            Unloaded += delegate { _timer.IsEnabled = false; };
         }
 
         private void DrawMagnifier(BitmapSource source, Point location)
