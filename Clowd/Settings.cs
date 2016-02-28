@@ -38,7 +38,7 @@ namespace Clowd
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
     public class GeneralSettings : SettingsBase, INotifyPropertyChanged
     {
-        [Browsable(false)]
+        [Browsable(false), ClassifyIgnore]
         public new object Attribute { get; } = null;
 
         [Browsable(false)]
@@ -81,11 +81,19 @@ namespace Clowd
                      "or as a single scrolling page.")]
         public SettingsDisplayMode DisplayMode { get; set; } = SettingsDisplayMode.Tabbed;
 
-        [Category("Hotkeys"), DisplayName("General - File Upload")]
-        public KeyGesture FileUploadShortcut { get; set; } = null;
+        [Category("Hotkeys"), DisplayName("General - File Upload"), ClassifyIgnoreIfDefault]
+        public GlobalTrigger FileUploadShortcut { get; set; }
+            = new GlobalTrigger(() => App.Current.UploadFile());
 
-        [Category("Hotkeys"), DisplayName("General - Open Clowd")]
-        public KeyGesture OpenHomeShortcut { get; set; } = null;
+        [Category("Hotkeys"), DisplayName("General - Open Clowd"), ClassifyIgnoreIfDefault]
+        public GlobalTrigger OpenHomeShortcut { get; set; }
+            = new GlobalTrigger(() =>
+                {
+                    if (UploadManager.Authenticated)
+                        TemplatedWindow.CreateWindow("Clowd", new HomePage()).Show();
+                    else
+                        TemplatedWindow.CreateWindow("Clowd", new LoginPage()).Show();
+                });
 
         [ExpandAsCategory("Capture")]
         public CaptureSettings CaptureSettings { get; set; } = new CaptureSettings();
@@ -107,14 +115,17 @@ namespace Clowd
         [Description("If this is true, the Capture window will try to detect and highlight different windows as you hover over them.")]
         public bool DetectWindows { get; set; } = true;
 
-        [Category("Hotkeys"), DisplayName("Capture - Region")]
-        public KeyGesture CaptureRegionShortcut { get; set; } = new KeyGesture(Key.PrintScreen);
+        [Category("Hotkeys"), DisplayName("Capture - Region"), ClassifyIgnoreIfDefault]
+        public GlobalTrigger CaptureRegionShortcut { get; set; }
+            = new GlobalTrigger(Key.PrintScreen, () => App.Current.StartCapture());
 
-        [Category("Hotkeys"), DisplayName("Capture - Fullscreen")]
-        public KeyGesture CaptureFullscreenShortcut { get; set; } = new KeyGesture(Key.PrintScreen, ModifierKeys.Control);
+        [Category("Hotkeys"), DisplayName("Capture - Fullscreen"), ClassifyIgnoreIfDefault]
+        public GlobalTrigger CaptureFullscreenShortcut { get; set; }
+            = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Control, () => App.Current.QuickCapture());
 
-        [Category("Hotkeys"), DisplayName("Capture - Active Window")]
-        public KeyGesture CaptureActiveShortcut { get; set; } = new KeyGesture(Key.PrintScreen, ModifierKeys.Alt);
+        [Category("Hotkeys"), DisplayName("Capture - Active Window"), ClassifyIgnoreIfDefault]
+        public GlobalTrigger CaptureActiveShortcut { get; set; }
+            = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Alt, () => App.Current.QuickCapture());
     }
 
     [ImplementPropertyChanged]

@@ -8,19 +8,20 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Clowd.Utilities;
 
 namespace Clowd.Controls
 {
     public class KeyGestureEditor : UserControl
     {
-        public KeyGesture Gesture
+        public GlobalTrigger Trigger
         {
-            get { return (KeyGesture)GetValue(GestureProperty); }
-            set { SetValue(GestureProperty, value); }
+            get { return (GlobalTrigger)GetValue(TriggerProperty); }
+            set { SetValue(TriggerProperty, value); }
         }
 
-        public static readonly DependencyProperty GestureProperty =
-            DependencyProperty.Register("Gesture", typeof(KeyGesture), typeof(KeyGestureEditor),
+        public static readonly DependencyProperty TriggerProperty =
+            DependencyProperty.Register("Trigger", typeof(GlobalTrigger), typeof(KeyGestureEditor),
                 new PropertyMetadata(null, GestureChangedCallback));
 
         public bool IsEditing { get; private set; }
@@ -97,12 +98,12 @@ namespace Clowd.Controls
             this.KeyUp -= OnKeyUp;
             try
             {
-                Gesture = new KeyGesture(key, modifiers);
+                Trigger.Gesture = new KeyGesture(key, modifiers);
             }
             catch
             {
                 // invalid keygesture
-                Gesture = null;
+                Trigger.Gesture = null;
             }
             UpdateControls();
         }
@@ -122,14 +123,14 @@ namespace Clowd.Controls
             }
             else
             {
-                if (Gesture == null)
+                if (Trigger == null || Trigger.Gesture == null)
                 {
                     _button.Content = "(undefined)";
                     _status.Background = Brushes.PaleVioletRed;
                 }
                 else
                 {
-                    _button.Content = Gesture.GetDisplayStringForCulture(CultureInfo.CurrentUICulture);
+                    _button.Content = Trigger.Gesture.GetDisplayStringForCulture(CultureInfo.CurrentUICulture);
                     _status.Background = Brushes.PaleGreen;
                 }
             }
