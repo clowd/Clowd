@@ -329,28 +329,12 @@ namespace Clowd
 
             if (draggingArea)
             {
-                double x, y, width, height;
-                if (currentPoint.X > draggingOrigin.X)
-                {
-                    x = draggingOrigin.X;
-                    width = currentPoint.X - draggingOrigin.X;
-                }
-                else
-                {
-                    x = currentPoint.X;
-                    width = draggingOrigin.X - currentPoint.X;
-                }
-                if (currentPoint.Y > draggingOrigin.Y)
-                {
-                    y = draggingOrigin.Y;
-                    height = currentPoint.Y - draggingOrigin.Y;
-                }
-                else
-                {
-                    y = currentPoint.Y;
-                    height = draggingOrigin.Y - currentPoint.Y;
-                }
-                UpdateCanvasSelection(new Rect(x, y, width, height));
+                var rect = new Rect();
+                rect.X = Math.Min(draggingOrigin.X, currentPoint.X);
+                rect.Y = Math.Min(draggingOrigin.Y, currentPoint.Y);
+                rect.Width = Math.Abs(draggingOrigin.X - currentPoint.X) + 1;
+                rect.Height = Math.Abs(draggingOrigin.Y - currentPoint.Y) + 1;
+                UpdateCanvasSelection(rect);
             }
             else
             {
