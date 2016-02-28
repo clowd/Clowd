@@ -121,10 +121,10 @@ namespace Clowd
     {
         public override FrameworkElement CreateControl(PropertyItem property, PropertyControlFactoryOptions options)
         {
-            if (property.Is(typeof(KeyGesture)))
+            if (property.Is(typeof(GlobalTrigger)))
             {
                 var editor = new KeyGestureEditor();
-                editor.SetBinding(KeyGestureEditor.GestureProperty, property.CreateBinding());
+                editor.SetBinding(KeyGestureEditor.TriggerProperty, property.CreateBinding());
                 return editor;
             }
 

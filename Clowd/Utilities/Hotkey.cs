@@ -34,6 +34,13 @@ namespace Clowd.Utilities
         // ******************************************************************
         public HotKey(Key k, ModifierKeys keyModifiers, Action<HotKey> action, bool register = true)
         {
+            if (_dictHotKeyToCalBackProc != null)
+            {
+                var id = KeyInterop.VirtualKeyFromKey(Key) + ((int) KeyModifiers*0x10000);
+                if (_dictHotKeyToCalBackProc.ContainsKey(id))
+                    throw new InvalidOperationException("This key combination is already registered.");
+            }
+
             Key = k;
             KeyModifiers = keyModifiers;
             Action = action;
@@ -69,6 +76,7 @@ namespace Clowd.Utilities
             if (_dictHotKeyToCalBackProc.TryGetValue(Id, out hotKey))
             {
                 UnregisterHotKey(IntPtr.Zero, Id);
+                _dictHotKeyToCalBackProc.Remove(Id);
             }
         }
 
