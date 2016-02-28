@@ -911,7 +911,7 @@ namespace DrawToolsLib
             var rect = g.ContentBounds;
             if (g.IsSelected)
             {
-                var trim = GraphicsBase.HandleSize / 2 - LineWidth;
+                var trim = (GraphicsBase.HandleSize - LineWidth) / 2;
                 return new Rect(rect.X + trim, rect.Y + trim,
                     Math.Max(0, rect.Width - (trim * 2)), Math.Max(0, rect.Height - (trim * 2)));
             }
