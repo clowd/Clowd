@@ -282,8 +282,8 @@ namespace Clowd
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             Point p = new Point();
-            p.X = System.Windows.Forms.Cursor.Position.X + System.Windows.Forms.SystemInformation.VirtualScreen.X;
-            p.Y = System.Windows.Forms.Cursor.Position.Y + System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+            p.X = System.Windows.Forms.Cursor.Position.X;
+            p.Y = System.Windows.Forms.Cursor.Position.Y;
             var primaryScreen = windowFinder.GetBoundsOfScreenContainingPoint(p, false);
             primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
             primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
