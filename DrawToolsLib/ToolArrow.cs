@@ -43,7 +43,7 @@ namespace DrawToolsLib
         {
             drawingCanvas.Cursor = ToolCursor;
 
-            if (e.LeftButton == MouseButtonState.Pressed)
+            if (e.LeftButton == MouseButtonState.Pressed && drawingCanvas.IsMouseCaptured)
             {
                 drawingCanvas[drawingCanvas.Count - 1].MoveHandleTo(
                     e.GetPosition(drawingCanvas), 2);
