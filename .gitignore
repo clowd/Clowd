@@ -213,3 +213,6 @@ FakesAssemblies/
 GeneratedArtifacts/
 _Pvt_Extensions/
 ModelManifest.xml
+
+# Clowd-specific ignores
+NAppUpdate.Framework/Updater/updater.exe
