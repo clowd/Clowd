@@ -54,7 +54,7 @@
     </UserControl.Resources>
     <UserControl.InputBindings>
         <KeyBinding Key="Enter" Command="{StaticResource Commands.Upload}" />
-        <KeyBinding Key="Esc" Command="{StaticResource Commands.SelectTool}" CommandParameter="None"/>
+        <KeyBinding Key="Esc" Command="{StaticResource Commands.SelectTool}" CommandParameter="Pointer"/>
         <KeyBinding Key="D" Command="{StaticResource Commands.SelectTool}" CommandParameter="None"/>
         <KeyBinding Key="S" Command="{StaticResource Commands.SelectTool}" CommandParameter="Pointer"/>
         <KeyBinding Key="R" Command="{StaticResource Commands.SelectTool}" CommandParameter="Rectangle"/>
@@ -75,7 +75,7 @@
         <CommandBinding Command="{StaticResource Commands.Upload}" Executed="UploadCommand" />
         <CommandBinding Command="{StaticResource Commands.SelectTool}" Executed="SelectToolCommand" />
     </UserControl.CommandBindings>
-    <Grid Name="rootGrid">
+    <Grid Name="rootGrid" PreviewKeyDown="rootGrid_PreviewKeyDown" PreviewKeyUp="rootGrid_PreviewKeyUp">
         <Grid.RowDefinitions>
             <RowDefinition Height="30" />
             <RowDefinition />
@@ -246,42 +246,16 @@
                 </Viewbox>
             </Button>
         </StackPanel>
-        <Grid Grid.Row="1">
-            <controls:ZoomBorderControl x:Name="zoomControl" ClipToBounds="True" Background="#1e1e1e" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                <Canvas x:Name="objectCanvas" Width="1000" Height="1000" HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True">
-                    <Rectangle Width="{Binding ActualWidth, ElementName=objectCanvas}"
-                               Height="{Binding ActualHeight, ElementName=objectCanvas}">
-                        <Rectangle.Fill>
-                            <util:CheckeredBrush BlockSize="24" Foreground="{StaticResource AccentColorBrush4}" Background="White" />
-                            <!--<DrawingBrush Stretch="None" TileMode="Tile" Viewport="0,0,24,24" ViewportUnits="Absolute">
-                                <DrawingBrush.Drawing>
-                                    <DrawingGroup>
-                                        <GeometryDrawing Brush="White">
-                                            <GeometryDrawing.Geometry>
-                                                <RectangleGeometry Rect="0,0,24,24" />
-                                            </GeometryDrawing.Geometry>
-                                        </GeometryDrawing>
-                                        <GeometryDrawing Brush="{DynamicResource AccentColorBrush4}">
-                                            <GeometryDrawing.Geometry>
-                                                <GeometryGroup>
-                                                    <RectangleGeometry Rect="0,0,12,12" />
-                                                    <RectangleGeometry Rect="12,12,12,12" />
-                                                </GeometryGroup>
-                                            </GeometryDrawing.Geometry>
-                                        </GeometryDrawing>
-                                    </DrawingGroup>
-                                </DrawingBrush.Drawing>
-                            </DrawingBrush>-->
-                        </Rectangle.Fill>
-                    </Rectangle>
-                    <Rectangle x:Name="artworkBounds" Fill="White" />
-                    <lib:DrawingCanvas x:Name="drawingCanvas" LineWidth="{Binding LineWidth}" 
-                                       ObjectColor="{Binding ObjectColor}" Background="#00000000"
-                                       Width="{Binding ActualWidth, ElementName=objectCanvas}"
-                                       Height="{Binding ActualHeight, ElementName=objectCanvas}"/>
-                </Canvas>
-            </controls:ZoomBorderControl>
-        </Grid>
+        <Canvas Grid.Row="1" x:Name="objectCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ClipToBounds="True">
+            <Rectangle Fill="#1e1e1e"
+                Width="{Binding ActualWidth, ElementName=objectCanvas}"
+                Height="{Binding ActualHeight, ElementName=objectCanvas}">
+            </Rectangle>
+            <lib:DrawingCanvas x:Name="drawingCanvas" LineWidth="{Binding LineWidth}" 
+                                ObjectColor="{Binding ObjectColor}" Background="#00000000"
+                                Width="{Binding ActualWidth, ElementName=objectCanvas}"
+                                Height="{Binding ActualHeight, ElementName=objectCanvas}"/>
+        </Canvas>
         <StackPanel Width="70" Margin="30"  Orientation="Vertical" Grid.Row="1" 
                     VerticalAlignment="Center" HorizontalAlignment="Right" >
             <Border x:Name="shiftIndicator" Background="#70707a" Height="40" Margin="0,0,0,10" CornerRadius="10" Opacity=".7">
@@ -324,7 +298,7 @@
                             Style="{StaticResource FlatSlider}"
                             Minimum="0.2" Maximum="3" 
                             TickFrequency="0.2"
-                            Value="{Binding ElementName=zoomControl, Path=ContentScale}"/>
+                            Value="{Binding ElementName=drawingCanvas, Path=ContentScale}"/>
                     </Grid>
                     <Button Grid.Row="1" Margin="5" Click="ZoomFit_Clicked">Fit</Button>
                     <Button Grid.Row="2" Margin="5,0,5,10" Click="ZoomActual_Clicked">Actual</Button>

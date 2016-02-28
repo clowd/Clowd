@@ -334,7 +334,7 @@ namespace Clowd
         private void SetupSettings()
         {
             GeneralSettings tmp;
-            RT.Util.SettingsUtil.LoadSettings<GeneralSettings>(out tmp);
+            SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
         }
         private void SetupAccentColors()

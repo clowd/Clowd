@@ -38,8 +38,6 @@ namespace DrawToolsLib
             {
                 drawingCanvas.GraphicsList.Add(o.CreateGraphics());
             }
-
-            drawingCanvas.RefreshClip();
         }
 
         /// <summary>

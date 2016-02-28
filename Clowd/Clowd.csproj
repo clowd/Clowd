@@ -146,7 +146,6 @@
     <Compile Include="Controls\SizeAwareProgressBar.cs" />
     <Compile Include="Controls\TransitioningContentControl.cs" />
     <Compile Include="Controls\UploadProgressBar.cs" />
-    <Compile Include="Controls\ZoomBorderControl.cs" />
     <Compile Include="Converters\BoolToInverseConverter.cs" />
     <Compile Include="Converters\BoolToVisibilityConverter2.cs" />
     <Compile Include="Converters\BorderThicknessToStrokeThicknessConverter.cs" />
