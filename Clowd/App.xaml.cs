@@ -20,6 +20,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using CS.Wpf;
@@ -29,6 +30,7 @@ using RT.Util;
 using RT.Util.Serialization;
 using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
+using GlobalTrigger = Clowd.Utilities.GlobalTrigger;
 using Point = System.Windows.Point;
 
 namespace Clowd
@@ -41,7 +43,7 @@ namespace Clowd
         public string AppDataDirectory { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
 
         // static instead of const for debugging purposes.
-        public static string ClowdServerDomain { get; private set; } = "clowd.ca"; 
+        public static string ClowdServerDomain { get; private set; } = "clowd.ca";
         public const string ClowdAppName = "Clowd";
         public const string ClowdNamedPipe = "ClowdRunningPipe";
         public const string ClowdMutex = "ClowdMutex000";
@@ -144,7 +146,7 @@ namespace Clowd
 
             // if running from a debug location, offer prompt to target remote or local clowd server.
             if (Debugger.IsAttached ||
-                Regex.IsMatch(Assembly.GetExecutingAssembly().Location, 
+                Regex.IsMatch(Assembly.GetExecutingAssembly().Location,
                 @"^(.*)bin\\(Debug|Release)\\Clowd\.exe$",
                 RegexOptions.IgnoreCase))
             {
@@ -152,7 +154,7 @@ namespace Clowd
                 config.Title = "Clowd";
                 config.MainInstruction = "Clowd running in debug mode.";
                 config.Content = "Choose to target either a local or remote server location.";
-                config.CustomButtons = new[] {"Remote (clowd.ca)", "Local"};
+                config.CustomButtons = new[] { "Remote (clowd.ca)", "Local" };
                 config.MainIcon = VistaTaskDialogIcon.Information;
                 var result = TaskDialog.Show(config);
                 if (result.CustomButtonResult == 1)
@@ -459,20 +461,6 @@ namespace Clowd
             var icon = new System.Drawing.Icon(sri.Stream, new System.Drawing.Size(nearest, nearest));
             _taskbarIcon.Icon = icon;
         }
-        private void SetupGlobalHotkeys()
-        {
-            var capture = Settings.CaptureSettings.CaptureRegionShortcut;
-            _captureHotkey = new HotKey(capture.Key, capture.Modifiers, (key) =>
-            {
-                StartCapture();
-            }, false);
-
-            if (!_captureHotkey.Register())
-            {
-                //hotkey was not registered, because some other application already has registered it or it is reserved.
-                //TODO: Show some kind of error message here.
-            }
-        }
         private void SetupUpdateTimer()
         {
             // NAppUpdater uses relative paths, so the current directory must be set accordingly.
@@ -599,7 +587,6 @@ namespace Clowd
                 _taskbarIcon.TrayDropEnabled = true;
 
             SetupTrayContextMenu();
-            SetupGlobalHotkeys();
             Settings.Save();
             _cmdCache = new List<string>();
             _cmdBatchTimer = new DispatcherTimer();
@@ -621,6 +608,17 @@ namespace Clowd
                 _prtscrWindowOpen = false;
             };
             _prtscrWindowOpen = true;
+        }
+
+        public void QuickCapture()
+        {
+            using (MemoryStream ms = new MemoryStream())
+            using (var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen,
+                App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+            {
+                source.Save(ms, ImageFormat.Png);
+                var task = UploadManager.Upload(ms.ToArray(), "clowd-default.png");
+            }
         }
         public void UploadFile(Window owner = null)
         {
@@ -757,7 +755,7 @@ namespace Clowd
         }
         private void OnWndProcMessageReceived(uint obj)
         {
-            if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED 
+            if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED
                 && Settings?.AccentScheme == AccentScheme.System)
             {
                 SetupAccentColors();

@@ -375,7 +375,7 @@ namespace Clowd
 
             UpdateCanvasMode(false);
 
-            if (CroppingRectangle.Width < 20 || CroppingRectangle.Height < 20)
+            if (CroppingRectangle.Width < 15 && CroppingRectangle.Height < 15)
             {
                 var wfMouse = new Point(System.Windows.Forms.Cursor.Position.X, System.Windows.Forms.Cursor.Position.Y);
                 var window = windowFinder.GetWindowThatContainsPoint(wfMouse);
