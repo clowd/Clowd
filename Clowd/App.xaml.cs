@@ -334,6 +334,8 @@ namespace Clowd
         private void SetupSettings()
         {
             GeneralSettings tmp;
+            Classify.DefaultOptions = new ClassifyOptions()
+                .AddTypeOptions(typeof(Color), new ClassifyColorTypeOptions());
             SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
         }
