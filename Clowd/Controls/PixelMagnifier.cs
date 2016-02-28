@@ -1,19 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Drawing.Drawing2D;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Forms;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using Clowd.Utilities;
 using CS.Wpf;
-
 
 namespace Clowd.Controls
 {
@@ -42,8 +33,7 @@ namespace Clowd.Controls
         private DispatcherTimer _timer = new DispatcherTimer();
         private Point _lastPoint = default(Point);
         private int _size = 13;
-        private byte[] croppedBytes = new byte[0];
-        private byte[] writableBytes = new byte[0];
+
         public PixelMagnifier()
         {
             AddVisualChild(_visual);
@@ -76,10 +66,10 @@ namespace Clowd.Controls
                 {
                     size = CreateMagnifier(dc, source, location, _size, _size, pixSize);
                     Pen pen = new Pen(Brushes.DarkGray, 2);
-                    dc.DrawEllipse(null, pen, new Point(size.Width / 2, size.Height / 2), size.Width / 2, size.Height / 2);
+                    dc.DrawEllipse(null, pen, new Point(size.Width / 2 + 0.5, size.Height / 2 + 0.5), size.Width / 2 - 1, size.Height / 2 - 1);
                     size = new Size(DpiScale.DownScaleX(size.Width), DpiScale.DownScaleY(size.Height));
                 }
-                this.Clip = new EllipseGeometry(new Point(size.Width / 2, size.Height / 2), size.Width / 2, size.Height / 2);
+                this.Clip = new EllipseGeometry(new Point(size.Width / 2 + 0.5, size.Height / 2 + 0.5), size.Width / 2 - 1, size.Height / 2 - 1);
                 this.Width = size.Width;
                 this.Height = size.Height;
             }
@@ -101,94 +91,69 @@ namespace Clowd.Controls
             double width = horizontalPixelCount * pixelSize;
             double height = verticalPixelCount * pixelSize;
 
-            var cX = Math.Floor(position.X - (double)horizontalPixelCount / 2);
-            var cY = Math.Floor(position.Y - (double)verticalPixelCount / 2);
+            var cornerX = (int)position.X - horizontalPixelCount / 2;
+            var cornerY = (int)position.Y - verticalPixelCount / 2;
 
-            // if coordinates are out of the image bounds.
-            if (cX < 0 || cY < 0 || cX + horizontalPixelCount > source.PixelWidth ||
-                cY + verticalPixelCount > source.PixelHeight)
-                return default(Size);
+            var sourceRect = new Int32Rect(cornerX, cornerY, horizontalPixelCount, verticalPixelCount);
+            var targetRect = new Rect(0, 0, width, height);
 
-            BitmapSource cropped = new CroppedBitmap(source, new Int32Rect(
-                    (int)cX,
-                    (int)cY,
-                    horizontalPixelCount,
-                    verticalPixelCount));
-
-            var enlarged = EnlargeImage(cropped, pixelSize);
-
-            g.DrawRectangle(Brushes.DarkGray, null, new Rect(0, 0, width, height));
-            g.DrawImage(enlarged, new Rect(0, 0, width, height));
-
-            SolidColorBrush crosshairBrush = new SolidColorBrush(Color.FromArgb(125, 173, 216, 230)); // light blue
-            g.DrawRectangle(crosshairBrush, null, new Rect(0, (height - pixelSize) / 2, (width - pixelSize) / 2, pixelSize)); // Left
-            g.DrawRectangle(crosshairBrush, null, new Rect((width + pixelSize) / 2, (height - pixelSize) / 2, (width - pixelSize) / 2, pixelSize)); // Right
-            g.DrawRectangle(crosshairBrush, null, new Rect((width - pixelSize) / 2, 0, pixelSize, (height - pixelSize) / 2)); // Top
-            g.DrawRectangle(crosshairBrush, null, new Rect((width - pixelSize) / 2, (height + pixelSize) / 2, pixelSize, (height - pixelSize) / 2)); // Bottom
-
-            g.DrawRectangle(null, new Pen(Brushes.Black, 1), new Rect((width - pixelSize) / 2 - 1, (height - pixelSize) / 2 - 1, pixelSize, pixelSize));
-            g.DrawRectangle(null, new Pen(Brushes.White, 1), new Rect((width - pixelSize) / 2, (height - pixelSize) / 2, pixelSize - 2, pixelSize - 2));
-
-            return new Size(enlarged.PixelWidth, enlarged.PixelHeight);
-        }
-        private BitmapSource EnlargeImage(BitmapSource source, int pixelSize)
-        {
-            // force the pixel format to bgra32
-            if (source.Format != PixelFormats.Bgra32)
-                source = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
-
-            WriteableBitmap writable = new WriteableBitmap(
-                source.PixelWidth * pixelSize,
-                source.PixelHeight * pixelSize,
-                96, 96, source.Format, null);
-
-            var bytesPerPixel = (source.Format.BitsPerPixel + 7) / 8;
-            int stride = 4 * ((source.PixelWidth * bytesPerPixel + 3) / 4);
-
-            // prepare arrays
-            var croppedBytesLength = bytesPerPixel * source.PixelWidth * source.PixelHeight;
-            if (croppedBytes.Length != croppedBytesLength)
-                croppedBytes = new byte[croppedBytesLength];
-
-            var writableBytesLength = croppedBytes.Length * pixelSize * pixelSize;
-            if (writableBytes.Length != writableBytesLength)
-                writableBytes = new byte[writableBytesLength];
-
-            source.CopyPixels(new Int32Rect(0, 0, source.PixelWidth, source.PixelHeight), croppedBytes, stride, 0);
-            int writableIndex = 0;
-
-            // for each row of pixels
-            for (int x = 0; x < croppedBytes.Length / stride; x++)
+            // Crop the source & target rectangles so that they don't go past the edges of the screen(s)
+            if (sourceRect.X < 0)
             {
-                // this row [pixelSize] times.
-                for (int j = 0; j < pixelSize - 1; j++)
-                {
-                    // for each pixel in row
-                    for (int y = 0; y < stride; y += bytesPerPixel)
-                    {
-                        // this pixel [pixelSize] times.
-                        for (int z = 0; z < pixelSize - 1; z++)
-                        {
-                            int srcIndex = y + (x * stride);
-                            //this doesnt work, i'm not sure of the formula i need to calculate the destination
-                            //int desIndex = y * pixelSize + (z * bytesPerPixel) + (j * stride) + (x * stride);
-                            int desIndex = writableIndex;
-                            writableIndex += bytesPerPixel;
-                            Buffer.BlockCopy(croppedBytes, srcIndex, writableBytes, desIndex, bytesPerPixel);
-                        }
-
-                        //we skip the last pixel in each segment of pixels to create a separation of pixels
-                        writableIndex += bytesPerPixel;
-                    }
-                }
-                //we skip the last row of pixels in each segment of rows to create a separation of pixels
-                writableIndex += stride * pixelSize;
+                sourceRect.X -= cornerX;
+                sourceRect.Width += cornerX;
+                targetRect.X -= cornerX * pixelSize;
+                targetRect.Width += cornerX * pixelSize;
+            }
+            if (sourceRect.Y < 0)
+            {
+                sourceRect.Y -= cornerY;
+                sourceRect.Height += cornerY;
+                targetRect.Y -= cornerY * pixelSize;
+                targetRect.Height += cornerY * pixelSize;
+            }
+            if (sourceRect.X + sourceRect.Width > source.PixelWidth)
+            {
+                int excess = sourceRect.X + sourceRect.Width - source.PixelWidth;
+                sourceRect.Width -= excess;
+                targetRect.Width -= excess * pixelSize;
+            }
+            if (sourceRect.Y + sourceRect.Height > source.PixelHeight)
+            {
+                int excess = sourceRect.Y + sourceRect.Height - source.PixelHeight;
+                sourceRect.Height -= excess;
+                targetRect.Height -= excess * pixelSize;
             }
 
-            writable.WritePixels(new Int32Rect(0, 0, writable.PixelWidth, writable.PixelHeight), writableBytes, stride * pixelSize, 0);
-            return writable;
-        }
+            // Draw the background that shows when the magnifier is near the edge of the screen
+            g.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
 
+            // Draw the magnified image
+            var group = new DrawingGroup();
+            group.Children.Add(new ImageDrawing(new CroppedBitmap(source, sourceRect), targetRect));
+            var visual = new DrawingVisual();
+            g.DrawDrawing(group);
+
+            // Draw the pixel grid lines
+            var gridPen = new Pen(Brushes.DimGray, 1);
+            for (int x = sourceRect.X - cornerX; x <= sourceRect.X + sourceRect.Width - cornerX; x++)
+                g.DrawLine(gridPen, new Point(x * pixelSize + 0.5, targetRect.Top), new Point(x * pixelSize + 0.5, targetRect.Bottom));
+            for (int y = sourceRect.Y - cornerY; y <= sourceRect.Y + sourceRect.Height - cornerY; y++)
+                g.DrawLine(gridPen, new Point(targetRect.Left, y * pixelSize + 0.5), new Point(targetRect.Right, y * pixelSize + 0.5));
+
+            // Draw the crosshair
+            SolidColorBrush crosshairBrush = new SolidColorBrush(Color.FromArgb(125, 173, 216, 230)); // light blue
+            g.DrawRectangle(crosshairBrush, null, new Rect(0, (height - pixelSize) / 2, (width - pixelSize) / 2, pixelSize + 1)); // Left
+            g.DrawRectangle(crosshairBrush, null, new Rect((width + pixelSize) / 2, (height - pixelSize) / 2, (width - pixelSize) / 2, pixelSize + 1)); // Right
+            g.DrawRectangle(crosshairBrush, null, new Rect((width - pixelSize) / 2, 0, pixelSize + 1, (height - pixelSize) / 2)); // Top
+            g.DrawRectangle(crosshairBrush, null, new Rect((width - pixelSize) / 2, (height + pixelSize) / 2, pixelSize + 1, (height - pixelSize) / 2)); // Bottom
+
+            // Draw a highlight around the pixel under cursor
+            g.DrawRectangle(null, new Pen(Brushes.Black, 1), new Rect((width - pixelSize) / 2 - 0.5, (height - pixelSize) / 2 - 0.5, pixelSize + 2, pixelSize + 2));
+            g.DrawRectangle(null, new Pen(Brushes.White, 1), new Rect((width - pixelSize) / 2 + 0.5, (height - pixelSize) / 2 + 0.5, pixelSize, pixelSize));
+
+            return new Size(width, height);
+        }
 
         private class MyDrawingVisual : DrawingVisual
         {
