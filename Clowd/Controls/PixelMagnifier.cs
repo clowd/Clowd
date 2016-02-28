@@ -20,7 +20,7 @@ namespace Clowd.Controls
         {
             get
             {
-                var pix = DpiScale.UpScaleX(10);
+                var pix = DpiScale.UpScaleX(_zoom);
                 return new Size(pix * _size, pix * _size);
             }
         }
@@ -30,41 +30,27 @@ namespace Clowd.Controls
 
 
         private DrawingVisual _visual = new MyDrawingVisual();
-        private DispatcherTimer _timer = new DispatcherTimer();
         private Point _lastPoint = default(Point);
         private int _size = 13;
+        private int _zoom = 10;
 
         public PixelMagnifier()
         {
             AddVisualChild(_visual);
-            _timer.Interval = TimeSpan.FromMilliseconds(30);
-            _timer.Tick += (sender, args) =>
-            {
-                if (!this.IsVisible)
-                    return;
-                var wfMouse = System.Windows.Forms.Cursor.Position;
-                var wpfMouse = new Point(
-                    wfMouse.X - System.Windows.Forms.SystemInformation.VirtualScreen.X,
-                    wfMouse.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y);
-                if (_lastPoint == wpfMouse)
-                    return;
-                _lastPoint = wpfMouse;
-                DrawMagnifier(Image, wpfMouse);
-            };
-            _timer.IsEnabled = true;
-
-            Unloaded += delegate { _timer.IsEnabled = false; };
         }
 
-        private void DrawMagnifier(BitmapSource source, Point location)
+        public void DrawMagnifier(Point location)
         {
+            if (_lastPoint == location)
+                return;
+            _lastPoint = location;
             using (DrawingContext dc = _visual.RenderOpen())
             {
-                var pixSize = (int)Math.Ceiling((double)10 / 96 * DpiScale.DpiX);
+                var pixSize = (int)Math.Ceiling((double)_zoom / 96 * DpiScale.DpiX);
                 Size size = new Size(0, 0);
-                if (source != null && location != default(Point))
+                if (Image != null && location != default(Point))
                 {
-                    size = CreateMagnifier(dc, source, location, _size, _size, pixSize);
+                    size = CreateMagnifier(dc, Image, location, _size, _size, pixSize);
                     Pen pen = new Pen(Brushes.DarkGray, 2);
                     dc.DrawEllipse(null, pen, new Point(size.Width / 2 + 0.5, size.Height / 2 + 0.5), size.Width / 2 - 1, size.Height / 2 - 1);
                     size = new Size(DpiScale.DownScaleX(size.Width), DpiScale.DownScaleY(size.Height));

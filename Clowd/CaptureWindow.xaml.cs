@@ -325,6 +325,7 @@ namespace Clowd
                     new Point(pixelMagnifier.FinderSize.Width / 2 + 20, pixelMagnifier.FinderSize.Height / 2 + 20));
                 Canvas.SetLeft(pixelMagnifier, currentPoint.X - pixelMagnifier.FinderSize.Width / 2 + offset.X);
                 Canvas.SetTop(pixelMagnifier, currentPoint.Y - pixelMagnifier.FinderSize.Width / 2 + offset.Y);
+                pixelMagnifier.DrawMagnifier(currentPoint);
             }
 
             if (draggingArea)
