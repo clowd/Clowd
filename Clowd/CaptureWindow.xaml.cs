@@ -213,13 +213,17 @@ namespace Clowd
 
         private Point CalculateOptimalOffset(Size objectSize, Point targetPoint, Point desiredOffsetFromCenter)
         {
+            targetPoint.X += System.Windows.Forms.SystemInformation.VirtualScreen.X;
+            targetPoint.Y += System.Windows.Forms.SystemInformation.VirtualScreen.Y;
             var primaryScreen = windowFinder.GetBoundsOfScreenContainingPoint(targetPoint, false);
-            //primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
-            //primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+            targetPoint.X -= System.Windows.Forms.SystemInformation.VirtualScreen.X;
+            targetPoint.Y -= System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+            primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
+            primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
             primaryScreen = DpiScale.TranslateDownScaleRect(primaryScreen);
 
-            bool fitsX = primaryScreen.Width > targetPoint.X + (objectSize.Width / 2) + desiredOffsetFromCenter.X;
-            bool fitsY = primaryScreen.Height > targetPoint.Y + (objectSize.Height / 2) + desiredOffsetFromCenter.Y;
+            bool fitsX = primaryScreen.Right > targetPoint.X + (objectSize.Width / 2) + desiredOffsetFromCenter.X;
+            bool fitsY = primaryScreen.Bottom > targetPoint.Y + (objectSize.Height / 2) + desiredOffsetFromCenter.Y;
 
             double newX, newY;
 
@@ -278,8 +282,8 @@ namespace Clowd
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             Point p = new Point();
-            p.X = System.Windows.Forms.Cursor.Position.X;
-            p.Y = System.Windows.Forms.Cursor.Position.Y;
+            p.X = System.Windows.Forms.Cursor.Position.X + System.Windows.Forms.SystemInformation.VirtualScreen.X;
+            p.Y = System.Windows.Forms.Cursor.Position.Y + System.Windows.Forms.SystemInformation.VirtualScreen.Y;
             var primaryScreen = windowFinder.GetBoundsOfScreenContainingPoint(p, false);
             primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
             primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
@@ -350,7 +354,10 @@ namespace Clowd
             }
             else
             {
-                var window = windowFinder.GetWindowThatContainsPoint(DpiScale.UpScalePoint(currentPoint));
+                var point = currentPoint;
+                point.X += System.Windows.Forms.SystemInformation.VirtualScreen.X;
+                point.Y += System.Windows.Forms.SystemInformation.VirtualScreen.Y;
+                var window = windowFinder.GetWindowThatContainsPoint(DpiScale.UpScalePoint(point));
 
                 if (window.WindowRect == Rect.Empty)
                 {

@@ -53,7 +53,9 @@ namespace Clowd.Controls
                 if (this.Visibility != Visibility.Visible)
                     return;
                 var wfMouse = System.Windows.Forms.Cursor.Position;
-                var wpfMouse = new Point(wfMouse.X, wfMouse.Y);
+                var wpfMouse = new Point(
+                    wfMouse.X - System.Windows.Forms.SystemInformation.VirtualScreen.X,
+                    wfMouse.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y);
                 if (_lastPoint == wpfMouse)
                     return;
                 _lastPoint = wpfMouse;
