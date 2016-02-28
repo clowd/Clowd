@@ -1891,11 +1891,7 @@ namespace DrawToolsLib
             var rect = GetArtworkBounds();
             var x = ActualWidth / 2 - rect.Width * ContentScale / 2 - rect.Left * ContentScale;
             var y = ActualHeight / 2 - rect.Height * ContentScale / 2 - rect.Top * ContentScale;
-            if (ContentScale == 1)
-                ContentOffset = new Point(Math.Round(x), Math.Round(y));
-            else
-                ContentOffset = new Point(x, y);
-
+            ContentOffset = new Point(Math.Round(x), Math.Round(y));
         }
 
         #endregion

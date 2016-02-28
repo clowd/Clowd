@@ -51,6 +51,12 @@ namespace DrawToolsLib
             }
 
             Rect r = Rectangle;
+            if (imageCache.PixelWidth == Math.Round(r.Width, 3) && imageCache.PixelHeight == Math.Round(r.Height, 3))
+            {
+                // If the image is still at the original size, round the rectangle position to whole pixels to avoid blurring.
+                r.X = Math.Round(r.X);
+                r.Y = Math.Round(r.Y);
+            }
             drawingContext.DrawRectangle(Brushes.Pink, new Pen(), r);
             drawingContext.DrawImage(imageCache, r);
 
