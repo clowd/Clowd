@@ -12,7 +12,7 @@ using Clowd.Utilities;
 
 namespace Clowd.Controls
 {
-    public class KeyGestureEditor : UserControl
+    public class GlobalTriggerEditor : UserControl
     {
         public GlobalTrigger Trigger
         {
@@ -21,21 +21,21 @@ namespace Clowd.Controls
         }
 
         public static readonly DependencyProperty TriggerProperty =
-            DependencyProperty.Register("Trigger", typeof(GlobalTrigger), typeof(KeyGestureEditor),
+            DependencyProperty.Register("Trigger", typeof(GlobalTrigger), typeof(GlobalTriggerEditor),
                 new PropertyMetadata(null, GestureChangedCallback));
 
         public bool IsEditing { get; private set; }
 
         private static void GestureChangedCallback(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs dependencyPropertyChangedEventArgs)
         {
-            var ths = (KeyGestureEditor)dependencyObject;
+            var ths = (GlobalTriggerEditor)dependencyObject;
             ths.UpdateControls();
         }
 
         private Button _button;
         private Border _status;
 
-        public KeyGestureEditor()
+        public GlobalTriggerEditor()
         {
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition());
