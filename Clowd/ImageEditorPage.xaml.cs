@@ -1,8 +1,10 @@
 ﻿using Clowd.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -14,6 +16,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using Clowd.Interop.Gdi32;
 using CS.Wpf;
 
 namespace Clowd
@@ -145,7 +148,7 @@ namespace Clowd
             {
                 drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
                 drawingCanvas.TextFontSize = DpiScale.DownScaleX(dlg.Font.Size / 72 * 96);
-                switch(dlg.Font.Style)
+                switch (dlg.Font.Style)
                 {
                     case System.Drawing.FontStyle.Italic:
                         drawingCanvas.TextFontStyle = FontStyles.Italic;
@@ -293,6 +296,18 @@ namespace Clowd
             drawingCanvas.Tool = tool;
         }
 
+        private void PasteCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            var path = System.IO.Path.GetTempFileName() + ".png";
+            var img = Clipboard.GetImage() ?? ClipboardEx.GetImageFromFile();
+            if (img == null)
+                return;
+            img.Save(path, ImageFormat.Png);
+            var width = DpiScale.DownScaleX(img.PixelWidth);
+            var height = DpiScale.DownScaleY(img.PixelHeight);
+            drawingCanvas.AddImageGraphic(path, new Rect(0, 0, width, height));
+        }
+
         private void rootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (Keyboard.FocusedElement is TextBox)
@@ -301,7 +316,7 @@ namespace Clowd
             {
                 _shiftPanPreviousTool = drawingCanvas.Tool;
                 drawingCanvas.Tool = DrawToolsLib.ToolType.None;
-                shiftIndicator.Background = (Brush) App.Current.Resources["AccentColorBrush"];
+                shiftIndicator.Background = (Brush)App.Current.Resources["AccentColorBrush"];
                 shiftIndicator.Opacity = 1;
             }
         }
