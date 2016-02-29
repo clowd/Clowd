@@ -65,6 +65,7 @@ namespace Clowd.Controls
             if (IsEditing)
                 return;
             IsEditing = true;
+            Trigger.Gesture = null;
             this.KeyDown += OnKeyDown;
             this.KeyUp += OnKeyUp;
             UpdateControls();
@@ -96,16 +97,30 @@ namespace Clowd.Controls
             IsEditing = false;
             this.KeyDown -= OnKeyDown;
             this.KeyUp -= OnKeyUp;
-            try
+
+            if (!IsBlacklisted(key, modifiers))
             {
-                Trigger.Gesture = new KeyGesture(key, modifiers);
-            }
-            catch
-            {
-                // invalid keygesture
-                Trigger.Gesture = null;
+                try
+                {
+                    Trigger.Gesture = new KeyGesture(key, modifiers);
+                }
+                catch
+                {
+                    // invalid keygesture
+                }
             }
             UpdateControls();
+        }
+
+        private bool IsBlacklisted(Key key, ModifierKeys modifiers)
+        {
+            if (modifiers != ModifierKeys.None)
+                return false;
+
+            if (key == Key.Escape)
+                return true;
+
+            return false;
         }
         private void UpdateControls()
         {
@@ -126,11 +141,19 @@ namespace Clowd.Controls
                 if (Trigger == null || Trigger.Gesture == null)
                 {
                     _button.Content = "(undefined)";
+                    _status.ToolTip = "The gesture is not set or is an invalid gesture.";
+                    _status.Background = Brushes.PaleVioletRed;
+                }
+                else if (!Trigger.IsRegistered && !String.IsNullOrEmpty(Trigger.Error))
+                {
+                    _button.Content = "(error)";
+                    _status.ToolTip = Trigger.Error;
                     _status.Background = Brushes.PaleVioletRed;
                 }
                 else
                 {
                     _button.Content = Trigger.Gesture.GetDisplayStringForCulture(CultureInfo.CurrentUICulture);
+                    _status.ToolTip = null;
                     _status.Background = Brushes.PaleGreen;
                 }
             }
