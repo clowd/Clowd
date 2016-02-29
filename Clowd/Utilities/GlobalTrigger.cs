@@ -117,7 +117,9 @@ namespace Clowd.Utilities
 
         private bool GestureEqualsCurrent(KeyGesture other)
         {
-            if (other == null)
+            if (other == null && _gesture == null)
+                return true;
+            if (other == null || _gesture == null)
                 return false;
             return other.Key == _gesture.Key && other.Modifiers == _gesture.Modifiers;
         }
