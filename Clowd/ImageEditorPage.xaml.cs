@@ -299,7 +299,7 @@ namespace Clowd
         private void PasteCommand(object sender, ExecutedRoutedEventArgs e)
         {
             var path = System.IO.Path.GetTempFileName() + ".png";
-            var img = Clipboard.GetImage() ?? ClipboardEx.GetImageFromFile();
+            var img = ClipboardEx.GetImage();
             if (img == null)
                 return;
             img.Save(path, ImageFormat.Png);
