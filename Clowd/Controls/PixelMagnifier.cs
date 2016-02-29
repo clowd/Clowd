@@ -121,7 +121,6 @@ namespace Clowd.Controls
             // Draw the magnified image
             var group = new DrawingGroup();
             group.Children.Add(new ImageDrawing(new CroppedBitmap(source, sourceRect), targetRect));
-            var visual = new DrawingVisual();
             g.DrawDrawing(group);
 
             // Draw the pixel grid lines
@@ -141,10 +140,6 @@ namespace Clowd.Controls
             // Draw a highlight around the pixel under cursor
             g.DrawRectangle(null, new Pen(Brushes.Black, 1), new Rect((width - pixelSize) / 2 - 0.5, (height - pixelSize) / 2 - 0.5, pixelSize + 2, pixelSize + 2));
             g.DrawRectangle(null, new Pen(Brushes.White, 1), new Rect((width - pixelSize) / 2 + 0.5, (height - pixelSize) / 2 + 0.5, pixelSize, pixelSize));
-
-            g.DrawText(new FormattedText(position.ToString(), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                new Typeface(new FontFamily("Arial"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), 14,
-                Brushes.Red, null, TextFormattingMode.Display), new Point(width / 2, height / 2));
 
             return new Size(width, height);
         }
