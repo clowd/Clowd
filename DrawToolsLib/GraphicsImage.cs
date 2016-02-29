@@ -57,7 +57,6 @@ namespace DrawToolsLib
                 r.X = Math.Round(r.X);
                 r.Y = Math.Round(r.Y);
             }
-            drawingContext.DrawRectangle(Brushes.Pink, new Pen(), r);
             drawingContext.DrawImage(imageCache, r);
 
             base.Draw(drawingContext);

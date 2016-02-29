@@ -41,22 +41,7 @@ namespace Clowd
             this.Loaded += CaptureWindow_Loaded;
         }
 
-        public static BitmapSource GetBitmapSource(System.Drawing.Bitmap original)
-        {
-            IntPtr ip = original.GetHbitmap();
-            BitmapSource bs = null;
-            try
-            {
-                bs = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(ip,
-                   IntPtr.Zero, Int32Rect.Empty,
-                   System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
-            }
-            finally
-            {
-                Interop.Gdi32.GDI32.DeleteObject(ip);
-            }
-            return bs;
-        }
+        
         public static System.Drawing.Bitmap MakeGrayscale3(System.Drawing.Bitmap original)
         {
             //create a blank bitmap the same size as original
@@ -103,10 +88,12 @@ namespace Clowd
         }
         private void CaptureBitmap()
         {
-            var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen,
-                App.Current.Settings.CaptureSettings.ScreenshotWithCursor);
-            ScreenImage = GetBitmapSource(source);
-            GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
+            using (var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen,
+                App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+            {
+                ScreenImage = source.ToBitmapSource();
+                GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
+            }
         }
 
         private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
