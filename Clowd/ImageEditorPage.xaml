@@ -72,6 +72,7 @@
         <CommandBinding Command="ApplicationCommands.Redo" Executed="RedoCommand" />
         <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyCommand" />
         <CommandBinding Command="ApplicationCommands.Delete" Executed="DeleteCommand" />
+        <CommandBinding Command="ApplicationCommands.Paste" Executed="PasteCommand" />
         <CommandBinding Command="{StaticResource Commands.Upload}" Executed="UploadCommand" />
         <CommandBinding Command="{StaticResource Commands.SelectTool}" Executed="SelectToolCommand" />
     </UserControl.CommandBindings>

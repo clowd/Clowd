@@ -1,12 +1,17 @@
 ﻿using Clowd.Interop;
 using System;
 using System.Collections.Generic;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace Clowd
 {
@@ -48,6 +53,47 @@ namespace Clowd
         public static System.Windows.Forms.DialogResult ShowDialog(this System.Windows.Forms.CommonDialog dialog, Window parent)
         {
             return dialog.ShowDialog(new Wpf32Window(parent));
+        }
+
+        public static BitmapSource ToBitmapSource(this System.Drawing.Bitmap original)
+        {
+            IntPtr ip = original.GetHbitmap();
+            BitmapSource bs = null;
+            try
+            {
+                bs = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(ip,
+                   IntPtr.Zero, Int32Rect.Empty,
+                   System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+            }
+            finally
+            {
+                Interop.Gdi32.GDI32.DeleteObject(ip);
+            }
+            return bs;
+        }
+        public static void Save(this BitmapSource source, string filePath, ImageFormat format)
+        {
+            BitmapEncoder encoder;
+
+            if (format.Equals(ImageFormat.Bmp))
+                encoder = new BmpBitmapEncoder();
+            else if (format.Equals(ImageFormat.Gif))
+                encoder = new GifBitmapEncoder();
+            else if (format.Equals(ImageFormat.Jpeg))
+                encoder = new JpegBitmapEncoder();
+            else if (format.Equals(ImageFormat.Tiff))
+                encoder = new TiffBitmapEncoder();
+            else if (format.Equals(ImageFormat.Png))
+                encoder = new PngBitmapEncoder();
+            else
+                throw new ArgumentOutOfRangeException(nameof(format));
+
+            encoder.Frames.Add(BitmapFrame.Create(source));
+            using (var ms = new MemoryStream())
+            {
+                encoder.Save(ms);
+                File.WriteAllBytes(filePath, ms.ToArray());
+            }
         }
 
         private class Wpf32Window : System.Windows.Forms.IWin32Window
