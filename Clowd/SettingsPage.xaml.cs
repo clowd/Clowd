@@ -123,8 +123,8 @@ namespace Clowd
         {
             if (property.Is(typeof(GlobalTrigger)))
             {
-                var editor = new KeyGestureEditor();
-                editor.SetBinding(KeyGestureEditor.TriggerProperty, property.CreateBinding());
+                var editor = new GlobalTriggerEditor();
+                editor.SetBinding(GlobalTriggerEditor.TriggerProperty, property.CreateBinding());
                 return editor;
             }
 
