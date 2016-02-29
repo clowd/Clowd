@@ -1,5 +1,7 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -44,11 +46,13 @@ namespace Clowd.Controls
             if (_lastPoint == location)
                 return;
             _lastPoint = location;
+
+            location = DpiScale.UpScalePoint(location);
             using (DrawingContext dc = _visual.RenderOpen())
             {
                 var pixSize = (int)Math.Ceiling((double)_zoom / 96 * DpiScale.DpiX);
                 Size size = new Size(0, 0);
-                if (Image != null && location != default(Point))
+                if (Image != null)
                 {
                     size = CreateMagnifier(dc, Image, location, _size, _size, pixSize);
                     Pen pen = new Pen(Brushes.DarkGray, 2);
@@ -137,6 +141,10 @@ namespace Clowd.Controls
             // Draw a highlight around the pixel under cursor
             g.DrawRectangle(null, new Pen(Brushes.Black, 1), new Rect((width - pixelSize) / 2 - 0.5, (height - pixelSize) / 2 - 0.5, pixelSize + 2, pixelSize + 2));
             g.DrawRectangle(null, new Pen(Brushes.White, 1), new Rect((width - pixelSize) / 2 + 0.5, (height - pixelSize) / 2 + 0.5, pixelSize, pixelSize));
+
+            g.DrawText(new FormattedText(position.ToString(), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                new Typeface(new FontFamily("Arial"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), 14,
+                Brushes.Red, null, TextFormattingMode.Display), new Point(width / 2, height / 2));
 
             return new Size(width, height);
         }
