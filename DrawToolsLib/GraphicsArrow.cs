@@ -31,10 +31,12 @@ namespace DrawToolsLib
                     lineStart + lineLength * lineVector);
             }
 
+            const int tipAngle = 165;
+
             var rotate = Matrix.Identity;
-            rotate.Rotate(165);
+            rotate.Rotate(tipAngle);
             var pt1 = lineEnd + rotate.Transform(lineVector * tipLength);
-            rotate.Rotate(-165 * 2);
+            rotate.Rotate(-tipAngle * 2);
             var pt2 = lineEnd + rotate.Transform(lineVector * tipLength);
             drawingContext.DrawGeometry(new SolidColorBrush(ObjectColor), new Pen(new SolidColorBrush(ObjectColor), 1),
                 new PathGeometry(new[] { new PathFigure(lineEnd, new[] { new LineSegment(pt2, true), new LineSegment(pt1, true) }, true) }));

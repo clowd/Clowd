@@ -33,6 +33,6 @@ namespace DrawToolsLib
         MoveToBack,
         Undo,
         Redo,
-        SerProperties
+        SetProperties
     };
 }

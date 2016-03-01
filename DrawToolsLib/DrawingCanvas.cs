@@ -1480,7 +1480,7 @@ namespace DrawToolsLib
                 case ContextMenuCommand.Redo:
                     Redo();
                     break;
-                case ContextMenuCommand.SerProperties:
+                case ContextMenuCommand.SetProperties:
                     SetProperties();
                     break;
             }
@@ -1600,7 +1600,7 @@ namespace DrawToolsLib
 
             menuItem = new MenuItem();
             menuItem.Header = "Set Properties";
-            menuItem.Tag = ContextMenuCommand.SerProperties;
+            menuItem.Tag = ContextMenuCommand.SetProperties;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
         }
@@ -1679,7 +1679,7 @@ namespace DrawToolsLib
                         case ContextMenuCommand.Redo:
                             item.IsEnabled = CanRedo;
                             break;
-                        case ContextMenuCommand.SerProperties:
+                        case ContextMenuCommand.SetProperties:
                             item.IsEnabled = CanSetProperties;
                             break;
                     }
