@@ -1,20 +1,9 @@
-using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-
-
 
 namespace DrawToolsLib
 {
-    /// <summary>
-    /// Delete command.
-    /// Applied to list selection.
-    /// </summary>
-    class CommandDelete : CommandBase
+    // TODO: the implementation of this class needs to be looked at later when somebody has time.
+    internal class CommandDelete : CommandBase
     {
         List<PropertiesGraphicsBase> cloneList;    // contains selected items which are deleted
         List<int> indexes;                         // contains indexes of deleted items
@@ -38,9 +27,6 @@ namespace DrawToolsLib
             }
         }
 
-        /// <summary>
-        /// Restore deleted objects
-        /// </summary>
         public override void Undo(DrawingCanvas drawingCanvas)
         {
             // Insert all objects from cloneList to GraphicsList
@@ -69,9 +55,6 @@ namespace DrawToolsLib
             }
         }
 
-        /// <summary>
-        /// Delete objects again.
-        /// </summary>
         public override void Redo(DrawingCanvas drawingCanvas)
         {
             // Delete from list all objects kept in cloneList.
