@@ -11,6 +11,7 @@ namespace DrawToolsLib
     /// <summary>
     /// Text object properties
     /// </summary>
+    [Serializable]
     public class PropertiesGraphicsText : PropertiesGraphicsBase
     {
         private string text;

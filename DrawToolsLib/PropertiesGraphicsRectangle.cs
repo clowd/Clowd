@@ -11,6 +11,7 @@ namespace DrawToolsLib
     /// <summary>
     /// Rectangle object properties.
     /// </summary>
+    [Serializable]
     public class PropertiesGraphicsRectangle : PropertiesGraphicsBase
     {
         private double left;

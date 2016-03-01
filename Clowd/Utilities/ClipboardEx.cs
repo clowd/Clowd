@@ -37,14 +37,22 @@ namespace Clowd.Utilities
         }
         public static void SetImage(BitmapSource bmp)
         {
+            Clipboard.Clear();
+            AddImage(bmp);
+        }
+
+        public static void AddImage(BitmapSource bmp)
+        {
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bmp));
             using (var ms = new MemoryStream())
             {
                 encoder.Save(ms);
                 ms.Position = 0;
-                System.Windows.Forms.IDataObject dataObject = new System.Windows.Forms.DataObject();
-                dataObject.SetData("PNG", false, ms);
+                System.Windows.Forms.IDataObject dataObject =
+                    System.Windows.Forms.Clipboard.GetDataObject() ?? new System.Windows.Forms.DataObject();
+                dataObject.SetData(DataFormats.Bitmap, true, (object)bmp);
+                dataObject.SetData("PNG", true, ms);
                 System.Windows.Forms.Clipboard.SetDataObject(dataObject, false);
             }
         }

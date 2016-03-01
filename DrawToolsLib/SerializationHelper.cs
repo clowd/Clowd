@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
@@ -16,59 +17,54 @@ namespace DrawToolsLib
     /// Helper class used for XML serialization.
     /// Contains array of SerializedGraphicsBase instances.
     /// </summary>
-    
-    [XmlRoot("Graphics")]
+
+    [Serializable, XmlRoot("Graphics")]
     public class SerializationHelper
     {
-        PropertiesGraphicsBase[] graphics;
-
-        /// <summary>
-        /// Default constructor is XML serialization requirement.
-        /// </summary>
-        public SerializationHelper()
-        {
-
-        }
-
-        /// <summary>
-        /// This constructor is used for serialization.
-        /// VisualCollection contains Graphics* instances.
-        /// Every Graphics instance creates SerializedGraphics*
-        /// instance which is added to graphics array.
-        /// </summary>
-        public SerializationHelper(VisualCollection collection)
-        {
-            if ( collection == null )
-            {
-                throw new ArgumentNullException("collection");
-            }
-
-            graphics = new PropertiesGraphicsBase[collection.Count];
-
-            int i = 0;
-
-            foreach (GraphicsBase g in collection)
-            {
-                graphics[i++] = g.CreateSerializedObject();
-            }
-        }
-
-        /// <summary>
-        /// When class is serialized, graphics array is filled in the constructor
-        /// and saved to XML file.
-        /// When class is deserialized, graphics array is loaded from XML file
-        /// and then used by called to create VisualCollection.
-        /// </summary>
-
         [XmlArrayItem(typeof(PropertiesGraphicsEllipse)),
          XmlArrayItem(typeof(PropertiesGraphicsLine)),
+         XmlArrayItem(typeof(PropertiesGraphicsArrow)),
+         XmlArrayItem(typeof(PropertiesGraphicsImage)),
          XmlArrayItem(typeof(PropertiesGraphicsPolyLine)),
          XmlArrayItem(typeof(PropertiesGraphicsRectangle)),
          XmlArrayItem(typeof(PropertiesGraphicsText))]
-        public PropertiesGraphicsBase[] Graphics
+        public PropertiesGraphicsBase[] Graphics { get; set; }
+
+        [XmlIgnore]
+        public Rect ContentBounds
         {
-            get { return graphics; }
-            set { graphics = value; }
+            get { return new Rect(Left, Top, Width, Height); }
+            set
+            {
+                Left = value.Left;
+                Top = value.Top;
+                Width = value.Width;
+                Height = value.Height;
+            }
+        }
+
+        [XmlAttribute]
+        public double Left { get; set; }
+        [XmlAttribute]
+        public double Top { get; set; }
+        [XmlAttribute]
+        public double Width { get; set; }
+        [XmlAttribute]
+        public double Height { get; set; }
+
+        // Default constructor is XML serialization requirement.
+        public SerializationHelper()
+        {
+        }
+
+        public SerializationHelper(IEnumerable<GraphicsBase> collection, Rect contentBounds)
+        {
+            if (collection == null)
+                throw new ArgumentNullException(nameof(collection));
+
+            Graphics = collection.Select(g => g.CreateSerializedObject()).ToArray();
+            ContentBounds = contentBounds;
+
         }
     }
 }
