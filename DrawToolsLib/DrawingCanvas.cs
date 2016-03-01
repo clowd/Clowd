@@ -28,7 +28,6 @@ namespace DrawToolsLib
         // Dependency properties
         public static readonly DependencyProperty ToolProperty;
         public static readonly DependencyProperty ActualScaleProperty;
-        public static readonly DependencyProperty IsDirtyProperty;
 
         public static readonly DependencyProperty LineWidthProperty;
         public static readonly DependencyProperty ObjectColorProperty;
@@ -50,8 +49,6 @@ namespace DrawToolsLib
         public static readonly DependencyProperty CanMoveToFrontProperty;
         public static readonly DependencyProperty CanMoveToBackProperty;
         public static readonly DependencyProperty CanSetPropertiesProperty;
-
-        public static readonly RoutedEvent IsDirtyChangedEvent;
 
         private Tool[] tools;                   // Array of tools
 
@@ -141,13 +138,6 @@ namespace DrawToolsLib
 
             ActualScaleProperty = DependencyProperty.Register(
                 "ActualScale", typeof(double), typeof(DrawingCanvas),
-                metaData);
-
-            // IsDirty
-            metaData = new PropertyMetadata(false);
-
-            IsDirtyProperty = DependencyProperty.Register(
-                "IsDirty", typeof(bool), typeof(DrawingCanvas),
                 metaData);
 
             // LineWidth
@@ -280,16 +270,6 @@ namespace DrawToolsLib
             CanSetPropertiesProperty = DependencyProperty.Register(
                 "CanSetProperties", typeof(bool), typeof(DrawingCanvas),
                 metaData);
-
-            // **********************************************************
-            // Create routed events
-            // **********************************************************
-
-            // IsDirtyChanged
-
-            IsDirtyChangedEvent = EventManager.RegisterRoutedEvent("IsDirtyChangedChanged",
-                RoutingStrategy.Bubble, typeof(DependencyPropertyChangedEventHandler), typeof(DrawingCanvas));
-
         }
 
         #endregion Constructor
@@ -358,29 +338,6 @@ namespace DrawToolsLib
         }
 
         #endregion ActualScale
-
-        #region IsDirty
-
-        /// <summary>
-        /// Returns true if document is changed
-        /// </summary>
-        public bool IsDirty
-        {
-            get
-            {
-                return (bool)GetValue(IsDirtyProperty);
-            }
-            internal set
-            {
-                SetValue(IsDirtyProperty, value);
-
-                // Raise IsDirtyChanged event.
-                RoutedEventArgs newargs = new RoutedEventArgs(IsDirtyChangedEvent);
-                RaiseEvent(newargs);
-            }
-        }
-
-        #endregion IsDirty
 
         #region CanUndo
 
@@ -787,23 +744,6 @@ namespace DrawToolsLib
 
         #endregion Dependency Properties
 
-        #region Routed Events
-
-        /// <summary>
-        /// IsDirtyChanged event.
-        /// 
-        /// If client binds to IsDirty property, this event is not required.
-        /// But if client knows when IsDirty changed without binding, 
-        /// IsDirtyChanged is needed.
-        /// </summary>
-        public event RoutedEventHandler IsDirtyChanged
-        {
-            add { AddHandler(IsDirtyChangedEvent, value); }
-            remove { RemoveHandler(IsDirtyChangedEvent, value); }
-        }
-
-        #endregion Routed Events
-
         #region Public Functions
 
         /// <summary>
@@ -1067,15 +1007,17 @@ namespace DrawToolsLib
                 {
                     helper = (SerializationHelper)xml.Deserialize(stream);
                 }
+
                 HelperFunctions.UnselectAll(this);
-                foreach (var g in helper.Graphics.Select(s => s.CreateGraphics()))
+                var newGraphics = helper.Graphics.Select(s => s.CreateGraphics()).ToArray();
+                foreach (var g in newGraphics)
                 {
                     g.Move(-helper.Left - helper.Width / 2, -helper.Top - helper.Height / 2);
                     g.ActualScale = ActualScale;
                     g.IsSelected = true;
                     graphicsList.Add(g);
                 }
-                AddCommandToHistory(new CommandChangeState(this));
+                AddCommandToHistory(new CommandAdd(newGraphics));
                 UpdateState();
                 InvalidateVisual();
                 RefreshBounds();
@@ -1523,13 +1465,6 @@ namespace DrawToolsLib
         {
             this.CanUndo = undoManager.CanUndo;
             this.CanRedo = undoManager.CanRedo;
-
-            // Set IsDirty only if it is actually changed.
-            // Setting IsDirty raises event for client.
-            if (undoManager.IsDirty != this.IsDirty)
-            {
-                this.IsDirty = undoManager.IsDirty;
-            }
         }
 
 

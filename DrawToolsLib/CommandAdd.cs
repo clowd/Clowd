@@ -1,65 +1,33 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-
+using System.Linq;
 
 namespace DrawToolsLib
 {
-    /// <summary>
-    /// Add new object command
-    /// </summary>
-    class CommandAdd : CommandBase
+    internal class CommandAdd : CommandBase
     {
-        PropertiesGraphicsBase newObjectClone;
+        private readonly PropertiesGraphicsBase[] _graphics;
 
-        // Create this command with DrawObject instance added to the list
-        public CommandAdd(GraphicsBase newObject)
-            : base()
+        public CommandAdd(params GraphicsBase[] newObjects)
         {
-            // Keep copy of added object
-            this.newObjectClone = newObject.CreateSerializedObject();
+            _graphics = newObjects.Select(s => s.CreateSerializedObject()).ToArray();
         }
 
-        /// <summary>
-        /// Delete added object
-        /// </summary>
         public override void Undo(DrawingCanvas drawingCanvas)
         {
-            // Find object to delete by its ID.
-            // Don't use objects order in the list.
-
-
-            GraphicsBase objectToDelete = null;
-
-            // Remove object from the list
-            foreach(GraphicsBase b in drawingCanvas.GraphicsList)
+            foreach (var g in _graphics)
             {
-                if ( b.Id == newObjectClone.ID )
-                {
-                    objectToDelete = b;
-                    break;
-                }
-            }
+                GraphicsBase objectToDelete = drawingCanvas.GraphicsList.Cast<GraphicsBase>()
+                    .FirstOrDefault(b => b.Id == g.ID);
 
-            if ( objectToDelete != null )
-            {
-                drawingCanvas.GraphicsList.Remove(objectToDelete);
+                if (objectToDelete != null)
+                    drawingCanvas.GraphicsList.Remove(objectToDelete);
             }
         }
 
-        /// <summary>
-        /// Add object again
-        /// </summary>
         public override void Redo(DrawingCanvas drawingCanvas)
         {
             HelperFunctions.UnselectAll(drawingCanvas);
-
-            // Create full object from the clone and add it to list
-            drawingCanvas.GraphicsList.Add(newObjectClone.CreateGraphics());
+            foreach (var g in _graphics)
+                drawingCanvas.GraphicsList.Add(g.CreateGraphics());
         }
     }
 }
