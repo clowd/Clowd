@@ -43,5 +43,10 @@ namespace DrawToolsLib
 
             base.Draw(drawingContext);
         }
+
+        public override PropertiesGraphicsBase CreateSerializedObject()
+        {
+            return new PropertiesGraphicsArrow(this);
+        }
     }
 }
