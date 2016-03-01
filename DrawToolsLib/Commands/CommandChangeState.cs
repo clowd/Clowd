@@ -64,6 +64,8 @@ namespace DrawToolsLib
                 if (replacement != null)
                 {
                     // Replace object with its clone
+                    var old = graphicsList[i];
+                    (old as GraphicsVisual)?.Dispose();
                     graphicsList.RemoveAt(i);
                     graphicsList.Insert(i, replacement.CreateVisual());
                 }

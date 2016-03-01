@@ -33,6 +33,7 @@ namespace DrawToolsLib
             foreach (var g in _graphics)
             {
                 var vis = g.CreateVisual();
+                vis.IsSelected = true;
                 drawingCanvas.GraphicsList.Add(vis);
             }
         }
