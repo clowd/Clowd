@@ -73,7 +73,7 @@ namespace DrawToolsLib.Graphics
             {
                 figure.StartPoint = points[0];
             }
-
+            //TODO: http://blog.scottlogic.com/2010/11/22/adding-a-smoothed-line-series-bezier-curve-to-a-visiblox-chart.html
             for (int i = 1; i < points.Length; i++)
             {
                 LineSegment segment = new LineSegment(points[i], true);
