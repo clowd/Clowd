@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -8,6 +9,7 @@ using System.IO;
 using System.Xml.Serialization;
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows.Media.Imaging;
 
 namespace DrawToolsLib
 {
@@ -59,6 +61,8 @@ namespace DrawToolsLib
         private ContextMenu contextMenu;
 
         private UndoManager undoManager;
+
+        private const string clipboardFormat = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
 
 
         #endregion Class Members
@@ -884,41 +888,54 @@ namespace DrawToolsLib
             }
             return -1;
         }
-        public void AddImageGraphic(string filename, Rect rect)
+
+        /// <summary>
+        /// Add a graphic object to the canvas from its serialized companion class.
+        /// </summary>
+        public void AddGraphic(PropertiesGraphicsBase graphic)
+        {
+            HelperFunctions.UnselectAll(this);
+            var g = graphic.CreateGraphics();
+            g.IsSelected = true;
+            this.GraphicsList.Add(g);
+            AddCommandToHistory(new CommandAdd(g));
+        }
+
+        /// <summary>
+        /// Helper method to add an image graphic from a file location
+        /// </summary>
+        public void AddGraphicImage(string filename, Rect rect)
         {
             HelperFunctions.UnselectAll(this);
             var o = new GraphicsImage(filename, rect.Left, rect.Top, rect.Right, rect.Bottom, LineWidth, ObjectColor, 1d);
             o.IsSelected = true;
             this.GraphicsList.Add(o);
+            AddCommandToHistory(new CommandAdd(o));
         }
-        public Rect GetArtworkBounds()
+
+        /// <summary>
+        /// Gets a bounding rectangle of all of the current graphics objects (selection handles not included)
+        /// </summary>
+        /// <returns></returns>
+        public Rect GetArtworkBounds(bool selectedOnly = false)
         {
             var artwork = GraphicsList.Cast<GraphicsBase>().Where(g => !(g is GraphicsSelectionRectangle));
             Rect result = new Rect(0, 0, 0, 0);
             bool first = true;
             foreach (var item in artwork)
             {
+                if (selectedOnly && !item.IsSelected)
+                    continue;
+                var rect = GetGraphicRect(item);
                 if (first)
-                    result = GetGraphicRect(item);
-                else
-                    result.Union(GetGraphicRect(item));
-                first = false;
+                {
+                    result = rect;
+                    first = false;
+                    continue;
+                }
+                result.Union(rect);
             }
             return result;
-        }
-        private Rect GetGraphicRect(GraphicsBase g)
-        {
-            var rect = g.ContentBounds;
-            if (g.IsSelected)
-            {
-                var trim = (GraphicsBase.HandleSize - LineWidth) / 2;
-                return new Rect(rect.X + trim, rect.Y + trim,
-                    Math.Max(0, rect.Width - (trim * 2)), Math.Max(0, rect.Height - (trim * 2)));
-            }
-            else
-            {
-                return rect;
-            }
         }
 
         /// <summary>
@@ -939,8 +956,7 @@ namespace DrawToolsLib
         {
             try
             {
-                SerializationHelper helper = new SerializationHelper(graphicsList);
-
+                var helper = new SerializationHelper(graphicsList.OfType<GraphicsBase>(), GetArtworkBounds());
                 XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
 
                 using (Stream stream = new FileStream(fileName,
@@ -1008,6 +1024,65 @@ namespace DrawToolsLib
             }
         }
 
+        /// <summary>
+        /// Copies the current selected graphic objects to the clipboard
+        /// </summary>
+        public void Copy()
+        {
+            Clipboard.Clear();
+            GraphicsBase[] graphics = graphicsList.OfType<GraphicsBase>().Where(g => g.IsSelected).ToArray();
+            if (!graphics.Any())
+                graphics = graphicsList.OfType<GraphicsBase>().ToArray();
+            var helper = new SerializationHelper(graphics, GetArtworkBounds(true));
+
+            XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
+            using (MemoryStream stream = new MemoryStream())
+            {
+                xml.Serialize(stream, helper);
+                var format = DataFormats.GetDataFormat(clipboardFormat);
+                IDataObject dataObj = new DataObject();
+                dataObj.SetData(format.Name, Convert.ToBase64String(stream.ToArray()), true);
+                Clipboard.SetDataObject(dataObj, false);
+            }
+            UpdateState();
+        }
+
+        /// <summary>
+        /// Paste any graphics objects in the clipboard to the drawing canvas
+        /// </summary>
+        /// <returns>True if there were graphics to paste, or False otherwise</returns>
+        public bool Paste()
+        {
+            var dataObj = Clipboard.GetDataObject();
+            if (dataObj?.GetDataPresent(clipboardFormat) == true)
+            {
+                var base64 = dataObj.GetData(clipboardFormat) as string;
+                if (String.IsNullOrEmpty(base64))
+                    return false;
+
+                SerializationHelper helper;
+                XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
+
+                using (var stream = new MemoryStream(Convert.FromBase64String(base64)))
+                {
+                    helper = (SerializationHelper)xml.Deserialize(stream);
+                }
+                HelperFunctions.UnselectAll(this);
+                foreach (var g in helper.Graphics.Select(s => s.CreateGraphics()))
+                {
+                    g.Move(-helper.Left - helper.Width / 2, -helper.Top - helper.Height / 2);
+                    g.ActualScale = ActualScale;
+                    g.IsSelected = true;
+                    graphicsList.Add(g);
+                }
+                AddCommandToHistory(new CommandChangeState(this));
+                UpdateState();
+                InvalidateVisual();
+                RefreshBounds();
+                return true;
+            }
+            return false;
+        }
 
         /// <summary>
         /// Select all
@@ -1252,7 +1327,7 @@ namespace DrawToolsLib
                 {
                     HandleDoubleClick(e);        // special case for GraphicsText
                 }
-                else if (Tool == ToolType.None || tools[(int) Tool] == null)
+                else if (Tool == ToolType.None || tools[(int)Tool] == null)
                 {
                     StartPanning(e);
                 }
@@ -1797,6 +1872,20 @@ namespace DrawToolsLib
             _artworkRectangle.Height = bounds.Height;
         }
 
+        private Rect GetGraphicRect(GraphicsBase g)
+        {
+            var rect = g.ContentBounds;
+            if (g.IsSelected)
+            {
+                var trim = (GraphicsBase.HandleSize - LineWidth) / 2;
+                return new Rect(rect.X + trim, rect.Y + trim,
+                    Math.Max(0, rect.Width - (trim * 2)), Math.Max(0, rect.Height - (trim * 2)));
+            }
+            else
+            {
+                return rect;
+            }
+        }
 
         #endregion Other Functions
 
@@ -1806,7 +1895,7 @@ namespace DrawToolsLib
 
         public Point ContentOffset
         {
-            get { return (Point) GetValue(ContentOffsetProperty); }
+            get { return (Point)GetValue(ContentOffsetProperty); }
             set { SetValue(ContentOffsetProperty, value); }
         }
         public static readonly DependencyProperty ContentOffsetProperty =
@@ -1815,7 +1904,7 @@ namespace DrawToolsLib
 
         public double ContentScale
         {
-            get { return (double) GetValue(ContentScaleProperty); }
+            get { return (double)GetValue(ContentScaleProperty); }
             set { SetValue(ContentScaleProperty, value); }
         }
         public static readonly DependencyProperty ContentScaleProperty =
@@ -1824,15 +1913,15 @@ namespace DrawToolsLib
 
         private static void ContentScaleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var me = (DrawingCanvas) d;
-            var scale = (double) e.NewValue;
+            var me = (DrawingCanvas)d;
+            var scale = (double)e.NewValue;
             me._scaleTransform.ScaleX = scale;
             me._scaleTransform.ScaleY = scale;
         }
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var me = (DrawingCanvas) d;
-            var pt = (Point) e.NewValue;
+            var me = (DrawingCanvas)d;
+            var pt = (Point)e.NewValue;
             me._translateTransform.X = pt.X;
             me._translateTransform.Y = pt.Y;
         }

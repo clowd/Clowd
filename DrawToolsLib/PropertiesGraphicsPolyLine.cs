@@ -10,6 +10,7 @@ namespace DrawToolsLib
     /// <summary>
     /// Polyline object properties
     /// </summary>
+    [Serializable]
     public class PropertiesGraphicsPolyLine : PropertiesGraphicsBase
     {
         private Point[] points;

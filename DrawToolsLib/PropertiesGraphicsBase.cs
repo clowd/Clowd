@@ -32,6 +32,7 @@ namespace DrawToolsLib
     /// directly.
     /// 
     /// </summary>
+    [Serializable]
     public abstract class PropertiesGraphicsBase
     {
         [XmlIgnore]

@@ -48,7 +48,7 @@ namespace Clowd
                     width = DpiScale.DownScaleX(bitmapFrame.PixelWidth);
                     height = DpiScale.DownScaleY(bitmapFrame.PixelHeight);
                 }
-                drawingCanvas.AddImageGraphic(_imagePath, new Rect(0, 0, width, height));
+                drawingCanvas.AddGraphicImage(_imagePath, new Rect(0, 0, width, height));
             }
         }
 
@@ -260,12 +260,9 @@ namespace Clowd
         {
             if (!VerifyArtworkExists())
                 return;
-            using (var ms = new MemoryStream())
-            {
-                GetRenderedPng().Save(ms);
-                var img = System.Drawing.Image.FromStream(ms);
-                System.Windows.Forms.Clipboard.SetImage(img);
-            }
+
+            drawingCanvas.Copy();
+            ClipboardEx.AddImage(GetRenderedBitmap());
         }
 
         private void DeleteCommand(object sender, ExecutedRoutedEventArgs e)
@@ -298,6 +295,9 @@ namespace Clowd
 
         private void PasteCommand(object sender, ExecutedRoutedEventArgs e)
         {
+            if (drawingCanvas.Paste())
+                return;
+
             var path = System.IO.Path.GetTempFileName() + ".png";
             var img = ClipboardEx.GetImage();
             if (img == null)
@@ -305,7 +305,7 @@ namespace Clowd
             img.Save(path, ImageFormat.Png);
             var width = DpiScale.DownScaleX(img.PixelWidth);
             var height = DpiScale.DownScaleY(img.PixelHeight);
-            drawingCanvas.AddImageGraphic(path, new Rect(0, 0, width, height));
+            drawingCanvas.AddGraphicImage(path, new Rect(0, 0, width, height));
         }
 
         private void rootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
