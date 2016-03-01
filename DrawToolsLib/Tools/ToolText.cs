@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.IO;
 using System.Diagnostics;
+using DrawToolsLib.Graphics;
 
 
 namespace DrawToolsLib
@@ -17,7 +18,7 @@ namespace DrawToolsLib
         TextBox textBox;
         string oldText;
 
-        GraphicsText editedGraphicsText;
+        GraphicsVisual editedGraphicsText;
         DrawingCanvas drawingCanvas;
 
 
@@ -43,22 +44,16 @@ namespace DrawToolsLib
         /// </summary>
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
-            Point p = e.GetPosition(drawingCanvas);
+            Point point = e.GetPosition(drawingCanvas);
 
-            AddNewObject(drawingCanvas,
-                new GraphicsText(
-                String.Empty,
-                p.X,
-                p.Y,
-                p.X + 1,
-                p.Y + 1,
-                drawingCanvas.ObjectColor,
-                drawingCanvas.TextFontSize,
-                drawingCanvas.TextFontFamilyName,
-                drawingCanvas.TextFontStyle,
-                drawingCanvas.TextFontWeight,
-                drawingCanvas.TextFontStretch,
-                drawingCanvas.ActualScale));
+            var tface = new Typeface(
+                new FontFamily(drawingCanvas.TextFontFamilyName),
+                drawingCanvas.TextFontStyle, 
+                drawingCanvas.TextFontWeight, 
+                drawingCanvas.TextFontStretch);
+
+            var rect = HelperFunctions.CreateRectSafe(point.X, point.Y, point.X + 1, point.Y + 1);
+            AddNewObject(drawingCanvas, new GraphicsText(drawingCanvas, rect, tface, drawingCanvas.TextFontSize, ""));
         }
 
         /// <summary>
@@ -73,18 +68,18 @@ namespace DrawToolsLib
 
             if (drawingCanvas.Count > 0)
             {
-                drawingCanvas[drawingCanvas.Count - 1].Normalize();
+                drawingCanvas[drawingCanvas.Count - 1].Graphic.Normalize();
 
-                GraphicsText t = drawingCanvas[drawingCanvas.Count - 1] as GraphicsText;
-                if (t.Rectangle.Width < 150)
+                GraphicsText t = drawingCanvas[drawingCanvas.Count - 1].Graphic as GraphicsText;
+                if (t.Bounds.Width < 150)
                     t.Right = t.Left + 150;
-                if (t.Rectangle.Height < 100)
+                if (t.Bounds.Height < 100)
                     t.Bottom = t.Top + 150;
 
                 if (t != null)
                 {
                     // Create textbox for editing of graphics object which is just created
-                    CreateTextBox(t, drawingCanvas);
+                    CreateTextBox(drawingCanvas[drawingCanvas.Count - 1], drawingCanvas);
                 }
             }
 
@@ -95,26 +90,31 @@ namespace DrawToolsLib
         /// <summary>
         /// Create textbox for in-place editing
         /// </summary>
-        public void CreateTextBox(GraphicsText graphicsText, DrawingCanvas drawingCanvas)
+        public void CreateTextBox(GraphicsVisual graphics, DrawingCanvas drawingCanvas)
         {
+            var graphicsText = graphics.Graphic as GraphicsText;
+            if (graphicsText != null)
+                return;
+
             graphicsText.IsSelected = false;  // selection marks don't look good with textbox
 
             // Keep old text in the case Esc is pressed while editing
             oldText = graphicsText.Text;
 
             // Keep reference to edited object
-            editedGraphicsText = graphicsText;
+            editedGraphicsText = graphics;
 
 
             textBox = new TextBox();
 
-            textBox.Width = graphicsText.Rectangle.Width;
-            textBox.Height = graphicsText.Rectangle.Height;
-            textBox.FontFamily = new FontFamily(graphicsText.TextFontFamilyName);
-            textBox.FontSize = graphicsText.TextFontSize;
-            textBox.FontStretch = graphicsText.TextFontStretch;
-            textBox.FontStyle = graphicsText.TextFontStyle;
-            textBox.FontWeight = graphicsText.TextFontWeight;
+            textBox.Width = graphicsText.Bounds.Width;
+            textBox.Height = graphicsText.Bounds.Height;
+            textBox.FontFamily = new FontFamily(graphicsText.FontFamily);
+            textBox.FontSize = graphicsText.FontSize;
+            var tface = graphicsText.Typeface;
+            textBox.FontStretch = tface.Stretch;
+            textBox.FontStyle = tface.Style;
+            textBox.FontWeight = tface.Weight;
             textBox.Text = graphicsText.Text;
 
             textBox.AcceptsReturn = true;
@@ -122,8 +122,8 @@ namespace DrawToolsLib
 
             drawingCanvas.Children.Add(textBox);
 
-            Canvas.SetLeft(textBox, graphicsText.Rectangle.Left);
-            Canvas.SetTop(textBox, graphicsText.Rectangle.Top);
+            Canvas.SetLeft(textBox, graphicsText.Bounds.Left);
+            Canvas.SetTop(textBox, graphicsText.Bounds.Top);
             textBox.Width = textBox.Width;
             textBox.Height = textBox.Height;
 

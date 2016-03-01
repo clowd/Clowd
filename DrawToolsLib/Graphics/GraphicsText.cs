@@ -3,177 +3,118 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Xml.Serialization;
 
-
-
-namespace DrawToolsLib
+namespace DrawToolsLib.Graphics
 {
-    /// <summary>
-    ///  Text graphics object.
-    /// </summary>
-    public class GraphicsText : GraphicsRectangleBase
+    [Serializable]
+    public class GraphicsText : GraphicsRectangle
     {
-        #region Class Members
+        [XmlIgnore]
+        public Typeface Typeface => _typeface.GetTypeface();
 
-        private string text;
-        private string textFontFamilyName;
-        private FontStyle textFontStyle;
-        private FontWeight textFontWeight;
-        private FontStretch textFontStretch;
-        private double textFontSize;
-
-        // For internal use
-        FormattedText formattedText;
-
-        #endregion Class Members
-
-        #region Constructors
-
-        public GraphicsText(
-            string text,
-            double left, 
-            double top, 
-            double right, 
-            double bottom,
-            Color objectColor,
-            double textFontSize,
-            string textFontFamilyName,
-            FontStyle textFontStyle,
-            FontWeight textFontWeight,
-            FontStretch textFontStretch,
-            double actualScale)
+        public string FontFamily
         {
-            this.text = text;
-            this.rectangleLeft = left;
-            this.rectangleTop = top;
-            this.rectangleRight = right;
-            this.rectangleBottom = bottom;
-            this.graphicsObjectColor = objectColor;
-            this.textFontSize = textFontSize;
-            this.textFontFamilyName = textFontFamilyName;
-            this.textFontStyle = textFontStyle;
-            this.textFontWeight = textFontWeight;
-            this.textFontStretch = textFontStretch;
-            this.graphicsActualScale = actualScale;
-
-            graphicsLineWidth = 2;      // used for drawing bounding rectangle when selected
-
-
-            //RefreshDrawng();
+            get { return _typeface.FontFamily; }
+            set
+            {
+                if (value == _typeface.FontFamily) return;
+                _typeface.FontFamily = value;
+                OnPropertyChanged(nameof(FontFamily));
+            }
+        }
+        public string FontStyle
+        {
+            get { return _typeface.FontStyle; }
+            set
+            {
+                if (value == _typeface.FontStyle) return;
+                _typeface.FontStyle = value;
+                OnPropertyChanged(nameof(FontStyle));
+            }
+        }
+        public string FontWeight
+        {
+            get { return _typeface.FontWeight; }
+            set
+            {
+                if (value == _typeface.FontWeight) return;
+                _typeface.FontWeight = value;
+                OnPropertyChanged(nameof(FontWeight));
+            }
+        }
+        public string FontStretch
+        {
+            get { return _typeface.FontStretch; }
+            set
+            {
+                if (value == _typeface.FontStretch) return;
+                _typeface.FontStretch = value;
+                OnPropertyChanged(nameof(FontStretch));
+            }
         }
 
-        public GraphicsText()
-            :
-            this(Properties.Settings.Default.UnknownText, 0, 0, 0, 0, Colors.Black, 12, 
-                 Properties.Settings.Default.DefaultFontFamily, FontStyles.Normal,
-                 FontWeights.Normal, FontStretches.Normal, 1.0)
+        public double FontSize
         {
+            get { return _fontSize; }
+            set
+            {
+                if (value.Equals(_fontSize)) return;
+                _fontSize = value;
+                OnPropertyChanged();
+            }
         }
-
-        #endregion Constructors
-
-        #region Properties
-
         public string Text
         {
-            get 
-            { 
-                return text; 
-            }
-            set 
-            { 
-                text = value;
-                RefreshDrawing();
-            }
-        }
-
-        public string TextFontFamilyName
-        {
-            get 
-            { 
-                return textFontFamilyName; 
-            }
-            set 
-            { 
-                textFontFamilyName = value;
-                RefreshDrawing();
-            }
-        }
-
-        public FontStyle TextFontStyle
-        {
-            get 
-            { 
-                return textFontStyle; 
-            }
-            set 
-            { 
-                textFontStyle = value;
-                RefreshDrawing();
-            }
-        }
-
-        public FontWeight TextFontWeight
-        {
-            get 
-            { 
-                return textFontWeight; 
-            }
-            set 
-            { 
-                textFontWeight = value;
-                RefreshDrawing();
-            }
-        }
-
-        public FontStretch TextFontStretch
-        {
-            get 
-            { 
-                return textFontStretch; 
-            }
-            set 
-            { 
-                textFontStretch = value;
-                RefreshDrawing();
-            }
-        }
-
-        public double TextFontSize
-        {
-            get 
-            { 
-                return textFontSize; 
-            }
-            set 
-            { 
-                textFontSize = value;
-                RefreshDrawing();
-            }
-        }
-
-        #endregion Properties
-
-        #region Overrides
-
-        /// <summary>
-        /// Draw text
-        /// </summary>
-        public override void Draw(DrawingContext drawingContext)
-        {
-            if ( drawingContext == null )
+            get { return _text; }
+            set
             {
-                throw new ArgumentNullException("drawingContext");
+                if (value == _text) return;
+                _text = value;
+                OnPropertyChanged();
             }
+        }
 
-            CreateFormattedText();
+        private TypefaceString _typeface;
+        private double _fontSize;
+        private string _text;
 
-            Rect rect = Rectangle;
+        protected GraphicsText()
+        {
+            _typeface = new TypefaceString();
+        }
+        public GraphicsText(DrawingCanvas canvas, Rect rect, Typeface typeFace, double fontSize, string text)
+            : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, rect, typeFace, fontSize, text)
+        {
+        }
+        public GraphicsText(double scale, Color objectColor, double lineWidth, Rect rect,
+            Typeface typeFace, double fontSize, string text) : base(scale, objectColor, lineWidth, rect)
+        {
+            _typeface = TypefaceString.FromTypeface(typeFace);
+            _fontSize = fontSize;
+            _text = text;
+        }
+        public GraphicsText(DrawingCanvas canvas, Rect rect, TypefaceString typeFace, double fontSize, string text)
+           : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, rect, typeFace, fontSize, text)
+        {
+        }
+        public GraphicsText(double scale, Color objectColor, double lineWidth, Rect rect,
+            TypefaceString typeFace, double fontSize, string text) : base(scale, objectColor, lineWidth, rect)
+        {
+            _typeface = typeFace;
+            _fontSize = fontSize;
+            _text = text;
+        }
 
+        internal override void DrawRectangle(DrawingContext drawingContext)
+        {
+            if (drawingContext == null)
+                throw new ArgumentNullException(nameof(drawingContext));
+
+            Rect rect = Bounds;
             drawingContext.PushClip(new RectangleGeometry(rect));
-
             drawingContext.DrawRectangle(Brushes.LightYellow, new Pen(Brushes.Black, 1), rect);
-            drawingContext.DrawText(formattedText, new Point(rect.Left, rect.Top));
+            drawingContext.DrawText(CreateFormattedText(), new Point(rect.Left, rect.Top));
 
             drawingContext.Pop();
 
@@ -181,108 +122,82 @@ namespace DrawToolsLib
             {
                 drawingContext.DrawRectangle(
                     null,
-                    new Pen(new SolidColorBrush(graphicsObjectColor), ActualLineWidth),
+                    new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
                     rect);
             }
 
             // Draw tracker
-            base.Draw(drawingContext);
+        }
+        internal override bool Contains(Point point)
+        {
+            return Bounds.Contains(point);
         }
 
-        /// <summary>
-        /// Update rectangle to fit actual text size.
-        /// </summary>
-        public void UpdateRectangle()
+        public override GraphicsBase Clone()
         {
-            /*
-             * 
-             * Trying to find acceptable adjustment algorithm, I decided finally
-             * to leave rectangle completely under user control.
-            
-            CreateFormattedText();
-
-            Rect rect = Rectangle;
-
-            if (formattedText.Width > rect.Width)
-            {
-                formattedText.MaxTextWidth = rect.Width;
-            }
-            else
-            {
-                rect.Width = formattedText.Width;
-            }
-
-            if (rect.Height > formattedText.Height)
-            {
-                rect.Height = formattedText.Height;
-            }
-
-            this.left = rect.Left;
-            this.top = rect.Top;
-            this.right = rect.Right;
-            this.bottom = rect.Bottom;
-             */
-
-            RefreshDrawing();
-             
+            return new GraphicsText(ActualScale, ObjectColor, LineWidth, Bounds, _typeface, FontSize, Text) { ObjectId = ObjectId };
         }
 
-        /// <summary>
-        /// Create formatted text.
-        /// It is required for drawing and updating bounding rectangle.
-        /// </summary>
-        void CreateFormattedText()
+        private FormattedText CreateFormattedText()
         {
-            // Number of corrections I have done after trying to open
-            // XML file with correct object names, but incorrect field names.
-            if ( String.IsNullOrEmpty(textFontFamilyName) )
-            {
-                textFontFamilyName = Properties.Settings.Default.DefaultFontFamily;
-            }
+            if (String.IsNullOrEmpty(_typeface.FontFamily))
+                _typeface.FontFamily = Properties.Settings.Default.DefaultFontFamily;
 
-            if (text == null)
-            {
-                text = "";
-            }
+            if (_text == null)
+                _text = "";
 
-            if ( textFontSize <= 0.0 )
-            {
-                textFontSize = 12.0;
-            }
+            if (_fontSize <= 0.0)
+                _fontSize = 12.0;
 
-            Typeface typeface = new Typeface(
-                new FontFamily(textFontFamilyName),
-                textFontStyle,
-                textFontWeight,
-                textFontStretch);
+            Typeface typeface = _typeface.GetTypeface();
 
-            formattedText = new FormattedText(
-                text,
+            var formatted = new FormattedText(
+                Text,
                 System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
                 typeface,
-                textFontSize,
-                new SolidColorBrush(graphicsObjectColor));
+                FontSize,
+                new SolidColorBrush(ObjectColor));
 
-            formattedText.MaxTextWidth = Rectangle.Width;
+            formatted.MaxTextWidth = Bounds.Width;
+            return formatted;
         }
-
-        /// <summary>
-        /// Test whether object contains point
-        /// </summary>
-        public override bool Contains(Point point)
+        public class TypefaceString
         {
-            return this.Rectangle.Contains(point);
-        }
+            public string FontFamily { get; set; }
+            public string FontStyle { get; set; }
+            public string FontWeight { get; set; }
+            public string FontStretch { get; set; }
 
-        /// <summary>
-        /// Serialization support
-        /// </summary>
-        public override PropertiesGraphicsBase CreateSerializedObject()
-        {
-            return new PropertiesGraphicsText(this);
-        }
+            public TypefaceString()
+            {
+            }
 
-        #endregion Overrides
+            public TypefaceString(string family, string style, string weight, string stretch)
+            {
+                FontFamily = family;
+                FontStyle = style;
+                FontWeight = weight;
+                FontStretch = stretch;
+            }
+
+            public Typeface GetTypeface()
+            {
+                return new Typeface(new FontFamily(FontFamily),
+                    FontConversions.FontStyleFromString(FontStyle),
+                    FontConversions.FontWeightFromString(FontWeight),
+                    FontConversions.FontStretchFromString(FontStretch));
+            }
+            public static TypefaceString FromTypeface(Typeface tface)
+            {
+                return new TypefaceString()
+                {
+                    FontFamily = tface.FontFamily.ToString(),
+                    FontStretch = FontConversions.FontStretchToString(tface.Stretch),
+                    FontStyle = FontConversions.FontStyleToString(tface.Style),
+                    FontWeight = FontConversions.FontWeightToString(tface.Weight)
+                };
+            }
+        }
     }
 }

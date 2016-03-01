@@ -4,13 +4,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-
 namespace DrawToolsLib
 {
-    /// <summary>
-    /// Base class for all drawing tools
-    /// </summary>
-    abstract class Tool
+    internal abstract class Tool
     {
         public abstract void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e);
 

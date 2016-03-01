@@ -3,8 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-
-
+using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
@@ -13,22 +12,10 @@ namespace DrawToolsLib
     /// </summary>
     abstract class ToolObject : Tool
     {
-        private Cursor toolCursor;
-
         /// <summary>
         /// Tool cursor.
         /// </summary>
-        protected Cursor ToolCursor
-        {
-            get
-            {
-                return toolCursor;
-            }
-            set
-            {
-                toolCursor = value;
-            }
-        }
+        protected Cursor ToolCursor { get; set; }
 
 
         /// <summary>
@@ -39,8 +26,7 @@ namespace DrawToolsLib
         {
             if (drawingCanvas.Count > 0)
             {
-                drawingCanvas[drawingCanvas.Count - 1].Normalize();
-
+                drawingCanvas[drawingCanvas.Count - 1].Graphic.Normalize();
                 drawingCanvas.AddCommandToHistory(new CommandAdd(drawingCanvas[drawingCanvas.Count - 1]));
             }
 
@@ -57,10 +43,8 @@ namespace DrawToolsLib
         protected static void AddNewObject(DrawingCanvas drawingCanvas, GraphicsBase o)
         {
             HelperFunctions.UnselectAll(drawingCanvas);
-
             o.IsSelected = true;
-
-            drawingCanvas.GraphicsList.Add(o);
+            drawingCanvas.GraphicsList.Add(o.CreateVisual());
             drawingCanvas.CaptureMouse();
         }
 
@@ -69,7 +53,7 @@ namespace DrawToolsLib
         /// </summary>
         public override void SetCursor(DrawingCanvas drawingCanvas)
         {
-            drawingCanvas.Cursor = this.toolCursor;
+            drawingCanvas.Cursor = this.ToolCursor;
         }
 
     }

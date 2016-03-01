@@ -73,19 +73,19 @@
     <Compile Include="DrawingCanvas.cs" />
     <Compile Include="DrawingCanvasException.cs" />
     <Compile Include="FontConversions.cs" />
+    <Compile Include="GraphicsVisual.cs" />
     <Compile Include="Graphics\GraphicsBase.cs" />
     <Compile Include="Graphics\GraphicsImage.cs" />
     <Compile Include="Graphics\GraphicsArrow.cs" />
     <Compile Include="Graphics\GraphicsText.cs" />
-    <Compile Include="Graphics\PropertiesGraphicsImage.cs" />
-    <Compile Include="Graphics\PropertiesGraphicsArrow.cs" />
+    <Compile Include="OriginIndicator.cs" />
+    <Compile Include="Properties\Annotations.cs" />
     <Compile Include="Properties\Settings.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
     <Compile Include="SerializationHelper.cs" />
-    <Compile Include="Graphics\PropertiesGraphicsText.cs" />
     <Compile Include="Tools\ToolEllipse.cs" />
     <Compile Include="Tools\ToolArrow.cs" />
     <Compile Include="Tools\ToolLine.cs" />
@@ -98,7 +98,6 @@
     <Compile Include="Graphics\GraphicsLine.cs" />
     <Compile Include="Graphics\GraphicsPolyLine.cs" />
     <Compile Include="Graphics\GraphicsRectangle.cs" />
-    <Compile Include="Graphics\GraphicsRectangleBase.cs" />
     <Compile Include="Graphics\GraphicsSelectionRectangle.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
@@ -106,11 +105,6 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <Compile Include="Graphics\PropertiesGraphicsBase.cs" />
-    <Compile Include="Graphics\PropertiesGraphicsEllipse.cs" />
-    <Compile Include="Graphics\PropertiesGraphicsLine.cs" />
-    <Compile Include="Graphics\PropertiesGraphicsPolyLine.cs" />
-    <Compile Include="Graphics\PropertiesGraphicsRectangle.cs" />
     <Compile Include="Tools\Tool.cs" />
     <Compile Include="Tools\ToolRectangleBase.cs" />
     <Compile Include="Tools\ToolText.cs" />

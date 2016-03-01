@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-
+using DrawToolsLib.Graphics;
 
 
 namespace DrawToolsLib
@@ -59,8 +59,7 @@ namespace DrawToolsLib
             // Test for resizing (only if control is selected, cursor is on the handle)
             for (int i = drawingCanvas.GraphicsList.Count - 1; i >= 0; i--)
             {
-                o = drawingCanvas[i];
-
+                o = drawingCanvas[i].Graphic;
                 if (o.IsSelected)
                 {
                     handleNumber = o.MakeHitTest(point);
@@ -89,7 +88,7 @@ namespace DrawToolsLib
             {
                 for (int i = drawingCanvas.GraphicsList.Count - 1; i >= 0; i--)
                 {
-                    o = drawingCanvas[i];
+                    o = drawingCanvas[i].Graphic;
 
                     if (o.MakeHitTest(point) == 0)
                     {
@@ -128,13 +127,10 @@ namespace DrawToolsLib
                 }
 
                 // Group selection. Create selection rectangle.
-                GraphicsSelectionRectangle r = new GraphicsSelectionRectangle(
-                    point.X, point.Y,
-                    point.X + 1, point.Y + 1,
-                    drawingCanvas.ActualScale);
+                var rect =  HelperFunctions.CreateRectSafe(point.X, point.Y, point.X + 1, point.Y + 1);
+                GraphicsSelectionRectangle r = new GraphicsSelectionRectangle(drawingCanvas, rect);
 
-                drawingCanvas.GraphicsList.Add(r);
-
+                drawingCanvas.GraphicsList.Add(r.CreateVisual());
                 selectMode = SelectionMode.GroupSelection;
             }
 
@@ -168,7 +164,7 @@ namespace DrawToolsLib
 
                 for (int i = drawingCanvas.Count - 1; i >= 0; i--)
                 {
-                    int n = drawingCanvas[i].MakeHitTest(point);
+                    int n = drawingCanvas[i].Graphic.MakeHitTest(point);
 
                     if (n == 0)
                     {
@@ -177,7 +173,7 @@ namespace DrawToolsLib
                     }
                     else if (n > 0)
                     {
-                        cursor = drawingCanvas[i].GetHandleCursor(n);
+                        cursor = drawingCanvas[i].Graphic.GetHandleCursor(n);
                         break;
                     }
                 }
@@ -216,9 +212,9 @@ namespace DrawToolsLib
             // Move
             if (selectMode == SelectionMode.Move)
             {
-                foreach (GraphicsBase o in drawingCanvas.Selection)
+                foreach (GraphicsVisual o in drawingCanvas.Selection)
                 {
-                    o.Move(dx, dy);
+                    o.Graphic.Move(dx, dy);
                 }
             }
 
@@ -226,7 +222,7 @@ namespace DrawToolsLib
             if (selectMode == SelectionMode.GroupSelection)
             {
                 // Resize selection rectangle
-                drawingCanvas[drawingCanvas.Count - 1].MoveHandleTo(
+                drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(
                     point, 5);
             }
         }
@@ -250,25 +246,25 @@ namespace DrawToolsLib
                 resizedObject.Normalize();
 
                 // Special case for text
-                if (resizedObject is GraphicsText)
-                {
-                    ((GraphicsText)resizedObject).UpdateRectangle();
-                }
+                //if (resizedObject is GraphicsText)
+                //{
+                //    ((GraphicsText)resizedObject).
+                //}
 
                 resizedObject = null;
             }
 
             if (selectMode == SelectionMode.GroupSelection)
             {
-                GraphicsSelectionRectangle r = (GraphicsSelectionRectangle)drawingCanvas[drawingCanvas.Count - 1];
+                GraphicsSelectionRectangle r = (GraphicsSelectionRectangle)(drawingCanvas[drawingCanvas.Count - 1].Graphic);
                 r.Normalize();
-                Rect rect = r.Rectangle;
+                Rect rect = r.Bounds;
 
-                drawingCanvas.GraphicsList.Remove(r);
+                drawingCanvas.GraphicsList.Remove(drawingCanvas[drawingCanvas.Count - 1]);
 
-                foreach (GraphicsBase g in drawingCanvas.GraphicsList)
+                foreach (GraphicsVisual g in drawingCanvas.GraphicsList)
                 {
-                    if (g.IntersectsWith(rect))
+                    if (g.Graphic.IntersectsWith(rect))
                     {
                         g.IsSelected = true;
                     }

@@ -4,51 +4,37 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace DrawToolsLib
+namespace DrawToolsLib.Graphics
 {
-    /// <summary>
-    ///  Rectangle graphics object.
-    /// </summary>
-    public class GraphicsEllipse : GraphicsRectangleBase
+    [Serializable]
+    public class GraphicsEllipse : GraphicsRectangle
     {
-        #region Constructors
-
-        public GraphicsEllipse(double left, double top, double right, double bottom,
-            double lineWidth, Color objectColor, double actualScale)
+        protected GraphicsEllipse()
         {
-            this.rectangleLeft = left;
-            this.rectangleTop = top;
-            this.rectangleRight = right;
-            this.rectangleBottom = bottom;
-            this.graphicsLineWidth = lineWidth;
-            this.graphicsObjectColor = objectColor;
-            this.graphicsActualScale = actualScale;
-
-            //RefreshDrawng();
         }
-
-        public GraphicsEllipse()
-            :
-            this(0.0, 0.0, 100.0, 100.0, 1.0, Colors.Black, 1.0)
+        public GraphicsEllipse(DrawingCanvas canvas, Rect rect) : base(canvas, rect)
         {
         }
 
-        #endregion Constructors
-
-        #region Overrides
-
-        /// <summary>
-        /// Draw object
-        /// </summary>
-        public override void Draw(DrawingContext drawingContext)
+        public GraphicsEllipse(DrawingCanvas canvas, Rect rect, bool filled) : base(canvas, rect, filled)
         {
-            if ( drawingContext == null )
-            {
-                throw new ArgumentNullException("drawingContext");
-            }
+        }
 
-            Rect r = Rectangle;
+        public GraphicsEllipse(double scale, Color objectColor, double lineWidth, Rect rect) : base(scale, objectColor, lineWidth, rect)
+        {
+        }
 
+        public GraphicsEllipse(double scale, Color objectColor, double lineWidth, Rect rect, bool filled) : base(scale, objectColor, lineWidth, rect, filled)
+        {
+        }
+
+
+        internal override void DrawRectangle(DrawingContext drawingContext)
+        {
+            if (drawingContext == null)
+                throw new ArgumentNullException(nameof(drawingContext));
+
+            Rect r = Bounds;
             Point center = new Point(
                 (r.Left + r.Right) / 2.0,
                 (r.Top + r.Bottom) / 2.0);
@@ -56,57 +42,36 @@ namespace DrawToolsLib
             double radiusX = (r.Right - r.Left) / 2.0;
             double radiusY = (r.Bottom - r.Top) / 2.0;
 
+            var brush = new SolidColorBrush(ObjectColor);
             drawingContext.DrawEllipse(
-                null,
-                new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
+                Filled ? brush : null,
+                new Pen(brush, ActualLineWidth),
                 center,
                 radiusX,
                 radiusY);
-
-            base.Draw(drawingContext);
         }
 
-        /// <summary>
-        /// Test whether object contains point
-        /// </summary>
-        public override bool Contains(Point point)
+        internal override bool Contains(Point point)
         {
-            if ( IsSelected )
-            {
-                return this.Rectangle.Contains(point);
-            }
-            else
-            {
-                EllipseGeometry g = new EllipseGeometry(Rectangle);
+            if (IsSelected)
+                return Bounds.Contains(point);
 
-                return g.FillContains(point) || g.StrokeContains(new Pen(Brushes.Black, ActualLineWidth), point);
-            }
+            EllipseGeometry g = new EllipseGeometry(Bounds);
+            return g.FillContains(point) || g.StrokeContains(new Pen(Brushes.Black, ActualLineWidth), point);
         }
 
-        /// <summary>
-        /// Test whether object intersects with rectangle
-        /// </summary>
-        public override bool IntersectsWith(Rect rectangle)
+        internal override bool IntersectsWith(Rect rectangle)
         {
-            RectangleGeometry rg = new RectangleGeometry(rectangle);    // parameter
-            EllipseGeometry eg = new EllipseGeometry(Rectangle);        // this object rectangle
-
+            RectangleGeometry rg = new RectangleGeometry(rectangle);
+            EllipseGeometry eg = new EllipseGeometry(Bounds);
             PathGeometry p = Geometry.Combine(rg, eg, GeometryCombineMode.Intersect, null);
 
-            return (!p.IsEmpty());
+            return !p.IsEmpty();
         }
 
-
-        /// <summary>
-        /// Serialization support
-        /// </summary>
-        public override PropertiesGraphicsBase CreateSerializedObject()
+        public override GraphicsBase Clone()
         {
-            return new PropertiesGraphicsEllipse(this);
+            return new GraphicsEllipse(ActualScale, ObjectColor, LineWidth, Bounds, Filled) {ObjectId = ObjectId};
         }
-
-
-        #endregion Overrides
-
     }
 }

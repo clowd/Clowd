@@ -18,6 +18,7 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Clowd.Interop.Gdi32;
 using CS.Wpf;
+using DrawToolsLib.Graphics;
 
 namespace Clowd
 {
@@ -48,7 +49,8 @@ namespace Clowd
                     width = DpiScale.DownScaleX(bitmapFrame.PixelWidth);
                     height = DpiScale.DownScaleY(bitmapFrame.PixelHeight);
                 }
-                drawingCanvas.AddGraphicImage(_imagePath, new Rect(0, 0, width, height));
+                var graphic = new GraphicsImage(drawingCanvas, new Rect(0, 0, width, height), _imagePath);
+                drawingCanvas.AddGraphic(graphic);
             }
         }
 
@@ -305,7 +307,8 @@ namespace Clowd
             img.Save(path, ImageFormat.Png);
             var width = DpiScale.DownScaleX(img.PixelWidth);
             var height = DpiScale.DownScaleY(img.PixelHeight);
-            drawingCanvas.AddGraphicImage(path, new Rect(0, 0, width, height));
+            var graphic = new GraphicsImage(drawingCanvas, new Rect(0, 0, width, height), path);
+            drawingCanvas.AddGraphic(graphic);
         }
 
         private void rootGrid_PreviewKeyDown(object sender, KeyEventArgs e)

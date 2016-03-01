@@ -2,22 +2,31 @@ using System;
 using System.Windows;
 using System.Windows.Media;
 
-namespace DrawToolsLib
+namespace DrawToolsLib.Graphics
 {
+    [Serializable]
     public class GraphicsArrow : GraphicsLine
     {
-        public GraphicsArrow(Point start, Point end, double lineWidth, Color objectColor, double actualScale)
-            :base(start, end, lineWidth, objectColor, actualScale)
+        protected GraphicsArrow()
+        {
+        }
+        public GraphicsArrow(DrawingCanvas canvas, Point start, Point end)
+            : base(canvas, start, end)
         {
         }
 
-        public override void Draw(DrawingContext drawingContext)
+        public GraphicsArrow(double scale, Color objectColor, double lineWidth, Point start, Point end)
+            : base(scale, objectColor, lineWidth, start, end)
+        {
+        }
+
+        internal override void Draw(DrawingContext drawingContext)
         {
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
             var tipLength = ActualLineWidth * 8;
-            var lineVector = lineEnd - lineStart;
+            var lineVector = LineEnd - LineStart;
             var lineLength = lineVector.Length;
             lineVector.Normalize();
 
@@ -27,26 +36,26 @@ namespace DrawToolsLib
             {
                 drawingContext.DrawLine(
                     new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
-                    lineStart,
-                    lineStart + lineLength * lineVector);
+                    LineStart,
+                    LineStart + lineLength * lineVector);
             }
 
             const int tipAngle = 165;
 
             var rotate = Matrix.Identity;
             rotate.Rotate(tipAngle);
-            var pt1 = lineEnd + rotate.Transform(lineVector * tipLength);
+            var pt1 = LineEnd + rotate.Transform(lineVector * tipLength);
             rotate.Rotate(-tipAngle * 2);
-            var pt2 = lineEnd + rotate.Transform(lineVector * tipLength);
+            var pt2 = LineEnd + rotate.Transform(lineVector * tipLength);
             drawingContext.DrawGeometry(new SolidColorBrush(ObjectColor), new Pen(new SolidColorBrush(ObjectColor), 1),
-                new PathGeometry(new[] { new PathFigure(lineEnd, new[] { new LineSegment(pt2, true), new LineSegment(pt1, true) }, true) }));
+                new PathGeometry(new[] { new PathFigure(LineEnd, new[] { new LineSegment(pt2, true), new LineSegment(pt1, true) }, true) }));
 
             base.Draw(drawingContext);
         }
 
-        public override PropertiesGraphicsBase CreateSerializedObject()
+        public override GraphicsBase Clone()
         {
-            return new PropertiesGraphicsArrow(this);
+            return new GraphicsArrow(ActualScale, ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
         }
     }
 }

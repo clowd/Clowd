@@ -1,25 +1,26 @@
 using System.Linq;
+using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
     internal class CommandDeleteAll : CommandBase
     {
-        private readonly PropertiesGraphicsBase[] _cloneList;
+        private readonly GraphicsBase[] _cloneList;
 
         // Create this command BEFORE applying Delete All function.
         public CommandDeleteAll(DrawingCanvas drawingCanvas)
         {
             _cloneList = drawingCanvas.GraphicsList
-                .OfType<GraphicsBase>()
-                .Select(g => g.CreateSerializedObject())
+                .OfType<GraphicsVisual>()
+                .Select(g => g.Graphic)
                 .ToArray();
         }
 
         public override void Undo(DrawingCanvas drawingCanvas)
         {
-            foreach (PropertiesGraphicsBase o in _cloneList)
+            foreach (GraphicsBase o in _cloneList)
             {
-                drawingCanvas.GraphicsList.Add(o.CreateGraphics());
+                drawingCanvas.GraphicsList.Add(o.CreateVisual());
             }
         }
 

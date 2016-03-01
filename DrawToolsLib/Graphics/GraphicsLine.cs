@@ -4,127 +4,76 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-
-
-namespace DrawToolsLib
+namespace DrawToolsLib.Graphics
 {
-    /// <summary>
-    ///  Line graphics object.
-    /// </summary>
+    [Serializable]
     public class GraphicsLine : GraphicsBase
     {
-        #region Class Members
-
-        protected Point lineStart;
-        protected Point lineEnd;
-
-        #endregion Class Members
-
-        #region Constructors
-
-        public GraphicsLine(Point start, Point end, double lineWidth, Color objectColor, double actualScale)
+        public Point LineStart
         {
-            this.lineStart = start;
-            this.lineEnd = end;
-            this.graphicsLineWidth = lineWidth;
-            this.graphicsObjectColor = objectColor;
-            this.graphicsActualScale = actualScale;
-
-            //RefreshDrawng();
-        }
-
-        public GraphicsLine()
-            :
-            this(new Point(0.0, 0.0), new Point(100.0, 100.0), 1.0, Colors.Black, 1.0)
-        {
-        }
-
-        #endregion Constructors
-
-        #region Properties
-
-        public Point Start
-        {
-            get { return lineStart; }
-            set { lineStart = value; }
-        }
-
-        public Point End
-        {
-            get { return lineEnd; }
-            set { lineEnd = value; }
-        }
-
-        #endregion Properties
-
-        #region Overrides
-
-        /// <summary>
-        /// Draw object
-        /// </summary>
-        public override void Draw(DrawingContext drawingContext)
-        {
-            if ( drawingContext == null )
+            get { return _lineStart; }
+            set
             {
-                throw new ArgumentNullException("drawingContext");
+                if (value.Equals(_lineStart)) return;
+                _lineStart = value;
+                OnPropertyChanged(nameof(LineStart));
             }
-
-            drawingContext.DrawLine(
-                new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
-                lineStart,
-                lineEnd);
-
-            base.Draw(drawingContext);
         }
 
-        /// <summary>
-        /// Test whether object contains point
-        /// </summary>
-        public override bool Contains(Point point)
+        public Point LineEnd
         {
-            LineGeometry g = new LineGeometry(lineStart, lineEnd);
-
-            return g.StrokeContains(new Pen(Brushes.Black, LineHitTestWidth), point);
+            get { return _lineEnd; }
+            set
+            {
+                if (value.Equals(_lineEnd)) return;
+                _lineEnd = value;
+                OnPropertyChanged(nameof(LineEnd));
+            }
         }
 
-        /// <summary>
-        /// XML serialization support
-        /// </summary>
-        /// <returns></returns>
-        public override PropertiesGraphicsBase CreateSerializedObject()
+        private Point _lineStart;
+        private Point _lineEnd;
+
+        protected GraphicsLine()
         {
-            return new PropertiesGraphicsLine(this);
+        }
+        public GraphicsLine(DrawingCanvas canvas, Point start, Point end) : base(canvas)
+        {
+            _lineStart = start;
+            _lineEnd = end;
+        }
+        public GraphicsLine(double scale, Color objectColor, double lineWidth, Point start, Point end)
+            : base(scale, objectColor, lineWidth)
+        {
+            _lineStart = start;
+            _lineEnd = end;
         }
 
-        /// <summary>
-        /// Get number of handles
-        /// </summary>
-        public override int HandleCount
+        public override Rect Bounds
         {
             get
             {
-                return 2;
+                var start = _lineStart;
+                var end = _lineEnd;
+                return new Rect(Math.Min(start.X, end.X),
+                                Math.Min(start.Y, end.Y),
+                                Math.Abs(start.X - end.X),
+                                Math.Abs(start.Y - end.Y));
             }
         }
 
-        /// <summary>
-        /// Get handle point by 1-based number
-        /// </summary>
-        public override Point GetHandle(int handleNumber)
-        {
-            if (handleNumber == 1)
-                return lineStart;
-            else
-                return lineEnd;
-        }
+        internal override int HandleCount => 2;
 
-        /// <summary>
-        /// Hit test.
-        /// Return value: -1 - no hit
-        ///                0 - hit anywhere
-        ///                > 1 - handle number
-        /// </summary>
-        public override int MakeHitTest(Point point)
+        internal override bool Contains(Point point)
+        {
+            LineGeometry g = new LineGeometry(LineStart, LineEnd);
+            return g.StrokeContains(new Pen(Brushes.Black, LineHitTestWidth), point);
+        }
+        internal override Point GetHandle(int handleNumber)
+        {
+            return handleNumber == 1 ? LineStart : LineEnd;
+        }
+        internal override int MakeHitTest(Point point)
         {
             if (IsSelected)
             {
@@ -134,72 +83,51 @@ namespace DrawToolsLib
                         return i;
                 }
             }
-
             if (Contains(point))
                 return 0;
-
             return -1;
         }
-
-
-        /// <summary>
-        /// Test whether object intersects with rectangle
-        /// </summary>
-        public override bool IntersectsWith(Rect rectangle)
+        internal override bool IntersectsWith(Rect rectangle)
         {
             RectangleGeometry rg = new RectangleGeometry(rectangle);
-
-            LineGeometry lg = new LineGeometry(lineStart, lineEnd);
+            LineGeometry lg = new LineGeometry(LineStart, LineEnd);
             PathGeometry widen = lg.GetWidenedPathGeometry(new Pen(Brushes.Black, LineHitTestWidth));
-
             PathGeometry p = Geometry.Combine(rg, widen, GeometryCombineMode.Intersect, null);
 
-            return (!p.IsEmpty());
+            return !p.IsEmpty();
         }
-
-        /// <summary>
-        /// Get cursor for the handle
-        /// </summary>
-        public override Cursor GetHandleCursor(int handleNumber)
+        internal override void Move(double deltaX, double deltaY)
         {
-            switch (handleNumber)
-            {
-                case 1:
-                case 2:
-                    return Cursors.SizeAll;
-                default:
-                    return HelperFunctions.DefaultCursor;
-            }
+            _lineStart = new Point(LineStart.X + deltaX, LineStart.Y + deltaY);
+            _lineEnd = new Point(LineEnd.X + deltaX, LineEnd.Y + deltaY);
+            OnPropertyChanged();
         }
-
-        /// <summary>
-        /// Move handle to new point (resizing)
-        /// </summary>
-        public override void MoveHandleTo(Point point, int handleNumber)
+        internal override void MoveHandleTo(Point point, int handleNumber)
         {
             if (handleNumber == 1)
-                lineStart = point;
+                LineStart = point;
             else
-                lineEnd = point;
-
-            RefreshDrawing();
+                LineEnd = point;
         }
-
-        /// <summary>
-        /// Move object
-        /// </summary>
-        public override void Move(double deltaX, double deltaY)
+        internal override Cursor GetHandleCursor(int handleNumber)
         {
-            lineStart.X += deltaX;
-            lineStart.Y += deltaY;
+            return Cursors.SizeAll;
+        }
+        internal override void Draw(DrawingContext drawingContext)
+        {
+            if (drawingContext == null)
+                throw new ArgumentNullException(nameof(drawingContext));
 
-            lineEnd.X += deltaX;
-            lineEnd.Y += deltaY;
+            drawingContext.DrawLine(new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
+                LineStart,
+                LineEnd);
 
-            RefreshDrawing();
+            base.Draw(drawingContext);
         }
 
-
-        #endregion Overrides
+        public override GraphicsBase Clone()
+        {
+            return new GraphicsLine(ActualScale, ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
+        }
     }
 }

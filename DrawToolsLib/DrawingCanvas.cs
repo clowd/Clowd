@@ -10,6 +10,7 @@ using System.Xml.Serialization;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Media.Imaging;
+using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
@@ -21,7 +22,7 @@ namespace DrawToolsLib
     {
         #region Class Members
 
-        // Collection contains instances of GraphicsBase-derived classes.
+        // Collection contains instances of GraphicsVisual-derived classes.
         private VisualCollection graphicsList;
 
 
@@ -112,6 +113,8 @@ namespace DrawToolsLib
             _artworkRectangle = new Border();
             _artworkRectangle.Background = new SolidColorBrush(Colors.White);
             Children.Add(_artworkRectangle);
+
+            _originIndicator = new OriginIndicator();
         }
 
 
@@ -331,7 +334,7 @@ namespace DrawToolsLib
 
             double scale = d.ActualScale;
 
-            foreach (GraphicsBase b in d.GraphicsList)
+            foreach (GraphicsVisual b in d.GraphicsList)
             {
                 b.ActualScale = scale;
             }
@@ -583,7 +586,7 @@ namespace DrawToolsLib
         private static void HandleColorChanged(DependencyObject property, DependencyPropertyChangedEventArgs e)
         {
             DrawingCanvas d = property as DrawingCanvas;
-            GraphicsBase.HandleBrush = new SolidColorBrush(d.HandleColor);
+            Graphics.GraphicsBase.HandleBrush = new SolidColorBrush(d.HandleColor);
         }
         #endregion
 
@@ -747,25 +750,6 @@ namespace DrawToolsLib
         #region Public Functions
 
         /// <summary>
-        /// Return list of graphic objects.
-        /// Used if client program needs to make its own usage of
-        /// graphics objects, like save them in some persistent storage.
-        /// </summary>
-        public PropertiesGraphicsBase[] GetListOfGraphicObjects()
-        {
-            PropertiesGraphicsBase[] result = new PropertiesGraphicsBase[graphicsList.Count];
-
-            int i = 0;
-
-            foreach (GraphicsBase g in graphicsList)
-            {
-                result[i++] = g.CreateSerializedObject();
-            }
-
-            return result;
-        }
-
-        /// <summary>
         /// Draw all graphics objects to DrawingContext supplied by client.
         /// Can be used for printing or saving image together with graphics
         /// as single bitmap.
@@ -788,7 +772,7 @@ namespace DrawToolsLib
         {
             bool oldSelection = false;
 
-            foreach (GraphicsBase b in graphicsList)
+            foreach (GraphicsVisual b in graphicsList)
             {
                 if (!withSelection)
                 {
@@ -797,7 +781,7 @@ namespace DrawToolsLib
                     b.IsSelected = false;
                 }
 
-                b.Draw(drawingContext);
+                b.Graphic.Draw(drawingContext);
 
                 if (!withSelection)
                 {
@@ -819,7 +803,7 @@ namespace DrawToolsLib
             {
                 var o = this[i];
 
-                var handleNumber = o.MakeHitTest(p);
+                var handleNumber = o.Graphic.MakeHitTest(p);
 
                 if (handleNumber > -1)
                 {
@@ -832,25 +816,13 @@ namespace DrawToolsLib
         /// <summary>
         /// Add a graphic object to the canvas from its serialized companion class.
         /// </summary>
-        public void AddGraphic(PropertiesGraphicsBase graphic)
+        public void AddGraphic(GraphicsBase graphic)
         {
             HelperFunctions.UnselectAll(this);
-            var g = graphic.CreateGraphics();
+            var g = graphic.CreateVisual();
             g.IsSelected = true;
             this.GraphicsList.Add(g);
             AddCommandToHistory(new CommandAdd(g));
-        }
-
-        /// <summary>
-        /// Helper method to add an image graphic from a file location
-        /// </summary>
-        public void AddGraphicImage(string filename, Rect rect)
-        {
-            HelperFunctions.UnselectAll(this);
-            var o = new GraphicsImage(filename, rect.Left, rect.Top, rect.Right, rect.Bottom, LineWidth, ObjectColor, 1d);
-            o.IsSelected = true;
-            this.GraphicsList.Add(o);
-            AddCommandToHistory(new CommandAdd(o));
         }
 
         /// <summary>
@@ -859,14 +831,15 @@ namespace DrawToolsLib
         /// <returns></returns>
         public Rect GetArtworkBounds(bool selectedOnly = false)
         {
-            var artwork = GraphicsList.Cast<GraphicsBase>().Where(g => !(g is GraphicsSelectionRectangle));
+            var artwork = GraphicsList.Cast<GraphicsVisual>()
+                .Where(g => !(g.Graphic is GraphicsSelectionRectangle));
             Rect result = new Rect(0, 0, 0, 0);
             bool first = true;
             foreach (var item in artwork)
             {
                 if (selectedOnly && !item.IsSelected)
                     continue;
-                var rect = GetGraphicRect(item);
+                var rect = item.Graphic.Bounds;
                 if (first)
                 {
                     result = rect;
@@ -896,7 +869,7 @@ namespace DrawToolsLib
         {
             try
             {
-                var helper = new SerializationHelper(graphicsList.OfType<GraphicsBase>(), GetArtworkBounds());
+                var helper = new SerializationHelper(graphicsList.OfType<GraphicsVisual>().Select(g => g.Graphic), GetArtworkBounds());
                 XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
 
                 using (Stream stream = new FileStream(fileName,
@@ -942,9 +915,9 @@ namespace DrawToolsLib
 
                 graphicsList.Clear();
 
-                foreach (PropertiesGraphicsBase g in helper.Graphics)
+                foreach (var g in helper.Graphics)
                 {
-                    graphicsList.Add(g.CreateGraphics());
+                    graphicsList.Add(g.CreateVisual());
                 }
 
                 ClearHistory();
@@ -970,10 +943,10 @@ namespace DrawToolsLib
         public void Copy()
         {
             Clipboard.Clear();
-            GraphicsBase[] graphics = graphicsList.OfType<GraphicsBase>().Where(g => g.IsSelected).ToArray();
+            GraphicsVisual[] graphics = graphicsList.OfType<GraphicsVisual>().Where(g => g.IsSelected).ToArray();
             if (!graphics.Any())
-                graphics = graphicsList.OfType<GraphicsBase>().ToArray();
-            var helper = new SerializationHelper(graphics, GetArtworkBounds(true));
+                graphics = graphicsList.OfType<GraphicsVisual>().ToArray();
+            var helper = new SerializationHelper(graphics.Select(g => g.Graphic), GetArtworkBounds(true));
 
             XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
             using (MemoryStream stream = new MemoryStream())
@@ -1009,10 +982,10 @@ namespace DrawToolsLib
                 }
 
                 HelperFunctions.UnselectAll(this);
-                var newGraphics = helper.Graphics.Select(s => s.CreateGraphics()).ToArray();
+                var newGraphics = helper.Graphics.Select(s => s.CreateVisual()).ToArray();
                 foreach (var g in newGraphics)
                 {
-                    g.Move(-helper.Left - helper.Width / 2, -helper.Top - helper.Height / 2);
+                    g.Graphic.Move(-helper.Left - helper.Width / 2, -helper.Top - helper.Height / 2);
                     g.ActualScale = ActualScale;
                     g.IsSelected = true;
                     graphicsList.Add(g);
@@ -1120,13 +1093,13 @@ namespace DrawToolsLib
         /// <summary>
         /// Get graphic object by index
         /// </summary>
-        internal GraphicsBase this[int index]
+        internal GraphicsVisual this[int index]
         {
             get
             {
                 if (index >= 0 && index < Count)
                 {
-                    return (GraphicsBase)graphicsList[index];
+                    return (GraphicsVisual)graphicsList[index];
                 }
 
                 return null;
@@ -1153,7 +1126,7 @@ namespace DrawToolsLib
             {
                 int n = 0;
 
-                foreach (GraphicsBase g in this.graphicsList)
+                foreach (GraphicsVisual g in this.graphicsList)
                 {
                     if (g.IsSelected)
                     {
@@ -1180,11 +1153,11 @@ namespace DrawToolsLib
         /// Returns INumerable which may be used for enumeration
         /// of selected objects.
         /// </summary>
-        internal IEnumerable<GraphicsBase> Selection
+        internal IEnumerable<GraphicsVisual> Selection
         {
             get
             {
-                foreach (GraphicsBase o in graphicsList)
+                foreach (GraphicsVisual o in graphicsList)
                 {
                     if (o.IsSelected)
                     {
@@ -1201,7 +1174,8 @@ namespace DrawToolsLib
 
         private Border _clickable;
         private Border _artworkRectangle;
-        private const int _extraVisualsCount = 2; // only includes the permanent extra visuals
+        private OriginIndicator _originIndicator;
+        private const int _extraVisualsCount = 3; // only includes the permanent extra visuals
 
         protected override int VisualChildrenCount
         {
@@ -1234,6 +1208,10 @@ namespace DrawToolsLib
             else if (index == 1)
             {
                 return _artworkRectangle;
+            }
+            else if (index == 2)
+            {
+                return _originIndicator;
             }
             else if (index - _extraVisualsCount < graphicsList.Count)
             {
@@ -1549,13 +1527,13 @@ namespace DrawToolsLib
 
             Point point = e.GetPosition(this);
 
-            GraphicsBase o = null;
+            GraphicsVisual o = null;
 
             for (int i = graphicsList.Count - 1; i >= 0; i--)
             {
-                if (((GraphicsBase)graphicsList[i]).MakeHitTest(point) == 0)
+                if (((GraphicsVisual)graphicsList[i]).Graphic.MakeHitTest(point) == 0)
                 {
-                    o = (GraphicsBase)graphicsList[i];
+                    o = (GraphicsVisual)graphicsList[i];
                     break;
                 }
             }
@@ -1674,12 +1652,15 @@ namespace DrawToolsLib
         /// If ToolText.OldText is empty, this is new object.
         /// If not, this is existing object.
         /// </summary>
-        internal void HideTextbox(GraphicsText graphicsText)
+        internal void HideTextbox(GraphicsVisual graphic)
         {
             if (toolText.TextBox == null)
             {
                 return;
             }
+            var graphicsText = graphic.Graphic as GraphicsText;
+            if (graphicsText == null)
+                return;
 
             graphicsText.IsSelected = true;   // restore selection which was removed for better textbox appearance
 
@@ -1696,7 +1677,7 @@ namespace DrawToolsLib
                 }
 
                 // Remove empty text object
-                graphicsList.Remove(graphicsText);
+                graphicsList.Remove(graphic);
             }
             else
             {
@@ -1709,7 +1690,6 @@ namespace DrawToolsLib
 
                         // Make change in the text object
                         graphicsText.Text = toolText.TextBox.Text.Trim();
-                        graphicsText.UpdateRectangle();
 
                         // Keep state after change and add command to the history
                         command.NewState(this);
@@ -1720,10 +1700,9 @@ namespace DrawToolsLib
                 {
                     // Make change in the text object
                     graphicsText.Text = toolText.TextBox.Text.Trim();
-                    graphicsText.UpdateRectangle();
 
                     // Add command to the history
-                    undoManager.AddCommandToHistory(new CommandAdd(graphicsText));
+                    undoManager.AddCommandToHistory(new CommandAdd(graphic));
                 }
             }
 
@@ -1746,13 +1725,13 @@ namespace DrawToolsLib
             // Enumerate all text objects
             for (int i = graphicsList.Count - 1; i >= 0; i--)
             {
-                GraphicsText t = graphicsList[i] as GraphicsText;
+                GraphicsText t = (graphicsList[i] as GraphicsVisual)?.Graphic as GraphicsText;
 
                 if (t != null)
                 {
                     if (t.Contains(point))
                     {
-                        toolText.CreateTextBox(t, this);
+                        toolText.CreateTextBox((GraphicsVisual)graphicsList[i], this);
                         return;
                     }
                 }
@@ -1805,21 +1784,6 @@ namespace DrawToolsLib
             Canvas.SetTop(_artworkRectangle, bounds.Top);
             _artworkRectangle.Width = bounds.Width;
             _artworkRectangle.Height = bounds.Height;
-        }
-
-        private Rect GetGraphicRect(GraphicsBase g)
-        {
-            var rect = g.ContentBounds;
-            if (g.IsSelected)
-            {
-                var trim = (GraphicsBase.HandleSize - LineWidth) / 2;
-                return new Rect(rect.X + trim, rect.Y + trim,
-                    Math.Max(0, rect.Width - (trim * 2)), Math.Max(0, rect.Height - (trim * 2)));
-            }
-            else
-            {
-                return rect;
-            }
         }
 
         #endregion Other Functions

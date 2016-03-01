@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Windows.Media;
+using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
@@ -14,15 +15,15 @@ namespace DrawToolsLib
     /// </summary>
     internal class CommandChangeState : CommandBase
     {
-        PropertiesGraphicsBase[] _listBefore;
-        PropertiesGraphicsBase[] _listAfter;
+        GraphicsBase[] _listBefore;
+        GraphicsBase[] _listAfter;
 
         // Create this command BEFORE operation.
         public CommandChangeState(DrawingCanvas drawingCanvas)
         {
             _listBefore = drawingCanvas.GraphicsList
-                .OfType<GraphicsBase>()
-                .Select(g => g.CreateSerializedObject())
+                .OfType<GraphicsVisual>()
+                .Select(g => g.Graphic.Clone())
                 .ToArray();
         }
 
@@ -30,8 +31,8 @@ namespace DrawToolsLib
         public void NewState(DrawingCanvas drawingCanvas)
         {
             _listAfter = drawingCanvas.GraphicsList
-                .OfType<GraphicsBase>()
-                .Select(g => g.CreateSerializedObject())
+                .OfType<GraphicsVisual>()
+                .Select(g => g.Graphic.Clone())
                 .ToArray();
         }
 
@@ -45,15 +46,15 @@ namespace DrawToolsLib
             ReplaceObjects(drawingCanvas.GraphicsList, _listAfter);
         }
 
-        private static void ReplaceObjects(VisualCollection graphicsList, PropertiesGraphicsBase[] list)
+        private static void ReplaceObjects(VisualCollection graphicsList, GraphicsBase[] list)
         {
             for (int i = 0; i < graphicsList.Count; i++)
             {
-                PropertiesGraphicsBase replacement = null;
+                GraphicsBase replacement = null;
 
-                foreach (PropertiesGraphicsBase o in list)
+                foreach (GraphicsBase o in list)
                 {
-                    if (o.ID == ((GraphicsBase)graphicsList[i]).Id)
+                    if (o.ObjectId == ((GraphicsVisual)graphicsList[i]).ObjectId)
                     {
                         replacement = o;
                         break;
@@ -64,7 +65,7 @@ namespace DrawToolsLib
                 {
                     // Replace object with its clone
                     graphicsList.RemoveAt(i);
-                    graphicsList.Insert(i, replacement.CreateGraphics());
+                    graphicsList.Insert(i, replacement.CreateVisual());
                 }
             }
         }
