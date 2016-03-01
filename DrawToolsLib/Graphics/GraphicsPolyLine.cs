@@ -6,92 +6,69 @@ using System.Windows.Media;
 using System.Windows.Resources;
 using System.IO;
 
-
-namespace DrawToolsLib
+namespace DrawToolsLib.Graphics
 {
-    /// <summary>
-    ///  PolyLine graphics object.
-    /// </summary>
+    [Serializable]
     public class GraphicsPolyLine : GraphicsBase
     {
-        #region Class Members
-
-        // This class member contains all required geometry.
-        // It is ready for drawing and hit testing.
-        protected PathGeometry pathGeometry;
-
-        // Points from pathGeometry, including StartPoint
-        protected Point[] points;
-
-        static Cursor handleCursor;
-
-        #endregion Class Members
-
-        #region Constructors
-
-        public GraphicsPolyLine(Point[] points, double lineWidth, Color objectColor, double actualScale)
+        public Point[] Points
         {
-            Fill(points, lineWidth, objectColor, actualScale);
-
-            //RefreshDrawng();
-        }
-
-
-        public GraphicsPolyLine()
-            :
-            this(new Point[] { new Point(0.0, 0.0), new Point(100.0, 100.0) }, 1.0, Colors.Black, 1.0)
-        {
-        }
-
-        static GraphicsPolyLine()
-        {
-            MemoryStream stream = new MemoryStream(Properties.Resources.PolyHandle);
-
-            handleCursor = new Cursor(stream);
-        }
-
-        #endregion Constructors
-
-        #region Other Functions
-
-        /// <summary>
-        /// Convert geometry to array of points.
-        /// </summary>
-        void MakePoints()
-        {
-            points = new Point[pathGeometry.Figures[0].Segments.Count + 1];
-
-            points[0] = pathGeometry.Figures[0].StartPoint;
-
-            for (int i = 0; i < pathGeometry.Figures[0].Segments.Count; i++)
+            get { return _points; }
+            set
             {
-                points[i + 1] = ((LineSegment)(pathGeometry.Figures[0].Segments[i])).Point;
+                if (Equals(value, _points)) return;
+                _points = value;
+                OnPropertyChanged();
             }
         }
 
-        /// <summary>
-        /// Return array of points.
-        /// </summary>
-        public Point[] GetPoints()
+        protected PathGeometry pathGeometry;
+        private Point[] _points;
+
+        static readonly Cursor HandleCursor;
+        static GraphicsPolyLine()
         {
-            return points;
+            MemoryStream stream = new MemoryStream(Properties.Resources.PolyHandle);
+            HandleCursor = new Cursor(stream);
         }
 
-        /// <summary>
-        /// Convert array of points to geometry.
-        /// </summary>
-        void MakeGeometryFromPoints(ref Point[] points)
+        protected GraphicsPolyLine()
         {
-            if ( points == null )
+        }
+        public GraphicsPolyLine(DrawingCanvas canvas, Point[] points)
+            : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, points)
+        {
+        }
+
+        public GraphicsPolyLine(double scale, Color objectColor, double lineWidth, Point[] points)
+            : base(scale, objectColor, lineWidth)
+        {
+            MakeGeometryFromPoints(points);
+        }
+
+        public Point[] GetPoints()
+        {
+            return Points;
+        }
+        public void AddPoint(Point point)
+        {
+            LineSegment segment = new LineSegment(point, true);
+            segment.IsSmoothJoin = true;
+
+            pathGeometry.Figures[0].Segments.Add(segment);
+            MakePoints();   // keep points array up to date
+        }
+
+        private void MakeGeometryFromPoints(Point[] points)
+        {
+            if (points == null)
             {
                 // This really sucks, XML file contains Points object,
                 // but list of points is empty. Do something to prevent program crush.
-
                 points = new Point[2];
             }
 
             PathFigure figure = new PathFigure();
-
             if (points.Length >= 1)
             {
                 figure.StartPoint = points[0];
@@ -101,51 +78,30 @@ namespace DrawToolsLib
             {
                 LineSegment segment = new LineSegment(points[i], true);
                 segment.IsSmoothJoin = true;
-
                 figure.Segments.Add(segment);
             }
 
             pathGeometry = new PathGeometry();
-
             pathGeometry.Figures.Add(figure);
+            MakePoints();
+        }
+        private void MakePoints()
+        {
+            Points = new Point[pathGeometry.Figures[0].Segments.Count + 1];
+            Points[0] = pathGeometry.Figures[0].StartPoint;
 
-            MakePoints();   // keep points array up to date
+            for (int i = 0; i < pathGeometry.Figures[0].Segments.Count; i++)
+            {
+                Points[i + 1] = ((LineSegment)(pathGeometry.Figures[0].Segments[i])).Point;
+            }
         }
 
-        // Called from constructors
-        void Fill(Point[] points, double lineWidth, Color objectColor, double actualScale)
+        public override Rect Bounds => pathGeometry.Bounds;
+        internal override int HandleCount => pathGeometry.Figures[0].Segments.Count + 1;
+
+        internal override void Draw(DrawingContext drawingContext)
         {
-            MakeGeometryFromPoints(ref points);
-
-            this.graphicsLineWidth = lineWidth;
-            this.graphicsObjectColor = objectColor;
-            this.graphicsActualScale = actualScale;
-        }
-
-
-        /// <summary>
-        /// Add new point (line segment)
-        /// </summary>
-        public void AddPoint(Point point)
-        {
-            LineSegment segment = new LineSegment(point, true);
-            segment.IsSmoothJoin = true;
-
-            pathGeometry.Figures[0].Segments.Add(segment);
-
-            MakePoints();   // keep points array up to date
-        }
-
-        #endregion Other Functions
-
-        #region Overrides
-
-        /// <summary>
-        /// Draw object
-        /// </summary>
-        public override void Draw(DrawingContext drawingContext)
-        {
-            if ( drawingContext == null )
+            if (drawingContext == null)
             {
                 throw new ArgumentNullException("drawingContext");
             }
@@ -157,104 +113,49 @@ namespace DrawToolsLib
 
             base.Draw(drawingContext);
         }
-
-        /// <summary>
-        /// Test whether object contains point
-        /// </summary>
-        public override bool Contains(Point point)
+        internal override bool Contains(Point point)
         {
             return pathGeometry.FillContains(point) ||
                 pathGeometry.StrokeContains(new Pen(Brushes.Black, LineHitTestWidth), point);
         }
-
-        /// <summary>
-        /// XML serialization support
-        /// </summary>
-        public override PropertiesGraphicsBase CreateSerializedObject()
-        {
-            return new PropertiesGraphicsPolyLine(this);
-        }
-
-
-        /// <summary>
-        /// Get number of handles
-        /// </summary>
-        public override int HandleCount
-        {
-            get
-            {
-                return pathGeometry.Figures[0].Segments.Count + 1;
-            }
-        }
-
-
-        /// <summary>
-        /// Get handle point by 1-based number
-        /// </summary>
-        public override Point GetHandle(int handleNumber)
+        internal override Point GetHandle(int handleNumber)
         {
             if (handleNumber < 1)
                 handleNumber = 1;
 
-            if (handleNumber > points.Length)
-                handleNumber = points.Length;
+            if (handleNumber > Points.Length)
+                handleNumber = Points.Length;
 
-            return points[handleNumber - 1];
+            return Points[handleNumber - 1];
         }
-
-        /// <summary>
-        /// Get cursor for the handle
-        /// </summary>
-        public override Cursor GetHandleCursor(int handleNumber)
+        internal override Cursor GetHandleCursor(int handleNumber)
         {
-            return handleCursor;
+            return HandleCursor;
         }
-
-        /// <summary>
-        /// Move handle to new point (resizing).
-        /// handleNumber is 1-based.
-        /// </summary>
-        public override void MoveHandleTo(Point point, int handleNumber)
+        internal override void MoveHandleTo(Point point, int handleNumber)
         {
-            if ( handleNumber == 1 )
+            if (handleNumber == 1)
             {
                 pathGeometry.Figures[0].StartPoint = point;
             }
             else
             {
-                ((LineSegment)(pathGeometry.Figures[0].Segments[handleNumber-2])).Point = point;
+                ((LineSegment)(pathGeometry.Figures[0].Segments[handleNumber - 2])).Point = point;
             }
 
             MakePoints();
-
-            RefreshDrawing();
         }
-
-
-        /// <summary>
-        /// Move object
-        /// </summary>
-        public override void Move(double deltaX, double deltaY)
+        internal override void Move(double deltaX, double deltaY)
         {
-            for (int i = 0; i < points.Length; i++ )
+            for (int i = 0; i < Points.Length; i++)
             {
-                points[i].X += deltaX;
-                points[i].Y += deltaY;
+                Points[i].X += deltaX;
+                Points[i].Y += deltaY;
             }
 
-            MakeGeometryFromPoints(ref points);
-
-            RefreshDrawing();
+            MakeGeometryFromPoints(Points);
         }
-
-
-        /// <summary>
-        /// Hit test.
-        /// Return value: -1 - no hit
-        ///                0 - hit anywhere
-        ///                > 1 - handle number
-        /// </summary>
-        public override int MakeHitTest(Point point)
+        internal override int MakeHitTest(Point point)
         {
             if (IsSelected)
             {
@@ -270,14 +171,7 @@ namespace DrawToolsLib
 
             return -1;
         }
-
-
-        #endregion Overrides
-
-        /// <summary>
-        /// Test whether object intersects with rectangle
-        /// </summary>
-        public override bool IntersectsWith(Rect rectangle)
+        internal override bool IntersectsWith(Rect rectangle)
         {
             RectangleGeometry rg = new RectangleGeometry(rectangle);
 
@@ -285,6 +179,9 @@ namespace DrawToolsLib
 
             return (!p.IsEmpty());
         }
-
+        public override GraphicsBase Clone()
+        {
+            return new GraphicsPolyLine(ActualScale, ObjectColor, LineWidth, Points) { ObjectId = ObjectId };
+        }
     }
 }
