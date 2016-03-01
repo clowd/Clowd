@@ -35,19 +35,19 @@ namespace DrawToolsLib
             end = line.End;
             lineWidth = line.LineWidth;
             objectColor = line.ObjectColor;
-            actualScale = line.ActualScale;
+            ActualScale = line.ActualScale;
             ID = line.Id;
-            selected = line.IsSelected;
+            Selected = line.IsSelected;
         }
 
         public override GraphicsBase CreateGraphics()
         {
-            GraphicsBase b = new GraphicsLine(start, end, lineWidth, objectColor, actualScale);
+            GraphicsBase b = new GraphicsLine(start, end, lineWidth, objectColor, ActualScale);
 
             if (this.ID != 0)
             {
                 b.Id = this.ID;
-                b.IsSelected = this.selected;
+                b.IsSelected = this.Selected;
             }
 
             return b;

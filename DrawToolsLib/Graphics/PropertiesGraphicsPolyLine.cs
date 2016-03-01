@@ -34,19 +34,19 @@ namespace DrawToolsLib
             points = polyLine.GetPoints();
             lineWidth = polyLine.LineWidth;
             objectColor = polyLine.ObjectColor;
-            actualScale = polyLine.ActualScale;
+            ActualScale = polyLine.ActualScale;
             ID = polyLine.Id;
-            selected = polyLine.IsSelected;
+            Selected = polyLine.IsSelected;
         }
 
         public override GraphicsBase CreateGraphics()
         {
-            GraphicsBase b = new GraphicsPolyLine(points, lineWidth, objectColor, actualScale);
+            GraphicsBase b = new GraphicsPolyLine(points, lineWidth, objectColor, ActualScale);
 
             if (this.ID != 0)
             {
                 b.Id = this.ID;
-                b.IsSelected = this.selected;
+                b.IsSelected = this.Selected;
             }
 
             return b;

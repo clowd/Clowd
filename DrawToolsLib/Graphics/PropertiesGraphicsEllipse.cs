@@ -1,15 +1,8 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Windows.Input;
 using System.Windows.Media;
-
 
 namespace DrawToolsLib
 {
-    /// <summary>
-    /// Ellipse object properties.
-    /// </summary>
     [Serializable]
     public class PropertiesGraphicsEllipse : PropertiesGraphicsBase
     {
@@ -22,7 +15,6 @@ namespace DrawToolsLib
 
         public PropertiesGraphicsEllipse()
         {
-
         }
 
         public PropertiesGraphicsEllipse(GraphicsEllipse ellipse)
@@ -39,19 +31,19 @@ namespace DrawToolsLib
 
             lineWidth = ellipse.LineWidth;
             objectColor = ellipse.ObjectColor;
-            actualScale = ellipse.ActualScale;
+            ActualScale = ellipse.ActualScale;
             ID = ellipse.Id;
-            selected = ellipse.IsSelected;
+            Selected = ellipse.IsSelected;
         }
 
         public override GraphicsBase CreateGraphics()
         {
-            GraphicsBase b =  new GraphicsEllipse(left, top, right, bottom, lineWidth, objectColor, actualScale);
+            GraphicsBase b =  new GraphicsEllipse(left, top, right, bottom, lineWidth, objectColor, ActualScale);
 
             if ( this.ID != 0 )
             {
                 b.Id = this.ID;
-                b.IsSelected = this.selected;
+                b.IsSelected = this.Selected;
             }
 
             return b;

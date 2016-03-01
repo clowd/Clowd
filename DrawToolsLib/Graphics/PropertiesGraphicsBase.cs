@@ -1,8 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Xml.Serialization;
-
 
 namespace DrawToolsLib
 {
@@ -36,14 +33,13 @@ namespace DrawToolsLib
     public abstract class PropertiesGraphicsBase
     {
         [XmlIgnore]
-        internal int ID;
+        internal int ID { get; set; }
 
         [XmlIgnore]
-        internal bool selected;
+        internal bool Selected { get; set; }
 
         [XmlIgnore]
-        internal double actualScale;
-
+        internal double ActualScale { get; set; }
 
         public abstract GraphicsBase CreateGraphics();
     }
