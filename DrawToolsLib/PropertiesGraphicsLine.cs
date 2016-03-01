@@ -11,6 +11,7 @@ namespace DrawToolsLib
     /// <summary>
     /// Line object properties
     /// </summary>
+    [Serializable]
     public class PropertiesGraphicsLine : PropertiesGraphicsBase
     {
         private Point start;

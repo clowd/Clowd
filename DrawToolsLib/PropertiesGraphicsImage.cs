@@ -8,6 +8,7 @@ using System.Windows.Media;
 
 namespace DrawToolsLib
 {
+    [Serializable]
     public class PropertiesGraphicsImage : PropertiesGraphicsBase
     {
         private double left;

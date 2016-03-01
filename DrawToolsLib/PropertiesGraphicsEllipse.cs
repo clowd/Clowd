@@ -10,6 +10,7 @@ namespace DrawToolsLib
     /// <summary>
     /// Ellipse object properties.
     /// </summary>
+    [Serializable]
     public class PropertiesGraphicsEllipse : PropertiesGraphicsBase
     {
         private double left;
