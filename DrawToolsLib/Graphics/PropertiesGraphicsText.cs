@@ -50,9 +50,9 @@ namespace DrawToolsLib
             this.textFontStyle = FontConversions.FontStyleToString(graphicsText.TextFontStyle);
             this.textFontWeight = FontConversions.FontWeightToString(graphicsText.TextFontWeight);
             this.textFontStretch = FontConversions.FontStretchToString(graphicsText.TextFontStretch);
-            this.actualScale = graphicsText.ActualScale;
+            this.ActualScale = graphicsText.ActualScale;
             this.ID = graphicsText.Id;
-            this.selected = graphicsText.IsSelected;
+            this.Selected = graphicsText.IsSelected;
         }
 
         public override GraphicsBase CreateGraphics()
@@ -69,12 +69,12 @@ namespace DrawToolsLib
                 FontConversions.FontStyleFromString(textFontStyle),
                 FontConversions.FontWeightFromString(textFontWeight),
                 FontConversions.FontStretchFromString(textFontStretch),
-                actualScale);
+                ActualScale);
 
             if (this.ID != 0)
             {
                 b.Id = this.ID;
-                b.IsSelected = this.selected;
+                b.IsSelected = this.Selected;
             }
 
             return b;
