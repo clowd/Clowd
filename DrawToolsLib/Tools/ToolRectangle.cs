@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.IO;
+using DrawToolsLib.Graphics;
 
 
 namespace DrawToolsLib
@@ -24,17 +25,10 @@ namespace DrawToolsLib
         /// </summary>
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
-            Point p = e.GetPosition(drawingCanvas);
+            Point point = e.GetPosition(drawingCanvas);
 
-            AddNewObject(drawingCanvas, 
-                new GraphicsRectangle(
-                p.X,
-                p.Y,
-                p.X + 1,
-                p.Y + 1,
-                drawingCanvas.LineWidth,
-                drawingCanvas.ObjectColor,
-                drawingCanvas.ActualScale));
+            var rect = HelperFunctions.CreateRectSafe(point.X, point.Y, point.X + 1, point.Y + 1);
+            AddNewObject(drawingCanvas, new GraphicsRectangle(drawingCanvas, rect));
         }
     }
 }

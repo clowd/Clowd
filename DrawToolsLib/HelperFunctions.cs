@@ -1,10 +1,11 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Collections.Generic;
 using System.Diagnostics;
-
+using DrawToolsLib.Graphics;
 
 
 namespace DrawToolsLib
@@ -16,33 +17,21 @@ namespace DrawToolsLib
     /// methods, because I cannot derive from VisualCollection.
     /// They make different operations with GraphicsBase list.
     /// </summary>
-    static class HelperFunctions
+    internal static class HelperFunctions
     {
         /// <summary>
         /// Default cursor
         /// </summary>
-        public static Cursor DefaultCursor
-        {
-            get
-            {
-                return Cursors.Arrow;
-            }
-        }
+        public static Cursor DefaultCursor => Cursors.Arrow;
 
-        /// <summary>
-        /// Select all graphic objects
-        /// </summary>
         public static void SelectAll(DrawingCanvas drawingCanvas)
         {
-            for(int i = 0; i < drawingCanvas.Count; i++)
+            for (int i = 0; i < drawingCanvas.Count; i++)
             {
                 drawingCanvas[i].IsSelected = true;
             }
         }
 
-        /// <summary>
-        /// Unselect all graphic objects
-        /// </summary>
         public static void UnselectAll(DrawingCanvas drawingCanvas)
         {
             for (int i = 0; i < drawingCanvas.Count; i++)
@@ -51,9 +40,6 @@ namespace DrawToolsLib
             }
         }
 
-        /// <summary>
-        /// Delete selected graphic objects
-        /// </summary>
         public static void DeleteSelection(DrawingCanvas drawingCanvas)
         {
             CommandDelete command = new CommandDelete(drawingCanvas);
@@ -61,25 +47,22 @@ namespace DrawToolsLib
 
             for (int i = drawingCanvas.Count - 1; i >= 0; i--)
             {
-                if ( drawingCanvas[i].IsSelected )
+                if (drawingCanvas[i].IsSelected)
                 {
                     drawingCanvas.GraphicsList.RemoveAt(i);
                     wasChange = true;
                 }
             }
 
-            if ( wasChange )
+            if (wasChange)
             {
                 drawingCanvas.AddCommandToHistory(command);
             }
         }
 
-        /// <summary>
-        /// Delete all graphic objects
-        /// </summary>
         public static void DeleteAll(DrawingCanvas drawingCanvas)
         {
-            if (drawingCanvas.GraphicsList.Count > 0 )
+            if (drawingCanvas.GraphicsList.Count > 0)
             {
                 drawingCanvas.AddCommandToHistory(new CommandDeleteAll(drawingCanvas));
 
@@ -88,9 +71,6 @@ namespace DrawToolsLib
 
         }
 
-        /// <summary>
-        /// Move selection to front
-        /// </summary>
         public static void MoveSelectionToFront(DrawingCanvas drawingCanvas)
         {
             // Moving to front of z-order means moving
@@ -99,13 +79,13 @@ namespace DrawToolsLib
             // Read GraphicsList in the reverse order, and move every selected object
             // to temporary list.
 
-            List<GraphicsBase> list = new List<GraphicsBase>();
+            List<GraphicsVisual> list = new List<GraphicsVisual>();
 
             CommandChangeOrder command = new CommandChangeOrder(drawingCanvas);
 
-            for(int i = drawingCanvas.Count - 1; i >= 0; i--)
+            for (int i = drawingCanvas.Count - 1; i >= 0; i--)
             {
-                if ( drawingCanvas[i].IsSelected )
+                if (drawingCanvas[i].IsSelected)
                 {
                     list.Insert(0, drawingCanvas[i]);
                     drawingCanvas.GraphicsList.RemoveAt(i);
@@ -113,12 +93,12 @@ namespace DrawToolsLib
             }
 
             // Add all items from temporary list to the end of GraphicsList
-            foreach(GraphicsBase g in list)
+            foreach (GraphicsVisual g in list)
             {
                 drawingCanvas.GraphicsList.Add(g);
             }
 
-            if ( list.Count > 0 )
+            if (list.Count > 0)
             {
                 command.NewState(drawingCanvas);
                 drawingCanvas.AddCommandToHistory(command);
@@ -136,7 +116,7 @@ namespace DrawToolsLib
             // Read GraphicsList in the reverse order, and move every selected object
             // to temporary list.
 
-            List<GraphicsBase> list = new List<GraphicsBase>();
+            List<GraphicsVisual> list = new List<GraphicsVisual>();
 
             CommandChangeOrder command = new CommandChangeOrder(drawingCanvas);
 
@@ -150,7 +130,7 @@ namespace DrawToolsLib
             }
 
             // Add all items from temporary list to the beginning of GraphicsList
-            foreach (GraphicsBase g in list)
+            foreach (GraphicsVisual g in list)
             {
                 drawingCanvas.GraphicsList.Insert(0, g);
             }
@@ -174,22 +154,18 @@ namespace DrawToolsLib
             // LineWidth is set for all objects except of GraphicsText.
             // Though GraphicsText has this property, it should remain constant.
 
-            foreach(GraphicsBase g in drawingCanvas.Selection)
+            foreach (GraphicsVisual g in drawingCanvas.Selection)
             {
-                if (g is GraphicsRectangle ||
-                     g is GraphicsEllipse ||
-                     g is GraphicsLine ||
-                     g is GraphicsPolyLine)
+                if (g.Graphic is GraphicsText || g.Graphic is GraphicsSelectionRectangle)
+                    continue;
+                if (g.LineWidth != value)
                 {
-                    if ( g.LineWidth != value )
-                    {
-                        g.LineWidth = value;
-                        wasChange = true;
-                    }
+                    g.LineWidth = value;
+                    wasChange = true;
                 }
             }
 
-            if (wasChange  && addToHistory)
+            if (wasChange && addToHistory)
             {
                 command.NewState(drawingCanvas);
                 drawingCanvas.AddCommandToHistory(command);
@@ -206,170 +182,12 @@ namespace DrawToolsLib
             CommandChangeState command = new CommandChangeState(drawingCanvas);
             bool wasChange = false;
 
-            foreach (GraphicsBase g in drawingCanvas.Selection)
+            foreach (GraphicsVisual g in drawingCanvas.Selection)
             {
                 if (g.ObjectColor != value)
                 {
                     g.ObjectColor = value;
                     wasChange = true;
-                }
-            }
-
-            if ( wasChange && addToHistory )
-            {
-                command.NewState(drawingCanvas);
-                drawingCanvas.AddCommandToHistory(command);
-            }
-
-            return wasChange;
-        }
-
-        /// <summary>
-        /// Apply new font family
-        /// </summary>
-        public static bool ApplyFontFamily(DrawingCanvas drawingCanvas, string value, bool addToHistory)
-        {
-            CommandChangeState command = new CommandChangeState(drawingCanvas);
-            bool wasChange = false;
-
-            foreach (GraphicsBase g in drawingCanvas.Selection)
-            {
-                GraphicsText gt = g as GraphicsText;
-
-                if (gt != null)
-                {
-                    if (gt.TextFontFamilyName != value)
-                    {
-                        gt.TextFontFamilyName = value;
-                        wasChange = true;
-                    }
-                }
-            }
-
-            if (wasChange  && addToHistory )
-            {
-                command.NewState(drawingCanvas);
-                drawingCanvas.AddCommandToHistory(command);
-            }
-
-            return wasChange;
-        }
-
-        /// <summary>
-        /// Apply new font style
-        /// </summary>
-        public static bool ApplyFontStyle(DrawingCanvas drawingCanvas, FontStyle value, bool addToHistory)
-        {
-            CommandChangeState command = new CommandChangeState(drawingCanvas);
-            bool wasChange = false;
-
-            foreach (GraphicsBase g in drawingCanvas.GraphicsList)
-            {
-                if (g.IsSelected)
-                {
-                    GraphicsText gt = g as GraphicsText;
-
-                    if (gt != null)
-                    {
-                        if (gt.TextFontStyle != value)
-                        {
-                            gt.TextFontStyle = value;
-                            wasChange = true;
-                        }
-                    }
-                }
-            }
-
-            if (wasChange  && addToHistory)
-            {
-                command.NewState(drawingCanvas);
-                drawingCanvas.AddCommandToHistory(command);
-            }
-
-            return wasChange;
-        }
-
-        /// <summary>
-        /// Apply new font weight
-        /// </summary>
-        public static bool ApplyFontWeight(DrawingCanvas drawingCanvas, FontWeight value, bool addToHistory)
-        {
-            CommandChangeState command = new CommandChangeState(drawingCanvas);
-            bool wasChange = false;
-
-            foreach (GraphicsBase g in drawingCanvas.Selection)
-            {
-                GraphicsText gt = g as GraphicsText;
-
-                if (gt != null)
-                {
-                    if (gt.TextFontWeight != value)
-                    {
-                        gt.TextFontWeight = value;
-                        wasChange = true;
-                    }
-                }
-            }
-
-            if (wasChange  && addToHistory)
-            {
-                command.NewState(drawingCanvas);
-                drawingCanvas.AddCommandToHistory(command);
-            }
-
-            return wasChange;
-        }
-
-        /// <summary>
-        /// Apply new font stretch
-        /// </summary>
-        public static bool ApplyFontStretch(DrawingCanvas drawingCanvas, FontStretch value, bool addToHistory)
-        {
-            CommandChangeState command = new CommandChangeState(drawingCanvas);
-            bool wasChange = false;
-
-            foreach (GraphicsBase g in drawingCanvas.Selection)
-            {
-                GraphicsText gt = g as GraphicsText;
-
-                if (gt != null)
-                {
-                    if (gt.TextFontStretch != value)
-                    {
-                        gt.TextFontStretch = value;
-                        wasChange = true;
-                    }
-                }
-            }
-
-            if (wasChange  && addToHistory)
-            {
-                command.NewState(drawingCanvas);
-                drawingCanvas.AddCommandToHistory(command);
-            }
-
-            return wasChange;
-        }
-
-        /// <summary>
-        /// Apply new font size
-        /// </summary>
-        public static bool ApplyFontSize(DrawingCanvas drawingCanvas, double value, bool addToHistory)
-        {
-            CommandChangeState command = new CommandChangeState(drawingCanvas);
-            bool wasChange = false;
-
-            foreach (GraphicsBase g in drawingCanvas.Selection)
-            {
-                GraphicsText gt = g as GraphicsText;
-
-                if (gt != null)
-                {
-                    if (gt.TextFontSize != value)
-                    {
-                        gt.TextFontSize = value;
-                        wasChange = true;
-                    }
                 }
             }
 
@@ -382,30 +200,87 @@ namespace DrawToolsLib
             return wasChange;
         }
 
-
-        /// <summary>
-        /// Dump graphics list (for debugging)
-        /// </summary>
-        [Conditional("DEBUG")]
-        public static void Dump(VisualCollection graphicsList, string header)
+        public static bool ApplyProperty<T>(DrawingCanvas canvas, Func<T, bool> action, bool addToHistory, bool selectedOnly)
+            where T : GraphicsBase
         {
-            Trace.WriteLine("");
-            Trace.WriteLine(header);
-            Trace.WriteLine("");
-
-            foreach(GraphicsBase g in graphicsList)
+            CommandChangeState command = new CommandChangeState(canvas);
+            bool wasChange = false;
+            foreach (GraphicsVisual g in canvas.Selection)
             {
-                g.Dump();
+                if (g.IsSelected || selectedOnly)
+                {
+                    T gt = g.Graphic as T;
+                    if (gt != null)
+                    {
+                        wasChange = action(gt);
+                    }
+                }
             }
+
+            if (wasChange && addToHistory)
+            {
+                command.NewState(canvas);
+                canvas.AddCommandToHistory(command);
+            }
+            return wasChange;
         }
 
-        /// <summary>
-        /// Dump graphics list overload
-        /// </summary>
-        [Conditional("DEBUG")]
-        public static void Dump(VisualCollection graphicsList)
+        public static bool ApplyFontFamily(DrawingCanvas drawingCanvas, string value, bool addToHistory)
         {
-            Dump(graphicsList, "Graphics List");
+            return ApplyProperty<GraphicsText>(drawingCanvas,
+                (text) =>
+                {
+                    if (text.FontFamily == value) return false;
+                    text.FontFamily = value;
+                    return true;
+                },
+                addToHistory, false);
+        }
+        public static bool ApplyFontStyle(DrawingCanvas drawingCanvas, FontStyle value, bool addToHistory)
+        {
+            return ApplyProperty<GraphicsText>(drawingCanvas,
+                (text) =>
+                {
+                    var con = FontConversions.FontStyleToString(value);
+                    if (text.FontStyle == con) return false;
+                    text.FontStyle = con;
+                    return true;
+                }, addToHistory, false);
+        }
+        public static bool ApplyFontWeight(DrawingCanvas drawingCanvas, FontWeight value, bool addToHistory)
+        {
+            return ApplyProperty<GraphicsText>(drawingCanvas,
+                (text) =>
+                {
+                    var con = FontConversions.FontWeightToString(value);
+                    if (text.FontWeight == con) return false;
+                    text.FontWeight = con;
+                    return true;
+                }, addToHistory, false);
+        }
+        public static bool ApplyFontStretch(DrawingCanvas drawingCanvas, FontStretch value, bool addToHistory)
+        {
+            return ApplyProperty<GraphicsText>(drawingCanvas,
+                (text) =>
+                {
+                    var con = FontConversions.FontStretchToString(value);
+                    if (text.FontStretch == con) return false;
+                    text.FontStretch = con;
+                    return true;
+                }, addToHistory, false);
+        }
+
+        public static bool ApplyFontSize(DrawingCanvas drawingCanvas, double value, bool addToHistory)
+        {
+            return ApplyProperty<GraphicsText>(drawingCanvas,
+                (text) =>
+                {
+                    if ((int) text.FontSize == (int) value)
+                        return false;
+                    text.FontSize = value;
+                    return true;
+                }, 
+                addToHistory, false);
         }
 
         /// <summary>
@@ -417,25 +292,19 @@ namespace DrawToolsLib
         /// </summary>
         public static bool CanApplyProperties(DrawingCanvas drawingCanvas)
         {
-            foreach(GraphicsBase graphicsBase in drawingCanvas.GraphicsList)
+            foreach (GraphicsVisual graphicsBase in drawingCanvas.GraphicsList)
             {
-                if ( ! graphicsBase.IsSelected )
-                {
+                if (!graphicsBase.IsSelected)
                     continue;
-                }
 
-                // ObjectColor - used in all graphics objects
-                if ( graphicsBase.ObjectColor != drawingCanvas.ObjectColor )
-                {
+                if (graphicsBase.ObjectColor != drawingCanvas.ObjectColor)
                     return true;
-                }
 
-                GraphicsText graphicsText = graphicsBase as GraphicsText;
-
-                if ( graphicsText == null )
+                GraphicsText graphicsText = graphicsBase.Graphic as GraphicsText;
+                if (graphicsText == null)
                 {
                     // LineWidth - used in all objects except of GraphicsText
-                    if ( graphicsBase.LineWidth != drawingCanvas.LineWidth )
+                    if (graphicsBase.LineWidth != drawingCanvas.LineWidth)
                     {
                         return true;
                     }
@@ -443,40 +312,22 @@ namespace DrawToolsLib
                 else
                 {
                     // Font - for GraphicsText
-
-                    if ( graphicsText.TextFontFamilyName != drawingCanvas.TextFontFamilyName )
-                    {
+                    if (graphicsText.FontFamily != drawingCanvas.TextFontFamilyName)
                         return true;
-                    }
-
-                    if ( graphicsText.TextFontSize != drawingCanvas.TextFontSize )
-                    {
+                    if (graphicsText.FontSize != drawingCanvas.TextFontSize)
                         return true;
-                    }
-
-                    if ( graphicsText.TextFontStretch != drawingCanvas.TextFontStretch )
-                    {
+                    if (graphicsText.FontStretch != FontConversions.FontStretchToString(drawingCanvas.TextFontStretch))
                         return true;
-                    }
-
-                    if ( graphicsText.TextFontStyle != drawingCanvas.TextFontStyle )
-                    {
+                    if (graphicsText.FontStyle != FontConversions.FontStyleToString(drawingCanvas.TextFontStyle))
                         return true;
-                    }
-
-                    if ( graphicsText.TextFontWeight != drawingCanvas.TextFontWeight )
-                    {
+                    if (graphicsText.FontWeight != FontConversions.FontWeightToString(drawingCanvas.TextFontWeight))
                         return true;
-                    }
                 }
             }
 
             return false;
         }
 
-        /// <summary>
-        /// Apply currently active properties to selected objects
-        /// </summary>
         public static void ApplyProperties(DrawingCanvas drawingCanvas)
         {
             // Apply every property.
@@ -486,49 +337,61 @@ namespace DrawToolsLib
             CommandChangeState command = new CommandChangeState(drawingCanvas);
             bool wasChange = false;
 
-            // Line Width
-            if ( ApplyLineWidth(drawingCanvas, drawingCanvas.LineWidth, false))
-            {
+            if (ApplyLineWidth(drawingCanvas, drawingCanvas.LineWidth, false))
                 wasChange = true;
-            }
 
-            // Color
-            if ( ApplyColor(drawingCanvas, drawingCanvas.ObjectColor, false) )
-            {
+            if (ApplyColor(drawingCanvas, drawingCanvas.ObjectColor, false))
                 wasChange = true;
-            }
 
-            // Font properties
-            if ( ApplyFontFamily(drawingCanvas, drawingCanvas.TextFontFamilyName, false) )
-            {
+            if (ApplyFontFamily(drawingCanvas, drawingCanvas.TextFontFamilyName, false))
                 wasChange = true;
-            }
 
-            if ( ApplyFontSize(drawingCanvas, drawingCanvas.TextFontSize, false) )
-            {
+            if (ApplyFontSize(drawingCanvas, drawingCanvas.TextFontSize, false))
                 wasChange = true;
-            }
 
-            if ( ApplyFontStretch(drawingCanvas, drawingCanvas.TextFontStretch, false) )
-            {
+            if (ApplyFontStretch(drawingCanvas, drawingCanvas.TextFontStretch, false))
                 wasChange = true;
-            }
 
-            if ( ApplyFontStyle(drawingCanvas, drawingCanvas.TextFontStyle, false) )
-            {
+            if (ApplyFontStyle(drawingCanvas, drawingCanvas.TextFontStyle, false))
                 wasChange = true;
-            }
 
-            if ( ApplyFontWeight(drawingCanvas, drawingCanvas.TextFontWeight, false) )
-            {
+            if (ApplyFontWeight(drawingCanvas, drawingCanvas.TextFontWeight, false))
                 wasChange = true;
-            }
 
-            if ( wasChange )
+            if (wasChange)
             {
                 command.NewState(drawingCanvas);
                 drawingCanvas.AddCommandToHistory(command);
             }
+        }
+
+        public static Rect CreateRectSafe(double Left, double Top, double Right, double Bottom)
+        {
+            double l, t, w, h;
+
+            if (Left <= Right)
+            {
+                l = Left;
+                w = Right - Left;
+            }
+            else
+            {
+                l = Right;
+                w = Left - Right;
+            }
+
+            if (Top <= Bottom)
+            {
+                t = Top;
+                h = Bottom - Top;
+            }
+            else
+            {
+                t = Bottom;
+                h = Top - Bottom;
+            }
+
+            return new Rect(l, t, w, h);
         }
 
     }

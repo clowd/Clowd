@@ -1,26 +1,27 @@
 using System.Collections.Generic;
+using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
     // TODO: the implementation of this class needs to be looked at later when somebody has time.
     internal class CommandDelete : CommandBase
     {
-        List<PropertiesGraphicsBase> cloneList;    // contains selected items which are deleted
+        List<GraphicsBase> cloneList;    // contains selected items which are deleted
         List<int> indexes;                         // contains indexes of deleted items
 
         // Create this command BEFORE applying Delete function.
         public CommandDelete(DrawingCanvas drawingCanvas)
         {
-            cloneList = new List<PropertiesGraphicsBase>();
+            cloneList = new List<GraphicsBase>();
             indexes = new List<int>();
 
             // Make clone of the list selection.
 
             int currentIndex = 0;
 
-            foreach (GraphicsBase g in drawingCanvas.Selection)
+            foreach (GraphicsVisual g in drawingCanvas.Selection)
             {
-                cloneList.Add(g.CreateSerializedObject());
+                cloneList.Add(g.Graphic);
                 indexes.Add(currentIndex);
 
                 currentIndex++;
@@ -34,19 +35,19 @@ namespace DrawToolsLib
             int currentIndex = 0;
             int indexToInsert;
 
-            foreach (PropertiesGraphicsBase o in cloneList)
+            foreach (GraphicsBase o in cloneList)
             {
                 indexToInsert = indexes[currentIndex];
 
-                if ( indexToInsert >=0  &&  indexToInsert <= drawingCanvas.GraphicsList.Count )   // "<=" is correct !
+                if (indexToInsert >= 0 && indexToInsert <= drawingCanvas.GraphicsList.Count)   // "<=" is correct !
                 {
-                    drawingCanvas.GraphicsList.Insert(indexToInsert, o.CreateGraphics());
+                    drawingCanvas.GraphicsList.Insert(indexToInsert, o.CreateVisual());
                 }
                 else
                 {
                     // Bug: we should not be here.
                     // Add to the end anyway.
-                    drawingCanvas.GraphicsList.Add(o.CreateGraphics());
+                    drawingCanvas.GraphicsList.Add(o.CreateVisual());
 
                     System.Diagnostics.Trace.WriteLine("CommandDelete.Undo - incorrect index");
                 }
@@ -65,11 +66,11 @@ namespace DrawToolsLib
             for (int i = n - 1; i >= 0; i--)
             {
                 bool toDelete = false;
-                GraphicsBase currentObject = (GraphicsBase)drawingCanvas.GraphicsList[i];
+                GraphicsVisual currentObject = (GraphicsVisual)drawingCanvas.GraphicsList[i];
 
-                foreach (PropertiesGraphicsBase o in cloneList)
+                foreach (GraphicsBase o in cloneList)
                 {
-                    if (o.ID == currentObject.Id)
+                    if (o.ObjectId == currentObject.ObjectId)
                     {
                         toDelete = true;
                         break;

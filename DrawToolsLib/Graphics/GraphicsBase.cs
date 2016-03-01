@@ -1,319 +1,178 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Diagnostics;
-using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Xml.Serialization;
+using DrawToolsLib.Annotations;
 
-
-namespace DrawToolsLib
+namespace DrawToolsLib.Graphics
 {
-    /// <summary>
-    /// Base class for all graphics objects.
-    /// </summary>
-    public abstract class GraphicsBase : DrawingVisual
+    [Serializable]
+    public abstract class GraphicsBase : INotifyPropertyChanged, ICloneable
     {
-        #region Class Members
+        [XmlIgnore]
+        public int ObjectId
+        {
+            get { return _objectId; }
+            protected set { _objectId = value; }
+        }
+        [XmlIgnore]
+        public double ActualScale
+        {
+            get { return _actualScale; }
+            internal set
+            {
+                if (value.Equals(_actualScale)) return;
+                _actualScale = value;
+                OnPropertyChanged(nameof(ActualScale));
+                OnPropertyChanged(nameof(ActualLineWidth));
+            }
+        }
+        public Color ObjectColor
+        {
+            get { return _objectColor; }
+            set
+            {
+                if (value.Equals(_objectColor)) return;
+                _objectColor = value;
+                OnPropertyChanged(nameof(ObjectColor));
+            }
+        }
+        public double LineWidth
+        {
+            get { return _lineWidth; }
+            set
+            {
+                if (value.Equals(_lineWidth)) return;
+                _lineWidth = value;
+                OnPropertyChanged(nameof(LineWidth));
+                OnPropertyChanged(nameof(ActualLineWidth));
+            }
+        }
+        public bool IsSelected
+        {
+            get { return _isSelected; }
+            set
+            {
+                if (value == _isSelected) return;
+                _isSelected = value;
+                OnPropertyChanged(nameof(IsSelected));
+            }
+        }
 
-        protected double graphicsLineWidth;
-        protected Color graphicsObjectColor;
+        [XmlIgnore]
+        public double ActualLineWidth => ActualScale <= 0 ? LineWidth : LineWidth / ActualScale;
+        public event PropertyChangedEventHandler PropertyChanged;
+        public event EventHandler Invalidated;
 
-        protected double graphicsActualScale;
-        protected bool selected;
+        private int _objectId;
+        private Rect _bounds;
+        private double _actualScale;
+        private Color _objectColor;
+        private double _lineWidth;
+        private bool _isSelected;
 
-        public static SolidColorBrush HandleBrush { get; set; } = new SolidColorBrush(Color.FromRgb(0, 0, 255));
-
-        // Allows to write Undo - Redo functions and don't care about
-        // objects order in the list.
-        int objectId;
-
+        [XmlIgnore]
+        protected double LineHitTestWidth => Math.Max(8.0, ActualLineWidth);
+        [XmlIgnore]
         protected const double HitTestWidth = 12.0;
-
-        public const double HandleSize = 12.0;
-
-        static SolidColorBrush handleBrush2 = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
-
-        #endregion Class Members
-
-        #region Constructor
+        [XmlIgnore]
+        internal static double HandleSize { get; set; } = 12.0;
+        [XmlIgnore]
+        internal static SolidColorBrush HandleBrush { get; set; } = new SolidColorBrush(Color.FromRgb(0, 0, 255));
+        [XmlIgnore]
+        protected static SolidColorBrush HandleBrush2 { get; set; } = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
 
         protected GraphicsBase()
         {
-            objectId = this.GetHashCode();
+            ObjectId = this.GetHashCode();
         }
-
-        #endregion Constructor
-
-        #region Properties
-
-        public bool IsSelected
+        protected GraphicsBase(DrawingCanvas canvas)
+            : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth)
         {
-            get
-            {
-                return selected;
-            }
-            set
-            {
-                selected = value;
-
-                RefreshDrawing();
-            }
         }
-
-        public double LineWidth
+        protected GraphicsBase(double scale, Color objectColor, double lineWidth)
+            : this()
         {
-            get
-            {
-                return graphicsLineWidth;
-            }
-
-            set
-            {
-                graphicsLineWidth = value;
-
-                RefreshDrawing();
-            }
+            ActualScale = scale;
+            ObjectColor = objectColor;
+            LineWidth = lineWidth;
         }
 
-        public Color ObjectColor
+        [XmlIgnore]
+        public abstract Rect Bounds { get; }
+        [XmlIgnore]
+        internal abstract int HandleCount { get; }
+
+        internal abstract bool Contains(Point point);
+        internal abstract Point GetHandle(int handleNumber);
+        internal abstract int MakeHitTest(Point point);
+        internal abstract bool IntersectsWith(Rect rectangle);
+        internal abstract void Move(double deltaX, double deltaY);
+        internal abstract void MoveHandleTo(Point point, int handleNumber);
+        internal abstract Cursor GetHandleCursor(int handleNumber);
+
+        internal virtual void Normalize()
         {
-            get
-            {
-                return graphicsObjectColor;
-            }
-
-            set
-            {
-                graphicsObjectColor = value;
-
-                RefreshDrawing();
-            }
+            // Empty implementation is OK for classes which don't require normalization, like line.
         }
-
-        public double ActualScale
-        {
-            get
-            {
-                return graphicsActualScale;
-            }
-
-            set
-            {
-                graphicsActualScale = value;
-
-                RefreshDrawing();
-            }
-        }
-
-        protected double ActualLineWidth
-        {
-            get
-            {
-                return graphicsActualScale <= 0 ? graphicsLineWidth : graphicsLineWidth / graphicsActualScale;
-            }
-        }
-
-
-        protected double LineHitTestWidth
-        {
-            get
-            {
-                // Ensure that hit test area is not too narrow
-                return Math.Max(8.0, ActualLineWidth);
-            }
-        }
-
-        /// <summary>
-        /// Object ID
-        /// </summary>
-        public int Id
-        {
-            get { return objectId; }
-            set { objectId = value; }
-        }
-
-
-        #endregion Properties
-
-        #region Abstract Methods and Properties
-
-        /// <summary>
-        /// Returns number of handles
-        /// </summary>
-        public abstract int HandleCount
-        {
-            get;
-        }
-
-
-        /// <summary>
-        /// Hit test, should be overwritten in derived classes.
-        /// </summary>
-        public abstract bool Contains(Point point);
-
-        /// <summary>
-        /// Create object for serialization
-        /// </summary>
-        public abstract PropertiesGraphicsBase CreateSerializedObject();
-
-        /// <summary>
-        /// Get handle point by 1-based number
-        /// </summary>
-        public abstract Point GetHandle(int handleNumber);
-
-        /// <summary>
-        /// Hit test.
-        /// Return value: -1 - no hit
-        ///                0 - hit anywhere
-        ///                > 1 - handle number
-        /// </summary>
-        public abstract int MakeHitTest(Point point);
-
-
-        /// <summary>
-        /// Test whether object intersects with rectangle
-        /// </summary>
-        public abstract bool IntersectsWith(Rect rectangle);
-
-        /// <summary>
-        /// Move object
-        /// </summary>
-        public abstract void Move(double deltaX, double deltaY);
-
-
-        /// <summary>
-        /// Move handle to the point
-        /// </summary>
-        public abstract void MoveHandleTo(Point point, int handleNumber);
-
-        /// <summary>
-        /// Get cursor for the handle
-        /// </summary>
-        public abstract Cursor GetHandleCursor(int handleNumber);
-
-        #endregion Abstract Methods and Properties
-
-        #region Virtual Methods
-
-        /// <summary>
-        /// Normalize object.
-        /// Call this function in the end of object resizing,
-        /// </summary>
-        public virtual void Normalize()
-        {
-            // Empty implementation is OK for classes which don't require
-            // normalization, like line.
-            // Normalization is required for rectangle-based classes.
-        }
-
-        /// <summary>
-        /// Implements actual drawing code.
-        /// 
-        /// Call GraphicsBase.Draw in the end of every derived class Draw 
-        /// function to draw tracker if necessary.
-        /// </summary>
-        public virtual void Draw(DrawingContext drawingContext)
+        internal virtual void Draw(DrawingContext drawingContext)
         {
             if (IsSelected)
             {
                 DrawTracker(drawingContext);
             }
         }
-
-
-        /// <summary>
-        /// Draw tracker for selected object.
-        /// </summary>
-        public virtual void DrawTracker(DrawingContext drawingContext)
+        internal virtual void DrawTracker(DrawingContext drawingContext)
         {
             for (int i = 1; i <= HandleCount; i++)
             {
-                DrawTrackerRectangle(drawingContext, GetHandleRectangle(i));
+                var rectangle = GetHandleRectangle(i);
+                drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
+                drawingContext.DrawEllipse(HandleBrush2, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 2, rectangle.Height / 2 - 2);
+                drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 3, rectangle.Height / 2 - 3);
             }
         }
 
-
-        /// <summary>
-        /// Dump (for debugging)
-        /// </summary>
-        [Conditional("DEBUG")]
-        public virtual void Dump()
+        internal virtual GraphicsVisual CreateVisual()
         {
-            Trace.WriteLine(this.GetType().Name);
+            // clear event handler, so if there are any un-disposed GraphicsVisual's we are de-referencing them.
+            Invalidated = delegate { };
 
-            Trace.WriteLine("ID = " + objectId.ToString(CultureInfo.InvariantCulture) +
-                "   Selected = " + selected.ToString(CultureInfo.InvariantCulture));
-
-            Trace.WriteLine("objectColor = " + ColorToDisplay(graphicsObjectColor) +
-                "  lineWidth = " + DoubleForDisplay(graphicsLineWidth));
+            var vis =  new GraphicsVisual(this);
+            this.InvalidateVisual();
+            return vis;
         }
 
-
-        #endregion Virtual Methods
-
-        #region Other Methods
-
-        /// <summary>
-        /// Draw tracker rectangle
-        /// </summary>
-        static void DrawTrackerRectangle(DrawingContext drawingContext, Rect rectangle)
-        {
-            //used to be a rectangle, circle looks better.
-            drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
-            drawingContext.DrawEllipse(handleBrush2, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 2, rectangle.Height / 2 - 2);
-            drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 3, rectangle.Height / 2 - 3);
-        }
-
-
-        /// <summary>
-        /// Refresh drawing.
-        /// Called after change if any object property.
-        /// </summary>
-        public void RefreshDrawing()
-        {
-            DrawingContext dc = this.RenderOpen();
-
-            Draw(dc);
-
-            dc.Close();
-        }
-
-        /// <summary>
-        /// Get handle rectangle by 1-based number
-        /// </summary>
-        public Rect GetHandleRectangle(int handleNumber)
+        protected virtual Rect GetHandleRectangle(int handleNumber)
         {
             Point point = GetHandle(handleNumber);
 
             // Handle rectangle should have constant size, except of the case
             // when line is too width.
-            double size = Math.Max(HandleSize / graphicsActualScale, ActualLineWidth * 1.1);
+            double size = Math.Max(HandleSize / ActualScale, ActualLineWidth * 1.1);
 
             return new Rect(point.X - size / 2, point.Y - size / 2,
                 size, size);
         }
 
-        /// <summary>
-        /// Helper function used for Dump
-        /// </summary>
-        static string DoubleForDisplay(double value)
+        [NotifyPropertyChangedInvocator]
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
-            return ((float)value).ToString("f2", CultureInfo.InvariantCulture);
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            InvalidateVisual();
+        }
+        protected virtual void InvalidateVisual()
+        {
+            Invalidated?.Invoke(this, new EventArgs());
         }
 
-        /// <summary>
-        /// Helper function used for Dump
-        /// </summary>
-        static string ColorToDisplay(Color value)
+        public abstract GraphicsBase Clone();
+        object ICloneable.Clone()
         {
-            //return "A:" + value.A.ToString() +
-            return "R:" + value.R.ToString(CultureInfo.InvariantCulture) +
-                   " G:" + value.G.ToString(CultureInfo.InvariantCulture) +
-                   " B:" + value.B.ToString(CultureInfo.InvariantCulture);
+            return Clone();
         }
-
-
-        #endregion Other Methods
     }
 }

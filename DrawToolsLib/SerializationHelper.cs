@@ -8,7 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-
+using DrawToolsLib.Graphics;
 
 
 namespace DrawToolsLib
@@ -21,14 +21,14 @@ namespace DrawToolsLib
     [Serializable, XmlRoot("Graphics")]
     public class SerializationHelper
     {
-        [XmlArrayItem(typeof(PropertiesGraphicsEllipse)),
-         XmlArrayItem(typeof(PropertiesGraphicsLine)),
-         XmlArrayItem(typeof(PropertiesGraphicsArrow)),
-         XmlArrayItem(typeof(PropertiesGraphicsImage)),
-         XmlArrayItem(typeof(PropertiesGraphicsPolyLine)),
-         XmlArrayItem(typeof(PropertiesGraphicsRectangle)),
-         XmlArrayItem(typeof(PropertiesGraphicsText))]
-        public PropertiesGraphicsBase[] Graphics { get; set; }
+        [XmlArrayItem(typeof(GraphicsEllipse)),
+         XmlArrayItem(typeof(GraphicsLine)),
+         XmlArrayItem(typeof(GraphicsArrow)),
+         XmlArrayItem(typeof(GraphicsImage)),
+         XmlArrayItem(typeof(GraphicsPolyLine)),
+         XmlArrayItem(typeof(GraphicsRectangle)),
+         XmlArrayItem(typeof(GraphicsText))]
+        public GraphicsBase[] Graphics { get; set; }
 
         [XmlIgnore]
         public Rect ContentBounds
@@ -62,7 +62,7 @@ namespace DrawToolsLib
             if (collection == null)
                 throw new ArgumentNullException(nameof(collection));
 
-            Graphics = collection.Select(g => g.CreateSerializedObject()).ToArray();
+            Graphics = collection.ToArray();
             ContentBounds = contentBounds;
 
         }

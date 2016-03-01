@@ -1,25 +1,29 @@
 using System.Linq;
+using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
     internal class CommandAdd : CommandBase
     {
-        private readonly PropertiesGraphicsBase[] _graphics;
+        private readonly GraphicsBase[] _graphics;
 
-        public CommandAdd(params GraphicsBase[] newObjects)
+        public CommandAdd(params GraphicsVisual[] newObjects)
         {
-            _graphics = newObjects.Select(s => s.CreateSerializedObject()).ToArray();
+            _graphics = newObjects.Select(s => s.Graphic).ToArray();
         }
 
         public override void Undo(DrawingCanvas drawingCanvas)
         {
             foreach (var g in _graphics)
             {
-                GraphicsBase objectToDelete = drawingCanvas.GraphicsList.Cast<GraphicsBase>()
-                    .FirstOrDefault(b => b.Id == g.ID);
+                GraphicsVisual objectToDelete = drawingCanvas.GraphicsList.Cast<GraphicsVisual>()
+                    .FirstOrDefault(b => b.ObjectId == g.ObjectId);
 
                 if (objectToDelete != null)
+                {
                     drawingCanvas.GraphicsList.Remove(objectToDelete);
+                    objectToDelete.Dispose();
+                }
             }
         }
 
@@ -27,7 +31,10 @@ namespace DrawToolsLib
         {
             HelperFunctions.UnselectAll(drawingCanvas);
             foreach (var g in _graphics)
-                drawingCanvas.GraphicsList.Add(g.CreateGraphics());
+            {
+                var vis = g.CreateVisual();
+                drawingCanvas.GraphicsList.Add(vis);
+            }
         }
     }
 }

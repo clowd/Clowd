@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.IO;
+using DrawToolsLib.Graphics;
 
 
 namespace DrawToolsLib
@@ -32,15 +33,11 @@ namespace DrawToolsLib
         {
             Point p = e.GetPosition(drawingCanvas);
 
-            newPolyLine = new GraphicsPolyLine(
-                new Point[]
+            newPolyLine = new GraphicsPolyLine(drawingCanvas, new Point[]
                 {
                     p,
                     new Point(p.X + 1, p.Y + 1)
-                },
-                drawingCanvas.LineWidth,
-                drawingCanvas.ObjectColor,
-                drawingCanvas.ActualScale);
+                });
 
             AddNewObject(drawingCanvas, newPolyLine);
 

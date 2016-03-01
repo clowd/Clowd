@@ -1,75 +1,69 @@
 using System;
 using System.IO;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace DrawToolsLib
+namespace DrawToolsLib.Graphics
 {
-    public class GraphicsImage : GraphicsRectangleBase
+    [Serializable]
+    public class GraphicsImage : GraphicsRectangle
     {
         public string FileName
         {
-            get { return fileName; }
-            set { fileName = value; }
+            get { return _fileName; }
+            set
+            {
+                if (value == _fileName) return;
+                _fileName = value;
+                OnPropertyChanged();
+            }
         }
 
-        private string fileName;
-        private BitmapSource imageCache;
-        public GraphicsImage(string filename, double left, double top, double right, double bottom,
-            double lineWidth, Color objectColor, double actualScale)
-        {
-            this.rectangleLeft = left;
-            this.rectangleTop = top;
-            this.rectangleRight = right;
-            this.rectangleBottom = bottom;
-            this.graphicsLineWidth = lineWidth;
-            this.graphicsObjectColor = objectColor;
-            this.graphicsActualScale = actualScale;
-            this.fileName = filename;
+        private string _fileName;
+        private readonly BitmapSource _imageCache;
 
-            if (!File.Exists(filename))
-                throw new FileNotFoundException(filename);
+        protected GraphicsImage()
+        {
+        }
+        public GraphicsImage(DrawingCanvas canvas, Rect rect, string filePath)
+           : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, rect, filePath)
+        {
+        }
+
+        public GraphicsImage(double scale, Color objectColor, double lineWidth, Rect rect, string filePath)
+            : base(scale, objectColor, lineWidth, rect)
+        {
+            _fileName = filePath;
+            if (!File.Exists(_fileName))
+                throw new FileNotFoundException(_fileName);
 
             BitmapSource myImage = BitmapFrame.Create(
-                new Uri(filename, UriKind.Absolute),
+                new Uri(_fileName, UriKind.Absolute),
                 BitmapCreateOptions.None,
                 BitmapCacheOption.OnLoad);
 
-            imageCache = myImage;
-
-            //RefreshDrawng();
+            _imageCache = myImage;
         }
 
-        public override void Draw(DrawingContext drawingContext)
+        internal override void DrawRectangle(DrawingContext drawingContext)
         {
             if (drawingContext == null)
-            {
-                throw new ArgumentNullException("drawingContext");
-            }
+                throw new ArgumentNullException(nameof(drawingContext));
 
-            Rect r = Rectangle;
-            if (imageCache.PixelWidth == Math.Round(r.Width, 3) && imageCache.PixelHeight == Math.Round(r.Height, 3))
+            Rect r = Bounds;
+            if (_imageCache.PixelWidth == (int)Math.Round(r.Width, 3) && _imageCache.PixelHeight == (int)Math.Round(r.Height, 3))
             {
                 // If the image is still at the original size, round the rectangle position to whole pixels to avoid blurring.
                 r.X = Math.Round(r.X);
                 r.Y = Math.Round(r.Y);
             }
-            drawingContext.DrawImage(imageCache, r);
-
-            base.Draw(drawingContext);
+            drawingContext.DrawImage(_imageCache, r);
         }
 
-        public override bool Contains(Point point)
+        public override GraphicsBase Clone()
         {
-            return this.Rectangle.Contains(point);
-        }
-
-        public override PropertiesGraphicsBase CreateSerializedObject()
-        {
-            return new PropertiesGraphicsImage(this);
+            return new GraphicsImage(ActualScale, ObjectColor, LineWidth, Bounds, FileName) { ObjectId = ObjectId };
         }
     }
 }

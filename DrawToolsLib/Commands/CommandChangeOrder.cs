@@ -18,8 +18,8 @@ namespace DrawToolsLib
         public CommandChangeOrder(DrawingCanvas drawingCanvas)
         {
             _listBefore = drawingCanvas.GraphicsList
-                .OfType<GraphicsBase>()
-                .Select(g => g.Id)
+                .OfType<GraphicsVisual>()
+                .Select(g => g.ObjectId)
                 .ToArray();
         }
 
@@ -27,8 +27,8 @@ namespace DrawToolsLib
         public void NewState(DrawingCanvas drawingCanvas)
         {
             _listAfter = drawingCanvas.GraphicsList
-                .OfType<GraphicsBase>()
-                .Select(g => g.Id)
+                .OfType<GraphicsVisual>()
+                .Select(g => g.ObjectId)
                 .ToArray();
         }
 
@@ -44,17 +44,17 @@ namespace DrawToolsLib
 
         private static void SetCanvasOrder(VisualCollection graphicsList, int[] indexList)
         {
-            List<GraphicsBase> tmpList = new List<GraphicsBase>();
+            List<GraphicsVisual> tmpList = new List<GraphicsVisual>();
 
             // Read indexList, find every element in graphicsList by ID
             // and move it to tmpList.
 
             foreach (int id in indexList)
             {
-                GraphicsBase objectToMove = null;
-                foreach (GraphicsBase g in graphicsList)
+                GraphicsVisual objectToMove = null;
+                foreach (GraphicsVisual g in graphicsList)
                 {
-                    if (g.Id == id)
+                    if (g.ObjectId == id)
                     {
                         objectToMove = g;
                         break;
@@ -69,7 +69,7 @@ namespace DrawToolsLib
 
             // Now tmpList contains objects in correct order.
             // Read tmpList and add all its elements back to graphicsList.
-            foreach (GraphicsBase g in tmpList)
+            foreach (GraphicsVisual g in tmpList)
             {
                 graphicsList.Add(g);
             }
