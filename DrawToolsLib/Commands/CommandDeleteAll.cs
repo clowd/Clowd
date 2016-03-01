@@ -26,6 +26,7 @@ namespace DrawToolsLib
 
         public override void Redo(DrawingCanvas drawingCanvas)
         {
+            drawingCanvas.GraphicsList.OfType<GraphicsVisual>().ToList().ForEach(g => g.Dispose());
             drawingCanvas.GraphicsList.Clear();
         }
     }
