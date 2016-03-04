@@ -145,22 +145,18 @@ namespace Clowd
             }
 
             // if running from a debug location, offer prompt to target remote or local clowd server.
-            if (Debugger.IsAttached ||
-                Regex.IsMatch(Assembly.GetExecutingAssembly().Location,
-                @"^(.*)bin\\(Debug|Release)\\Clowd\.exe$",
-                RegexOptions.IgnoreCase))
-            {
-                var config = new TaskDialogOptions();
-                config.Title = "Clowd";
-                config.MainInstruction = "Clowd running in debug mode.";
-                config.Content = "Choose to target either a local or remote server location.";
-                config.CustomButtons = new[] { "Remote (clowd.ca)", "Local" };
-                config.MainIcon = VistaTaskDialogIcon.Information;
-                var result = TaskDialog.Show(config);
-                if (result.CustomButtonResult == 1)
-                    ClowdServerDomain = "localhost";
-            }
+#if DEBUG
+            var ddiag = new TaskDialogOptions();
+            ddiag.Title = "Clowd";
+            ddiag.MainInstruction = "Clowd running in debug mode.";
+            ddiag.Content = "Choose to target either a local or remote server location.";
+            ddiag.CustomButtons = new[] { "Remote (clowd.ca)", "Local" };
+            ddiag.MainIcon = VistaTaskDialogIcon.Information;
+            var ddiagResult = TaskDialog.Show(ddiag);
+            if (ddiagResult.CustomButtonResult == 1)
+                ClowdServerDomain = "localhost";
 
+#endif
             SetupServiceHost();
             SetupDpiScaling();
             SetupTrayIcon();
@@ -207,9 +203,9 @@ namespace Clowd
                     }
                 }
             }
-
-            if (!System.Diagnostics.Debugger.IsAttached)
-                SetupUpdateTimer();
+#if (!DEBUG)
+            SetupUpdateTimer();
+#endif
         }
         protected override void OnExit(ExitEventArgs e)
         {
