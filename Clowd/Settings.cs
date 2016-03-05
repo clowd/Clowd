@@ -100,6 +100,8 @@ namespace Clowd
 
         [ExpandAsCategory("Editor")]
         public EditorSettings EditorSettings { get; set; } = new EditorSettings();
+
+        public MagnifierSettings MagnifierSettings { get; set; } = new MagnifierSettings();
     }
 
     [ImplementPropertyChanged]
@@ -144,5 +146,16 @@ namespace Clowd
 
         [PData.Spinnable(1, 2, 1, 10)]
         public int ObjectLineWidth { get; set; } = 2;
+    }
+
+    [ImplementPropertyChanged]
+    public class MagnifierSettings
+    {
+        public double Zoom { get; set; } = 12;
+        public int AreaSize { get; set; } = 13;
+        public double GridLineWidth { get; set; } = 0.7; // 1 pixel at <= 200% DPI; 2 pixels at 225% DPI; always rendered as a whole number of pixels
+        public double BorderWidth { get; set; } = 3;
+        public Color BorderColor { get; set; } = Colors.DarkGray;
+        public Color CrosshairColor { get; set; } = Color.FromArgb(125, 173, 216, 230); // light blue
     }
 }
