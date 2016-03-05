@@ -13,6 +13,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CS.Wpf;
+using ScreenVersusWpf;
 
 namespace Clowd
 {
@@ -41,7 +42,7 @@ namespace Clowd
             this.Loaded += CaptureWindow_Loaded;
         }
 
-        
+
         public static System.Drawing.Bitmap MakeGrayscale3(System.Drawing.Bitmap original)
         {
             //create a blank bitmap the same size as original
@@ -198,26 +199,16 @@ namespace Clowd
             }
         }
 
-        private Point CalculateOptimalOffset(Size objectSize, Point targetPoint, Point desiredOffsetFromCenter)
+        private WpfSize CalculateOptimalOffset(WpfSize objectSize, WpfPoint targetPoint, WpfSize desiredOffsetFromCenter)
         {
-            targetPoint.X += System.Windows.Forms.SystemInformation.VirtualScreen.X;
-            targetPoint.Y += System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-            var primaryScreen = windowFinder.GetBoundsOfScreenContainingPoint(targetPoint, false);
-            targetPoint.X -= System.Windows.Forms.SystemInformation.VirtualScreen.X;
-            targetPoint.Y -= System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-            primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
-            primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-            primaryScreen = DpiScale.TranslateDownScaleRect(primaryScreen);
+            var screenBounds = ScreenTools.GetBoundsOfScreenContaining(targetPoint.ToScreenPoint()).ToWpfRect();
 
-            bool fitsX = primaryScreen.Right > targetPoint.X + (objectSize.Width / 2) + desiredOffsetFromCenter.X;
-            bool fitsY = primaryScreen.Bottom > targetPoint.Y + (objectSize.Height / 2) + desiredOffsetFromCenter.Y;
+            bool fitsX = screenBounds.Left + screenBounds.Width >= targetPoint.X + (objectSize.Width / 2) + desiredOffsetFromCenter.Width;
+            bool fitsY = screenBounds.Top + screenBounds.Height >= targetPoint.Y + (objectSize.Height / 2) + desiredOffsetFromCenter.Height;
 
-            double newX, newY;
-
-            newX = fitsX ? desiredOffsetFromCenter.X : -desiredOffsetFromCenter.X;
-            newY = fitsY ? desiredOffsetFromCenter.Y : -desiredOffsetFromCenter.Y;
-
-            return new Point(newX, newY);
+            return new WpfSize(
+                fitsX ? desiredOffsetFromCenter.Width : -desiredOffsetFromCenter.Width,
+                fitsY ? desiredOffsetFromCenter.Height : -desiredOffsetFromCenter.Height);
         }
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -299,20 +290,17 @@ namespace Clowd
         {
             var currentPoint = e.GetPosition(rootGrid);
 
-            //Canvas.SetLeft(crosshairTopRight, currentPoint.X - 1);
-            //Canvas.SetBottom(crosshairTopRight, (rootGrid.ActualHeight - currentPoint.Y));
-            //Canvas.SetTop(crosshairBottomLeft, currentPoint.Y - 1);
-            //Canvas.SetRight(crosshairBottomLeft, (rootGrid.ActualWidth - currentPoint.X));
-
             if (ShowMagnifier)
             {
+                var mousePoint = ScreenTools.GetMousePosition();
                 var offset = CalculateOptimalOffset(
                     pixelMagnifier.FinderSize,
-                    currentPoint,
-                    new Point(pixelMagnifier.FinderSize.Width / 2 + 20, pixelMagnifier.FinderSize.Height / 2 + 20));
-                Canvas.SetLeft(pixelMagnifier, currentPoint.X - pixelMagnifier.FinderSize.Width / 2 + offset.X);
-                Canvas.SetTop(pixelMagnifier, currentPoint.Y - pixelMagnifier.FinderSize.Width / 2 + offset.Y);
-                pixelMagnifier.DrawMagnifier(currentPoint);
+                    mousePoint.ToWpfPoint(),
+                    pixelMagnifier.FinderSize / 2 + new WpfSize(20, 20));
+                var pos = mousePoint.ToWpfPoint() - pixelMagnifier.FinderSize / 2 + offset;
+                Canvas.SetLeft(pixelMagnifier, pos.X);
+                Canvas.SetTop(pixelMagnifier, pos.Y);
+                pixelMagnifier.DrawMagnifier(mousePoint);
             }
 
             if (draggingArea)

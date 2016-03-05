@@ -1,12 +1,10 @@
-﻿using System;
+﻿using CS.Wpf;
+using ScreenVersusWpf;
+using System;
 using System.ComponentModel;
-using System.Diagnostics;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Threading;
-using CS.Wpf;
 
 namespace Clowd.Controls
 {
@@ -18,50 +16,110 @@ namespace Clowd.Controls
             set { SetValue(ImageProperty, value); }
         }
 
-        public Size FinderSize
-        {
-            get
-            {
-                var pix = DpiScale.UpScaleX(_zoom);
-                return new Size(pix * _size, pix * _size);
-            }
-        }
+        public WpfSize FinderSize => (_singlePixelSize * _zoomedPixels).ToWpfSize();
+        private ScreenSize _singlePixelSize => new WpfSize(App.Current.Settings.MagnifierSettings.Zoom, App.Current.Settings.MagnifierSettings.Zoom).ToScreenSize();
+        private int _zoomedPixels => App.Current.Settings.MagnifierSettings.AreaSize - App.Current.Settings.MagnifierSettings.AreaSize % 2 + 1;
 
         public static readonly DependencyProperty ImageProperty =
             DependencyProperty.Register("Image", typeof(BitmapSource), typeof(PixelMagnifier), new PropertyMetadata(null));
 
 
         private DrawingVisual _visual = new MyDrawingVisual();
-        private Point _lastPoint = default(Point);
-        private int _size = 13;
-        private int _zoom = 10;
+        private ScreenPoint _lastPoint;
 
         public PixelMagnifier()
         {
             AddVisualChild(_visual);
         }
 
-        public void DrawMagnifier(Point location)
+        public void DrawMagnifier(ScreenPoint location)
         {
             if (_lastPoint == location)
                 return;
             _lastPoint = location;
 
-            location = DpiScale.UpScalePoint(location);
-            using (DrawingContext dc = _visual.RenderOpen())
+            using (DrawingContext g = _visual.RenderOpen())
             {
-                var pixSize = (int)Math.Ceiling((double)_zoom / 96 * DpiScale.DpiX);
-                Size size = new Size(0, 0);
-                if (Image != null)
+                if (Image == null)
+                    return;
+
+                var cornerX = (int)location.X - _zoomedPixels / 2;
+                var cornerY = (int)location.Y - _zoomedPixels / 2;
+                var px = ScreenTools.ScreenToWpf(1);
+
+                var sourceRect = new ScreenRect(cornerX, cornerY, _zoomedPixels, _zoomedPixels);
+                var targetRect = new WpfRect(0, 0, FinderSize.Width, FinderSize.Height);
+
+                // Crop the source & target rectangles so that they don't go past the edges of the screen(s)
+                var zoomedPixel = _singlePixelSize.ToWpfSize();
+                if (sourceRect.Left < 0)
                 {
-                    size = CreateMagnifier(dc, Image, location, _size, _size, pixSize);
-                    Pen pen = new Pen(Brushes.DarkGray, 2);
-                    dc.DrawEllipse(null, pen, new Point(size.Width / 2 + 0.5, size.Height / 2 + 0.5), size.Width / 2 - 1, size.Height / 2 - 1);
-                    size = new Size(DpiScale.DownScaleX(size.Width), DpiScale.DownScaleY(size.Height));
+                    sourceRect.Left -= cornerX;
+                    sourceRect.Width += cornerX;
+                    targetRect.Left -= cornerX * zoomedPixel.Width;
+                    targetRect.Width += cornerX * zoomedPixel.Width;
                 }
-                this.Clip = new EllipseGeometry(new Point(size.Width / 2 + 0.5, size.Height / 2 + 0.5), size.Width / 2 - 1, size.Height / 2 - 1);
-                this.Width = size.Width;
-                this.Height = size.Height;
+                if (sourceRect.Top < 0)
+                {
+                    sourceRect.Top -= cornerY;
+                    sourceRect.Height += cornerY;
+                    targetRect.Top -= cornerY * zoomedPixel.Height;
+                    targetRect.Height += cornerY * zoomedPixel.Height;
+                }
+                if (sourceRect.Left + sourceRect.Width > Image.PixelWidth)
+                {
+                    int excess = sourceRect.Left + sourceRect.Width - Image.PixelWidth;
+                    sourceRect.Width -= excess;
+                    targetRect.Width -= excess * zoomedPixel.Width;
+                }
+                if (sourceRect.Top + sourceRect.Height > Image.PixelHeight)
+                {
+                    int excess = sourceRect.Top + sourceRect.Height - Image.PixelHeight;
+                    sourceRect.Height -= excess;
+                    targetRect.Height -= excess * zoomedPixel.Height;
+                }
+
+                // Draw the black background visible at the edge of the screen where no zoomed pixels are available
+                g.DrawRectangle(Brushes.Black, null, new Rect(0, 0, FinderSize.Width, FinderSize.Height));
+
+                // Draw the magnified image
+                var group = new DrawingGroup();
+                group.Children.Add(new ImageDrawing(new CroppedBitmap(Image, sourceRect), targetRect));
+                g.DrawDrawing(group);
+
+                // Draw the pixel grid lines
+                var gridLinePixelWidth = Math.Max(ScreenTools.WpfToScreen(App.Current.Settings.MagnifierSettings.GridLineWidth), 1); 
+                var gridLineWidth = ScreenTools.ScreenToWpf(gridLinePixelWidth);
+                var gridPen = new Pen(Brushes.DimGray, gridLineWidth);
+                var gridOffset = (gridLinePixelWidth % 2) * 0.5 * px; // offset the line by 0.5 pixels if the line width is odd, to avoid blurring
+                g.PushTransform(new TranslateTransform(gridOffset, gridOffset));
+                for (int x = sourceRect.Left - cornerX; x <= sourceRect.Left + sourceRect.Width - cornerX; x++)
+                    g.DrawLine(gridPen, new Point(x * zoomedPixel.Width, targetRect.Top), new Point(x * zoomedPixel.Width, targetRect.Bottom));
+                for (int y = sourceRect.Top - cornerY; y <= sourceRect.Top + sourceRect.Height - cornerY; y++)
+                    g.DrawLine(gridPen, new Point(targetRect.Left, y * zoomedPixel.Height), new Point(targetRect.Right, y * zoomedPixel.Height));
+
+                // Draw the crosshair
+                var xhairBrush = new SolidColorBrush(App.Current.Settings.MagnifierSettings.CrosshairColor);
+                var xhairGrow = gridLineWidth / 2; // make sure the crosshair rectangles cover the adjacent grid lines wholly on both sides
+                g.DrawRectangle(xhairBrush, null, new WpfRect(0, (FinderSize.Height - zoomedPixel.Height) / 2, (FinderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Left
+                g.DrawRectangle(xhairBrush, null, new WpfRect((FinderSize.Width + zoomedPixel.Width) / 2, (FinderSize.Height - zoomedPixel.Height) / 2, (FinderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Right
+                g.DrawRectangle(xhairBrush, null, new WpfRect((FinderSize.Width - zoomedPixel.Width) / 2, 0, zoomedPixel.Width, (FinderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Top
+                g.DrawRectangle(xhairBrush, null, new WpfRect((FinderSize.Width - zoomedPixel.Width) / 2, (FinderSize.Height + zoomedPixel.Height) / 2, zoomedPixel.Width, (FinderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Bottom
+
+                // Draw a highlight around the pixel under cursor
+                var innerRect = new WpfRect((FinderSize.Width - zoomedPixel.Width) / 2, (FinderSize.Height - zoomedPixel.Height) / 2, zoomedPixel.Width, zoomedPixel.Height);
+                g.DrawRectangle(null, new Pen(Brushes.White, gridLineWidth), innerRect);
+                g.DrawRectangle(null, new Pen(Brushes.Black, gridLineWidth), innerRect.Grow(gridLineWidth));
+                g.Pop(); // grid line 0.5 px offset
+
+                // Draw the magnifier border
+                Pen pen = new Pen(new SolidColorBrush(App.Current.Settings.MagnifierSettings.BorderColor), App.Current.Settings.MagnifierSettings.BorderWidth);
+                g.DrawEllipse(null, pen, new Point(FinderSize.Width / 2 + gridOffset, FinderSize.Height / 2 + gridOffset), FinderSize.Width / 2, FinderSize.Height / 2);
+                // Clip to the exact same ellipse (thus clipping off half of the drawn border)
+                this.Clip = new EllipseGeometry(new Point(FinderSize.Width / 2 + gridOffset, FinderSize.Height / 2 + gridOffset), FinderSize.Width / 2, FinderSize.Height / 2);
+
+                this.Width = FinderSize.Width;
+                this.Height = FinderSize.Height;
             }
         }
 
@@ -75,83 +133,11 @@ namespace Clowd.Controls
             return _visual;
         }
 
-        private Size CreateMagnifier(DrawingContext g, BitmapSource source, Point position, int horizontalPixelCount,
-           int verticalPixelCount, int pixelSize)
-        {
-            double width = horizontalPixelCount * pixelSize;
-            double height = verticalPixelCount * pixelSize;
-
-            var cornerX = (int)position.X - horizontalPixelCount / 2;
-            var cornerY = (int)position.Y - verticalPixelCount / 2;
-
-            var sourceRect = new Int32Rect(cornerX, cornerY, horizontalPixelCount, verticalPixelCount);
-            var targetRect = new Rect(0, 0, width, height);
-
-            // Crop the source & target rectangles so that they don't go past the edges of the screen(s)
-            if (sourceRect.X < 0)
-            {
-                sourceRect.X -= cornerX;
-                sourceRect.Width += cornerX;
-                targetRect.X -= cornerX * pixelSize;
-                targetRect.Width += cornerX * pixelSize;
-            }
-            if (sourceRect.Y < 0)
-            {
-                sourceRect.Y -= cornerY;
-                sourceRect.Height += cornerY;
-                targetRect.Y -= cornerY * pixelSize;
-                targetRect.Height += cornerY * pixelSize;
-            }
-            if (sourceRect.X + sourceRect.Width > source.PixelWidth)
-            {
-                int excess = sourceRect.X + sourceRect.Width - source.PixelWidth;
-                sourceRect.Width -= excess;
-                targetRect.Width -= excess * pixelSize;
-            }
-            if (sourceRect.Y + sourceRect.Height > source.PixelHeight)
-            {
-                int excess = sourceRect.Y + sourceRect.Height - source.PixelHeight;
-                sourceRect.Height -= excess;
-                targetRect.Height -= excess * pixelSize;
-            }
-
-            // Draw the background that shows when the magnifier is near the edge of the screen
-            g.DrawRectangle(Brushes.Black, null, new Rect(0, 0, width, height));
-
-            // Draw the magnified image
-            var group = new DrawingGroup();
-            group.Children.Add(new ImageDrawing(new CroppedBitmap(source, sourceRect), targetRect));
-            g.DrawDrawing(group);
-
-            // Draw the pixel grid lines
-            var gridPen = new Pen(Brushes.DimGray, 1);
-            for (int x = sourceRect.X - cornerX; x <= sourceRect.X + sourceRect.Width - cornerX; x++)
-                g.DrawLine(gridPen, new Point(x * pixelSize + 0.5, targetRect.Top), new Point(x * pixelSize + 0.5, targetRect.Bottom));
-            for (int y = sourceRect.Y - cornerY; y <= sourceRect.Y + sourceRect.Height - cornerY; y++)
-                g.DrawLine(gridPen, new Point(targetRect.Left, y * pixelSize + 0.5), new Point(targetRect.Right, y * pixelSize + 0.5));
-
-            // Draw the crosshair
-            SolidColorBrush crosshairBrush = new SolidColorBrush(Color.FromArgb(125, 173, 216, 230)); // light blue
-            g.DrawRectangle(crosshairBrush, null, new Rect(0, (height - pixelSize) / 2, (width - pixelSize) / 2, pixelSize + 1)); // Left
-            g.DrawRectangle(crosshairBrush, null, new Rect((width + pixelSize) / 2, (height - pixelSize) / 2, (width - pixelSize) / 2, pixelSize + 1)); // Right
-            g.DrawRectangle(crosshairBrush, null, new Rect((width - pixelSize) / 2, 0, pixelSize + 1, (height - pixelSize) / 2)); // Top
-            g.DrawRectangle(crosshairBrush, null, new Rect((width - pixelSize) / 2, (height + pixelSize) / 2, pixelSize + 1, (height - pixelSize) / 2)); // Bottom
-
-            // Draw a highlight around the pixel under cursor
-            g.DrawRectangle(null, new Pen(Brushes.Black, 1), new Rect((width - pixelSize) / 2 - 0.5, (height - pixelSize) / 2 - 0.5, pixelSize + 2, pixelSize + 2));
-            g.DrawRectangle(null, new Pen(Brushes.White, 1), new Rect((width - pixelSize) / 2 + 0.5, (height - pixelSize) / 2 + 0.5, pixelSize, pixelSize));
-
-            return new Size(width, height);
-        }
-
         private class MyDrawingVisual : DrawingVisual
         {
             public MyDrawingVisual()
             {
                 VisualBitmapScalingMode = BitmapScalingMode.NearestNeighbor;
-                VisualEdgeMode = EdgeMode.Unspecified;
-                if (!DesignerProperties.GetIsInDesignMode(this))
-                    Transform = DpiScale.DownScaleTransform;
             }
         }
     }
