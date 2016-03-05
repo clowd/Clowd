@@ -65,7 +65,7 @@ namespace Clowd
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            SetupExless();
+            SetupExceptionHandling();
 
             try
             {
@@ -217,8 +217,24 @@ namespace Clowd
                 _captureHotkey.Dispose();
         }
 
-        private void SetupExless()
+        private void SetupExceptionHandling()
         {
+#if DEBUG
+            if (Debugger.IsAttached)
+                return;
+
+            Action<Exception> showError = (Exception e) => { MessageBox.Show($"Unhandled exception: {e.Message}\n{e.GetType()}\n\n{e.StackTrace}", "Unhandled exception", MessageBoxButton.OK, MessageBoxImage.Error); };
+
+            System.Windows.Forms.Application.ThreadException += (object sender, ThreadExceptionEventArgs e) => { showError(e.Exception); };
+            Application.Current.DispatcherUnhandledException += (object sender, DispatcherUnhandledExceptionEventArgs e) => { showError(e.Exception); };
+            AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
+            {
+                if (e.ExceptionObject is Exception)
+                    showError((Exception)e.ExceptionObject);
+                else
+                    MessageBox.Show($"Unhandled exception: {e.ExceptionObject}");
+            };
+#else
             // initialize custom exceptionless server at https://exless.caesa.ca if not debugging.
             var exless = ExceptionlessClient.Default;
             var exconf = exless.Configuration;
@@ -314,6 +330,7 @@ namespace Clowd
 
             exless.SubmittingEvent += OnSubmitting;
             exless.SubmittedEvent += OnSubmitted;
+#endif
         }
         private void SetupServiceHost()
         {
