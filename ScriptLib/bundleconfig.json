@@ -1,0 +1,11 @@
+[
+  {
+    "outputFileName": "build/clowd-lib.js",
+    "inputFiles": [
+      "lib/filesaver.min.js",
+      "lib/inflate.min.js",
+      "Bridge/output/bridge.min.js",
+      "Bridge/output/clowd-lib.min.js"
+    ]
+  }
+]
