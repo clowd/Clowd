@@ -41,8 +41,8 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CS.Wpf, Version=1.0.6.23, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\CS.Wpf.1.0.6.23\lib\net45\CS.Wpf.dll</HintPath>
+    <Reference Include="CS.Wpf, Version=1.0.6.26, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\CS.Wpf.1.0.6.26\lib\net45\CS.Wpf.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
