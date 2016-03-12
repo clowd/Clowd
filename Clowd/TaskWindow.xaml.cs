@@ -82,7 +82,7 @@ namespace Clowd
             };
         }
 
-        public new async void Show()
+        public new async Task Show()
         {
             if (!this.IsLoaded)
             {
@@ -93,11 +93,11 @@ namespace Clowd
                 Canvas.SetTop(containerGrid, this.Height + 1);
                 (this as Window).Show();
                 await Task.Delay(100);
-                SetHeightTo(containerGrid.DesiredSize.Height);
+                await SetHeightTo(containerGrid.DesiredSize.Height);
             }
             else if (this.IsMinimized)
             {
-                SetHeightTo(containerGrid.DesiredSize.Height);
+                await SetHeightTo(containerGrid.DesiredSize.Height);
             }
             this.IsMinimized = false;
             AutoMinimizeEnabled = true;
@@ -123,6 +123,18 @@ namespace Clowd
             base.Close();
         }
 
+        public async Task ActivateNext()
+        {
+            foreach (var t in TaskList)
+            {
+                if (t.HeroAvailable && t.Status != TaskViewItem.TaskStatus.Executed)
+                {
+                    await Show();
+                    t.HeroCommand.Execute(null);
+                    return;
+                }
+            }
+        }
         public void Notify()
         {
             if (!this.IsVisible)
@@ -408,7 +420,7 @@ namespace Clowd
         {
             get
             {
-                return !String.IsNullOrEmpty(UploadURL) 
+                return !String.IsNullOrEmpty(UploadURL)
                     && (Status == TaskStatus.Complete || Status == TaskStatus.InProgress || Status == TaskStatus.Executed);
             }
         }

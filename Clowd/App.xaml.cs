@@ -677,6 +677,13 @@ namespace Clowd
                 OnFilesReceived(fileArray);
             }
         }
+        public void ShowHome()
+        {
+            if (UploadManager.Authenticated)
+                TemplatedWindow.CreateWindow("Clowd", new HomePage()).Show();
+            else
+                TemplatedWindow.CreateWindow("Clowd", new LoginPage()).Show();
+        }
 
         private async void OnCheckForUpdates(object sender, EventArgs e)
         {
