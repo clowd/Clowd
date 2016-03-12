@@ -359,12 +359,12 @@ namespace Clowd
         public double Progress { get; set; }
         public virtual double OverallWeight { get { return 1; } }
         public virtual bool HeroAvailable { get { return false; } }
-        public RelayUICommand HeroCommand { get; set; }
-        public RelayUICommand OpenCommand { get; set; }
-        public RelayUICommand CopyCommand { get; set; }
-        public RelayUICommand EmailCommand { get; set; }
-        public RelayUICommand EditCommand { get; set; }
-        public RelayUICommand CancelCommand { get; set; }
+        public RelayUICommand HeroCommand { get; protected set; }
+        public RelayUICommand OpenCommand { get; protected set; }
+        public RelayUICommand CopyCommand { get; protected set; }
+        public RelayUICommand EmailCommand { get; protected set; }
+        public RelayUICommand EditCommand { get; protected set; }
+        public RelayUICommand CancelCommand { get; protected set; }
 
         public TaskViewItem()
         {
