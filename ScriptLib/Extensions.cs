@@ -14,5 +14,21 @@ namespace ScriptLib
         {
             Script.Call("saveAs", data, filename);
         }
+
+        [Script("return md5(array);")]
+        public static string Md5(this ArrayBuffer array)
+        {
+            return null;
+        }
+        [Script("return md5(array);")]
+        public static string Md5(this Array array)
+        {
+            return null;
+        }
+        [Script("return md5(str);")]
+        public static string Md5(this string str)
+        {
+            return null;
+        }
     }
 }

@@ -33,6 +33,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Encoder.cs" />
     <Compile Include="App.cs" />
     <Compile Include="Downloader.cs" />
     <Compile Include="Extensions.cs" />
@@ -60,6 +61,7 @@
     <Content Include="build\clowd-lib.js" />
     <Content Include="lib\filesaver.min.js" />
     <Content Include="lib\filesaver.js" />
+    <Content Include="lib\md5.min.js" />
     <Content Include="lib\inflate.min.js" />
     <Content Include="lib\inflate.js" />
   </ItemGroup>
