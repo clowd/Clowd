@@ -4,6 +4,7 @@
     "inputFiles": [
       "lib/filesaver.min.js",
       "lib/inflate.min.js",
+      "lib/md5.min.js",
       "Bridge/output/bridge.min.js",
       "Bridge/output/clowd-lib.min.js"
     ]

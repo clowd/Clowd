@@ -5,11 +5,18 @@
         var exports = { };
         Bridge.define('ScriptLib.App', {
             statics: {
-                main2: function () {
+                config: {
+                    init: function () {
+                        Bridge.ready(this.main);
+                    }
+                },
+                main: function () {
                     var $step = 0,
                         $task1, 
                         $taskResult1, 
                         $jumpFromFinally, 
+                        options, 
+                        contentDiv, 
                         compressed, 
                         decompressed, 
                         blob, 
@@ -18,6 +25,10 @@
                                 $step = Bridge.Array.min([0,1], $step);
                                 switch ($step) {
                                     case 0: {
+                                        options = Bridge.get(ScriptLib.App).getOptions();
+                                        contentDiv = document.getElementById(Bridge.cast(options.contentId, String));
+                                        
+                                        
                                         $task1 = Bridge.get(ScriptLib.App).downloadPartial("http://caesa.ca/ziptest.zip", "test.txt", 253, 15);
                                         $step = 1;
                                         $task1.continueWith($asyncBody, true);
@@ -40,6 +51,9 @@
                         }, arguments);
         
                     $asyncBody();
+                },
+                getOptions: function () {
+                    return clowdOptions;
                 },
                 inflate: function (input, offset, length) {
                     return jszlib_inflate_buffer(input, offset, length, null);
@@ -161,6 +175,15 @@
             statics: {
                 saveAs: function (data, filename) {
                     saveAs(data, filename);
+                },
+                md5: function (array) {
+                    return md5(array);
+                },
+                md5$1: function (array) {
+                    return md5(array);
+                },
+                md5$2: function (str) {
+                    return md5(str);
                 }
             }
         });
