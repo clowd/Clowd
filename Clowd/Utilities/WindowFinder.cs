@@ -10,6 +10,7 @@ using Clowd.Utilities;
 using Clowd.Interop.DwmApi;
 using Clowd.Interop.Shcore;
 using CS.Wpf;
+using ScreenVersusWpf;
 
 namespace Clowd.Utilities
 {
@@ -20,7 +21,7 @@ namespace Clowd.Utilities
 
         private readonly List<CachedWindow> _cachedWindows = new List<CachedWindow>();
         private readonly List<IntPtr> _hWndsAlreadyProcessed = new List<IntPtr>();
-        private readonly Stack<Rect> _parentRects = new Stack<Rect>();
+        private readonly Stack<ScreenRect> _parentRects = new Stack<ScreenRect>();
 
         public void Capture()
         {
@@ -30,19 +31,17 @@ namespace Clowd.Utilities
             this._hWndsAlreadyProcessed.Clear();
 
         }
-        public CachedWindow GetWindowThatContainsPoint(Point point)
+        public CachedWindow GetWindowThatContainsPoint(ScreenPoint point)
         {
-            //point.Offset(DpiScale.UpScaleX(SystemParameters.VirtualScreenLeft), DpiScale.UpScaleY(SystemParameters.VirtualScreenTop));
             foreach (var window in _cachedWindows)
             {
                 if (window.WindowRect.Contains(point))
                 {
                     var temp = window;
-                    //temp.WindowRect.Offset(-DpiScale.UpScaleX(SystemParameters.VirtualScreenLeft), -DpiScale.UpScaleY(SystemParameters.VirtualScreenTop));
                     return temp;
                 }
             }
-            return new CachedWindow() { WindowRect = Rect.Empty };
+            return new CachedWindow() { WindowRect = ScreenRect.Empty };
         }
         public bool IsWindowPartiallyCovered(CachedWindow window)
         {
@@ -67,7 +66,7 @@ namespace Clowd.Utilities
             var depthInt = depth.ToInt32();
             if (!this._hWndsAlreadyProcessed.Contains(hWnd) && USER32.IsWindowVisible(hWnd) && !USER32.IsIconic(hWnd))
             {
-                Rect boundsOfScreenWorkspace = (Rect)this.GetWindowBounds(hWnd);
+                ScreenRect boundsOfScreenWorkspace = this.GetWindowBounds(hWnd);
                 string className;
                 if (this.IsMetroOrPhantomWindow((IntPtr)hWnd, depthInt, out className))
                 {
@@ -75,7 +74,7 @@ namespace Clowd.Utilities
                 }
                 if (this.IsTopLevelMaximizedWindow(hWnd, depthInt))
                 {
-                    boundsOfScreenWorkspace = this.GetBoundsOfScreenContainingRect(boundsOfScreenWorkspace);
+                    boundsOfScreenWorkspace = ScreenTools.GetBoundsOfScreenContaining(boundsOfScreenWorkspace, true);
                 }
                 boundsOfScreenWorkspace = this.GetWindowBoundsClippedToParentWindow(boundsOfScreenWorkspace);
                 boundsOfScreenWorkspace = this.GetWindowBoundsClippedToScreen(boundsOfScreenWorkspace);
@@ -103,7 +102,7 @@ namespace Clowd.Utilities
             }
             return true;
         }
-        private RECT GetWindowBounds(IntPtr hWnd)
+        private ScreenRect GetWindowBounds(IntPtr hWnd)
         {
             bool dwmSuccess = false;
             RECT normalWindowBounds = new RECT();
@@ -124,7 +123,7 @@ namespace Clowd.Utilities
                     throw new Exception(string.Format("Could not get boundary for window with handle: {0}", hWnd));
                 }
             }
-            return normalWindowBounds;
+            return SystemToScreenRect(normalWindowBounds);
         }
         private bool IsMetroOrPhantomWindow(IntPtr hWnd, int depth, out string className)
         {
@@ -185,101 +184,41 @@ namespace Clowd.Utilities
             }
             return USER32.IsZoomed(hWnd);
         }
-        /// <param name="point">The point must be in screen bounds units (relative to the top left of the primary monitor rather than the entire virtual screen)</param>
-        /// <returns>A rectangle in screen bounds units  (relative to the top left of the primary monitor rather than the entire virtual screen)</returns>
-        public Rect GetBoundsOfScreenContainingPoint(Point point, bool workingAreaOnly = true)
-        {
-            POINT p;
-            p.x = (int)point.X;
-            p.y = (int)point.Y;
-            var hMonitor = USER32.MonitorFromPoint(p, MonitorOptions.MONITOR_DEFAULTTONEAREST);
-            MONITORINFO mi = new MONITORINFO();
-            mi.cbSize = (uint)Marshal.SizeOf(mi);
-            bool success = USER32.GetMonitorInfo(hMonitor, ref mi);
-            if (success)
-            {
-                if (mi.rcWork.HasSize() && workingAreaOnly)
-                    return mi.rcWork;
-                return mi.rcMonitor;
-            }
-            var rectangle = SystemInformation.VirtualScreen;
-            return new Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
-        }
-        public Rect GetBoundsOfScreenContainingRect(Rect bounds, bool returnWorkingAreaOnly = true)
-        {
-            RECT rect = bounds;
-            var hMonitor = USER32.MonitorFromRect(ref rect, MonitorOptions.MONITOR_DEFAULTTONEAREST);
-            MONITORINFO mi = new MONITORINFO();
-            mi.cbSize = (uint)Marshal.SizeOf(mi);
-            bool success = USER32.GetMonitorInfo(hMonitor, ref mi);
-            if (success)
-            {
-                if (mi.rcWork.HasSize() && returnWorkingAreaOnly)
-                    return mi.rcWork;
-                return mi.rcMonitor;
-            }
-            var rectangle = SystemInformation.VirtualScreen;
-            return new Rect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
-
-            //if (SysInfo.IsWindows8_1OrLater)
-            //{
-            //    uint dpiX = 0, dpiY = 0;
-            //    if (!SHCORE.GetDpiForMonitor(hMonitor, MONITOR_DPI_TYPE.MDT_EFFECTIVE_DPI, ref dpiX, ref dpiY))
-            //    {
-            //        dpiX = dpiY = 96;
-            //    }
-
-            //}
-
-            //var point = new System.Drawing.Point((int)(bounds.Left + bounds.Width / 2), (int)(bounds.Top + bounds.Height / 2));
-            //Rect retval = Rect.Empty;
-            //Screen[] allScreens = Screen.AllScreens;
-            //for (int i = 0; i < (int)allScreens.Length; i++)
-            //{
-            //    Screen screen = allScreens[i];
-
-            //    if (screen.Bounds.Contains(point))
-            //    {
-            //        if (returnWorkingAreaOnly)
-            //            retval = new Rect(screen.WorkingArea.X, screen.WorkingArea.Y, screen.WorkingArea.Width, screen.WorkingArea.Height);
-            //        else
-            //            retval = new Rect(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height);
-            //    }
-            //}
-            //return retval;
-        }
-        private Rect GetWindowBoundsClippedToParentWindow(Rect windowBounds)
+        private ScreenRect GetWindowBoundsClippedToParentWindow(ScreenRect windowBounds)
         {
             if (this._parentRects.Count > 0)
             {
-                windowBounds.Intersect(this._parentRects.Peek());
+                windowBounds = windowBounds.Intersect(this._parentRects.Peek());
             }
             return windowBounds;
         }
-        private Rect GetWindowBoundsClippedToScreen(Rect windowBounds)
+        private ScreenRect GetWindowBoundsClippedToScreen(ScreenRect windowBounds)
         {
-            Rect rect = new Rect(DpiScale.UpScaleX(SystemParameters.VirtualScreenLeft), DpiScale.UpScaleY(SystemParameters.VirtualScreenTop), DpiScale.UpScaleX(SystemParameters.VirtualScreenWidth), DpiScale.UpScaleY(SystemParameters.VirtualScreenHeight));
-            windowBounds.Intersect(rect);
-            return windowBounds;
+            return ScreenTools.GetVirtualScreen().Intersect(windowBounds);
         }
-        private bool BoundsAreLargeEnoughForCapture(Rect windowBounds, int depth)
+        private bool BoundsAreLargeEnoughForCapture(ScreenRect windowBounds, int depth)
         {
             int minSize = (depth == 0) ? 25 : MinWinCaptureBounds;
 
-            if (windowBounds.Size.Height <= minSize)
+            if (windowBounds.Height <= minSize)
                 return false;
             return windowBounds.Width > minSize;
+        }
+        private ScreenRect SystemToScreenRect(RECT rect)
+        {
+            var scr = SystemInformation.VirtualScreen;
+            return new ScreenRect(rect.left - scr.Left, rect.top - scr.Top, rect.right - rect.left, rect.bottom - rect.top);
         }
         public class CachedWindow
         {
             public IntPtr Handle;
-            public Rect WindowRect;
+            public ScreenRect WindowRect;
             public string Caption;
             public string ClassName;
             public uint ProcessID;
             public override string ToString()
             {
-                return $"{Caption} / {ClassName} [x:{WindowRect.X} y:{WindowRect.Y} w:{WindowRect.Width} h: {WindowRect.Height}]";
+                return $"{Caption} / {ClassName} [x:{WindowRect.Left} y:{WindowRect.Top} w:{WindowRect.Width} h: {WindowRect.Height}]";
             }
         }
     }
