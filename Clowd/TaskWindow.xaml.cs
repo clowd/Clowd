@@ -82,7 +82,7 @@ namespace Clowd
             };
         }
 
-        public new async void Show()
+        public new async Task Show()
         {
             if (!this.IsLoaded)
             {
@@ -93,11 +93,11 @@ namespace Clowd
                 Canvas.SetTop(containerGrid, this.Height + 1);
                 (this as Window).Show();
                 await Task.Delay(100);
-                SetHeightTo(containerGrid.DesiredSize.Height);
+                await SetHeightTo(containerGrid.DesiredSize.Height);
             }
             else if (this.IsMinimized)
             {
-                SetHeightTo(containerGrid.DesiredSize.Height);
+                await SetHeightTo(containerGrid.DesiredSize.Height);
             }
             this.IsMinimized = false;
             AutoMinimizeEnabled = true;
@@ -123,6 +123,18 @@ namespace Clowd
             base.Close();
         }
 
+        public async Task ActivateNext()
+        {
+            foreach (var t in TaskList)
+            {
+                if (t.HeroAvailable && t.Status != TaskViewItem.TaskStatus.Executed)
+                {
+                    await Show();
+                    t.HeroCommand.Execute(null);
+                    return;
+                }
+            }
+        }
         public void Notify()
         {
             if (!this.IsVisible)
@@ -347,12 +359,12 @@ namespace Clowd
         public double Progress { get; set; }
         public virtual double OverallWeight { get { return 1; } }
         public virtual bool HeroAvailable { get { return false; } }
-        public RelayUICommand HeroCommand { get; set; }
-        public RelayUICommand OpenCommand { get; set; }
-        public RelayUICommand CopyCommand { get; set; }
-        public RelayUICommand EmailCommand { get; set; }
-        public RelayUICommand EditCommand { get; set; }
-        public RelayUICommand CancelCommand { get; set; }
+        public RelayUICommand HeroCommand { get; protected set; }
+        public RelayUICommand OpenCommand { get; protected set; }
+        public RelayUICommand CopyCommand { get; protected set; }
+        public RelayUICommand EmailCommand { get; protected set; }
+        public RelayUICommand EditCommand { get; protected set; }
+        public RelayUICommand CancelCommand { get; protected set; }
 
         public TaskViewItem()
         {
@@ -408,7 +420,7 @@ namespace Clowd
         {
             get
             {
-                return !String.IsNullOrEmpty(UploadURL) 
+                return !String.IsNullOrEmpty(UploadURL)
                     && (Status == TaskStatus.Complete || Status == TaskStatus.InProgress || Status == TaskStatus.Executed);
             }
         }

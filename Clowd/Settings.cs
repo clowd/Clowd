@@ -87,13 +87,7 @@ namespace Clowd
 
         [Category("Hotkeys"), DisplayName("General - Open Clowd"), ClassifyIgnoreIfDefault]
         public GlobalTrigger OpenHomeShortcut { get; set; }
-            = new GlobalTrigger(() =>
-                {
-                    if (UploadManager.Authenticated)
-                        TemplatedWindow.CreateWindow("Clowd", new HomePage()).Show();
-                    else
-                        TemplatedWindow.CreateWindow("Clowd", new LoginPage()).Show();
-                });
+            = new GlobalTrigger(() => App.Current.ShowHome());
 
         [ExpandAsCategory("Capture")]
         public CaptureSettings CaptureSettings { get; set; } = new CaptureSettings();
@@ -101,6 +95,10 @@ namespace Clowd
         [ExpandAsCategory("Editor")]
         public EditorSettings EditorSettings { get; set; } = new EditorSettings();
 
+        [ExpandAsCategory("Uploads")]
+        public UploadSettings UploadSettings { get; set; } = new UploadSettings();
+		
+        [Browsable(false)]
         public MagnifierSettings MagnifierSettings { get; set; } = new MagnifierSettings();
     }
 
@@ -146,6 +144,16 @@ namespace Clowd
 
         [PData.Spinnable(1, 2, 1, 10)]
         public int ObjectLineWidth { get; set; } = 2;
+    }
+
+    [ImplementPropertyChanged]
+    public class UploadSettings
+    {
+        [Category("Hotkeys"), DisplayName("Uploads - Activate Next"), ClassifyIgnoreIfDefault]
+        [Description("This hotkey activates the next item in the task window. " +
+                     "For instance, if the next item is an upload it will be copied to the clipboard.")]
+        public GlobalTrigger ActivateNextShortcut { get; set; }
+           = new GlobalTrigger(() => TaskWindow.Current?.ActivateNext());
     }
 
     [ImplementPropertyChanged]
