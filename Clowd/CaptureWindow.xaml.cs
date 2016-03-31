@@ -23,7 +23,8 @@ namespace Clowd
         //Disclaimer, I started writing this using MVVM and then ditched that idea, so code is kind of inconsistant.
 
         public Cursor CanvasCursor { get; private set; } = Cursors.Cross;
-        public Rect CroppingRectangle { get; private set; } = new Rect(0, 0, 0, 0);
+        public ScreenRect CroppingRectangle { get; private set; } = new ScreenRect(0, 0, 0, 0);
+        public Rect CroppingRectangleWpf { get { return CroppingRectangle.ToWpfRect(); } private set { CroppingRectangle = new WpfRect(value).ToScreenRect(); } }
         public BitmapSource GrayScreenImage { get; private set; }
         public IntPtr Handle { get; private set; }
         public BitmapSource ScreenImage { get; private set; }
@@ -32,7 +33,7 @@ namespace Clowd
 
         private bool? capturing = null;
         private bool draggingArea = false;
-        private Point draggingOrigin = default(Point);
+        private ScreenPoint draggingOrigin = default(ScreenPoint);
         private WindowFinder2 windowFinder = new WindowFinder2();
 
         private CaptureWindow()
@@ -153,25 +154,24 @@ namespace Clowd
                 myAdorner.SetupCustomResizeHandling(UpdateCanvasSelection);
                 adornerLayer.Add(myAdorner);
 
-                Point mouseDownPos = default(Point);
-                Rect originRect = default(Rect);
+                ScreenPoint mouseDownPos = default(ScreenPoint);
+                ScreenRect originRect = default(ScreenRect);
                 bool mouseDown = false;
                 MouseButtonEventHandler mouseDownHandler = (sender, e) =>
                 {
                     selectionBorder.CaptureMouse();
                     originRect = CroppingRectangle;
-                    mouseDownPos = e.GetPosition(rootGrid);
+                    mouseDownPos = ScreenTools.GetMousePosition();
                     mouseDown = true;
                 };
                 MouseEventHandler mouseMoveHandler = (sender, e) =>
                 {
                     if (!mouseDown)
                         return;
-                    var cur = e.GetPosition(rootGrid);
-                    var x = mouseDownPos.X - cur.X;
-                    var y = mouseDownPos.Y - cur.Y;
-                    var result = new Rect(originRect.X - x, originRect.Y - y, originRect.Width, originRect.Height);
-                    result.Intersect(new Rect(0, 0, rootGrid.ActualWidth, rootGrid.ActualHeight));
+                    var cur = ScreenTools.GetMousePosition();
+                    var delta = mouseDownPos - cur;
+                    var result = new ScreenRect(originRect.Left - delta.X, originRect.Top - delta.Y, originRect.Width, originRect.Height);
+                    result = result.Intersect(ScreenTools.GetVirtualScreen());
                     UpdateCanvasSelection(result);
                 };
                 MouseButtonEventHandler mouseUpHandler = (sender, e) =>
@@ -213,9 +213,7 @@ namespace Clowd
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            Rect croppingRect = DpiScale.TranslateUpScaleRect(CroppingRectangle);
-            var i32r = new Int32Rect((int)croppingRect.X, (int)croppingRect.Y, (int)croppingRect.Width, (int)croppingRect.Height);
-            var cropped = new CroppedBitmap(ScreenImage, i32r);
+            var cropped = new CroppedBitmap(ScreenImage, CroppingRectangle);
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(cropped));
             var path = System.IO.Path.GetTempFileName() + ".png";
@@ -233,9 +231,7 @@ namespace Clowd
         }
         private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            Rect croppingRect = DpiScale.TranslateUpScaleRect(CroppingRectangle);
-            var i32r = new Int32Rect((int)croppingRect.X, (int)croppingRect.Y, (int)croppingRect.Width, (int)croppingRect.Height);
-            var cropped = new CroppedBitmap(ScreenImage, i32r);
+            var cropped = new CroppedBitmap(ScreenImage, CroppingRectangle);
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(cropped));
             using (var ms = new MemoryStream())
@@ -259,16 +255,9 @@ namespace Clowd
         }
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            Point p = new Point();
-            p.X = System.Windows.Forms.Cursor.Position.X;
-            p.Y = System.Windows.Forms.Cursor.Position.Y;
-            var primaryScreen = windowFinder.GetBoundsOfScreenContainingPoint(p, false);
-            primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
-            primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-            primaryScreen = DpiScale.TranslateDownScaleRect(primaryScreen);
-
+            var screenContainingMouse = ScreenTools.GetBoundsOfScreenContaining(ScreenTools.GetMousePosition());
             UpdateCanvasMode(false);
-            UpdateCanvasSelection(primaryScreen);
+            UpdateCanvasSelection(screenContainingMouse);
         }
         private void CloseExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -283,53 +272,45 @@ namespace Clowd
                 ShowTips = false;
                 ((UIElement)sender).CaptureMouse();
                 draggingArea = true;
-                draggingOrigin = e.GetPosition(rootGrid);
+                draggingOrigin = ScreenTools.GetMousePosition();
             }
         }
         private void RootGrid_MouseMove(object sender, MouseEventArgs e)
         {
-            var currentPoint = e.GetPosition(rootGrid);
+            var currentPoint = ScreenTools.GetMousePosition();
 
             if (ShowMagnifier)
             {
-                var mousePoint = ScreenTools.GetMousePosition();
                 var offset = CalculateOptimalOffset(
                     pixelMagnifier.FinderSize,
-                    mousePoint.ToWpfPoint(),
+                    currentPoint.ToWpfPoint(),
                     pixelMagnifier.FinderSize / 2 + new WpfSize(20, 20));
-                var pos = mousePoint.ToWpfPoint() - pixelMagnifier.FinderSize / 2 + offset;
+                var pos = currentPoint.ToWpfPoint() - pixelMagnifier.FinderSize / 2 + offset;
                 Canvas.SetLeft(pixelMagnifier, pos.X);
                 Canvas.SetTop(pixelMagnifier, pos.Y);
-                pixelMagnifier.DrawMagnifier(mousePoint);
+                pixelMagnifier.DrawMagnifier(currentPoint);
             }
 
             if (draggingArea)
             {
-                var rect = new Rect();
-                rect.X = Math.Min(draggingOrigin.X, currentPoint.X);
-                rect.Y = Math.Min(draggingOrigin.Y, currentPoint.Y);
+                var rect = new ScreenRect();
+                rect.Left = Math.Min(draggingOrigin.X, currentPoint.X);
+                rect.Top = Math.Min(draggingOrigin.Y, currentPoint.Y);
                 rect.Width = Math.Abs(draggingOrigin.X - currentPoint.X) + 1;
                 rect.Height = Math.Abs(draggingOrigin.Y - currentPoint.Y) + 1;
                 UpdateCanvasSelection(rect);
             }
             else
             {
-                var point = currentPoint;
-                point.X += System.Windows.Forms.SystemInformation.VirtualScreen.X;
-                point.Y += System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-                var window = windowFinder.GetWindowThatContainsPoint(DpiScale.UpScalePoint(point));
+                var window = windowFinder.GetWindowThatContainsPoint(currentPoint);
 
-                if (window.WindowRect == Rect.Empty)
+                if (window.WindowRect == ScreenRect.Empty)
                 {
-                    UpdateCanvasSelection(new Rect(0, 0, 0, 0));
+                    UpdateCanvasSelection(new ScreenRect(0, 0, 0, 0));
                 }
                 else
                 {
-                    var rect = window.WindowRect;
-                    rect.X = rect.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
-                    rect.Y = rect.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-                    rect = DpiScale.TranslateDownScaleRect(rect);
-                    UpdateCanvasSelection(rect);
+                    UpdateCanvasSelection(window.WindowRect);
                 }
             }
         }
@@ -344,19 +325,14 @@ namespace Clowd
 
             if (CroppingRectangle.Width < 15 && CroppingRectangle.Height < 15)
             {
-                var wfMouse = new Point(System.Windows.Forms.Cursor.Position.X, System.Windows.Forms.Cursor.Position.Y);
-                var window = windowFinder.GetWindowThatContainsPoint(wfMouse);
-                if (window.WindowRect == Rect.Empty)
+                var window = windowFinder.GetWindowThatContainsPoint(ScreenTools.GetMousePosition());
+                if (window.WindowRect == ScreenRect.Empty)
                 {
-                    UpdateCanvasSelection(new Rect(0, 0, 0, 0));
+                    UpdateCanvasSelection(new ScreenRect(0, 0, 0, 0));
                 }
                 else
                 {
-                    var rect = window.WindowRect;
-                    rect.X = rect.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
-                    rect.Y = rect.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-                    rect = DpiScale.TranslateDownScaleRect(rect);
-                    UpdateCanvasSelection(rect);
+                    UpdateCanvasSelection(window.WindowRect);
                 }
             }
         }
@@ -406,47 +382,34 @@ namespace Clowd
         }
         private void UpdateCanvasPlacement()
         {
+#warning TODO: some of these checks are in screen pixels
             var selection = CroppingRectangle;
-            //translate the selction to real screen coordinates.
-            var realSelection = DpiScale.TranslateUpScaleRect(selection);
-            realSelection.X = realSelection.X + System.Windows.Forms.SystemInformation.VirtualScreen.X;
-            realSelection.Y = realSelection.Y + System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-            //get bounds of current screen, in relation to the current window.
-            var primaryScreen = windowFinder.GetBoundsOfScreenContainingRect(realSelection, false);
-            primaryScreen.X = primaryScreen.X - System.Windows.Forms.SystemInformation.VirtualScreen.X;
-            primaryScreen.Y = primaryScreen.Y - System.Windows.Forms.SystemInformation.VirtualScreen.Y;
-            primaryScreen = DpiScale.TranslateDownScaleRect(primaryScreen);
-            if (primaryScreen == Rect.Empty)
-                return;
-            var bottomSpace = Math.Max(primaryScreen.Bottom - selection.Bottom, 0);
+            var selectionScreen = ScreenTools.GetBoundsOfScreenContaining(selection);
+            var bottomSpace = ScreenTools.ScreenToWpf(Math.Max(selectionScreen.Bottom - selection.Bottom, 0));
             if (capturing == true)
             {
-                areaSizeIndicatorWidth.Text = Math.Round(DpiScale.UpScaleX(selection.Width)).ToString();
-                areaSizeIndicatorHeight.Text = Math.Round(DpiScale.UpScaleY(selection.Height)).ToString();
-                double indLeft, indTop;
-                indLeft = selection.Left + (selection.Width / 2) - areaSizeIndicator.ActualWidth / 2;
-                if (bottomSpace >= 30)
-                {
-                    if (bottomSpace >= 40)
-                        indTop = selection.Bottom + 5;
-                    else
-                        indTop = selection.Bottom + 1;
-                }
+                areaSizeIndicatorWidth.Text = selection.Width.ToString();
+                areaSizeIndicatorHeight.Text = selection.Height.ToString();
+                var indicatorPos = selection.ToWpfRect();
+                indicatorPos.Left += (indicatorPos.Width / 2) - areaSizeIndicator.ActualWidth / 2;
+                if (bottomSpace < 30)
+                    indicatorPos.Top = indicatorPos.Bottom - 35;
+                else if (bottomSpace >= 40)
+                    indicatorPos.Top = indicatorPos.Bottom + 5;
                 else
-                    indTop = selection.Bottom - 35;
-                Canvas.SetLeft(areaSizeIndicator, indLeft);
-                Canvas.SetTop(areaSizeIndicator, indTop);
+                    indicatorPos.Top = indicatorPos.Bottom + 1;
+                Canvas.SetLeft(areaSizeIndicator, indicatorPos.Left);
+                Canvas.SetTop(areaSizeIndicator, indicatorPos.Top);
             }
             else if (capturing == false)
             {
-                var rightSpace = Math.Max(primaryScreen.Right - selection.Right, 0);
-                var leftSpace = Math.Max(selection.Left - primaryScreen.Left, 0);
+                var rightSpace = ScreenTools.ScreenToWpf(Math.Max(selectionScreen.Right - selection.Right, 0));
+                var leftSpace = ScreenTools.ScreenToWpf(Math.Max(selection.Left - selectionScreen.Left, 0));
                 double indLeft = 0, indTop = 0;
                 //we want to display (and clip) the controls on/to the primary screen -
                 //where the primary screen is the screen that contains the center of the cropping rectangle
-                var intersecting = primaryScreen;
-                intersecting.Intersect(CroppingRectangle);
-                if (intersecting == Rect.Empty)
+                var intersecting = selectionScreen.Intersect(CroppingRectangle);
+                if (intersecting == ScreenRect.Empty)
                     return;
                 if (bottomSpace >= 50)
                 {
@@ -490,15 +453,15 @@ namespace Clowd
                     indLeft = intersecting.Left + intersecting.Width / 2 - toolActionBar.ActualWidth / 2;
                     indTop = intersecting.Bottom - 70;
                 }
-                if (indLeft < primaryScreen.Left)
-                    indLeft = primaryScreen.Left;
-                else if (indLeft + toolActionBar.ActualWidth > primaryScreen.Right)
-                    indLeft = primaryScreen.Right - toolActionBar.ActualWidth;
+                if (indLeft < selectionScreen.Left)
+                    indLeft = selectionScreen.Left;
+                else if (indLeft + toolActionBar.ActualWidth > selectionScreen.Right)
+                    indLeft = selectionScreen.Right - toolActionBar.ActualWidth;
                 Canvas.SetLeft(toolActionBar, indLeft);
                 Canvas.SetTop(toolActionBar, indTop);
             }
         }
-        private void UpdateCanvasSelection(Rect selection)
+        private void UpdateCanvasSelection(ScreenRect selection)
         {
             CroppingRectangle = selection;
             UpdateCanvasPlacement();

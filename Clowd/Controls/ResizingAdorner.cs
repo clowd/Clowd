@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ScreenVersusWpf;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -14,13 +15,13 @@ namespace Clowd.Controls
         // Resizing adorner uses Thumbs for visual elements.  
         // The Thumbs have built-in mouse input handling.
         Thumb topLeft, topRight, bottomLeft, bottomRight, topMiddle, rightMiddle, leftMiddle, bottomMiddle;
-        Action<Rect> customResizeHandler = null;
+        Action<ScreenRect> customResizeHandler = null;
 
 
         // To store and manage the adorner's visual children.
         VisualCollection visualChildren;
 
-        public void SetupCustomResizeHandling(Action<Rect> newSizeHandler)
+        public void SetupCustomResizeHandling(Action<ScreenRect> newSizeHandler)
         {
             customResizeHandler = newSizeHandler;
         }
@@ -78,7 +79,7 @@ namespace Clowd.Controls
             }
             else
             {
-                customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), width, height));
+                customResizeHandler(new WpfRect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), width, height).ToScreenRect());
             }
         }
         private void HandleTopRight(object sender, DragDeltaEventArgs args)
@@ -105,7 +106,7 @@ namespace Clowd.Controls
             }
             else
             {
-                customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), top_new, new_width, height_new));
+                customResizeHandler(new WpfRect(Canvas.GetLeft(adornedElement), top_new, new_width, height_new).ToScreenRect());
             }
         }
         private void HandleTopLeft(object sender, DragDeltaEventArgs args)
@@ -142,7 +143,7 @@ namespace Clowd.Controls
             }
             else
             {
-                customResizeHandler(new Rect(left_new, top_new, width_new, height_new));
+                customResizeHandler(new WpfRect(left_new, top_new, width_new, height_new).ToScreenRect());
             }
         }
         private void HandleBottomLeft(object sender, DragDeltaEventArgs args)
@@ -174,7 +175,7 @@ namespace Clowd.Controls
             }
             else
             {
-                customResizeHandler(new Rect(left_new, Canvas.GetTop(adornedElement), width_new, height_new));
+                customResizeHandler(new WpfRect(left_new, Canvas.GetTop(adornedElement), width_new, height_new).ToScreenRect());
             }
         }
 
@@ -198,7 +199,7 @@ namespace Clowd.Controls
             }
             else
             {
-                customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), adornedElement.Width, height));
+                customResizeHandler(new WpfRect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), adornedElement.Width, height).ToScreenRect());
             }
         }
         private void HandleLeftMiddle(object sender, DragDeltaEventArgs args)
@@ -226,7 +227,7 @@ namespace Clowd.Controls
             }
             else
             {
-                customResizeHandler(new Rect(left_new, Canvas.GetTop(adornedElement), width_new, adornedElement.Height));
+                customResizeHandler(new WpfRect(left_new, Canvas.GetTop(adornedElement), width_new, adornedElement.Height).ToScreenRect());
             }
         }
         private void HandleRightMiddle(object sender, DragDeltaEventArgs args)
@@ -249,7 +250,7 @@ namespace Clowd.Controls
             }
             else
             {
-                customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), width, adornedElement.Height));
+                customResizeHandler(new WpfRect(Canvas.GetLeft(adornedElement), Canvas.GetTop(adornedElement), width, adornedElement.Height).ToScreenRect());
             }
         }
         private void HandleTopMiddle(object sender, DragDeltaEventArgs args)
@@ -274,7 +275,7 @@ namespace Clowd.Controls
             }
             else
             {
-                customResizeHandler(new Rect(Canvas.GetLeft(adornedElement), top_new, adornedElement.Width, height_new));
+                customResizeHandler(new WpfRect(Canvas.GetLeft(adornedElement), top_new, adornedElement.Width, height_new).ToScreenRect());
             }
         }
 
