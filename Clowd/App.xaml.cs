@@ -460,6 +460,7 @@ namespace Clowd
             double logY = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSY);
             Interop.USER32.ReleaseDC(IntPtr.Zero, dC);
             DpiScale.ScaleUISetup(logX, logY);
+            ScreenVersusWpf.ScreenTools.InitializeDpi(ScreenVersusWpf.ScreenTools.GetScreenDpi());
         }
         private void SetupTrayIcon()
         {

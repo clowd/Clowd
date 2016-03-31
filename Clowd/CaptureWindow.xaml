@@ -74,15 +74,15 @@
         <Image Name="imageForeground"  Source="{Binding ScreenImage}" Stretch="Fill"
                ClipToBounds="True" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
             <Image.Clip>
-                <RectangleGeometry Rect="{Binding CroppingRectangle}"/>
+                <RectangleGeometry Rect="{Binding CroppingRectangleWpf}"/>
             </Image.Clip>
         </Image>
         <Canvas Name="dynamicCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
             <UserControl Name="selectionBorder"
-                     Width="{Binding CroppingRectangle.Width }"
-                     Height="{Binding CroppingRectangle.Height }"
-                     Canvas.Left="{Binding CroppingRectangle.X }"
-                     Canvas.Top="{Binding  CroppingRectangle.Y }">
+                     Width="{Binding CroppingRectangleWpf.Width }"
+                     Height="{Binding CroppingRectangleWpf.Height }"
+                     Canvas.Left="{Binding CroppingRectangleWpf.Left }"
+                     Canvas.Top="{Binding  CroppingRectangleWpf.Top }">
                 <UserControl.Template>
                     <ControlTemplate TargetType="{x:Type UserControl}">
                         <ControlTemplate.Resources>
