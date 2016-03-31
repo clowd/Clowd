@@ -1,0 +1,9 @@
+{
+  "output": "Bridge/output",
+  "outputFormatting": "Both",
+  "fileName": "clowd-lib.js",
+  "module": "clowd-lib",
+  "outputBy": "Project"
+
+  // http://bridge.net/kb/global-configuration
+}
