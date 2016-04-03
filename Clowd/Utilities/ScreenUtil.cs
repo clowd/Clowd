@@ -1,25 +1,18 @@
 ﻿using Clowd.Interop;
 using Clowd.Interop.Gdi32;
+using ScreenVersusWpf;
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Forms;
 
 namespace Clowd.Utilities
 {
     public static class ScreenUtil
     {
-        public static Rectangle VirtualScreenBounds => new Rectangle(0, 0, SystemInformation.VirtualScreen.Width, SystemInformation.VirtualScreen.Height);
-
-        public static Bitmap Capture(Rectangle? bounds = null, bool captureCursor = false)
+        public static Bitmap Capture(ScreenRect? bounds = null, bool captureCursor = false)
         {
-            var rect = bounds == null ? VirtualScreenBounds : bounds.GetValueOrDefault();
+            var rect = (bounds ?? ScreenTools.VirtualScreen.Bounds).ToSystem();
 
             var bitmap = new Bitmap(rect.Width, rect.Height, PixelFormat.Format24bppRgb);
             using (Graphics g = Graphics.FromImage(bitmap))

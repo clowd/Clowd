@@ -1,7 +1,7 @@
 ﻿using Clowd.Controls;
 using Clowd.Utilities;
+using ScreenVersusWpf;
 using System;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,8 +12,6 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using CS.Wpf;
-using ScreenVersusWpf;
 
 namespace Clowd
 {
@@ -90,8 +88,7 @@ namespace Clowd
         }
         private void CaptureBitmap()
         {
-            using (var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen,
-                App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+            using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
             {
                 ScreenImage = source.ToBitmapSource();
                 GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
@@ -171,7 +168,7 @@ namespace Clowd
                     var cur = ScreenTools.GetMousePosition();
                     var delta = mouseDownPos - cur;
                     var result = new ScreenRect(originRect.Left - delta.X, originRect.Top - delta.Y, originRect.Width, originRect.Height);
-                    result = result.Intersect(ScreenTools.GetVirtualScreen());
+                    result = result.Intersect(ScreenTools.VirtualScreen.Bounds);
                     UpdateCanvasSelection(result);
                 };
                 MouseButtonEventHandler mouseUpHandler = (sender, e) =>
@@ -199,16 +196,53 @@ namespace Clowd
             }
         }
 
-        private WpfSize CalculateOptimalOffset(WpfSize objectSize, WpfPoint targetPoint, WpfSize desiredOffsetFromCenter)
+        private static void PositionWithinAScreen(FrameworkElement element, WpfPoint anchor, HorizontalAlignment horz, VerticalAlignment vert, double distance)
         {
-            var screenBounds = ScreenTools.GetBoundsOfScreenContaining(targetPoint.ToScreenPoint()).ToWpfRect();
+            var scr = ScreenTools.Screens.FirstOrDefault(s => s.Bounds.ToWpfRect().Contains(anchor));
+            if (scr == null)
+                scr = ScreenTools.Screens.OrderBy(s => Math.Min(
+                     Math.Min(Math.Abs(s.Bounds.Left - anchor.X), Math.Abs(s.Bounds.Right - anchor.X)),
+                     Math.Min(Math.Abs(s.Bounds.Top - anchor.Y), Math.Abs(s.Bounds.Bottom - anchor.Y)))
+                ).First();
+            var screen = scr.Bounds.ToWpfRect();
 
-            bool fitsX = screenBounds.Left + screenBounds.Width >= targetPoint.X + (objectSize.Width / 2) + desiredOffsetFromCenter.Width;
-            bool fitsY = screenBounds.Top + screenBounds.Height >= targetPoint.Y + (objectSize.Height / 2) + desiredOffsetFromCenter.Height;
+            var alignCoordinate = RT.Util.Ut.Lambda((int mode, double anchorXY, double elementSize, double screenMin, double screenMax) =>
+            {
+                for (int repeat = 0; repeat < 2; repeat++) // repeat twice to allow a right-align to flip left and vice versa
+                {
+                    if (mode > 0) // right/bottom alignment: left/top edge aligns with anchor
+                    {
+                        var xy = anchorXY + distance;
+                        if (xy + elementSize < screenMax)
+                            return xy; // it fits
+                        else if (anchorXY + elementSize < screenMax)
+                            return screenMax - elementSize; // it fits if we shrink the distance from anchor point
+                        else // it doesn't fit either way; flip alignment
+                            mode = -1;
+                    }
+                    if (mode < 0) // left/top alignment: right/bottom edge aligns with anchor
+                    {
+                        var xy = anchorXY - distance - elementSize;
+                        if (xy >= screenMin)
+                            return xy; // it fits
+                        else if (anchorXY - elementSize >= screenMin)
+                            return screenMin; // it fits if we shrink the distance from anchor point
+                        else
+                            mode = 1; // it doesn't fit either way
+                    }
+                }
+                // We're here either because the element is center-aligned or is larger than the screen
+                return anchorXY - elementSize / 2;
+            });
 
-            return new WpfSize(
-                fitsX ? desiredOffsetFromCenter.Width : -desiredOffsetFromCenter.Width,
-                fitsY ? desiredOffsetFromCenter.Height : -desiredOffsetFromCenter.Height);
+            double x = alignCoordinate(horz == HorizontalAlignment.Left ? -1 : horz == HorizontalAlignment.Right ? 1 : 0, anchor.X, element.ActualWidth, screen.Left, screen.Right);
+            double y = alignCoordinate(vert == VerticalAlignment.Top ? -1 : vert == VerticalAlignment.Bottom ? 1 : 0, anchor.Y, element.ActualHeight, screen.Top, screen.Bottom);
+
+            x = Math.Max(screen.Left, Math.Min(screen.Right - element.ActualWidth, x));
+            y = Math.Max(screen.Top, Math.Min(screen.Bottom - element.ActualHeight, y));
+
+            Canvas.SetLeft(element, x);
+            Canvas.SetTop(element, y);
         }
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -255,7 +289,7 @@ namespace Clowd
         }
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            var screenContainingMouse = ScreenTools.GetBoundsOfScreenContaining(ScreenTools.GetMousePosition());
+            var screenContainingMouse = ScreenTools.GetScreenContaining(ScreenTools.GetMousePosition()).Bounds;
             UpdateCanvasMode(false);
             UpdateCanvasSelection(screenContainingMouse);
         }
@@ -281,13 +315,7 @@ namespace Clowd
 
             if (ShowMagnifier)
             {
-                var offset = CalculateOptimalOffset(
-                    pixelMagnifier.FinderSize,
-                    currentPoint.ToWpfPoint(),
-                    pixelMagnifier.FinderSize / 2 + new WpfSize(20, 20));
-                var pos = currentPoint.ToWpfPoint() - pixelMagnifier.FinderSize / 2 + offset;
-                Canvas.SetLeft(pixelMagnifier, pos.X);
-                Canvas.SetTop(pixelMagnifier, pos.Y);
+                PositionWithinAScreen(pixelMagnifier, currentPoint.ToWpfPoint(), HorizontalAlignment.Right, VerticalAlignment.Bottom, 20);
                 pixelMagnifier.DrawMagnifier(currentPoint);
             }
 
@@ -380,37 +408,28 @@ namespace Clowd
             args.RoutedEvent = MouseMoveEvent;
             rootGrid.RaiseEvent(args);
         }
+
         private void UpdateCanvasPlacement()
         {
-#warning TODO: some of these checks are in screen pixels
-            var selection = CroppingRectangle;
-            var selectionScreen = ScreenTools.GetBoundsOfScreenContaining(selection);
-            var bottomSpace = ScreenTools.ScreenToWpf(Math.Max(selectionScreen.Bottom - selection.Bottom, 0));
+            var selection = CroppingRectangle.ToWpfRect();
             if (capturing == true)
             {
-                areaSizeIndicatorWidth.Text = selection.Width.ToString();
-                areaSizeIndicatorHeight.Text = selection.Height.ToString();
-                var indicatorPos = selection.ToWpfRect();
-                indicatorPos.Left += (indicatorPos.Width / 2) - areaSizeIndicator.ActualWidth / 2;
-                if (bottomSpace < 30)
-                    indicatorPos.Top = indicatorPos.Bottom - 35;
-                else if (bottomSpace >= 40)
-                    indicatorPos.Top = indicatorPos.Bottom + 5;
-                else
-                    indicatorPos.Top = indicatorPos.Bottom + 1;
-                Canvas.SetLeft(areaSizeIndicator, indicatorPos.Left);
-                Canvas.SetTop(areaSizeIndicator, indicatorPos.Top);
+                areaSizeIndicatorWidth.Text = CroppingRectangle.Width.ToString();
+                areaSizeIndicatorHeight.Text = CroppingRectangle.Height.ToString();
+                PositionWithinAScreen(areaSizeIndicator, new WpfPoint(selection.Left + selection.Width / 2, selection.Bottom), HorizontalAlignment.Center, VerticalAlignment.Bottom, 5);
             }
             else if (capturing == false)
             {
-                var rightSpace = ScreenTools.ScreenToWpf(Math.Max(selectionScreen.Right - selection.Right, 0));
-                var leftSpace = ScreenTools.ScreenToWpf(Math.Max(selection.Left - selectionScreen.Left, 0));
+                var selectionScreen = ScreenTools.GetScreenContaining(CroppingRectangle).Bounds.ToWpfRect();
+                var bottomSpace = Math.Max(selectionScreen.Bottom - selection.Bottom, 0);
+                var rightSpace = Math.Max(selectionScreen.Right - selection.Right, 0);
+                var leftSpace = Math.Max(selection.Left - selectionScreen.Left, 0);
                 double indLeft = 0, indTop = 0;
                 //we want to display (and clip) the controls on/to the primary screen -
                 //where the primary screen is the screen that contains the center of the cropping rectangle
-                var intersecting = selectionScreen.Intersect(CroppingRectangle);
-                if (intersecting == ScreenRect.Empty)
-                    return;
+                var intersecting = selectionScreen.Intersect(selection);
+                if (intersecting == WpfRect.Empty)
+                    return; // not supposed to happen since selectionScreen contains the center of selection rect
                 if (bottomSpace >= 50)
                 {
                     if (toolActionBarStackPanel.Orientation == Orientation.Vertical)
@@ -461,6 +480,7 @@ namespace Clowd
                 Canvas.SetTop(toolActionBar, indTop);
             }
         }
+
         private void UpdateCanvasSelection(ScreenRect selection)
         {
             CroppingRectangle = selection;

@@ -460,7 +460,7 @@ namespace Clowd
             double logY = (double)Interop.Gdi32.GDI32.GetDeviceCaps(dC, Interop.Gdi32.DEVICECAP.LOGPIXELSY);
             Interop.USER32.ReleaseDC(IntPtr.Zero, dC);
             DpiScale.ScaleUISetup(logX, logY);
-            ScreenVersusWpf.ScreenTools.InitializeDpi(ScreenVersusWpf.ScreenTools.GetScreenDpi());
+            ScreenVersusWpf.ScreenTools.InitializeDpi(ScreenVersusWpf.ScreenTools.GetSystemDpi());
         }
         private void SetupTrayIcon()
         {
@@ -629,8 +629,7 @@ namespace Clowd
         public void QuickCapture()
         {
             using (MemoryStream ms = new MemoryStream())
-            using (var source = ScreenUtil.Capture(System.Windows.Forms.SystemInformation.VirtualScreen,
-                App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+            using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
             {
                 source.Save(ms, ImageFormat.Png);
                 var task = UploadManager.Upload(ms.ToArray(), "clowd-default.png");
