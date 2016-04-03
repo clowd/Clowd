@@ -4,8 +4,8 @@
 #define MyAppPublisher "Caesa Consulting Ltd."
 #define MyAppURL "http://clowd.ca"
 #define MyAppExeName "Clowd.exe"
-#define MySourceDirectory "C:\Users\Caelan\Source\Workspaces\Clowd\Clowd\bin\Release"
-#define MyBuildDirectory "C:\Users\Caelan\Source\Workspaces\Clowd\tools\installer"
+#define MySourceDirectory "C:\Users\Caelan\Source\Repos\clowd-win\Clowd\bin\Release"
+#define MyBuildDirectory "C:\Users\Caelan\Source\Repos\clowd-win\tools\installer"
 #define MyContextName "Upload with Clowd"
 
 [Setup]
@@ -14,7 +14,7 @@ AppName={#MyAppName}
 AppVerName={#MyAppName}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppCopyright=Copyright © 2014-2015 Caesa Consulting Ltd.
+AppCopyright=Copyright © 2014-2016 Caesa Consulting Ltd.
 AppMutex=ClowdMutex000
 DefaultDirName={pf}\{#MyAppName}
 DisableDirPage=yes
