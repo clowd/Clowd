@@ -74,7 +74,7 @@ namespace Clowd.Utilities
                 }
                 if (this.IsTopLevelMaximizedWindow(hWnd, depthInt))
                 {
-                    boundsOfScreenWorkspace = ScreenTools.GetBoundsOfScreenContaining(boundsOfScreenWorkspace, true);
+                    boundsOfScreenWorkspace = ScreenTools.GetScreenContaining(boundsOfScreenWorkspace).WorkingArea;
                 }
                 boundsOfScreenWorkspace = this.GetWindowBoundsClippedToParentWindow(boundsOfScreenWorkspace);
                 boundsOfScreenWorkspace = this.GetWindowBoundsClippedToScreen(boundsOfScreenWorkspace);
@@ -123,7 +123,7 @@ namespace Clowd.Utilities
                     throw new Exception(string.Format("Could not get boundary for window with handle: {0}", hWnd));
                 }
             }
-            return SystemToScreenRect(normalWindowBounds);
+            return ScreenRect.FromSystem(normalWindowBounds);
         }
         private bool IsMetroOrPhantomWindow(IntPtr hWnd, int depth, out string className)
         {
@@ -194,7 +194,7 @@ namespace Clowd.Utilities
         }
         private ScreenRect GetWindowBoundsClippedToScreen(ScreenRect windowBounds)
         {
-            return ScreenTools.GetVirtualScreen().Intersect(windowBounds);
+            return ScreenTools.VirtualScreen.Bounds.Intersect(windowBounds);
         }
         private bool BoundsAreLargeEnoughForCapture(ScreenRect windowBounds, int depth)
         {
@@ -203,11 +203,6 @@ namespace Clowd.Utilities
             if (windowBounds.Height <= minSize)
                 return false;
             return windowBounds.Width > minSize;
-        }
-        private ScreenRect SystemToScreenRect(RECT rect)
-        {
-            var scr = SystemInformation.VirtualScreen;
-            return new ScreenRect(rect.left - scr.Left, rect.top - scr.Top, rect.right - rect.left, rect.bottom - rect.top);
         }
         public class CachedWindow
         {
