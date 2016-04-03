@@ -146,7 +146,7 @@
   </Target>
   -->
   <PropertyGroup>
-    <PostBuildEvent>"C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe" sign /d "Clowd Updater" /du "http://clowd.ca" /f "C:\Users\Caelan\Documents\Certificates\codesign.pfx" /t "http://timestamp.verisign.com/scripts/timestamp.dll" /v $(TargetDir)NAppUpdate.Updater.exe
+    <PostBuildEvent>"C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe" sign /d "Clowd Update" /du "http://clowd.ca" /f "C:\Users\Caelan\Documents\Certificates\codesign.pfx" /t "http://timestamp.verisign.com/scripts/timestamp.dll" /v $(TargetDir)NAppUpdate.Updater.exe
 mkdir "$(SolutionDir)NAppUpdate.Framework\Updater"
 
 copy /y "$(TargetDir)NAppUpdate.Updater.exe" "$(SolutionDir)NAppUpdate.Framework\Updater\Updater.exe"</PostBuildEvent>
