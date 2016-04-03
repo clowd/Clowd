@@ -11,6 +11,7 @@ using System.Windows.Forms;
 using System.Windows.Threading;
 using Clowd.Interop;
 using RT.Util.Drawing;
+using ScreenVersusWpf;
 
 namespace Clowd.Utilities
 {
@@ -18,7 +19,7 @@ namespace Clowd.Utilities
     {
         public Image Result { get; private set; }
         private readonly IntPtr _hWnd;
-        private Rectangle _region;
+        private ScreenRect _region;
         private List<Image> _images;
         private DispatcherTimer _timer;
         private ScrollMode _mode;
@@ -453,7 +454,7 @@ namespace Clowd.Utilities
         private void ScrollToTop()
         {
             FocusWindow();
-            _region = USER32EX.GetWindowRectangle(_hWnd);
+            _region = ScreenRect.FromSystem(USER32EX.GetWindowRectangle(_hWnd));
             SendKeys.SendWait("{HOME}");
             SendKeys.Flush();
             USER32.SendMessage(_hWnd, (uint)WindowMessage.WM_VSCROLL, (IntPtr)6/*SB_TOP*/, (IntPtr)0);
