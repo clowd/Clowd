@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Xml.Serialization;
 
 namespace DrawToolsLib.Graphics
 {
@@ -21,7 +22,22 @@ namespace DrawToolsLib.Graphics
         }
 
         private string _fileName;
-        private readonly BitmapSource _imageCache;
+
+        [XmlIgnore]
+        private BitmapSource _imageBacking;
+        [XmlIgnore]
+        private BitmapSource _imageCache
+        {
+            get
+            {
+                if(_imageBacking == null)
+                    _imageBacking = BitmapFrame.Create(
+                        new Uri(_fileName, UriKind.Absolute),
+                        BitmapCreateOptions.None,
+                        BitmapCacheOption.OnLoad);
+                return _imageBacking;
+            }
+        }
 
         protected GraphicsImage()
         {
@@ -37,13 +53,6 @@ namespace DrawToolsLib.Graphics
             _fileName = filePath;
             if (!File.Exists(_fileName))
                 throw new FileNotFoundException(_fileName);
-
-            BitmapSource myImage = BitmapFrame.Create(
-                new Uri(_fileName, UriKind.Absolute),
-                BitmapCreateOptions.None,
-                BitmapCacheOption.OnLoad);
-
-            _imageCache = myImage;
         }
 
         internal override void DrawRectangle(DrawingContext drawingContext)

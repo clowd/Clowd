@@ -978,11 +978,14 @@ namespace DrawToolsLib
                     helper = (SerializationHelper)xml.Deserialize(stream);
                 }
 
+                var transformX = (-helper.Left - helper.Width / 2) + ((ActualWidth / 2 - ContentOffset.X) / ContentScale);
+                var transformY = (-helper.Top - helper.Height / 2) + ((ActualHeight / 2 - ContentOffset.Y) / ContentScale);
+
                 HelperFunctions.UnselectAll(this);
                 var newGraphics = helper.Graphics.Select(s => s.CreateVisual()).ToArray();
                 foreach (var g in newGraphics)
                 {
-                    g.Graphic.Move(-helper.Left - helper.Width / 2, -helper.Top - helper.Height / 2);
+                    g.Graphic.Move(transformX, transformY);
                     g.ActualScale = ActualScale;
                     g.IsSelected = true;
                     graphicsList.Add(g);
@@ -1806,6 +1809,9 @@ namespace DrawToolsLib
         public static readonly DependencyProperty ContentScaleProperty =
             DependencyProperty.Register("ContentScale", typeof(double), typeof(DrawingCanvas),
                 new PropertyMetadata(1d, ContentScaleChanged));
+
+        public Point WorldOffset => new Point((ActualWidth / 2 - ContentOffset.X) / ContentScale,
+           (ActualHeight / 2 - ContentOffset.Y) / ContentScale);
 
         private static void ContentScaleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
