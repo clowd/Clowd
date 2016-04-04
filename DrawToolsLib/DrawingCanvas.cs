@@ -1,16 +1,13 @@
+using DrawToolsLib.Graphics;
 using System;
-using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Diagnostics;
-using System.IO;
 using System.Xml.Serialization;
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows.Media.Imaging;
-using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
@@ -1816,6 +1813,10 @@ namespace DrawToolsLib
             var scale = (double)e.NewValue;
             me._scaleTransform.ScaleX = scale;
             me._scaleTransform.ScaleY = scale;
+
+            var worldCX = (me.ActualWidth / 2 - me.ContentOffset.X) / (double)e.OldValue;
+            var worldCY = (me.ActualHeight / 2 - me.ContentOffset.Y) / (double)e.OldValue;
+            me.ContentOffset = new Point(me.ActualWidth / 2 - worldCX * (double)e.NewValue, me.ActualHeight / 2 - worldCY * (double)e.NewValue);
         }
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
