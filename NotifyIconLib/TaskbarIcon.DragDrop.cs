@@ -8,7 +8,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Interop;
+using NotifyIconLib.Interop;
 using ScreenVersusWpf;
+using Point = System.Windows.Point;
 
 namespace NotifyIconLib
 {
@@ -164,12 +167,15 @@ namespace NotifyIconLib
                 taskbarCache = GetTaskBarData();
                 UpdateDropWindowFromCache();
                 lastStateRefresh = DateTime.Now;
+                Console.WriteLine("Refreshed: " + stateCache.Location + " (" + point + ")");
             }
             if (dragging && stateCache.Location.Contains(point) && stateCache.State == TaskbarIconState.Pinned)
             {
                 if (leftMouseDown && !((Rect)taskbarCache.rc).Contains(mouseDownPoint) && !dropWindow.IsVisible)
                 {
                     dropWindow.Show();
+                    IntPtr windowHandle = new WindowInteropHelper(dropWindow).Handle;
+                    WinApi.SetWindowPos(windowHandle, 0, 0, 0, 0, 0, WinApi.SWP_NOMOVE | WinApi.SWP_NOSIZE | WinApi.SWP_SHOWWINDOW | WinApi.SWP_NOACTIVATE);
                 }
             }
             else if (dropWindow.IsVisible)

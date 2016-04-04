@@ -85,5 +85,13 @@ namespace NotifyIconLib.Interop
 
         [DllImport("USER32.DLL", SetLastError = true)]
         public static extern bool GetCursorPos(ref Point lpPoint);
+
+        public const int SWP_NOMOVE = 0x0002;
+        public const int SWP_NOSIZE = 0x0001;
+        public const int SWP_SHOWWINDOW = 0x0040;
+        public const int SWP_NOACTIVATE = 0x0010;
+        [DllImport("user32.dll", EntryPoint = "SetWindowPos")]
+        public static extern IntPtr SetWindowPos(IntPtr hWnd, int hWndInsertAfter, int x, int Y, int cx, int cy, int wFlags);
+
     }
 }
