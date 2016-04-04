@@ -293,10 +293,10 @@ namespace DrawToolsLib.Graphics
         internal virtual void DrawRectangle(DrawingContext drawingContext)
         {
             var brush = new SolidColorBrush(ObjectColor);
-            drawingContext.DrawRectangle(
+            drawingContext.DrawRoundedRectangle(
                 _filled ? brush : null,
                 new Pen(brush, ActualLineWidth),
-                Bounds);
+                Bounds, LineWidth, LineWidth);
         }
         public override GraphicsBase Clone()
         {
