@@ -110,8 +110,6 @@ namespace DrawToolsLib
             _artworkRectangle = new Border();
             _artworkRectangle.Background = new SolidColorBrush(Colors.White);
             Children.Add(_artworkRectangle);
-
-            _originIndicator = new OriginIndicator();
         }
 
 
@@ -1174,8 +1172,7 @@ namespace DrawToolsLib
 
         private Border _clickable;
         private Border _artworkRectangle;
-        private OriginIndicator _originIndicator;
-        private const int _extraVisualsCount = 3; // only includes the permanent extra visuals
+        private const int _extraVisualsCount = 2; // only includes the permanent extra visuals
 
         protected override int VisualChildrenCount
         {
@@ -1208,10 +1205,6 @@ namespace DrawToolsLib
             else if (index == 1)
             {
                 return _artworkRectangle;
-            }
-            else if (index == 2)
-            {
-                return _originIndicator;
             }
             else if (index - _extraVisualsCount < graphicsList.Count)
             {
