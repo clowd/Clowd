@@ -307,7 +307,10 @@ namespace Clowd
             img.Save(path, ImageFormat.Png);
             var width = DpiScale.DownScaleX(img.PixelWidth);
             var height = DpiScale.DownScaleY(img.PixelHeight);
-            var graphic = new GraphicsImage(drawingCanvas, new Rect(0, 0, width, height), path);
+            var graphic = new GraphicsImage(drawingCanvas, new Rect(
+                drawingCanvas.WorldOffset.X - (width / 2),
+                drawingCanvas.WorldOffset.Y - (height / 2),
+                width, height), path);
             drawingCanvas.AddGraphic(graphic);
         }
 
