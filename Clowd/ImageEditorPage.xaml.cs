@@ -17,8 +17,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Clowd.Interop.Gdi32;
-using CS.Wpf;
 using DrawToolsLib.Graphics;
+using ScreenVersusWpf;
 
 namespace Clowd
 {
@@ -46,8 +46,8 @@ namespace Clowd
                 using (var stream = new FileStream(_imagePath, FileMode.Open, FileAccess.Read))
                 {
                     var bitmapFrame = BitmapFrame.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
-                    width = DpiScale.DownScaleX(bitmapFrame.PixelWidth);
-                    height = DpiScale.DownScaleY(bitmapFrame.PixelHeight);
+                    width = ScreenTools.ScreenToWpf(bitmapFrame.PixelWidth);
+                    height = ScreenTools.ScreenToWpf(bitmapFrame.PixelHeight);
                 }
                 var graphic = new GraphicsImage(drawingCanvas, new Rect(0, 0, width, height), _imagePath);
                 drawingCanvas.AddGraphic(graphic);
@@ -103,10 +103,10 @@ namespace Clowd
         {
             var drawingVisual = GetRenderedVisual();
             RenderTargetBitmap bmp = new RenderTargetBitmap(
-                (int)DpiScale.UpScaleX(drawingVisual.ContentBounds.Width),
-                (int)DpiScale.UpScaleY(drawingVisual.ContentBounds.Height),
-                DpiScale.DpiX,
-                DpiScale.DpiY,
+                (int)ScreenTools.WpfToScreen(drawingVisual.ContentBounds.Width),
+                (int)ScreenTools.WpfToScreen(drawingVisual.ContentBounds.Height),
+                ScreenTools.DpiZoom,
+                ScreenTools.DpiZoom,
                 PixelFormats.Pbgra32);
             bmp.Render(drawingVisual);
             return bmp;
@@ -130,7 +130,7 @@ namespace Clowd
         private void Font_Clicked(object sender, RoutedEventArgs e)
         {
             System.Windows.Forms.FontDialog dlg = new System.Windows.Forms.FontDialog();
-            float wfSize = (float)DpiScale.UpScaleX(drawingCanvas.TextFontSize) / 96 * 72;
+            float wfSize = (float)ScreenTools.ScreenToWpf(drawingCanvas.TextFontSize) / 96 * 72;
             System.Drawing.FontStyle wfStyle;
             if (drawingCanvas.TextFontStyle == FontStyles.Italic)
                 wfStyle = System.Drawing.FontStyle.Italic;
@@ -149,7 +149,7 @@ namespace Clowd
             if (dlg.ShowDialog(Window.GetWindow(this)) == System.Windows.Forms.DialogResult.OK)
             {
                 drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
-                drawingCanvas.TextFontSize = DpiScale.DownScaleX(dlg.Font.Size / 72 * 96);
+                drawingCanvas.TextFontSize = ScreenTools.WpfToScreen(dlg.Font.Size / 72 * 96);
                 switch (dlg.Font.Style)
                 {
                     case System.Drawing.FontStyle.Italic:
@@ -305,8 +305,8 @@ namespace Clowd
             if (img == null)
                 return;
             img.Save(path, ImageFormat.Png);
-            var width = DpiScale.DownScaleX(img.PixelWidth);
-            var height = DpiScale.DownScaleY(img.PixelHeight);
+            var width = ScreenTools.ScreenToWpf(img.PixelWidth);
+            var height = ScreenTools.ScreenToWpf(img.PixelHeight);
             var graphic = new GraphicsImage(drawingCanvas, new Rect(
                 drawingCanvas.WorldOffset.X - (width / 2),
                 drawingCanvas.WorldOffset.Y - (height / 2),

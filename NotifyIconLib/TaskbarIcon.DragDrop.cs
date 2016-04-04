@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
+using ScreenVersusWpf;
 
 namespace NotifyIconLib
 {
@@ -58,7 +59,7 @@ namespace NotifyIconLib
         public TaskbarIconData GetNotifyIconState()
         {
             TaskbarIconData data;
-            Rect rect;
+            ScreenRect rect;
             bool inFlyout;
 
             if ((Environment.OSVersion.Version >= new Version(6, 0, 7600) && GetNotifyIconRectangleShell(out rect, out inFlyout))
@@ -69,7 +70,7 @@ namespace NotifyIconLib
             }
             else
             {
-                data.Location = Rect.Empty;
+                data.Location = ScreenRect.Empty;
                 data.State = TaskbarIconState.Hidden;
             }
             return data;
@@ -139,7 +140,8 @@ namespace NotifyIconLib
         {
             if (stateCache.State != TaskbarIconState.Pinned)
                 return;
-            var scale = CS.Wpf.DpiScale.TranslateDownScaleRect(stateCache.Location);
+
+            var scale = stateCache.Location.ToWpfRect();
             dropWindow.Left = scale.Left;
             dropWindow.Top = scale.Top;
             dropWindow.Width = scale.Width;
@@ -153,7 +155,7 @@ namespace NotifyIconLib
         }
         private void DragHook_MouseMove(object sender, System.Windows.Forms.MouseEventArgs e)
         {
-            var point = new Point(e.Location.X, e.Location.Y);
+            var point = new ScreenPoint(e.Location.X, e.Location.Y);
             var mouseDown = leftMouseDown;
             var dragging = leftMouseDown && DateTime.Now - mouseDownTime > TimeSpan.FromMilliseconds(300);
             if (dragging && DateTime.Now - lastStateRefresh > TimeSpan.FromSeconds(2))
@@ -200,7 +202,7 @@ namespace NotifyIconLib
                 }
             }
         }
-        private bool GetNotifyIconRectangleShell(out Rect rectangle, out bool inFlyout)
+        private bool GetNotifyIconRectangleShell(out ScreenRect rectangle, out bool inFlyout)
         {
             var identifier = new NOTIFYICONIDENTIFIER();
             identifier.uID = iconData.TaskbarIconId;
@@ -209,17 +211,17 @@ namespace NotifyIconLib
 
             var iconLocation = new RECT();
             int result = SHELL32.Shell_NotifyIconGetRect(ref identifier, out iconLocation);
-            Rect rect = iconLocation;
+            System.Drawing.Rectangle rect = iconLocation;
 
             // 0 means success, 1 means the notify icon is in the fly-out - either is fine
             // if the value is 1, the rectangle will be the location of the flyout expansion button
             inFlyout = result == 1;
-            rectangle = rect;
+            rectangle = new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
             return ((result == 0 || (result == 1)) && rect.Width > 0 && rect.Height > 0);
         }
-        private bool GetNotifyIconRectangleLegacy(out Rect rectangle, out bool inFlyout)
+        private bool GetNotifyIconRectangleLegacy(out ScreenRect rectangle, out bool inFlyout)
         {
-            rectangle = Rect.Empty;
+            rectangle = ScreenRect.Empty;
             inFlyout = false;
 
             var identifier = new NOTIFYICONIDENTIFIER();
@@ -327,7 +329,8 @@ namespace NotifyIconLib
                                 // find where the rectangle lies in relation to the screen
                                 USER32.MapWindowPoints(natoolbarhandle, (IntPtr)null, ref result, 2);
 
-                                rectangle = result;
+                                System.Drawing.Rectangle t_rect = result;
+                                rectangle = new ScreenRect(t_rect.X, t_rect.Y, t_rect.Width, t_rect.Height);
                             }
 
                             found = true;
@@ -361,7 +364,7 @@ namespace NotifyIconLib
         /// <summary>
         /// The current location of the taskbar icon. This property is not DPI aware.
         /// </summary>
-        public Rect Location;
+        public ScreenRect Location;
         /// <summary>
         /// Contains information about the current state of the taskbar icon
         /// </summary>
