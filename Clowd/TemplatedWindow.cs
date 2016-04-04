@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CS.Wpf;
+using ScreenVersusWpf;
 
 namespace Clowd
 {
@@ -26,7 +27,7 @@ namespace Clowd
             if (customChrome)
             {
                 window = CreateMetroWindow();
-                titleHeight = DpiScale.UpScaleY(40);
+                titleHeight = ScreenTools.ScreenToWpf(40);
                 borderWidth = 1;
             }
             else
