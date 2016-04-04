@@ -1822,8 +1822,23 @@ namespace DrawToolsLib
         {
             var me = (DrawingCanvas)d;
             var pt = (Point)e.NewValue;
-            me._translateTransform.X = pt.X;
-            me._translateTransform.Y = pt.Y;
+            if (me.ContentScale == 1)
+            {
+                me._translateTransform.X = Math.Round(pt.X);
+                me._translateTransform.Y = Math.Round(pt.Y);
+            }
+            else
+            {
+                me._translateTransform.X = pt.X;
+                me._translateTransform.Y = pt.Y;
+            }
+        }
+        protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+        {
+            base.OnRenderSizeChanged(sizeInfo);
+            ContentOffset = new Point(
+                ContentOffset.X + sizeInfo.NewSize.Width / 2 - sizeInfo.PreviousSize.Width / 2,
+                ContentOffset.Y + sizeInfo.NewSize.Height / 2 - sizeInfo.PreviousSize.Height / 2);
         }
 
         private ScaleTransform _scaleTransform;
@@ -1880,7 +1895,7 @@ namespace DrawToolsLib
             var rect = GetArtworkBounds();
             var x = ActualWidth / 2 - rect.Width * ContentScale / 2 - rect.Left * ContentScale;
             var y = ActualHeight / 2 - rect.Height * ContentScale / 2 - rect.Top * ContentScale;
-            ContentOffset = new Point(Math.Round(x), Math.Round(y));
+            ContentOffset = new Point(x, y);
         }
 
         #endregion
