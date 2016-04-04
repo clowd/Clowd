@@ -32,6 +32,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using NotifyIconLib.Interop;
+using ScreenVersusWpf;
 using Point = NotifyIconLib.Interop.Point;
 
 
@@ -364,8 +365,8 @@ namespace NotifyIconLib
             {
                 WinApi.GetCursorPos(ref cursorPosition);
             }
-
-            var dpiPoint = CS.Wpf.DpiScale.DownScalePoint(new System.Windows.Point(cursorPosition.X, cursorPosition.Y));
+            
+            var dpiPoint = new ScreenPoint(cursorPosition.X, cursorPosition.Y).ToWpfPoint();
             cursorPosition.X = (int)dpiPoint.X;
             cursorPosition.Y = (int)dpiPoint.Y;
 
