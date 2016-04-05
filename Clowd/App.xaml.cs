@@ -539,13 +539,7 @@ namespace Clowd
             var home = new MenuItem() { Header = "Clowd _Home" };
             home.Click += (s, e) =>
             {
-                var wnd = TemplatedWindow.GetWindow(typeof(HomePage));
-                if (wnd == null)
-                {
-                    wnd = TemplatedWindow.CreateWindow("CLOWD", new HomePage());
-                }
-                wnd.Show();
-                wnd.MakeForeground();
+                ShowHome();
             };
             context.Items.Add(home);
 
@@ -691,10 +685,17 @@ namespace Clowd
         }
         public void ShowHome()
         {
-            if (UploadManager.Authenticated)
-                TemplatedWindow.CreateWindow("Clowd", new HomePage()).Show();
-            else
-                TemplatedWindow.CreateWindow("Clowd", new LoginPage()).Show();
+            var wnd = TemplatedWindow.GetWindow(typeof(HomePage)) 
+                ?? TemplatedWindow.GetWindow(typeof(SettingsPage));
+            if (wnd == null)
+            {
+                if (UploadManager.Authenticated)
+                    wnd = TemplatedWindow.CreateWindow("Clowd", new HomePage());
+                else
+                    wnd = TemplatedWindow.CreateWindow("Clowd", new LoginPage());
+            }
+            wnd.Show();
+            wnd.MakeForeground();
         }
 
         private async void OnCheckForUpdates(object sender, EventArgs e)
