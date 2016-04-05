@@ -63,6 +63,10 @@ namespace Clowd
         [Description("Specifies whether to use the system default window chrome, or a metro design.")]
         public bool UseCustomWindowChrome { get; set; } = true;
 
+        [DisplayName("Tray-drop enabled")]
+        [Description("If true, allows dropping files directly on to the windows tray icon to start an upload.")]
+        public bool TrayDropEnabled { get; set; } = true;
+
         [DisplayName("Accent color"), PData.EnableBy("AccentScheme", AccentScheme.User)]
         [Description("Allows you to set a custom accent color when the appropriate accent mode is also set.")]
         public Color UserAccentColor { get; set; } = Color.FromRgb(59, 151, 210);
