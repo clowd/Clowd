@@ -595,7 +595,7 @@ namespace Clowd
             // because of the mouse hook in the tray drop mechanism, hitting a breakpoint will cause clowd to stop 
             // responding to message events, which will lock up the mouse cursor - so we disable it if debugging.
             if (!System.Diagnostics.Debugger.IsAttached)
-                _taskbarIcon.TrayDropEnabled = true;
+                _taskbarIcon.TrayDropEnabled = Settings.TrayDropEnabled;
 
             SetupTrayContextMenu();
             Settings.Save();
