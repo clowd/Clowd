@@ -26,8 +26,8 @@ namespace Clowd
         public BitmapSource GrayScreenImage { get; private set; }
         public IntPtr Handle { get; private set; }
         public BitmapSource ScreenImage { get; private set; }
-        public bool ShowMagnifier { get; private set; } = true;
-        public bool ShowTips { get; private set; } = true;
+        public bool ShowMagnifier { get; private set; } = App.Current.Settings.CaptureSettings.MagnifierEnabled;
+        public bool ShowTips { get; private set; } = App.Current.Settings.CaptureSettings.TipsEnabled;
 
         private bool? capturing = null;
         private bool draggingArea = false;
@@ -40,7 +40,6 @@ namespace Clowd
             this.SourceInitialized += CaptureWindow_SourceInitialized;
             this.Loaded += CaptureWindow_Loaded;
         }
-
 
         public static System.Drawing.Bitmap MakeGrayscale3(System.Drawing.Bitmap original)
         {
@@ -328,7 +327,7 @@ namespace Clowd
                 rect.Height = Math.Abs(draggingOrigin.Y - currentPoint.Y) + 1;
                 UpdateCanvasSelection(rect);
             }
-            else
+            else if (App.Current.Settings.CaptureSettings.DetectWindows)
             {
                 var window = windowFinder.GetWindowThatContainsPoint(currentPoint);
 
@@ -340,6 +339,10 @@ namespace Clowd
                 {
                     UpdateCanvasSelection(window.WindowRect);
                 }
+            }
+            else
+            {
+                UpdateCanvasSelection(new ScreenRect(0, 0, 0, 0));
             }
         }
         private void RootGrid_MouseUp(object sender, MouseButtonEventArgs e)
