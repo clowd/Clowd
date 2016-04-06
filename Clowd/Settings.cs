@@ -116,6 +116,9 @@ namespace Clowd
         [Description("This controls the default state of the pixel magnifier in the capture window")]
         public bool MagnifierEnabled { get; set; } = true;
 
+        [Description("This controls whether the tips menu is displayed when capturing a screenshot.")]
+        public bool TipsEnabled { get; set; } = true;
+
         [Description("If this is true, the Capture window will try to detect and highlight different windows as you hover over them.")]
         public bool DetectWindows { get; set; } = true;
 
@@ -135,10 +138,15 @@ namespace Clowd
     [ImplementPropertyChanged]
     public class EditorSettings
     {
-        [DisplayName("Object Color")]
-        public Color DefaultDrawingColor { get; set; } = Colors.Red;
+        [DisplayName("Object color")]
+        public Color ObjectDrawingColor { get; set; } = Colors.Red;
 
-        [PData.FontPreview(16), ClassifyIgnore]
+        [PData.Spinnable(1, 2, 1, 10)]
+        public int ObjectLineWidth { get; set; } = 2;
+
+        public Color CanvasBackground { get; set; } = Colors.White;
+
+        [DisplayName("Font family"), PData.FontPreview(16), ClassifyIgnore]
         public FontFamily DefaultFont
         {
             get { return new FontFamily(_defaultFontString); }
@@ -146,8 +154,8 @@ namespace Clowd
         }
         private string _defaultFontString = "Arial";
 
-        [PData.Spinnable(1, 2, 1, 10)]
-        public int ObjectLineWidth { get; set; } = 2;
+        [DisplayName("Font size"), PData.Spinnable(2, 4, 6, 48)]
+        public int DefaultFontSize { get; set; } = 8;
     }
 
     [ImplementPropertyChanged]
