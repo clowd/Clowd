@@ -103,6 +103,9 @@ namespace Clowd
             this.Width = SystemParameters.VirtualScreenWidth;
             this.Height = SystemParameters.VirtualScreenHeight;
             Interop.USER32.SetForegroundWindow(this.Handle);
+            if (!System.Diagnostics.Debugger.IsAttached)
+                Interop.USER32.SetWindowPos(this.Handle, 0, 0, 0, 0, 0,
+                    Interop.SWP.NOMOVE | Interop.SWP.NOSIZE | Interop.SWP.SHOWWINDOW);
             UpdateCanvasMode(true);
         }
         private void CaptureWindow_SourceInitialized(object sender, EventArgs e)
