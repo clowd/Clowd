@@ -15,8 +15,8 @@ namespace DrawToolsLib.Graphics
         {
         }
 
-        public GraphicsArrow(double scale, Color objectColor, double lineWidth, Point start, Point end)
-            : base(scale, objectColor, lineWidth, start, end)
+        public GraphicsArrow(Color objectColor, double lineWidth, Point start, Point end)
+            : base(objectColor, lineWidth, start, end)
         {
         }
 
@@ -25,7 +25,7 @@ namespace DrawToolsLib.Graphics
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
-            var tipLength = ActualLineWidth * 8;
+            var tipLength = LineWidth * 8;
             var lineVector = LineEnd - LineStart;
             var lineLength = lineVector.Length;
             lineVector.Normalize();
@@ -35,7 +35,7 @@ namespace DrawToolsLib.Graphics
             if (lineLength > 0)
             {
                 drawingContext.DrawLine(
-                    new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
+                    new Pen(new SolidColorBrush(ObjectColor), LineWidth),
                     LineStart,
                     LineStart + lineLength * lineVector);
             }
@@ -55,7 +55,7 @@ namespace DrawToolsLib.Graphics
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsArrow(ActualScale, ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
+            return new GraphicsArrow(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
         }
     }
 }

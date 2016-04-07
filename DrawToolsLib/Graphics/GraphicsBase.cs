@@ -18,18 +18,6 @@ namespace DrawToolsLib.Graphics
             get { return _objectId; }
             protected set { _objectId = value; }
         }
-        [XmlIgnore]
-        public double ActualScale
-        {
-            get { return _actualScale; }
-            internal set
-            {
-                if (value.Equals(_actualScale)) return;
-                _actualScale = value;
-                OnPropertyChanged(nameof(ActualScale));
-                OnPropertyChanged(nameof(ActualLineWidth));
-            }
-        }
         public Color ObjectColor
         {
             get { return _objectColor; }
@@ -48,7 +36,6 @@ namespace DrawToolsLib.Graphics
                 if (value.Equals(_lineWidth)) return;
                 _lineWidth = value;
                 OnPropertyChanged(nameof(LineWidth));
-                OnPropertyChanged(nameof(ActualLineWidth));
             }
         }
         public bool IsSelected
@@ -62,8 +49,6 @@ namespace DrawToolsLib.Graphics
             }
         }
 
-        [XmlIgnore]
-        public double ActualLineWidth => ActualScale <= 0 ? LineWidth : LineWidth / ActualScale;
         public event PropertyChangedEventHandler PropertyChanged;
         public event EventHandler Invalidated;
 
@@ -75,7 +60,7 @@ namespace DrawToolsLib.Graphics
         private bool _isSelected;
 
         [XmlIgnore]
-        protected double LineHitTestWidth => Math.Max(8.0, ActualLineWidth);
+        protected double LineHitTestWidth => Math.Max(8.0, LineWidth);
         [XmlIgnore]
         protected const double HitTestWidth = 12.0;
         [XmlIgnore]
@@ -90,13 +75,12 @@ namespace DrawToolsLib.Graphics
             ObjectId = this.GetHashCode();
         }
         protected GraphicsBase(DrawingCanvas canvas)
-            : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth)
+            : this(canvas.ObjectColor, canvas.LineWidth)
         {
         }
-        protected GraphicsBase(double scale, Color objectColor, double lineWidth)
+        protected GraphicsBase(Color objectColor, double lineWidth)
             : this()
         {
-            ActualScale = scale;
             ObjectColor = objectColor;
             LineWidth = lineWidth;
         }
@@ -152,7 +136,7 @@ namespace DrawToolsLib.Graphics
 
             // Handle rectangle should have constant size, except of the case
             // when line is too width.
-            double size = Math.Max(HandleSize / ActualScale, ActualLineWidth * 1.1);
+            double size = Math.Max(HandleSize, LineWidth * 1.1);
 
             return new Rect(point.X - size / 2, point.Y - size / 2,
                 size, size);

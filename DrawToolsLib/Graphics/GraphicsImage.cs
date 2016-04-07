@@ -43,12 +43,12 @@ namespace DrawToolsLib.Graphics
         {
         }
         public GraphicsImage(DrawingCanvas canvas, Rect rect, string filePath)
-           : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, rect, filePath)
+           : this(canvas.ObjectColor, canvas.LineWidth, rect, filePath)
         {
         }
 
-        public GraphicsImage(double scale, Color objectColor, double lineWidth, Rect rect, string filePath)
-            : base(scale, objectColor, lineWidth, rect)
+        public GraphicsImage(Color objectColor, double lineWidth, Rect rect, string filePath)
+            : base(objectColor, lineWidth, rect)
         {
             _fileName = filePath;
             if (!File.Exists(_fileName))
@@ -72,7 +72,7 @@ namespace DrawToolsLib.Graphics
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsImage(ActualScale, ObjectColor, LineWidth, Bounds, FileName) { ObjectId = ObjectId };
+            return new GraphicsImage(ObjectColor, LineWidth, Bounds, FileName) { ObjectId = ObjectId };
         }
     }
 }

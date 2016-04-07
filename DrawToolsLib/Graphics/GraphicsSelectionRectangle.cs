@@ -16,8 +16,8 @@ namespace DrawToolsLib.Graphics
             : base(canvas, rect, false)
         {
         }
-        public GraphicsSelectionRectangle(double scale, Color objectColor, double lineWidth, Rect rect) 
-            : base(scale, objectColor, lineWidth, rect, false)
+        public GraphicsSelectionRectangle(Color objectColor, double lineWidth, Rect rect) 
+            : base(objectColor, lineWidth, rect, false)
         {
         }
 
@@ -25,13 +25,13 @@ namespace DrawToolsLib.Graphics
         {
             drawingContext.DrawRectangle(
                 null,
-                new Pen(Brushes.White, ActualLineWidth),
+                new Pen(Brushes.White, LineWidth),
                 Bounds);
 
             DashStyle dashStyle = new DashStyle();
             dashStyle.Dashes.Add(4);
 
-            Pen dashedPen = new Pen(Brushes.Black, ActualLineWidth);
+            Pen dashedPen = new Pen(Brushes.Black, LineWidth);
             dashedPen.DashStyle = dashStyle;
 
             drawingContext.DrawRectangle(

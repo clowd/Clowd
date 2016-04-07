@@ -20,11 +20,11 @@ namespace DrawToolsLib.Graphics
         {
         }
 
-        public GraphicsEllipse(double scale, Color objectColor, double lineWidth, Rect rect) : base(scale, objectColor, lineWidth, rect)
+        public GraphicsEllipse(Color objectColor, double lineWidth, Rect rect) : base(objectColor, lineWidth, rect)
         {
         }
 
-        public GraphicsEllipse(double scale, Color objectColor, double lineWidth, Rect rect, bool filled) : base(scale, objectColor, lineWidth, rect, filled)
+        public GraphicsEllipse(Color objectColor, double lineWidth, Rect rect, bool filled) : base(objectColor, lineWidth, rect, filled)
         {
         }
 
@@ -45,7 +45,7 @@ namespace DrawToolsLib.Graphics
             var brush = new SolidColorBrush(ObjectColor);
             drawingContext.DrawEllipse(
                 Filled ? brush : null,
-                new Pen(brush, ActualLineWidth),
+                new Pen(brush, LineWidth),
                 center,
                 radiusX,
                 radiusY);
@@ -57,7 +57,7 @@ namespace DrawToolsLib.Graphics
                 return Bounds.Contains(point);
 
             EllipseGeometry g = new EllipseGeometry(Bounds);
-            return g.FillContains(point) || g.StrokeContains(new Pen(Brushes.Black, ActualLineWidth), point);
+            return g.FillContains(point) || g.StrokeContains(new Pen(Brushes.Black, LineWidth), point);
         }
 
         internal override bool IntersectsWith(Rect rectangle)
@@ -71,7 +71,7 @@ namespace DrawToolsLib.Graphics
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsEllipse(ActualScale, ObjectColor, LineWidth, Bounds, Filled) { ObjectId = ObjectId };
+            return new GraphicsEllipse(ObjectColor, LineWidth, Bounds, Filled) { ObjectId = ObjectId };
         }
     }
 }

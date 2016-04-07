@@ -36,12 +36,12 @@ namespace DrawToolsLib.Graphics
         {
         }
         public GraphicsPolyLine(DrawingCanvas canvas, Point[] points)
-            : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, points)
+            : this(canvas.ObjectColor, canvas.LineWidth, points)
         {
         }
 
-        public GraphicsPolyLine(double scale, Color objectColor, double lineWidth, Point[] points)
-            : base(scale, objectColor, lineWidth)
+        public GraphicsPolyLine(Color objectColor, double lineWidth, Point[] points)
+            : base(objectColor, lineWidth)
         {
             MakeGeometryFromPoints(points);
         }
@@ -108,7 +108,7 @@ namespace DrawToolsLib.Graphics
 
             drawingContext.DrawGeometry(
                 null,
-                new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
+                new Pen(new SolidColorBrush(ObjectColor), LineWidth),
                 pathGeometry);
 
             base.Draw(drawingContext);
@@ -181,7 +181,7 @@ namespace DrawToolsLib.Graphics
         }
         public override GraphicsBase Clone()
         {
-            return new GraphicsPolyLine(ActualScale, ObjectColor, LineWidth, Points) { ObjectId = ObjectId };
+            return new GraphicsPolyLine(ObjectColor, LineWidth, Points) { ObjectId = ObjectId };
         }
     }
 }
