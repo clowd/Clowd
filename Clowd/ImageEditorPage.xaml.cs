@@ -23,12 +23,14 @@ using ScreenVersusWpf;
 namespace Clowd
 {
     [PropertyChanged.ImplementPropertyChanged]
-    public partial class ImageEditorPage : UserControl
+    public partial class ImageEditorPage : TemplatedControl
     {
+        public override string Title => "Editor";
         public bool ShowActionLabels { get; set; } = true;
 
         private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private string _imagePath;
+        private Size _imageSize;
 
         public ImageEditorPage(string initImagePath)
         {
@@ -38,7 +40,6 @@ namespace Clowd
             drawingCanvas.LineWidth = 2;
             this.Loaded += ImageEditorPage_Loaded;
             _imagePath = initImagePath;
-            //http://www.1001fonts.com/honey-script-font.html
 
             if (!String.IsNullOrEmpty(_imagePath) && File.Exists(_imagePath))
             {
@@ -48,6 +49,7 @@ namespace Clowd
                     var bitmapFrame = BitmapFrame.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                     width = ScreenTools.ScreenToWpf(bitmapFrame.PixelWidth);
                     height = ScreenTools.ScreenToWpf(bitmapFrame.PixelHeight);
+                    _imageSize = new Size(width, height);
                 }
                 var graphic = new GraphicsImage(drawingCanvas, new Rect(0, 0, width, height), _imagePath);
                 drawingCanvas.AddGraphic(graphic);
@@ -116,6 +118,22 @@ namespace Clowd
             var enc = new PngBitmapEncoder();
             enc.Frames.Add(BitmapFrame.Create(GetRenderedBitmap()));
             return enc;
+        }
+
+        protected override async void OnActivated(Window wnd)
+        {
+            var padding = App.Current.Settings.EditorSettings.CapturePadding;
+            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + (padding * 2),
+                _imageSize.Height + actionRow.Height.Value + (padding * 2)));
+
+            // just doing this to force a thread context switch.
+            // by the time we get back on to the UI thread the window will be done resizing.
+            await Task.Delay(10);
+
+            if (fit)
+                ZoomActual_Clicked(null, null);
+            else
+                ZoomFit_Clicked(null, null);
         }
 
         private void ImageEditorPage_Loaded(object sender, RoutedEventArgs e)
