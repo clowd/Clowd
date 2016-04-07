@@ -84,22 +84,22 @@ namespace DrawToolsLib.Graphics
             _typeface = new TypefaceString();
         }
         public GraphicsText(DrawingCanvas canvas, Rect rect, Typeface typeFace, double fontSize, string text)
-            : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, rect, typeFace, fontSize, text)
+            : this(canvas.ObjectColor, canvas.LineWidth, rect, typeFace, fontSize, text)
         {
         }
-        public GraphicsText(double scale, Color objectColor, double lineWidth, Rect rect,
-            Typeface typeFace, double fontSize, string text) : base(scale, objectColor, lineWidth, rect)
+        public GraphicsText(Color objectColor, double lineWidth, Rect rect,
+            Typeface typeFace, double fontSize, string text) : base(objectColor, lineWidth, rect)
         {
             _typeface = TypefaceString.FromTypeface(typeFace);
             _fontSize = fontSize;
             _text = text;
         }
         public GraphicsText(DrawingCanvas canvas, Rect rect, TypefaceString typeFace, double fontSize, string text)
-           : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, rect, typeFace, fontSize, text)
+           : this(canvas.ObjectColor, canvas.LineWidth, rect, typeFace, fontSize, text)
         {
         }
-        public GraphicsText(double scale, Color objectColor, double lineWidth, Rect rect,
-            TypefaceString typeFace, double fontSize, string text) : base(scale, objectColor, lineWidth, rect)
+        public GraphicsText(Color objectColor, double lineWidth, Rect rect,
+            TypefaceString typeFace, double fontSize, string text) : base(objectColor, lineWidth, rect)
         {
             _typeface = typeFace;
             _fontSize = fontSize;
@@ -122,7 +122,7 @@ namespace DrawToolsLib.Graphics
             {
                 drawingContext.DrawRectangle(
                     null,
-                    new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
+                    new Pen(new SolidColorBrush(ObjectColor), LineWidth),
                     rect);
             }
 
@@ -135,7 +135,7 @@ namespace DrawToolsLib.Graphics
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsText(ActualScale, ObjectColor, LineWidth, Bounds, _typeface, FontSize, Text) { ObjectId = ObjectId };
+            return new GraphicsText(ObjectColor, LineWidth, Bounds, _typeface, FontSize, Text) { ObjectId = ObjectId };
         }
 
         private FormattedText CreateFormattedText()

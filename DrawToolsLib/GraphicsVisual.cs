@@ -14,11 +14,6 @@ namespace DrawToolsLib
 
         public int ObjectId => _graphic.ObjectId;
 
-        public double ActualScale
-        {
-            get { return _graphic.ActualScale; }
-            set { _graphic.ActualScale = value; }
-        }
         public Color ObjectColor
         {
             get { return _graphic.ObjectColor; }

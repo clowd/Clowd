@@ -42,8 +42,8 @@ namespace DrawToolsLib.Graphics
             _lineStart = start;
             _lineEnd = end;
         }
-        public GraphicsLine(double scale, Color objectColor, double lineWidth, Point start, Point end)
-            : base(scale, objectColor, lineWidth)
+        public GraphicsLine(Color objectColor, double lineWidth, Point start, Point end)
+            : base(objectColor, lineWidth)
         {
             _lineStart = start;
             _lineEnd = end;
@@ -118,7 +118,7 @@ namespace DrawToolsLib.Graphics
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
-            drawingContext.DrawLine(new Pen(new SolidColorBrush(ObjectColor), ActualLineWidth),
+            drawingContext.DrawLine(new Pen(new SolidColorBrush(ObjectColor), LineWidth),
                 LineStart,
                 LineEnd);
 
@@ -127,7 +127,7 @@ namespace DrawToolsLib.Graphics
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsLine(ActualScale, ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
+            return new GraphicsLine(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
         }
     }
 }

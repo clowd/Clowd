@@ -75,19 +75,19 @@ namespace DrawToolsLib.Graphics
         {
         }
         public GraphicsRectangle(DrawingCanvas canvas, Rect rect)
-            : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, rect, false)
+            : this(canvas.ObjectColor, canvas.LineWidth, rect, false)
         {
         }
         public GraphicsRectangle(DrawingCanvas canvas, Rect rect, bool filled)
-            : this(canvas.ActualScale, canvas.ObjectColor, canvas.LineWidth, rect, filled)
+            : this(canvas.ObjectColor, canvas.LineWidth, rect, filled)
         {
         }
-        public GraphicsRectangle(double scale, Color objectColor, double lineWidth, Rect rect)
-            : this(scale, objectColor, lineWidth, rect, false)
+        public GraphicsRectangle(Color objectColor, double lineWidth, Rect rect)
+            : this(objectColor, lineWidth, rect, false)
         {
         }
-        public GraphicsRectangle(double scale, Color objectColor, double lineWidth, Rect rect, bool filled)
-            : base(scale, objectColor, lineWidth)
+        public GraphicsRectangle(Color objectColor, double lineWidth, Rect rect, bool filled)
+            : base(objectColor, lineWidth)
         {
             _left = rect.Left;
             _top = rect.Top;
@@ -296,14 +296,14 @@ namespace DrawToolsLib.Graphics
             var bounds = this.Bounds;
             drawingContext.DrawRoundedRectangle(
                 _filled ? brush : null,
-                new Pen(brush, ActualLineWidth),
-                new Rect(bounds.Left + (ActualLineWidth / 2), bounds.Top + (ActualLineWidth / 2),
-                    Math.Max(1, bounds.Width - ActualLineWidth), Math.Max(1, bounds.Height - ActualLineWidth)),
+                new Pen(brush, LineWidth),
+                new Rect(bounds.Left + (LineWidth / 2), bounds.Top + (LineWidth / 2),
+                    Math.Max(1, bounds.Width - LineWidth), Math.Max(1, bounds.Height - LineWidth)),
                 LineWidth, LineWidth);
         }
         public override GraphicsBase Clone()
         {
-            return new GraphicsRectangle(ActualScale, ObjectColor, LineWidth, Bounds) { ObjectId = ObjectId };
+            return new GraphicsRectangle(ObjectColor, LineWidth, Bounds) { ObjectId = ObjectId };
         }
     }
 }
