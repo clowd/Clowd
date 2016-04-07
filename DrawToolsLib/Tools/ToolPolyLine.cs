@@ -71,9 +71,7 @@ namespace DrawToolsLib
 
             double distance = (p.X - lastX) * (p.X - lastX) + (p.Y - lastY) * (p.Y - lastY);
 
-            double d = drawingCanvas.ActualScale <= 0 ? 
-                minDistance * minDistance :
-                minDistance * minDistance / drawingCanvas.ActualScale;
+            double d = minDistance*minDistance;
 
             if ( distance < d)
             {

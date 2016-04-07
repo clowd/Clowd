@@ -25,7 +25,6 @@ namespace DrawToolsLib
 
         // Dependency properties
         public static readonly DependencyProperty ToolProperty;
-        public static readonly DependencyProperty ActualScaleProperty;
 
         public static readonly DependencyProperty LineWidthProperty;
         public static readonly DependencyProperty ObjectColorProperty;
@@ -126,16 +125,6 @@ namespace DrawToolsLib
 
             ToolProperty = DependencyProperty.Register(
                 "Tool", typeof(ToolType), typeof(DrawingCanvas),
-                metaData);
-
-
-            // ActualScale
-            metaData = new PropertyMetadata(
-                1.0,                                                        // default value
-                new PropertyChangedCallback(ActualScaleChanged));           // change callback
-
-            ActualScaleProperty = DependencyProperty.Register(
-                "ActualScale", typeof(double), typeof(DrawingCanvas),
                 metaData);
 
             // LineWidth
@@ -302,40 +291,6 @@ namespace DrawToolsLib
         }
 
         #endregion Tool
-
-        #region ActualScale
-
-        /// <summary>
-        /// Dependency property ActualScale.
-        /// </summary>
-        public double ActualScale
-        {
-            get
-            {
-                return (double)GetValue(ActualScaleProperty);
-            }
-            set
-            {
-                SetValue(ActualScaleProperty, value);
-            }
-        }
-
-        /// <summary>
-        /// Callback function called when ActualScale dependency property is changed.
-        /// </summary>
-        static void ActualScaleChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
-        {
-            DrawingCanvas d = property as DrawingCanvas;
-
-            double scale = d.ActualScale;
-
-            foreach (GraphicsVisual b in d.GraphicsList)
-            {
-                b.ActualScale = scale;
-            }
-        }
-
-        #endregion ActualScale
 
         #region CanUndo
 
@@ -984,7 +939,6 @@ namespace DrawToolsLib
                 foreach (var g in newGraphics)
                 {
                     g.Graphic.Move(transformX, transformY);
-                    g.ActualScale = ActualScale;
                     g.IsSelected = true;
                     graphicsList.Add(g);
                 }
