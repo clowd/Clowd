@@ -163,31 +163,18 @@ namespace Clowd
                 content.Width = Double.NaN;
                 content.Height = Double.NaN;
             }
-            content.VerticalAlignment = VerticalAlignment.Stretch;
-            content.HorizontalAlignment = HorizontalAlignment.Stretch;
 
-            template.SetContent(content);
+            SetContent(window, content);
 
             return window;
         }
 
         public static bool SizeToContent(Window window, Size size)
         {
-            double titleHeight, borderWidth;
-            if (window is MetroWindow)
-            {
-                var metro = (MetroWindow)window;
-                titleHeight = metro.TitlebarHeight;
-                borderWidth = 1;
-            }
-            else
-            {
-                titleHeight = SystemParameters.WindowCaptionHeight + SystemParameters.ResizeFrameHorizontalBorderHeight;
-                borderWidth = SystemParameters.ResizeFrameVerticalBorderWidth;
-            }
+            var border = GetWindowBorderSize(window);
 
-            var wndHeight = size.Height + titleHeight + borderWidth;
-            var wndWidth = size.Width + (borderWidth * 2);
+            var wndHeight = size.Height + border.Height;
+            var wndWidth = size.Width + border.Width;
 
             if (!Double.IsNaN(window.Left) && !Double.IsNaN(window.Top))
             {
@@ -221,10 +208,20 @@ namespace Clowd
         public static void SetContent(Window window, Control content)
         {
             var template = (TemplatedControl.ITemplatable)window;
+            window.MinHeight = 0;
+            window.MinWidth = 0;
+
+            var border = GetWindowBorderSize(window);
+            if (!Double.IsNaN(content.MinHeight))
+                window.MinHeight = content.MinHeight + border.Height;
+            if (!Double.IsNaN(content.MinWidth))
+                window.MinWidth = content.MinWidth + border.Width;
+
             content.Width = Double.NaN;
             content.Height = Double.NaN;
             content.VerticalAlignment = VerticalAlignment.Stretch;
             content.HorizontalAlignment = HorizontalAlignment.Stretch;
+
             template.SetContent(content);
         }
         public static void SetContent(Control currentHost, Control content)
@@ -263,6 +260,24 @@ namespace Clowd
                 }
             }
             return null;
+        }
+
+        private static Size GetWindowBorderSize(Window wnd)
+        {
+            double titleHeight, borderWidth;
+            if (wnd is MetroWindow)
+            {
+                var metro = (MetroWindow)wnd;
+                titleHeight = metro.TitlebarHeight;
+                borderWidth = 1;
+            }
+            else
+            {
+                titleHeight = SystemParameters.WindowCaptionHeight + SystemParameters.ResizeFrameHorizontalBorderHeight;
+                borderWidth = SystemParameters.ResizeFrameVerticalBorderWidth;
+            }
+
+            return new Size(borderWidth * 2, borderWidth + titleHeight);
         }
     }
 }
