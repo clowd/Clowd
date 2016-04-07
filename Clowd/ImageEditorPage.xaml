@@ -10,6 +10,7 @@
              xmlns:util="clr-namespace:Clowd.Utilities"
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
              mc:Ignorable="d" Background="Transparent"
+             MinHeight="380" MinWidth="600"
              d:DesignHeight="300" d:DesignWidth="800">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -83,7 +84,8 @@
         </Grid.RowDefinitions>
         <Border Grid.Row="0" Background="#70707a" />
 
-        <StackPanel Name="actionBar" Grid.Column="1" Orientation="Horizontal">
+        <StackPanel Name="actionBar" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left" 
+                    VerticalAlignment="Top" Height="30">
             <StackPanel.Resources>
                 <Style TargetType="Path">
                     <Setter Property="Fill" Value="White" />
@@ -151,7 +153,7 @@
                 </StackPanel>
             </Button>
         </StackPanel>
-        <StackPanel Name="toolBar" Orientation="Horizontal" Grid.Row="0" HorizontalAlignment="Right">
+        <StackPanel Name="toolBar" Orientation="Horizontal" Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Bottom">
             <StackPanel.Resources>
                 <Style TargetType="Path">
                     <Setter Property="Fill" Value="White" />
@@ -257,7 +259,7 @@
                                 Width="{Binding ActualWidth, ElementName=objectCanvas}"
                                 Height="{Binding ActualHeight, ElementName=objectCanvas}"/>
         </Canvas>
-        <StackPanel Width="70" Margin="30"  Orientation="Vertical" Grid.Row="1" 
+        <StackPanel Width="70" Margin="0,0,30,0"  Orientation="Vertical" Grid.Row="1" 
                     VerticalAlignment="Center" HorizontalAlignment="Right" >
             <Border x:Name="shiftIndicator" Background="#70707a" Height="40" Margin="0,0,0,10" CornerRadius="10" Opacity=".7">
                 <StackPanel Orientation="Horizontal">

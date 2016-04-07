@@ -31,6 +31,8 @@ namespace Clowd
         private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private string _imagePath;
         private Size _imageSize;
+        private double _actionBarSize = double.NaN;
+        private bool _actionBarLabels;
 
         public ImageEditorPage(string initImagePath)
         {
@@ -39,6 +41,7 @@ namespace Clowd
             drawingCanvas.ObjectColor = Colors.Red;
             drawingCanvas.LineWidth = 2;
             this.Loaded += ImageEditorPage_Loaded;
+            this.SizeChanged += ImageEditorPage_SizeChanged;
             _imagePath = initImagePath;
 
             if (!String.IsNullOrEmpty(_imagePath) && File.Exists(_imagePath))
@@ -123,8 +126,10 @@ namespace Clowd
         protected override async void OnActivated(Window wnd)
         {
             var padding = App.Current.Settings.EditorSettings.CapturePadding;
+            // instead of 61 it should be actionRow.Height.Value but its likely that this value hasnt been properly computed yet
+            // so this is just a shortcut for now.
             bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + (padding * 2),
-                _imageSize.Height + actionRow.Height.Value + (padding * 2)));
+                _imageSize.Height + 61 + (padding * 2)));
 
             // just doing this to force a thread context switch.
             // by the time we get back on to the UI thread the window will be done resizing.
@@ -141,8 +146,35 @@ namespace Clowd
             // you need to focus a button, or some other control that holds keyboard focus.
             // if you don't do this, input bindings / keyboard shortcuts won't work.
             Keyboard.Focus(uploadButton);
-
             ZoomFit_Clicked(null, null);
+
+            _actionBarSize = actionBar.ActualWidth;
+            _actionBarLabels = ShowActionLabels = true;
+        }
+
+        private void ImageEditorPage_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // probably need to bring this back soon, just ommiting for now and recording in source control.
+
+            //if (!Double.IsNaN(_actionBarSize) && rootGrid.ActualWidth < _actionBarSize && ShowActionLabels)
+            //{
+            //    ShowActionLabels = false;
+            //}
+            //else if(_actionBarLabels && rootGrid.ActualWidth > _actionBarSize && !ShowActionLabels)
+            //{
+            //    ShowActionLabels = true;
+            //}
+
+            if (toolBar.ActualWidth + actionBar.ActualWidth > rootGrid.ActualWidth)
+            {
+                actionRow.Height = new GridLength(61);
+                toolBar.HorizontalAlignment = HorizontalAlignment.Left;
+            }
+            else
+            {
+                actionRow.Height = new GridLength(30);
+                toolBar.HorizontalAlignment = HorizontalAlignment.Right;
+            }
         }
 
         private void Font_Clicked(object sender, RoutedEventArgs e)
