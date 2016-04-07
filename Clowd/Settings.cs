@@ -101,7 +101,7 @@ namespace Clowd
 
         [ExpandAsCategory("Uploads")]
         public UploadSettings UploadSettings { get; set; } = new UploadSettings();
-		
+
         [Browsable(false)]
         public MagnifierSettings MagnifierSettings { get; set; } = new MagnifierSettings();
     }
@@ -156,6 +156,10 @@ namespace Clowd
 
         [DisplayName("Font size"), PData.Spinnable(2, 4, 6, 48)]
         public int DefaultFontSize { get; set; } = 8;
+
+        [DisplayName("Capture padding (px)"), PData.Spinnable(5, 10, 0, 100)]
+        [Description("Controls how much space (in pixels) there is between an opened capture and the editors window edge.")]
+        public int CapturePadding { get; set; } = 30;
     }
 
     [ImplementPropertyChanged]

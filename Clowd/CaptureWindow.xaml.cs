@@ -93,6 +93,24 @@ namespace Clowd
                 GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
             }
         }
+        private CroppedBitmap CropBitmap()
+        {
+            var rect = CroppingRectangle;
+            //x
+            if (rect.Left < 0)
+                rect.Left = 0;
+            //y
+            if (rect.Top < 0)
+                rect.Top = 0;
+            //width
+            if (rect.Width > ScreenImage.PixelWidth)
+                rect.Width = ScreenImage.PixelWidth;
+            //height
+            if (rect.Height > ScreenImage.PixelHeight)
+                rect.Height = ScreenImage.PixelHeight;
+
+            return new CroppedBitmap(ScreenImage, rect);
+        }
 
         private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
         {
@@ -249,7 +267,7 @@ namespace Clowd
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            var cropped = new CroppedBitmap(ScreenImage, CroppingRectangle);
+            var cropped = CropBitmap();
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(cropped));
             var path = System.IO.Path.GetTempFileName() + ".png";
@@ -267,7 +285,7 @@ namespace Clowd
         }
         private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            var cropped = new CroppedBitmap(ScreenImage, CroppingRectangle);
+            var cropped = CropBitmap();
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(cropped));
             using (var ms = new MemoryStream())
