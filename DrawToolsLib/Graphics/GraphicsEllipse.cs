@@ -39,8 +39,8 @@ namespace DrawToolsLib.Graphics
                 (r.Left + r.Right) / 2.0,
                 (r.Top + r.Bottom) / 2.0);
 
-            double radiusX = (r.Right - r.Left) / 2.0;
-            double radiusY = (r.Bottom - r.Top) / 2.0;
+            double radiusX = (r.Right - r.Left) / 2.0 - LineWidth / 2;
+            double radiusY = (r.Bottom - r.Top) / 2.0 - LineWidth / 2;
 
             var brush = new SolidColorBrush(ObjectColor);
             drawingContext.DrawEllipse(
@@ -71,7 +71,7 @@ namespace DrawToolsLib.Graphics
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsEllipse(ActualScale, ObjectColor, LineWidth, Bounds, Filled) {ObjectId = ObjectId};
+            return new GraphicsEllipse(ActualScale, ObjectColor, LineWidth, Bounds, Filled) { ObjectId = ObjectId };
         }
     }
 }
