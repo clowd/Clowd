@@ -67,7 +67,7 @@ namespace DrawToolsLib.Graphics
                 r.X = Math.Round(r.X);
                 r.Y = Math.Round(r.Y);
             }
-            drawingContext.DrawImage(_imageCache, r);
+            drawingContext.DrawImage(_imageCache, Bounds);
         }
 
         public override GraphicsBase Clone()
