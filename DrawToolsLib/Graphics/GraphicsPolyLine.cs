@@ -102,7 +102,7 @@ namespace DrawToolsLib.Graphics
             var brush = new SolidColorBrush(ObjectColor);
             foreach (var pt in _points)
             {
-                context.DrawEllipse(brush, null, pt, LineWidth / 2, LineWidth / 2);
+                context.DrawEllipse(brush, null, pt, LineWidth, LineWidth);
             }
         }
 
@@ -124,7 +124,7 @@ namespace DrawToolsLib.Graphics
                 }
             }
             geo.Freeze();
-            _geoCache = geo;
+            _geoCache = geo.GetWidenedPathGeometry(new Pen(Brushes.Black, LineWidth));
 
             if (IsSelected)
             {
@@ -193,11 +193,7 @@ namespace DrawToolsLib.Graphics
         }
         internal override bool IntersectsWith(Rect rectangle)
         {
-            RectangleGeometry rg = new RectangleGeometry(rectangle);
-
-            PathGeometry p = Geometry.Combine(rg, _geoCache, GeometryCombineMode.Intersect, null);
-
-            return (!p.IsEmpty());
+            return rectangle.IntersectsWith(Bounds);
         }
         public override GraphicsBase Clone()
         {
@@ -218,6 +214,7 @@ namespace DrawToolsLib.Graphics
             _points = ppPts.Select(toWpfPoint).ToList();
             InvalidateVisual();
         }
+
 
         private Point toWpfPoint(VECTOR p)
         {
