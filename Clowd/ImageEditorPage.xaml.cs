@@ -341,6 +341,8 @@ namespace Clowd
 
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)
         {
+            if (Mouse.LeftButton == MouseButtonState.Pressed)
+                return;
             var tool = (DrawToolsLib.ToolType)Enum.Parse(typeof(DrawToolsLib.ToolType), (string)e.Parameter);
             drawingCanvas.Tool = tool;
         }
@@ -368,7 +370,7 @@ namespace Clowd
         {
             if (Keyboard.FocusedElement is TextBox)
                 return;
-            if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool == null)
+            if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool == null && Mouse.LeftButton != MouseButtonState.Pressed)
             {
                 _shiftPanPreviousTool = drawingCanvas.Tool;
                 drawingCanvas.Tool = DrawToolsLib.ToolType.None;
