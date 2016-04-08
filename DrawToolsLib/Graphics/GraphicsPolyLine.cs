@@ -96,7 +96,6 @@ namespace DrawToolsLib.Graphics
                 DrawCurvedLine(drawingContext);
             }
         }
-
         private void DrawBasicPoints(DrawingContext context)
         {
             var brush = new SolidColorBrush(ObjectColor);
@@ -105,7 +104,6 @@ namespace DrawToolsLib.Graphics
                 context.DrawEllipse(brush, null, pt, LineWidth, LineWidth);
             }
         }
-
         private void DrawCurvedLine(DrawingContext context)
         {
             var vectors = _points.Select(toVector).ToList();
@@ -193,7 +191,16 @@ namespace DrawToolsLib.Graphics
         }
         internal override bool IntersectsWith(Rect rectangle)
         {
-            return rectangle.IntersectsWith(Bounds);
+            if (rectangle.Contains(Bounds))
+                return true;
+
+            Geometry og1 = new RectangleGeometry(rectangle).GetWidenedPathGeometry(new Pen(Brushes.Black, 1.0));
+            Geometry og2 = _geoCache.GetWidenedPathGeometry(new Pen(Brushes.Black, 1.0));
+
+            CombinedGeometry cg = new CombinedGeometry(GeometryCombineMode.Intersect, og1, og2);
+            PathGeometry pg = cg.GetFlattenedPathGeometry();
+
+            return pg.Figures.Any();
         }
         public override GraphicsBase Clone()
         {
@@ -205,7 +212,6 @@ namespace DrawToolsLib.Graphics
             _points.Add(point);
             InvalidateVisual();
         }
-
         public void FinishDrawing()
         {
             _drawing = false;
@@ -214,7 +220,6 @@ namespace DrawToolsLib.Graphics
             _points = ppPts.Select(toWpfPoint).ToList();
             InvalidateVisual();
         }
-
 
         private Point toWpfPoint(VECTOR p)
         {
