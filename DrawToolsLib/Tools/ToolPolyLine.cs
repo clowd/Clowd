@@ -9,16 +9,9 @@ using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
-    /// <summary>
-    /// Polyline tool
-    /// </summary>
-    class ToolPolyLine : ToolObject
+    internal class ToolPolyLine : ToolObject
     {
-        private double lastX;
-        private double lastY;
         private GraphicsPolyLine newPolyLine;
-        private const double minDistance = 15;
-
 
         public ToolPolyLine()
         {
@@ -26,73 +19,31 @@ namespace DrawToolsLib
             ToolCursor = new Cursor(stream);
         }
 
-        /// <summary>
-        /// Create new object
-        /// </summary>
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
             Point p = e.GetPosition(drawingCanvas);
 
-            newPolyLine = new GraphicsPolyLine(drawingCanvas, new Point[]
-                {
-                    p,
-                    new Point(p.X + 1, p.Y + 1)
-                });
+            newPolyLine = new GraphicsPolyLine(drawingCanvas, new Point(p.X + 1, p.Y + 1));
 
             AddNewObject(drawingCanvas, newPolyLine);
-
-            lastX = p.X;
-            lastY = p.Y;
         }
 
-        /// <summary>
-        /// Set cursor and resize new polyline
-        /// </summary>
         public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)
         {
+            if (newPolyLine == null || e.LeftButton != MouseButtonState.Pressed || !drawingCanvas.IsMouseCaptured)
+                return;
+
             drawingCanvas.Cursor = ToolCursor;
-
-            if (e.LeftButton != MouseButtonState.Pressed)
-            {
-                return;
-            }
-
-            if ( ! drawingCanvas.IsMouseCaptured )
-            {
-                return;
-            }
-
-            if ( newPolyLine == null )
-            {
-                return;         // precaution
-            }
 
             Point p = e.GetPosition(drawingCanvas);
 
-            double distance = (p.X - lastX) * (p.X - lastX) + (p.Y - lastY) * (p.Y - lastY);
-
-            double d = minDistance*minDistance;
-
-            if ( distance < d)
-            {
-                // Distance between last two points is less than minimum -
-                // move last point
-                newPolyLine.MoveHandleTo(p, newPolyLine.HandleCount);
-            }
-            else
-            {
-                // Add new segment
-                newPolyLine.AddPoint(p);
-
-                lastX = p.X;
-                lastY = p.Y;
-            }
+            newPolyLine.AddPoint(p);
         }
 
         public override void OnMouseUp(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
+            newPolyLine.FinishDrawing();
             newPolyLine = null;
-
             base.OnMouseUp(drawingCanvas, e);
         }
     }

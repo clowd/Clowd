@@ -38,7 +38,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;SYSTEM_WINDOWS_VECTOR</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
@@ -48,7 +48,7 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;SYSTEM_WINDOWS_VECTOR</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
@@ -69,6 +69,14 @@
     <Compile Include="Commands\CommandChangeState.cs" />
     <Compile Include="Commands\CommandDelete.cs" />
     <Compile Include="Commands\CommandDeleteAll.cs" />
+    <Compile Include="Curves\CubicBezier.cs" />
+    <Compile Include="Curves\CurveBuilder.cs" />
+    <Compile Include="Curves\CurveFit.cs" />
+    <Compile Include="Curves\CurveFitBase.cs" />
+    <Compile Include="Curves\CurvePreprocess.cs" />
+    <Compile Include="Curves\Spline.cs" />
+    <Compile Include="Curves\SplineBuilder.cs" />
+    <Compile Include="Curves\VectorHelper.cs" />
     <Compile Include="Definitions.cs" />
     <Compile Include="DrawingCanvas.cs" />
     <Compile Include="DrawingCanvasException.cs" />
