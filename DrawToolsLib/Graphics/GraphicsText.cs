@@ -17,6 +17,16 @@ namespace DrawToolsLib.Graphics
         [XmlIgnore]
         public int Padding { get; } = 15;
 
+        [XmlIgnore]
+        public bool Editing
+        {
+            get { return _editing; }
+            set
+            {
+                _editing = value;
+                OnPropertyChanged(nameof(Editing));
+            }
+        }
         public int Angle
         {
             get { return _angle; }
@@ -38,6 +48,7 @@ namespace DrawToolsLib.Graphics
 
         private int _angle;
         private string _body;
+        private bool _editing;
 
         public GraphicsText(DrawingCanvas canvas, Point point)
             : this(canvas.ObjectColor, canvas.LineWidth, point)
@@ -51,7 +62,6 @@ namespace DrawToolsLib.Graphics
             var colors = new Color[]
             {
                 Color.FromRgb(255, 255, 203),
-                Color.FromRgb(255, 255, 203),
                 Color.FromRgb(229, 203, 228),
                 Color.FromRgb(203, 228, 222),
                 Color.FromRgb(213, 198, 157)
@@ -61,9 +71,17 @@ namespace DrawToolsLib.Graphics
             Angle = rnd.Next(-4, 4);
             Body = "double click to edit note.";
         }
+        public GraphicsText(Color objectColor, double lineWidth, Point point, int angle, string body)
+            : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)))
+        {
+            Angle = angle;
+            Body = body;
+        }
         protected GraphicsText()
         {
         }
+
+        internal override int HandleCount => 0;
 
         internal override void Draw(DrawingContext context)
         {
@@ -78,7 +96,12 @@ namespace DrawToolsLib.Graphics
             drawShadow3(context, Color.FromArgb(140, 0, 0, 0), Color.FromArgb(0, 0, 0, 0), Bounds, 4);
 
             context.DrawRectangle(new SolidColorBrush(ObjectColor), null, Bounds);
-            context.DrawText(form, new Point(this.Left + Padding, this.Top + Padding));
+
+            if (IsSelected)
+                DrawDashedBorder(context);
+
+            if (!Editing)
+                context.DrawText(form, new Point(this.Left + Padding, this.Top + Padding));
         }
         private void drawShadow3(DrawingContext context, Color foreg, Color backg, Rect rect, double depth)
         {
@@ -139,6 +162,11 @@ namespace DrawToolsLib.Graphics
                 new SolidColorBrush(Color.FromArgb(190, 0, 0, 0)));
 
             return formatted;
+        }
+
+        public override GraphicsBase Clone()
+        {
+            return new GraphicsText(ObjectColor, LineWidth, Bounds.TopLeft, Angle, Body) { ObjectId = ObjectId };
         }
     }
 }
