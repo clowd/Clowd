@@ -1741,7 +1741,7 @@ namespace DrawToolsLib
                 return;
 
             graphicsText.IsSelected = true;   // restore selection which was removed for better textbox appearance
-
+            graphicsText.Editing = false;
 
             if (toolText.TextBox.Text.Trim().Length == 0)
             {

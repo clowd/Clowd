@@ -126,16 +126,7 @@ namespace DrawToolsLib.Graphics
 
             if (IsSelected)
             {
-                context.DrawRectangle(null,
-                    new Pen(new SolidColorBrush(Color.FromArgb(127, 255, 255, 255)), LineWidth),
-                    Bounds);
-                DashStyle dashStyle = new DashStyle();
-                dashStyle.Dashes.Add(4);
-                Pen dashedPen = new Pen(new SolidColorBrush(Color.FromArgb(127, 0, 0, 0)), LineWidth);
-                dashedPen.DashStyle = dashStyle;
-                context.DrawRectangle(null,
-                    dashedPen,
-                    Bounds);
+                DrawDashedBorder(context);
                 context.DrawGeometry(null, new Pen(new SolidColorBrush(Color.FromArgb(127, 0, 0, 0)), LineWidth * 3), geo);
             }
 

@@ -85,6 +85,7 @@ namespace DrawToolsLib
                 return;
 
             graphicsText.IsSelected = false;  // selection marks don't look good with textbox
+            graphicsText.Editing = true;
 
             // Keep old text in the case Esc is pressed while editing
             oldText = graphicsText.Body;
