@@ -97,26 +97,23 @@ namespace Clowd
             var bounds = drawingCanvas.GetArtworkBounds();
 
             DrawingVisual vs = new DrawingVisual();
-            DrawingContext dc = vs.RenderOpen();
-
-            var transform = new TranslateTransform(Math.Floor(-bounds.Left), Math.Floor(-bounds.Top));
-            dc.PushTransform(transform);
-
-            dc.DrawRectangle(Brushes.White, null, bounds);
-            drawingCanvas.Draw(dc);
-
-            dc.Close();
-
+            using (DrawingContext dc = vs.RenderOpen())
+            {
+                var transform = new TranslateTransform(Math.Floor(-bounds.Left), Math.Floor(-bounds.Top));
+                dc.PushTransform(transform);
+                dc.DrawRectangle(Brushes.White, null, bounds);
+                drawingCanvas.Draw(dc);
+            }
             return vs;
         }
         private RenderTargetBitmap GetRenderedBitmap()
         {
             var drawingVisual = GetRenderedVisual();
             RenderTargetBitmap bmp = new RenderTargetBitmap(
-                (int)ScreenTools.WpfToScreen(drawingVisual.ContentBounds.Width),
-                (int)ScreenTools.WpfToScreen(drawingVisual.ContentBounds.Height),
-                ScreenTools.DpiZoom,
-                ScreenTools.DpiZoom,
+                ScreenTools.WpfToScreen(drawingVisual.ContentBounds.Width),
+                ScreenTools.WpfToScreen(drawingVisual.ContentBounds.Height),
+                ScreenTools.WpfToScreen(96),
+                ScreenTools.WpfToScreen(96),
                 PixelFormats.Pbgra32);
             bmp.Render(drawingVisual);
             return bmp;
