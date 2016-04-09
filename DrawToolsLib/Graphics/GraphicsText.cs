@@ -159,7 +159,7 @@ namespace DrawToolsLib.Graphics
                 FlowDirection.LeftToRight,
                 typeface,
                 12,
-                new SolidColorBrush(Color.FromArgb(190, 0, 0, 0)));
+                new SolidColorBrush(Color.FromArgb(220, 0, 0, 0)));
 
             return formatted;
         }
