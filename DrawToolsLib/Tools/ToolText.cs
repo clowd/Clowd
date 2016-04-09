@@ -75,6 +75,29 @@ namespace DrawToolsLib
             // in-place textbox.
         }
 
+        public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)
+        {
+            drawingCanvas.Cursor = ToolCursor;
+
+            if (e.LeftButton == MouseButtonState.Pressed)
+            {
+                if (drawingCanvas.IsMouseCaptured)
+                {
+                    if (drawingCanvas.Count > 0)
+                    {
+                        Point point = e.GetPosition(drawingCanvas);
+                        var gr = drawingCanvas[drawingCanvas.Count - 1].Graphic as GraphicsText;
+                        if (gr != null)
+                        {
+                            gr.Left = point.X;
+                            gr.Top = point.Y;
+                        }
+                    }
+                }
+
+            }
+        }
+
         /// <summary>
         /// Create textbox for in-place editing
         /// </summary>
