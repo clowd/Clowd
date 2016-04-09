@@ -12,13 +12,15 @@ namespace DrawToolsLib.Graphics
     /// </summary>
     internal class GraphicsSelectionRectangle : GraphicsRectangle
     {
-        public GraphicsSelectionRectangle(DrawingCanvas canvas, Rect rect) 
+        public GraphicsSelectionRectangle(DrawingCanvas canvas, Rect rect)
             : base(canvas, rect, false)
         {
+            Effect = null;
         }
-        public GraphicsSelectionRectangle(Color objectColor, double lineWidth, Rect rect) 
+        public GraphicsSelectionRectangle(Color objectColor, double lineWidth, Rect rect)
             : base(objectColor, lineWidth, rect, false)
         {
+            Effect = null;
         }
 
         internal override void Draw(DrawingContext drawingContext)

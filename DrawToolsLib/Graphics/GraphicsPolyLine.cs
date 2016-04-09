@@ -127,7 +127,6 @@ namespace DrawToolsLib.Graphics
             if (IsSelected)
             {
                 DrawDashedBorder(context);
-                context.DrawGeometry(null, new Pen(new SolidColorBrush(Color.FromArgb(127, 0, 0, 0)), LineWidth * 3), geo);
             }
 
             context.DrawGeometry(null, pen, geo);
