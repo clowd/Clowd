@@ -19,8 +19,8 @@ namespace DrawToolsLib.Graphics
             get { return _effect; }
             protected set
             {
-                OnPropertyChanged(nameof(Effect));
                 _effect = value;
+                OnPropertyChanged(nameof(Effect));
             }
         }
 
