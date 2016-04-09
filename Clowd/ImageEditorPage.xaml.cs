@@ -325,6 +325,16 @@ namespace Clowd
             ClipboardEx.AddImage(GetRenderedBitmap());
         }
 
+        private void CutCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (!VerifyArtworkExists())
+                return;
+
+            drawingCanvas.Copy();
+            ClipboardEx.AddImage(GetRenderedBitmap());
+            drawingCanvas.DeleteAll();
+        }
+
         private void DeleteCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Delete();
@@ -372,6 +382,11 @@ namespace Clowd
                 drawingCanvas.WorldOffset.Y - (height / 2),
                 width, height), path);
             drawingCanvas.AddGraphic(graphic);
+        }
+
+        private void SelectAllCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            drawingCanvas.SelectAll();
         }
 
         private void rootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
