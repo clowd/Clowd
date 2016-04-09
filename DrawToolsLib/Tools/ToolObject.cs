@@ -42,7 +42,7 @@ namespace DrawToolsLib
         /// </summary>
         protected static void AddNewObject(DrawingCanvas drawingCanvas, GraphicsBase o)
         {
-            HelperFunctions.UnselectAll(drawingCanvas);
+            drawingCanvas.UnselectAll();
             o.IsSelected = true;
             drawingCanvas.GraphicsList.Add(o.CreateVisual());
             drawingCanvas.CaptureMouse();

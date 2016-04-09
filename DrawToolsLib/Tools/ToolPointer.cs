@@ -73,7 +73,7 @@ namespace DrawToolsLib
                         resizedObjectHandle = handleNumber;
 
                         // Since we want to resize only one object, unselect all other objects
-                        HelperFunctions.UnselectAll(drawingCanvas);
+                        drawingCanvas.UnselectAll();
                         o.IsSelected = true;
 
                         commandChangeState = new CommandChangeState(drawingCanvas);
@@ -104,7 +104,7 @@ namespace DrawToolsLib
                     // Unselect all if Ctrl is not pressed and clicked object is not selected yet
                     if (Keyboard.Modifiers != ModifierKeys.Control && !movedObject.IsSelected)
                     {
-                        HelperFunctions.UnselectAll(drawingCanvas);
+                        drawingCanvas.UnselectAll();
                     }
 
                     // Select clicked object
@@ -123,7 +123,7 @@ namespace DrawToolsLib
                 // Unselect all if Ctrl is not pressed
                 if (Keyboard.Modifiers != ModifierKeys.Control)
                 {
-                    HelperFunctions.UnselectAll(drawingCanvas);
+                    drawingCanvas.UnselectAll();
                 }
 
                 // Group selection. Create selection rectangle.
