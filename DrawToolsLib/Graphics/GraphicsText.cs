@@ -90,10 +90,7 @@ namespace DrawToolsLib.Graphics
             this.Right = this.Left + form.Width + (Padding * 2);
             this.Bottom = this.Top + form.Height + (Padding * 2);
 
-            //context.PushTransform(new RotateTransform(Angle, (this.Right - this.Left) / 2 + this.Left, (this.Bottom - this.Top) / 2 + this.Top));
             context.PushTransform(new RotateTransform(Angle, Left, Top));
-
-            drawShadow3(context, Color.FromArgb(140, 0, 0, 0), Color.FromArgb(0, 0, 0, 0), Bounds, 4);
 
             context.DrawRectangle(new SolidColorBrush(ObjectColor), null, Bounds);
 
@@ -102,47 +99,6 @@ namespace DrawToolsLib.Graphics
 
             if (!Editing)
                 context.DrawText(form, new Point(this.Left + Padding, this.Top + Padding));
-        }
-        private void drawShadow3(DrawingContext context, Color foreg, Color backg, Rect rect, double depth)
-        {
-            var bottom_brush = new LinearGradientBrush(foreg, backg, 90);
-            var bottom_path = new RectangleGeometry(new Rect(new Point(rect.Left + depth, rect.Bottom), new Size(rect.Width - depth, depth)));
-
-            var right_brush = new LinearGradientBrush(foreg, backg, 0);
-            var right_path = new RectangleGeometry(new Rect(new Point(rect.Right, rect.Top + depth), new Size(depth, rect.Height - depth)));
-
-            RadialGradientBrush bottomright_brush = new RadialGradientBrush(foreg, backg)
-            {
-                Center = new Point(0, 0),
-                GradientOrigin = new Point(0, 0),
-                RadiusX = 1,
-                RadiusY = 1,
-            };
-            var bottomright_path = new RectangleGeometry(new Rect(rect.BottomRight, new Size(depth, depth)));
-
-            RadialGradientBrush topright_brush = new RadialGradientBrush(foreg, backg)
-            {
-                Center = new Point(0, 1),
-                GradientOrigin = new Point(0, 1),
-                RadiusX = 1,
-                RadiusY = 1,
-            };
-            var topright_path = new RectangleGeometry(new Rect(rect.TopRight, new Size(depth, depth)));
-
-            RadialGradientBrush bottomleft_brush = new RadialGradientBrush(foreg, backg)
-            {
-                Center = new Point(1, 0),
-                GradientOrigin = new Point(1, 0),
-                RadiusX = 1,
-                RadiusY = 1,
-            };
-            var bottomleft_path = new RectangleGeometry(new Rect(rect.BottomLeft, new Size(depth, depth)));
-
-            context.DrawGeometry(bottom_brush, null, bottom_path);
-            context.DrawGeometry(right_brush, null, right_path);
-            context.DrawGeometry(bottomright_brush, null, bottomright_path);
-            context.DrawGeometry(topright_brush, null, topright_path);
-            context.DrawGeometry(bottomleft_brush, null, bottomleft_path);
         }
 
         internal FormattedText CreateFormattedText()

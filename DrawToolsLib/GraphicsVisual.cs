@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
@@ -35,10 +36,13 @@ namespace DrawToolsLib
         {
             _graphic = graphic;
             _graphic.Invalidated += GraphicOnInvalidated;
+            Effect = _graphic.Effect;
         }
 
         private void GraphicOnInvalidated(object sender, EventArgs eventArgs)
         {
+            if (Effect != _graphic.Effect)
+                Effect = _graphic.Effect;
             RefreshDrawing();
         }
         public void RefreshDrawing()

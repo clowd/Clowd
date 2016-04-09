@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Runtime.CompilerServices;
+using System.Windows.Media.Effects;
 using System.Xml.Serialization;
 using DrawToolsLib.Annotations;
 
@@ -12,6 +13,17 @@ namespace DrawToolsLib.Graphics
     [Serializable]
     public abstract class GraphicsBase : INotifyPropertyChanged, ICloneable
     {
+        [XmlIgnore]
+        public Effect Effect
+        {
+            get { return _effect; }
+            protected set
+            {
+                OnPropertyChanged(nameof(Effect));
+                _effect = value;
+            }
+        }
+
         [XmlIgnore]
         public int ObjectId
         {
@@ -53,11 +65,10 @@ namespace DrawToolsLib.Graphics
         public event EventHandler Invalidated;
 
         private int _objectId;
-        private Rect _bounds;
-        private double _actualScale;
         private Color _objectColor;
         private double _lineWidth;
         private bool _isSelected;
+        private Effect _effect;
 
         [XmlIgnore]
         protected double LineHitTestWidth => Math.Max(8.0, LineWidth);
@@ -73,6 +84,7 @@ namespace DrawToolsLib.Graphics
         protected GraphicsBase()
         {
             ObjectId = this.GetHashCode();
+            _effect = new DropShadowEffect() { Opacity = 0.5, ShadowDepth = 2, RenderingBias = RenderingBias.Performance };
         }
         protected GraphicsBase(DrawingCanvas canvas)
             : this(canvas.ObjectColor, canvas.LineWidth)
@@ -139,7 +151,7 @@ namespace DrawToolsLib.Graphics
             // clear event handler, so if there are any un-disposed GraphicsVisual's we are de-referencing them.
             Invalidated = delegate { };
 
-            var vis =  new GraphicsVisual(this);
+            var vis = new GraphicsVisual(this);
             this.InvalidateVisual();
             return vis;
         }

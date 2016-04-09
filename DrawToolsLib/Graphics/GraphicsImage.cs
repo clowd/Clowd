@@ -41,6 +41,7 @@ namespace DrawToolsLib.Graphics
 
         protected GraphicsImage()
         {
+            Effect = null;
         }
         public GraphicsImage(DrawingCanvas canvas, Rect rect, string filePath)
            : this(canvas.ObjectColor, canvas.LineWidth, rect, filePath)
@@ -51,6 +52,7 @@ namespace DrawToolsLib.Graphics
             : base(objectColor, lineWidth, rect)
         {
             _fileName = filePath;
+            Effect = null;
             if (!File.Exists(_fileName))
                 throw new FileNotFoundException(_fileName);
         }
