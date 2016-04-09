@@ -15,7 +15,7 @@ namespace DrawToolsLib
     /// </summary>
     class ToolText : ToolRectangleBase
     {
-        TextBox textBox;
+        TextBox _textBox;
         string oldText;
 
         GraphicsVisual editedGraphicsText;
@@ -35,8 +35,8 @@ namespace DrawToolsLib
         /// </summary>
         public TextBox TextBox
         {
-            get { return textBox; }
-            set { textBox = value; }
+            get { return _textBox; }
+            set { _textBox = value; }
         }
 
         /// <summary>
@@ -45,15 +45,7 @@ namespace DrawToolsLib
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
             Point point = e.GetPosition(drawingCanvas);
-
-            var tface = new Typeface(
-                new FontFamily(drawingCanvas.TextFontFamilyName),
-                drawingCanvas.TextFontStyle, 
-                drawingCanvas.TextFontWeight, 
-                drawingCanvas.TextFontStretch);
-
-            var rect = HelperFunctions.CreateRectSafe(point.X, point.Y, point.X + 1, point.Y + 1);
-            AddNewObject(drawingCanvas, new GraphicsText(drawingCanvas, rect, tface, drawingCanvas.TextFontSize, ""));
+            AddNewObject(drawingCanvas, new GraphicsText(drawingCanvas, point));
         }
 
         /// <summary>
@@ -71,15 +63,11 @@ namespace DrawToolsLib
                 drawingCanvas[drawingCanvas.Count - 1].Graphic.Normalize();
 
                 GraphicsText t = drawingCanvas[drawingCanvas.Count - 1].Graphic as GraphicsText;
-                if (t.Bounds.Width < 150)
-                    t.Right = t.Left + 150;
-                if (t.Bounds.Height < 100)
-                    t.Bottom = t.Top + 150;
 
                 if (t != null)
                 {
                     // Create textbox for editing of graphics object which is just created
-                    CreateTextBox(drawingCanvas[drawingCanvas.Count - 1], drawingCanvas);
+                    CreateTextBox(drawingCanvas[drawingCanvas.Count - 1], drawingCanvas, true);
                 }
             }
 
@@ -90,54 +78,80 @@ namespace DrawToolsLib
         /// <summary>
         /// Create textbox for in-place editing
         /// </summary>
-        public void CreateTextBox(GraphicsVisual graphics, DrawingCanvas drawingCanvas)
+        public void CreateTextBox(GraphicsVisual graphics, DrawingCanvas drawingCanvas, bool newGraphic = false)
         {
             var graphicsText = graphics.Graphic as GraphicsText;
-            if (graphicsText != null)
+            if (graphicsText == null)
                 return;
 
             graphicsText.IsSelected = false;  // selection marks don't look good with textbox
 
             // Keep old text in the case Esc is pressed while editing
-            oldText = graphicsText.Text;
+            oldText = graphicsText.Body;
 
             // Keep reference to edited object
             editedGraphicsText = graphics;
 
+            var gb = graphicsText.Bounds;
 
-            textBox = new TextBox();
+            _textBox = new TextBox();
+            _textBox.RenderTransform = new RotateTransform(graphicsText.Angle);
+            //textBox.Width = graphicsText.Bounds.Width;
+            //textBox.Height = graphicsText.Bounds.Height;
+            //textBox.FontFamily = new FontFamily(graphicsText.FontFamily);
+            //textBox.FontSize = graphicsText.FontSize;
+            //var tface = graphicsText.Typeface;
+            //textBox.FontStretch = tface.Stretch;
+            //textBox.FontStyle = tface.Style;
+            //textBox.FontWeight = tface.Weight;
+            //textBox.Text = graphicsText.Text;
+            _textBox.Width = Double.NaN;
+            _textBox.Height = Double.NaN;
+            _textBox.Background = Brushes.Transparent;
+            _textBox.FontFamily = new FontFamily("Arial");
+            _textBox.Text = graphicsText.Body;
+            _textBox.FontSize = 12;
+            _textBox.BorderThickness = new Thickness(0, 0, 0, 1);
+            _textBox.Tag = graphicsText;
 
-            textBox.Width = graphicsText.Bounds.Width;
-            textBox.Height = graphicsText.Bounds.Height;
-            textBox.FontFamily = new FontFamily(graphicsText.FontFamily);
-            textBox.FontSize = graphicsText.FontSize;
-            var tface = graphicsText.Typeface;
-            textBox.FontStretch = tface.Stretch;
-            textBox.FontStyle = tface.Style;
-            textBox.FontWeight = tface.Weight;
-            textBox.Text = graphicsText.Text;
+            if (newGraphic)
+            {
+                _textBox.Text = graphicsText.Body = "start typing your note,\r\nuse shift+enter for new lines.";
+                _textBox.SelectAll();
+            }
 
-            textBox.AcceptsReturn = true;
-            textBox.TextWrapping = TextWrapping.Wrap;
+            _textBox.AcceptsReturn = true;
+            //_textBox.TextWrapping = TextWrapping.Wrap;
 
-            drawingCanvas.Children.Add(textBox);
+            drawingCanvas.Children.Add(_textBox);
 
-            Canvas.SetLeft(textBox, graphicsText.Bounds.Left);
-            Canvas.SetTop(textBox, graphicsText.Bounds.Top);
-            textBox.Width = textBox.Width;
-            textBox.Height = textBox.Height;
+            //Matrix matrix = new Matrix();
+            //matrix.Rotate(graphicsText.Angle);
+            //gb.Transform(matrix);
 
-            textBox.Focus();
+            Canvas.SetLeft(_textBox, gb.TopLeft.X + graphicsText.Padding);
+            Canvas.SetTop(_textBox, gb.TopLeft.Y + graphicsText.Padding);
 
-            textBox.LostFocus += new RoutedEventHandler(textBox_LostFocus);
-            textBox.LostKeyboardFocus += new KeyboardFocusChangedEventHandler(textBox_LostKeyboardFocus);
-            textBox.PreviewKeyDown += new KeyEventHandler(textBox_PreviewKeyDown);
-            textBox.ContextMenu = null;     // see notes in textBox_LostKeyboardFocus
+            _textBox.Focus();
+
+            _textBox.LostFocus += new RoutedEventHandler(textBox_LostFocus);
+            _textBox.LostKeyboardFocus += new KeyboardFocusChangedEventHandler(textBox_LostKeyboardFocus);
+            _textBox.PreviewKeyDown += new KeyEventHandler(textBox_PreviewKeyDown);
+            _textBox.ContextMenu = null;     // see notes in textBox_LostKeyboardFocus
+            _textBox.TextChanged += textBox_TextChanged;
 
             // Initially textbox is set to the same rectangle as graphicsText.
             // After textbox loading its template is available, and we can
             // correct textbox position - see details in the textBox_Loaded function.
-            textBox.Loaded += new RoutedEventHandler(textBox_Loaded);
+            _textBox.Loaded += new RoutedEventHandler(textBox_Loaded);
+        }
+
+        private void textBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var grap = (sender as TextBox)?.Tag as GraphicsText;
+            if (grap == null)
+                return;
+            grap.Body = ((TextBox)sender).Text;
         }
 
 
@@ -154,13 +168,13 @@ namespace DrawToolsLib
         {
             double xOffset, yOffset;
 
-            ComputeTextOffset(textBox, out xOffset, out yOffset);
+            ComputeTextOffset(_textBox, out xOffset, out yOffset);
 
 
-            Canvas.SetLeft(textBox, Canvas.GetLeft(textBox) - xOffset);
-            Canvas.SetTop(textBox, Canvas.GetTop(textBox) - yOffset);
-            textBox.Width = textBox.Width + xOffset + xOffset;
-            textBox.Height = textBox.Height + yOffset + yOffset;
+            Canvas.SetLeft(_textBox, Canvas.GetLeft(_textBox) - xOffset);
+            Canvas.SetTop(_textBox, Canvas.GetTop(_textBox) - yOffset);
+            _textBox.Width = _textBox.Width + xOffset + xOffset;
+            _textBox.Height = _textBox.Height + yOffset + yOffset;
         }
 
 
@@ -217,7 +231,7 @@ namespace DrawToolsLib
         {
             if (e.Key == Key.Escape)
             {
-                textBox.Text = oldText;
+                _textBox.Text = oldText;
 
                 drawingCanvas.HideTextbox(editedGraphicsText);
 
@@ -252,8 +266,8 @@ namespace DrawToolsLib
 
                 if (!String.IsNullOrWhiteSpace(str))
                 {
-                    var comp = new TextComposition(InputManager.Current, textBox, str);
-                    textBox.RaiseEvent(new TextCompositionEventArgs(InputManager.Current.PrimaryKeyboardDevice, comp)
+                    var comp = new TextComposition(InputManager.Current, _textBox, str);
+                    _textBox.RaiseEvent(new TextCompositionEventArgs(InputManager.Current.PrimaryKeyboardDevice, comp)
                     {
                         RoutedEvent = TextCompositionManager.TextInputEvent
                     });

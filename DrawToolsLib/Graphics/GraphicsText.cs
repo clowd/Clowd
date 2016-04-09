@@ -1,203 +1,144 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using System.Xml.Serialization;
 
 namespace DrawToolsLib.Graphics
 {
-    [Serializable]
     public class GraphicsText : GraphicsRectangle
     {
         [XmlIgnore]
-        public Typeface Typeface => _typeface.GetTypeface();
+        public int Padding { get; } = 15;
 
-        public string FontFamily
+        public int Angle
         {
-            get { return _typeface.FontFamily; }
+            get { return _angle; }
             set
             {
-                if (value == _typeface.FontFamily) return;
-                _typeface.FontFamily = value;
-                OnPropertyChanged(nameof(FontFamily));
+                _angle = value;
+                OnPropertyChanged(nameof(Angle));
             }
         }
-        public string FontStyle
+        public string Body
         {
-            get { return _typeface.FontStyle; }
+            get { return _body; }
             set
             {
-                if (value == _typeface.FontStyle) return;
-                _typeface.FontStyle = value;
-                OnPropertyChanged(nameof(FontStyle));
-            }
-        }
-        public string FontWeight
-        {
-            get { return _typeface.FontWeight; }
-            set
-            {
-                if (value == _typeface.FontWeight) return;
-                _typeface.FontWeight = value;
-                OnPropertyChanged(nameof(FontWeight));
-            }
-        }
-        public string FontStretch
-        {
-            get { return _typeface.FontStretch; }
-            set
-            {
-                if (value == _typeface.FontStretch) return;
-                _typeface.FontStretch = value;
-                OnPropertyChanged(nameof(FontStretch));
+                _body = value;
+                OnPropertyChanged(nameof(Body));
             }
         }
 
-        public double FontSize
-        {
-            get { return _fontSize; }
-            set
-            {
-                if (value.Equals(_fontSize)) return;
-                _fontSize = value;
-                OnPropertyChanged();
-            }
-        }
-        public string Text
-        {
-            get { return _text; }
-            set
-            {
-                if (value == _text) return;
-                _text = value;
-                OnPropertyChanged();
-            }
-        }
+        private int _angle;
+        private string _body;
 
-        private TypefaceString _typeface;
-        private double _fontSize;
-        private string _text;
+        public GraphicsText(DrawingCanvas canvas, Point point)
+            : this(canvas.ObjectColor, canvas.LineWidth, point)
+        {
+        }
+        public GraphicsText(Color objectColor, double lineWidth, Point point)
+            : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)))
+        {
+            Random rnd = new Random();
 
+            var colors = new Color[]
+            {
+                Color.FromRgb(255, 255, 203),
+                Color.FromRgb(255, 255, 203),
+                Color.FromRgb(229, 203, 228),
+                Color.FromRgb(203, 228, 222),
+                Color.FromRgb(213, 198, 157)
+            };
+
+            ObjectColor = colors[rnd.Next(0, colors.Length - 1)];
+            Angle = rnd.Next(-4, 4);
+            Body = "double click to edit note.";
+        }
         protected GraphicsText()
         {
-            _typeface = new TypefaceString();
-        }
-        public GraphicsText(DrawingCanvas canvas, Rect rect, Typeface typeFace, double fontSize, string text)
-            : this(canvas.ObjectColor, canvas.LineWidth, rect, typeFace, fontSize, text)
-        {
-        }
-        public GraphicsText(Color objectColor, double lineWidth, Rect rect,
-            Typeface typeFace, double fontSize, string text) : base(objectColor, lineWidth, rect)
-        {
-            _typeface = TypefaceString.FromTypeface(typeFace);
-            _fontSize = fontSize;
-            _text = text;
-        }
-        public GraphicsText(DrawingCanvas canvas, Rect rect, TypefaceString typeFace, double fontSize, string text)
-           : this(canvas.ObjectColor, canvas.LineWidth, rect, typeFace, fontSize, text)
-        {
-        }
-        public GraphicsText(Color objectColor, double lineWidth, Rect rect,
-            TypefaceString typeFace, double fontSize, string text) : base(objectColor, lineWidth, rect)
-        {
-            _typeface = typeFace;
-            _fontSize = fontSize;
-            _text = text;
         }
 
-        internal override void DrawRectangle(DrawingContext drawingContext)
+        internal override void Draw(DrawingContext context)
         {
-            if (drawingContext == null)
-                throw new ArgumentNullException(nameof(drawingContext));
+            var form = CreateFormattedText();
 
-            Rect rect = Bounds;
-            drawingContext.PushClip(new RectangleGeometry(rect));
-            drawingContext.DrawRectangle(Brushes.LightYellow, new Pen(Brushes.Black, 1), rect);
-            drawingContext.DrawText(CreateFormattedText(), new Point(rect.Left, rect.Top));
+            this.Right = this.Left + form.Width + (Padding * 2);
+            this.Bottom = this.Top + form.Height + (Padding * 2);
 
-            drawingContext.Pop();
+            //context.PushTransform(new RotateTransform(Angle, (this.Right - this.Left) / 2 + this.Left, (this.Bottom - this.Top) / 2 + this.Top));
+            context.PushTransform(new RotateTransform(Angle, Left, Top));
 
-            if (IsSelected)
+            drawShadow3(context, Color.FromArgb(140, 0, 0, 0), Color.FromArgb(0, 0, 0, 0), Bounds, 4);
+
+            context.DrawRectangle(new SolidColorBrush(ObjectColor), null, Bounds);
+            context.DrawText(form, new Point(this.Left + Padding, this.Top + Padding));
+        }
+        private void drawShadow3(DrawingContext context, Color foreg, Color backg, Rect rect, double depth)
+        {
+            var bottom_brush = new LinearGradientBrush(foreg, backg, 90);
+            var bottom_path = new RectangleGeometry(new Rect(new Point(rect.Left + depth, rect.Bottom), new Size(rect.Width - depth, depth)));
+
+            var right_brush = new LinearGradientBrush(foreg, backg, 0);
+            var right_path = new RectangleGeometry(new Rect(new Point(rect.Right, rect.Top + depth), new Size(depth, rect.Height - depth)));
+
+            RadialGradientBrush bottomright_brush = new RadialGradientBrush(foreg, backg)
             {
-                drawingContext.DrawRectangle(
-                    null,
-                    new Pen(new SolidColorBrush(ObjectColor), LineWidth),
-                    rect);
-            }
+                Center = new Point(0, 0),
+                GradientOrigin = new Point(0, 0),
+                RadiusX = 1,
+                RadiusY = 1,
+            };
+            var bottomright_path = new RectangleGeometry(new Rect(rect.BottomRight, new Size(depth, depth)));
 
-            // Draw tracker
+            RadialGradientBrush topright_brush = new RadialGradientBrush(foreg, backg)
+            {
+                Center = new Point(0, 1),
+                GradientOrigin = new Point(0, 1),
+                RadiusX = 1,
+                RadiusY = 1,
+            };
+            var topright_path = new RectangleGeometry(new Rect(rect.TopRight, new Size(depth, depth)));
+
+            RadialGradientBrush bottomleft_brush = new RadialGradientBrush(foreg, backg)
+            {
+                Center = new Point(1, 0),
+                GradientOrigin = new Point(1, 0),
+                RadiusX = 1,
+                RadiusY = 1,
+            };
+            var bottomleft_path = new RectangleGeometry(new Rect(rect.BottomLeft, new Size(depth, depth)));
+
+            context.DrawGeometry(bottom_brush, null, bottom_path);
+            context.DrawGeometry(right_brush, null, right_path);
+            context.DrawGeometry(bottomright_brush, null, bottomright_path);
+            context.DrawGeometry(topright_brush, null, topright_path);
+            context.DrawGeometry(bottomleft_brush, null, bottomleft_path);
         }
-        internal override bool Contains(Point point)
+
+        internal FormattedText CreateFormattedText()
         {
-            return Bounds.Contains(point);
+            return CreateFormattedText(Body);
         }
-
-        public override GraphicsBase Clone()
+        internal FormattedText CreateFormattedText(string text)
         {
-            return new GraphicsText(ObjectColor, LineWidth, Bounds, _typeface, FontSize, Text) { ObjectId = ObjectId };
-        }
-
-        private FormattedText CreateFormattedText()
-        {
-            if (String.IsNullOrEmpty(_typeface.FontFamily))
-                _typeface.FontFamily = Properties.Settings.Default.DefaultFontFamily;
-
-            if (_text == null)
-                _text = "";
-
-            if (_fontSize <= 0.0)
-                _fontSize = 12.0;
-
-            Typeface typeface = _typeface.GetTypeface();
+            var typeface = new Typeface(new FontFamily("Arial"), FontStyles.Normal, FontWeights.Normal, new FontStretch());
 
             var formatted = new FormattedText(
-                Text,
+                Body,
                 System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
                 typeface,
-                FontSize,
-                new SolidColorBrush(ObjectColor));
+                12,
+                new SolidColorBrush(Color.FromArgb(190, 0, 0, 0)));
 
-            formatted.MaxTextWidth = Bounds.Width;
             return formatted;
-        }
-        public class TypefaceString
-        {
-            public string FontFamily { get; set; }
-            public string FontStyle { get; set; }
-            public string FontWeight { get; set; }
-            public string FontStretch { get; set; }
-
-            public TypefaceString()
-            {
-            }
-
-            public TypefaceString(string family, string style, string weight, string stretch)
-            {
-                FontFamily = family;
-                FontStyle = style;
-                FontWeight = weight;
-                FontStretch = stretch;
-            }
-
-            public Typeface GetTypeface()
-            {
-                return new Typeface(new FontFamily(FontFamily),
-                    FontConversions.FontStyleFromString(FontStyle),
-                    FontConversions.FontWeightFromString(FontWeight),
-                    FontConversions.FontStretchFromString(FontStretch));
-            }
-            public static TypefaceString FromTypeface(Typeface tface)
-            {
-                return new TypefaceString()
-                {
-                    FontFamily = tface.FontFamily.ToString(),
-                    FontStretch = FontConversions.FontStretchToString(tface.Stretch),
-                    FontStyle = FontConversions.FontStyleToString(tface.Style),
-                    FontWeight = FontConversions.FontWeightToString(tface.Weight)
-                };
-            }
         }
     }
 }
