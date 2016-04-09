@@ -22,7 +22,6 @@ namespace DrawToolsLib
         // Collection contains instances of GraphicsVisual-derived classes.
         private VisualCollection graphicsList;
 
-
         // Dependency properties
         public static readonly DependencyProperty ToolProperty;
 
@@ -490,7 +489,25 @@ namespace DrawToolsLib
         {
             DrawingCanvas d = property as DrawingCanvas;
 
-            HelperFunctions.ApplyLineWidth(d, d.LineWidth, true);
+            CommandChangeState command = new CommandChangeState(d);
+            bool wasChange = false;
+
+            foreach (GraphicsVisual g in d.Selection)
+            {
+                if (g.Graphic is GraphicsText || g.Graphic is GraphicsSelectionRectangle)
+                    continue;
+                if (g.LineWidth != d.LineWidth)
+                {
+                    g.LineWidth = d.LineWidth;
+                    wasChange = true;
+                }
+            }
+
+            if (wasChange)
+            {
+                command.NewState(d);
+                d.AddCommandToHistory(command);
+            }
         }
 
         #endregion LineWidth
@@ -521,7 +538,24 @@ namespace DrawToolsLib
         {
             DrawingCanvas d = property as DrawingCanvas;
 
-            HelperFunctions.ApplyColor(d, d.ObjectColor, true);
+            CommandChangeState command = new CommandChangeState(d);
+            bool wasChange = false;
+            var value = d.ObjectColor;
+
+            foreach (GraphicsVisual g in d.Selection)
+            {
+                if (g.ObjectColor != value)
+                {
+                    g.ObjectColor = value;
+                    wasChange = true;
+                }
+            }
+
+            if (wasChange)
+            {
+                command.NewState(d);
+                d.AddCommandToHistory(command);
+            }
         }
 
         #endregion ObjectColor
@@ -768,7 +802,7 @@ namespace DrawToolsLib
         /// </summary>
         public void AddGraphic(GraphicsBase graphic)
         {
-            HelperFunctions.UnselectAll(this);
+            this.UnselectAll();
             var g = graphic.CreateVisual();
             g.IsSelected = true;
             this.GraphicsList.Add(g);
@@ -934,7 +968,7 @@ namespace DrawToolsLib
                 var transformX = (-helper.Left - helper.Width / 2) + ((ActualWidth / 2 - ContentOffset.X) / ContentScale);
                 var transformY = (-helper.Top - helper.Height / 2) + ((ActualHeight / 2 - ContentOffset.Y) / ContentScale);
 
-                HelperFunctions.UnselectAll(this);
+                this.UnselectAll();
                 var newGraphics = helper.Graphics.Select(s => s.CreateVisual()).ToArray();
                 foreach (var g in newGraphics)
                 {
@@ -956,7 +990,10 @@ namespace DrawToolsLib
         /// </summary>
         public void SelectAll()
         {
-            HelperFunctions.SelectAll(this);
+            for (int i = 0; i < this.Count; i++)
+            {
+                this[i].IsSelected = true;
+            }
             UpdateState();
         }
 
@@ -965,7 +1002,10 @@ namespace DrawToolsLib
         /// </summary>
         public void UnselectAll()
         {
-            HelperFunctions.UnselectAll(this);
+            for (int i = 0; i < this.Count; i++)
+            {
+                this[i].IsSelected = false;
+            }
             UpdateState();
         }
 
@@ -974,7 +1014,23 @@ namespace DrawToolsLib
         /// </summary>
         public void Delete()
         {
-            HelperFunctions.DeleteSelection(this);
+            CommandDelete command = new CommandDelete(this);
+            bool wasChange = false;
+
+            for (int i = this.Count - 1; i >= 0; i--)
+            {
+                if (this[i].IsSelected)
+                {
+                    this.GraphicsList.RemoveAt(i);
+                    wasChange = true;
+                }
+            }
+
+            if (wasChange)
+            {
+                this.AddCommandToHistory(command);
+            }
+
             UpdateState();
             RefreshBounds();
         }
@@ -984,7 +1040,12 @@ namespace DrawToolsLib
         /// </summary>
         public void DeleteAll()
         {
-            HelperFunctions.DeleteAll(this);
+            if (GraphicsList.Count > 0)
+            {
+                AddCommandToHistory(new CommandDeleteAll(this));
+                GraphicsList.Clear();
+            }
+
             UpdateState();
             RefreshBounds();
         }
@@ -994,7 +1055,31 @@ namespace DrawToolsLib
         /// </summary>
         public void MoveToFront()
         {
-            HelperFunctions.MoveSelectionToFront(this);
+            List<GraphicsVisual> list = new List<GraphicsVisual>();
+
+            CommandChangeOrder command = new CommandChangeOrder(this);
+
+            for (int i = this.Count - 1; i >= 0; i--)
+            {
+                if (this[i].IsSelected)
+                {
+                    list.Insert(0, this[i]);
+                    this.GraphicsList.RemoveAt(i);
+                }
+            }
+
+            // Add all items from temporary list to the end of GraphicsList
+            foreach (GraphicsVisual g in list)
+            {
+                this.GraphicsList.Add(g);
+            }
+
+            if (list.Count > 0)
+            {
+                command.NewState(this);
+                this.AddCommandToHistory(command);
+            }
+
             UpdateState();
         }
 
@@ -1003,7 +1088,31 @@ namespace DrawToolsLib
         /// </summary>
         public void MoveToBack()
         {
-            HelperFunctions.MoveSelectionToBack(this);
+            List<GraphicsVisual> list = new List<GraphicsVisual>();
+
+            CommandChangeOrder command = new CommandChangeOrder(this);
+
+            for (int i = this.Count - 1; i >= 0; i--)
+            {
+                if (this[i].IsSelected)
+                {
+                    list.Add(this[i]);
+                    this.GraphicsList.RemoveAt(i);
+                }
+            }
+
+            // Add all items from temporary list to the beginning of GraphicsList
+            foreach (GraphicsVisual g in list)
+            {
+                this.GraphicsList.Insert(0, g);
+            }
+
+            if (list.Count > 0)
+            {
+                command.NewState(this);
+                this.AddCommandToHistory(command);
+            }
+
             UpdateState();
         }
 
@@ -1012,7 +1121,29 @@ namespace DrawToolsLib
         /// </summary>
         public void SetProperties()
         {
-            HelperFunctions.ApplyProperties(this);
+            CommandChangeState command = new CommandChangeState(this);
+            bool changed = false;
+
+            foreach (var v in GraphicsList.Cast<GraphicsVisual>())
+            {
+                if (v.LineWidth != LineWidth)
+                {
+                    changed = true;
+                    v.LineWidth = LineWidth;
+                }
+                if (v.ObjectColor != ObjectColor)
+                {
+                    changed = true;
+                    v.ObjectColor = ObjectColor;
+                }
+            }
+
+            if (changed)
+            {
+                command.NewState(this);
+                AddCommandToHistory(command);
+            }
+
             UpdateState();
             RefreshBounds();
         }
@@ -1720,8 +1851,7 @@ namespace DrawToolsLib
             CanDeleteAll = hasObjects;
             CanMoveToFront = hasSelectedObjects;
             CanMoveToBack = hasSelectedObjects;
-
-            CanSetProperties = HelperFunctions.CanApplyProperties(this);
+            CanSetProperties = hasSelectedObjects;
         }
 
         private void RefreshBounds()
