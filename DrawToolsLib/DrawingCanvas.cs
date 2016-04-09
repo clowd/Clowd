@@ -1636,7 +1636,7 @@ namespace DrawToolsLib
                         CommandChangeState command = new CommandChangeState(this);
 
                         // Make change in the text object
-                        graphicsText.Text = toolText.TextBox.Text.Trim();
+                        graphicsText.Body = toolText.TextBox.Text.Trim();
 
                         // Keep state after change and add command to the history
                         command.NewState(this);
@@ -1646,7 +1646,7 @@ namespace DrawToolsLib
                 else                                          // new text was added
                 {
                     // Make change in the text object
-                    graphicsText.Text = toolText.TextBox.Text.Trim();
+                    graphicsText.Body = toolText.TextBox.Text.Trim();
 
                     // Add command to the history
                     undoManager.AddCommandToHistory(new CommandAdd(graphic));

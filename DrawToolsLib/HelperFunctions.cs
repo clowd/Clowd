@@ -227,60 +227,24 @@ namespace DrawToolsLib
 
         public static bool ApplyFontFamily(DrawingCanvas drawingCanvas, string value, bool addToHistory)
         {
-            return ApplyProperty<GraphicsText>(drawingCanvas,
-                (text) =>
-                {
-                    if (text.FontFamily == value) return false;
-                    text.FontFamily = value;
-                    return true;
-                },
-                addToHistory, false);
+            return false;
         }
         public static bool ApplyFontStyle(DrawingCanvas drawingCanvas, FontStyle value, bool addToHistory)
         {
-            return ApplyProperty<GraphicsText>(drawingCanvas,
-                (text) =>
-                {
-                    var con = FontConversions.FontStyleToString(value);
-                    if (text.FontStyle == con) return false;
-                    text.FontStyle = con;
-                    return true;
-                }, addToHistory, false);
+            return false;
         }
         public static bool ApplyFontWeight(DrawingCanvas drawingCanvas, FontWeight value, bool addToHistory)
         {
-            return ApplyProperty<GraphicsText>(drawingCanvas,
-                (text) =>
-                {
-                    var con = FontConversions.FontWeightToString(value);
-                    if (text.FontWeight == con) return false;
-                    text.FontWeight = con;
-                    return true;
-                }, addToHistory, false);
+            return false;
         }
         public static bool ApplyFontStretch(DrawingCanvas drawingCanvas, FontStretch value, bool addToHistory)
         {
-            return ApplyProperty<GraphicsText>(drawingCanvas,
-                (text) =>
-                {
-                    var con = FontConversions.FontStretchToString(value);
-                    if (text.FontStretch == con) return false;
-                    text.FontStretch = con;
-                    return true;
-                }, addToHistory, false);
+            return false;
         }
 
         public static bool ApplyFontSize(DrawingCanvas drawingCanvas, double value, bool addToHistory)
         {
-            return ApplyProperty<GraphicsText>(drawingCanvas,
-                (text) =>
-                {
-                    if ((int) text.FontSize == (int) value)
-                        return false;
-                    text.FontSize = value;
-                    return true;
-                }, 
-                addToHistory, false);
+            return false;
         }
 
         /// <summary>
@@ -312,16 +276,16 @@ namespace DrawToolsLib
                 else
                 {
                     // Font - for GraphicsText
-                    if (graphicsText.FontFamily != drawingCanvas.TextFontFamilyName)
-                        return true;
-                    if (graphicsText.FontSize != drawingCanvas.TextFontSize)
-                        return true;
-                    if (graphicsText.FontStretch != FontConversions.FontStretchToString(drawingCanvas.TextFontStretch))
-                        return true;
-                    if (graphicsText.FontStyle != FontConversions.FontStyleToString(drawingCanvas.TextFontStyle))
-                        return true;
-                    if (graphicsText.FontWeight != FontConversions.FontWeightToString(drawingCanvas.TextFontWeight))
-                        return true;
+                    //if (graphicsText.FontFamily != drawingCanvas.TextFontFamilyName)
+                    //    return true;
+                    //if (graphicsText.FontSize != drawingCanvas.TextFontSize)
+                    //    return true;
+                    //if (graphicsText.FontStretch != FontConversions.FontStretchToString(drawingCanvas.TextFontStretch))
+                    //    return true;
+                    //if (graphicsText.FontStyle != FontConversions.FontStyleToString(drawingCanvas.TextFontStyle))
+                    //    return true;
+                    //if (graphicsText.FontWeight != FontConversions.FontWeightToString(drawingCanvas.TextFontWeight))
+                    //    return true;
                 }
             }
 
