@@ -29,7 +29,7 @@ namespace DrawToolsLib
 
         public override void Redo(DrawingCanvas drawingCanvas)
         {
-            HelperFunctions.UnselectAll(drawingCanvas);
+            drawingCanvas.UnselectAll();
             foreach (var g in _graphics)
             {
                 var vis = g.CreateVisual();
