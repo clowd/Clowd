@@ -17,6 +17,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Clowd.Interop.Gdi32;
+using CS.Util.Extensions;
 using DrawToolsLib.Graphics;
 using ScreenVersusWpf;
 
@@ -33,6 +34,10 @@ namespace Clowd
         private Size _imageSize;
         private double _actionBarSize = double.NaN;
         private bool _actionBarLabels;
+
+        public ImageEditorPage() : this(null)
+        {
+        }
 
         public ImageEditorPage(string initImagePath)
         {
@@ -125,6 +130,9 @@ namespace Clowd
 
         protected override async void OnActivated(Window wnd)
         {
+            if (_imageSize.IsEmpty || _imageSize.IsDefault())
+                return;
+
             var padding = App.Current.Settings.EditorSettings.CapturePadding;
             // instead of 61 it should be actionRow.Height.Value but its likely that this value hasnt been properly computed yet
             // so this is just a shortcut for now.
