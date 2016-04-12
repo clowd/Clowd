@@ -50,7 +50,8 @@ namespace DrawToolsLib.Graphics
             drawingContext.DrawGeometry(new SolidColorBrush(ObjectColor), new Pen(new SolidColorBrush(ObjectColor), 1),
                 new PathGeometry(new[] { new PathFigure(LineEnd, new[] { new LineSegment(pt2, true), new LineSegment(pt1, true) }, true) }));
 
-            base.Draw(drawingContext);
+            if (IsSelected)
+                DrawTracker(drawingContext);
         }
 
         public override GraphicsBase Clone()
