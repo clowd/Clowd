@@ -21,15 +21,10 @@ namespace Clowd.Utilities
             {
                 if (SysInfo.IsWindows8OrLater) 
                 {
-                    var selected = GetImmersiveColor("ImmersiveStartSelectionBackground");
+                    var selected = GetImmersiveColor("ImmersiveSaturatedHoverBackground");
                     var hsl = HSLColor.FromRGB(selected);
                     if (hsl.IsBoring())
                     {
-                        var secondary = GetImmersiveColor("ImmersiveStartBackground");
-                        if(!HSLColor.FromRGB(secondary).IsBoring())
-                        {
-                            return secondary;
-                        }
                         hsl.Excite();
                     }
                     return hsl.ToRGB();
