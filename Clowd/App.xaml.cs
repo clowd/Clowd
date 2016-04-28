@@ -166,7 +166,8 @@ namespace Clowd
             if (Settings.FirstRun)
             {
                 // there were no settings to load, show login window.
-                Settings = new GeneralSettings() { FirstRun = false };
+                Settings.FirstRun = false;
+                Settings.Save();
                 var page = new LoginPage();
                 var login = TemplatedWindow.CreateWindow("CLOWD", page);
                 login.Show();
