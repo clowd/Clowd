@@ -161,8 +161,6 @@ namespace Clowd
         "</Grid>" +
     "</ControlTemplate>";
                 Style style = new Style(typeof(Thumb));
-                //style.Setters.Add(new Setter(Thumb.OpacityProperty, 0.7));
-                //new SolidColorBrush(Color.FromRgb(59, 151, 210) clowd color
                 style.Setters.Add(new Setter(Thumb.BackgroundProperty, App.Current.Resources["HighlightBrush"]));
                 style.Setters.Add(new Setter(Thumb.TemplateProperty, (ControlTemplate)System.Windows.Markup.XamlReader.Parse(template)));
 
@@ -205,7 +203,7 @@ namespace Clowd
             else
             {
                 AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
-                var resize = adornerLayer.GetAdorners(selectionBorder)?.Where(a => a is ResizingAdorner)?.FirstOrDefault();
+                var resize = adornerLayer.GetAdorners(selectionBorder).FirstOrDefault(a => a is ResizingAdorner);
                 if (resize != null)
                     adornerLayer.Remove(resize);
 
@@ -270,8 +268,8 @@ namespace Clowd
             var cropped = CropBitmap();
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(cropped));
-            var path = System.IO.Path.GetTempFileName() + ".png";
-            using (var fileStream = new System.IO.FileStream(path, System.IO.FileMode.Create))
+            var path = Path.GetTempFileName() + ".png";
+            using (var fileStream = new System.IO.FileStream(path, FileMode.Create))
             {
                 encoder.Save(fileStream);
             }
@@ -281,7 +279,6 @@ namespace Clowd
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             UpdateCanvasMode(true);
-            //UpdateCanvasSelection(new Rect(0, 0, 0, 0));
         }
         private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -324,7 +321,7 @@ namespace Clowd
             {
                 var wfMouse = System.Windows.Forms.Cursor.Position;
                 ShowTips = false;
-                ((UIElement)sender).CaptureMouse();
+                (crosshair).CaptureMouse();
                 draggingArea = true;
                 draggingOrigin = ScreenTools.GetMousePosition();
             }
@@ -370,7 +367,7 @@ namespace Clowd
         {
             if (!draggingArea)
                 return;
-            ((UIElement)sender).ReleaseMouseCapture();
+            (crosshair).ReleaseMouseCapture();
             draggingArea = false;
 
             UpdateCanvasMode(false);
@@ -403,12 +400,7 @@ namespace Clowd
                 CanvasCursor = Cursors.Cross;
                 pixelMagnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Hidden;
                 toolActionBar.Visibility = Visibility.Hidden;
-                //crosshairBottomLeft.Width = rootGrid.ActualWidth;
-                //crosshairBottomLeft.Height = rootGrid.ActualHeight;
-                //crosshairTopRight.Width = rootGrid.ActualWidth;
-                //crosshairTopRight.Height = rootGrid.ActualHeight;
-                //crosshairBottomLeft.Visibility = Visibility.Visible;
-                //crosshairTopRight.Visibility = Visibility.Visible;
+                crosshair.Visibility = Visibility.Visible;
             }
             else
             {
@@ -420,8 +412,7 @@ namespace Clowd
                 }
                 areaSizeIndicator.Visibility = Visibility.Hidden;
                 pixelMagnifier.Visibility = Visibility.Hidden;
-                //crosshairBottomLeft.Visibility = Visibility.Hidden;
-                //crosshairTopRight.Visibility = Visibility.Hidden;
+                crosshair.Visibility = Visibility.Collapsed;
                 ShowTips = false;
                 CanvasCursor = Cursors.Arrow;
                 toolActionBar.Visibility = Visibility.Visible;
