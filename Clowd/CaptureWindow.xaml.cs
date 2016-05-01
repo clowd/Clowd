@@ -214,7 +214,7 @@ namespace Clowd
             }
         }
 
-        private static void PositionWithinAScreen(FrameworkElement element, WpfPoint anchor, HorizontalAlignment horz, VerticalAlignment vert, double distance)
+        private WpfPoint PositionWithinAScreen(FrameworkElement element, WpfPoint anchor, HorizontalAlignment horz, VerticalAlignment vert, double distance)
         {
             var scr = ScreenTools.Screens.FirstOrDefault(s => s.Bounds.ToWpfRect().Contains(anchor));
             if (scr == null)
@@ -261,6 +261,7 @@ namespace Clowd
 
             Canvas.SetLeft(element, x);
             Canvas.SetTop(element, y);
+            return new WpfPoint(x, y);
         }
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -329,10 +330,21 @@ namespace Clowd
         private void RootGrid_MouseMove(object sender, MouseEventArgs e)
         {
             var currentPoint = ScreenTools.GetMousePosition();
+            var currentPointWpf = currentPoint.ToWpfPoint();
 
             if (ShowMagnifier)
             {
-                PositionWithinAScreen(pixelMagnifier, currentPoint.ToWpfPoint(), HorizontalAlignment.Right, VerticalAlignment.Bottom, 20);
+                var result = PositionWithinAScreen(pixelMagnifier, currentPointWpf, HorizontalAlignment.Right, VerticalAlignment.Bottom, 20);
+
+                if (result.X > currentPointWpf.X && result.Y > currentPointWpf.Y) // point is to the bottom right
+                    pixelMagnifier.IndicatorPosition = PixelMagnifier.ArrowIndicatorPosition.TopLeft;
+                else if (result.X > currentPointWpf.X) // point is to the top right
+                    pixelMagnifier.IndicatorPosition = PixelMagnifier.ArrowIndicatorPosition.BottomLeft;
+                else if (result.Y > currentPointWpf.Y) // point is to the bottom left
+                    pixelMagnifier.IndicatorPosition = PixelMagnifier.ArrowIndicatorPosition.TopRight;
+                else // point is to the top left
+                    pixelMagnifier.IndicatorPosition = PixelMagnifier.ArrowIndicatorPosition.BottomRight;
+
                 pixelMagnifier.DrawMagnifier(currentPoint);
             }
 
