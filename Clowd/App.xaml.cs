@@ -616,13 +616,15 @@ namespace Clowd
             _prtscrWindowOpen = true;
         }
 
-        public void QuickCapture()
+        public void QuickCapture(bool fullscreen = true)
         {
             if (!_initialized)
                 return;
 
             using (MemoryStream ms = new MemoryStream())
-            using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+            using (var source = fullscreen
+                ? ScreenUtil.Capture(captureCursor: Settings.CaptureSettings.ScreenshotWithCursor)
+                : ScreenUtil.CaptureActiveWindow())
             {
                 source.Save(ms, ImageFormat.Png);
                 var task = UploadManager.Upload(ms.ToArray(), "clowd-default.png");
