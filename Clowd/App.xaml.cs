@@ -618,6 +618,9 @@ namespace Clowd
 
         public void QuickCapture()
         {
+            if (!_initialized)
+                return;
+
             using (MemoryStream ms = new MemoryStream())
             using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
             {
@@ -627,6 +630,9 @@ namespace Clowd
         }
         public void UploadFile(Window owner = null)
         {
+            if (!_initialized)
+                return;
+
             var dlg = new Microsoft.Win32.OpenFileDialog();
             if (Settings.LastUploadPath != null)
                 dlg.InitialDirectory = Settings.LastUploadPath;
@@ -657,6 +663,9 @@ namespace Clowd
         }
         public void Paste()
         {
+            if (!_initialized)
+                return;
+
             if (Clipboard.ContainsImage())
             {
                 var img = System.Windows.Forms.Clipboard.GetImage();
@@ -686,7 +695,10 @@ namespace Clowd
         }
         public void ShowHome()
         {
-            var wnd = TemplatedWindow.GetWindow(typeof(HomePage)) 
+            if (!_initialized)
+                return;
+
+            var wnd = TemplatedWindow.GetWindow(typeof(HomePage))
                 ?? TemplatedWindow.GetWindow(typeof(SettingsPage));
             if (wnd == null)
             {
