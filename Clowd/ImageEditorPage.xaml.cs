@@ -132,8 +132,8 @@ namespace Clowd
 
             var padding = App.Current.Settings.EditorSettings.CapturePadding;
             // instead of 61 it should be actionRow.Height.Value but its likely that this value hasnt been properly computed yet
-            // so this is just a shortcut for now.
-            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + (padding * 2),
+            // so this is just a shortcut for now. (200 is padding for the zoom control)
+            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + (padding * 2) + 200,
                 _imageSize.Height + 61 + (padding * 2)));
 
             // just doing this to force a thread context switch.
