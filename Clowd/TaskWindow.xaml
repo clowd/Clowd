@@ -54,7 +54,7 @@
                 </Grid.ColumnDefinitions>
                 <ContentPresenter ContentTemplate="{StaticResource MetroIconTemplate}" />
                 <TextBlock Grid.Column="1" Foreground="{DynamicResource IdealForegroundColorBrush}" 
-                       VerticalAlignment="Center" Text="CLOWD"/>
+                       VerticalAlignment="Center" Text="CLOWD" FontFamily="pack://application:,,,/Assets/#Raleway"/>
                 <Button Grid.Column="2" Style="{StaticResource ToolButtonStyle}" Padding="3" Command="{StaticResource Commands.Minimize}" ToolTip="Hide">
                     <Viewbox>
                         <Path Fill="White" Height="32" Width="32" Data="{StaticResource IconExpandDown32}" />
