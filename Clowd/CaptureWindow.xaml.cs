@@ -343,6 +343,12 @@ namespace Clowd
             this.Close();
             TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(path)).Show();
         }
+        private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            var cropped = CropBitmap();
+            ClipboardEx.SetImage(cropped);
+            this.Close();
+        }
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             UpdateCanvasMode(true);
@@ -421,7 +427,7 @@ namespace Clowd
                 var tipsRect = new Rect(tipsOriginPoint.X - tipsPadding, tipsOriginPoint.Y - tipsPadding,
                     TipsPanel.Width + (tipsPadding * 2), TipsPanel.ActualHeight + (tipsPadding * 2));
                 var distance = DistancePointToRectangle(currentPointWpf, tipsRect);
-                TipsPanel.Opacity = Math.Max(Math.Min(distance / 200, 0.8), 0);
+                TipsPanel.Opacity = Math.Max(Math.Min(distance / 100, 0.8), 0);
             }
 
             if (draggingArea)
@@ -446,7 +452,6 @@ namespace Clowd
                 UpdateCanvasSelection(new ScreenRect(0, 0, 0, 0));
             }
         }
-
         private void RootGrid_MouseUp(object sender, MouseButtonEventArgs e)
         {
             if (!draggingArea)
@@ -507,7 +512,6 @@ namespace Clowd
             args.RoutedEvent = MouseMoveEvent;
             rootGrid.RaiseEvent(args);
         }
-
         private void UpdateCanvasPlacement()
         {
             var selection = CroppingRectangle.ToWpfRect();
@@ -579,7 +583,6 @@ namespace Clowd
                 Canvas.SetTop(toolActionBar, indTop);
             }
         }
-
         private void UpdateCanvasSelection(ScreenRect selection)
         {
             CroppingRectangle = selection;
