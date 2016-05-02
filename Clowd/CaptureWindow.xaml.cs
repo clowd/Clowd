@@ -263,6 +263,72 @@ namespace Clowd
             Canvas.SetTop(element, y);
             return new WpfPoint(x, y);
         }
+        public double DistancePointToRectangle(WpfPoint point, Rect rect)
+        {
+            //  Calculate a distance between a point and a rectangle.
+            //  The area around/in the rectangle is defined in terms of
+            //  several regions:
+            //
+            //  O--x
+            //  |
+            //  y
+            //
+            //
+            //        I   |    II    |  III
+            //      ======+==========+======   --yMin
+            //       VIII |  IX (in) |  IV
+            //      ======+==========+======   --yMax
+            //       VII  |    VI    |   V
+            //
+            //
+            //  Note that the +y direction is down because of Unity's GUI coordinates.
+
+            if (point.X < rect.Left)
+            { // Region I, VIII, or VII
+                if (point.Y < rect.Top)
+                { // I
+                    WpfPoint diff = point - new WpfPoint(rect.Left, rect.Top);
+                    return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
+                }
+                else if (point.Y > rect.Bottom)
+                { // VII
+                    WpfPoint diff = point - new WpfPoint(rect.Left, rect.Bottom);
+                    return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
+                }
+                else { // VIII
+                    return rect.Left - point.X;
+                }
+            }
+            else if (point.X > rect.Right)
+            { // Region III, IV, or V
+                if (point.Y < rect.Top)
+                { // III
+                    WpfPoint diff = point - new WpfPoint(rect.Right, rect.Top);
+                    return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
+                }
+                else if (point.Y > rect.Bottom)
+                { // V
+                    WpfPoint diff = point - new WpfPoint(rect.Right, rect.Bottom);
+                    return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
+                }
+                else { // IV
+                    return point.X - rect.Right;
+                }
+            }
+            else { // Region II, IX, or VI
+                if (point.Y < rect.Top)
+                { // II
+                    return rect.Top - point.Y;
+                }
+                else if (point.Y > rect.Bottom)
+                { // VI
+                    return point.Y - rect.Bottom;
+                }
+                else { // IX
+                    return 0d;
+                }
+            }
+        }
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -348,6 +414,16 @@ namespace Clowd
                 pixelMagnifier.DrawMagnifier(currentPoint);
             }
 
+            if (ShowTips)
+            {
+                var tipsOriginPoint = TipsPanel.TransformToAncestor(rootGrid).Transform(new Point(0, 0));
+                var tipsPadding = pixelMagnifier.Width + 5;
+                var tipsRect = new Rect(tipsOriginPoint.X - tipsPadding, tipsOriginPoint.Y - tipsPadding,
+                    TipsPanel.Width + (tipsPadding * 2), TipsPanel.ActualHeight + (tipsPadding * 2));
+                var distance = DistancePointToRectangle(currentPointWpf, tipsRect);
+                TipsPanel.Opacity = Math.Max(Math.Min(distance / 200, 0.8), 0);
+            }
+
             if (draggingArea)
             {
                 var rect = new ScreenRect();
@@ -361,20 +437,16 @@ namespace Clowd
             {
                 var window = windowFinder.GetWindowThatContainsPoint(currentPoint);
 
-                if (window.WindowRect == ScreenRect.Empty)
-                {
-                    UpdateCanvasSelection(new ScreenRect(0, 0, 0, 0));
-                }
-                else
-                {
-                    UpdateCanvasSelection(window.WindowRect);
-                }
+                UpdateCanvasSelection(window.WindowRect == ScreenRect.Empty
+                    ? new ScreenRect(0, 0, 0, 0)
+                    : window.WindowRect);
             }
             else
             {
                 UpdateCanvasSelection(new ScreenRect(0, 0, 0, 0));
             }
         }
+
         private void RootGrid_MouseUp(object sender, MouseButtonEventArgs e)
         {
             if (!draggingArea)
