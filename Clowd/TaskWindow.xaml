@@ -19,13 +19,6 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.TextBlock.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <DataTemplate x:Key="CopyIconTemplate">
-                <Grid>
-                    <Viewbox Margin="5">
-                        <Path Fill="Black" Opacity="0.8" Width="26" Height="26"  Data="{StaticResource IconCopy26}" />
-                    </Viewbox>
-                </Grid>
-            </DataTemplate>
             <RoutedUICommand x:Key="Commands.Minimize" Text="Hide"/>
         </ResourceDictionary>
     </Window.Resources>
