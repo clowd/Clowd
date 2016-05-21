@@ -318,17 +318,14 @@ namespace Clowd
             if (!VerifyArtworkExists())
                 return;
 
-            drawingCanvas.Copy();
-            ClipboardEx.AddImage(GetRenderedBitmap());
+            var data = drawingCanvas.GetClipboardObject();
+            ClipboardEx.AddImageToData(data, GetRenderedBitmap());
+            Clipboard.SetDataObject(data, true);
         }
 
         private void CutCommand(object sender, ExecutedRoutedEventArgs e)
         {
-            if (!VerifyArtworkExists())
-                return;
-
-            drawingCanvas.Copy();
-            ClipboardEx.AddImage(GetRenderedBitmap());
+            CopyCommand(sender, e);
             drawingCanvas.DeleteAll();
         }
 

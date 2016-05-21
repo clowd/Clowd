@@ -926,6 +926,16 @@ namespace DrawToolsLib
         /// </summary>
         public void Copy()
         {
+            Clipboard.SetDataObject(GetClipboardObject(), false);
+            UpdateState();
+        }
+
+        /// <summary>
+        /// Generates a clipboard DataObject that can be added to before pushing to the clipboard.
+        /// </summary>
+        /// <returns></returns>
+        public DataObject GetClipboardObject()
+        {
             Clipboard.Clear();
             GraphicsVisual[] graphics = graphicsList.OfType<GraphicsVisual>().Where(g => g.IsSelected).ToArray();
             if (!graphics.Any())
@@ -937,11 +947,10 @@ namespace DrawToolsLib
             {
                 xml.Serialize(stream, helper);
                 var format = DataFormats.GetDataFormat(clipboardFormat);
-                IDataObject dataObj = new DataObject();
+                DataObject dataObj = new DataObject();
                 dataObj.SetData(format.Name, Convert.ToBase64String(stream.ToArray()), true);
-                Clipboard.SetDataObject(dataObj, false);
+                return dataObj;
             }
-            UpdateState();
         }
 
         /// <summary>
