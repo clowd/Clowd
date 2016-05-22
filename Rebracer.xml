@@ -117,6 +117,7 @@
         <PropertyValue name="AutoIndentOnTab">false</PropertyValue>
         <PropertyValue name="ColorizeInactiveBlocksDifferently">true</PropertyValue>
         <PropertyValue name="DisableBrowsingUpToDateCheck">true</PropertyValue>
+        <PropertyValue name="DisableCreateDeclDefnScan">false</PropertyValue>
         <PropertyValue name="DisableErrorReporting">false</PropertyValue>
         <PropertyValue name="DisableIntelliSenseErrorsInErrorList">false</PropertyValue>
         <PropertyValue name="EnableChangeSignature">false</PropertyValue>
@@ -141,6 +142,7 @@
         <PropertyValue name="IndentPreprocessor">2</PropertyValue>
         <PropertyValue name="IndentationReference">2</PropertyValue>
         <PropertyValue name="MemberListDotToArrow">false</PropertyValue>
+        <PropertyValue name="MemberListFilterHeuristic">false</PropertyValue>
         <PropertyValue name="NewlineControlBlockBrace">0</PropertyValue>
         <PropertyValue name="NewlineEmptyFunctionCloseBrace">true</PropertyValue>
         <PropertyValue name="NewlineEmptyTypeCloseBrace">true</PropertyValue>
@@ -222,6 +224,7 @@
         <PropertyValue name="ShowVirtualProjectsInSolutionExplorerWhenSolutionOpen">false</PropertyValue>
         <PropertyValue name="UseAMDCodeGenerationForModulesThatAreNotPartOfAProject">false</PropertyValue>
         <PropertyValue name="UseCommonJSCodeGenerationForModulesThatAreNotPartOfAProject">false</PropertyValue>
+        <PropertyValue name="UseES2015CodeGenerationForModulesThatAreNotPartOfAProject">false</PropertyValue>
         <PropertyValue name="UseJsxPreserveForFilesThatAreNotPartOfAProject">false</PropertyValue>
         <PropertyValue name="UseJsxReactForFilesThatAreNotPartOfAProject">false</PropertyValue>
         <PropertyValue name="UseSystemCodeGenerationForModulesThatAreNotPartOfAProject">false</PropertyValue>
