@@ -126,7 +126,7 @@ namespace DrawToolsLib.Graphics
 
             if (IsSelected)
             {
-                DrawDashedBorder(context);
+                DrawDashedBorder(context, Bounds);
             }
 
             context.DrawGeometry(null, pen, geo);

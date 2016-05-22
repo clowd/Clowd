@@ -31,6 +31,7 @@ namespace DrawToolsLib
         DeleteAll,
         MoveToFront,
         MoveToBack,
+        ResetRotation,
         Undo,
         Redo,
         SetProperties
