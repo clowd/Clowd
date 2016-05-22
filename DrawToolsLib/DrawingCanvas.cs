@@ -1540,13 +1540,13 @@ namespace DrawToolsLib
             contextMenu = new ContextMenu();
 
             menuItem = new MenuItem();
-            menuItem.Header = "Select All";
+            menuItem.Header = "Select all";
             menuItem.Tag = ContextMenuCommand.SelectAll;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
-            menuItem.Header = "Unselect All";
+            menuItem.Header = "Unselect all";
             menuItem.Tag = ContextMenuCommand.UnselectAll;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
@@ -1558,7 +1558,7 @@ namespace DrawToolsLib
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
-            menuItem.Header = "Delete All";
+            menuItem.Header = "Delete all";
             menuItem.Tag = ContextMenuCommand.DeleteAll;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
@@ -1566,13 +1566,13 @@ namespace DrawToolsLib
             contextMenu.Items.Add(new Separator());
 
             menuItem = new MenuItem();
-            menuItem.Header = "Move to Front";
+            menuItem.Header = "Move to front";
             menuItem.Tag = ContextMenuCommand.MoveToFront;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
-            menuItem.Header = "Move to Back";
+            menuItem.Header = "Move to back";
             menuItem.Tag = ContextMenuCommand.MoveToBack;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
@@ -1592,7 +1592,7 @@ namespace DrawToolsLib
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
-            menuItem.Header = "Set Properties";
+            menuItem.Header = "Set properties";
             menuItem.Tag = ContextMenuCommand.SetProperties;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
@@ -1807,13 +1807,10 @@ namespace DrawToolsLib
             {
                 GraphicsText t = (graphicsList[i] as GraphicsVisual)?.Graphic as GraphicsText;
 
-                if (t != null)
+                if (t != null && t.Contains(point))
                 {
-                    if (t.Contains(point))
-                    {
-                        toolText.CreateTextBox((GraphicsVisual)graphicsList[i], this);
-                        return;
-                    }
+                    toolText.CreateTextBox((GraphicsVisual)graphicsList[i], this);
+                    return;
                 }
             }
         }

@@ -14,7 +14,7 @@ namespace DrawToolsLib.Graphics
             get { return _left; }
             set
             {
-                if (value.Equals(_left)) return;
+                if (value == _left) return;
                 _left = value;
                 OnPropertyChanged(nameof(Left));
                 OnPropertyChanged(nameof(Bounds));
@@ -25,7 +25,7 @@ namespace DrawToolsLib.Graphics
             get { return _top; }
             set
             {
-                if (value.Equals(_top)) return;
+                if (value == _top) return;
                 _top = value;
                 OnPropertyChanged(nameof(Top));
                 OnPropertyChanged(nameof(Bounds));
@@ -36,7 +36,7 @@ namespace DrawToolsLib.Graphics
             get { return _right; }
             set
             {
-                if (value.Equals(_right)) return;
+                if (value == _right) return;
                 _right = value;
                 OnPropertyChanged(nameof(Right));
                 OnPropertyChanged(nameof(Bounds));
@@ -47,7 +47,7 @@ namespace DrawToolsLib.Graphics
             get { return _bottom; }
             set
             {
-                if (value.Equals(_bottom)) return;
+                if (value == _bottom) return;
                 _bottom = value;
                 OnPropertyChanged(nameof(Bottom));
                 OnPropertyChanged(nameof(Bounds));
@@ -61,7 +61,7 @@ namespace DrawToolsLib.Graphics
             {
                 if (value == _filled) return;
                 _filled = value;
-                OnPropertyChanged();
+                OnPropertyChanged(nameof(Filled));
             }
         }
 
