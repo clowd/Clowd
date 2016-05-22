@@ -272,7 +272,6 @@
                         Hold<LineBreak/><Run FontWeight="SemiBold">Shift</Run> 
                     </TextBlock>
                 </StackPanel>
-                
             </Border>
             <Border Background="#70707a" CornerRadius="10" Opacity=".7" Height="250">
                 <Grid>

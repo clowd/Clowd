@@ -12,6 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
@@ -115,6 +116,8 @@ namespace Clowd
         }
         public new async void Close()
         {
+            if (Current == this)
+                Current = null;
             if (this.IsLoaded || this.IsVisible)
             {
                 await SetHeightTo(-1);
@@ -425,16 +428,31 @@ namespace Clowd
             }
         }
 
+        private static DataTemplate _copyTemplate;
+
         public UploadTaskViewItem(string primary, string secondary)
         {
             PrimaryText = primary;
             SecondaryText = secondary;
             Progress = 5;
+
+            const string copyTemplate =
+@"<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation"">
+    <Grid>
+        <Viewbox Margin=""5"">
+            <Path Fill=""Black"" Opacity=""0.8"" Width=""26"" Height=""26""  Data=""{StaticResource IconCopy26}"" />
+        </Viewbox>
+    </Grid>
+</DataTemplate>";
+            if (_copyTemplate == null)
+                _copyTemplate = (DataTemplate)XamlReader.Parse(copyTemplate);
+
             HeroCommand = new RelayUICommand(
                 _ => CopyExecuted(_),
                 _ => HeroAvailable,
-                "Copy to clipboard");
-            // (DataTemplate)TaskWindow.Current.FindResource("CopyIconTemplate")
+                "Copy to clipboard",
+                _copyTemplate);
+
             OpenCommand = new RelayUICommand(
                 _ => OpenExecuted(_),
                 _ => !String.IsNullOrEmpty(UploadURL) && (Status == TaskStatus.Complete || Status == TaskStatus.Executed || Status == TaskStatus.InProgress));

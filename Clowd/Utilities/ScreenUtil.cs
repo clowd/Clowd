@@ -12,7 +12,7 @@ namespace Clowd.Utilities
     {
         public static Bitmap Capture(ScreenRect? bounds = null, bool captureCursor = false)
         {
-            var rect = (bounds ?? ScreenTools.VirtualScreen.Bounds).ToSystem();
+            Rectangle rect = (bounds ?? ScreenTools.VirtualScreen.Bounds).ToSystem();
 
             var bitmap = new Bitmap(rect.Width, rect.Height, PixelFormat.Format24bppRgb);
             using (Graphics g = Graphics.FromImage(bitmap))
@@ -24,6 +24,13 @@ namespace Clowd.Utilities
                 }
             }
             return bitmap;
+        }
+
+        public static Bitmap CaptureActiveWindow()
+        {
+            var foreground = USER32.GetForegroundWindow();
+            var bounds = USER32EX.GetWindowRectangle(foreground);
+            return Capture(ScreenRect.FromSystem(bounds), false);
         }
 
         private static void DrawCursor(Graphics g, System.Drawing.Point origin)

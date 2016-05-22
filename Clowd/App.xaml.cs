@@ -616,10 +616,15 @@ namespace Clowd
             _prtscrWindowOpen = true;
         }
 
-        public void QuickCapture()
+        public void QuickCapture(bool fullscreen = true)
         {
+            if (!_initialized)
+                return;
+
             using (MemoryStream ms = new MemoryStream())
-            using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+            using (var source = fullscreen
+                ? ScreenUtil.Capture(captureCursor: Settings.CaptureSettings.ScreenshotWithCursor)
+                : ScreenUtil.CaptureActiveWindow())
             {
                 source.Save(ms, ImageFormat.Png);
                 var task = UploadManager.Upload(ms.ToArray(), "clowd-default.png");
@@ -627,6 +632,9 @@ namespace Clowd
         }
         public void UploadFile(Window owner = null)
         {
+            if (!_initialized)
+                return;
+
             var dlg = new Microsoft.Win32.OpenFileDialog();
             if (Settings.LastUploadPath != null)
                 dlg.InitialDirectory = Settings.LastUploadPath;
@@ -657,6 +665,9 @@ namespace Clowd
         }
         public void Paste()
         {
+            if (!_initialized)
+                return;
+
             if (Clipboard.ContainsImage())
             {
                 var img = System.Windows.Forms.Clipboard.GetImage();
@@ -686,7 +697,10 @@ namespace Clowd
         }
         public void ShowHome()
         {
-            var wnd = TemplatedWindow.GetWindow(typeof(HomePage)) 
+            if (!_initialized)
+                return;
+
+            var wnd = TemplatedWindow.GetWindow(typeof(HomePage))
                 ?? TemplatedWindow.GetWindow(typeof(SettingsPage));
             if (wnd == null)
             {

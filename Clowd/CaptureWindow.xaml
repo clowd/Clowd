@@ -56,7 +56,7 @@
         <KeyBinding Key="R" Command="{StaticResource Command.Reset}" />
         <KeyBinding Key="F" Command="{StaticResource Command.SelectScreen}" />
         <KeyBinding Key="M" Command="{StaticResource Command.ToggleMagnifier}" />
-        <KeyBinding Key="C" Command="ApplicationCommands.Close" />
+        <KeyBinding Key="C" Command="ApplicationCommands.Copy" />
         <KeyBinding Key="Esc" Command="ApplicationCommands.Close" />
     </Window.InputBindings>
     <Window.CommandBindings>
@@ -67,6 +67,7 @@
         <CommandBinding Command="{StaticResource Command.SelectScreen}" Executed="SelectScreenExecuted" />
         <CommandBinding Command="{StaticResource Command.ToggleMagnifier}" Executed="ToggleMagnifierExecuted" />
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
+        <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyExecuted" />
     </Window.CommandBindings>
     <Grid Name="rootGrid" Cursor="{Binding CanvasCursor}">
         <Image Name="imageBackground"  Source="{Binding GrayScreenImage}" Stretch="Fill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
@@ -128,29 +129,6 @@
                 </StackPanel>
             </Border>
             <controls:PixelMagnifier x:Name="pixelMagnifier" Image="{Binding ScreenImage}"></controls:PixelMagnifier>
-            <!--<Grid Name="crosshairTopRight" Visibility="Hidden" SnapsToDevicePixels="True">
-                <Border BorderThickness="{Binding NormalThickness}" BorderBrush="{StaticResource HighlightBrush}" Opacity=".7" SnapsToDevicePixels="True" />
-                <Rectangle Stroke="#A5FFFFFF" StrokeThickness="{Binding NormalThickness}" StrokeDashArray="8 8" Opacity=".6" SnapsToDevicePixels="True"  />
-                <Border BorderThickness="{Binding TopRightThickness}" BorderBrush="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"
-                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Width="120" Height="120"/>
-                <Rectangle Width="60" Height="5" VerticalAlignment="Bottom" HorizontalAlignment="Left" SnapsToDevicePixels="True"
-                           Margin="60,0,0,-2" Fill="{StaticResource HighlightBrush}" />
-                <Rectangle Width="5" Height="60" VerticalAlignment="Bottom" HorizontalAlignment="Left" SnapsToDevicePixels="True"
-                           Margin="-2,0,0,60" Fill="{StaticResource HighlightBrush}" />
-            </Grid>
-            <Grid Name="crosshairBottomLeft" Visibility="Hidden" SnapsToDevicePixels="True">
-                <Border BorderThickness="{Binding NormalThickness}" BorderBrush="{StaticResource HighlightBrush}" Opacity=".7" SnapsToDevicePixels="True"/>
-                <Rectangle Stroke="#A5FFFFFF" StrokeThickness="{Binding NormalThickness}" StrokeDashArray="8 8" Opacity=".6"   SnapsToDevicePixels="True"/>
-                <Border BorderThickness="{Binding BottomLeftThickness}" BorderBrush="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"
-                        HorizontalAlignment="Right" VerticalAlignment="Top" Width="120" Height="120" />
-                <Rectangle Width="60" Height="5" VerticalAlignment="Top" HorizontalAlignment="Right"
-                           Margin="0,-2,60,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True"/>
-                <Rectangle Width="5" Height="60" VerticalAlignment="Top" HorizontalAlignment="Right"
-                           Margin="0,60,-2,0" Fill="{StaticResource HighlightBrush}" SnapsToDevicePixels="True" />
-            </Grid>-->
-            <!--<Viewbox Width="100" Height="100">
-                <Path Width="60.85" Height="61.1" Fill="Red" Data="M15,32.05H0v-3h15V32.05z M31.8,61.1v-15h-3v15H31.8z M60.851,29.05h-15v3h15V29.05z M31.8,15V0h-3v15H31.8z M45.851,30.05 H15v1h30.851V30.05z M30.8,45.975V15.125h-1v30.851H30.8z" />
-            </Viewbox>-->
             <Border Name="toolActionBar" Background="{StaticResource HighlightBrush}" Visibility="Hidden">
                 <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
                     <!--<Border Width="50" Height="50">
@@ -185,6 +163,14 @@
                             </TextBlock>
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource ButtonTool}" Width="50" Command="ApplicationCommands.Copy">
+                        <StackPanel Orientation="Vertical" Margin="5">
+                            <Path Width="26" Height="26" Fill="White" Data="M 5 2 C 3.9 2 3 2.9 3 4 L 3 17 L 5 17 L 5 4 L 15 4 L 15 2 L 5 2 z M 9 6 C 7.9 6 7 6.9 7 8 L 7 20 C 7 21.1 7.9 22 9 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 C 20 6.9 19.1 6 18 6 L 9 6 z M 9 8 L 18 8 L 18 20 L 9 20 L 9 8 z" />
+                            <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
+                                <Run TextDecorations="Underline">C</Run>OPY
+                            </TextBlock>
+                        </StackPanel>
+                    </Button>
                     <!--<Button Style="{StaticResource ButtonTool}" Width="50" Click="Search_Clicked">
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Path Width="26" Height="26" Fill="White" Data="M 10 0.1875 C 4.58 0.1875 0.1875 4.58 0.1875 10 C 0.1875 15.42 4.58 19.8125 10 19.8125 C 12.28995 19.8125 14.393062 19.001996 16.0625 17.6875 L 16.9375 18.5625 C 16.571328 19.252523 16.699291 20.136791 17.28125 20.71875 L 21.875 25.34375 C 22.588 26.05775 23.75475 26.05775 24.46875 25.34375 L 25.34375 24.46875 C 26.05675 23.75475 26.05675 22.588 25.34375 21.875 L 20.71875 17.28125 C 20.134554 16.697054 19.254632 16.595625 18.5625 16.96875 L 17.6875 16.09375 C 19.011378 14.421193 19.8125 12.298983 19.8125 10 C 19.8125 4.58 15.42 0.1875 10 0.1875 z M 10 2 C 14.418 2 18 5.582 18 10 C 18 14.418 14.418 18 10 18 C 5.582 18 2 14.418 2 10 C 2 5.582 5.582 2 10 2 z M 4.9375 7.46875 C 4.4205 8.30475 4.125 9.28975 4.125 10.34375 C 4.125 13.37075 6.56775 15.8125 9.59375 15.8125 C 10.76275 15.8125 11.859 15.4355 12.75 14.8125 C 12.511 14.8385 12.245 14.84375 12 14.84375 C 8.086 14.84375 4.9375 11.69625 4.9375 7.78125 C 4.9375 7.67725 4.9325 7.57275 4.9375 7.46875 z" />
@@ -212,7 +198,8 @@
                 </StackPanel>
             </Border>
         </Canvas>
-        <Grid IsHitTestVisible="False" Background="#dddddd" Visibility="{Binding ShowTips, Converter={StaticResource BoolToVis}}" Width="350" Opacity="0.8" Height="100" Margin="0,0,70,70" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+        <controls:Crosshair x:Name="crosshair" AccentColor="{StaticResource HighlightColor}" />
+        <Grid Name="TipsPanel" IsHitTestVisible="False" Background="#dddddd" Visibility="{Binding ShowTips, Converter={StaticResource BoolToVis}}" Width="350" Opacity="0.8" Height="100" Margin="0,0,70,70" HorizontalAlignment="Right" VerticalAlignment="Bottom">
             <Rectangle Fill="{StaticResource HighlightBrush}" Width="100" Height="100" VerticalAlignment="Top" HorizontalAlignment="Left" />
             <Viewbox Width="60" Height="60"  VerticalAlignment="Top" HorizontalAlignment="Left" Margin="20,20,0,0" >
                 <Path Width="32" Height="32" Fill="White" Data="M 16 3 C 8.8321429 3 3 8.8321429 3 16 C 3 23.167857 8.8321429 29 16 29 C 23.167857 29 29 23.167857 29 16 C 29 8.8321429 23.167857 3 16 3 z M 16 5 C 22.086977 5 27 9.9130231 27 16 C 27 22.086977 22.086977 27 16 27 C 9.9130231 27 5 22.086977 5 16 C 5 9.9130231 9.9130231 5 16 5 z M 15 10 L 15 12 L 17 12 L 17 10 L 15 10 z M 15 14 L 15 22 L 17 22 L 17 14 L 15 14 z" />
