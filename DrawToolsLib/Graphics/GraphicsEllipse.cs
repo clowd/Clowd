@@ -60,15 +60,6 @@ namespace DrawToolsLib.Graphics
             return g.FillContains(point) || g.StrokeContains(new Pen(Brushes.Black, LineWidth), point);
         }
 
-        internal override bool IntersectsWith(Rect rectangle)
-        {
-            RectangleGeometry rg = new RectangleGeometry(rectangle);
-            EllipseGeometry eg = new EllipseGeometry(Bounds);
-            PathGeometry p = Geometry.Combine(rg, eg, GeometryCombineMode.Intersect, null);
-
-            return !p.IsEmpty();
-        }
-
         public override GraphicsBase Clone()
         {
             return new GraphicsEllipse(ObjectColor, LineWidth, Bounds, Filled) { ObjectId = ObjectId };
