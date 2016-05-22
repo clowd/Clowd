@@ -104,6 +104,9 @@ namespace Clowd
 
         [Browsable(false)]
         public MagnifierSettings MagnifierSettings { get; set; } = new MagnifierSettings();
+
+        [Browsable(false), ClassifyNotNull]
+        public int[] CustomColors { get; set; } = new int[0];
     }
 
     [ImplementPropertyChanged]

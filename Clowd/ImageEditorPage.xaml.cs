@@ -218,10 +218,13 @@ namespace Clowd
             dlg.AnyColor = true;
             dlg.FullOpen = true;
             dlg.ShowHelp = false;
+            dlg.CustomColors = App.Current.Settings.CustomColors;
             var initial = drawingCanvas.ObjectColor;
             dlg.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
             if (dlg.ShowDialog(Window.GetWindow(this)) == System.Windows.Forms.DialogResult.OK)
             {
+                App.Current.Settings.CustomColors = dlg.CustomColors;
+                App.Current.Settings.Save();
                 var final = dlg.Color;
                 drawingCanvas.ObjectColor = Color.FromArgb(final.A, final.R, final.G, final.B);
             }
