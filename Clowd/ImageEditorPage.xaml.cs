@@ -191,6 +191,8 @@ namespace Clowd
                 wfStyle = System.Drawing.FontStyle.Italic;
             else
                 wfStyle = System.Drawing.FontStyle.Regular;
+            if (drawingCanvas.TextFontWeight.ToOpenTypeWeight() > 400)
+                wfStyle |= System.Drawing.FontStyle.Bold;
             dlg.Font = new System.Drawing.Font(drawingCanvas.TextFontFamilyName, wfSize, wfStyle);
             dlg.FontMustExist = true;
             dlg.MaxSize = 64;
@@ -205,15 +207,8 @@ namespace Clowd
             {
                 drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
                 drawingCanvas.TextFontSize = ScreenTools.WpfToScreen(dlg.Font.Size / 72 * 96);
-                switch (dlg.Font.Style)
-                {
-                    case System.Drawing.FontStyle.Italic:
-                        drawingCanvas.TextFontStyle = FontStyles.Italic;
-                        break;
-                    default:
-                        drawingCanvas.TextFontStyle = FontStyles.Normal;
-                        break;
-                }
+                drawingCanvas.TextFontStyle = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Italic) ? FontStyles.Italic : FontStyles.Normal;
+                drawingCanvas.TextFontWeight = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Bold) ? FontWeights.Bold : FontWeights.Normal;
             }
         }
 
