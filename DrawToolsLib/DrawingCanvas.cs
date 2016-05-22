@@ -1166,6 +1166,35 @@ namespace DrawToolsLib
                     changed = true;
                     v.ObjectColor = ObjectColor;
                 }
+                var t = v.Graphic as GraphicsText;
+                if (t != null)
+                {
+                    if (t.FontName != TextFontFamilyName)
+                    {
+                        changed = true;
+                        t.FontName = TextFontFamilyName;
+                    }
+                    if (t.FontSize != TextFontSize)
+                    {
+                        changed = true;
+                        t.FontSize = TextFontSize;
+                    }
+                    if (t.FontStretch != TextFontStretch)
+                    {
+                        changed = true;
+                        t.FontStretch = TextFontStretch;
+                    }
+                    if (t.FontStyle != TextFontStyle)
+                    {
+                        changed = true;
+                        t.FontStyle = TextFontStyle;
+                    }
+                    if (t.FontWeight != TextFontWeight)
+                    {
+                        changed = true;
+                        t.FontWeight = TextFontWeight;
+                    }
+                }
             }
 
             if (changed)
