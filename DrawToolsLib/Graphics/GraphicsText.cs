@@ -45,9 +45,59 @@ namespace DrawToolsLib.Graphics
                 OnPropertyChanged(nameof(Body));
             }
         }
+        public string FontName
+        {
+            get { return _fontName; }
+            set
+            {
+                _fontName = value;
+                OnPropertyChanged(nameof(FontName));
+            }
+        }
+        public double FontSize
+        {
+            get { return _fontSize; }
+            set
+            {
+                _fontSize = value;
+                OnPropertyChanged(nameof(FontSize));
+            }
+        }
+        public FontStyle FontStyle
+        {
+            get { return _fontStyle; }
+            set
+            {
+                _fontStyle = value;
+                OnPropertyChanged(nameof(FontStyle));
+            }
+        }
+        public FontWeight FontWeight
+        {
+            get { return _fontWeight; }
+            set
+            {
+                _fontWeight = value;
+                OnPropertyChanged(nameof(FontWeight));
+            }
+        }
+        public FontStretch FontStretch
+        {
+            get { return _fontStretch; }
+            set
+            {
+                _fontStretch = value;
+                OnPropertyChanged(nameof(FontStretch));
+            }
+        }
 
         private int _angle;
         private string _body;
+        private string _fontName = "Arial";
+        private double _fontSize = 12;
+        private FontStyle _fontStyle = FontStyles.Normal;
+        private FontWeight _fontWeight = FontWeights.Normal;
+        private FontStretch _fontStretch = FontStretches.Normal;
         private bool _editing;
 
         public GraphicsText(DrawingCanvas canvas, Point point)
@@ -103,21 +153,13 @@ namespace DrawToolsLib.Graphics
 
         internal FormattedText CreateFormattedText()
         {
-            return CreateFormattedText(Body);
-        }
-        internal FormattedText CreateFormattedText(string text)
-        {
-            var typeface = new Typeface(new FontFamily("Arial"), FontStyles.Normal, FontWeights.Normal, new FontStretch());
-
-            var formatted = new FormattedText(
+            return new FormattedText(
                 Body,
                 System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
-                typeface,
-                12,
+                new Typeface(new FontFamily(FontName), FontStyle, FontWeight, FontStretch),
+                FontSize,
                 new SolidColorBrush(Color.FromArgb(220, 0, 0, 0)));
-
-            return formatted;
         }
 
         public override GraphicsBase Clone()

@@ -598,9 +598,32 @@ namespace DrawToolsLib
         /// </summary>
         static void TextFontFamilyNameChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
-            DrawingCanvas d = property as DrawingCanvas;
+            ApplyFontChange(property as DrawingCanvas, d => d.TextFontFamilyName, t => t.FontName, (t, v) => { t.FontName = v; });
+        }
 
-            HelperFunctions.ApplyFontFamily(d, d.TextFontFamilyName, true);
+        private static void ApplyFontChange<TPropertyType>(DrawingCanvas d, Func<DrawingCanvas, TPropertyType> getProp, Func<GraphicsText, TPropertyType> getTextProp, Action<GraphicsText, TPropertyType> setTextProp)
+        {
+            CommandChangeState command = new CommandChangeState(d);
+            bool wasChange = false;
+            var value = getProp(d);
+
+            foreach (GraphicsVisual g in d.Selection)
+            {
+                var t = g.Graphic as GraphicsText;
+                if (t == null)
+                    continue;
+                if (!Equals(getTextProp(t), value))
+                {
+                    setTextProp(t, value);
+                    wasChange = true;
+                }
+            }
+
+            if (wasChange)
+            {
+                command.NewState(d);
+                d.AddCommandToHistory(command);
+            }
         }
 
         #endregion TextFontFamilyName
@@ -629,9 +652,7 @@ namespace DrawToolsLib
         /// </summary>
         static void TextFontStyleChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
-            DrawingCanvas d = property as DrawingCanvas;
-
-            HelperFunctions.ApplyFontStyle(d, d.TextFontStyle, true);
+            ApplyFontChange(property as DrawingCanvas, d => d.TextFontStyle, t => t.FontStyle, (t, v) => { t.FontStyle = v; });
         }
 
         #endregion TextFontStyle
@@ -660,9 +681,7 @@ namespace DrawToolsLib
         /// </summary>
         static void TextFontWeightChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
-            DrawingCanvas d = property as DrawingCanvas;
-
-            HelperFunctions.ApplyFontWeight(d, d.TextFontWeight, true);
+            ApplyFontChange(property as DrawingCanvas, d => d.TextFontWeight, t => t.FontWeight, (t, v) => { t.FontWeight = v; });
         }
 
         #endregion TextFontWeight
@@ -691,9 +710,7 @@ namespace DrawToolsLib
         /// </summary>
         static void TextFontStretchChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
-            DrawingCanvas d = property as DrawingCanvas;
-
-            HelperFunctions.ApplyFontStretch(d, d.TextFontStretch, true);
+            ApplyFontChange(property as DrawingCanvas, d => d.TextFontStretch, t => t.FontStretch, (t, v) => { t.FontStretch = v; });
         }
 
         #endregion TextFontStretch
@@ -722,9 +739,7 @@ namespace DrawToolsLib
         /// </summary>
         static void TextFontSizeChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
-            DrawingCanvas d = property as DrawingCanvas;
-
-            HelperFunctions.ApplyFontSize(d, d.TextFontSize, true);
+            ApplyFontChange(property as DrawingCanvas, d => d.TextFontSize, t => t.FontSize, (t, v) => { t.FontSize = v; });
         }
 
         #endregion TextFontSize
