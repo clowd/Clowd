@@ -30,7 +30,7 @@ namespace DrawToolsLib.Graphics
         {
             get
             {
-                if(_imageBacking == null)
+                if (_imageBacking == null)
                     _imageBacking = BitmapFrame.Create(
                         new Uri(_fileName, UriKind.Absolute),
                         BitmapCreateOptions.None,

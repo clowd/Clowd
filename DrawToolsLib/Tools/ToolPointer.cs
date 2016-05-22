@@ -143,7 +143,7 @@ namespace DrawToolsLib
 
         /// <summary>
         /// Handle mouse move.
-        /// Se cursor, move/resize, make group selection.
+        /// Set cursor, move/resize, make group selection.
         /// </summary>
         public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)
         {
@@ -222,8 +222,7 @@ namespace DrawToolsLib
             if (selectMode == SelectionMode.GroupSelection)
             {
                 // Resize selection rectangle
-                drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(
-                    point, 5);
+                drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(point, 5);
             }
         }
 
