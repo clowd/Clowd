@@ -116,25 +116,17 @@ namespace DrawToolsLib
             // Keep reference to edited object
             editedGraphicsText = graphics;
 
-            var gb = graphicsText.Bounds;
-
             _textBox = new TextBox();
-            _textBox.RenderTransform = new RotateTransform(graphicsText.Angle);
-            //textBox.Width = graphicsText.Bounds.Width;
-            //textBox.Height = graphicsText.Bounds.Height;
-            //textBox.FontFamily = new FontFamily(graphicsText.FontFamily);
-            //textBox.FontSize = graphicsText.FontSize;
-            //var tface = graphicsText.Typeface;
-            //textBox.FontStretch = tface.Stretch;
-            //textBox.FontStyle = tface.Style;
-            //textBox.FontWeight = tface.Weight;
-            //textBox.Text = graphicsText.Text;
+            _textBox.RenderTransform = new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2, (graphicsText.Bottom - graphicsText.Top) / 2);
+            _textBox.FontFamily = new FontFamily(graphicsText.FontName);
+            _textBox.FontSize = graphicsText.FontSize;
+            _textBox.FontStretch = graphicsText.FontStretch;
+            _textBox.FontStyle = graphicsText.FontStyle;
+            _textBox.FontWeight = graphicsText.FontWeight;
             _textBox.Width = Double.NaN;
             _textBox.Height = Double.NaN;
             _textBox.Background = Brushes.Transparent;
-            _textBox.FontFamily = new FontFamily("Arial");
             _textBox.Text = graphicsText.Body;
-            _textBox.FontSize = 12;
             _textBox.BorderThickness = new Thickness(0, 0, 0, 1);
             _textBox.Tag = graphicsText;
 
@@ -145,16 +137,11 @@ namespace DrawToolsLib
             }
 
             _textBox.AcceptsReturn = true;
-            //_textBox.TextWrapping = TextWrapping.Wrap;
 
             drawingCanvas.Children.Add(_textBox);
 
-            //Matrix matrix = new Matrix();
-            //matrix.Rotate(graphicsText.Angle);
-            //gb.Transform(matrix);
-
-            Canvas.SetLeft(_textBox, gb.TopLeft.X + graphicsText.Padding);
-            Canvas.SetTop(_textBox, gb.TopLeft.Y + graphicsText.Padding);
+            Canvas.SetLeft(_textBox, graphicsText.Left + graphicsText.Padding);
+            Canvas.SetTop(_textBox, graphicsText.Top + graphicsText.Padding);
 
             _textBox.Focus();
 
