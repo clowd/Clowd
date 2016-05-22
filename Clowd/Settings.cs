@@ -131,11 +131,11 @@ namespace Clowd
 
         [Category("Hotkeys"), DisplayName("Capture - Fullscreen"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureFullscreenShortcut { get; set; }
-            = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Control, () => App.Current.QuickCapture());
+            = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Control, () => App.Current.QuickCapture(true));
 
         [Category("Hotkeys"), DisplayName("Capture - Active Window"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureActiveShortcut { get; set; }
-            = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Alt, () => App.Current.QuickCapture());
+            = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Alt, () => App.Current.QuickCapture(false));
     }
 
     [ImplementPropertyChanged]

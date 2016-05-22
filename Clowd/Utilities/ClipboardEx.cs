@@ -27,34 +27,44 @@ namespace Clowd.Utilities
 
         public static void SetImage(Bitmap bmp)
         {
-            using (MemoryStream ms = new MemoryStream())
+            byte[] pngBytes;
+            using (var ms = new MemoryStream())
             {
                 bmp.Save(ms, ImageFormat.Png);
-                System.Windows.Forms.IDataObject dataObject = new System.Windows.Forms.DataObject();
-                dataObject.SetData("PNG", false, ms);
-                System.Windows.Forms.Clipboard.SetDataObject(dataObject, false);
+                pngBytes = ms.ToArray();
             }
+
+            IDataObject dataObject = new DataObject();
+            dataObject.SetData(DataFormats.Bitmap, bmp, true);
+            dataObject.SetData("PNG", pngBytes, true);
+            Clipboard.SetDataObject(dataObject, true);
         }
         public static void SetImage(BitmapSource bmp)
         {
-            Clipboard.Clear();
-            AddImage(bmp);
-        }
-
-        public static void AddImage(BitmapSource bmp)
-        {
-            BitmapEncoder encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bmp));
+            byte[] pngBytes;
             using (var ms = new MemoryStream())
             {
-                encoder.Save(ms);
-                ms.Position = 0;
-                System.Windows.Forms.IDataObject dataObject =
-                    System.Windows.Forms.Clipboard.GetDataObject() ?? new System.Windows.Forms.DataObject();
-                dataObject.SetData(DataFormats.Bitmap, true, (object)bmp);
-                dataObject.SetData("PNG", true, ms);
-                System.Windows.Forms.Clipboard.SetDataObject(dataObject, false);
+                bmp.Save(ms, ImageFormat.Png);
+                pngBytes = ms.ToArray();
             }
+
+            IDataObject dataObject = new DataObject();
+            dataObject.SetData(DataFormats.Bitmap, bmp, true);
+            dataObject.SetData("PNG", pngBytes, true);
+            Clipboard.SetDataObject(dataObject, true);
+        }
+
+        public static void AddImageToData(IDataObject dataObject, BitmapSource bmp)
+        {
+            byte[] pngBytes;
+            using (var ms = new MemoryStream())
+            {
+                bmp.Save(ms, ImageFormat.Png);
+                pngBytes = ms.ToArray();
+            }
+
+            dataObject.SetData(DataFormats.Bitmap, bmp, true);
+            dataObject.SetData("PNG", pngBytes, true);
         }
 
         private static BitmapSource GetImageFromFile()

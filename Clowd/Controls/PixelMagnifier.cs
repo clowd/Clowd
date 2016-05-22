@@ -15,14 +15,20 @@ namespace Clowd.Controls
             get { return (BitmapSource)GetValue(ImageProperty); }
             set { SetValue(ImageProperty, value); }
         }
+        public static readonly DependencyProperty ImageProperty =
+            DependencyProperty.Register("Image", typeof(BitmapSource), typeof(PixelMagnifier), new PropertyMetadata(null));
+
+        public ArrowIndicatorPosition IndicatorPosition
+        {
+            get { return (ArrowIndicatorPosition)GetValue(IndicatorPositionProperty); }
+            set { SetValue(IndicatorPositionProperty, value); }
+        }
+        public static readonly DependencyProperty IndicatorPositionProperty =
+            DependencyProperty.Register("IndicatorPosition", typeof(ArrowIndicatorPosition), typeof(PixelMagnifier), new PropertyMetadata(ArrowIndicatorPosition.None));
 
         public WpfSize FinderSize => (_singlePixelSize * _zoomedPixels).ToWpfSize();
         private ScreenSize _singlePixelSize => new WpfSize(App.Current.Settings.MagnifierSettings.Zoom, App.Current.Settings.MagnifierSettings.Zoom).ToScreenSize();
         private int _zoomedPixels => App.Current.Settings.MagnifierSettings.AreaSize - App.Current.Settings.MagnifierSettings.AreaSize % 2 + 1;
-
-        public static readonly DependencyProperty ImageProperty =
-            DependencyProperty.Register("Image", typeof(BitmapSource), typeof(PixelMagnifier), new PropertyMetadata(null));
-
 
         private DrawingVisual _visual = new MyDrawingVisual();
         private ScreenPoint _lastPoint;
@@ -79,6 +85,11 @@ namespace Clowd.Controls
                     targetRect.Height -= excess * zoomedPixel.Height;
                 }
 
+                var gridLinePixelWidth = Math.Max(ScreenTools.WpfToScreen(App.Current.Settings.MagnifierSettings.GridLineWidth), 1);
+                var gridOffset = (gridLinePixelWidth % 2) * 0.5 * px; // offset the line by 0.5 pixels if the line width is odd, to avoid blurring
+                // Clip to the exact same ellipse as the border (thus clipping off half of the drawn border)
+                g.PushClip(new EllipseGeometry(new Point(FinderSize.Width / 2 + gridOffset, FinderSize.Height / 2 + gridOffset), FinderSize.Width / 2, FinderSize.Height / 2));
+
                 // Draw the black background visible at the edge of the screen where no zoomed pixels are available
                 g.DrawRectangle(Brushes.Black, null, new Rect(0, 0, FinderSize.Width, FinderSize.Height));
 
@@ -88,10 +99,10 @@ namespace Clowd.Controls
                 g.DrawDrawing(group);
 
                 // Draw the pixel grid lines
-                var gridLinePixelWidth = Math.Max(ScreenTools.WpfToScreen(App.Current.Settings.MagnifierSettings.GridLineWidth), 1); 
                 var gridLineWidth = ScreenTools.ScreenToWpf(gridLinePixelWidth);
                 var gridPen = new Pen(Brushes.DimGray, gridLineWidth);
-                var gridOffset = (gridLinePixelWidth % 2) * 0.5 * px; // offset the line by 0.5 pixels if the line width is odd, to avoid blurring
+
+                // Apply grid offset transform and draw grid
                 g.PushTransform(new TranslateTransform(gridOffset, gridOffset));
                 for (int x = sourceRect.Left - cornerX; x <= sourceRect.Left + sourceRect.Width - cornerX; x++)
                     g.DrawLine(gridPen, new Point(x * zoomedPixel.Width, targetRect.Top), new Point(x * zoomedPixel.Width, targetRect.Bottom));
@@ -115,8 +126,36 @@ namespace Clowd.Controls
                 // Draw the magnifier border
                 Pen pen = new Pen(new SolidColorBrush(App.Current.Settings.MagnifierSettings.BorderColor), App.Current.Settings.MagnifierSettings.BorderWidth);
                 g.DrawEllipse(null, pen, new Point(FinderSize.Width / 2 + gridOffset, FinderSize.Height / 2 + gridOffset), FinderSize.Width / 2, FinderSize.Height / 2);
-                // Clip to the exact same ellipse (thus clipping off half of the drawn border)
-                this.Clip = new EllipseGeometry(new Point(FinderSize.Width / 2 + gridOffset, FinderSize.Height / 2 + gridOffset), FinderSize.Width / 2, FinderSize.Height / 2);
+
+                g.Pop(); // the circular clip
+
+                // draw indicator pointer
+                const double indSize = 60d;
+                const double indBorder = 10d;
+                Rect indicatorSquare = Rect.Empty;
+                switch (IndicatorPosition)
+                {
+                    case ArrowIndicatorPosition.TopLeft:
+                        indicatorSquare = new Rect(0, 0, indSize, indSize);
+                        break;
+                    case ArrowIndicatorPosition.TopRight:
+                        indicatorSquare = new Rect(FinderSize.Width - indSize, 0, indSize, indSize);
+                        break;
+                    case ArrowIndicatorPosition.BottomLeft:
+                        indicatorSquare = new Rect(0, FinderSize.Height - indSize, indSize, indSize);
+                        break;
+                    case ArrowIndicatorPosition.BottomRight:
+                        indicatorSquare = new Rect(FinderSize.Width - indSize, FinderSize.Height - indSize, indSize, indSize);
+                        break;
+                }
+                if (!indicatorSquare.IsEmpty)
+                {
+                    var indicatorGeo = Geometry.Combine(
+                        new RectangleGeometry(indicatorSquare),
+                        new EllipseGeometry(new Rect(-indBorder, -indBorder, FinderSize.Width + (indBorder * 2), FinderSize.Height + (indBorder * 2))),
+                        GeometryCombineMode.Exclude, null);
+                    g.DrawGeometry(new SolidColorBrush(Color.FromArgb(180, 135, 135, 135)), null, indicatorGeo);
+                }
 
                 this.Width = FinderSize.Width;
                 this.Height = FinderSize.Height;
@@ -139,6 +178,15 @@ namespace Clowd.Controls
             {
                 VisualBitmapScalingMode = BitmapScalingMode.NearestNeighbor;
             }
+        }
+
+        public enum ArrowIndicatorPosition
+        {
+            None,
+            TopLeft,
+            TopRight,
+            BottomLeft,
+            BottomRight
         }
     }
 }

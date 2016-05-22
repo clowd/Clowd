@@ -132,8 +132,8 @@ namespace Clowd
 
             var padding = App.Current.Settings.EditorSettings.CapturePadding;
             // instead of 61 it should be actionRow.Height.Value but its likely that this value hasnt been properly computed yet
-            // so this is just a shortcut for now.
-            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + (padding * 2),
+            // so this is just a shortcut for now. (200 is padding for the zoom control)
+            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + (padding * 2) + 200,
                 _imageSize.Height + 61 + (padding * 2)));
 
             // just doing this to force a thread context switch.
@@ -316,17 +316,14 @@ namespace Clowd
             if (!VerifyArtworkExists())
                 return;
 
-            drawingCanvas.Copy();
-            ClipboardEx.AddImage(GetRenderedBitmap());
+            var data = drawingCanvas.GetClipboardObject();
+            ClipboardEx.AddImageToData(data, GetRenderedBitmap());
+            Clipboard.SetDataObject(data, true);
         }
 
         private void CutCommand(object sender, ExecutedRoutedEventArgs e)
         {
-            if (!VerifyArtworkExists())
-                return;
-
-            drawingCanvas.Copy();
-            ClipboardEx.AddImage(GetRenderedBitmap());
+            CopyCommand(sender, e);
             drawingCanvas.DeleteAll();
         }
 
