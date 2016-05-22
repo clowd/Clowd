@@ -791,28 +791,6 @@ namespace DrawToolsLib
         }
 
         /// <summary>
-        /// Hit test.
-        /// Return value: -1 - no hit
-        ///                0 - hit anywhere
-        ///               +1 - hit handle
-        /// </summary>
-        public int HitTestGraphics(Point p)
-        {
-            for (int i = this.GraphicsList.Count - 1; i >= 0; i--)
-            {
-                var o = this[i];
-
-                var handleNumber = o.Graphic.MakeHitTest(p);
-
-                if (handleNumber > -1)
-                {
-                    return Math.Max(handleNumber, 1);
-                }
-            }
-            return -1;
-        }
-
-        /// <summary>
         /// Add a graphic object to the canvas from its serialized companion class.
         /// </summary>
         public void AddGraphic(GraphicsBase graphic)
