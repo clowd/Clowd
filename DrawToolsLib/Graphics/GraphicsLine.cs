@@ -87,15 +87,6 @@ namespace DrawToolsLib.Graphics
                 return 0;
             return -1;
         }
-        internal override bool IntersectsWith(Rect rectangle)
-        {
-            RectangleGeometry rg = new RectangleGeometry(rectangle);
-            LineGeometry lg = new LineGeometry(LineStart, LineEnd);
-            PathGeometry widen = lg.GetWidenedPathGeometry(new Pen(Brushes.Black, LineHitTestWidth));
-            PathGeometry p = Geometry.Combine(rg, widen, GeometryCombineMode.Intersect, null);
-
-            return !p.IsEmpty();
-        }
         internal override void Move(double deltaX, double deltaY)
         {
             _lineStart = new Point(LineStart.X + deltaX, LineStart.Y + deltaY);

@@ -105,7 +105,10 @@ namespace DrawToolsLib.Graphics
         internal abstract bool Contains(Point point);
         internal abstract Point GetHandle(int handleNumber);
         internal abstract int MakeHitTest(Point point);
-        internal abstract bool IntersectsWith(Rect rectangle);
+        internal virtual bool ContainedIn(Rect rectangle)
+        {
+            return rectangle.Contains(Bounds);
+        }
         internal abstract void Move(double deltaX, double deltaY);
         internal abstract void MoveHandleTo(Point point, int handleNumber);
         internal abstract Cursor GetHandleCursor(int handleNumber);
