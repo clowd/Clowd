@@ -263,7 +263,7 @@ namespace DrawToolsLib
 
                 foreach (GraphicsVisual g in drawingCanvas.GraphicsList)
                 {
-                    if (g.Graphic.IntersectsWith(rect))
+                    if (g.Graphic.ContainedIn(rect))
                     {
                         g.IsSelected = true;
                     }

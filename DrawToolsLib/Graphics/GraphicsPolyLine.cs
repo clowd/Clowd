@@ -179,19 +179,6 @@ namespace DrawToolsLib.Graphics
 
             return -1;
         }
-        internal override bool IntersectsWith(Rect rectangle)
-        {
-            if (rectangle.Contains(Bounds))
-                return true;
-
-            Geometry og1 = new RectangleGeometry(rectangle).GetWidenedPathGeometry(new Pen(Brushes.Black, 1.0));
-            Geometry og2 = _geoCache.GetWidenedPathGeometry(new Pen(Brushes.Black, 1.0));
-
-            CombinedGeometry cg = new CombinedGeometry(GeometryCombineMode.Intersect, og1, og2);
-            PathGeometry pg = cg.GetFlattenedPathGeometry();
-
-            return pg.Figures.Any();
-        }
         public override GraphicsBase Clone()
         {
             return new GraphicsPolyLine(ObjectColor, LineWidth, _points) { ObjectId = ObjectId };

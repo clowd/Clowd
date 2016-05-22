@@ -193,10 +193,6 @@ namespace DrawToolsLib.Graphics
 
             return -1;
         }
-        internal override bool IntersectsWith(Rect rectangle)
-        {
-            return Bounds.IntersectsWith(rectangle);
-        }
         internal override void Move(double deltaX, double deltaY)
         {
             Left += deltaX;
