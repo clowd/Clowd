@@ -62,14 +62,14 @@ namespace DrawToolsLib.Graphics
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
-            Rect r = Bounds;
-            if (_imageCache.PixelWidth == (int)Math.Round(r.Width, 3) && _imageCache.PixelHeight == (int)Math.Round(r.Height, 3))
+            Rect r = UnrotatedBounds;
+            if (_imageCache.PixelWidth == (int)Math.Round(r.Width, 3) && _imageCache.PixelHeight == (int)Math.Round(r.Height, 3) && Angle == 0)
             {
-                // If the image is still at the original size, round the rectangle position to whole pixels to avoid blurring.
+                // If the image is still at the original size and zero rotation, round the rectangle position to whole pixels to avoid blurring.
                 r.X = Math.Round(r.X);
                 r.Y = Math.Round(r.Y);
             }
-            drawingContext.DrawImage(_imageCache, Bounds);
+            drawingContext.DrawImage(_imageCache, r);
         }
 
         public override GraphicsBase Clone()

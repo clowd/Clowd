@@ -125,18 +125,16 @@ namespace DrawToolsLib.Graphics
             }
         }
 
-        internal virtual void DrawDashedBorder(DrawingContext drawingContext)
+        internal virtual void DrawDashedBorder(DrawingContext drawingContext, Rect where)
         {
             drawingContext.DrawRectangle(null,
                     new Pen(new SolidColorBrush(Color.FromArgb(127, 255, 255, 255)), LineWidth),
-                    Bounds);
+                    where);
             DashStyle dashStyle = new DashStyle();
             dashStyle.Dashes.Add(4);
             Pen dashedPen = new Pen(new SolidColorBrush(Color.FromArgb(127, 0, 0, 0)), LineWidth);
             dashedPen.DashStyle = dashStyle;
-            drawingContext.DrawRectangle(null,
-                dashedPen,
-                Bounds);
+            drawingContext.DrawRectangle(null, dashedPen, where);
         }
         internal virtual void DrawTracker(DrawingContext drawingContext)
         {

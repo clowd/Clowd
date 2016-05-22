@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,22 +16,22 @@ namespace DrawToolsLib
         private enum SelectionMode
         {
             None,
-            Move,           // object(s) are moved
-            Size,           // object is resized
+            Move,               // object(s) are moved
+            HandleDrag,         // object is edited via dragging a handle (e.g. resize, rotate)
             GroupSelection
         }
 
-        private SelectionMode selectMode = SelectionMode.None;
+        private SelectionMode _selectMode = SelectionMode.None;
 
         // Object which is currently resized:
-        private GraphicsBase resizedObject;
-        private int resizedObjectHandle;
+        private GraphicsBase _handleGrabbedObject;
+        private int _handleGrabbed;
 
-        // Keep state about last and current point (used to move and resize objects)
-        private Point lastPoint = new Point(0, 0);
+        // Keep state about last and current point (used to edit objects via dragging, e.g. move and resize)
+        private Point _lastPoint = new Point(0, 0);
 
-        private CommandChangeState commandChangeState;
-        bool wasMove;
+        private CommandChangeState _commandChangeState;
+        bool _wasMove;
 
 
         public ToolPointer()
@@ -44,62 +44,41 @@ namespace DrawToolsLib
         /// </summary>
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
-            commandChangeState = null;
-            wasMove = false;
-
+            _commandChangeState = null;
+            _wasMove = false;
+            _selectMode = SelectionMode.None;
 
             Point point = e.GetPosition(drawingCanvas);
-
-            selectMode = SelectionMode.None;
-
-            GraphicsBase o;
             GraphicsBase movedObject = null;
-            int handleNumber;
 
-            // Test for resizing (only if control is selected, cursor is on the handle)
+            // Test if we start dragging an object or a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
             for (int i = drawingCanvas.GraphicsList.Count - 1; i >= 0; i--)
             {
-                o = drawingCanvas[i].Graphic;
-                if (o.IsSelected)
+                var o = drawingCanvas[i].Graphic;
+                int handleNumber;
+
+                // Test for handles
+                if (o.IsSelected && (handleNumber = o.MakeHitTest(point)) > 0)
                 {
-                    handleNumber = o.MakeHitTest(point);
+                    _selectMode = SelectionMode.HandleDrag;
+                    _handleGrabbedObject = o;
+                    _handleGrabbed = handleNumber;
 
-                    if (handleNumber > 0)
-                    {
-                        selectMode = SelectionMode.Size;
+                    // Since we want to edit only one object, unselect all other objects
+                    drawingCanvas.UnselectAll();
+                    o.IsSelected = true;
 
-                        // keep resized object in class member
-                        resizedObject = o;
-                        resizedObjectHandle = handleNumber;
+                    _commandChangeState = new CommandChangeState(drawingCanvas);
 
-                        // Since we want to resize only one object, unselect all other objects
-                        drawingCanvas.UnselectAll();
-                        o.IsSelected = true;
-
-                        commandChangeState = new CommandChangeState(drawingCanvas);
-
-                        break;
-                    }
-                }
-            }
-
-            // Test for move (cursor is on the object)
-            if (selectMode == SelectionMode.None)
-            {
-                for (int i = drawingCanvas.GraphicsList.Count - 1; i >= 0; i--)
-                {
-                    o = drawingCanvas[i].Graphic;
-
-                    if (o.MakeHitTest(point) == 0)
-                    {
-                        movedObject = o;
-                        break;
-                    }
+                    // Since handles take precedence over everything, we do not need to check the rest of the objects
+                    break;
                 }
 
-                if (movedObject != null)
+                // Test for dragging an object, but only if we haven’t already found an object to drag
+                else if (o.MakeHitTest(point) == 0 && _selectMode != SelectionMode.Move)
                 {
-                    selectMode = SelectionMode.Move;
+                    movedObject = o;
+                    _selectMode = SelectionMode.Move;
 
                     // Unselect all if Ctrl is not pressed and clicked object is not selected yet
                     if (Keyboard.Modifiers != ModifierKeys.Control && !movedObject.IsSelected)
@@ -113,12 +92,12 @@ namespace DrawToolsLib
                     // Set move cursor
                     drawingCanvas.Cursor = Cursors.SizeAll;
 
-                    commandChangeState = new CommandChangeState(drawingCanvas);
+                    _commandChangeState = new CommandChangeState(drawingCanvas);
                 }
             }
 
             // Click on background
-            if (selectMode == SelectionMode.None)
+            if (_selectMode == SelectionMode.None)
             {
                 // Unselect all if Ctrl is not pressed
                 if (Keyboard.Modifiers != ModifierKeys.Control)
@@ -127,15 +106,14 @@ namespace DrawToolsLib
                 }
 
                 // Group selection. Create selection rectangle.
-                var rect =  HelperFunctions.CreateRectSafe(point.X, point.Y, point.X + 1, point.Y + 1);
+                var rect = HelperFunctions.CreateRectSafe(point.X, point.Y, point.X + 1, point.Y + 1);
                 GraphicsSelectionRectangle r = new GraphicsSelectionRectangle(drawingCanvas, rect);
 
                 drawingCanvas.GraphicsList.Add(r.CreateVisual());
-                selectMode = SelectionMode.GroupSelection;
+                _selectMode = SelectionMode.GroupSelection;
             }
 
-
-            lastPoint = point;
+            _lastPoint = point;
 
             // Capture mouse until MouseUp event is received
             drawingCanvas.CaptureMouse();
@@ -192,25 +170,25 @@ namespace DrawToolsLib
                 return;
             }
 
-            wasMove = true;
+            _wasMove = true;
 
             // Find difference between previous and current position
-            double dx = point.X - lastPoint.X;
-            double dy = point.Y - lastPoint.Y;
+            double dx = point.X - _lastPoint.X;
+            double dy = point.Y - _lastPoint.Y;
 
-            lastPoint = point;
+            _lastPoint = point;
 
-            // Resize
-            if (selectMode == SelectionMode.Size)
+            // Resize or rotate
+            if (_selectMode == SelectionMode.HandleDrag)
             {
-                if (resizedObject != null)
+                if (_handleGrabbedObject != null)
                 {
-                    resizedObject.MoveHandleTo(point, resizedObjectHandle);
+                    _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
                 }
             }
 
             // Move
-            if (selectMode == SelectionMode.Move)
+            if (_selectMode == SelectionMode.Move)
             {
                 foreach (GraphicsVisual o in drawingCanvas.Selection)
                 {
@@ -219,7 +197,7 @@ namespace DrawToolsLib
             }
 
             // Group selection
-            if (selectMode == SelectionMode.GroupSelection)
+            if (_selectMode == SelectionMode.GroupSelection)
             {
                 // Resize selection rectangle
                 drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(point, 5);
@@ -235,14 +213,14 @@ namespace DrawToolsLib
             if (!drawingCanvas.IsMouseCaptured)
             {
                 drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
-                selectMode = SelectionMode.None;
+                _selectMode = SelectionMode.None;
                 return;
             }
 
-            if (resizedObject != null)
+            if (_handleGrabbedObject != null)
             {
                 // after resizing
-                resizedObject.Normalize();
+                _handleGrabbedObject.Normalize();
 
                 // Special case for text
                 //if (resizedObject is GraphicsText)
@@ -250,10 +228,10 @@ namespace DrawToolsLib
                 //    ((GraphicsText)resizedObject).
                 //}
 
-                resizedObject = null;
+                _handleGrabbedObject = null;
             }
 
-            if (selectMode == SelectionMode.GroupSelection)
+            if (_selectMode == SelectionMode.GroupSelection)
             {
                 GraphicsSelectionRectangle r = (GraphicsSelectionRectangle)(drawingCanvas[drawingCanvas.Count - 1].Graphic);
                 r.Normalize();
@@ -274,7 +252,7 @@ namespace DrawToolsLib
 
             drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
 
-            selectMode = SelectionMode.None;
+            _selectMode = SelectionMode.None;
 
             AddChangeToHistory(drawingCanvas);
         }
@@ -294,12 +272,12 @@ namespace DrawToolsLib
         /// </summary>
         public void AddChangeToHistory(DrawingCanvas drawingCanvas)
         {
-            if (commandChangeState != null && wasMove)
+            if (_commandChangeState != null && _wasMove)
             {
                 // Keep state after moving/resizing and add command to history
-                commandChangeState.NewState(drawingCanvas);
-                drawingCanvas.AddCommandToHistory(commandChangeState);
-                commandChangeState = null;
+                _commandChangeState.NewState(drawingCanvas);
+                drawingCanvas.AddCommandToHistory(_commandChangeState);
+                _commandChangeState = null;
             }
         }
 

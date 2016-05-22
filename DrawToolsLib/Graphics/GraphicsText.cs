@@ -27,22 +27,19 @@ namespace DrawToolsLib.Graphics
                 OnPropertyChanged(nameof(Editing));
             }
         }
-        public int Angle
-        {
-            get { return _angle; }
-            set
-            {
-                _angle = value;
-                OnPropertyChanged(nameof(Angle));
-            }
-        }
         public string Body
         {
             get { return _body; }
             set
             {
                 _body = value;
+                var form = CreateFormattedText();
+                Right = Left + form.Width;
+                Bottom = Top + form.Height;
                 OnPropertyChanged(nameof(Body));
+                OnPropertyChanged(nameof(Right));
+                OnPropertyChanged(nameof(Bottom));
+                OnPropertyChanged(nameof(Bounds));
             }
         }
         public string FontName
@@ -91,7 +88,6 @@ namespace DrawToolsLib.Graphics
             }
         }
 
-        private int _angle;
         private string _body;
         private string _fontName = "Arial";
         private double _fontSize = 12;
@@ -100,55 +96,79 @@ namespace DrawToolsLib.Graphics
         private FontStretch _fontStretch = FontStretches.Normal;
         private bool _editing;
 
+        private static Random _rnd = new Random();
+        private static Color[] _colors = new Color[]
+        {
+            Color.FromRgb(255, 255, 203),
+            Color.FromRgb(229, 203, 228),
+            Color.FromRgb(203, 228, 222),
+            Color.FromRgb(213, 198, 157)
+        };
+        private static int _nextColor = 0;
+
         public GraphicsText(DrawingCanvas canvas, Point point)
-            : this(canvas.ObjectColor, canvas.LineWidth, point)
+            : this(_colors[_nextColor], canvas.LineWidth, point, _rnd.NextDouble() * 8 - 4)
         {
+            _nextColor = (_nextColor + 1) % _colors.Length;
+            FontName = canvas.TextFontFamilyName;
+            FontSize = canvas.TextFontSize;
+            FontStretch = canvas.TextFontStretch;
+            FontStyle = canvas.TextFontStyle;
+            FontWeight = canvas.TextFontWeight;
         }
-        public GraphicsText(Color objectColor, double lineWidth, Point point)
-            : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)))
-        {
-            Random rnd = new Random();
-
-            var colors = new Color[]
-            {
-                Color.FromRgb(255, 255, 203),
-                Color.FromRgb(229, 203, 228),
-                Color.FromRgb(203, 228, 222),
-                Color.FromRgb(213, 198, 157)
-            };
-
-            ObjectColor = colors[rnd.Next(0, colors.Length - 1)];
-            Angle = rnd.Next(-4, 4);
-            Body = "double click to edit note.";
-        }
-        public GraphicsText(Color objectColor, double lineWidth, Point point, int angle, string body)
+        public GraphicsText(Color objectColor, double lineWidth, Point point, double angle = 0, string body = null)
             : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)))
         {
             Angle = angle;
-            Body = body;
+            Body = body ?? "Double-click to edit note.";
         }
         protected GraphicsText()
         {
         }
 
-        internal override int HandleCount => 0;
+        internal override int HandleCount => 1;
+
+        internal override Point GetHandle(int handleNumber)
+        {
+            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1–8 are used for resizing.
+            if (handleNumber == 1)
+                return base.GetHandle(9);
+            return base.GetHandle(0);
+        }
+
+        internal override Cursor GetHandleCursor(int handleNumber)
+        {
+            return handleNumber == 1 ? Cursors.Cross : HelperFunctions.DefaultCursor;
+        }
+
+        internal override void MoveHandleTo(Point point, int handleNumber)
+        {
+            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1–8 are used for resizing.
+            base.MoveHandleTo(point, handleNumber == 1 ? 9 : 0);
+        }
 
         internal override void Draw(DrawingContext context)
         {
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
+
             var form = CreateFormattedText();
 
-            this.Right = this.Left + form.Width + (Padding * 2);
-            this.Bottom = this.Top + form.Height + (Padding * 2);
+            Right = Left + form.Width + (Padding * 2);
+            Bottom = Top + form.Height + (Padding * 2);
 
-            context.PushTransform(new RotateTransform(Angle, Left, Top));
+            context.PushTransform(new RotateTransform(Angle, (Left + Right) / 2, (Top + Bottom) / 2));
 
-            context.DrawRectangle(new SolidColorBrush(ObjectColor), null, Bounds);
+            context.DrawRectangle(new SolidColorBrush(ObjectColor), null, UnrotatedBounds);
 
             if (IsSelected)
-                DrawDashedBorder(context);
+            {
+                DrawDashedBorder(context, UnrotatedBounds);
+                DrawTracker(context);
+            }
 
             if (!Editing)
-                context.DrawText(form, new Point(this.Left + Padding, this.Top + Padding));
+                context.DrawText(form, new Point(Left + Padding, Top + Padding));
         }
 
         internal FormattedText CreateFormattedText()

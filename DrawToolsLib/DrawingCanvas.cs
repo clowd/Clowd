@@ -1119,6 +1119,34 @@ namespace DrawToolsLib
         }
 
         /// <summary>
+        /// Reset angle of rotation to 0 for all selected elements
+        /// </summary>
+        public void ResetRotation()
+        {
+            var changed = false;
+            for (int i = this.Count - 1; i >= 0; i--)
+            {
+                var rect = this[i].Graphic as GraphicsRectangle;
+                if (rect != null && this[i].IsSelected)
+                {
+                    if (rect.Angle != 0)
+                        changed = true;
+                    rect.Angle = 0;
+                }
+            }
+
+            if (changed)
+            {
+                CommandChangeState command = new CommandChangeState(this);
+                command.NewState(this);
+                AddCommandToHistory(command);
+            }
+
+            UpdateState();
+            RefreshBounds();
+        }
+
+        /// <summary>
         /// Apply currently active properties to selected objects
         /// </summary>
         public void SetProperties()
@@ -1483,6 +1511,9 @@ namespace DrawToolsLib
                 case ContextMenuCommand.SetProperties:
                     SetProperties();
                     break;
+                case ContextMenuCommand.ResetRotation:
+                    ResetRotation();
+                    break;
             }
         }
 
@@ -1574,6 +1605,12 @@ namespace DrawToolsLib
             menuItem = new MenuItem();
             menuItem.Header = "Move to back";
             menuItem.Tag = ContextMenuCommand.MoveToBack;
+            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
+            contextMenu.Items.Add(menuItem);
+
+            menuItem = new MenuItem();
+            menuItem.Header = "Reset rotation";
+            menuItem.Tag = ContextMenuCommand.ResetRotation;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 

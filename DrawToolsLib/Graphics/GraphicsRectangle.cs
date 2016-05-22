@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -53,6 +54,16 @@ namespace DrawToolsLib.Graphics
                 OnPropertyChanged(nameof(Bounds));
             }
         }
+        public double Angle
+        {
+            get { return _angle; }
+            set
+            {
+                if (value == _angle) return;
+                _angle = value;
+                OnPropertyChanged(nameof(Angle));
+            }
+        }
 
         public bool Filled
         {
@@ -69,6 +80,7 @@ namespace DrawToolsLib.Graphics
         private double _top;
         private double _right;
         private double _bottom;
+        private double _angle = 0;
         private bool _filled;
 
         protected GraphicsRectangle()
@@ -86,7 +98,7 @@ namespace DrawToolsLib.Graphics
             : this(objectColor, lineWidth, rect, false)
         {
         }
-        public GraphicsRectangle(Color objectColor, double lineWidth, Rect rect, bool filled)
+        public GraphicsRectangle(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0)
             : base(objectColor, lineWidth)
         {
             _left = rect.Left;
@@ -94,40 +106,31 @@ namespace DrawToolsLib.Graphics
             _right = rect.Right;
             _bottom = rect.Bottom;
             _filled = filled;
+            _angle = angle;
         }
 
         public override Rect Bounds
         {
             get
             {
-                double l, t, w, h;
-
-                if (Left <= Right)
-                {
-                    l = Left;
-                    w = Right - Left;
-                }
-                else
-                {
-                    l = Right;
-                    w = Left - Right;
-                }
-
-                if (Top <= Bottom)
-                {
-                    t = Top;
-                    h = Bottom - Top;
-                }
-                else
-                {
-                    t = Bottom;
-                    h = Top - Bottom;
-                }
-
-                return new Rect(l, t, w, h);
+                var points = new[] { new Point(Left, Top), new Point(Right, Top), new Point(Left, Bottom), new Point(Right, Bottom) };
+                var rotated = points.Select(p => ApplyRotation(p));
+                var l = rotated.Min(p => p.X);
+                var t = rotated.Min(p => p.Y);
+                var r = rotated.Max(p => p.X);
+                var b = rotated.Max(p => p.Y);
+                return new Rect(l, t, r - l, b - t);
             }
         }
-        internal override int HandleCount => 8;
+        public Rect UnrotatedBounds
+        {
+            get
+            {
+                return new Rect(Left, Top, Right - Left, Bottom - Top);
+            }
+        }
+
+        internal override int HandleCount => 9;
 
         internal override bool Contains(Point point)
         {
@@ -174,6 +177,11 @@ namespace DrawToolsLib.Graphics
                     x = Left;
                     y = yCenter;
                     break;
+
+                case 9: // handle for rotation
+                    x = (xCenter + Right) / 2;
+                    y = yCenter;
+                    break;
             }
             return new Point(x, y);
         }
@@ -183,7 +191,7 @@ namespace DrawToolsLib.Graphics
             {
                 for (int i = 1; i <= HandleCount; i++)
                 {
-                    if (GetHandleRectangle(i).Contains(point))
+                    if (GetHandleRectangle(i).Contains(UnapplyRotation(point)))
                         return i;
                 }
             }
@@ -202,37 +210,63 @@ namespace DrawToolsLib.Graphics
             Bottom += deltaY;
             OnPropertyChanged();
         }
+        internal Point ApplyRotation(Point point)
+        {
+            var midPoint = new Point((Left + Right) / 2, (Top + Bottom) / 2);
+            var d = point - midPoint;
+            var angleRad = Angle / 180 * Math.PI;
+            var newPoint = midPoint + new Vector(
+                d.X * Math.Cos(angleRad) - d.Y * Math.Sin(angleRad),
+                d.Y * Math.Cos(angleRad) + d.X * Math.Sin(angleRad));
+            return newPoint;
+        }
+        internal Point UnapplyRotation(Point point)
+        {
+            var midPoint = new Point((Left + Right) / 2, (Top + Bottom) / 2);
+            var d = point - midPoint;
+            var negAngleRad = -Angle / 180 * Math.PI;
+            var newPoint = midPoint + new Vector(
+                d.X * Math.Cos(negAngleRad) - d.Y * Math.Sin(negAngleRad),
+                d.Y * Math.Cos(negAngleRad) + d.X * Math.Sin(negAngleRad));
+            return newPoint;
+        }
         internal override void MoveHandleTo(Point point, int handleNumber)
         {
+            var rPoint = UnapplyRotation(point);
             switch (handleNumber)
             {
                 case 1:
-                    Left = point.X;
-                    Top = point.Y;
+                    Left = rPoint.X;
+                    Top = rPoint.Y;
                     break;
                 case 2:
-                    Top = point.Y;
+                    Top = rPoint.Y;
                     break;
                 case 3:
-                    Right = point.X;
-                    Top = point.Y;
+                    Right = rPoint.X;
+                    Top = rPoint.Y;
                     break;
                 case 4:
-                    Right = point.X;
+                    Right = rPoint.X;
                     break;
                 case 5:
-                    Right = point.X;
-                    Bottom = point.Y;
+                    Right = rPoint.X;
+                    Bottom = rPoint.Y;
                     break;
                 case 6:
-                    Bottom = point.Y;
+                    Bottom = rPoint.Y;
                     break;
                 case 7:
-                    Left = point.X;
-                    Bottom = point.Y;
+                    Left = rPoint.X;
+                    Bottom = rPoint.Y;
                     break;
                 case 8:
-                    Left = point.X;
+                    Left = rPoint.X;
+                    break;
+
+                case 9: // rotation
+                    var unrotatedMid = new Point((Left + Right) / 2, (Top + Bottom) / 2);
+                    Angle = Math.Atan2(point.Y - unrotatedMid.Y, point.X - unrotatedMid.X) / Math.PI * 180;
                     break;
             }
             OnPropertyChanged();
@@ -257,6 +291,8 @@ namespace DrawToolsLib.Graphics
                     return Cursors.SizeNESW;
                 case 8:
                     return Cursors.SizeWE;
+                case 9:
+                    return Cursors.Cross;
                 default:
                     return HelperFunctions.DefaultCursor;
             }
@@ -282,24 +318,23 @@ namespace DrawToolsLib.Graphics
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
+            drawingContext.PushTransform(new RotateTransform(Angle, (Left + Right) / 2, (Top + Bottom) / 2));
             DrawRectangle(drawingContext);
-
             base.Draw(drawingContext);
         }
         internal virtual void DrawRectangle(DrawingContext drawingContext)
         {
             var brush = new SolidColorBrush(ObjectColor);
-            var bounds = this.Bounds;
             drawingContext.DrawRoundedRectangle(
                 _filled ? brush : null,
                 new Pen(brush, LineWidth),
-                new Rect(bounds.Left + (LineWidth / 2), bounds.Top + (LineWidth / 2),
-                    Math.Max(1, bounds.Width - LineWidth), Math.Max(1, bounds.Height - LineWidth)),
+                new Rect(Left + (LineWidth / 2), Top + (LineWidth / 2),
+                    Math.Max(1, Right - Left - LineWidth), Math.Max(1, Bottom - Top - LineWidth)),
                 LineWidth, LineWidth);
         }
         public override GraphicsBase Clone()
         {
-            return new GraphicsRectangle(ObjectColor, LineWidth, Bounds) { ObjectId = ObjectId };
+            return new GraphicsRectangle(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
         }
     }
 }
