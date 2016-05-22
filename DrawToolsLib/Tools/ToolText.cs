@@ -140,7 +140,7 @@ namespace DrawToolsLib
 
             if (newGraphic)
             {
-                _textBox.Text = graphicsText.Body = "start typing your note,\r\nuse shift+enter for new lines.";
+                _textBox.Text = graphicsText.Body = "Start typing your note.\r\nUse Shift+Enter for new lines.";
                 _textBox.SelectAll();
             }
 
