@@ -161,8 +161,6 @@ namespace Clowd
         "</Grid>" +
     "</ControlTemplate>";
                 Style style = new Style(typeof(Thumb));
-                //style.Setters.Add(new Setter(Thumb.OpacityProperty, 0.7));
-                //new SolidColorBrush(Color.FromRgb(59, 151, 210) clowd color
                 style.Setters.Add(new Setter(Thumb.BackgroundProperty, App.Current.Resources["HighlightBrush"]));
                 style.Setters.Add(new Setter(Thumb.TemplateProperty, (ControlTemplate)System.Windows.Markup.XamlReader.Parse(template)));
 
@@ -205,7 +203,7 @@ namespace Clowd
             else
             {
                 AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
-                var resize = adornerLayer.GetAdorners(selectionBorder)?.Where(a => a is ResizingAdorner)?.FirstOrDefault();
+                var resize = adornerLayer.GetAdorners(selectionBorder).FirstOrDefault(a => a is ResizingAdorner);
                 if (resize != null)
                     adornerLayer.Remove(resize);
 
@@ -216,7 +214,7 @@ namespace Clowd
             }
         }
 
-        private static void PositionWithinAScreen(FrameworkElement element, WpfPoint anchor, HorizontalAlignment horz, VerticalAlignment vert, double distance)
+        private WpfPoint PositionWithinAScreen(FrameworkElement element, WpfPoint anchor, HorizontalAlignment horz, VerticalAlignment vert, double distance)
         {
             var scr = ScreenTools.Screens.FirstOrDefault(s => s.Bounds.ToWpfRect().Contains(anchor));
             if (scr == null)
@@ -263,6 +261,73 @@ namespace Clowd
 
             Canvas.SetLeft(element, x);
             Canvas.SetTop(element, y);
+            return new WpfPoint(x, y);
+        }
+        public double DistancePointToRectangle(WpfPoint point, Rect rect)
+        {
+            //  Calculate a distance between a point and a rectangle.
+            //  The area around/in the rectangle is defined in terms of
+            //  several regions:
+            //
+            //  O--x
+            //  |
+            //  y
+            //
+            //
+            //        I   |    II    |  III
+            //      ======+==========+======   --yMin
+            //       VIII |  IX (in) |  IV
+            //      ======+==========+======   --yMax
+            //       VII  |    VI    |   V
+            //
+            //
+            //  Note that the +y direction is down because of Unity's GUI coordinates.
+
+            if (point.X < rect.Left)
+            { // Region I, VIII, or VII
+                if (point.Y < rect.Top)
+                { // I
+                    WpfPoint diff = point - new WpfPoint(rect.Left, rect.Top);
+                    return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
+                }
+                else if (point.Y > rect.Bottom)
+                { // VII
+                    WpfPoint diff = point - new WpfPoint(rect.Left, rect.Bottom);
+                    return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
+                }
+                else { // VIII
+                    return rect.Left - point.X;
+                }
+            }
+            else if (point.X > rect.Right)
+            { // Region III, IV, or V
+                if (point.Y < rect.Top)
+                { // III
+                    WpfPoint diff = point - new WpfPoint(rect.Right, rect.Top);
+                    return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
+                }
+                else if (point.Y > rect.Bottom)
+                { // V
+                    WpfPoint diff = point - new WpfPoint(rect.Right, rect.Bottom);
+                    return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
+                }
+                else { // IV
+                    return point.X - rect.Right;
+                }
+            }
+            else { // Region II, IX, or VI
+                if (point.Y < rect.Top)
+                { // II
+                    return rect.Top - point.Y;
+                }
+                else if (point.Y > rect.Bottom)
+                { // VI
+                    return point.Y - rect.Bottom;
+                }
+                else { // IX
+                    return 0d;
+                }
+            }
         }
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -270,18 +335,23 @@ namespace Clowd
             var cropped = CropBitmap();
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(cropped));
-            var path = System.IO.Path.GetTempFileName() + ".png";
-            using (var fileStream = new System.IO.FileStream(path, System.IO.FileMode.Create))
+            var path = Path.GetTempFileName() + ".png";
+            using (var fileStream = new System.IO.FileStream(path, FileMode.Create))
             {
                 encoder.Save(fileStream);
             }
             this.Close();
             TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(path)).Show();
         }
+        private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            var cropped = CropBitmap();
+            ClipboardEx.SetImage(cropped);
+            this.Close();
+        }
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             UpdateCanvasMode(true);
-            //UpdateCanvasSelection(new Rect(0, 0, 0, 0));
         }
         private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -324,7 +394,7 @@ namespace Clowd
             {
                 var wfMouse = System.Windows.Forms.Cursor.Position;
                 ShowTips = false;
-                ((UIElement)sender).CaptureMouse();
+                (crosshair).CaptureMouse();
                 draggingArea = true;
                 draggingOrigin = ScreenTools.GetMousePosition();
             }
@@ -332,11 +402,32 @@ namespace Clowd
         private void RootGrid_MouseMove(object sender, MouseEventArgs e)
         {
             var currentPoint = ScreenTools.GetMousePosition();
+            var currentPointWpf = currentPoint.ToWpfPoint();
 
             if (ShowMagnifier)
             {
-                PositionWithinAScreen(pixelMagnifier, currentPoint.ToWpfPoint(), HorizontalAlignment.Right, VerticalAlignment.Bottom, 20);
+                var result = PositionWithinAScreen(pixelMagnifier, currentPointWpf, HorizontalAlignment.Right, VerticalAlignment.Bottom, 20);
+
+                if (result.X > currentPointWpf.X && result.Y > currentPointWpf.Y) // point is to the bottom right
+                    pixelMagnifier.IndicatorPosition = PixelMagnifier.ArrowIndicatorPosition.TopLeft;
+                else if (result.X > currentPointWpf.X) // point is to the top right
+                    pixelMagnifier.IndicatorPosition = PixelMagnifier.ArrowIndicatorPosition.BottomLeft;
+                else if (result.Y > currentPointWpf.Y) // point is to the bottom left
+                    pixelMagnifier.IndicatorPosition = PixelMagnifier.ArrowIndicatorPosition.TopRight;
+                else // point is to the top left
+                    pixelMagnifier.IndicatorPosition = PixelMagnifier.ArrowIndicatorPosition.BottomRight;
+
                 pixelMagnifier.DrawMagnifier(currentPoint);
+            }
+
+            if (ShowTips)
+            {
+                var tipsOriginPoint = TipsPanel.TransformToAncestor(rootGrid).Transform(new Point(0, 0));
+                var tipsPadding = pixelMagnifier.Width + 5;
+                var tipsRect = new Rect(tipsOriginPoint.X - tipsPadding, tipsOriginPoint.Y - tipsPadding,
+                    TipsPanel.Width + (tipsPadding * 2), TipsPanel.ActualHeight + (tipsPadding * 2));
+                var distance = DistancePointToRectangle(currentPointWpf, tipsRect);
+                TipsPanel.Opacity = Math.Max(Math.Min(distance / 100, 0.8), 0);
             }
 
             if (draggingArea)
@@ -352,14 +443,9 @@ namespace Clowd
             {
                 var window = windowFinder.GetWindowThatContainsPoint(currentPoint);
 
-                if (window.WindowRect == ScreenRect.Empty)
-                {
-                    UpdateCanvasSelection(new ScreenRect(0, 0, 0, 0));
-                }
-                else
-                {
-                    UpdateCanvasSelection(window.WindowRect);
-                }
+                UpdateCanvasSelection(window.WindowRect == ScreenRect.Empty
+                    ? new ScreenRect(0, 0, 0, 0)
+                    : window.WindowRect);
             }
             else
             {
@@ -370,7 +456,7 @@ namespace Clowd
         {
             if (!draggingArea)
                 return;
-            ((UIElement)sender).ReleaseMouseCapture();
+            (crosshair).ReleaseMouseCapture();
             draggingArea = false;
 
             UpdateCanvasMode(false);
@@ -403,12 +489,7 @@ namespace Clowd
                 CanvasCursor = Cursors.Cross;
                 pixelMagnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Hidden;
                 toolActionBar.Visibility = Visibility.Hidden;
-                //crosshairBottomLeft.Width = rootGrid.ActualWidth;
-                //crosshairBottomLeft.Height = rootGrid.ActualHeight;
-                //crosshairTopRight.Width = rootGrid.ActualWidth;
-                //crosshairTopRight.Height = rootGrid.ActualHeight;
-                //crosshairBottomLeft.Visibility = Visibility.Visible;
-                //crosshairTopRight.Visibility = Visibility.Visible;
+                crosshair.Visibility = Visibility.Visible;
             }
             else
             {
@@ -420,8 +501,7 @@ namespace Clowd
                 }
                 areaSizeIndicator.Visibility = Visibility.Hidden;
                 pixelMagnifier.Visibility = Visibility.Hidden;
-                //crosshairBottomLeft.Visibility = Visibility.Hidden;
-                //crosshairTopRight.Visibility = Visibility.Hidden;
+                crosshair.Visibility = Visibility.Collapsed;
                 ShowTips = false;
                 CanvasCursor = Cursors.Arrow;
                 toolActionBar.Visibility = Visibility.Visible;
@@ -432,7 +512,6 @@ namespace Clowd
             args.RoutedEvent = MouseMoveEvent;
             rootGrid.RaiseEvent(args);
         }
-
         private void UpdateCanvasPlacement()
         {
             var selection = CroppingRectangle.ToWpfRect();
@@ -504,7 +583,6 @@ namespace Clowd
                 Canvas.SetTop(toolActionBar, indTop);
             }
         }
-
         private void UpdateCanvasSelection(ScreenRect selection)
         {
             CroppingRectangle = selection;

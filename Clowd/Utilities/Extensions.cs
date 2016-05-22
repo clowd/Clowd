@@ -73,6 +73,14 @@ namespace Clowd
         }
         public static void Save(this BitmapSource source, string filePath, ImageFormat format)
         {
+            using (var ms = new MemoryStream())
+            {
+                source.Save(ms, format);
+                File.WriteAllBytes(filePath, ms.ToArray());
+            }
+        }
+        public static void Save(this BitmapSource source, Stream stream, ImageFormat format)
+        {
             BitmapEncoder encoder;
 
             if (format.Equals(ImageFormat.Bmp))
@@ -89,11 +97,7 @@ namespace Clowd
                 throw new ArgumentOutOfRangeException(nameof(format));
 
             encoder.Frames.Add(BitmapFrame.Create(source));
-            using (var ms = new MemoryStream())
-            {
-                encoder.Save(ms);
-                File.WriteAllBytes(filePath, ms.ToArray());
-            }
+            encoder.Save(stream);
         }
 
         private class Wpf32Window : System.Windows.Forms.IWin32Window

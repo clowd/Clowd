@@ -19,13 +19,6 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.TextBlock.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <DataTemplate x:Key="CopyIconTemplate">
-                <Grid>
-                    <Viewbox Margin="5">
-                        <Path Fill="Black" Opacity="0.8" Width="26" Height="26"  Data="{StaticResource IconCopy26}" />
-                    </Viewbox>
-                </Grid>
-            </DataTemplate>
             <RoutedUICommand x:Key="Commands.Minimize" Text="Hide"/>
         </ResourceDictionary>
     </Window.Resources>
@@ -54,7 +47,7 @@
                 </Grid.ColumnDefinitions>
                 <ContentPresenter ContentTemplate="{StaticResource MetroIconTemplate}" />
                 <TextBlock Grid.Column="1" Foreground="{DynamicResource IdealForegroundColorBrush}" 
-                       VerticalAlignment="Center" Text="CLOWD"/>
+                       VerticalAlignment="Center" Text="CLOWD" FontFamily="pack://application:,,,/Assets/#Raleway"/>
                 <Button Grid.Column="2" Style="{StaticResource ToolButtonStyle}" Padding="3" Command="{StaticResource Commands.Minimize}" ToolTip="Hide">
                     <Viewbox>
                         <Path Fill="White" Height="32" Width="32" Data="{StaticResource IconExpandDown32}" />

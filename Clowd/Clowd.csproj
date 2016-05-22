@@ -122,6 +122,7 @@
       <DependentUpon>CaptureWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="Controls\CornerClippingBorder.cs" />
+    <Compile Include="Controls\Crosshair.cs" />
     <Compile Include="Controls\GlobalTriggerEditor.cs" />
     <Compile Include="Controls\PixelMagnifier.cs" />
     <Compile Include="ImageEditorPage.xaml.cs">
