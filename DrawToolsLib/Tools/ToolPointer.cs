@@ -76,10 +76,17 @@ namespace DrawToolsLib
             // Capture mouse until MouseUp event is received
             drawingCanvas.CaptureMouse();
 
-            // If dragging a handle, unselect all other objects.
-            // Else (if dragging an object or creating a selection rectangle), unselect all other objects only if the user didn’t press Ctrl or Shift.
-            if (handleNumber > 0 || (Keyboard.Modifiers != ModifierKeys.Control && Keyboard.Modifiers != ModifierKeys.Shift && !graphic.IsSelected))
+            // Unselect all other objects if:
+            if (
+                // ... dragging a handle, OR
+                handleNumber > 0 ||
+                // ... dragging an unselected object or creating a selection rectangle,
+                ((graphic == null || !graphic.IsSelected) &&
+                    // ... and the user didn’t press Ctrl or Shift.
+                    Keyboard.Modifiers != ModifierKeys.Control && Keyboard.Modifiers != ModifierKeys.Shift))
+            {
                 drawingCanvas.UnselectAll();
+            }
 
             // If we create a selection rectangle, this shouldn’t be considered an edit for the undo history.
             // Similarly, if we mouse down on an object or handle but don’t end up dragging it anywhere, it’s also not an edit,
