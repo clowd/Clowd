@@ -179,7 +179,7 @@ namespace DrawToolsLib.Graphics
                     break;
 
                 case 9: // handle for rotation
-                    x = (xCenter + Right) / 2;
+                    x = Right + 32;
                     y = yCenter;
                     break;
             }
@@ -343,7 +343,35 @@ namespace DrawToolsLib.Graphics
 
             drawingContext.PushTransform(new RotateTransform(Angle, _centerOfRotation.X, _centerOfRotation.Y));
             DrawRectangle(drawingContext);
+
             base.Draw(drawingContext);
+        }
+
+        internal override void DrawSingleTracker(DrawingContext drawingContext, int handleNum)
+        {
+            // draw rotation handle differently
+            if (handleNum == 9)
+            {
+                DrawRotationTracker(drawingContext, GetHandle(4), GetHandleRectangle(9));
+                base.DrawSingleTracker(drawingContext, 4);
+            }
+            else
+            {
+                base.DrawSingleTracker(drawingContext, handleNum);
+            }
+        }
+
+        internal virtual void DrawRotationTracker(DrawingContext drawingContext, Point anchor, Rect rectangle)
+        {
+            Point center = new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2);
+            DashStyle dashStyle = new DashStyle();
+            dashStyle.Dashes.Add(4);
+            var dashedPen = new Pen(Brushes.White, 1);
+            dashedPen.DashStyle = dashStyle;
+            var basePen = new Pen(Brushes.Black, 1);
+            drawingContext.DrawLine(basePen, anchor, center);
+            drawingContext.DrawLine(dashedPen, anchor, center);
+            drawingContext.DrawEllipse(Brushes.Green, null, center, rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
         }
 
         internal virtual void DrawRectangle(DrawingContext drawingContext)

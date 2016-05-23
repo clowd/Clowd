@@ -51,7 +51,7 @@ namespace DrawToolsLib.Graphics
                 new PathGeometry(new[] { new PathFigure(LineEnd, new[] { new LineSegment(pt2, true), new LineSegment(pt1, true) }, true) }));
 
             if (IsSelected)
-                DrawTracker(drawingContext);
+                DrawTrackers(drawingContext);
         }
 
         public override GraphicsBase Clone()

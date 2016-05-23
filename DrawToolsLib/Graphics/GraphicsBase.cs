@@ -121,7 +121,7 @@ namespace DrawToolsLib.Graphics
         {
             if (IsSelected)
             {
-                DrawTracker(drawingContext);
+                DrawTrackers(drawingContext);
             }
         }
 
@@ -136,15 +136,20 @@ namespace DrawToolsLib.Graphics
             dashedPen.DashStyle = dashStyle;
             drawingContext.DrawRectangle(null, dashedPen, where);
         }
-        internal virtual void DrawTracker(DrawingContext drawingContext)
+        internal virtual void DrawTrackers(DrawingContext drawingContext)
         {
             for (int i = 1; i <= HandleCount; i++)
             {
-                var rectangle = GetHandleRectangle(i);
-                drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
-                drawingContext.DrawEllipse(HandleBrush2, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 2, rectangle.Height / 2 - 2);
-                drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 3, rectangle.Height / 2 - 3);
+                DrawSingleTracker(drawingContext, i);
             }
+        }
+
+        internal virtual void DrawSingleTracker(DrawingContext drawingContext, int handleNum)
+        {
+            var rectangle = GetHandleRectangle(handleNum);
+            drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
+            drawingContext.DrawEllipse(HandleBrush2, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 2, rectangle.Height / 2 - 2);
+            drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 3, rectangle.Height / 2 - 3);
         }
 
         internal virtual GraphicsVisual CreateVisual()
