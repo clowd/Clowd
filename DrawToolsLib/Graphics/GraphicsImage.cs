@@ -39,6 +39,7 @@ namespace DrawToolsLib.Graphics
             }
         }
 
+        [XmlIgnore]
         private ScaleTransform _transform = new ScaleTransform(1, 1);
 
         protected GraphicsImage()
