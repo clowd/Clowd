@@ -114,7 +114,7 @@ namespace DrawToolsLib.Graphics
             get
             {
                 var points = new[] { new Point(Left, Top), new Point(Right, Top), new Point(Left, Bottom), new Point(Right, Bottom) };
-                var rotated = points.Select(p => ApplyRotation(p));
+                var rotated = points.Select(ApplyRotation).ToArray();
                 var l = rotated.Min(p => p.X);
                 var t = rotated.Min(p => p.Y);
                 var r = rotated.Max(p => p.X);
@@ -122,13 +122,7 @@ namespace DrawToolsLib.Graphics
                 return new Rect(l, t, r - l, b - t);
             }
         }
-        public Rect UnrotatedBounds
-        {
-            get
-            {
-                return new Rect(Left, Top, Right - Left, Bottom - Top);
-            }
-        }
+        public Rect UnrotatedBounds => HelperFunctions.CreateRectSafe(Left, Top, Right, Bottom);
 
         internal override int HandleCount => 9;
 
@@ -189,9 +183,10 @@ namespace DrawToolsLib.Graphics
         {
             if (IsSelected)
             {
+                var rotated = UnapplyRotation(point);
                 for (int i = 1; i <= HandleCount; i++)
                 {
-                    if (GetHandleRectangle(i).Contains(UnapplyRotation(point)))
+                    if (GetHandleRectangle(i).Contains(rotated))
                         return i;
                 }
             }
@@ -212,7 +207,7 @@ namespace DrawToolsLib.Graphics
         }
         internal Point ApplyRotation(Point point)
         {
-            var midPoint = new Point((Left + Right) / 2, (Top + Bottom) / 2);
+            var midPoint = new Point((UnrotatedBounds.Left + UnrotatedBounds.Right) / 2, (UnrotatedBounds.Top + UnrotatedBounds.Bottom) / 2);
             var d = point - midPoint;
             var angleRad = Angle / 180 * Math.PI;
             var newPoint = midPoint + new Vector(
@@ -222,7 +217,7 @@ namespace DrawToolsLib.Graphics
         }
         internal Point UnapplyRotation(Point point)
         {
-            var midPoint = new Point((Left + Right) / 2, (Top + Bottom) / 2);
+            var midPoint = new Point((UnrotatedBounds.Left + UnrotatedBounds.Right) / 2, (UnrotatedBounds.Top + UnrotatedBounds.Bottom) / 2);
             var d = point - midPoint;
             var negAngleRad = -Angle / 180 * Math.PI;
             var newPoint = midPoint + new Vector(
@@ -232,6 +227,7 @@ namespace DrawToolsLib.Graphics
         }
         internal override void MoveHandleTo(Point point, int handleNumber)
         {
+            var unrotatedMid = new Point((UnrotatedBounds.Left + UnrotatedBounds.Right) / 2, (UnrotatedBounds.Top + UnrotatedBounds.Bottom) / 2);
             var rPoint = UnapplyRotation(point);
             switch (handleNumber)
             {
@@ -265,7 +261,6 @@ namespace DrawToolsLib.Graphics
                     break;
 
                 case 9: // rotation
-                    var unrotatedMid = new Point((Left + Right) / 2, (Top + Bottom) / 2);
                     Angle = Math.Atan2(point.Y - unrotatedMid.Y, point.X - unrotatedMid.X) / Math.PI * 180;
                     break;
             }
@@ -328,8 +323,10 @@ namespace DrawToolsLib.Graphics
             drawingContext.DrawRoundedRectangle(
                 _filled ? brush : null,
                 new Pen(brush, LineWidth),
-                new Rect(Left + (LineWidth / 2), Top + (LineWidth / 2),
-                    Math.Max(1, Right - Left - LineWidth), Math.Max(1, Bottom - Top - LineWidth)),
+                new Rect(UnrotatedBounds.Left + (LineWidth / 2),
+                    UnrotatedBounds.Top + (LineWidth / 2),
+                    Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left - LineWidth),
+                    Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top - LineWidth)),
                 LineWidth, LineWidth);
         }
         public override GraphicsBase Clone()
