@@ -158,30 +158,16 @@ namespace DrawToolsLib.Graphics
             Bottom = Top + form.Height + (Padding * 2);
 
             context.PushTransform(new RotateTransform(Angle, (Left + Right) / 2, (Top + Bottom) / 2));
-
             context.DrawRectangle(new SolidColorBrush(ObjectColor), null, UnrotatedBounds);
 
             if (IsSelected)
             {
+                DrawRotationTracker(context, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1));
                 DrawDashedBorder(context, UnrotatedBounds);
-                DrawTrackers(context);
             }
 
             if (!Editing)
                 context.DrawText(form, new Point(Left + Padding, Top + Padding));
-        }
-
-        internal override void DrawSingleTracker(DrawingContext drawingContext, int handleNum)
-        {
-            // draw rotation handle differently
-            if (handleNum == 1)
-            {
-                DrawRotationTracker(drawingContext, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1));
-            }
-            else
-            {
-                base.DrawSingleTracker(drawingContext, handleNum);
-            }
         }
 
         internal FormattedText CreateFormattedText()
