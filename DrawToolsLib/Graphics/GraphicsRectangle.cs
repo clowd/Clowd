@@ -133,7 +133,7 @@ namespace DrawToolsLib.Graphics
 
         internal override bool Contains(Point point)
         {
-            return Bounds.Contains(point);
+            return UnrotatedBounds.Contains(UnapplyRotation(point));
         }
 
         internal override Point GetHandle(int handleNumber)
