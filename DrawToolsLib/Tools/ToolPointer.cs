@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -31,11 +32,35 @@ namespace DrawToolsLib
         private Point _lastPoint = new Point(0, 0);
 
         private CommandChangeState _commandChangeState;
-        bool _wasMove;
+        bool _wasEdit;
 
 
         public ToolPointer()
         {
+        }
+
+        private GraphicsBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
+        {
+            var controls = drawingCanvas.GraphicsList.Cast<GraphicsVisual>().Select(gv => new { gv.Graphic, gv.Graphic.IsSelected, HitTest = gv.Graphic.MakeHitTest(point) }).Reverse().ToArray();
+
+            // Test if we start dragging a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
+            var grabHandle = controls.FirstOrDefault(g => g.IsSelected && g.HitTest > 0);
+            if (grabHandle != null)
+            {
+                handleNumber = grabHandle.HitTest;
+                return grabHandle.Graphic;
+            }
+
+            // Test if we start dragging an object 
+            var grabObject = controls.FirstOrDefault(g => g.HitTest == 0);
+            if (grabObject != null)
+            {
+                handleNumber = 0;
+                return grabObject.Graphic;
+            }
+
+            handleNumber = -1;
+            return null;
         }
 
         /// <summary>
@@ -44,79 +69,50 @@ namespace DrawToolsLib
         /// </summary>
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
-            _commandChangeState = null;
-            _wasMove = false;
-            _selectMode = SelectionMode.None;
-
-            Point point = e.GetPosition(drawingCanvas);
-            GraphicsBase movedObject = null;
-
-            // Test if we start dragging an object or a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
-            for (int i = drawingCanvas.GraphicsList.Count - 1; i >= 0; i--)
-            {
-                var o = drawingCanvas[i].Graphic;
-                int handleNumber;
-
-                // Test for handles
-                if (o.IsSelected && (handleNumber = o.MakeHitTest(point)) > 0)
-                {
-                    _selectMode = SelectionMode.HandleDrag;
-                    _handleGrabbedObject = o;
-                    _handleGrabbed = handleNumber;
-
-                    // Since we want to edit only one object, unselect all other objects
-                    drawingCanvas.UnselectAll();
-                    o.IsSelected = true;
-
-                    _commandChangeState = new CommandChangeState(drawingCanvas);
-
-                    // Since handles take precedence over everything, we do not need to check the rest of the objects
-                    break;
-                }
-
-                // Test for dragging an object, but only if we haven’t already found an object to drag
-                else if (o.MakeHitTest(point) == 0 && _selectMode != SelectionMode.Move)
-                {
-                    movedObject = o;
-                    _selectMode = SelectionMode.Move;
-
-                    // Unselect all if Ctrl is not pressed and clicked object is not selected yet
-                    if (Keyboard.Modifiers != ModifierKeys.Control && !movedObject.IsSelected)
-                    {
-                        drawingCanvas.UnselectAll();
-                    }
-
-                    // Select clicked object
-                    movedObject.IsSelected = true;
-
-                    // Set move cursor
-                    drawingCanvas.Cursor = Cursors.SizeAll;
-
-                    _commandChangeState = new CommandChangeState(drawingCanvas);
-                }
-            }
-
-            // Click on background
-            if (_selectMode == SelectionMode.None)
-            {
-                // Unselect all if Ctrl is not pressed
-                if (Keyboard.Modifiers != ModifierKeys.Control)
-                {
-                    drawingCanvas.UnselectAll();
-                }
-
-                // Group selection. Create selection rectangle.
-                var rect = HelperFunctions.CreateRectSafe(point.X, point.Y, point.X + 1, point.Y + 1);
-                GraphicsSelectionRectangle r = new GraphicsSelectionRectangle(drawingCanvas, rect);
-
-                drawingCanvas.GraphicsList.Add(r.CreateVisual());
-                _selectMode = SelectionMode.GroupSelection;
-            }
-
-            _lastPoint = point;
+            _lastPoint = e.GetPosition(drawingCanvas);
+            int handleNumber;
+            var graphic = MakeHitTest(drawingCanvas, _lastPoint, out handleNumber);
 
             // Capture mouse until MouseUp event is received
             drawingCanvas.CaptureMouse();
+
+            // If dragging a handle, unselect all other objects.
+            // Else (if dragging an object or creating a selection rectangle), unselect all other objects only if the user didn’t press Ctrl or Shift.
+            if (handleNumber > 0 || (Keyboard.Modifiers != ModifierKeys.Control && Keyboard.Modifiers != ModifierKeys.Shift && !graphic.IsSelected))
+                drawingCanvas.UnselectAll();
+
+            // If we create a selection rectangle, this shouldn’t be considered an edit for the undo history.
+            // Similarly, if we mouse down on an object or handle but don’t end up dragging it anywhere, it’s also not an edit,
+            // so we don’t set _wasEdit to true until the mouse-move event with the button pressed.
+            _wasEdit = false;
+
+            if (graphic != null)
+            {
+                if (handleNumber > 0)
+                {
+                    _selectMode = SelectionMode.HandleDrag;
+                    _handleGrabbedObject = graphic;
+                    _handleGrabbed = handleNumber;
+                }
+                else
+                {
+                    _selectMode = SelectionMode.Move;
+                    drawingCanvas.Cursor = Cursors.SizeAll;
+                }
+
+                graphic.IsSelected = true;
+                _commandChangeState = new CommandChangeState(drawingCanvas);
+            }
+            else
+            {
+                // Click on background — start a selection rectangle for group selection.
+                var rect = HelperFunctions.CreateRectSafe(_lastPoint.X, _lastPoint.Y, _lastPoint.X + 1, _lastPoint.Y + 1);
+                var gsr = new GraphicsSelectionRectangle(drawingCanvas, rect);
+                drawingCanvas.GraphicsList.Add(gsr.CreateVisual());
+
+                _selectMode = SelectionMode.GroupSelection;
+                _commandChangeState = null;
+            }
         }
 
         /// <summary>
@@ -138,31 +134,14 @@ namespace DrawToolsLib
             // Set cursor when left button is not pressed
             if (e.LeftButton == MouseButtonState.Released)
             {
-                Cursor cursor = null;
-
-                for (int i = drawingCanvas.Count - 1; i >= 0; i--)
-                {
-                    int n = drawingCanvas[i].Graphic.MakeHitTest(point);
-
-                    if (n == 0)
-                    {
-                        cursor = Cursors.Hand;
-                        break;
-                    }
-                    else if (n > 0)
-                    {
-                        cursor = drawingCanvas[i].Graphic.GetHandleCursor(n);
-                        break;
-                    }
-                }
-
-                if (cursor == null)
-                    cursor = HelperFunctions.DefaultCursor;
-
-                drawingCanvas.Cursor = cursor;
+                int handleNumber;
+                var graphic = MakeHitTest(drawingCanvas, point, out handleNumber);
+                drawingCanvas.Cursor =
+                    handleNumber < 0 ? HelperFunctions.DefaultCursor :
+                    handleNumber == 0 ? Cursors.Hand :
+                    graphic.GetHandleCursor(handleNumber);
 
                 return;
-
             }
 
             if (!drawingCanvas.IsMouseCaptured)
@@ -170,7 +149,7 @@ namespace DrawToolsLib
                 return;
             }
 
-            _wasMove = true;
+            _wasEdit = true;
 
             // Find difference between previous and current position
             double dx = point.X - _lastPoint.X;
@@ -178,29 +157,22 @@ namespace DrawToolsLib
 
             _lastPoint = point;
 
-            // Resize or rotate
-            if (_selectMode == SelectionMode.HandleDrag)
+            switch (_selectMode)
             {
-                if (_handleGrabbedObject != null)
-                {
-                    _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
-                }
-            }
+                case SelectionMode.Move:
+                    foreach (GraphicsVisual o in drawingCanvas.Selection)
+                        o.Graphic.Move(dx, dy);
+                    break;
 
-            // Move
-            if (_selectMode == SelectionMode.Move)
-            {
-                foreach (GraphicsVisual o in drawingCanvas.Selection)
-                {
-                    o.Graphic.Move(dx, dy);
-                }
-            }
+                case SelectionMode.HandleDrag:
+                    if (_handleGrabbedObject != null)
+                        _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
+                    break;
 
-            // Group selection
-            if (_selectMode == SelectionMode.GroupSelection)
-            {
-                // Resize selection rectangle
-                drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(point, 5);
+                case SelectionMode.GroupSelection:
+                    // Resize selection rectangle
+                    drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(point, 5);
+                    break;
             }
         }
 
@@ -219,15 +191,8 @@ namespace DrawToolsLib
 
             if (_handleGrabbedObject != null)
             {
-                // after resizing
+                // after resizing/rotating
                 _handleGrabbedObject.Normalize();
-
-                // Special case for text
-                //if (resizedObject is GraphicsText)
-                //{
-                //    ((GraphicsText)resizedObject).
-                //}
-
                 _handleGrabbedObject = null;
             }
 
@@ -272,7 +237,7 @@ namespace DrawToolsLib
         /// </summary>
         public void AddChangeToHistory(DrawingCanvas drawingCanvas)
         {
-            if (_commandChangeState != null && _wasMove)
+            if (_commandChangeState != null && _wasEdit)
             {
                 // Keep state after moving/resizing and add command to history
                 _commandChangeState.NewState(drawingCanvas);
