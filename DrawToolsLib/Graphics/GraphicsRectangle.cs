@@ -83,6 +83,9 @@ namespace DrawToolsLib.Graphics
         private double _angle = 0;
         private bool _filled;
 
+        // This is always the center of the rectangle except while the user is dragging a resizing handle.
+        private Point _centerOfRotation;
+
         protected GraphicsRectangle()
         {
         }
@@ -105,6 +108,7 @@ namespace DrawToolsLib.Graphics
             _top = rect.Top;
             _right = rect.Right;
             _bottom = rect.Bottom;
+            _centerOfRotation = new Point((_left + _right) / 2, (_top + _bottom) / 2);
             _filled = filled;
             _angle = angle;
         }
@@ -122,6 +126,7 @@ namespace DrawToolsLib.Graphics
                 return new Rect(l, t, r - l, b - t);
             }
         }
+
         public Rect UnrotatedBounds => HelperFunctions.CreateRectSafe(Left, Top, Right, Bottom);
 
         internal override int HandleCount => 9;
@@ -130,6 +135,7 @@ namespace DrawToolsLib.Graphics
         {
             return Bounds.Contains(point);
         }
+
         internal override Point GetHandle(int handleNumber)
         {
             var xCenter = (Right + Left) / 2;
@@ -179,6 +185,7 @@ namespace DrawToolsLib.Graphics
             }
             return new Point(x, y);
         }
+
         internal override int MakeHitTest(Point point)
         {
             if (IsSelected)
@@ -196,35 +203,39 @@ namespace DrawToolsLib.Graphics
 
             return -1;
         }
+
         internal override void Move(double deltaX, double deltaY)
         {
             Left += deltaX;
             Right += deltaX;
-
             Top += deltaY;
             Bottom += deltaY;
+            _centerOfRotation = new Point(
+                _centerOfRotation.X + deltaX,
+                _centerOfRotation.Y + deltaY);
             OnPropertyChanged();
         }
+
         internal Point ApplyRotation(Point point)
         {
-            var midPoint = new Point((UnrotatedBounds.Left + UnrotatedBounds.Right) / 2, (UnrotatedBounds.Top + UnrotatedBounds.Bottom) / 2);
-            var d = point - midPoint;
+            var d = point - _centerOfRotation;
             var angleRad = Angle / 180 * Math.PI;
-            var newPoint = midPoint + new Vector(
+            var newPoint = _centerOfRotation + new Vector(
                 d.X * Math.Cos(angleRad) - d.Y * Math.Sin(angleRad),
                 d.Y * Math.Cos(angleRad) + d.X * Math.Sin(angleRad));
             return newPoint;
         }
+
         internal Point UnapplyRotation(Point point)
         {
-            var midPoint = new Point((UnrotatedBounds.Left + UnrotatedBounds.Right) / 2, (UnrotatedBounds.Top + UnrotatedBounds.Bottom) / 2);
-            var d = point - midPoint;
+            var d = point - _centerOfRotation;
             var negAngleRad = -Angle / 180 * Math.PI;
-            var newPoint = midPoint + new Vector(
+            var newPoint = _centerOfRotation + new Vector(
                 d.X * Math.Cos(negAngleRad) - d.Y * Math.Sin(negAngleRad),
                 d.Y * Math.Cos(negAngleRad) + d.X * Math.Sin(negAngleRad));
             return newPoint;
         }
+
         internal override void MoveHandleTo(Point point, int handleNumber)
         {
             var unrotatedMid = new Point((UnrotatedBounds.Left + UnrotatedBounds.Right) / 2, (UnrotatedBounds.Top + UnrotatedBounds.Bottom) / 2);
@@ -266,6 +277,7 @@ namespace DrawToolsLib.Graphics
             }
             OnPropertyChanged();
         }
+
         internal override Cursor GetHandleCursor(int handleNumber)
         {
             switch (handleNumber)
@@ -292,6 +304,7 @@ namespace DrawToolsLib.Graphics
                     return HelperFunctions.DefaultCursor;
             }
         }
+
         internal override void Normalize()
         {
             if (Left > Right)
@@ -307,16 +320,32 @@ namespace DrawToolsLib.Graphics
                 Top = Bottom;
                 Bottom = tmp;
             }
+
+            // If the user resized a rotated rectangle, we need to move the rectangle in such a way that the center of rotation is in the center of the rectangle again.
+            // Step 1: find the *rotated* positions of the top-left and bottom-right corners.
+            var topLeft = ApplyRotation(new Point(Left, Top));
+            var bottomRight = ApplyRotation(new Point(Right, Bottom));
+            // The center of rotation is in the middle between the top-left and bottom-right, even when rotated.
+            _centerOfRotation = new Point((topLeft.X + bottomRight.X) / 2, (topLeft.Y + bottomRight.Y) / 2);
+            // Step 2: reverse the rotation, but about the *new* center of rotation.
+            topLeft = UnapplyRotation(topLeft);
+            bottomRight = UnapplyRotation(bottomRight);
+            Left = topLeft.X;
+            Top = topLeft.Y;
+            Right = bottomRight.X;
+            Bottom = bottomRight.Y;
         }
+
         internal override void Draw(DrawingContext drawingContext)
         {
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
-            drawingContext.PushTransform(new RotateTransform(Angle, (Left + Right) / 2, (Top + Bottom) / 2));
+            drawingContext.PushTransform(new RotateTransform(Angle, _centerOfRotation.X, _centerOfRotation.Y));
             DrawRectangle(drawingContext);
             base.Draw(drawingContext);
         }
+
         internal virtual void DrawRectangle(DrawingContext drawingContext)
         {
             var brush = new SolidColorBrush(ObjectColor);
@@ -329,6 +358,7 @@ namespace DrawToolsLib.Graphics
                     Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top - LineWidth)),
                 LineWidth, LineWidth);
         }
+
         public override GraphicsBase Clone()
         {
             return new GraphicsRectangle(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
