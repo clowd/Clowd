@@ -26,14 +26,14 @@ namespace Clowd.Utilities
             return bitmap;
         }
 
-        public static Bitmap CaptureActiveWindow()
+        public static Bitmap CaptureActiveWindow(bool captureCursor = false)
         {
             var foreground = USER32.GetForegroundWindow();
             var bounds = USER32EX.GetWindowRectangle(foreground);
-            return Capture(ScreenRect.FromSystem(bounds), false);
+            return Capture(ScreenRect.FromSystem(bounds), captureCursor);
         }
 
-        private static void DrawCursor(Graphics g, System.Drawing.Point origin)
+        private static void DrawCursor(Graphics g, Point origin)
         {
             CURSORINFO cursorInfo;
             cursorInfo.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
