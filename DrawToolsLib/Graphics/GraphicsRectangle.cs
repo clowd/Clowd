@@ -280,29 +280,37 @@ namespace DrawToolsLib.Graphics
 
         internal override Cursor GetHandleCursor(int handleNumber)
         {
-            switch (handleNumber)
+            if (handleNumber == 0 || handleNumber > 9)
+                return HelperFunctions.DefaultCursor;
+
+            if (handleNumber == 9)
+                return Cursors.Cross;
+
+            int[] angles = new[] { 0, 45, 90, 135, 180, -180, -135, -90, -45 };
+            var nearest = angles.OrderBy(x => Math.Abs(x - Angle)).First();
+
+            Cursor[] cursors = new[] { Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE };
+
+            switch (nearest)
             {
-                case 1:
-                    return Cursors.SizeNWSE;
-                case 2:
-                    return Cursors.SizeNS;
-                case 3:
-                    return Cursors.SizeNESW;
-                case 4:
-                    return Cursors.SizeWE;
-                case 5:
-                    return Cursors.SizeNWSE;
-                case 6:
-                    return Cursors.SizeNS;
-                case 7:
-                    return Cursors.SizeNESW;
-                case 8:
-                    return Cursors.SizeWE;
-                case 9:
-                    return Cursors.Cross;
-                default:
-                    return HelperFunctions.DefaultCursor;
+                case 45:
+                case -135:
+                    cursors = new[] { Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE, Cursors.SizeNWSE };
+                    break;
+                case 90:
+                case -90:
+                    cursors = new[] { Cursors.SizeNESW, Cursors.SizeWE, Cursors.SizeNWSE, Cursors.SizeNS };
+                    break;
+                case 135:
+                case -45:
+                    cursors = new[] { Cursors.SizeWE, Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW };
+                    break;
             }
+
+            if (handleNumber > 4)
+                handleNumber = handleNumber - 4;
+
+            return cursors[handleNumber - 1];
         }
 
         internal override void Normalize()
