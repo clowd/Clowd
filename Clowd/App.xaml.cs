@@ -1,9 +1,14 @@
-﻿using Clowd.Utilities;
+﻿using Clowd.Interop;
+using Clowd.Utilities;
 using Exceptionless;
 using Exceptionless.Logging;
+using Exceptionless.Plugins;
 using Ionic.Zip;
 using NotifyIconLib;
+using RT.Util;
 using RT.Util.ExtensionMethods;
+using RT.Util.Serialization;
+using ScreenVersusWpf;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -12,25 +17,15 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Reflection;
-using System.Runtime.Remoting.Channels;
 using System.ServiceModel;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using CS.Wpf;
-using Exceptionless.Dependency;
-using Exceptionless.Plugins;
-using RT.Util;
-using RT.Util.Serialization;
 using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
-using GlobalTrigger = Clowd.Utilities.GlobalTrigger;
 using Point = System.Windows.Point;
 
 namespace Clowd
@@ -603,12 +598,13 @@ namespace Clowd
                 OnCommandLineArgsReceived(this, new CommandLineEventArgs(_args));
             }
         }
-        public async void StartCapture()
+
+        public async void StartCapture(ScreenRect? region = null)
         {
             if (_prtscrWindowOpen)
                 return;
 
-            var wnd = await CaptureWindow.ShowNew();
+            var wnd = await CaptureWindow.ShowNew(region);
             wnd.Closed += (s, e) =>
             {
                 _prtscrWindowOpen = false;
@@ -616,20 +612,18 @@ namespace Clowd
             _prtscrWindowOpen = true;
         }
 
-        public void QuickCapture(bool fullscreen = true)
+        public void QuickCaptureFullScreen()
         {
-            if (!_initialized)
-                return;
-
-            using (MemoryStream ms = new MemoryStream())
-            using (var source = fullscreen
-                ? ScreenUtil.Capture(captureCursor: Settings.CaptureSettings.ScreenshotWithCursor)
-                : ScreenUtil.CaptureActiveWindow())
-            {
-                source.Save(ms, ImageFormat.Png);
-                var task = UploadManager.Upload(ms.ToArray(), "clowd-default.png");
-            }
+            StartCapture(ScreenTools.VirtualScreen.Bounds);
         }
+
+        public void QuickCaptureCurrentWindow()
+        {
+            var foreground = USER32.GetForegroundWindow();
+            var bounds = USER32EX.GetWindowRectangle(foreground);
+            StartCapture(ScreenRect.FromSystem(bounds));
+        }
+
         public void UploadFile(Window owner = null)
         {
             if (!_initialized)
@@ -648,7 +642,7 @@ namespace Clowd
                 {
                     ShowActivated = false,
                     Opacity = 0,
-                    WindowStyle = WindowStyle.None,
+                    WindowStyle = System.Windows.WindowStyle.None,
                     ResizeMode = ResizeMode.NoResize,
                     AllowsTransparency = true,
                     Width = 1,
