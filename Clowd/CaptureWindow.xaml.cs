@@ -33,9 +33,11 @@ namespace Clowd
         private bool draggingArea = false;
         private ScreenPoint draggingOrigin = default(ScreenPoint);
         private WindowFinder2 windowFinder = new WindowFinder2();
+        private ScreenRect? initialRegion = null;
 
-        private CaptureWindow()
+        private CaptureWindow(ScreenRect? initial = null)
         {
+            initialRegion = initial;
             InitializeComponent();
             this.SourceInitialized += CaptureWindow_SourceInitialized;
             this.Loaded += CaptureWindow_Loaded;
@@ -75,9 +77,9 @@ namespace Clowd
             g.Dispose();
             return newBitmap;
         }
-        public static async Task<CaptureWindow> ShowNew()
+        public static async Task<CaptureWindow> ShowNew(ScreenRect? captureRegion = null)
         {
-            var c = new CaptureWindow();
+            var c = new CaptureWindow(captureRegion);
             if (TaskWindow.Current?.IsVisible == true)
             {
                 await TaskWindow.Current.Hide();
@@ -124,8 +126,17 @@ namespace Clowd
             if (!System.Diagnostics.Debugger.IsAttached)
                 Interop.USER32.SetWindowPos(this.Handle, 0, 0, 0, 0, 0,
                     Interop.SWP.NOMOVE | Interop.SWP.NOSIZE | Interop.SWP.SHOWWINDOW);
-            UpdateCanvasMode(true);
+            if (initialRegion == null)
+            {
+                UpdateCanvasMode(true);
+            }
+            else
+            {
+                UpdateCanvasMode(false);
+                UpdateCanvasSelection(initialRegion.Value);
+            }
         }
+
         private void CaptureWindow_SourceInitialized(object sender, EventArgs e)
         {
             this.Handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
@@ -394,7 +405,7 @@ namespace Clowd
             {
                 var wfMouse = System.Windows.Forms.Cursor.Position;
                 ShowTips = false;
-                (crosshair).CaptureMouse();
+                crosshair.CaptureMouse();
                 draggingArea = true;
                 draggingOrigin = ScreenTools.GetMousePosition();
             }
@@ -456,7 +467,7 @@ namespace Clowd
         {
             if (!draggingArea)
                 return;
-            (crosshair).ReleaseMouseCapture();
+            crosshair.ReleaseMouseCapture();
             draggingArea = false;
 
             UpdateCanvasMode(false);
@@ -497,8 +508,8 @@ namespace Clowd
                 {
                     ManageCanvasMouseHandlers(false);
                     ManageSelectionResizeHandlers(true);
-                    capturing = false;
                 }
+                capturing = false;
                 areaSizeIndicator.Visibility = Visibility.Hidden;
                 pixelMagnifier.Visibility = Visibility.Hidden;
                 crosshair.Visibility = Visibility.Collapsed;
