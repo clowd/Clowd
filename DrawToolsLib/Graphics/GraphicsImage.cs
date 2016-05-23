@@ -39,6 +39,8 @@ namespace DrawToolsLib.Graphics
             }
         }
 
+        private ScaleTransform _transform = new ScaleTransform(1, 1);
+
         protected GraphicsImage()
         {
             Effect = null;
@@ -69,7 +71,37 @@ namespace DrawToolsLib.Graphics
                 r.X = Math.Round(r.X);
                 r.Y = Math.Round(r.Y);
             }
+
+            var centerX = r.Left + (r.Width / 2);
+            var centerY = r.Top + (r.Height / 2);
+
+            // push current flip transform
+            _transform.CenterX = centerX;
+            _transform.CenterY = centerY;
+            drawingContext.PushTransform(_transform);
+
+            // push any resizing/rendering transform (will be added to current transform later)
+            if (Right <= Left)
+                drawingContext.PushTransform(new ScaleTransform(-1, 1, centerX, centerY));
+            if (Bottom <= Top)
+                drawingContext.PushTransform(new ScaleTransform(1, -1, centerX, centerY));
+
             drawingContext.DrawImage(_imageCache, r);
+
+            if (Right <= Left || Bottom <= Top)
+                drawingContext.Pop();
+
+            drawingContext.Pop();
+        }
+
+        internal override void Normalize()
+        {
+            if (Right <= Left)
+                _transform.ScaleX = _transform.ScaleX / -1;
+            if (Bottom <= Top)
+                _transform.ScaleY = _transform.ScaleY / -1;
+
+            base.Normalize();
         }
 
         public override GraphicsBase Clone()
