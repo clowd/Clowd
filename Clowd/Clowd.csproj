@@ -47,12 +47,12 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CS.Util, Version=1.0.6.31, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\CS.Util.1.0.6.31\lib\net45\CS.Util.dll</HintPath>
+    <Reference Include="CS.Util, Version=1.0.6.33, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\CS.Util.1.0.6.33\lib\net45\CS.Util.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="CS.Wpf, Version=1.0.6.31, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\CS.Wpf.1.0.6.31\lib\net45\CS.Wpf.dll</HintPath>
+    <Reference Include="CS.Wpf, Version=1.0.6.33, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\CS.Wpf.1.0.6.33\lib\net45\CS.Wpf.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Exceptionless.Extras, Version=3.3.1575.0, Culture=neutral, processorArchitecture=MSIL">
