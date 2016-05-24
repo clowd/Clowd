@@ -173,7 +173,10 @@ namespace DrawToolsLib
 
                 case SelectionMode.HandleDrag:
                     if (_handleGrabbedObject != null)
+                    {
                         _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
+                        drawingCanvas.Cursor = _handleGrabbedObject.GetHandleCursor(_handleGrabbed);
+                    }
                     break;
 
                 case SelectionMode.GroupSelection:
