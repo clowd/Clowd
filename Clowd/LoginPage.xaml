@@ -5,9 +5,10 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:metro="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro" 
              xmlns:local="clr-namespace:Clowd"
+             xmlns:cswpf="clr-namespace:CS.Wpf.Controls;assembly=CS.Wpf"
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
              mc:Ignorable="d" 
-             Width="436" Height="450">
+             Width="436" Height="500">
     <UserControl.Resources>
         <RoutedCommand x:Key="Command.Login" />
     </UserControl.Resources>
@@ -25,27 +26,37 @@
                 <RotateTransform Angle="90" />
             </TextBlock.LayoutTransform>
         </TextBlock>
-        <StackPanel Orientation="Vertical"  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Width="200">
+        <cswpf:ExpandingStackPanel x:Name="stackInput" Orientation="Vertical"  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Width="200">
             <Viewbox Width="150">
                 <Path Fill="{DynamicResource AccentColorBrush}" Width="75.15" Height="53.70" Data="{StaticResource PathLogoLarge}" />
             </Viewbox>
-            <TextBlock FontSize="20" Margin="0,20,0,0" HorizontalAlignment="Center">Login</TextBlock>
+            <TextBlock x:Name="labelTitle" FontSize="20" Margin="0,20,0,0" HorizontalAlignment="Center">Login</TextBlock>
             <TextBox x:Name="textUsername" Margin="0,10,0,0" FontSize="12"
                      metro:TextBoxHelper.Watermark="Username"
                      metro:TextBoxHelper.UseFloatingWatermark="True">
+            </TextBox>
+            <TextBox x:Name="textEmail" Margin="0,5,0,0" FontSize="12"
+                     metro:TextBoxHelper.Watermark="Email"
+                     metro:TextBoxHelper.UseFloatingWatermark="True"
+                     cswpf:ExpandingStackPanel.Expandable="True">
             </TextBox>
             <PasswordBox x:Name="textPassword" Margin="0,5,0,0" FontSize="12"
                      metro:TextBoxHelper.Watermark="Password"
                      metro:TextBoxHelper.UseFloatingWatermark="True">
             </PasswordBox>
+            <PasswordBox x:Name="textPasswordConfirm" Margin="0,5,0,0" FontSize="12"
+                     metro:TextBoxHelper.Watermark="Confirm Password"
+                     metro:TextBoxHelper.UseFloatingWatermark="True"
+                     cswpf:ExpandingStackPanel.Expandable="True">
+            </PasswordBox>
             <Button x:Name="loginButton" Content="Login" HorizontalAlignment="Center" FontSize="12" Command="{StaticResource Command.Login}" VerticalAlignment="Top" Width="75" Margin="0,10,0,0" Cursor="Hand"/>
             <Label Margin="0,10,0,0" Padding="2" Foreground="{Binding Foreground}" HorizontalAlignment="Center" Cursor="Hand" MouseDown="register_Click">
-                <TextBlock TextDecorations="Underline">Register an account</TextBlock>
+                <TextBlock x:Name="labelRegister" TextDecorations="Underline">Register an account</TextBlock>
             </Label>
             <Label MouseDown="useAnon_Click" Margin="0,5,0,0" FontSize="12" Padding="2" Foreground="{Binding Foreground}" HorizontalAlignment="Center" Cursor="Hand">
                 <TextBlock TextDecorations="Underline">Use Clowd anonymously</TextBlock>
             </Label>
-        </StackPanel>
+        </cswpf:ExpandingStackPanel>
         <Border Name="invalidIndicator" Background="#ef5416" Margin="0,10,0,0" Padding="5" 
                 HorizontalAlignment="Stretch" VerticalAlignment="Bottom">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
