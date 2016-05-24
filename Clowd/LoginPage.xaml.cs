@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using MahApps.Metro.Controls;
 
 namespace Clowd
 {
@@ -55,10 +56,22 @@ namespace Clowd
 
         private void register_Click(object sender, MouseButtonEventArgs e)
         {
-            //var cache = this.Content;
-            //WebBrowser wb = new WebBrowser();
-            //this.Content = wb;
-            //wb.Navigate("http://example.com");
+            if (stackInput.Expanded)
+            {
+                labelTitle.Text = "Login";
+                loginButton.Content = "Login";
+                labelRegister.Text = "Register an account";
+                stackInput.Collapse();
+            }
+            else
+            {
+                textEmail.Text = "";
+                textPasswordConfirm.Password = "";
+                labelTitle.Text = "Register";
+                loginButton.Content = "Register";
+                labelRegister.Text = "I have an account";
+                stackInput.Expand();
+            }
         }
 
         private async void LoginExecuted(object sender, ExecutedRoutedEventArgs e)
