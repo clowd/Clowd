@@ -284,33 +284,9 @@ namespace DrawToolsLib.Graphics
                 return HelperFunctions.DefaultCursor;
 
             if (handleNumber == 9)
-                return Cursors.Cross;
+                return new Cursor(Application.GetResourceStream(new Uri($"pack://application:,,,/Assets/RotationCursor{(int)((Angle + 7) / 15 + 24) % 24}.cur")).Stream);
 
-            int[] angles = new[] { 0, 45, 90, 135, 180, -180, -135, -90, -45 };
-            var nearest = angles.OrderBy(x => Math.Abs(x - Angle)).First();
-
-            Cursor[] cursors = new[] { Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE };
-
-            switch (nearest)
-            {
-                case 45:
-                case -135:
-                    cursors = new[] { Cursors.SizeNS, Cursors.SizeNESW, Cursors.SizeWE, Cursors.SizeNWSE };
-                    break;
-                case 90:
-                case -90:
-                    cursors = new[] { Cursors.SizeNESW, Cursors.SizeWE, Cursors.SizeNWSE, Cursors.SizeNS };
-                    break;
-                case 135:
-                case -45:
-                    cursors = new[] { Cursors.SizeWE, Cursors.SizeNWSE, Cursors.SizeNS, Cursors.SizeNESW };
-                    break;
-            }
-
-            if (handleNumber > 4)
-                handleNumber = handleNumber - 4;
-
-            return cursors[handleNumber - 1];
+            return new Cursor(Application.GetResourceStream(new Uri($"pack://application:,,,/Assets/ResizingCursor{(int)((45 * handleNumber - 90 + Angle + 5) / 10 + 36) % 18}.cur")).Stream);
         }
 
         internal override void Normalize()
