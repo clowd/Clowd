@@ -125,6 +125,7 @@
     <Compile Include="Controls\Crosshair.cs" />
     <Compile Include="Controls\GlobalTriggerEditor.cs" />
     <Compile Include="Controls\PixelMagnifier.cs" />
+    <Compile Include="Converters\TaskStatusToVisibilityConverter.cs" />
     <Compile Include="ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
     </Compile>
@@ -159,7 +160,6 @@
     <Compile Include="Converters\DoubleToDecimalConverter.cs" />
     <Compile Include="Converters\DoubleToIntegerConverter.cs" />
     <Compile Include="Converters\FontSizeConverter.cs" />
-    <Compile Include="Converters\IsEqualOrGreaterThanConverter.cs" />
     <Compile Include="Converters\MathConverter.cs" />
     <Compile Include="Converters\MethodToValueConverter.cs" />
     <Compile Include="Converters\RaduisConverter.cs" />
@@ -406,6 +406,9 @@
     <Resource Include="Assets\ResizingCursor7.cur" />
     <Resource Include="Assets\ResizingCursor8.cur" />
     <Resource Include="Assets\ResizingCursor9.cur" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\Cross-26.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
