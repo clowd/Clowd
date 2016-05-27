@@ -37,7 +37,8 @@ namespace Clowd
             string viewName = displayName;
             if (displayName.StartsWith("clowd-default", StringComparison.InvariantCultureIgnoreCase))
                 viewName = "Upload";
-            var view = new UploadTaskViewItem(viewName, "Connecting...");
+            var canceler = new ManualResetEventSlim(false);
+            var view = new UploadTaskViewItem(viewName, "Connecting...", canceler);
             _window.AddTask(view);
 
             UploadSession context;
@@ -45,6 +46,9 @@ namespace Clowd
             {
                 using (context = await GetSession(true))
                 {
+                    if (canceler.IsSet)
+                        return null;
+
                     view.SecondaryText = "Uploading...";
                     Packet p = new Packet();
 
@@ -69,7 +73,7 @@ namespace Clowd
                         p.Headers.Add("partitioned", "true");
                         p.Headers.Add("file-size", data_size.ToString());
 
-                        for (int i = 0; i < data_size; i += chunk_size)
+                        for (int i = 0; i < data_size && !canceler.IsSet; i += chunk_size)
                         {
                             var size = Math.Min(chunk_size, data_size - i);
                             bool last = i + chunk_size >= data_size;
@@ -113,6 +117,10 @@ namespace Clowd
                         view.Progress = 33;
                         await context.WriteAsync(p);
                     }
+
+                    if (canceler.IsSet)
+                        return null;
+
                     var response = await context.WaitPacketAsync();
                     if (response.Command == "COMPLETE" && response.HasPayload)
                     {
@@ -126,7 +134,7 @@ namespace Clowd
                         return response.Payload;
                     }
                     else
-                        throw new NotImplementedException();
+                        return null;
                 }
             }
             catch (Exception e)
@@ -228,7 +236,7 @@ namespace Clowd
                     return null;
                 }
 #warning unable to auto-login with cached credentials...
-//show error? prompt for login if credentials are incorrect?
+                //show error? prompt for login if credentials are incorrect?
                 _cache = null;
             }
 
