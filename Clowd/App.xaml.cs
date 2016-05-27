@@ -28,6 +28,7 @@ using Exceptionless.Dependency;
 using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
+using Ionic.Zlib;
 
 namespace Clowd
 {
@@ -781,6 +782,7 @@ namespace Clowd
                 _cmdCache.Clear();
             }
         }
+
         private void OnWndProcMessageReceived(uint obj)
         {
             if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED
@@ -789,11 +791,19 @@ namespace Clowd
                 SetupAccentColors();
             }
         }
+
         private async Task OnFilesReceived(string[] filePaths)
         {
             string url;
-            if (filePaths.Length > 1 || (filePaths.Length == 1 && Directory.Exists(filePaths[0]))
-                || (filePaths.Length == 1 && Clowd.Shared.MIMEAssistant2.GetMIMEType(filePaths[0]) == null))
+
+            // ZIP the files into an archive if:
+            if (
+                // • there is more than one file;
+                filePaths.Length > 1 ||
+                // • we are processing a directory rather than a file; or
+                (filePaths.Length == 1 && Directory.Exists(filePaths[0])) ||
+                // • we are processing a single file that might benefit from compression
+                (filePaths.Length == 1 && FileMightBeCompressible(filePaths[0])))
             {
                 using (MemoryStream ms = new MemoryStream())
                 {
@@ -814,10 +824,7 @@ namespace Clowd
                             zip.Save(ms);
                         }
                     });
-                    ms.Position = 0;
-                    byte[] barr = new byte[ms.Length];
-                    ms.Read(barr, 0, (int)ms.Length);
-                    url = await UploadManager.Upload(barr, archiveName);
+                    url = await UploadManager.Upload(ms.ToArray(), archiveName);
                 }
             }
             else
@@ -825,6 +832,21 @@ namespace Clowd
                 url = await UploadManager.Upload(File.ReadAllBytes(filePaths[0]), Path.GetFileName(filePaths[0]));
             }
         }
+
+        private bool FileMightBeCompressible(string file)
+        {
+            using (var f = File.Open(file, FileMode.Open, FileAccess.Read))
+            {
+                var firstMB = f.Read(1024 * 1024);  // may be less if file is smaller
+                using (var mem = new MemoryStream())
+                {
+                    using (var gz = new GZipStream(mem, CompressionMode.Compress, CompressionLevel.BestCompression, leaveOpen: true))
+                        gz.Write(firstMB);
+                    return mem.Length <= firstMB.Length * 9 / 10;    // At least 10% compression achieved
+                }
+            }
+        }
+
         private void OnTaskbarIconDrop(object sender, DragEventArgs e)
         {
             var formats = e.Data.GetFormats();
