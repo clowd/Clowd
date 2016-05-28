@@ -134,6 +134,7 @@ namespace Clowd
             {
                 UpdateCanvasMode(false);
                 UpdateCanvasSelection(initialRegion.Value);
+                ManageSelectionResizeHandlers(true);
             }
         }
 
