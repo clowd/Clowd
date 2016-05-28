@@ -11,7 +11,7 @@
         xmlns:eim="clr-namespace:Microsoft.Expression.Interactivity.Media;assembly=Microsoft.Expression.Interactions"
         xmlns:i="clr-namespace:System.Windows.Interactivity;assembly=System.Windows.Interactivity"
         DataContext="{Binding RelativeSource={RelativeSource Self}}" Topmost="True"
-        mc:Ignorable="d" ResizeMode="NoResize" ShowInTaskbar="False" BorderThickness="0" SnapsToDevicePixels="True" 
+        mc:Ignorable="d" ResizeMode="NoResize" ShowInTaskbar="False" BorderThickness="0" SnapsToDevicePixels="True"
         Title="ClTaskWindow" Height="30" Width="240" WindowStyle="None" MinWidth="240" MinHeight="1" AllowsTransparency="True"
         ShowActivated="False" Background="Transparent">
     <Window.Resources>
@@ -34,9 +34,9 @@
                 <RowDefinition Height="30" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <controls:CornerClippingBorder Background="{DynamicResource AccentColorBrush}" BorderBrush="{DynamicResource AccentColorBrush}" 
+            <controls:CornerClippingBorder Background="{DynamicResource AccentColorBrush}" BorderBrush="{DynamicResource AccentColorBrush}"
                     BorderThickness="1,1,1,0" CornerRadius="2,2,0,0" ClipToBounds="True">
-                <ProgressBar Height="NaN" Background="Transparent" Value="{Binding OverallProgress, Mode=OneWay}" 
+                <ProgressBar Height="NaN" Background="Transparent" Value="{Binding OverallProgress, Mode=OneWay}"
                          Foreground="#22FFFFFF" BorderThickness="0" Opacity="1"/>
             </controls:CornerClippingBorder>
             <Grid Name="headerGrid">
@@ -46,7 +46,7 @@
                     <ColumnDefinition Width="30"/>
                 </Grid.ColumnDefinitions>
                 <ContentPresenter ContentTemplate="{StaticResource MetroIconTemplate}" />
-                <TextBlock Grid.Column="1" Foreground="{DynamicResource IdealForegroundColorBrush}" 
+                <TextBlock Grid.Column="1" Foreground="{DynamicResource IdealForegroundColorBrush}"
                        VerticalAlignment="Center" Text="CLOWD" FontFamily="pack://application:,,,/Assets/#Raleway"/>
                 <Button Grid.Column="2" Style="{StaticResource ToolButtonStyle}" Padding="3" Command="{StaticResource Commands.Minimize}" ToolTip="Hide">
                     <Viewbox>
@@ -57,16 +57,9 @@
             <Rectangle Fill="White" Grid.Row="1" />
             <ItemsControl Name="taskBox" Grid.Row="1" MinHeight="30" Margin="10,10,10,5" ItemsSource="{Binding TaskList, Mode=OneWay}">
                 <ItemsControl.Resources>
-                    <conv:ValueConverterGroup x:Key="progToVis">
-                        <conv:IsEqualOrGreaterThanConverter />
-                        <conv:BoolToVisibilityConverter2 />
-                    </conv:ValueConverterGroup>
-                    <conv:ValueConverterGroup x:Key="progToInverseVis">
-                        <conv:IsEqualOrGreaterThanConverter />
-                        <conv:BoolToInverseConverter />
-                        <conv:BoolToVisibilityConverter2 />
-                    </conv:ValueConverterGroup>
                     <conv:BoolToVisibilityConverter2 x:Key="bool2vis" />
+                    <conv:TaskStatusToVisibilityConverter x:Key="statusToVis" />
+
                     <ContextMenu x:Key="itemMenu">
                         <MenuItem Header="Open" Command="{Binding OpenCommand}" CommandParameter="{Binding}" Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource bool2vis}}" />
                         <MenuItem Header="Copy" Command="{Binding CopyCommand}" CommandParameter="{Binding}" Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource bool2vis}}"/>
@@ -94,7 +87,7 @@
                                 <BeginStoryboard Storyboard="{StaticResource ItemEnterAnimation}" />
                             </EventTrigger>
                         </DataTemplate.Triggers>
-                        <Grid x:Name="container" Height="30" Background="White" Margin="0,0,0,5" ClipToBounds="True" 
+                        <Grid x:Name="container" Height="30" Background="White" Margin="0,0,0,5" ClipToBounds="True"
                               ContextMenu="{StaticResource itemMenu}" RenderTransformOrigin="0.5,0">
                             <Grid.RenderTransform>
                                 <TransformGroup>
@@ -109,13 +102,14 @@
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Padding="5" Background="{Binding ProgressBrush}">
                                 <Canvas>
-                                    <Viewbox Width="20" Height="20" Visibility="{Binding Progress, Converter={StaticResource progToInverseVis}}">
+                                    <Viewbox Width="20" Height="20" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=Waiting;InProgress}">
                                         <controls:ProgressRing Foreground="Black" Opacity=".8" IsActive="True" Style="{StaticResource ChasingDotsProgressRingStyle}" />
                                     </Viewbox>
-                                    <Image Width="20" Height="20" Source="Images/Checkmark-26.png" Visibility="{Binding Progress, Converter={StaticResource progToVis}}"/>
+                                    <Image Width="20" Height="20" Source="Images/Checkmark-26.png" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=Complete;Executed}"/>
+                                    <Image Width="20" Height="20" Source="Images/Cross-26.png" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=Canceled;Error}"/>
                                 </Canvas>
                             </Border>
-                            <ProgressBar Grid.Column="2" Grid.ColumnSpan="4" Value="{Binding Progress}" Background="#22FFFFFF" 
+                            <ProgressBar Grid.Column="2" Grid.ColumnSpan="4" Value="{Binding Progress}" Background="#22FFFFFF"
                                          Height="NaN" BorderThickness="0">
                                 <ProgressBar.Resources>
                                     <SolidColorBrush x:Key="ProgressBrush" Color="{Binding ProgressColor}" />
@@ -152,7 +146,7 @@
                                 <Border BorderBrush="DarkGray" BorderThickness="1,0,0,1" Height="6" Width="6" VerticalAlignment="Bottom"  HorizontalAlignment="Left" SnapsToDevicePixels="True"/>
                             </Grid>
                             <Border Background="{Binding ProgressBrush}" Cursor="Hand" BorderBrush="DarkGray" Grid.ColumnSpan="6"
-                                    Visibility="{Binding HeroAvailable, Converter={StaticResource bool2vis}}" BorderThickness="1" 
+                                    Visibility="{Binding HeroAvailable, Converter={StaticResource bool2vis}}" BorderThickness="1"
                                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch" SnapsToDevicePixels="True">
                                 <Border.InputBindings>
                                     <MouseBinding Command="{Binding HeroCommand}" MouseAction="LeftClick" />
@@ -186,7 +180,7 @@
                                 </StackPanel>
                             </Border>
                             <Border Background="{Binding ProgressBrush}" BorderBrush="DarkGray" Grid.ColumnSpan="6"
-                                    Visibility="{Binding HeroAvailable, Converter={StaticResource bool2vis}}" BorderThickness="1" 
+                                    Visibility="{Binding HeroAvailable, Converter={StaticResource bool2vis}}" BorderThickness="1"
                                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch" SnapsToDevicePixels="True" Opacity="0"
                                     IsHitTestVisible="False" Name="copiedNotifier">
                                 <i:Interaction.Triggers>
@@ -207,7 +201,7 @@
                                 </i:Interaction.Triggers>
                                 <TextBlock Margin="40,0,0,0" Opacity="0.8" Foreground="Black" VerticalAlignment="Center" Text="Copied"></TextBlock>
                             </Border>
-                            <Button Grid.Column="3" Style="{StaticResource ToolButtonStyle}" HorizontalAlignment="Right" 
+                            <Button Grid.Column="3" Style="{StaticResource ToolButtonStyle}" HorizontalAlignment="Right"
                                     ContextMenu="{StaticResource itemMenu}" Background="#32400000">
                                 <i:Interaction.Behaviors>
                                     <util:ButtonClickContextBehavior />
@@ -222,7 +216,7 @@
             </ItemsControl>
             <Rectangle Grid.Row="3" VerticalAlignment="Bottom" Height="10">
                 <Rectangle.Fill>
-                    <LinearGradientBrush StartPoint="1,0" EndPoint="1,1" 
+                    <LinearGradientBrush StartPoint="1,0" EndPoint="1,1"
 		                                 SpreadMethod="Pad" ColorInterpolationMode="SRgbLinearInterpolation" >
                         <GradientStop Color="#00FFFFFF" Offset="0" />
                         <GradientStop Color="#FFFFFFFF" Offset="1" />

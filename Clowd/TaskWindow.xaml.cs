@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -351,6 +352,7 @@ namespace Clowd
             InProgress,
             Error,
             Executed,
+            Canceled
         }
         public TaskStatus Status { get; set; }
         public SolidColorBrush ProgressBrush { get; private set; }
@@ -392,6 +394,10 @@ namespace Clowd
                     ProgressBrush = Brushes.PaleVioletRed;
                     ProgressColor = Colors.PaleVioletRed;
                     break;
+                case TaskStatus.Canceled:
+                    ProgressBrush = Brushes.IndianRed;
+                    ProgressColor = Colors.IndianRed;
+                    break;
                 case TaskStatus.InProgress:
                     ProgressBrush = Brushes.PaleGoldenrod;
                     ProgressColor = Colors.PaleGoldenrod;
@@ -419,6 +425,8 @@ namespace Clowd
     {
         public long FileSize { get; set; }
         public string UploadURL { get; set; }
+        private ManualResetEventSlim _canceler;
+
         public override bool HeroAvailable
         {
             get
@@ -430,10 +438,11 @@ namespace Clowd
 
         private static DataTemplate _copyTemplate;
 
-        public UploadTaskViewItem(string primary, string secondary)
+        public UploadTaskViewItem(string primary, string secondary, ManualResetEventSlim canceler)
         {
             PrimaryText = primary;
             SecondaryText = secondary;
+            _canceler = canceler;
             Progress = 5;
 
             const string copyTemplate =
@@ -492,7 +501,9 @@ namespace Clowd
         }
         private void CancelExecuted(object param)
         {
-
+            _canceler.Set();
+            SecondaryText = "Canceled.";
+            Status = TaskStatus.Canceled;
         }
 
         private void SetExecuted()
