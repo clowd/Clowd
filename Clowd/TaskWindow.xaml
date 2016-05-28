@@ -102,11 +102,11 @@
                             </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Padding="5" Background="{Binding ProgressBrush}">
                                 <Canvas>
-                                    <Viewbox Width="20" Height="20" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=animation}">
+                                    <Viewbox Width="20" Height="20" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=Waiting;InProgress}">
                                         <controls:ProgressRing Foreground="Black" Opacity=".8" IsActive="True" Style="{StaticResource ChasingDotsProgressRingStyle}" />
                                     </Viewbox>
-                                    <Image Width="20" Height="20" Source="Images/Checkmark-26.png" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=checkmark}"/>
-                                    <Image Width="20" Height="20" Source="Images/Cross-26.png" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=cross}"/>
+                                    <Image Width="20" Height="20" Source="Images/Checkmark-26.png" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=Complete;Executed}"/>
+                                    <Image Width="20" Height="20" Source="Images/Cross-26.png" Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=Canceled;Error}"/>
                                 </Canvas>
                             </Border>
                             <ProgressBar Grid.Column="2" Grid.ColumnSpan="4" Value="{Binding Progress}" Background="#22FFFFFF"
