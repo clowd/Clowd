@@ -81,11 +81,6 @@ namespace Clowd
                             double progress = ((double)i + size) / data_size * 100;
                             Buffer.BlockCopy(data, i, buffer, 0, size);
 
-                            if (p == null)
-                            {
-                                System.Diagnostics.Debugger.Break();
-                            }
-
                             if (i == 0)
                             {
                                 p.PayloadBytes = buffer;
