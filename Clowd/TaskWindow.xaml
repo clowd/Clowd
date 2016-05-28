@@ -36,24 +36,24 @@
             </Grid.RowDefinitions>
             <controls:CornerClippingBorder Background="{DynamicResource AccentColorBrush}" BorderBrush="{DynamicResource AccentColorBrush}"
                     BorderThickness="1,1,1,0" CornerRadius="2,2,0,0" ClipToBounds="True">
-                <ProgressBar Height="NaN" Background="Transparent" Value="{Binding OverallProgress, Mode=OneWay}"
+                <Grid Name="headerGrid">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="30"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="30"/>
+                    </Grid.ColumnDefinitions>
+                    <ProgressBar Grid.ColumnSpan="3" Height="NaN" Background="Transparent" Value="{Binding OverallProgress, Mode=OneWay}"
                          Foreground="#22FFFFFF" BorderThickness="0" Opacity="1"/>
-            </controls:CornerClippingBorder>
-            <Grid Name="headerGrid">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="30"/>
-                </Grid.ColumnDefinitions>
-                <ContentPresenter ContentTemplate="{StaticResource MetroIconTemplate}" />
-                <TextBlock Grid.Column="1" Foreground="{DynamicResource IdealForegroundColorBrush}"
+                    <ContentPresenter Grid.Column="0" ContentTemplate="{StaticResource MetroIconTemplate}" />
+                    <TextBlock Grid.Column="1" Foreground="{DynamicResource IdealForegroundColorBrush}"
                        VerticalAlignment="Center" Text="CLOWD" FontFamily="pack://application:,,,/Assets/#Raleway"/>
-                <Button Grid.Column="2" Style="{StaticResource ToolButtonStyle}" Padding="3" Command="{StaticResource Commands.Minimize}" ToolTip="Hide">
-                    <Viewbox>
-                        <Path Fill="White" Height="32" Width="32" Data="{StaticResource IconExpandDown32}" />
-                    </Viewbox>
-                </Button>
-            </Grid>
+                    <Button Grid.Column="2" Style="{StaticResource ToolButtonStyle}" Padding="3" Command="{StaticResource Commands.Minimize}" ToolTip="Hide">
+                        <Viewbox>
+                            <Path Fill="White" Height="32" Width="32" Data="{StaticResource IconExpandDown32}" />
+                        </Viewbox>
+                    </Button>
+                </Grid>
+            </controls:CornerClippingBorder>
             <Rectangle Fill="White" Grid.Row="1" />
             <ItemsControl Name="taskBox" Grid.Row="1" MinHeight="30" Margin="10,10,10,5" ItemsSource="{Binding TaskList, Mode=OneWay}">
                 <ItemsControl.Resources>
