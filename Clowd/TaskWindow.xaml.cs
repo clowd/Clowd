@@ -411,6 +411,7 @@ namespace Clowd
                     ProgressColor = Colors.LightGray;
                     break;
             }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HeroAvailable)));
         }
         private void OnProgressChanged()
         {
