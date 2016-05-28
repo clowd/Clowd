@@ -344,15 +344,8 @@ namespace Clowd
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             var cropped = CropBitmap();
-            BitmapEncoder encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(cropped));
-            var path = Path.GetTempFileName() + ".png";
-            using (var fileStream = new System.IO.FileStream(path, FileMode.Create))
-            {
-                encoder.Save(fileStream);
-            }
             this.Close();
-            TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(path)).Show();
+            TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped)).Show();
         }
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {

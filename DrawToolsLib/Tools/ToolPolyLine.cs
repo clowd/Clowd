@@ -57,14 +57,8 @@ namespace DrawToolsLib
             var bitmap = new RenderTargetBitmap((int)newPolyLine.Bounds.Width, (int)newPolyLine.Bounds.Height, 96, 96, PixelFormats.Default);
             bitmap.Render(visual);
 
-            PngBitmapEncoder encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            File.Delete(path);
-            using (var fs = new FileStream(path, FileMode.Create))
-                encoder.Save(fs);
-
             drawingCanvas.GraphicsList.RemoveAt(drawingCanvas.GraphicsList.Count - 1);
-            drawingCanvas.AddGraphic(new GraphicsImage(drawingCanvas, newPolyLine.Bounds, path) { IsSelected = true });
+            drawingCanvas.AddGraphic(new GraphicsImage(drawingCanvas, newPolyLine.Bounds, bitmap) { IsSelected = true });
 
             newPolyLine = null;
             base.OnMouseUp(drawingCanvas, e);

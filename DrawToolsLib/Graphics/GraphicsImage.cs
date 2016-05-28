@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -10,55 +12,81 @@ namespace DrawToolsLib.Graphics
     [Serializable]
     public class GraphicsImage : GraphicsRectangle
     {
-        public string FileName
+        public int ScaleX
         {
-            get { return _fileName; }
+            get { return _scaleX; }
             set
             {
-                if (value == _fileName) return;
-                _fileName = value;
-                OnPropertyChanged();
+                if (value == _scaleX) return;
+                _scaleX = value;
+                OnPropertyChanged(nameof(ScaleX));
             }
         }
 
-        private string _fileName;
+        public int ScaleY
+        {
+            get { return _scaleY; }
+            set
+            {
+                if (value == _scaleY) return;
+                _scaleY = value;
+                OnPropertyChanged(nameof(ScaleY));
+            }
+        }
 
-        [XmlIgnore]
-        private BitmapSource _imageBacking;
-        [XmlIgnore]
-        private BitmapSource _imageCache
+        /// <summary>
+        /// This is used for serialization purposes only.
+        /// </summary>
+        public byte[] BitmapBytes
         {
             get
             {
-                if (_imageBacking == null)
-                    _imageBacking = BitmapFrame.Create(
-                        new Uri(_fileName, UriKind.Absolute),
-                        BitmapCreateOptions.None,
-                        BitmapCacheOption.OnLoad);
-                return _imageBacking;
+                using (var stream = new MemoryStream())
+                {
+                    var encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(_bitmap));
+                    encoder.Save(stream);
+                    return stream.ToArray();
+                }
+            }
+            set
+            {
+                using (var stream = new MemoryStream(value))
+                {
+                    stream.Position = 0;
+                    BitmapImage image = new BitmapImage();
+                    image.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
+                    image.BeginInit();
+                    image.StreamSource = stream;
+                    image.CacheOption = BitmapCacheOption.OnLoad;
+                    image.EndInit();
+                    image.Freeze();
+                    _bitmap = image;
+                    OnPropertyChanged(nameof(BitmapBytes));
+                }
             }
         }
 
-        [XmlIgnore]
-        private ScaleTransform _transform = new ScaleTransform(1, 1);
+
+        private BitmapSource _bitmap;
+        private int _scaleX = 1;
+        private int _scaleY = 1;
 
         protected GraphicsImage()
         {
             Effect = null;
         }
-        public GraphicsImage(DrawingCanvas canvas, Rect rect, string filePath)
-           : this(canvas.ObjectColor, canvas.LineWidth, rect, filePath)
+        public GraphicsImage(DrawingCanvas canvas, Rect rect, BitmapSource bitmap)
+           : this(canvas.ObjectColor, canvas.LineWidth, rect, bitmap)
         {
         }
 
-        public GraphicsImage(Color objectColor, double lineWidth, Rect rect, string filePath)
+        public GraphicsImage(Color objectColor, double lineWidth, Rect rect, BitmapSource bitmap)
             : base(objectColor, lineWidth, rect)
         {
-            _fileName = filePath;
-            Effect = null;
-            if (!File.Exists(_fileName))
-                throw new FileNotFoundException(_fileName);
+            _bitmap = bitmap;
         }
+
 
         internal override void DrawRectangle(DrawingContext drawingContext)
         {
@@ -66,7 +94,7 @@ namespace DrawToolsLib.Graphics
                 throw new ArgumentNullException(nameof(drawingContext));
 
             Rect r = UnrotatedBounds;
-            if (_imageCache.PixelWidth == (int)Math.Round(r.Width, 3) && _imageCache.PixelHeight == (int)Math.Round(r.Height, 3) && Angle == 0)
+            if (_bitmap.PixelWidth == (int)Math.Round(r.Width, 3) && _bitmap.PixelHeight == (int)Math.Round(r.Height, 3) && Angle == 0)
             {
                 // If the image is still at the original size and zero rotation, round the rectangle position to whole pixels to avoid blurring.
                 r.X = Math.Round(r.X);
@@ -77,9 +105,7 @@ namespace DrawToolsLib.Graphics
             var centerY = r.Top + (r.Height / 2);
 
             // push current flip transform
-            _transform.CenterX = centerX;
-            _transform.CenterY = centerY;
-            drawingContext.PushTransform(_transform);
+            drawingContext.PushTransform(new ScaleTransform(ScaleX, ScaleY, centerX, centerY));
 
             // push any resizing/rendering transform (will be added to current transform later)
             if (Right <= Left)
@@ -87,7 +113,7 @@ namespace DrawToolsLib.Graphics
             if (Bottom <= Top)
                 drawingContext.PushTransform(new ScaleTransform(1, -1, centerX, centerY));
 
-            drawingContext.DrawImage(_imageCache, r);
+            drawingContext.DrawImage(_bitmap, r);
 
             if (Right <= Left || Bottom <= Top)
                 drawingContext.Pop();
@@ -98,16 +124,16 @@ namespace DrawToolsLib.Graphics
         internal override void Normalize()
         {
             if (Right <= Left)
-                _transform.ScaleX = _transform.ScaleX / -1;
+                ScaleX = ScaleX / -1;
             if (Bottom <= Top)
-                _transform.ScaleY = _transform.ScaleY / -1;
+                ScaleY = ScaleY / -1;
 
             base.Normalize();
         }
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsImage(ObjectColor, LineWidth, Bounds, FileName) { ObjectId = ObjectId };
+            return new GraphicsImage(ObjectColor, LineWidth, Bounds, _bitmap) { ObjectId = ObjectId };
         }
     }
 }

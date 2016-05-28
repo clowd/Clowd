@@ -30,7 +30,7 @@ namespace Clowd
         public bool ShowActionLabels { get; set; } = true;
 
         private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
-        private string _imagePath;
+        private BitmapSource _image;
         private Size _imageSize;
         private double _actionBarSize = double.NaN;
         private bool _actionBarLabels;
@@ -39,7 +39,7 @@ namespace Clowd
         {
         }
 
-        public ImageEditorPage(string initImagePath)
+        public ImageEditorPage(BitmapSource initImage)
         {
             InitializeComponent();
             drawingCanvas.SetResourceReference(DrawToolsLib.DrawingCanvas.HandleColorProperty, "AccentColor");
@@ -47,21 +47,11 @@ namespace Clowd
             drawingCanvas.LineWidth = 2;
             this.Loaded += ImageEditorPage_Loaded;
             this.SizeChanged += ImageEditorPage_SizeChanged;
-            _imagePath = initImagePath;
+            _image = initImage;
 
-            if (!String.IsNullOrEmpty(_imagePath) && File.Exists(_imagePath))
-            {
-                double width, height;
-                using (var stream = new FileStream(_imagePath, FileMode.Open, FileAccess.Read))
-                {
-                    var bitmapFrame = BitmapFrame.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
-                    width = ScreenTools.ScreenToWpf(bitmapFrame.PixelWidth);
-                    height = ScreenTools.ScreenToWpf(bitmapFrame.PixelHeight);
-                    _imageSize = new Size(width, height);
-                }
-                var graphic = new GraphicsImage(drawingCanvas, new Rect(0, 0, width, height), _imagePath);
-                drawingCanvas.AddGraphic(graphic);
-            }
+            _imageSize = new Size(initImage.Width, initImage.Height);
+            var graphic = new GraphicsImage(drawingCanvas, new Rect(new Point(0, 0), _imageSize), _image);
+            drawingCanvas.AddGraphic(graphic);
         }
 
         private void MoveCommandsToChrome()
@@ -362,17 +352,15 @@ namespace Clowd
             if (drawingCanvas.Paste())
                 return;
 
-            var path = System.IO.Path.GetTempFileName() + ".png";
             var img = ClipboardEx.GetImage();
             if (img == null)
                 return;
-            img.Save(path, ImageFormat.Png);
             var width = ScreenTools.ScreenToWpf(img.PixelWidth);
             var height = ScreenTools.ScreenToWpf(img.PixelHeight);
             var graphic = new GraphicsImage(drawingCanvas, new Rect(
                 drawingCanvas.WorldOffset.X - (width / 2),
                 drawingCanvas.WorldOffset.Y - (height / 2),
-                width, height), path);
+                width, height), img);
             drawingCanvas.AddGraphic(graphic);
         }
 
