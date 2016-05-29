@@ -292,8 +292,8 @@ namespace DrawToolsLib.Graphics
             var handleAngle = (45 * handleNumber - 45) + Angle;
             if (handleAngle < 0)
                 handleAngle = handleAngle + 360;
+            // is there a better way to do this?
             double[] angles = Enumerable.Range(0, 17).Select(i => i * 22.5).ToArray();
-            angles = angles.Concat(angles.Skip(1).Select(i => -i).ToArray().Reverse()).ToArray();
             var nearest = angles.OrderBy(x => Math.Abs(x - handleAngle)).First();
             var index = Array.IndexOf(angles, nearest);
 
