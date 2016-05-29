@@ -281,51 +281,20 @@ namespace DrawToolsLib.Graphics
             OnPropertyChanged();
         }
 
+        private static Cursor[] _resizeCursors = new Cursor[36];
+
         internal override Cursor GetHandleCursor(int handleNumber)
         {
             if (handleNumber == 0 || handleNumber > 9)
                 return HelperFunctions.DefaultCursor;
 
             if (handleNumber == 9)
-                return new Cursor(new MemoryStream(Properties.Resources.Rotate));
+                return new Cursor(new MemoryStream(Resources.Rotate));
 
-            var handleAngle = (45 * handleNumber - 45) + Angle;
-            if (handleAngle < 0)
-                handleAngle = handleAngle + 360;
-            // is there a better way to do this?
-            double[] angles = Enumerable.Range(0, 17).Select(i => i * 22.5).ToArray();
-            var nearest = angles.OrderBy(x => Math.Abs(x - handleAngle)).First();
-            var index = Array.IndexOf(angles, nearest);
-
-            switch (index)
-            {
-                case 0:
-                case 8:
-                case 16:
-                    return new Cursor(new MemoryStream(Properties.Resources._0));
-                case 1:
-                case 9:
-                    return new Cursor(new MemoryStream(Properties.Resources._22_5));
-                case 2:
-                case 10:
-                    return new Cursor(new MemoryStream(Properties.Resources._45));
-                case 3:
-                case 11:
-                    return new Cursor(new MemoryStream(Properties.Resources._67_5));
-                case 4:
-                case 12:
-                    return new Cursor(new MemoryStream(Properties.Resources._90));
-                case 5:
-                case 13:
-                    return new Cursor(new MemoryStream(Properties.Resources._112_5));
-                case 6:
-                case 14:
-                    return new Cursor(new MemoryStream(Properties.Resources._135));
-                case 7:
-                case 15:
-                    return new Cursor(new MemoryStream(Properties.Resources._157_5));
-            }
-            return Cursors.Cross;
+            var cursorNum = (int)((45 * handleNumber + Angle + 92.5) / 5) % 36;
+            if (_resizeCursors[cursorNum] == null)
+                _resizeCursors[cursorNum] = new Cursor(new MemoryStream((byte[])Resources.ResourceManager.GetObject($"Resize{cursorNum}")));
+            return _resizeCursors[cursorNum];
         }
 
         internal override void Normalize()
