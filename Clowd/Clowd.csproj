@@ -362,52 +362,6 @@
     <Resource Include="Images\Help-25.png" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Assets\RotationCursor0.cur" />
-    <Resource Include="Assets\RotationCursor1.cur" />
-    <Resource Include="Assets\RotationCursor10.cur" />
-    <Resource Include="Assets\RotationCursor11.cur" />
-    <Resource Include="Assets\RotationCursor12.cur" />
-    <Resource Include="Assets\RotationCursor13.cur" />
-    <Resource Include="Assets\RotationCursor14.cur" />
-    <Resource Include="Assets\RotationCursor15.cur" />
-    <Resource Include="Assets\RotationCursor16.cur" />
-    <Resource Include="Assets\RotationCursor17.cur" />
-    <Resource Include="Assets\RotationCursor18.cur" />
-    <Resource Include="Assets\RotationCursor19.cur" />
-    <Resource Include="Assets\RotationCursor2.cur" />
-    <Resource Include="Assets\RotationCursor20.cur" />
-    <Resource Include="Assets\RotationCursor21.cur" />
-    <Resource Include="Assets\RotationCursor22.cur" />
-    <Resource Include="Assets\RotationCursor23.cur" />
-    <Resource Include="Assets\RotationCursor3.cur" />
-    <Resource Include="Assets\RotationCursor4.cur" />
-    <Resource Include="Assets\RotationCursor5.cur" />
-    <Resource Include="Assets\RotationCursor6.cur" />
-    <Resource Include="Assets\RotationCursor7.cur" />
-    <Resource Include="Assets\RotationCursor8.cur" />
-    <Resource Include="Assets\RotationCursor9.cur" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Assets\ResizingCursor0.cur" />
-    <Resource Include="Assets\ResizingCursor1.cur" />
-    <Resource Include="Assets\ResizingCursor10.cur" />
-    <Resource Include="Assets\ResizingCursor11.cur" />
-    <Resource Include="Assets\ResizingCursor12.cur" />
-    <Resource Include="Assets\ResizingCursor13.cur" />
-    <Resource Include="Assets\ResizingCursor14.cur" />
-    <Resource Include="Assets\ResizingCursor15.cur" />
-    <Resource Include="Assets\ResizingCursor16.cur" />
-    <Resource Include="Assets\ResizingCursor17.cur" />
-    <Resource Include="Assets\ResizingCursor2.cur" />
-    <Resource Include="Assets\ResizingCursor3.cur" />
-    <Resource Include="Assets\ResizingCursor4.cur" />
-    <Resource Include="Assets\ResizingCursor5.cur" />
-    <Resource Include="Assets\ResizingCursor6.cur" />
-    <Resource Include="Assets\ResizingCursor7.cur" />
-    <Resource Include="Assets\ResizingCursor8.cur" />
-    <Resource Include="Assets\ResizingCursor9.cur" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Cross-26.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

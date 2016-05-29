@@ -63,6 +63,86 @@ namespace DrawToolsLib.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Byte[].
         /// </summary>
+        internal static byte[] _0 {
+            get {
+                object obj = ResourceManager.GetObject("_0", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] _112_5 {
+            get {
+                object obj = ResourceManager.GetObject("_112_5", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] _135 {
+            get {
+                object obj = ResourceManager.GetObject("_135", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] _157_5 {
+            get {
+                object obj = ResourceManager.GetObject("_157_5", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] _22_5 {
+            get {
+                object obj = ResourceManager.GetObject("_22_5", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] _45 {
+            get {
+                object obj = ResourceManager.GetObject("_45", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] _67_5 {
+            get {
+                object obj = ResourceManager.GetObject("_67_5", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] _90 {
+            get {
+                object obj = ResourceManager.GetObject("_90", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
         internal static byte[] Arrow {
             get {
                 object obj = ResourceManager.GetObject("Arrow", resourceCulture);
@@ -116,6 +196,16 @@ namespace DrawToolsLib.Properties {
         internal static byte[] Rectangle {
             get {
                 object obj = ResourceManager.GetObject("Rectangle", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        internal static byte[] Rotate {
+            get {
+                object obj = ResourceManager.GetObject("Rotate", resourceCulture);
                 return ((byte[])(obj));
             }
         }
