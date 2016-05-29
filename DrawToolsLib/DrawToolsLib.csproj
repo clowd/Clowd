@@ -158,17 +158,46 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Images\Rotate.cur" />
-    <None Include="Images\0.cur" />
-    <None Include="Images\112_5.cur" />
-    <None Include="Images\135.cur" />
-    <None Include="Images\157_5.cur" />
-    <None Include="Images\22_5.cur" />
-    <None Include="Images\45.cur" />
-    <None Include="Images\67_5.cur" />
-    <None Include="Images\90.cur" />
     <None Include="Images\Arrow.cur" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Content Include="Images\Resize0.cur" />
+    <Content Include="Images\Resize1.cur" />
+    <Content Include="Images\Resize10.cur" />
+    <Content Include="Images\Resize11.cur" />
+    <Content Include="Images\Resize12.cur" />
+    <Content Include="Images\Resize13.cur" />
+    <Content Include="Images\Resize14.cur" />
+    <Content Include="Images\Resize15.cur" />
+    <Content Include="Images\Resize16.cur" />
+    <Content Include="Images\Resize17.cur" />
+    <Content Include="Images\Resize18.cur" />
+    <Content Include="Images\Resize19.cur" />
+    <Content Include="Images\Resize2.cur" />
+    <Content Include="Images\Resize20.cur" />
+    <Content Include="Images\Resize21.cur" />
+    <Content Include="Images\Resize22.cur" />
+    <Content Include="Images\Resize23.cur" />
+    <Content Include="Images\Resize24.cur" />
+    <Content Include="Images\Resize25.cur" />
+    <Content Include="Images\Resize26.cur" />
+    <Content Include="Images\Resize27.cur" />
+    <Content Include="Images\Resize28.cur" />
+    <Content Include="Images\Resize29.cur" />
+    <Content Include="Images\Resize3.cur" />
+    <Content Include="Images\Resize30.cur" />
+    <Content Include="Images\Resize31.cur" />
+    <Content Include="Images\Resize32.cur" />
+    <Content Include="Images\Resize33.cur" />
+    <Content Include="Images\Resize34.cur" />
+    <Content Include="Images\Resize35.cur" />
+    <Content Include="Images\Resize4.cur" />
+    <Content Include="Images\Resize5.cur" />
+    <Content Include="Images\Resize6.cur" />
+    <Content Include="Images\Resize7.cur" />
+    <Content Include="Images\Resize8.cur" />
+    <Content Include="Images\Resize9.cur" />
+  </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
