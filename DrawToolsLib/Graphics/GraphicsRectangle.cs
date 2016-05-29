@@ -1,9 +1,12 @@
 using System;
+using System.IO;
 using System.Linq;
+using System.Resources;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using DrawToolsLib.Properties;
 
 namespace DrawToolsLib.Graphics
 {
@@ -284,9 +287,45 @@ namespace DrawToolsLib.Graphics
                 return HelperFunctions.DefaultCursor;
 
             if (handleNumber == 9)
-                return new Cursor(Application.GetResourceStream(new Uri($"pack://application:,,,/Assets/RotationCursor{(int)((Angle + 7) / 15 + 24) % 24}.cur")).Stream);
+                return new Cursor(new MemoryStream(Properties.Resources.Rotate));
 
-            return new Cursor(Application.GetResourceStream(new Uri($"pack://application:,,,/Assets/ResizingCursor{(int)((45 * handleNumber - 90 + Angle + 5) / 10 + 36) % 18}.cur")).Stream);
+            var handleAngle = (45 * handleNumber - 45) + Angle;
+            if (handleAngle < 0)
+                handleAngle = handleAngle + 360;
+            double[] angles = Enumerable.Range(0, 17).Select(i => i * 22.5).ToArray();
+            angles = angles.Concat(angles.Skip(1).Select(i => -i).ToArray().Reverse()).ToArray();
+            var nearest = angles.OrderBy(x => Math.Abs(x - handleAngle)).First();
+            var index = Array.IndexOf(angles, nearest);
+
+            switch (index)
+            {
+                case 0:
+                case 8:
+                case 16:
+                    return new Cursor(new MemoryStream(Properties.Resources._0));
+                case 1:
+                case 9:
+                    return new Cursor(new MemoryStream(Properties.Resources._22_5));
+                case 2:
+                case 10:
+                    return new Cursor(new MemoryStream(Properties.Resources._45));
+                case 3:
+                case 11:
+                    return new Cursor(new MemoryStream(Properties.Resources._67_5));
+                case 4:
+                case 12:
+                    return new Cursor(new MemoryStream(Properties.Resources._90));
+                case 5:
+                case 13:
+                    return new Cursor(new MemoryStream(Properties.Resources._112_5));
+                case 6:
+                case 14:
+                    return new Cursor(new MemoryStream(Properties.Resources._135));
+                case 7:
+                case 15:
+                    return new Cursor(new MemoryStream(Properties.Resources._157_5));
+            }
+            return Cursors.Cross;
         }
 
         internal override void Normalize()
