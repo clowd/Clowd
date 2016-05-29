@@ -25,7 +25,7 @@
         <PropertyValue name="AutoComment">1</PropertyValue>
         <PropertyValue name="ClosedFileDiagnostics">1</PropertyValue>
         <PropertyValue name="DisplayLineSeparators">0</PropertyValue>
-        <PropertyValue name="EnableHighlightRelatedKeywords">1</PropertyValue>
+        <PropertyValue name="EnableHighlightRelatedKeywords">0</PropertyValue>
         <PropertyValue name="ExtractMethod_AllowMovingDeclaration">0</PropertyValue>
         <PropertyValue name="ExtractMethod_DoNotPutOutOrRefOnStruct">1</PropertyValue>
         <PropertyValue name="Formatting_TriggerOnBlockCompletion">1</PropertyValue>
@@ -100,7 +100,7 @@
         <PropertyValue name="InsertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis">false</PropertyValue>
         <PropertyValue name="InsertSpaceAfterSemicolonInForStatements">true</PropertyValue>
         <PropertyValue name="InsertSpaceBeforeAndAfterBinaryOperators">true</PropertyValue>
-        <PropertyValue name="PlaceOpenBraceOnNewLineForControlBlocks">false</PropertyValue>
+        <PropertyValue name="PlaceOpenBraceOnNewLineForControlBlocks">true</PropertyValue>
         <PropertyValue name="PlaceOpenBraceOnNewLineForFunctionsAndClasses">false</PropertyValue>
         <PropertyValue name="ShowErrorsAsWarnings">true</PropertyValue>
         <PropertyValue name="ShowSyntaxErrors">true</PropertyValue>
@@ -124,10 +124,10 @@
         <PropertyValue name="EnableExpandPrecedence">false</PropertyValue>
         <PropertyValue name="EnableExpandScopes">false</PropertyValue>
         <PropertyValue name="EnableExtractFunction">false</PropertyValue>
-        <PropertyValue name="EnableSQLiteStoreEngine">false</PropertyValue>
+        <PropertyValue name="EnableSQLiteStoreEngine">true</PropertyValue>
         <PropertyValue name="EnableSingleFileISense">true</PropertyValue>
         <PropertyValue name="EnableSingleFileISenseSquiggles">false</PropertyValue>
-        <PropertyValue name="EnumerateCommentTasks">true</PropertyValue>
+        <PropertyValue name="EnumerateCommentTasks">false</PropertyValue>
         <PropertyValue name="GroupBrackets">true</PropertyValue>
         <PropertyValue name="HideExperimentalAd">true</PropertyValue>
         <PropertyValue name="HighlightMatchingTokens">true</PropertyValue>
