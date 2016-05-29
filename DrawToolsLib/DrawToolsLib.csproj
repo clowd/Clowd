@@ -157,7 +157,16 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <None Include="Images\0.cur" />
+    <None Include="Images\112_5.cur" />
+    <None Include="Images\135.cur" />
+    <None Include="Images\157_5.cur" />
+    <None Include="Images\22_5.cur" />
+    <None Include="Images\45.cur" />
+    <None Include="Images\67_5.cur" />
+    <None Include="Images\90.cur" />
     <Content Include="Images\Arrow.cur" />
+    <None Include="Images\Rotate.cur" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
