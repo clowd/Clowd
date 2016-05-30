@@ -12,19 +12,23 @@ namespace DrawToolsLib.Graphics
         protected GraphicsEllipse()
         {
         }
-        public GraphicsEllipse(DrawingCanvas canvas, Rect rect) : base(canvas, rect)
+        public GraphicsEllipse(DrawingCanvas canvas, Rect rect)
+            : base(canvas, rect)
         {
         }
 
-        public GraphicsEllipse(DrawingCanvas canvas, Rect rect, bool filled) : base(canvas, rect, filled)
+        public GraphicsEllipse(DrawingCanvas canvas, Rect rect, bool filled)
+            : base(canvas, rect, filled)
         {
         }
 
-        public GraphicsEllipse(Color objectColor, double lineWidth, Rect rect) : base(objectColor, lineWidth, rect)
+        public GraphicsEllipse(Color objectColor, double lineWidth, Rect rect)
+            : base(objectColor, lineWidth, rect)
         {
         }
 
-        public GraphicsEllipse(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0) : base(objectColor, lineWidth, rect, filled, angle)
+        public GraphicsEllipse(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0)
+            : base(objectColor, lineWidth, rect, filled, angle)
         {
         }
 
@@ -76,7 +80,7 @@ namespace DrawToolsLib.Graphics
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsEllipse(ObjectColor, LineWidth, Bounds, Filled, Angle) { ObjectId = ObjectId };
+            return new GraphicsEllipse(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
         }
     }
 }
