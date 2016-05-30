@@ -76,14 +76,15 @@ namespace DrawToolsLib.Graphics
         {
             Effect = null;
         }
-        public GraphicsImage(DrawingCanvas canvas, Rect rect, BitmapSource bitmap)
-           : this(canvas.ObjectColor, canvas.LineWidth, rect, bitmap)
+        public GraphicsImage(DrawingCanvas canvas, Rect rect, BitmapSource bitmap, double angle = 0)
+           : this(canvas.ObjectColor, canvas.LineWidth, rect, bitmap, angle)
         {
         }
 
-        public GraphicsImage(Color objectColor, double lineWidth, Rect rect, BitmapSource bitmap)
+        public GraphicsImage(Color objectColor, double lineWidth, Rect rect, BitmapSource bitmap, double angle = 0)
             : base(objectColor, lineWidth, rect)
         {
+            Angle = angle;
             _bitmap = bitmap;
         }
 
@@ -133,7 +134,7 @@ namespace DrawToolsLib.Graphics
 
         public override GraphicsBase Clone()
         {
-            return new GraphicsImage(ObjectColor, LineWidth, Bounds, _bitmap) { ObjectId = ObjectId };
+            return new GraphicsImage(ObjectColor, LineWidth, UnrotatedBounds, _bitmap, Angle) { ObjectId = ObjectId };
         }
     }
 }
