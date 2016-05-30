@@ -26,10 +26,6 @@ namespace DrawToolsLib
                 .OfType<GraphicsVisual>()
                 .Select(g => g.Graphic.Clone())
                 .ToArray();
-
-            if (_listBefore.Any())
-                Console.WriteLine("BEFORE " + ((GraphicsRectangle)_listBefore[0]).Angle);
-
         }
 
         // Call this function AFTER operation.
@@ -39,22 +35,16 @@ namespace DrawToolsLib
                 .OfType<GraphicsVisual>()
                 .Select(g => g.Graphic.Clone())
                 .ToArray();
-            if (_listAfter.Any())
-                Console.WriteLine("AFTER " + ((GraphicsRectangle)_listAfter[0]).Angle);
         }
 
         public override void Undo(DrawingCanvas drawingCanvas)
         {
             ReplaceObjects(drawingCanvas.GraphicsList, _listBefore);
-            if (_listBefore.Any())
-                Console.WriteLine("UNDO TO " + ((GraphicsRectangle)_listBefore[0]).Angle);
         }
 
         public override void Redo(DrawingCanvas drawingCanvas)
         {
             ReplaceObjects(drawingCanvas.GraphicsList, _listAfter);
-            if (_listAfter.Any())
-                Console.WriteLine("REDO TO " + ((GraphicsRectangle)_listAfter[0]).Angle);
         }
 
         private static void ReplaceObjects(VisualCollection graphicsList, GraphicsBase[] list)
