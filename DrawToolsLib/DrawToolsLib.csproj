@@ -81,7 +81,7 @@
     <Compile Include="DrawingCanvas.cs" />
     <Compile Include="DrawingCanvasException.cs" />
     <Compile Include="FontConversions.cs" />
-    <Compile Include="GraphicsVisual.cs" />
+    <Compile Include="GraphicsVisualList.cs" />
     <Compile Include="Graphics\GraphicsBase.cs" />
     <Compile Include="Graphics\GraphicsImage.cs" />
     <Compile Include="Graphics\GraphicsArrow.cs" />

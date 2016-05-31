@@ -26,7 +26,7 @@ namespace DrawToolsLib
         {
             if (drawingCanvas.Count > 0)
             {
-                drawingCanvas[drawingCanvas.Count - 1].Graphic.Normalize();
+                drawingCanvas[drawingCanvas.Count - 1].Normalize();
                 drawingCanvas.AddCommandToHistory(new CommandAdd(drawingCanvas[drawingCanvas.Count - 1]));
             }
 
@@ -44,7 +44,7 @@ namespace DrawToolsLib
         {
             drawingCanvas.UnselectAll();
             o.IsSelected = true;
-            drawingCanvas.GraphicsList.Add(o.CreateVisual());
+            drawingCanvas.GraphicsList.Add(o);
             drawingCanvas.CaptureMouse();
         }
 
