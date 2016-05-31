@@ -160,47 +160,46 @@ namespace Clowd
             SetupSettings();
             SetupAccentColors();
 
-            if (Settings.FirstRun)
+            if (Settings.FirstRun || (String.IsNullOrEmpty(Settings.Username) && String.IsNullOrEmpty(Settings.PasswordHash)))
             {
                 // there were no settings to load, show login window.
                 Settings.FirstRun = false;
                 Settings.Save();
                 var page = new LoginPage();
                 var login = TemplatedWindow.CreateWindow("CLOWD", page);
+                login.Closed += (sender, args) =>
+                {
+                    if (!_initialized)
+                        Application.Current.Shutdown();
+                };
                 login.Show();
+            }
+            else if (Settings.Username == "anon" && String.IsNullOrEmpty(Settings.PasswordHash))
+            {
+                //use clowd anonymously.
+                FinishInit();
             }
             else
             {
-                if (Settings.Username == "anon" && String.IsNullOrEmpty(Settings.PasswordHash))
+                using (var details = new Credentials(Settings.Username, Settings.PasswordHash, true))
                 {
-                    //use clowd anonymously.
-                    FinishInit();
-                }
-                else
-                {
-                    if (String.IsNullOrEmpty(Settings.Username) && String.IsNullOrEmpty(Settings.PasswordHash))
-                    {
-                        var page = new LoginPage();
-                        var login = TemplatedWindow.CreateWindow("CLOWD", page);
-                        login.Show();
-                    }
+                    var result = await UploadManager.Login(details);
+                    if (result == AuthResult.Success)
+                        FinishInit();
                     else
                     {
-                        using (var details = new Credentials(Settings.Username, Settings.PasswordHash, true))
+                        var page = new LoginPage(result, Settings.Username);
+                        var login = TemplatedWindow.CreateWindow("CLOWD", page);
+                        login.Closed += (sender, args) =>
                         {
-                            var result = await UploadManager.Login(details);
-                            if (result == AuthResult.Success)
-                                FinishInit();
-                            else
-                            {
-                                var page = new LoginPage(result, Settings.Username);
-                                var login = TemplatedWindow.CreateWindow("CLOWD", page);
-                                login.Show();
-                            }
-                        }
+                            if (!_initialized)
+                                Application.Current.Shutdown();
+                        };
+                        login.Show();
                     }
                 }
             }
+
 #if (!DEBUG)
             SetupUpdateTimer();
 #endif
@@ -603,7 +602,7 @@ namespace Clowd
 
         public async void StartCapture(ScreenRect? region = null)
         {
-            if (_prtscrWindowOpen)
+            if (_prtscrWindowOpen || !_initialized)
                 return;
 
             var wnd = await CaptureWindow.ShowNew(region);
@@ -616,11 +615,15 @@ namespace Clowd
 
         public void QuickCaptureFullScreen()
         {
+            if (!_initialized)
+                return;
             StartCapture(ScreenTools.VirtualScreen.Bounds);
         }
 
         public void QuickCaptureCurrentWindow()
         {
+            if (!_initialized)
+                return;
             var foreground = USER32.GetForegroundWindow();
             var bounds = USER32EX.GetWindowRectangle(foreground);
             StartCapture(ScreenRect.FromSystem(bounds));
