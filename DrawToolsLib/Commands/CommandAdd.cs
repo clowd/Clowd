@@ -9,7 +9,7 @@ namespace DrawToolsLib
 
         public CommandAdd(params GraphicsBase[] newObjects)
         {
-            _graphics = newObjects;
+            _graphics = newObjects.Select(n => n.Clone()).ToArray();
         }
 
         public override void Undo(DrawingCanvas drawingCanvas)

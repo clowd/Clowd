@@ -130,6 +130,11 @@ namespace DrawToolsLib
             {
                 _textBox.Text = graphicsText.Body = "Start typing your note.\r\nUse Shift+Enter for new lines.";
                 _textBox.SelectAll();
+                oldText = "";
+            }
+            else
+            {
+                oldText = graphicsText.Body;
             }
 
             _textBox.AcceptsReturn = true;
