@@ -49,7 +49,7 @@ namespace Clowd
             this.SizeChanged += ImageEditorPage_SizeChanged;
             _image = initImage;
 
-            _imageSize = new Size(initImage.Width, initImage.Height);
+            _imageSize = new Size(ScreenTools.ScreenToWpf(initImage.PixelWidth), ScreenTools.ScreenToWpf(initImage.Height));
             var graphic = new GraphicsImage(drawingCanvas, new Rect(new Point(0, 0), _imageSize), _image);
             drawingCanvas.AddGraphic(graphic);
         }
