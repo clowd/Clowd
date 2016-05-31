@@ -11,8 +11,6 @@ namespace DrawToolsLib
         public CommandDeleteAll(DrawingCanvas drawingCanvas)
         {
             _cloneList = drawingCanvas.GraphicsList
-                .OfType<GraphicsVisual>()
-                .Select(g => g.Graphic)
                 .ToArray();
         }
 
@@ -20,13 +18,12 @@ namespace DrawToolsLib
         {
             foreach (GraphicsBase o in _cloneList)
             {
-                drawingCanvas.GraphicsList.Add(o.CreateVisual());
+                drawingCanvas.GraphicsList.Add(o);
             }
         }
 
         public override void Redo(DrawingCanvas drawingCanvas)
         {
-            drawingCanvas.GraphicsList.OfType<GraphicsVisual>().ToList().ForEach(g => g.Dispose());
             drawingCanvas.GraphicsList.Clear();
         }
     }

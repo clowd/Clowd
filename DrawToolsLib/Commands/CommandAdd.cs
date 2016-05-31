@@ -7,22 +7,21 @@ namespace DrawToolsLib
     {
         private readonly GraphicsBase[] _graphics;
 
-        public CommandAdd(params GraphicsVisual[] newObjects)
+        public CommandAdd(params GraphicsBase[] newObjects)
         {
-            _graphics = newObjects.Select(s => s.Graphic).ToArray();
+            _graphics = newObjects;
         }
 
         public override void Undo(DrawingCanvas drawingCanvas)
         {
             foreach (var g in _graphics)
             {
-                GraphicsVisual objectToDelete = drawingCanvas.GraphicsList.Cast<GraphicsVisual>()
+                GraphicsBase objectToDelete = drawingCanvas.GraphicsList
                     .FirstOrDefault(b => b.ObjectId == g.ObjectId);
 
                 if (objectToDelete != null)
                 {
                     drawingCanvas.GraphicsList.Remove(objectToDelete);
-                    objectToDelete.Dispose();
                 }
             }
         }
@@ -32,9 +31,8 @@ namespace DrawToolsLib
             drawingCanvas.UnselectAll();
             foreach (var g in _graphics)
             {
-                var vis = g.CreateVisual();
-                vis.IsSelected = true;
-                drawingCanvas.GraphicsList.Add(vis);
+                g.IsSelected = true;
+                drawingCanvas.GraphicsList.Add(g);
             }
         }
     }

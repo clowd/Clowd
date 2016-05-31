@@ -64,6 +64,7 @@ namespace DrawToolsLib.Graphics
         public event PropertyChangedEventHandler PropertyChanged;
         public event EventHandler Invalidated;
 
+        private DrawingVisual _visual;
         private int _objectId;
         private Color _objectColor;
         private double _lineWidth;
@@ -85,6 +86,7 @@ namespace DrawToolsLib.Graphics
         {
             ObjectId = this.GetHashCode();
             _effect = new DropShadowEffect() { Opacity = 0.5, ShadowDepth = 2, RenderingBias = RenderingBias.Performance };
+            _visual = new DrawingVisual();
         }
         protected GraphicsBase(DrawingCanvas canvas)
             : this(canvas.ObjectColor, canvas.LineWidth)
@@ -152,16 +154,6 @@ namespace DrawToolsLib.Graphics
             drawingContext.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 3, rectangle.Height / 2 - 3);
         }
 
-        internal virtual GraphicsVisual CreateVisual()
-        {
-            // clear event handler, so if there are any un-disposed GraphicsVisual's we are de-referencing them.
-            Invalidated = delegate { };
-
-            var vis = new GraphicsVisual(this);
-            this.InvalidateVisual();
-            return vis;
-        }
-
         protected virtual Rect GetHandleRectangle(int handleNumber)
         {
             Point point = GetHandle(handleNumber);
@@ -183,6 +175,11 @@ namespace DrawToolsLib.Graphics
         protected virtual void InvalidateVisual()
         {
             Invalidated?.Invoke(this, new EventArgs());
+        }
+
+        internal void ResetInvalidateEvent()
+        {
+            Invalidated = null;
         }
 
         public abstract GraphicsBase Clone();
