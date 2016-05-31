@@ -299,10 +299,6 @@
       <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>
       <Name>NotifyIconLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\PhotoLoaderLib\PhotoLoaderLib.csproj">
-      <Project>{7c68c43b-0e5c-4b9f-9f49-045caa39d8b3}</Project>
-      <Name>PhotoLoaderLib</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
       <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
       <Name>Clowd.Shared</Name>
