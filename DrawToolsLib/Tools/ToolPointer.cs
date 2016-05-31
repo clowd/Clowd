@@ -41,14 +41,14 @@ namespace DrawToolsLib
 
         private GraphicsBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
         {
-            var controls = drawingCanvas.GraphicsList.Cast<GraphicsVisual>().Select(gv => new { gv.Graphic, gv.Graphic.IsSelected, HitTest = gv.Graphic.MakeHitTest(point) }).Reverse().ToArray();
+            var controls = drawingCanvas.GraphicsList.Select(gv => new { gv, gv.IsSelected, HitTest = gv.MakeHitTest(point) }).Reverse().ToArray();
 
             // Test if we start dragging a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
             var grabHandle = controls.FirstOrDefault(g => g.IsSelected && g.HitTest > 0);
             if (grabHandle != null)
             {
                 handleNumber = grabHandle.HitTest;
-                return grabHandle.Graphic;
+                return grabHandle.gv;
             }
 
             // Test if we start dragging an object 
@@ -56,7 +56,7 @@ namespace DrawToolsLib
             if (grabObject != null)
             {
                 handleNumber = 0;
-                return grabObject.Graphic;
+                return grabObject.gv;
             }
 
             handleNumber = -1;
@@ -115,7 +115,7 @@ namespace DrawToolsLib
                 // Click on background — start a selection rectangle for group selection.
                 var rect = HelperFunctions.CreateRectSafe(_lastPoint.X, _lastPoint.Y, _lastPoint.X + 1, _lastPoint.Y + 1);
                 var gsr = new GraphicsSelectionRectangle(drawingCanvas, rect);
-                drawingCanvas.GraphicsList.Add(gsr.CreateVisual());
+                drawingCanvas.GraphicsList.Add(gsr);
 
                 _selectMode = SelectionMode.GroupSelection;
                 _commandChangeState = null;
@@ -167,8 +167,8 @@ namespace DrawToolsLib
             switch (_selectMode)
             {
                 case SelectionMode.Move:
-                    foreach (GraphicsVisual o in drawingCanvas.Selection)
-                        o.Graphic.Move(dx, dy);
+                    foreach (var o in drawingCanvas.Selection)
+                        o.Move(dx, dy);
                     break;
 
                 case SelectionMode.HandleDrag:
@@ -181,7 +181,7 @@ namespace DrawToolsLib
 
                 case SelectionMode.GroupSelection:
                     // Resize selection rectangle
-                    drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(point, 5);
+                    drawingCanvas[drawingCanvas.Count - 1].MoveHandleTo(point, 5);
                     break;
             }
         }
@@ -208,15 +208,15 @@ namespace DrawToolsLib
 
             if (_selectMode == SelectionMode.GroupSelection)
             {
-                GraphicsSelectionRectangle r = (GraphicsSelectionRectangle)(drawingCanvas[drawingCanvas.Count - 1].Graphic);
+                GraphicsSelectionRectangle r = (GraphicsSelectionRectangle)(drawingCanvas[drawingCanvas.Count - 1]);
                 r.Normalize();
                 Rect rect = r.Bounds;
 
                 drawingCanvas.GraphicsList.Remove(drawingCanvas[drawingCanvas.Count - 1]);
 
-                foreach (GraphicsVisual g in drawingCanvas.GraphicsList)
+                foreach (var g in drawingCanvas.GraphicsList)
                 {
-                    if (g.Graphic.ContainedIn(rect))
+                    if (g.ContainedIn(rect))
                     {
                         g.IsSelected = true;
                     }

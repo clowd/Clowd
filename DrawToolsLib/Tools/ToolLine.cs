@@ -30,7 +30,7 @@ namespace DrawToolsLib
 
             if (e.LeftButton == MouseButtonState.Pressed && drawingCanvas.IsMouseCaptured)
             {
-                drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(
+                drawingCanvas[drawingCanvas.Count - 1].MoveHandleTo(
                     e.GetPosition(drawingCanvas), 2);
             }
         }

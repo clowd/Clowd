@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Media;
 using DrawToolsLib.Graphics;
@@ -23,8 +24,7 @@ namespace DrawToolsLib
         public CommandChangeState(DrawingCanvas drawingCanvas)
         {
             _listBefore = drawingCanvas.GraphicsList
-                .OfType<GraphicsVisual>()
-                .Select(g => g.Graphic.Clone())
+                .Select(g => g.Clone())
                 .ToArray();
         }
 
@@ -32,8 +32,7 @@ namespace DrawToolsLib
         public void NewState(DrawingCanvas drawingCanvas)
         {
             _listAfter = drawingCanvas.GraphicsList
-                .OfType<GraphicsVisual>()
-                .Select(g => g.Graphic.Clone())
+                .Select(g => g.Clone())
                 .ToArray();
         }
 
@@ -47,7 +46,7 @@ namespace DrawToolsLib
             ReplaceObjects(drawingCanvas.GraphicsList, _listAfter);
         }
 
-        private static void ReplaceObjects(VisualCollection graphicsList, GraphicsBase[] list)
+        private static void ReplaceObjects(GraphicsVisualList graphicsList, GraphicsBase[] list)
         {
             for (int i = 0; i < graphicsList.Count; i++)
             {
@@ -55,7 +54,7 @@ namespace DrawToolsLib
 
                 foreach (GraphicsBase o in list)
                 {
-                    if (o.ObjectId == ((GraphicsVisual)graphicsList[i]).ObjectId)
+                    if (o.ObjectId == graphicsList[i].ObjectId)
                     {
                         replacement = o;
                         break;
@@ -65,10 +64,8 @@ namespace DrawToolsLib
                 if (replacement != null)
                 {
                     // Replace object with its clone
-                    var old = graphicsList[i];
-                    (old as GraphicsVisual)?.Dispose();
                     graphicsList.RemoveAt(i);
-                    graphicsList.Insert(i, replacement.CreateVisual());
+                    graphicsList.Insert(i, replacement);
                 }
             }
         }

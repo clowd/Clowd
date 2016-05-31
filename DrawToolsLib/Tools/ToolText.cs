@@ -18,7 +18,7 @@ namespace DrawToolsLib
         TextBox _textBox;
         string oldText;
 
-        GraphicsVisual editedGraphicsText;
+        GraphicsText editedGraphicsText;
         DrawingCanvas drawingCanvas;
 
 
@@ -60,14 +60,14 @@ namespace DrawToolsLib
 
             if (drawingCanvas.Count > 0)
             {
-                drawingCanvas[drawingCanvas.Count - 1].Graphic.Normalize();
+                drawingCanvas[drawingCanvas.Count - 1].Normalize();
 
-                GraphicsText t = drawingCanvas[drawingCanvas.Count - 1].Graphic as GraphicsText;
+                GraphicsText t = drawingCanvas[drawingCanvas.Count - 1] as GraphicsText;
 
                 if (t != null)
                 {
                     // Create textbox for editing of graphics object which is just created
-                    CreateTextBox(drawingCanvas[drawingCanvas.Count - 1], drawingCanvas, true);
+                    CreateTextBox(drawingCanvas[drawingCanvas.Count - 1] as GraphicsText, drawingCanvas, true);
                 }
             }
 
@@ -86,7 +86,7 @@ namespace DrawToolsLib
                     if (drawingCanvas.Count > 0)
                     {
                         Point point = e.GetPosition(drawingCanvas);
-                        var gr = drawingCanvas[drawingCanvas.Count - 1].Graphic as GraphicsText;
+                        var gr = drawingCanvas[drawingCanvas.Count - 1] as GraphicsText;
                         if (gr != null)
                         {
                             gr.Left = point.X;
@@ -101,12 +101,8 @@ namespace DrawToolsLib
         /// <summary>
         /// Create textbox for in-place editing
         /// </summary>
-        public void CreateTextBox(GraphicsVisual graphics, DrawingCanvas drawingCanvas, bool newGraphic = false)
+        public void CreateTextBox(GraphicsText graphicsText, DrawingCanvas drawingCanvas, bool newGraphic = false)
         {
-            var graphicsText = graphics.Graphic as GraphicsText;
-            if (graphicsText == null)
-                return;
-
             graphicsText.IsSelected = false;  // selection marks don't look good with textbox
             graphicsText.Editing = true;
 
@@ -114,7 +110,7 @@ namespace DrawToolsLib
             oldText = graphicsText.Body;
 
             // Keep reference to edited object
-            editedGraphicsText = graphics;
+            editedGraphicsText = graphicsText;
 
             _textBox = new TextBox();
             _textBox.RenderTransform = new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2, (graphicsText.Bottom - graphicsText.Top) / 2);

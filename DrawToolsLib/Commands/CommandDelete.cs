@@ -19,9 +19,9 @@ namespace DrawToolsLib
 
             int currentIndex = 0;
 
-            foreach (GraphicsVisual g in drawingCanvas.Selection)
+            foreach (GraphicsBase g in drawingCanvas.Selection)
             {
-                cloneList.Add(g.Graphic);
+                cloneList.Add(g);
                 indexes.Add(currentIndex);
 
                 currentIndex++;
@@ -41,13 +41,13 @@ namespace DrawToolsLib
 
                 if (indexToInsert >= 0 && indexToInsert <= drawingCanvas.GraphicsList.Count)   // "<=" is correct !
                 {
-                    drawingCanvas.GraphicsList.Insert(indexToInsert, o.CreateVisual());
+                    drawingCanvas.GraphicsList.Insert(indexToInsert, o);
                 }
                 else
                 {
                     // Bug: we should not be here.
                     // Add to the end anyway.
-                    drawingCanvas.GraphicsList.Add(o.CreateVisual());
+                    drawingCanvas.GraphicsList.Add(o);
 
                     System.Diagnostics.Trace.WriteLine("CommandDelete.Undo - incorrect index");
                 }
@@ -66,7 +66,7 @@ namespace DrawToolsLib
             for (int i = n - 1; i >= 0; i--)
             {
                 bool toDelete = false;
-                GraphicsVisual currentObject = (GraphicsVisual)drawingCanvas.GraphicsList[i];
+                GraphicsBase currentObject = drawingCanvas.GraphicsList[i];
 
                 foreach (GraphicsBase o in cloneList)
                 {

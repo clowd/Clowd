@@ -25,7 +25,7 @@ namespace DrawToolsLib
                 {
                     if ( drawingCanvas.Count > 0 )
                     {
-                        drawingCanvas[drawingCanvas.Count - 1].Graphic.MoveHandleTo(
+                        drawingCanvas[drawingCanvas.Count - 1].MoveHandleTo(
                             e.GetPosition(drawingCanvas), 5);
                     }
                 }

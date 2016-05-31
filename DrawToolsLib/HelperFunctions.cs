@@ -10,7 +10,7 @@ using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
-    
+
     internal static class HelperFunctions
     {
         public static Cursor DefaultCursor => Cursors.Arrow;
@@ -20,11 +20,11 @@ namespace DrawToolsLib
         {
             CommandChangeState command = new CommandChangeState(canvas);
             bool wasChange = false;
-            foreach (GraphicsVisual g in canvas.Selection)
+            foreach (GraphicsBase g in canvas.Selection)
             {
                 if (g.IsSelected || selectedOnly)
                 {
-                    T gt = g.Graphic as T;
+                    T gt = g as T;
                     if (gt != null)
                     {
                         wasChange = action(gt);
