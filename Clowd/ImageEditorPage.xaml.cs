@@ -48,10 +48,13 @@ namespace Clowd
             this.Loaded += ImageEditorPage_Loaded;
             this.SizeChanged += ImageEditorPage_SizeChanged;
             _image = initImage;
-
-            _imageSize = new Size(ScreenTools.ScreenToWpf(initImage.PixelWidth), ScreenTools.ScreenToWpf(initImage.Height));
-            var graphic = new GraphicsImage(drawingCanvas, new Rect(new Point(0, 0), _imageSize), _image);
-            drawingCanvas.AddGraphic(graphic);
+            if (_image != null)
+            {
+                _imageSize = new Size(ScreenTools.ScreenToWpf(initImage.PixelWidth),
+                    ScreenTools.ScreenToWpf(initImage.Height));
+                var graphic = new GraphicsImage(drawingCanvas, new Rect(new Point(0, 0), _imageSize), _image);
+                drawingCanvas.AddGraphic(graphic);
+            }
         }
 
         private void MoveCommandsToChrome()
