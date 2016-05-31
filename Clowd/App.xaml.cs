@@ -115,6 +115,7 @@ namespace Clowd
                     {
                         foreach (var p in processes)
                             p.Kill();
+                        Thread.Sleep(1000);
                         _mutex = Mutex.OpenExisting(ClowdMutex);
                     }
                     else
