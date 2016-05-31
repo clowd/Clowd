@@ -780,7 +780,13 @@ namespace DrawToolsLib
                     b.IsSelected = false;
                 }
 
-                b.Draw(drawingContext);
+                DrawingVisual vis = new DrawingVisual();
+                vis.Effect = b.Effect;
+                using (var cx = vis.RenderOpen())
+                {
+                    b.Draw(cx);
+                }
+                drawingContext.DrawRectangle(new VisualBrush(vis), null, vis.ContentBounds);
 
                 if (!withSelection)
                 {
@@ -1629,12 +1635,6 @@ namespace DrawToolsLib
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 
-            menuItem = new MenuItem();
-            menuItem.Header = "Reset rotation";
-            menuItem.Tag = ContextMenuCommand.ResetRotation;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
-
             contextMenu.Items.Add(new Separator());
 
             menuItem = new MenuItem();
@@ -1652,6 +1652,12 @@ namespace DrawToolsLib
             menuItem = new MenuItem();
             menuItem.Header = "Set properties";
             menuItem.Tag = ContextMenuCommand.SetProperties;
+            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
+            contextMenu.Items.Add(menuItem);
+
+            menuItem = new MenuItem();
+            menuItem.Header = "Reset rotation";
+            menuItem.Tag = ContextMenuCommand.ResetRotation;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
         }
