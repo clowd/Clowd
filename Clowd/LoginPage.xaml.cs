@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using CS.Util.Extensions;
 using MahApps.Metro.Controls;
 
 namespace Clowd
@@ -44,7 +46,7 @@ namespace Clowd
                 else if (prevResult == AuthResult.NetworkError)
                     ShowError("Network error - try again later.");
             }
-            RefocusKeyboard();
+            ValidateInput(false);
         }
 
         private void useAnon_Click(object sender, MouseButtonEventArgs e)
@@ -76,16 +78,8 @@ namespace Clowd
 
         private async void LoginExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (String.IsNullOrWhiteSpace(textUsername.Text))
-            {
-                ShowError("Username can not be empty");
+            if (!ValidateInput(true))
                 return;
-            }
-            if (textPassword.SecurePassword.Length <= 0)
-            {
-                ShowError("Password can not be empty");
-                return;
-            }
 
             var window = Window.GetWindow(this);
             TemplatedWindow.SetContentToSpinner(window);
@@ -119,15 +113,55 @@ namespace Clowd
             this.invalidIndicator.Visibility = Visibility.Hidden;
             this.invalidText.Text = message;
             this.invalidIndicator.Visibility = Visibility.Visible;
-            RefocusKeyboard();
         }
 
-        private void RefocusKeyboard()
+        private bool ValidateInput(bool showError)
         {
-            if (String.IsNullOrEmpty(textUsername.Text))
+            var foo = new EmailAddressAttribute();
+            if (String.IsNullOrWhiteSpace(textUsername.Text))
+            {
+                if (showError)
+                    ShowError("Username can not be empty.");
                 Keyboard.Focus(textUsername);
-            else
+                return false;
+            }
+            if (stackInput.Expanded && String.IsNullOrWhiteSpace(textEmail.Text))
+            {
+                if (showError)
+                    ShowError("Email can not be empty.");
+                Keyboard.Focus(textEmail);
+                return false;
+            }
+            if (stackInput.Expanded && !foo.IsValid(textEmail.Text))
+            {
+                if (showError)
+                    ShowError("Email must be in a valid format.");
+                Keyboard.Focus(textEmail);
+                return false;
+            }
+            if (textPassword.SecurePassword.Length <= 0)
+            {
+                if (showError)
+                    ShowError("Password can not be empty.");
                 Keyboard.Focus(textPassword);
+                return false;
+            }
+            if (stackInput.Expanded && textPasswordConfirm.SecurePassword.Length <= 0)
+            {
+                if (showError)
+                    ShowError("Confirm Password can not be empty.");
+                Keyboard.Focus(textPasswordConfirm);
+                return false;
+            }
+            if (stackInput.Expanded && !textPassword.SecurePassword.UseSecurely(pass =>
+                textPasswordConfirm.SecurePassword.UseSecurely(confirm => confirm == pass)))
+            {
+                if (showError)
+                    ShowError("The two password entries must be the same.");
+                Keyboard.Focus(textPasswordConfirm);
+                return false;
+            }
+            return true;
         }
     }
 }

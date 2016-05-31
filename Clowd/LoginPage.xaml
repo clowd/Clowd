@@ -57,7 +57,7 @@
                 <TextBlock TextDecorations="Underline">Use Clowd anonymously</TextBlock>
             </Label>
         </cswpf:ExpandingStackPanel>
-        <Border Name="invalidIndicator" Background="#ef5416" Margin="0,10,0,0" Padding="5" 
+        <Border Name="invalidIndicator" Background="IndianRed" Margin="0,10,0,0" Padding="5" 
                 HorizontalAlignment="Stretch" VerticalAlignment="Bottom">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                 <Viewbox Width="20">
