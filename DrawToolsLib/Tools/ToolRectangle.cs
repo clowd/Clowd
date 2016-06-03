@@ -28,7 +28,7 @@ namespace DrawToolsLib
             Point point = e.GetPosition(drawingCanvas);
 
             var rect = HelperFunctions.CreateRectSafe(point.X, point.Y, point.X + 1, point.Y + 1);
-            AddNewObject(drawingCanvas, new GraphicsRectangle(drawingCanvas, rect));
+            AddNewObject(drawingCanvas, new GraphicRectangle(drawingCanvas, rect));
         }
     }
 }

@@ -10,7 +10,7 @@ using System.Xml.Serialization;
 namespace DrawToolsLib.Graphics
 {
     [Serializable]
-    public class GraphicsImage : GraphicsRectangle
+    public class GraphicImage : GraphicRectangle
     {
         public int ScaleX
         {
@@ -72,16 +72,16 @@ namespace DrawToolsLib.Graphics
         private int _scaleX = 1;
         private int _scaleY = 1;
 
-        protected GraphicsImage()
+        protected GraphicImage()
         {
             Effect = null;
         }
-        public GraphicsImage(DrawingCanvas canvas, Rect rect, BitmapSource bitmap, double angle = 0)
+        public GraphicImage(DrawingCanvas canvas, Rect rect, BitmapSource bitmap, double angle = 0)
            : this(canvas.ObjectColor, canvas.LineWidth, rect, bitmap, angle)
         {
         }
 
-        public GraphicsImage(Color objectColor, double lineWidth, Rect rect, BitmapSource bitmap, double angle = 0)
+        public GraphicImage(Color objectColor, double lineWidth, Rect rect, BitmapSource bitmap, double angle = 0)
             : base(objectColor, lineWidth, rect)
         {
             Angle = angle;
@@ -132,9 +132,9 @@ namespace DrawToolsLib.Graphics
             base.Normalize();
         }
 
-        public override GraphicsBase Clone()
+        public override GraphicBase Clone()
         {
-            return new GraphicsImage(ObjectColor, LineWidth, UnrotatedBounds, _bitmap, Angle) { ObjectId = ObjectId };
+            return new GraphicImage(ObjectColor, LineWidth, UnrotatedBounds, _bitmap, Angle) { ObjectId = ObjectId };
         }
     }
 }

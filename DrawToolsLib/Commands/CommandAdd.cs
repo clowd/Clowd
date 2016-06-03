@@ -5,9 +5,9 @@ namespace DrawToolsLib
 {
     internal class CommandAdd : CommandBase
     {
-        private readonly GraphicsBase[] _graphics;
+        private readonly GraphicBase[] _graphics;
 
-        public CommandAdd(params GraphicsBase[] newObjects)
+        public CommandAdd(params GraphicBase[] newObjects)
         {
             _graphics = newObjects.Select(n => n.Clone()).ToArray();
         }
@@ -16,7 +16,7 @@ namespace DrawToolsLib
         {
             foreach (var g in _graphics)
             {
-                GraphicsBase objectToDelete = drawingCanvas.GraphicsList
+                GraphicBase objectToDelete = drawingCanvas.GraphicsList
                     .FirstOrDefault(b => b.ObjectId == g.ObjectId);
 
                 if (objectToDelete != null)

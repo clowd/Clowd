@@ -11,7 +11,7 @@ using DrawToolsLib.Annotations;
 namespace DrawToolsLib.Graphics
 {
     [Serializable]
-    public abstract class GraphicsBase : INotifyPropertyChanged, ICloneable
+    public abstract class GraphicBase : INotifyPropertyChanged, ICloneable
     {
         [XmlIgnore]
         public Effect Effect
@@ -82,17 +82,17 @@ namespace DrawToolsLib.Graphics
         [XmlIgnore]
         protected static SolidColorBrush HandleBrush2 { get; set; } = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
 
-        protected GraphicsBase()
+        protected GraphicBase()
         {
             ObjectId = this.GetHashCode();
             _effect = new DropShadowEffect() { Opacity = 0.5, ShadowDepth = 2, RenderingBias = RenderingBias.Performance };
             _visual = new DrawingVisual();
         }
-        protected GraphicsBase(DrawingCanvas canvas)
+        protected GraphicBase(DrawingCanvas canvas)
             : this(canvas.ObjectColor, canvas.LineWidth)
         {
         }
-        protected GraphicsBase(Color objectColor, double lineWidth)
+        protected GraphicBase(Color objectColor, double lineWidth)
             : this()
         {
             ObjectColor = objectColor;
@@ -182,7 +182,7 @@ namespace DrawToolsLib.Graphics
             Invalidated = null;
         }
 
-        public abstract GraphicsBase Clone();
+        public abstract GraphicBase Clone();
         object ICloneable.Clone()
         {
             return Clone();

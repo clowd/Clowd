@@ -11,7 +11,7 @@ using DrawToolsLib.Properties;
 namespace DrawToolsLib.Graphics
 {
     [Serializable]
-    public class GraphicsRectangle : GraphicsBase
+    public class GraphicRectangle : GraphicBase
     {
         public double Left
         {
@@ -89,22 +89,22 @@ namespace DrawToolsLib.Graphics
         // This is always the center of the rectangle except while the user is dragging a resizing handle.
         private Point _centerOfRotation;
 
-        protected GraphicsRectangle()
+        protected GraphicRectangle()
         {
         }
-        public GraphicsRectangle(DrawingCanvas canvas, Rect rect)
+        public GraphicRectangle(DrawingCanvas canvas, Rect rect)
             : this(canvas.ObjectColor, canvas.LineWidth, rect, false)
         {
         }
-        public GraphicsRectangle(DrawingCanvas canvas, Rect rect, bool filled)
+        public GraphicRectangle(DrawingCanvas canvas, Rect rect, bool filled)
             : this(canvas.ObjectColor, canvas.LineWidth, rect, filled)
         {
         }
-        public GraphicsRectangle(Color objectColor, double lineWidth, Rect rect)
+        public GraphicRectangle(Color objectColor, double lineWidth, Rect rect)
             : this(objectColor, lineWidth, rect, false)
         {
         }
-        public GraphicsRectangle(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0)
+        public GraphicRectangle(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0)
             : base(objectColor, lineWidth)
         {
             _left = rect.Left;
@@ -379,9 +379,9 @@ namespace DrawToolsLib.Graphics
                 LineWidth, LineWidth);
         }
 
-        public override GraphicsBase Clone()
+        public override GraphicBase Clone()
         {
-            return new GraphicsRectangle(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
+            return new GraphicRectangle(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
         }
     }
 }

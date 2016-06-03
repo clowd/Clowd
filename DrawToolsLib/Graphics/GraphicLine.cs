@@ -7,7 +7,7 @@ using System.Windows.Media;
 namespace DrawToolsLib.Graphics
 {
     [Serializable]
-    public class GraphicsLine : GraphicsBase
+    public class GraphicLine : GraphicBase
     {
         public Point LineStart
         {
@@ -34,15 +34,15 @@ namespace DrawToolsLib.Graphics
         private Point _lineStart;
         private Point _lineEnd;
 
-        protected GraphicsLine()
+        protected GraphicLine()
         {
         }
-        public GraphicsLine(DrawingCanvas canvas, Point start, Point end) : base(canvas)
+        public GraphicLine(DrawingCanvas canvas, Point start, Point end) : base(canvas)
         {
             _lineStart = start;
             _lineEnd = end;
         }
-        public GraphicsLine(Color objectColor, double lineWidth, Point start, Point end)
+        public GraphicLine(Color objectColor, double lineWidth, Point start, Point end)
             : base(objectColor, lineWidth)
         {
             _lineStart = start;
@@ -116,9 +116,9 @@ namespace DrawToolsLib.Graphics
             base.Draw(drawingContext);
         }
 
-        public override GraphicsBase Clone()
+        public override GraphicBase Clone()
         {
-            return new GraphicsLine(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
+            return new GraphicLine(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
         }
     }
 }

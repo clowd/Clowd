@@ -40,7 +40,7 @@ namespace DrawToolsLib
         /// Function is called when user left-clicks drawing canvas,
         /// and one of ToolObject-derived tools is active.
         /// </summary>
-        protected static void AddNewObject(DrawingCanvas drawingCanvas, GraphicsBase o)
+        protected static void AddNewObject(DrawingCanvas drawingCanvas, GraphicBase o)
         {
             drawingCanvas.UnselectAll();
             o.IsSelected = true;

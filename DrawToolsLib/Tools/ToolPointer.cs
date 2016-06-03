@@ -25,7 +25,7 @@ namespace DrawToolsLib
         private SelectionMode _selectMode = SelectionMode.None;
 
         // Object which is currently resized:
-        private GraphicsBase _handleGrabbedObject;
+        private GraphicBase _handleGrabbedObject;
         private int _handleGrabbed;
 
         // Keep state about last and current point (used to edit objects via dragging, e.g. move and resize)
@@ -39,7 +39,7 @@ namespace DrawToolsLib
         {
         }
 
-        private GraphicsBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
+        private GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
         {
             var controls = drawingCanvas.GraphicsList.Select(gv => new { gv, gv.IsSelected, HitTest = gv.MakeHitTest(point) }).Reverse().ToArray();
 
@@ -114,7 +114,7 @@ namespace DrawToolsLib
             {
                 // Click on background — start a selection rectangle for group selection.
                 var rect = HelperFunctions.CreateRectSafe(_lastPoint.X, _lastPoint.Y, _lastPoint.X + 1, _lastPoint.Y + 1);
-                var gsr = new GraphicsSelectionRectangle(drawingCanvas, rect);
+                var gsr = new GraphicSelectionRectangle(drawingCanvas, rect);
                 drawingCanvas.GraphicsList.Add(gsr);
 
                 _selectMode = SelectionMode.GroupSelection;
@@ -208,7 +208,7 @@ namespace DrawToolsLib
 
             if (_selectMode == SelectionMode.GroupSelection)
             {
-                GraphicsSelectionRectangle r = (GraphicsSelectionRectangle)(drawingCanvas[drawingCanvas.Count - 1]);
+                GraphicSelectionRectangle r = (GraphicSelectionRectangle)(drawingCanvas[drawingCanvas.Count - 1]);
                 r.Normalize();
                 Rect rect = r.Bounds;
 

@@ -10,14 +10,14 @@ namespace DrawToolsLib.Graphics
     /// Instance of this class should be created only for group selection
     /// and removed immediately after group selection finished.
     /// </summary>
-    internal class GraphicsSelectionRectangle : GraphicsRectangle
+    internal class GraphicSelectionRectangle : GraphicRectangle
     {
-        public GraphicsSelectionRectangle(DrawingCanvas canvas, Rect rect)
+        public GraphicSelectionRectangle(DrawingCanvas canvas, Rect rect)
             : base(canvas, rect, false)
         {
             Effect = null;
         }
-        public GraphicsSelectionRectangle(Color objectColor, double lineWidth, Rect rect)
+        public GraphicSelectionRectangle(Color objectColor, double lineWidth, Rect rect)
             : base(objectColor, lineWidth, rect, false)
         {
             Effect = null;

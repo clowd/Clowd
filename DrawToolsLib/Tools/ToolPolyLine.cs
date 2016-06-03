@@ -12,7 +12,7 @@ namespace DrawToolsLib
 {
     internal class ToolPolyLine : ToolObject
     {
-        private GraphicsPolyLine newPolyLine;
+        private GraphicPolyLine newPolyLine;
 
         public ToolPolyLine()
         {
@@ -24,7 +24,7 @@ namespace DrawToolsLib
         {
             Point p = e.GetPosition(drawingCanvas);
 
-            newPolyLine = new GraphicsPolyLine(drawingCanvas, new Point(p.X + 1, p.Y + 1));
+            newPolyLine = new GraphicPolyLine(drawingCanvas, new Point(p.X + 1, p.Y + 1));
 
             AddNewObject(drawingCanvas, newPolyLine);
         }
@@ -58,7 +58,7 @@ namespace DrawToolsLib
             bitmap.Render(visual);
 
             drawingCanvas.GraphicsList.RemoveAt(drawingCanvas.GraphicsList.Count - 1);
-            drawingCanvas.AddGraphic(new GraphicsImage(drawingCanvas, newPolyLine.Bounds, bitmap) { IsSelected = true });
+            drawingCanvas.AddGraphic(new GraphicImage(drawingCanvas, newPolyLine.Bounds, bitmap) { IsSelected = true });
 
             newPolyLine = null;
             base.OnMouseUp(drawingCanvas, e);
