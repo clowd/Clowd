@@ -27,7 +27,7 @@ using Path = System.Windows.Shapes.Path;
 
 namespace DrawToolsLib.Graphics
 {
-    public class GraphicsPolyLine : GraphicsBase
+    public class GraphicPolyLine : GraphicBase
     {
         public Point[] Points
         {
@@ -43,21 +43,21 @@ namespace DrawToolsLib.Graphics
         private bool _drawing;
         private Geometry _geoCache;
 
-        protected GraphicsPolyLine()
+        protected GraphicPolyLine()
         {
         }
 
-        public GraphicsPolyLine(DrawingCanvas canvas, Point start) : this(canvas.ObjectColor, canvas.LineWidth, start)
+        public GraphicPolyLine(DrawingCanvas canvas, Point start) : this(canvas.ObjectColor, canvas.LineWidth, start)
         {
         }
 
-        public GraphicsPolyLine(Color objectColor, double lineWidth, Point start) : base(objectColor, lineWidth)
+        public GraphicPolyLine(Color objectColor, double lineWidth, Point start) : base(objectColor, lineWidth)
         {
             _drawing = true;
             _points = new List<Point>();
             _points.Add(start);
         }
-        public GraphicsPolyLine(Color objectColor, double lineWidth, List<Point> points) : base(objectColor, lineWidth)
+        public GraphicPolyLine(Color objectColor, double lineWidth, List<Point> points) : base(objectColor, lineWidth)
         {
             _drawing = false;
             _points = points;
@@ -179,9 +179,9 @@ namespace DrawToolsLib.Graphics
 
             return -1;
         }
-        public override GraphicsBase Clone()
+        public override GraphicBase Clone()
         {
-            return new GraphicsPolyLine(ObjectColor, LineWidth, _points) { ObjectId = ObjectId };
+            return new GraphicPolyLine(ObjectColor, LineWidth, _points) { ObjectId = ObjectId };
         }
 
         public void AddPoint(Point point)

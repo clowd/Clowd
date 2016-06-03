@@ -7,27 +7,27 @@ using System.Windows.Media;
 namespace DrawToolsLib.Graphics
 {
     [Serializable]
-    public class GraphicsEllipse : GraphicsRectangle
+    public class GraphicEllipse : GraphicRectangle
     {
-        protected GraphicsEllipse()
+        protected GraphicEllipse()
         {
         }
-        public GraphicsEllipse(DrawingCanvas canvas, Rect rect)
+        public GraphicEllipse(DrawingCanvas canvas, Rect rect)
             : base(canvas, rect)
         {
         }
 
-        public GraphicsEllipse(DrawingCanvas canvas, Rect rect, bool filled)
+        public GraphicEllipse(DrawingCanvas canvas, Rect rect, bool filled)
             : base(canvas, rect, filled)
         {
         }
 
-        public GraphicsEllipse(Color objectColor, double lineWidth, Rect rect)
+        public GraphicEllipse(Color objectColor, double lineWidth, Rect rect)
             : base(objectColor, lineWidth, rect)
         {
         }
 
-        public GraphicsEllipse(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0)
+        public GraphicEllipse(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0)
             : base(objectColor, lineWidth, rect, filled, angle)
         {
         }
@@ -78,9 +78,9 @@ namespace DrawToolsLib.Graphics
             return g.FillContains(point) || g.StrokeContains(new Pen(Brushes.Black, LineWidth), point);
         }
 
-        public override GraphicsBase Clone()
+        public override GraphicBase Clone()
         {
-            return new GraphicsEllipse(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
+            return new GraphicEllipse(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
         }
     }
 }

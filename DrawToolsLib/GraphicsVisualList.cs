@@ -10,9 +10,9 @@ using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
-    public class GraphicsVisualList : IList<GraphicsBase>
+    public class GraphicsVisualList : IList<GraphicBase>
     {
-        private List<GraphicsBase> _graphics;
+        private List<GraphicBase> _graphics;
         private VisualCollection _visuals;
         private ReaderWriterLockSlim _lock;
 
@@ -20,10 +20,10 @@ namespace DrawToolsLib
         {
             _lock = new ReaderWriterLockSlim();
             _visuals = new VisualCollection(parent);
-            _graphics = new List<GraphicsBase>();
+            _graphics = new List<GraphicBase>();
         }
 
-        public IEnumerator<GraphicsBase> GetEnumerator()
+        public IEnumerator<GraphicBase> GetEnumerator()
         {
             return _graphics.GetEnumerator();
         }
@@ -33,7 +33,7 @@ namespace DrawToolsLib
             return _graphics.GetEnumerator();
         }
 
-        public void Add(GraphicsBase graphic)
+        public void Add(GraphicBase graphic)
         {
             using (new WriteLockContext(_lock))
             {
@@ -61,19 +61,19 @@ namespace DrawToolsLib
             }
         }
 
-        public bool Contains(GraphicsBase item)
+        public bool Contains(GraphicBase item)
         {
             using (new ReadLockContext(_lock))
                 return _graphics.Contains(item);
         }
 
-        public void CopyTo(GraphicsBase[] array, int arrayIndex)
+        public void CopyTo(GraphicBase[] array, int arrayIndex)
         {
             using (new ReadLockContext(_lock))
                 _graphics.CopyTo(array, arrayIndex);
         }
 
-        public bool Remove(GraphicsBase item)
+        public bool Remove(GraphicBase item)
         {
             using (new WriteLockContext(_lock))
             {
@@ -100,17 +100,17 @@ namespace DrawToolsLib
         {
             get
             {
-                return ((ICollection<GraphicsBase>)_graphics).IsReadOnly;
+                return ((ICollection<GraphicBase>)_graphics).IsReadOnly;
             }
         }
 
-        public int IndexOf(GraphicsBase item)
+        public int IndexOf(GraphicBase item)
         {
             using (new ReadLockContext(_lock))
                 return _graphics.IndexOf(item);
         }
 
-        public void Insert(int index, GraphicsBase item)
+        public void Insert(int index, GraphicBase item)
         {
             using (new WriteLockContext(_lock))
             {
@@ -132,7 +132,7 @@ namespace DrawToolsLib
             }
         }
 
-        public GraphicsBase this[int index]
+        public GraphicBase this[int index]
         {
             get
             {
@@ -156,7 +156,7 @@ namespace DrawToolsLib
         }
 
 
-        private void DrawGraphic(GraphicsBase g, DrawingVisual v)
+        private void DrawGraphic(GraphicBase g, DrawingVisual v)
         {
             v.Effect = g.Effect;
             using (var c = v.RenderOpen())

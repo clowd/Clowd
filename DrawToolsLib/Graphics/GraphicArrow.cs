@@ -5,17 +5,17 @@ using System.Windows.Media;
 namespace DrawToolsLib.Graphics
 {
     [Serializable]
-    public class GraphicsArrow : GraphicsLine
+    public class GraphicArrow : GraphicLine
     {
-        protected GraphicsArrow()
+        protected GraphicArrow()
         {
         }
-        public GraphicsArrow(DrawingCanvas canvas, Point start, Point end)
+        public GraphicArrow(DrawingCanvas canvas, Point start, Point end)
             : base(canvas, start, end)
         {
         }
 
-        public GraphicsArrow(Color objectColor, double lineWidth, Point start, Point end)
+        public GraphicArrow(Color objectColor, double lineWidth, Point start, Point end)
             : base(objectColor, lineWidth, start, end)
         {
         }
@@ -54,9 +54,9 @@ namespace DrawToolsLib.Graphics
                 DrawTrackers(drawingContext);
         }
 
-        public override GraphicsBase Clone()
+        public override GraphicBase Clone()
         {
-            return new GraphicsArrow(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
+            return new GraphicArrow(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
         }
     }
 }

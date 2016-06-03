@@ -52,7 +52,7 @@ namespace Clowd
             {
                 _imageSize = new Size(ScreenTools.ScreenToWpf(initImage.PixelWidth),
                     ScreenTools.ScreenToWpf(initImage.Height));
-                var graphic = new GraphicsImage(drawingCanvas, new Rect(new Point(0, 0), _imageSize), _image);
+                var graphic = new GraphicImage(drawingCanvas, new Rect(new Point(0, 0), _imageSize), _image);
                 drawingCanvas.AddGraphic(graphic);
             }
         }
@@ -360,7 +360,7 @@ namespace Clowd
                 return;
             var width = ScreenTools.ScreenToWpf(img.PixelWidth);
             var height = ScreenTools.ScreenToWpf(img.PixelHeight);
-            var graphic = new GraphicsImage(drawingCanvas, new Rect(
+            var graphic = new GraphicImage(drawingCanvas, new Rect(
                 drawingCanvas.WorldOffset.X - (width / 2),
                 drawingCanvas.WorldOffset.Y - (height / 2),
                 width, height), img);

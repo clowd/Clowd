@@ -492,9 +492,9 @@ namespace DrawToolsLib
             CommandChangeState command = new CommandChangeState(d);
             bool wasChange = false;
 
-            foreach (GraphicsBase g in d.Selection)
+            foreach (GraphicBase g in d.Selection)
             {
-                if (g is GraphicsText || g is GraphicsSelectionRectangle)
+                if (g is GraphicText || g is GraphicSelectionRectangle)
                     continue;
                 if (g.LineWidth != d.LineWidth)
                 {
@@ -542,7 +542,7 @@ namespace DrawToolsLib
             bool wasChange = false;
             var value = d.ObjectColor;
 
-            foreach (GraphicsBase g in d.Selection)
+            foreach (GraphicBase g in d.Selection)
             {
                 if (g.ObjectColor != value)
                 {
@@ -570,7 +570,7 @@ namespace DrawToolsLib
         private static void HandleColorChanged(DependencyObject property, DependencyPropertyChangedEventArgs e)
         {
             DrawingCanvas d = property as DrawingCanvas;
-            GraphicsBase.HandleBrush = new SolidColorBrush(d.HandleColor);
+            GraphicBase.HandleBrush = new SolidColorBrush(d.HandleColor);
         }
         #endregion
 
@@ -601,15 +601,15 @@ namespace DrawToolsLib
             ApplyFontChange(property as DrawingCanvas, d => d.TextFontFamilyName, t => t.FontName, (t, v) => { t.FontName = v; });
         }
 
-        private static void ApplyFontChange<TPropertyType>(DrawingCanvas d, Func<DrawingCanvas, TPropertyType> getProp, Func<GraphicsText, TPropertyType> getTextProp, Action<GraphicsText, TPropertyType> setTextProp)
+        private static void ApplyFontChange<TPropertyType>(DrawingCanvas d, Func<DrawingCanvas, TPropertyType> getProp, Func<GraphicText, TPropertyType> getTextProp, Action<GraphicText, TPropertyType> setTextProp)
         {
             CommandChangeState command = new CommandChangeState(d);
             bool wasChange = false;
             var value = getProp(d);
 
-            foreach (GraphicsBase g in d.Selection)
+            foreach (GraphicBase g in d.Selection)
             {
-                var t = g as GraphicsText;
+                var t = g as GraphicText;
                 if (t == null)
                     continue;
                 if (!Equals(getTextProp(t), value))
@@ -771,7 +771,7 @@ namespace DrawToolsLib
         {
             bool oldSelection = false;
 
-            foreach (GraphicsBase b in graphicsList)
+            foreach (GraphicBase b in graphicsList)
             {
                 if (!withSelection)
                 {
@@ -799,7 +799,7 @@ namespace DrawToolsLib
         /// <summary>
         /// Add a graphic object to the canvas from its serialized companion class.
         /// </summary>
-        public void AddGraphic(GraphicsBase g)
+        public void AddGraphic(GraphicBase g)
         {
             this.UnselectAll();
             g.IsSelected = true;
@@ -813,8 +813,8 @@ namespace DrawToolsLib
         /// <returns></returns>
         public Rect GetArtworkBounds(bool selectedOnly = false)
         {
-            var artwork = GraphicsList.Cast<GraphicsBase>()
-                .Where(g => !(g is GraphicsSelectionRectangle));
+            var artwork = GraphicsList.Cast<GraphicBase>()
+                .Where(g => !(g is GraphicSelectionRectangle));
             Rect result = new Rect(0, 0, 0, 0);
             bool first = true;
             foreach (var item in artwork)
@@ -851,7 +851,7 @@ namespace DrawToolsLib
         {
             try
             {
-                var helper = new SerializationHelper(graphicsList.OfType<GraphicsBase>().Select(g => g), GetArtworkBounds());
+                var helper = new SerializationHelper(graphicsList.OfType<GraphicBase>().Select(g => g), GetArtworkBounds());
                 XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
 
                 using (Stream stream = new FileStream(fileName,
@@ -935,9 +935,9 @@ namespace DrawToolsLib
         public DataObject GetClipboardObject()
         {
             Clipboard.Clear();
-            GraphicsBase[] graphics = graphicsList.OfType<GraphicsBase>().Where(g => g.IsSelected).ToArray();
+            GraphicBase[] graphics = graphicsList.OfType<GraphicBase>().Where(g => g.IsSelected).ToArray();
             if (!graphics.Any())
-                graphics = graphicsList.OfType<GraphicsBase>().ToArray();
+                graphics = graphicsList.OfType<GraphicBase>().ToArray();
             var helper = new SerializationHelper(graphics.Select(g => g), GetArtworkBounds(true));
 
             XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
@@ -1061,7 +1061,7 @@ namespace DrawToolsLib
         /// </summary>
         public void MoveToFront()
         {
-            List<GraphicsBase> list = new List<GraphicsBase>();
+            List<GraphicBase> list = new List<GraphicBase>();
 
             CommandChangeOrder command = new CommandChangeOrder(this);
 
@@ -1075,7 +1075,7 @@ namespace DrawToolsLib
             }
 
             // Add all items from temporary list to the end of GraphicsList
-            foreach (GraphicsBase g in list)
+            foreach (GraphicBase g in list)
             {
                 this.GraphicsList.Add(g);
             }
@@ -1094,7 +1094,7 @@ namespace DrawToolsLib
         /// </summary>
         public void MoveToBack()
         {
-            List<GraphicsBase> list = new List<GraphicsBase>();
+            List<GraphicBase> list = new List<GraphicBase>();
 
             CommandChangeOrder command = new CommandChangeOrder(this);
 
@@ -1108,7 +1108,7 @@ namespace DrawToolsLib
             }
 
             // Add all items from temporary list to the beginning of GraphicsList
-            foreach (GraphicsBase g in list)
+            foreach (GraphicBase g in list)
             {
                 this.GraphicsList.Insert(0, g);
             }
@@ -1130,7 +1130,7 @@ namespace DrawToolsLib
             var changed = false;
             for (int i = this.Count - 1; i >= 0; i--)
             {
-                var rect = this[i] as GraphicsRectangle;
+                var rect = this[i] as GraphicRectangle;
                 if (rect != null && this[i].IsSelected)
                 {
                     if (rect.Angle != 0)
@@ -1158,7 +1158,7 @@ namespace DrawToolsLib
             CommandChangeState command = new CommandChangeState(this);
             bool changed = false;
 
-            foreach (var v in GraphicsList.Cast<GraphicsBase>())
+            foreach (var v in GraphicsList.Cast<GraphicBase>())
             {
                 if (v.LineWidth != LineWidth)
                 {
@@ -1170,7 +1170,7 @@ namespace DrawToolsLib
                     changed = true;
                     v.ObjectColor = ObjectColor;
                 }
-                var t = v as GraphicsText;
+                var t = v as GraphicText;
                 if (t != null)
                 {
                     if (t.FontName != TextFontFamilyName)
@@ -1239,13 +1239,13 @@ namespace DrawToolsLib
         /// <summary>
         /// Get graphic object by index
         /// </summary>
-        internal GraphicsBase this[int index]
+        internal GraphicBase this[int index]
         {
             get
             {
                 if (index >= 0 && index < Count)
                 {
-                    return (GraphicsBase)graphicsList[index];
+                    return (GraphicBase)graphicsList[index];
                 }
 
                 return null;
@@ -1272,7 +1272,7 @@ namespace DrawToolsLib
             {
                 int n = 0;
 
-                foreach (GraphicsBase g in this.GraphicsList)
+                foreach (GraphicBase g in this.GraphicsList)
                 {
                     if (g.IsSelected)
                     {
@@ -1293,11 +1293,11 @@ namespace DrawToolsLib
         /// Returns INumerable which may be used for enumeration
         /// of selected objects.
         /// </summary>
-        internal IEnumerable<GraphicsBase> Selection
+        internal IEnumerable<GraphicBase> Selection
         {
             get
             {
-                foreach (GraphicsBase o in graphicsList)
+                foreach (GraphicBase o in graphicsList)
                 {
                     if (o.IsSelected)
                     {
@@ -1671,13 +1671,13 @@ namespace DrawToolsLib
 
             Point point = e.GetPosition(this);
 
-            GraphicsBase o = null;
+            GraphicBase o = null;
 
             for (int i = graphicsList.Count - 1; i >= 0; i--)
             {
-                if (((GraphicsBase)graphicsList[i]).MakeHitTest(point) == 0)
+                if (((GraphicBase)graphicsList[i]).MakeHitTest(point) == 0)
                 {
-                    o = (GraphicsBase)graphicsList[i];
+                    o = (GraphicBase)graphicsList[i];
                     break;
                 }
             }
@@ -1758,7 +1758,7 @@ namespace DrawToolsLib
             {
                 if (graphicsList.Count > 0)
                 {
-                    if (graphicsList[graphicsList.Count - 1] is GraphicsSelectionRectangle)
+                    if (graphicsList[graphicsList.Count - 1] is GraphicSelectionRectangle)
                     {
                         // Delete selection rectangle if it exists
                         graphicsList.RemoveAt(graphicsList.Count - 1);
@@ -1796,13 +1796,13 @@ namespace DrawToolsLib
         /// If ToolText.OldText is empty, this is new object.
         /// If not, this is existing object.
         /// </summary>
-        internal void HideTextbox(GraphicsBase graphic)
+        internal void HideTextbox(GraphicBase graphic)
         {
             if (toolText.TextBox == null)
             {
                 return;
             }
-            var graphicsText = graphic as GraphicsText;
+            var graphicsText = graphic as GraphicText;
             if (graphicsText == null)
                 return;
 
@@ -1869,7 +1869,7 @@ namespace DrawToolsLib
             // Enumerate all text objects
             for (int i = graphicsList.Count - 1; i >= 0; i--)
             {
-                GraphicsText t = graphicsList[i] as GraphicsText;
+                GraphicText t = graphicsList[i] as GraphicText;
                 if (t != null && t.Contains(point))
                 {
                     toolText.CreateTextBox(t, this);

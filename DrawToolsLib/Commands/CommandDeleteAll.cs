@@ -5,7 +5,7 @@ namespace DrawToolsLib
 {
     internal class CommandDeleteAll : CommandBase
     {
-        private readonly GraphicsBase[] _cloneList;
+        private readonly GraphicBase[] _cloneList;
 
         // Create this command BEFORE applying Delete All function.
         public CommandDeleteAll(DrawingCanvas drawingCanvas)
@@ -16,7 +16,7 @@ namespace DrawToolsLib
 
         public override void Undo(DrawingCanvas drawingCanvas)
         {
-            foreach (GraphicsBase o in _cloneList)
+            foreach (GraphicBase o in _cloneList)
             {
                 drawingCanvas.GraphicsList.Add(o);
             }

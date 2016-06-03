@@ -18,7 +18,7 @@ namespace DrawToolsLib
         TextBox _textBox;
         string oldText;
 
-        GraphicsText editedGraphicsText;
+        GraphicText editedGraphicsText;
         DrawingCanvas drawingCanvas;
 
 
@@ -45,7 +45,7 @@ namespace DrawToolsLib
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
             Point point = e.GetPosition(drawingCanvas);
-            AddNewObject(drawingCanvas, new GraphicsText(drawingCanvas, point));
+            AddNewObject(drawingCanvas, new GraphicText(drawingCanvas, point));
         }
 
         /// <summary>
@@ -62,12 +62,12 @@ namespace DrawToolsLib
             {
                 drawingCanvas[drawingCanvas.Count - 1].Normalize();
 
-                GraphicsText t = drawingCanvas[drawingCanvas.Count - 1] as GraphicsText;
+                GraphicText t = drawingCanvas[drawingCanvas.Count - 1] as GraphicText;
 
                 if (t != null)
                 {
                     // Create textbox for editing of graphics object which is just created
-                    CreateTextBox(drawingCanvas[drawingCanvas.Count - 1] as GraphicsText, drawingCanvas, true);
+                    CreateTextBox(drawingCanvas[drawingCanvas.Count - 1] as GraphicText, drawingCanvas, true);
                 }
             }
 
@@ -86,7 +86,7 @@ namespace DrawToolsLib
                     if (drawingCanvas.Count > 0)
                     {
                         Point point = e.GetPosition(drawingCanvas);
-                        var gr = drawingCanvas[drawingCanvas.Count - 1] as GraphicsText;
+                        var gr = drawingCanvas[drawingCanvas.Count - 1] as GraphicText;
                         if (gr != null)
                         {
                             gr.Left = point.X;
@@ -101,7 +101,7 @@ namespace DrawToolsLib
         /// <summary>
         /// Create textbox for in-place editing
         /// </summary>
-        public void CreateTextBox(GraphicsText graphicsText, DrawingCanvas drawingCanvas, bool newGraphic = false)
+        public void CreateTextBox(GraphicText graphicsText, DrawingCanvas drawingCanvas, bool newGraphic = false)
         {
             graphicsText.IsSelected = false;  // selection marks don't look good with textbox
             graphicsText.Editing = true;
@@ -160,7 +160,7 @@ namespace DrawToolsLib
 
         private void textBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            var grap = (sender as TextBox)?.Tag as GraphicsText;
+            var grap = (sender as TextBox)?.Tag as GraphicText;
             if (grap == null)
                 return;
             grap.Body = ((TextBox)sender).Text;
