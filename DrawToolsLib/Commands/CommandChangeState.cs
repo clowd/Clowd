@@ -17,8 +17,8 @@ namespace DrawToolsLib
     /// </summary>
     internal class CommandChangeState : CommandBase
     {
-        GraphicsBase[] _listBefore;
-        GraphicsBase[] _listAfter;
+        GraphicBase[] _listBefore;
+        GraphicBase[] _listAfter;
 
         // Create this command BEFORE operation.
         public CommandChangeState(DrawingCanvas drawingCanvas)
@@ -46,13 +46,13 @@ namespace DrawToolsLib
             ReplaceObjects(drawingCanvas.GraphicsList, _listAfter);
         }
 
-        private static void ReplaceObjects(GraphicsVisualList graphicsList, GraphicsBase[] list)
+        private static void ReplaceObjects(GraphicsVisualList graphicsList, GraphicBase[] list)
         {
             for (int i = 0; i < graphicsList.Count; i++)
             {
-                GraphicsBase replacement = null;
+                GraphicBase replacement = null;
 
-                foreach (GraphicsBase o in list)
+                foreach (GraphicBase o in list)
                 {
                     if (o.ObjectId == graphicsList[i].ObjectId)
                     {

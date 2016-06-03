@@ -20,7 +20,7 @@ namespace DrawToolsLib
         {
             Point p = e.GetPosition(drawingCanvas);
 
-            AddNewObject(drawingCanvas, new GraphicsArrow(drawingCanvas, p, new Point(p.X + 1, p.Y + 1)));
+            AddNewObject(drawingCanvas, new GraphicArrow(drawingCanvas, p, new Point(p.X + 1, p.Y + 1)));
 
         }
 

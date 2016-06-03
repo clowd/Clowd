@@ -21,7 +21,7 @@ namespace DrawToolsLib
         {
             Point p = e.GetPosition(drawingCanvas);
 
-            AddNewObject(drawingCanvas, new GraphicsLine(drawingCanvas, p, new Point(p.X + 1, p.Y + 1)));
+            AddNewObject(drawingCanvas, new GraphicLine(drawingCanvas, p, new Point(p.X + 1, p.Y + 1)));
         }
 
         public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)

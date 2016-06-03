@@ -21,14 +21,14 @@ namespace DrawToolsLib
     [Serializable, XmlRoot("Graphics")]
     public class SerializationHelper
     {
-        [XmlArrayItem(typeof(GraphicsEllipse)),
-         XmlArrayItem(typeof(GraphicsLine)),
-         XmlArrayItem(typeof(GraphicsArrow)),
-         XmlArrayItem(typeof(GraphicsImage)),
-         XmlArrayItem(typeof(GraphicsPolyLine)),
-         XmlArrayItem(typeof(GraphicsRectangle)),
-         XmlArrayItem(typeof(GraphicsText))]
-        public GraphicsBase[] Graphics { get; set; }
+        [XmlArrayItem(typeof(GraphicEllipse)),
+         XmlArrayItem(typeof(GraphicLine)),
+         XmlArrayItem(typeof(GraphicArrow)),
+         XmlArrayItem(typeof(GraphicImage)),
+         XmlArrayItem(typeof(GraphicPolyLine)),
+         XmlArrayItem(typeof(GraphicRectangle)),
+         XmlArrayItem(typeof(GraphicText))]
+        public GraphicBase[] Graphics { get; set; }
 
         [XmlIgnore]
         public Rect ContentBounds
@@ -57,7 +57,7 @@ namespace DrawToolsLib
         {
         }
 
-        public SerializationHelper(IEnumerable<GraphicsBase> collection, Rect contentBounds)
+        public SerializationHelper(IEnumerable<GraphicBase> collection, Rect contentBounds)
         {
             if (collection == null)
                 throw new ArgumentNullException(nameof(collection));

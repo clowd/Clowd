@@ -43,15 +43,15 @@ namespace DrawToolsLib
 
         private static void SetCanvasOrder(GraphicsVisualList graphicsList, int[] indexList)
         {
-            List<GraphicsBase> tmpList = new List<GraphicsBase>();
+            List<GraphicBase> tmpList = new List<GraphicBase>();
 
             // Read indexList, find every element in graphicsList by ID
             // and move it to tmpList.
 
             foreach (int id in indexList)
             {
-                GraphicsBase objectToMove = null;
-                foreach (GraphicsBase g in graphicsList)
+                GraphicBase objectToMove = null;
+                foreach (GraphicBase g in graphicsList)
                 {
                     if (g.ObjectId == id)
                     {
@@ -68,7 +68,7 @@ namespace DrawToolsLib
 
             // Now tmpList contains objects in correct order.
             // Read tmpList and add all its elements back to graphicsList.
-            foreach (GraphicsBase g in tmpList)
+            foreach (GraphicBase g in tmpList)
             {
                 graphicsList.Add(g);
             }

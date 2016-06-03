@@ -82,10 +82,10 @@
     <Compile Include="DrawingCanvasException.cs" />
     <Compile Include="FontConversions.cs" />
     <Compile Include="GraphicsVisualList.cs" />
-    <Compile Include="Graphics\GraphicsBase.cs" />
-    <Compile Include="Graphics\GraphicsImage.cs" />
-    <Compile Include="Graphics\GraphicsArrow.cs" />
-    <Compile Include="Graphics\GraphicsText.cs" />
+    <Compile Include="Graphics\GraphicBase.cs" />
+    <Compile Include="Graphics\GraphicImage.cs" />
+    <Compile Include="Graphics\GraphicArrow.cs" />
+    <Compile Include="Graphics\GraphicText.cs" />
     <Compile Include="OriginIndicator.cs" />
     <Compile Include="Properties\Annotations.cs" />
     <Compile Include="Properties\Settings.Designer.cs">
@@ -102,11 +102,11 @@
     <Compile Include="Tools\ToolPolyLine.cs" />
     <Compile Include="Tools\ToolRectangle.cs" />
     <Compile Include="HelperFunctions.cs" />
-    <Compile Include="Graphics\GraphicsEllipse.cs" />
-    <Compile Include="Graphics\GraphicsLine.cs" />
-    <Compile Include="Graphics\GraphicsPolyLine.cs" />
-    <Compile Include="Graphics\GraphicsRectangle.cs" />
-    <Compile Include="Graphics\GraphicsSelectionRectangle.cs" />
+    <Compile Include="Graphics\GraphicEllipse.cs" />
+    <Compile Include="Graphics\GraphicLine.cs" />
+    <Compile Include="Graphics\GraphicPolyLine.cs" />
+    <Compile Include="Graphics\GraphicRectangle.cs" />
+    <Compile Include="Graphics\GraphicSelectionRectangle.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>

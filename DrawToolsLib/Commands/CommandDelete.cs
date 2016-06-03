@@ -6,20 +6,20 @@ namespace DrawToolsLib
     // TODO: the implementation of this class needs to be looked at later when somebody has time.
     internal class CommandDelete : CommandBase
     {
-        List<GraphicsBase> cloneList;    // contains selected items which are deleted
+        List<GraphicBase> cloneList;    // contains selected items which are deleted
         List<int> indexes;                         // contains indexes of deleted items
 
         // Create this command BEFORE applying Delete function.
         public CommandDelete(DrawingCanvas drawingCanvas)
         {
-            cloneList = new List<GraphicsBase>();
+            cloneList = new List<GraphicBase>();
             indexes = new List<int>();
 
             // Make clone of the list selection.
 
             int currentIndex = 0;
 
-            foreach (GraphicsBase g in drawingCanvas.Selection)
+            foreach (GraphicBase g in drawingCanvas.Selection)
             {
                 cloneList.Add(g);
                 indexes.Add(currentIndex);
@@ -35,7 +35,7 @@ namespace DrawToolsLib
             int currentIndex = 0;
             int indexToInsert;
 
-            foreach (GraphicsBase o in cloneList)
+            foreach (GraphicBase o in cloneList)
             {
                 indexToInsert = indexes[currentIndex];
 
@@ -66,9 +66,9 @@ namespace DrawToolsLib
             for (int i = n - 1; i >= 0; i--)
             {
                 bool toDelete = false;
-                GraphicsBase currentObject = drawingCanvas.GraphicsList[i];
+                GraphicBase currentObject = drawingCanvas.GraphicsList[i];
 
-                foreach (GraphicsBase o in cloneList)
+                foreach (GraphicBase o in cloneList)
                 {
                     if (o.ObjectId == currentObject.ObjectId)
                     {

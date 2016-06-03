@@ -12,7 +12,7 @@ using System.Xml.Serialization;
 
 namespace DrawToolsLib.Graphics
 {
-    public class GraphicsText : GraphicsRectangle
+    public class GraphicText : GraphicRectangle
     {
         [XmlIgnore]
         public int Padding { get; } = 15;
@@ -106,7 +106,7 @@ namespace DrawToolsLib.Graphics
         };
         private static int _nextColor = 0;
 
-        public GraphicsText(DrawingCanvas canvas, Point point)
+        public GraphicText(DrawingCanvas canvas, Point point)
             : this(_colors[_nextColor], canvas.LineWidth, point, _rnd.NextDouble() * 8 - 4)
         {
             _nextColor = (_nextColor + 1) % _colors.Length;
@@ -116,13 +116,13 @@ namespace DrawToolsLib.Graphics
             FontStyle = canvas.TextFontStyle;
             FontWeight = canvas.TextFontWeight;
         }
-        public GraphicsText(Color objectColor, double lineWidth, Point point, double angle = 0, string body = null)
+        public GraphicText(Color objectColor, double lineWidth, Point point, double angle = 0, string body = null)
             : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)))
         {
             Angle = angle;
             Body = body ?? "Double-click to edit note.";
         }
-        protected GraphicsText()
+        protected GraphicText()
         {
         }
 
@@ -181,9 +181,9 @@ namespace DrawToolsLib.Graphics
                 new SolidColorBrush(Color.FromArgb(220, 0, 0, 0)));
         }
 
-        public override GraphicsBase Clone()
+        public override GraphicBase Clone()
         {
-            return new GraphicsText(ObjectColor, LineWidth, Bounds.TopLeft, Angle, Body) { ObjectId = ObjectId };
+            return new GraphicText(ObjectColor, LineWidth, Bounds.TopLeft, Angle, Body) { ObjectId = ObjectId };
         }
     }
 }
