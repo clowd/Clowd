@@ -78,8 +78,11 @@
     <Compile Include="Curves\SplineBuilder.cs" />
     <Compile Include="Curves\VectorHelper.cs" />
     <Compile Include="Definitions.cs" />
+    <Compile Include="DrawingBrush.cs" />
     <Compile Include="DrawingCanvas.cs" />
     <Compile Include="DrawingCanvasException.cs" />
+    <Compile Include="Filters\FilterBase.cs" />
+    <Compile Include="Filters\FilterPixelate.cs" />
     <Compile Include="FontConversions.cs" />
     <Compile Include="GraphicsVisualList.cs" />
     <Compile Include="Graphics\GraphicBase.cs" />
@@ -96,6 +99,7 @@
     </Compile>
     <Compile Include="SerializationHelper.cs" />
     <Compile Include="Tools\ToolDraggable.cs" />
+    <Compile Include="Tools\ToolFilter.cs" />
     <Compile Include="Tools\ToolObject.cs" />
     <Compile Include="Tools\ToolObjectNew.cs" />
     <Compile Include="Tools\ToolPointer.cs" />
