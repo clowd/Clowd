@@ -64,7 +64,6 @@ namespace DrawToolsLib.Graphics
         public event PropertyChangedEventHandler PropertyChanged;
         public event EventHandler Invalidated;
 
-        private DrawingVisual _visual;
         private int _objectId;
         private Color _objectColor;
         private double _lineWidth;
@@ -86,7 +85,6 @@ namespace DrawToolsLib.Graphics
         {
             ObjectId = this.GetHashCode();
             _effect = new DropShadowEffect() { Opacity = 0.5, ShadowDepth = 2, RenderingBias = RenderingBias.Performance };
-            _visual = new DrawingVisual();
         }
         protected GraphicBase(DrawingCanvas canvas)
             : this(canvas.ObjectColor, canvas.LineWidth)
