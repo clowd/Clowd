@@ -18,6 +18,8 @@ namespace DrawToolsLib.Tools
         private FilterBase _filter;
         private DrawingBrush _brush;
         private CommandChangeState _state;
+        private Point _startPoint;
+        private ShiftMode _shiftmode;
 
         public ToolFilter(Cursor cursor) : base(cursor)
         {
@@ -33,6 +35,7 @@ namespace DrawToolsLib.Tools
         {
             base.OnMouseDown(canvas, e);
             var point = e.GetPosition(canvas);
+            _startPoint = point;
             _state = new CommandChangeState(canvas);
             Start(canvas, point);
         }
@@ -40,7 +43,7 @@ namespace DrawToolsLib.Tools
         {
             base.OnMouseMove(canvas, e);
             var point = e.GetPosition(canvas);
-            Move(canvas, point);
+            Move(canvas, ConstrainPoint(point));
         }
         public override void OnMouseUp(DrawingCanvas canvas, MouseButtonEventArgs e)
         {
@@ -51,6 +54,31 @@ namespace DrawToolsLib.Tools
                 _state.NewState(canvas);
                 canvas.AddCommandToHistory(_state);
             }
+        }
+
+        private Point ConstrainPoint(Point p)
+        {
+            if (!Keyboard.IsKeyDown(Key.LeftShift) && !Keyboard.IsKeyDown(Key.RightShift))
+                return p;
+
+            var xDistance = Math.Abs(p.X - _startPoint.X);
+            var yDistance = Math.Abs(p.Y - _startPoint.Y);
+
+            // this is here so that when dragging in the same orientation with shift held that we don't 
+            // switch orentation when passing the mouse origin
+            int snapDistance = 20;
+            var mode = _shiftmode;
+            if (xDistance > snapDistance || yDistance > snapDistance)
+                mode = ShiftMode.None;
+            if (mode == ShiftMode.None)
+                mode = xDistance < yDistance ? ShiftMode.Horizontal : ShiftMode.Vertical;
+            _shiftmode = mode;
+
+            if (mode == ShiftMode.Horizontal)
+                return new Point(_startPoint.X, p.Y);
+            if (mode == ShiftMode.Vertical)
+                return new Point(p.X, _startPoint.Y);
+            return p;
         }
 
         private void Start(DrawingCanvas canvas, Point point)
@@ -103,6 +131,13 @@ namespace DrawToolsLib.Tools
         private FilterBase CreateFilter(DrawingCanvas canvas, GraphicImage image)
         {
             return (FilterBase)Activator.CreateInstance(typeof(T), new object[] { canvas, image });
+        }
+
+        private enum ShiftMode
+        {
+            None,
+            Vertical,
+            Horizontal
         }
     }
 }
