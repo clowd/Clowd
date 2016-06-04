@@ -62,11 +62,22 @@ namespace DrawToolsLib.Graphics
                     image.EndInit();
                     image.Freeze();
                     _bitmap = image;
-                    OnPropertyChanged(nameof(BitmapBytes));
+                    OnPropertyChanged(nameof(BitmapSource));
                 }
             }
         }
 
+        [XmlIgnore]
+        public BitmapSource BitmapSource
+        {
+            get { return _bitmap; }
+            set
+            {
+                value.Freeze();
+                _bitmap = value;
+                OnPropertyChanged(nameof(BitmapSource));
+            }
+        }
 
         private BitmapSource _bitmap;
         private int _scaleX = 1;
@@ -122,12 +133,33 @@ namespace DrawToolsLib.Graphics
             drawingContext.Pop();
         }
 
+        internal bool Flatten()
+        {
+            if (ScaleX == 1 && ScaleY == 1)
+                return false;
+
+            var visual = new DrawingVisual();
+            using (var ctx = visual.RenderOpen())
+            {
+                ctx.PushTransform(new ScaleTransform(ScaleX, ScaleY, BitmapSource.Width / 2, BitmapSource.Height / 2));
+                ctx.DrawImage(BitmapSource, new Rect(0, 0, BitmapSource.Width, BitmapSource.Height));
+            }
+
+            var final = new RenderTargetBitmap(BitmapSource.PixelWidth, BitmapSource.PixelHeight, 96, 96, PixelFormats.Pbgra32);
+            final.Render(visual);
+            _bitmap = final;
+            _scaleX = 1;
+            _scaleY = 1;
+            OnPropertyChanged(nameof(BitmapSource));
+            return true;
+        }
+
         internal override void Normalize()
         {
             if (Right <= Left)
-                ScaleX = ScaleX / -1;
+                _scaleX = _scaleX / -1;
             if (Bottom <= Top)
-                ScaleY = ScaleY / -1;
+                _scaleY = _scaleY / -1;
 
             base.Normalize();
         }

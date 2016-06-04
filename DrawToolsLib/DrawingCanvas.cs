@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Xml.Serialization;
+using DrawToolsLib.Filters;
 using DrawToolsLib.Graphics;
 using DrawToolsLib.Tools;
 
@@ -50,7 +51,7 @@ namespace DrawToolsLib
         private Tool[] tools;                   // Array of tools
 
         ToolText toolText;
-        ToolPointer toolPointer;
+        internal ToolPointer ToolPointer;
 
         private ContextMenu contextMenu;
 
@@ -73,8 +74,8 @@ namespace DrawToolsLib
             // create array of drawing tools
             tools = new Tool[(int)ToolType.Max];
 
-            toolPointer = new ToolPointer();
-            tools[(int)ToolType.Pointer] = toolPointer;
+            ToolPointer = new ToolPointer();
+            tools[(int)ToolType.Pointer] = ToolPointer;
 
             tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
                 new Cursor(new MemoryStream(Properties.Resources.Rectangle)),
@@ -104,6 +105,8 @@ namespace DrawToolsLib
 
             toolText = new ToolText(this);
             tools[(int)ToolType.Text] = toolText;   // kept as class member for in-place editing
+
+            tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>(Cursors.Hand);
 
             // Create undo manager
             undoManager = new UndoManager(this);
@@ -1784,7 +1787,7 @@ namespace DrawToolsLib
                     {
                         // Pointer tool moved or resized graphics object.
                         // Add this action to the history
-                        toolPointer.AddChangeToHistory(this);
+                        ToolPointer.AddChangeToHistory(this);
                     }
                 }
             }
@@ -1884,7 +1887,7 @@ namespace DrawToolsLib
             Point point = e.GetPosition(this);
 
             int handleNum;
-            var clicked = toolPointer.MakeHitTest(this, point, out handleNum);
+            var clicked = ToolPointer.MakeHitTest(this, point, out handleNum);
 
             if (clicked is GraphicText)
             {
