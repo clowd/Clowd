@@ -97,16 +97,13 @@ namespace DrawToolsLib
                 point => new GraphicArrow(this, point, point),
                 (point, g) => g.MoveHandleTo(point, 2));
 
-            //tools[(int)ToolType.Rectangle] = new ToolRectangle();
-            //tools[(int)ToolType.Ellipse] = new ToolEllipse();
-            //tools[(int)ToolType.Line] = new ToolLine();
-            //tools[(int)ToolType.Arrow] = new ToolArrow();
             tools[(int)ToolType.PolyLine] = new ToolPolyLine();
 
             toolText = new ToolText(this);
             tools[(int)ToolType.Text] = toolText;   // kept as class member for in-place editing
 
             tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>(Cursors.Hand);
+            tools[(int)ToolType.Erase] = new ToolFilter<FilterEraser>(Cursors.Hand);
 
             // Create undo manager
             undoManager = new UndoManager(this);

@@ -82,6 +82,7 @@
     <Compile Include="DrawingCanvas.cs" />
     <Compile Include="DrawingCanvasException.cs" />
     <Compile Include="Filters\FilterBase.cs" />
+    <Compile Include="Filters\FilterEraser.cs" />
     <Compile Include="Filters\FilterPixelate.cs" />
     <Compile Include="FontConversions.cs" />
     <Compile Include="GraphicsVisualList.cs" />

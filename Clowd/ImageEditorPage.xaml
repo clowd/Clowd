@@ -247,7 +247,16 @@
                 <Viewbox>
                     <Path Width="32" Height="32" Data="M16,0C7.179,0,0,7.18,0,16s7.179,16,16,16c8.82,0,16-7.18,16-16S24.82,0,16,0z M16,2.666c7.38,0,13.333,5.955,13.333,13.334 c0,7.38-5.953,13.333-13.333,13.333C8.621,29.333,2.667,23.38,2.667,16C2.667,8.621,8.621,2.666,16,2.666z M9.049,4.612v4.722H4.443 C5.559,7.399,7.146,5.773,9.049,4.612z M22.382,16V9.334h5.175c1.131,1.959,1.776,4.234,1.776,6.666 c0,0.945-0.098,1.868-0.284,2.757V16H22.382z M9.049,22.667h6.667v6.663c-2.442-0.051-4.719-0.754-6.667-1.942V22.667z M9.049,16 v6.667H4.443c-1.13-1.96-1.777-4.236-1.777-6.667H9.049z M22.382,9.334h-6.667V2.67C15.81,2.668,15.905,2.666,16,2.666 c2.314,0,4.488,0.586,6.382,1.617V9.334z M27.557,22.667c-1.225,2.123-3.019,3.875-5.175,5.049v-5.049H27.557z M15.715,16H9.049 V9.334h6.667V16z M22.382,16v6.667h-6.667V16H22.382z" />
                 </Viewbox>
-            </ToggleButton>            
+            </ToggleButton>
+            <ToggleButton ToolTip="Erase"
+                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
+                                     Converter={StaticResource convToolType}, ConverterParameter=Erase}"
+                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Erase"
+                          Style="{StaticResource ToggleToolButtonStyle}">
+                <Viewbox>
+                    <Path Margin="-2,-2,0,0" Width="22" Height="22" Data="M 14.75 2 C 14.039044 2 13.316445 2.2460554 12.78125 2.78125 L 7.78125 7.78125 L 7.09375 8.5 L 2.78125 12.78125 C 1.7108607 13.851639 1.7108607 15.648361 2.78125 16.71875 L 7.28125 21.21875 C 8.3516393 22.289139 10.148361 22.289139 11.21875 21.21875 L 15.5 16.90625 L 16.21875 16.21875 L 16.90625 15.5 L 21.21875 11.21875 C 22.289139 10.148361 22.289139 8.3516393 21.21875 7.28125 L 16.71875 2.78125 C 16.183555 2.2460554 15.460956 2 14.75 2 z M 8.5 9.9375 L 14.0625 15.5 L 9.78125 19.78125 C 9.4516393 20.110861 9.0483607 20.110861 8.71875 19.78125 L 4.21875 15.28125 C 3.8891393 14.951639 3.8891393 14.548361 4.21875 14.21875 L 8.5 9.9375 z" />
+                </Viewbox>
+            </ToggleButton>
             <Button ToolTip="Undo (Ctrl+Z)" Style="{StaticResource ToolButtonStyle}" Command="ApplicationCommands.Undo"
                     IsEnabled="{Binding ElementName=drawingCanvas, Path=CanUndo, Mode=OneWay}">
                 <Viewbox>
