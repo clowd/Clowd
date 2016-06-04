@@ -39,7 +39,7 @@ namespace DrawToolsLib
         {
         }
 
-        private GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
+        public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
         {
             var controls = drawingCanvas.GraphicsList.Select(gv => new { gv, gv.IsSelected, HitTest = gv.MakeHitTest(point) }).Reverse().ToArray();
 

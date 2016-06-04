@@ -13,7 +13,7 @@ namespace DrawToolsLib
     /// <summary>
     /// Text tool
     /// </summary>
-    class ToolText : ToolRectangleBase
+    class ToolText : ToolObject
     {
         TextBox _textBox;
         string oldText;

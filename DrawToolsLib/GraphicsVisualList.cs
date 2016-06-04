@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media;
 using DrawToolsLib.Graphics;
 
@@ -12,15 +13,27 @@ namespace DrawToolsLib
 {
     public class GraphicsVisualList : IList<GraphicBase>
     {
-        private List<GraphicBase> _graphics;
-        private VisualCollection _visuals;
-        private ReaderWriterLockSlim _lock;
+        public int Count => _graphics.Count;
+        public int VisualCount => _graphics.Count + _extraVisuals.Count;
+        public bool IsReadOnly => ((ICollection<GraphicBase>)_graphics).IsReadOnly;
 
-        public GraphicsVisualList(Visual parent)
+        private readonly List<GraphicBase> _graphics;
+        private readonly VisualCollection _visuals;
+        private readonly ReaderWriterLockSlim _lock;
+        private readonly DrawingCanvas _parent;
+
+        private readonly List<UIElement> _extraVisuals;
+        private Dictionary<GraphicBase, List<UIElement>> _extraLookup;
+
+
+        public GraphicsVisualList(DrawingCanvas parent)
         {
+            _parent = parent;
             _lock = new ReaderWriterLockSlim();
             _visuals = new VisualCollection(parent);
             _graphics = new List<GraphicBase>();
+            _extraVisuals = new List<UIElement>();
+            _extraLookup = new Dictionary<GraphicBase, List<UIElement>>();
         }
 
         public IEnumerator<GraphicBase> GetEnumerator()
@@ -45,10 +58,64 @@ namespace DrawToolsLib
             }
         }
 
-        public Visual GetItemVisual(int index)
+        public Visual GetVisual(int index)
         {
             using (new ReadLockContext(_lock))
-                return _visuals[index];
+            {
+                if (index < _visuals.Count)
+                    return _visuals[index];
+                return _extraVisuals[index - _visuals.Count];
+            }
+        }
+
+        internal void RegisterSubElement(GraphicBase graphic, UIElement subVisual)
+        {
+            using (new WriteLockContext(_lock))
+            {
+                List<UIElement> vlist;
+                if (!_extraLookup.ContainsKey(graphic))
+                    vlist = _extraLookup[graphic] = new List<UIElement>();
+                else
+                    vlist = _extraLookup[graphic];
+
+                if (!vlist.Contains(subVisual))
+                {
+                    vlist.Add(subVisual);
+                    _extraVisuals.Add(subVisual);
+                    _parent.Children.Add(subVisual);
+                }
+            }
+        }
+
+        internal void RemoveSubElement(GraphicBase graphic, UIElement subVisual)
+        {
+            using (new WriteLockContext(_lock))
+            {
+                RemoveSubElementUnsafe(graphic, subVisual);
+            }
+        }
+
+        private void RemoveSubElementUnsafe(GraphicBase graphic, UIElement subVisual)
+        {
+            if (_extraLookup.ContainsKey(graphic))
+            {
+                var vlist = _extraLookup[graphic];
+                if (vlist.Remove(subVisual))
+                {
+                    _parent.Children.Remove(subVisual);
+                    _extraVisuals.Remove(subVisual);
+                }
+            }
+        }
+
+        private void RemoveSubElementsUnsafe(GraphicBase graphic)
+        {
+            if (_extraLookup.ContainsKey(graphic))
+            {
+                var vlist = _extraLookup[graphic];
+                vlist.ToList().ForEach(v => RemoveSubElementUnsafe(graphic, v));
+                _extraLookup.Remove(graphic);
+            }
         }
 
         public void Clear()
@@ -57,6 +124,8 @@ namespace DrawToolsLib
             {
                 _graphics.ForEach(g => g.ResetInvalidateEvent());
                 _graphics.Clear();
+                _extraVisuals.Clear();
+                _extraLookup.Clear();
                 _visuals.Clear();
             }
         }
@@ -82,25 +151,10 @@ namespace DrawToolsLib
                     return false;
 
                 _graphics[index].ResetInvalidateEvent();
+                RemoveSubElementsUnsafe(item);
                 _graphics.RemoveAt(index);
                 _visuals.RemoveAt(index);
                 return true;
-            }
-        }
-
-        public int Count
-        {
-            get
-            {
-                return _graphics.Count;
-            }
-        }
-
-        public bool IsReadOnly
-        {
-            get
-            {
-                return ((ICollection<GraphicBase>)_graphics).IsReadOnly;
             }
         }
 
@@ -126,7 +180,8 @@ namespace DrawToolsLib
         {
             using (new WriteLockContext(_lock))
             {
-                _graphics[index].ResetInvalidateEvent();
+                _graphics[index]?.ResetInvalidateEvent();
+                RemoveSubElementsUnsafe(_graphics[index]);
                 _graphics.RemoveAt(index);
                 _visuals.RemoveAt(index);
             }
@@ -144,6 +199,7 @@ namespace DrawToolsLib
                 using (new WriteLockContext(_lock))
                 {
                     _graphics[index].ResetInvalidateEvent();
+                    RemoveSubElementsUnsafe(_graphics[index]);
                     _graphics.RemoveAt(index);
                     _visuals.RemoveAt(index);
                     var vis = new DrawingVisual();

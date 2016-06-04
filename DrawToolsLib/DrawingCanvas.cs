@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Xml.Serialization;
 using DrawToolsLib.Graphics;
+using DrawToolsLib.Tools;
 
 namespace DrawToolsLib
 {
@@ -75,10 +76,30 @@ namespace DrawToolsLib
             toolPointer = new ToolPointer();
             tools[(int)ToolType.Pointer] = toolPointer;
 
-            tools[(int)ToolType.Rectangle] = new ToolRectangle();
-            tools[(int)ToolType.Ellipse] = new ToolEllipse();
-            tools[(int)ToolType.Line] = new ToolLine();
-            tools[(int)ToolType.Arrow] = new ToolArrow();
+            tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
+                new Cursor(new MemoryStream(Properties.Resources.Rectangle)),
+                point => new GraphicRectangle(this, new Rect(point, new Size(1, 1))),
+                (point, g) => g.MoveHandleTo(point, 5));
+
+            tools[(int)ToolType.Ellipse] = new ToolDraggable<GraphicEllipse>(
+                new Cursor(new MemoryStream(Properties.Resources.Ellipse)),
+                point => new GraphicEllipse(this, new Rect(point, new Size(1, 1))),
+                (point, g) => g.MoveHandleTo(point, 5));
+
+            tools[(int)ToolType.Line] = new ToolDraggable<GraphicLine>(
+                new Cursor(new MemoryStream(Properties.Resources.Line)),
+                point => new GraphicLine(this, point, point),
+                (point, g) => g.MoveHandleTo(point, 2));
+
+            tools[(int)ToolType.Arrow] = new ToolDraggable<GraphicArrow>(
+                new Cursor(new MemoryStream(Properties.Resources.Arrow)),
+                point => new GraphicArrow(this, point, point),
+                (point, g) => g.MoveHandleTo(point, 2));
+
+            //tools[(int)ToolType.Rectangle] = new ToolRectangle();
+            //tools[(int)ToolType.Ellipse] = new ToolEllipse();
+            //tools[(int)ToolType.Line] = new ToolLine();
+            //tools[(int)ToolType.Arrow] = new ToolArrow();
             tools[(int)ToolType.PolyLine] = new ToolPolyLine();
 
             toolText = new ToolText(this);
@@ -1320,13 +1341,9 @@ namespace DrawToolsLib
         {
             get
             {
-                int n = _extraVisualsCount + graphicsList.Count;
-
+                int n = _extraVisualsCount + graphicsList.VisualCount;
                 if (toolText.TextBox != null)
-                {
                     n++;
-                }
-
                 return n;
             }
         }
@@ -1348,11 +1365,11 @@ namespace DrawToolsLib
             {
                 return _artworkRectangle;
             }
-            else if (index - _extraVisualsCount < graphicsList.Count)
+            else if (index - _extraVisualsCount < graphicsList.VisualCount)
             {
-                return graphicsList.GetItemVisual(index - _extraVisualsCount);
+                return graphicsList.GetVisual(index - _extraVisualsCount);
             }
-            else if (index == _extraVisualsCount + graphicsList.Count && toolText.TextBox != null)
+            else if (index == _extraVisualsCount + graphicsList.VisualCount && toolText.TextBox != null)
             {
                 return toolText.TextBox;
             }
@@ -1866,15 +1883,17 @@ namespace DrawToolsLib
         {
             Point point = e.GetPosition(this);
 
-            // Enumerate all text objects
-            for (int i = graphicsList.Count - 1; i >= 0; i--)
+            int handleNum;
+            var clicked = toolPointer.MakeHitTest(this, point, out handleNum);
+
+            if (clicked is GraphicText)
             {
-                GraphicText t = graphicsList[i] as GraphicText;
-                if (t != null && t.Contains(point))
-                {
-                    toolText.CreateTextBox(t, this);
-                    return;
-                }
+                GraphicText t = clicked as GraphicText;
+                toolText.CreateTextBox(t, this);
+            }
+            else
+            {
+                (clicked as IActivatableGraphic)?.Activate(this);
             }
         }
 

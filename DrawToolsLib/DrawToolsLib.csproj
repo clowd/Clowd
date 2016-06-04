@@ -86,6 +86,7 @@
     <Compile Include="Graphics\GraphicImage.cs" />
     <Compile Include="Graphics\GraphicArrow.cs" />
     <Compile Include="Graphics\GraphicText.cs" />
+    <Compile Include="Graphics\IActivatableGraphic.cs" />
     <Compile Include="OriginIndicator.cs" />
     <Compile Include="Properties\Annotations.cs" />
     <Compile Include="Properties\Settings.Designer.cs">
@@ -94,13 +95,11 @@
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
     <Compile Include="SerializationHelper.cs" />
-    <Compile Include="Tools\ToolEllipse.cs" />
-    <Compile Include="Tools\ToolArrow.cs" />
-    <Compile Include="Tools\ToolLine.cs" />
+    <Compile Include="Tools\ToolDraggable.cs" />
     <Compile Include="Tools\ToolObject.cs" />
+    <Compile Include="Tools\ToolObjectNew.cs" />
     <Compile Include="Tools\ToolPointer.cs" />
     <Compile Include="Tools\ToolPolyLine.cs" />
-    <Compile Include="Tools\ToolRectangle.cs" />
     <Compile Include="HelperFunctions.cs" />
     <Compile Include="Graphics\GraphicEllipse.cs" />
     <Compile Include="Graphics\GraphicLine.cs" />
@@ -114,7 +113,6 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <Compile Include="Tools\Tool.cs" />
-    <Compile Include="Tools\ToolRectangleBase.cs" />
     <Compile Include="Tools\ToolText.cs" />
     <Compile Include="Tools\ToolTypeConverter.cs" />
     <Compile Include="UndoManager.cs" />
@@ -198,6 +196,7 @@
     <Content Include="Images\Resize8.cur" />
     <Content Include="Images\Resize9.cur" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
