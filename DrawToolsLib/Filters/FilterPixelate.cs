@@ -145,7 +145,6 @@ namespace DrawToolsLib.Filters
             {
                 var centerX = (Source.Right - Source.Left) / 2 + Source.Left;
                 var centerY = (Source.Bottom - Source.Top) / 2 + Source.Top;
-
                 ctx.PushTransform(new RotateTransform(Source.Angle, centerX, centerY));
                 ctx.DrawImage(_rendered, Source.UnrotatedBounds);
             }
