@@ -46,7 +46,7 @@ namespace DrawToolsLib
             ReplaceObjects(drawingCanvas.GraphicsList, _listAfter);
         }
 
-        private static void ReplaceObjects(GraphicsVisualList graphicsList, GraphicBase[] list)
+        private static void ReplaceObjects(GraphicCollection graphicsList, GraphicBase[] list)
         {
             for (int i = 0; i < graphicsList.Count; i++)
             {

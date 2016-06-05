@@ -41,7 +41,7 @@ namespace DrawToolsLib
             SetCanvasOrder(drawingCanvas.GraphicsList, _listAfter);
         }
 
-        private static void SetCanvasOrder(GraphicsVisualList graphicsList, int[] indexList)
+        private static void SetCanvasOrder(GraphicCollection graphicsList, int[] indexList)
         {
             List<GraphicBase> tmpList = new List<GraphicBase>();
 
