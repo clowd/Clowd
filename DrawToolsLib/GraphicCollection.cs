@@ -60,34 +60,26 @@ namespace DrawToolsLib
         {
             using (new ReadLockContext(_lock))
             {
-                if (index < _visuals.Count)
-                    return _visuals[index];
-
-                var subElementArray = _extraLookup.Values.ToArray();
-                int searchIndex = _visuals.Count;
-
-                // loop through all extra visuals first
-                foreach (var sub in subElementArray)
+                int currentIndex = 0;
+                for (int i = 0; i < _visuals.Count; i++)
                 {
-                    for (int visualIndex = 0; visualIndex < sub.Visuals.Count; visualIndex++)
+                    var currentVisual = _visuals[i];
+                    if (currentIndex == index)
+                        return currentVisual;
+
+                    var currentGraphic = _graphics[i];
+                    SubElementContainer subElement;
+                    if (_extraLookup.TryGetValue(currentGraphic, out subElement))
                     {
-                        if (searchIndex == index)
-                            return sub.Visuals[visualIndex];
-
-                        searchIndex++;
+                        foreach (var subVisual in subElement.Visuals)
+                            if (++currentIndex == index)
+                                return subVisual;
+                        foreach (var subUiElement in subElement.Elements)
+                            if (++currentIndex == index)
+                                return subUiElement;
                     }
-                }
 
-                // then through all extra elements
-                foreach (var sub in subElementArray)
-                {
-                    for (int elementIndex = 0; elementIndex < sub.Elements.Count; elementIndex++)
-                    {
-                        if (searchIndex == index)
-                            return sub.Elements[elementIndex];
-
-                        searchIndex++;
-                    }
+                    currentIndex++;
                 }
 
                 throw new ArgumentOutOfRangeException(nameof(index));
