@@ -135,19 +135,16 @@ namespace DrawToolsLib
         }
 
         #region INTEROP
-        private struct IconInfo
-        {
-            public bool fIcon;
-            public int xHotspot;
-            public int yHotspot;
-            public IntPtr hbmMask;
-            public IntPtr hbmColor;
-        }
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetIconInfo(IntPtr hIcon, ref IconInfo pIconInfo);
+
         [DllImport("user32.dll")]
         private static extern IntPtr CreateIconIndirect(ref IconInfo icon);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DestroyIcon([In] IntPtr hIcon);
 
         private static Cursor CreateCursorNoResize(Bitmap bmp, int xHotSpot, int yHotSpot)
         {
@@ -159,8 +156,31 @@ namespace DrawToolsLib
             tmp.fIcon = false;
             ptr = CreateIconIndirect(ref tmp);
 
-            SafeFileHandle panHandle = new SafeFileHandle(ptr, false);
+            SafeIconHandle panHandle = new SafeIconHandle(ptr);
             return System.Windows.Interop.CursorInteropHelper.Create(panHandle);
+        }
+
+        private struct IconInfo
+        {
+            public bool fIcon;
+            public int xHotspot;
+            public int yHotspot;
+            public IntPtr hbmMask;
+            public IntPtr hbmColor;
+        }
+
+        private class SafeIconHandle : SafeHandleZeroOrMinusOneIsInvalid
+        {
+            public SafeIconHandle(IntPtr hIcon)
+                : base(true)
+            {
+                this.SetHandle(hIcon);
+            }
+
+            protected override bool ReleaseHandle()
+            {
+                return DestroyIcon(this.handle);
+            }
         }
         #endregion
     }
