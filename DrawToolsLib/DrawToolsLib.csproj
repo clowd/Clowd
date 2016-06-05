@@ -86,7 +86,7 @@
     <Compile Include="Filters\FilterEraser.cs" />
     <Compile Include="Filters\FilterPixelate.cs" />
     <Compile Include="FontConversions.cs" />
-    <Compile Include="GraphicsVisualList.cs" />
+    <Compile Include="GraphicCollection.cs" />
     <Compile Include="Graphics\GraphicBase.cs" />
     <Compile Include="Graphics\GraphicImage.cs" />
     <Compile Include="Graphics\GraphicArrow.cs" />

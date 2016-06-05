@@ -11,7 +11,7 @@ using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib
 {
-    public class GraphicsVisualList : IList<GraphicBase>
+    public class GraphicCollection : IList<GraphicBase>
     {
         public int Count => _graphics.Count;
         public int VisualCount => _graphics.Count + _extraLookup.Values.Sum(sub => sub.VisualCount);
@@ -25,7 +25,7 @@ namespace DrawToolsLib
         private Dictionary<GraphicBase, SubElementContainer> _extraLookup;
 
 
-        public GraphicsVisualList(DrawingCanvas parent)
+        public GraphicCollection(DrawingCanvas parent)
         {
             _parent = parent;
             _lock = new ReaderWriterLockSlim();
