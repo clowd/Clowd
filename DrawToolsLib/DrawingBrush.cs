@@ -1,13 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using DrawToolsLib.Annotations;
+using Microsoft.Win32.SafeHandles;
+using Brush = System.Windows.Media.Brush;
+using Color = System.Windows.Media.Color;
+using Size = System.Windows.Size;
 
 namespace DrawToolsLib
 {
@@ -28,22 +35,19 @@ namespace DrawToolsLib
         {
             get
             {
-                var brush = new RadialGradientBrush(new GradientStopCollection(new GradientStop[]
+                if (Type == DrawingBrushType.Circle)
                 {
-                    new GradientStop(_currentColor, 0),
-                    new GradientStop(_currentColor, _hardness),
-                    new GradientStop(Color.FromArgb(0,_currentColor.R,_currentColor.G,_currentColor.B), 1),
-                }));
-                return brush;
+                    return new RadialGradientBrush(new GradientStopCollection(new GradientStop[]
+                    {
+                        new GradientStop(_currentColor, 0),
+                        new GradientStop(_currentColor, _hardness),
+                        new GradientStop(Color.FromArgb(0, _currentColor.R, _currentColor.G, _currentColor.B), 1),
+                    }));
+                }
+                return new SolidColorBrush(Color);
             }
         }
-        public Size Size
-        {
-            get
-            {
-                return new Size(_radius * 2, _radius * 2);
-            }
-        }
+        public Size Size => new Size(_radius * 2, _radius * 2);
         public int Radius
         {
             get { return _radius; }
@@ -67,10 +71,60 @@ namespace DrawToolsLib
                 OnPropertyChanged(nameof(Brush));
             }
         }
+        public DrawingBrushType Type
+        {
+            get { return _type; }
+            set
+            {
+                if (value == _type) return;
+                _type = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(Brush));
+            }
+        }
 
         private Color _currentColor = Colors.Red;
         private int _radius = 16;
         private double _hardness = 0.7;
+        private DrawingBrushType _type = DrawingBrushType.Circle;
+
+        public DrawingBrush()
+        {
+        }
+
+        public DrawingBrush(DrawingBrushType type, int radius, Color color, int hardness)
+        {
+            _type = type;
+            _radius = radius;
+            _hardness = hardness;
+            _currentColor = color;
+        }
+
+        public Cursor GetBrushCursor()
+        {
+            var diameter = _radius * 2;
+            using (Bitmap curBit = new Bitmap(diameter + 3, diameter + 3))
+            {
+                using (var bgPen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(175, 255, 255, 255), 3))
+                using (var fgPen = new System.Drawing.Pen(System.Drawing.Color.Black, 1))
+                using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(curBit))
+                {
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    if (Type == DrawingBrushType.Circle)
+                    {
+                        g.DrawEllipse(bgPen, 1, 1, diameter, diameter);
+                        g.DrawEllipse(fgPen, 1, 1, diameter, diameter);
+                    }
+                    else if (Type == DrawingBrushType.Block)
+                    {
+                        g.DrawRectangle(bgPen, 1, 1, diameter, diameter);
+                        g.DrawRectangle(fgPen, 1, 1, diameter, diameter);
+                    }
+                }
+
+                return CreateCursorNoResize(curBit, _radius + 2, _radius + 2);
+            }
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -79,5 +133,41 @@ namespace DrawToolsLib
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+
+        #region INTEROP
+        private struct IconInfo
+        {
+            public bool fIcon;
+            public int xHotspot;
+            public int yHotspot;
+            public IntPtr hbmMask;
+            public IntPtr hbmColor;
+        }
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetIconInfo(IntPtr hIcon, ref IconInfo pIconInfo);
+        [DllImport("user32.dll")]
+        private static extern IntPtr CreateIconIndirect(ref IconInfo icon);
+
+        private static Cursor CreateCursorNoResize(Bitmap bmp, int xHotSpot, int yHotSpot)
+        {
+            IntPtr ptr = bmp.GetHicon();
+            IconInfo tmp = new IconInfo();
+            GetIconInfo(ptr, ref tmp);
+            tmp.xHotspot = xHotSpot;
+            tmp.yHotspot = yHotSpot;
+            tmp.fIcon = false;
+            ptr = CreateIconIndirect(ref tmp);
+
+            SafeFileHandle panHandle = new SafeFileHandle(ptr, false);
+            return System.Windows.Interop.CursorInteropHelper.Create(panHandle);
+        }
+        #endregion
+    }
+
+    public enum DrawingBrushType
+    {
+        Circle,
+        Block
     }
 }

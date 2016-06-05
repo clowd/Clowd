@@ -21,13 +21,14 @@ namespace DrawToolsLib.Tools
         private Point _startPoint;
         private ShiftMode _shiftmode;
 
-        public ToolFilter(Cursor cursor) : base(cursor)
+        public ToolFilter() : base(Cursors.None)
         {
             _brush = new DrawingBrush()
             {
                 Color = Colors.White,
                 Hardness = 0.7,
-                Radius = 16
+                Radius = 16,
+                Type = DrawingBrushType.Circle
             };
         }
 
@@ -54,6 +55,11 @@ namespace DrawToolsLib.Tools
                 _state.NewState(canvas);
                 canvas.AddCommandToHistory(_state);
             }
+        }
+
+        public override void SetCursor(DrawingCanvas canvas)
+        {
+            canvas.Cursor = _brush.GetBrushCursor();
         }
 
         private Point ConstrainPoint(Point p)
