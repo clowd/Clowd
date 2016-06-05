@@ -22,7 +22,7 @@ namespace DrawToolsLib
         #region Class Members
 
         // Collection contains instances of GraphicsBase-derived classes.
-        private GraphicsVisualList graphicsList;
+        private GraphicCollection graphicsList;
 
         // Dependency properties
         public static readonly DependencyProperty ToolProperty;
@@ -67,7 +67,7 @@ namespace DrawToolsLib
         public DrawingCanvas()
             : base()
         {
-            graphicsList = new GraphicsVisualList(this);
+            graphicsList = new GraphicCollection(this);
 
             CreateContextMenu();
 
@@ -1308,7 +1308,7 @@ namespace DrawToolsLib
         /// <summary>
         /// Return list of graphics
         /// </summary>
-        internal GraphicsVisualList GraphicsList => graphicsList;
+        internal GraphicCollection GraphicsList => graphicsList;
 
         /// <summary>
         /// Returns INumerable which may be used for enumeration
