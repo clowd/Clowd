@@ -27,6 +27,7 @@ namespace DrawToolsLib
         // Object which is currently resized:
         private GraphicBase _handleGrabbedObject;
         private int _handleGrabbed;
+        private double _handleRatio;
 
         // Keep state about last and current point (used to edit objects via dragging, e.g. move and resize)
         private Point _lastPoint = new Point(0, 0);
@@ -100,6 +101,13 @@ namespace DrawToolsLib
                     _selectMode = SelectionMode.HandleDrag;
                     _handleGrabbedObject = graphic;
                     _handleGrabbed = handleNumber;
+
+                    // initial aspect ratio
+                    var rotatableGraphic = graphic as GraphicRectangle;
+                    if (rotatableGraphic != null)
+                        _handleRatio = rotatableGraphic.UnrotatedBounds.Width / rotatableGraphic.UnrotatedBounds.Height;
+                    else
+                        _handleRatio = 0;
                 }
                 else
                 {
@@ -152,9 +160,7 @@ namespace DrawToolsLib
             }
 
             if (!drawingCanvas.IsMouseCaptured)
-            {
                 return;
-            }
 
             _wasEdit = true;
 
@@ -174,8 +180,27 @@ namespace DrawToolsLib
                 case SelectionMode.HandleDrag:
                     if (_handleGrabbedObject != null)
                     {
-                        _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
-                        drawingCanvas.Cursor = _handleGrabbedObject.GetHandleCursor(_handleGrabbed);
+                        // if should maintain aspect ratio of a rectangle
+                        var rotatableGraphic = _handleGrabbedObject as GraphicRectangle;
+                        var rotatableDestRect = GetTransformedRect(rotatableGraphic?.UnrotatedBounds ?? Rect.Empty, _handleGrabbed,
+                            rotatableGraphic?.UnapplyRotation(point) ?? default(Point));
+                        if ((Keyboard.IsKeyDown(Key.RightShift) || Keyboard.IsKeyDown(Key.LeftShift))
+                            && rotatableGraphic != null && _handleRatio != 0 && !rotatableDestRect.IsEmpty)
+                        {
+                            var sourceRatio = _handleRatio;
+                            rotatableDestRect = ScaleRectToAspect(rotatableDestRect, sourceRatio);
+                            rotatableDestRect = TranslateDestAroundHandle(rotatableGraphic.UnrotatedBounds, rotatableDestRect, _handleGrabbed);
+
+                            rotatableGraphic.Left = rotatableDestRect.Left;
+                            rotatableGraphic.Bottom = rotatableDestRect.Bottom;
+                            rotatableGraphic.Right = rotatableDestRect.Right;
+                            rotatableGraphic.Top = rotatableDestRect.Top;
+                        }
+                        else
+                        {
+                            _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
+                            drawingCanvas.Cursor = _handleGrabbedObject.GetHandleCursor(_handleGrabbed);
+                        }
                     }
                     break;
 
@@ -256,5 +281,80 @@ namespace DrawToolsLib
             }
         }
 
+        private Rect GetTransformedRect(Rect source, int handleNumber, Point point)
+        {
+            if (source.IsEmpty)
+                return Rect.Empty;
+
+            switch (handleNumber)
+            {
+                case 1:
+                    return HelperFunctions.CreateRectSafe(point.X, point.Y, source.Right, source.Bottom);
+                case 3:
+                    return HelperFunctions.CreateRectSafe(source.Left, point.Y, point.X, source.Bottom);
+                case 5:
+                    return HelperFunctions.CreateRectSafe(source.Left, source.Top, point.X, point.Y);
+                case 7:
+                    return HelperFunctions.CreateRectSafe(point.X, source.Top, source.Right, point.Y);
+                default:
+                    return Rect.Empty;
+            }
+        }
+
+        private Rect TranslateDestAroundHandle(Rect source, Rect dest, int handleNumber)
+        {
+            switch (handleNumber)
+            {
+                case 5:
+                    var topLeft = source.TopLeft;
+                    return new Rect(new Point(topLeft.X + dest.Width, topLeft.Y + dest.Height), topLeft);
+                case 7:
+                    var topRight = source.TopRight;
+                    return new Rect(new Point(topRight.X - dest.Width, topRight.Y + dest.Height), topRight);
+                case 1:
+                    var botRight = source.BottomRight;
+                    return new Rect(new Point(botRight.X - dest.Width, botRight.Y - dest.Height), botRight);
+                case 3:
+                    var botLeft = source.BottomLeft;
+                    return new Rect(new Point(botLeft.X + dest.Width, botLeft.Y - dest.Height), botLeft);
+                default:
+                    return Rect.Empty;
+            }
+        }
+        private Rect ScaleRectToAspect(Rect dest, double sourceAspect, bool keepWidth = true, bool keepHeight = true)
+        {
+            Rect destRect = new Rect();
+
+            double destAspect = dest.Width / dest.Height;
+
+            if (sourceAspect > destAspect)
+            {
+                // wider than high keep the width and scale the height
+                destRect.Width = dest.Width;
+                destRect.Height = dest.Width / sourceAspect;
+
+                if (keepHeight)
+                {
+                    double resizePerc = dest.Height / destRect.Height;
+                    destRect.Width = dest.Width * resizePerc;
+                    destRect.Height = dest.Height;
+                }
+            }
+            else
+            {
+                // higher than wide – keep the height and scale the width
+                destRect.Height = dest.Height;
+                destRect.Width = dest.Height * sourceAspect;
+
+                if (keepWidth)
+                {
+                    double resizePerc = dest.Width / destRect.Width;
+                    destRect.Width = dest.Width;
+                    destRect.Height = dest.Height * resizePerc;
+                }
+
+            }
+            return destRect;
+        }
     }
 }
