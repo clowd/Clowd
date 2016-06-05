@@ -7,13 +7,9 @@ using System.IO;
 using System.Diagnostics;
 using DrawToolsLib.Graphics;
 
-
-namespace DrawToolsLib
+namespace DrawToolsLib.Tools
 {
-    /// <summary>
-    /// Text tool
-    /// </summary>
-    class ToolText : ToolObject
+    internal class ToolText : ToolBase
     {
         TextBox _textBox;
         string oldText;
@@ -23,10 +19,9 @@ namespace DrawToolsLib
 
 
         public ToolText(DrawingCanvas drawingCanvas)
+            : base(new Cursor(new MemoryStream(Properties.Resources.Text)))
         {
             this.drawingCanvas = drawingCanvas;
-            MemoryStream stream = new MemoryStream(Properties.Resources.Text);
-            ToolCursor = new Cursor(stream);
         }
 
         /// <summary>
@@ -45,7 +40,11 @@ namespace DrawToolsLib
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
             Point point = e.GetPosition(drawingCanvas);
-            AddNewObject(drawingCanvas, new GraphicText(drawingCanvas, point));
+            var o = new GraphicText(drawingCanvas, point);
+            drawingCanvas.UnselectAll();
+            o.IsSelected = true;
+            drawingCanvas.GraphicsList.Add(o);
+            drawingCanvas.CaptureMouse();
         }
 
         /// <summary>
@@ -77,8 +76,6 @@ namespace DrawToolsLib
 
         public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)
         {
-            drawingCanvas.Cursor = ToolCursor;
-
             if (e.LeftButton == MouseButtonState.Pressed)
             {
                 if (drawingCanvas.IsMouseCaptured)

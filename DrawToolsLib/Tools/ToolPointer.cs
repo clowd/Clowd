@@ -7,12 +7,9 @@ using System.Windows.Media;
 using DrawToolsLib.Graphics;
 
 
-namespace DrawToolsLib
+namespace DrawToolsLib.Tools
 {
-    /// <summary>
-    /// Pointer tool
-    /// </summary>
-    class ToolPointer : Tool
+    internal class ToolPointer : ToolBase
     {
         private enum SelectionMode
         {
@@ -35,8 +32,7 @@ namespace DrawToolsLib
         private CommandChangeState _commandChangeState;
         bool _wasEdit;
 
-
-        public ToolPointer()
+        public ToolPointer() : base(HelperFunctions.DefaultCursor)
         {
         }
 
@@ -265,7 +261,6 @@ namespace DrawToolsLib
             drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
         }
 
-
         /// <summary>
         /// Add change to history.
         /// Called after finishing moving/resizing.
@@ -300,7 +295,6 @@ namespace DrawToolsLib
                     return Rect.Empty;
             }
         }
-
         private Rect TranslateDestAroundHandle(Rect source, Rect dest, int handleNumber)
         {
             switch (handleNumber)

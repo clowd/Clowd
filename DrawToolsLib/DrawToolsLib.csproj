@@ -102,8 +102,7 @@
     <Compile Include="SerializationHelper.cs" />
     <Compile Include="Tools\ToolDraggable.cs" />
     <Compile Include="Tools\ToolFilter.cs" />
-    <Compile Include="Tools\ToolObject.cs" />
-    <Compile Include="Tools\ToolObjectNew.cs" />
+    <Compile Include="Tools\ToolBase.cs" />
     <Compile Include="Tools\ToolPointer.cs" />
     <Compile Include="Tools\ToolPolyLine.cs" />
     <Compile Include="HelperFunctions.cs" />
@@ -118,9 +117,8 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
-    <Compile Include="Tools\Tool.cs" />
     <Compile Include="Tools\ToolText.cs" />
-    <Compile Include="Tools\ToolTypeConverter.cs" />
+    <Compile Include="ToolTypeConverter.cs" />
     <Compile Include="UndoManager.cs" />
   </ItemGroup>
   <ItemGroup>
