@@ -12,7 +12,7 @@ using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib.Tools
 {
-    internal class ToolFilter<T> : ToolObjectNew
+    internal class ToolFilter<T> : ToolBase
         where T : FilterBase
     {
         private FilterBase _filter;

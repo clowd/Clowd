@@ -9,7 +9,7 @@ using DrawToolsLib.Graphics;
 
 namespace DrawToolsLib.Tools
 {
-    internal class ToolDraggable<T> : ToolObjectNew
+    internal class ToolDraggable<T> : ToolBase
         where T : GraphicBase
     {
         private readonly Func<Point, T> _create;
