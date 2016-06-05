@@ -145,6 +145,7 @@ namespace DrawToolsLib.Filters
             {
                 var centerX = (Source.Right - Source.Left) / 2 + Source.Left;
                 var centerY = (Source.Bottom - Source.Top) / 2 + Source.Top;
+                ctx.PushOpacityMask(new ImageBrush(Source.BitmapSource));
                 ctx.PushTransform(new RotateTransform(Source.Angle, centerX, centerY));
                 ctx.DrawImage(_rendered, Source.UnrotatedBounds);
             }
@@ -159,6 +160,7 @@ namespace DrawToolsLib.Filters
             using (var ctx = vis.RenderOpen())
             {
                 var imgRect = new Rect(0, 0, image.PixelWidth, image.PixelHeight);
+                ctx.PushOpacityMask(new ImageBrush(Source.BitmapSource));
                 ctx.DrawImage(Source.BitmapSource, imgRect);
                 ctx.DrawImage(_rendered, imgRect);
             }
