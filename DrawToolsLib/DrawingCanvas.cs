@@ -48,7 +48,7 @@ namespace DrawToolsLib
         public static readonly DependencyProperty CanMoveToBackProperty;
         public static readonly DependencyProperty CanSetPropertiesProperty;
 
-        private Tool[] tools;                   // Array of tools
+        private ToolBase[] tools;                   // Array of tools
 
         ToolText toolText;
         internal ToolPointer ToolPointer;
@@ -72,7 +72,7 @@ namespace DrawToolsLib
             CreateContextMenu();
 
             // create array of drawing tools
-            tools = new Tool[(int)ToolType.Max];
+            tools = new ToolBase[(int)ToolType.Max];
 
             ToolPointer = new ToolPointer();
             tools[(int)ToolType.Pointer] = ToolPointer;

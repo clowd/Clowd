@@ -7,17 +7,14 @@ using System.IO;
 using System.Windows.Media.Imaging;
 using DrawToolsLib.Graphics;
 
-
-namespace DrawToolsLib
+namespace DrawToolsLib.Tools
 {
-    internal class ToolPolyLine : ToolObject
+    internal class ToolPolyLine : ToolBase
     {
         private GraphicPolyLine newPolyLine;
 
-        public ToolPolyLine()
+        public ToolPolyLine() : base(new Cursor(new MemoryStream(Properties.Resources.Pencil)))
         {
-            MemoryStream stream = new MemoryStream(Properties.Resources.Pencil);
-            ToolCursor = new Cursor(stream);
         }
 
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
@@ -26,7 +23,10 @@ namespace DrawToolsLib
 
             newPolyLine = new GraphicPolyLine(drawingCanvas, new Point(p.X + 1, p.Y + 1));
 
-            AddNewObject(drawingCanvas, newPolyLine);
+            drawingCanvas.UnselectAll();
+            newPolyLine.IsSelected = true;
+            drawingCanvas.GraphicsList.Add(newPolyLine);
+            drawingCanvas.CaptureMouse();
         }
 
         public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)
@@ -34,10 +34,7 @@ namespace DrawToolsLib
             if (newPolyLine == null || e.LeftButton != MouseButtonState.Pressed || !drawingCanvas.IsMouseCaptured)
                 return;
 
-            drawingCanvas.Cursor = ToolCursor;
-
             Point p = e.GetPosition(drawingCanvas);
-
             newPolyLine.AddPoint(p);
         }
 
@@ -53,7 +50,6 @@ namespace DrawToolsLib
                 newPolyLine.Draw(context);
             }
 
-            var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
             var bitmap = new RenderTargetBitmap((int)newPolyLine.Bounds.Width, (int)newPolyLine.Bounds.Height, 96, 96, PixelFormats.Default);
             bitmap.Render(visual);
 
