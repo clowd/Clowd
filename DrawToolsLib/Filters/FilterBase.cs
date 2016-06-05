@@ -12,7 +12,6 @@ namespace DrawToolsLib.Filters
     internal abstract class FilterBase
     {
         public DrawingCanvas Canvas { get; }
-        public DrawingBrush Brush { get; }
         public GraphicImage Source { get; }
 
         protected FilterBase(DrawingCanvas canvas, GraphicImage source)
