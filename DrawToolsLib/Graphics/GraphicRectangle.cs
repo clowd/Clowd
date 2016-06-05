@@ -291,7 +291,7 @@ namespace DrawToolsLib.Graphics
             if (handleNumber == 9)
                 return new Cursor(new MemoryStream(Resources.Rotate));
 
-            var cursorNum = (int)((45 * handleNumber + Angle + 92.5) / 5) % 36;
+            var cursorNum = (int)((45 * handleNumber + Angle + 272.5) / 5) % 36;
             if (_resizeCursors[cursorNum] == null)
                 _resizeCursors[cursorNum] = new Cursor(new MemoryStream((byte[])Resources.ResourceManager.GetObject($"Resize{cursorNum}")));
             return _resizeCursors[cursorNum];
