@@ -148,16 +148,25 @@ namespace DrawToolsLib
 
         private static Cursor CreateCursorNoResize(Bitmap bmp, int xHotSpot, int yHotSpot)
         {
-            IntPtr ptr = bmp.GetHicon();
-            IconInfo tmp = new IconInfo();
-            GetIconInfo(ptr, ref tmp);
-            tmp.xHotspot = xHotSpot;
-            tmp.yHotspot = yHotSpot;
-            tmp.fIcon = false;
-            ptr = CreateIconIndirect(ref tmp);
+            IntPtr ptr = IntPtr.Zero;
+            try
+            {
+                ptr = bmp.GetHicon();
+                IconInfo tmp = new IconInfo();
+                GetIconInfo(ptr, ref tmp);
+                tmp.xHotspot = xHotSpot;
+                tmp.yHotspot = yHotSpot;
+                tmp.fIcon = false;
 
-            SafeIconHandle panHandle = new SafeIconHandle(ptr);
-            return System.Windows.Interop.CursorInteropHelper.Create(panHandle);
+                var cursorPtr = CreateIconIndirect(ref tmp);
+                SafeIconHandle panHandle = new SafeIconHandle(cursorPtr);
+                return System.Windows.Interop.CursorInteropHelper.Create(panHandle);
+            }
+            finally
+            {
+                if (ptr != IntPtr.Zero)
+                    DestroyIcon(ptr);
+            }
         }
 
         private struct IconInfo
