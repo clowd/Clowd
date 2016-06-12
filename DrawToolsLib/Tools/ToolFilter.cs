@@ -59,7 +59,7 @@ namespace DrawToolsLib.Tools
 
         public override void SetCursor(DrawingCanvas canvas)
         {
-            canvas.Cursor = _brush.GetBrushCursor();
+            canvas.Cursor = _brush.GetBrushCursor(canvas);
         }
 
         private Point ConstrainPoint(Point p)

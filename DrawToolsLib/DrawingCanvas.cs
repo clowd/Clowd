@@ -1944,7 +1944,7 @@ namespace DrawToolsLib
             _artworkRectangle.Height = bounds.Height;
         }
 
-        #endregion Other Functions
+        #endregion Other FunctionsS
 
         #region Zooming and panning
 
@@ -1981,6 +1981,10 @@ namespace DrawToolsLib
             var worldCX = (me.ActualWidth / 2 - me.ContentOffset.X) / (double)e.OldValue;
             var worldCY = (me.ActualHeight / 2 - me.ContentOffset.Y) / (double)e.OldValue;
             me.ContentOffset = new Point(me.ActualWidth / 2 - worldCX * (double)e.NewValue, me.ActualHeight / 2 - worldCY * (double)e.NewValue);
+
+            // Set cursor - in the cases of brushes this makes sure the cursor accurately represents the brush size
+            var curTool = me.tools[(int)me.Tool];
+            curTool.SetCursor(me);
         }
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
