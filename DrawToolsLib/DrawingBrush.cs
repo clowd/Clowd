@@ -100,9 +100,9 @@ namespace DrawToolsLib
             _currentColor = color;
         }
 
-        public Cursor GetBrushCursor()
+        public Cursor GetBrushCursor(DrawingCanvas canvas)
         {
-            var diameter = _radius * 2;
+            var diameter = (int)((_radius * 2) * canvas.ContentScale);
             using (Bitmap curBit = new Bitmap(diameter + 3, diameter + 3))
             {
                 using (var bgPen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(175, 255, 255, 255), 3))
@@ -110,6 +110,8 @@ namespace DrawToolsLib
                 using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(curBit))
                 {
                     g.SmoothingMode = SmoothingMode.AntiAlias;
+                    g.InterpolationMode = InterpolationMode.High;
+                    g.CompositingQuality = CompositingQuality.HighQuality;
                     if (Type == DrawingBrushType.Circle)
                     {
                         g.DrawEllipse(bgPen, 1, 1, diameter, diameter);
@@ -122,7 +124,7 @@ namespace DrawToolsLib
                     }
                 }
 
-                return CreateCursorNoResize(curBit, _radius + 2, _radius + 2);
+                return CreateCursorNoResize(curBit, diameter / 2 + 2, diameter / 2 + 2);
             }
         }
 
