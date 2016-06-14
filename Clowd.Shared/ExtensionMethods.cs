@@ -6,7 +6,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using RT.Util.ExtensionMethods;
 using System.Net.Sockets;
 
 namespace Clowd.Shared

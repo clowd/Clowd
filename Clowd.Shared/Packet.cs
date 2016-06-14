@@ -1,5 +1,4 @@
-﻿using RT.Util.ExtensionMethods;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -23,7 +22,7 @@ namespace Clowd.Shared
         /// </summary>
         /// <param name="command">The Command.</param>
         public Packet(string command)
-            :this()
+            : this()
         {
             this.Command = command;
         }
@@ -63,21 +62,15 @@ namespace Clowd.Shared
         {
             get
             {
-                return this.PayloadBytes.FromUtf8();
+                return Encoding.UTF8.GetString(PayloadBytes);
             }
             set
             {
-                this.PayloadBytes = value.ToUtf8();
+                this.PayloadBytes = Encoding.UTF8.GetBytes(value);
             }
         }
         public readonly SortedDictionary<string, string> Headers;
-        public bool HasPayload
-        {
-            get
-            {
-                return PayloadBytes.Any();
-            }
-        }
+        public bool HasPayload => PayloadBytes.Any();
 
         /// <summary>
         /// Serializes the class into a byte array that can be written to a network stream and deserialized on the other side.
@@ -87,32 +80,34 @@ namespace Clowd.Shared
         /// </returns>
         public byte[] Serialize()
         {
+            bool hasPayload = this.PayloadBytes.Any();
+
             var output = new StringBuilder();
-            if (this.PayloadBytes.Any())
+            if (hasPayload)
             {
                 var len = this.PayloadBytes.Count().ToString(CultureInfo.InvariantCulture);
-                if (this.Headers.ContainsKey("CONTENT-LENGTH"))
-                {
-                    this.Headers["CONTENT-LENGTH"] = len;
-                }
-                else
-                {
-                    this.Headers.Add("CONTENT-LENGTH", len);
-                }
+                this.Headers["CONTENT-LENGTH"] = len;
+            }
+            else
+            {
+                this.Headers.Remove("CONTENT-LENGTH");
             }
 
             output.Append(this.Command + "\n");
 
             foreach (var header in this.Headers.Where(header => !String.IsNullOrEmpty(header.Value)))
             {
-                output.Append(String.Format("{0}: {1}\n", header.Key.ToUpperInvariant(), header.Value));
+                output.Append($"{header.Key.ToUpperInvariant()}: {header.Value}\n");
             }
 
             output.Append("\n");
 
             byte[] top = Encoding.ASCII.GetBytes(output.ToString());
-            int topCount = top.Count();
-            int payloadCount = this.PayloadBytes.Count();
+            if (!hasPayload)
+                return top;
+
+            int topCount = top.Length;
+            int payloadCount = this.PayloadBytes.Length;
             byte[] all = new byte[topCount + payloadCount];
             Array.Copy(top, all, topCount);
             Array.Copy(this.PayloadBytes, 0, all, topCount, payloadCount);
@@ -124,25 +119,30 @@ namespace Clowd.Shared
         {
             StringBuilder sb = new StringBuilder();
 
-            sb.AppendLine("[Packet Dump: " + this.Command + "]");
+            sb.AppendLine("---------------------------------[Packet Dump]---------------------------------");
+            sb.AppendLine("Command: " + this.Command);
+            sb.AppendLine("Headers:");
             foreach (var kvp in this.Headers)
-            {
-                sb.AppendLine(String.Format("---{0}: {1}", kvp.Key, kvp.Value));
-            }
+                sb.AppendLine($"---{kvp.Key}: {kvp.Value}");
+
             if (this.PayloadBytes.Any())
             {
-                sb.AppendLine("--------------------------------------------------------------------------------");
+                sb.AppendLine("Payload:");
                 if (this.Payload.Length > 1000)
                 {
-                    sb.AppendLine(this.Payload.SubstringSafe(0, 1000));
+                    sb.AppendLine(this.Payload.Substring(0, 1000));
                     sb.AppendLine("(Display trunicated to 1000 bytes. Actual length: " + this.Payload.Length + " bytes.");
                 }
                 else
                 {
                     sb.AppendLine(this.Payload);
                 }
-                sb.AppendLine("--------------------------------------------------------------------------------");
             }
+            else
+            {
+                sb.AppendLine("(no payload)");
+            }
+            sb.AppendLine("-------------------------------------------------------------------------------");
             return sb.ToString();
         }
     }
