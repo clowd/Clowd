@@ -150,7 +150,6 @@
     <Compile Include="ClowdService.cs" />
     <Compile Include="Config\AzureEndpointSection.cs" />
     <Compile Include="Config\ClowdConfigSection.cs" />
-    <Compile Include="MimeHandlers\MimeHelper.cs" />
     <Compile Include="ModelTypes.cs" />
     <Compile Include="Util\Extensions.cs" />
     <Content Include="feed.aspx">
@@ -175,7 +174,6 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="clowd.pfx" />
-    <None Include="mime.types" />
     <None Include="packages.config" />
     <None Include="DatabaseModel.lsmodel">
       <Generator>LightSpeedModelGenerator</Generator>
