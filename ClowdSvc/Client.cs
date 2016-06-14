@@ -235,8 +235,13 @@ namespace Clowd.Server
             bool direct = p.Headers.ContainsKey("direct") && ExactConvert.To<bool>(p.Headers["direct"]);
             bool hidden = p.Headers.ContainsKey("direct") && ExactConvert.To<bool>(p.Headers["direct"]);
             string displayName = p.Headers["display-name"];
-            string mimetype = System.Web.MimeMapping.GetMimeMapping(displayName);
-            //string mimetype = MimeHandlers.MimeHelper.GetMimeType()
+
+            // use built-in mime table if possible, if not fall back to the less complete framework.
+            var mimeData = MimeTable.LookupExt(Path.GetExtension(displayName)).FirstOrDefault();
+            string mimetype = String.IsNullOrWhiteSpace(mimeData.name)
+                ? System.Web.MimeMapping.GetMimeMapping(displayName)
+                : mimeData.name;
+
             upload.Hidden = hidden;
             upload.LastAccessed = DateTime.Now;
             upload.UploadDate = DateTime.Now;

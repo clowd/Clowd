@@ -13,7 +13,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Anotar.NLog;
 using Clowd.Server.Config;
-using Clowd.Server.MimeHandlers;
 using Clowd.Server.Util;
 using Clowd.Shared;
 using Exceptionless;
@@ -61,8 +60,6 @@ namespace Clowd.Server
                 Directory.CreateDirectory(tmpPath);
             LogTo.Info("Using temp path: " + tmpPath);
             TempPath = tmpPath;
-
-            LogTo.Info($"Updated and loaded {MimeHelper.Init()} mime types.");
 
             Storage = new AzureStorageClient();
             LogTo.Info("Connected to Azure storage. current storage endpoint: " + Storage.Endpoint);
