@@ -90,11 +90,13 @@ namespace DrawToolsLib.Graphics
         public GraphicImage(DrawingCanvas canvas, Rect rect, BitmapSource bitmap, double angle = 0)
            : this(canvas.ObjectColor, canvas.LineWidth, rect, bitmap, angle)
         {
+            Effect = null;
         }
 
         public GraphicImage(Color objectColor, double lineWidth, Rect rect, BitmapSource bitmap, double angle = 0)
             : base(objectColor, lineWidth, rect)
         {
+            Effect = null;
             Angle = angle;
             _bitmap = bitmap;
         }
