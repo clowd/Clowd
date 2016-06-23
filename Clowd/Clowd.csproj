@@ -329,12 +329,6 @@
     <Resource Include="Images\Screenshot\View File-26.png" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Images\defaultold.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Images\icon-white.ico" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Clowd-250.png" />
   </ItemGroup>
   <ItemGroup>
@@ -354,9 +348,6 @@
     <Resource Include="Images\External Link-32.png" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Images\default.ico" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Help-25.png" />
   </ItemGroup>
   <ItemGroup>
@@ -366,6 +357,8 @@
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
   </ItemGroup>
   <ItemGroup>
+    <Resource Include="Images\default-white.ico" />
+    <Resource Include="Images\default.ico" />
     <Content Include="Properties\AssemblyInfo.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
       <LastGenOutput>AssemblyInfo.cs</LastGenOutput>
