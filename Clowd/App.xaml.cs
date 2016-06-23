@@ -34,10 +34,10 @@ namespace Clowd
 {
     public partial class App : Application
     {
-        public static new App Current { get { return (App)Application.Current; } }
+        public static new App Current => (App)Application.Current;
 
         public GeneralSettings Settings { get; private set; }
-        public string AppDataDirectory { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd"); } }
+        public string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
 
         // static instead of const for debugging purposes.
         public static string ClowdServerDomain { get; private set; } = "clowd.ca";
@@ -48,7 +48,6 @@ namespace Clowd
         private TaskbarIcon _taskbarIcon;
         private bool _prtscrWindowOpen = false;
         private bool _initialized = false;
-        private HotKey _captureHotkey;
         private DispatcherTimer _updateTimer;
         private NAppUpdate.Framework.UpdateManager _updateManager;
         private ResourceDictionary _lightBase;
@@ -115,6 +114,9 @@ namespace Clowd
                     {
                         foreach (var p in processes)
                             p.Kill();
+                        foreach (var p in processes)
+                            p.WaitForExit();
+
                         Thread.Sleep(1000);
                         _mutex = Mutex.OpenExisting(ClowdMutex);
                     }
@@ -157,8 +159,8 @@ namespace Clowd
 #endif
             SetupServiceHost();
             SetupDpiScaling();
-            SetupTrayIcon();
             SetupSettings();
+            SetupTrayIcon();
             SetupAccentColors();
 
             if (Settings.FirstRun || (String.IsNullOrEmpty(Settings.Username) && String.IsNullOrEmpty(Settings.PasswordHash)))
@@ -211,8 +213,6 @@ namespace Clowd
             _mutex.ReleaseMutex();
             _host.Close();
             _taskbarIcon.Dispose();
-            if (_captureHotkey != null)
-                _captureHotkey.Dispose();
         }
 
         private void SetupExceptionHandling()
@@ -458,14 +458,14 @@ namespace Clowd
         private void SetupTrayIcon()
         {
             _taskbarIcon = new TaskbarIcon();
-            //_taskbarIcon.IconSource = new BitmapImage(new Uri("pack://application:,,,/Images/default.ico"));
             _taskbarIcon.TrayDrop += OnTaskbarIconDrop;
             _taskbarIcon.WndProcMessageReceived += OnWndProcMessageReceived;
 
             //force the correct icon size
-            System.Windows.Resources.StreamResourceInfo sri = Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico"));
+            string iconLocation = SysInfo.IsWindows8OrLater ? "/Images/default-white.ico" : "/Images/default.ico";
+            System.Windows.Resources.StreamResourceInfo sri = Application.GetResourceStream(new Uri("pack://application:,,," + iconLocation));
             var desiredSize = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
-            var avaliableSizes = new[] { 64, 48, 32, 24, 20, 16 };
+            var avaliableSizes = new[] { 64, 48, 40, 32, 24, 20, 16 };
             var nearest = avaliableSizes.OrderBy(x => Math.Abs(x - desiredSize)).First();
             var icon = new System.Drawing.Icon(sri.Stream, new System.Drawing.Size(nearest, nearest));
             _taskbarIcon.Icon = icon;
