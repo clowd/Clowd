@@ -86,13 +86,13 @@
     <AppDesigner Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\clowd-shared\Clowd.Shared.csproj">
+      <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
+      <Name>Clowd.Shared</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj">
       <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
       <Name>Clowd.Interop</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
-      <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
-      <Name>Clowd.Shared</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
