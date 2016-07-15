@@ -184,18 +184,17 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
-      <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
-      <Name>Clowd.Shared</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <Content Include="FodyWeavers.xml" />
     <Content Include="template.html">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="..\..\clowd-shared\Clowd.Shared.csproj">
+      <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
+      <Name>Clowd.Shared</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\Fody.1.29.4\build\dotnet\Fody.targets" Condition="Exists('..\packages\Fody.1.29.4\build\dotnet\Fody.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
