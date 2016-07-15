@@ -7,15 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd", "Clowd\Clowd.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrawToolsLib", "DrawToolsLib\DrawToolsLib.csproj", "{04456DDE-AF72-4B83-9132-5AFC5F89CC76}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "lib", "lib", "{EC965981-D673-45B7-8B89-C8BA8FD7E1B8}"
-	ProjectSection(SolutionItems) = preProject
-		lib\Interop.SHDocVw.dll = lib\Interop.SHDocVw.dll
-		lib\NAppUpdate.Framework.dll = lib\NAppUpdate.Framework.dll
-		lib\RT.Servers.dll = lib\RT.Servers.dll
-		lib\RT.TagSoup.dll = lib\RT.TagSoup.dll
-		lib\RT.Util.dll = lib\RT.Util.dll
-	EndProjectSection
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{146C3FD8-4884-4306-A2FC-15A2646F660D}"
 	ProjectSection(SolutionItems) = preProject
 		Rebracer.xml = Rebracer.xml
