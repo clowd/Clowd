@@ -36,9 +36,10 @@ namespace Clowd.Utilities
 
             IDataObject dataObject = new DataObject();
             dataObject.SetData(DataFormats.Bitmap, bmp, true);
-            dataObject.SetData("PNG", pngBytes, true);
+            //dataObject.SetData("PNG", pngBytes, true);
             Clipboard.SetDataObject(dataObject, true);
         }
+
         public static void SetImage(BitmapSource bmp)
         {
             byte[] pngBytes;
@@ -50,7 +51,7 @@ namespace Clowd.Utilities
 
             IDataObject dataObject = new DataObject();
             dataObject.SetData(DataFormats.Bitmap, bmp, true);
-            dataObject.SetData("PNG", pngBytes, true);
+            //dataObject.SetData("PNG", pngBytes, true);
             Clipboard.SetDataObject(dataObject, true);
         }
 
@@ -64,7 +65,7 @@ namespace Clowd.Utilities
             }
 
             dataObject.SetData(DataFormats.Bitmap, bmp, true);
-            dataObject.SetData("PNG", pngBytes, true);
+            //dataObject.SetData("PNG", pngBytes, true);
         }
 
         private static BitmapSource GetImageFromFile()
