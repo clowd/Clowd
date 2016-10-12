@@ -1,7 +1,9 @@
 ﻿using Clowd.Controls;
 using Clowd.Utilities;
+using Microsoft.Win32;
 using ScreenVersusWpf;
 using System;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -174,7 +176,7 @@ namespace Clowd
     "</ControlTemplate>";
                 Style style = new Style(typeof(Thumb));
                 style.Setters.Add(new Setter(Thumb.BackgroundProperty, App.Current.Resources["HighlightBrush"]));
-                style.Setters.Add(new Setter(Thumb.TemplateProperty, (ControlTemplate)System.Windows.Markup.XamlReader.Parse(template)));
+                style.Setters.Add(new Setter(Thumb.TemplateProperty, (ControlTemplate) System.Windows.Markup.XamlReader.Parse(template)));
 
                 AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
                 ResizingAdorner myAdorner = new ResizingAdorner(selectionBorder, style);
@@ -345,14 +347,26 @@ namespace Clowd
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             var cropped = CropBitmap();
-            this.Close();
+            Close();
             TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped)).Show();
         }
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             var cropped = CropBitmap();
             ClipboardEx.SetImage(cropped);
-            this.Close();
+            Close();
+        }
+        private void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            var cropped = CropBitmap();
+            SaveFileDialog dlg = new SaveFileDialog();
+            dlg.DefaultExt = ".png";
+            dlg.Filter = "PNG files (.png)|*.png|All files (*.*)|*.*"; // Filter files by extension
+            if (dlg.ShowDialog() == true)
+            {
+                cropped.Save(dlg.FileName, ImageFormat.Png);
+                Close();
+            }
         }
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
         {
