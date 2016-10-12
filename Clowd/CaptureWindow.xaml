@@ -57,6 +57,7 @@
         <KeyBinding Key="F" Command="{StaticResource Command.SelectScreen}" />
         <KeyBinding Key="M" Command="{StaticResource Command.ToggleMagnifier}" />
         <KeyBinding Key="C" Command="ApplicationCommands.Copy" />
+        <KeyBinding Key="S" Command="ApplicationCommands.SaveAs" />
         <KeyBinding Key="Esc" Command="ApplicationCommands.Close" />
     </Window.InputBindings>
     <Window.CommandBindings>
@@ -68,6 +69,7 @@
         <CommandBinding Command="{StaticResource Command.ToggleMagnifier}" Executed="ToggleMagnifierExecuted" />
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
         <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyExecuted" />
+        <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />
     </Window.CommandBindings>
     <Grid Name="rootGrid" Cursor="{Binding CanvasCursor}">
         <Image Name="imageBackground"  Source="{Binding GrayScreenImage}" Stretch="Fill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
@@ -124,7 +126,7 @@
                     BorderThickness="2" Background="White" Opacity="0.8" Height="30" Visibility="Hidden">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock FontSize="12" FontWeight="Bold">
-                        <Run Name="areaSizeIndicatorWidth"></Run> x <Run Name="areaSizeIndicatorHeight"></Run>
+                        <Run Name="areaSizeIndicatorWidth"></Run> × <Run Name="areaSizeIndicatorHeight"></Run>
                     </TextBlock>
                 </StackPanel>
             </Border>
@@ -168,6 +170,14 @@
                             <Path Width="26" Height="26" Fill="White" Data="M 5 2 C 3.9 2 3 2.9 3 4 L 3 17 L 5 17 L 5 4 L 15 4 L 15 2 L 5 2 z M 9 6 C 7.9 6 7 6.9 7 8 L 7 20 C 7 21.1 7.9 22 9 22 L 18 22 C 19.1 22 20 21.1 20 20 L 20 8 C 20 6.9 19.1 6 18 6 L 9 6 z M 9 8 L 18 8 L 18 20 L 9 20 L 9 8 z" />
                             <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
                                 <Run TextDecorations="Underline">C</Run>OPY
+                            </TextBlock>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ButtonTool}" Width="50" Command="ApplicationCommands.SaveAs">
+                        <StackPanel Orientation="Vertical" Margin="5">
+                            <Path Width="26" Height="26" Fill="White" Data="M 3.395549,2.467584 C 1.8763182,2.467584 1.1167028,3.2269183 1.1167028,4.7464302 L 1.1167028,22.9772 C 1.1167028,24.49643 1.8763182,25.256046 3.395549,25.256046 L 18.587858,25.256046 C 20.107111,25.256046 20.866704,24.49643 20.866704,22.9772 L 20.866704,4.7464302 C 20.866704,3.2268879 20.107089,2.467584 18.587858,2.467584 L 3.395549,2.467584 z M 5.6743949,3.2271994 17.068627,3.2271994 17.068627,9.3041221 C 17.068627,10.063738 16.309012,10.823353 15.549396,10.823353 L 7.1936265,10.823353 C 6.4340111,10.823353 5.6743949,10.063738 5.6743949,9.3041221 L 5.6743949,3.2271994 z M 11.751319,3.9868148 11.751319,10.063738 15.549396,10.063738 15.549396,3.9868148 11.751319,3.9868148 z M 3.395549,13.861815 18.587858,13.861815 18.587858,24.49643 3.395549,24.49643 3.395549,13.861815 z M 19.727281,22.9772 C 19.937041,22.9772 20.107089,23.147247 20.107089,23.357007 20.107089,23.566767 19.937041,23.736815 19.727281,23.736815 19.517521,23.736815 19.347473,23.566767 19.347473,23.357007 19.347473,23.147247 19.517521,22.9772 19.727281,22.9772 z" />
+                            <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
+                                <Run TextDecorations="Underline">S</Run>AVE
                             </TextBlock>
                         </StackPanel>
                     </Button>
