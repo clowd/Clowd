@@ -1,5 +1,4 @@
 ﻿
-using AForge.Video;
 using Clowd.Interop;
 using Clowd.Interop.Gdi32;
 using System;
@@ -10,7 +9,7 @@ using System.Threading;
 
 namespace Screeney.Video
 {
-    internal class GdiCaptureSource : IVideoSource
+    internal class ManagedGdiCaptureSource : IVideoSource
     {
         private Rectangle _region;
         private int _frameInterval = 100;
@@ -67,11 +66,11 @@ namespace Screeney.Video
                 return false;
             }
         }
-        public GdiCaptureSource(Rectangle region)
+        public ManagedGdiCaptureSource(Rectangle region)
         {
             this._region = region;
         }
-        public GdiCaptureSource(Rectangle region, int frameInterval)
+        public ManagedGdiCaptureSource(Rectangle region, int frameInterval)
         {
             this._region = region;
             this.FrameInterval = frameInterval;
@@ -129,7 +128,7 @@ namespace Screeney.Video
             int y = _region.Location.Y;
             Size size = _region.Size;
 
-            Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            Bitmap bitmap = new Bitmap(width, height, PixelFormat.Format24bppRgb);
             Graphics graphics = Graphics.FromImage(bitmap);
 
             DateTime start;
@@ -190,7 +189,6 @@ namespace Screeney.Video
         }
         private void DrawCursor(Graphics g)
         {
-            return;
             CURSORINFO cursorInfo;
             cursorInfo.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
             if (USER32.GetCursorInfo(out cursorInfo) && cursorInfo.flags == 0x00000001 /*CURSOR_SHOWING*/)
