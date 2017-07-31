@@ -16,7 +16,9 @@ namespace Clowd
 {
     public static class UploadManager
     {
-        public static bool Authenticated { get { return _cache != null && (_cache.Credentials != null || !String.IsNullOrWhiteSpace(_cache.SessionKey)); } }
+        private static IStorageServer _server = new ClowdStorageServer();
+
+        public static bool Authenticated => _server.Authenticated;
 
         private static TaskWindow _window
         {
@@ -30,7 +32,6 @@ namespace Clowd
                 return _windowBacking;
             }
         }
-        private static SessionCredentialStore _cache;
         private static TaskWindow _windowBacking;
         public static async Task<string> Upload(byte[] data, string displayName, UploadOptions options = null)
         {
@@ -41,96 +42,17 @@ namespace Clowd
             var view = new UploadTaskViewItem(viewName, "Connecting...", canceler);
             _window.AddTask(view);
 
-            UploadSession context;
             try
             {
-                using (context = await GetSession(true))
+                var url = await _server.Upload(data, displayName, options, view, () => canceler.IsSet);
+                if (url != null)
                 {
-                    if (canceler.IsSet)
-                        return null;
-
-                    view.SecondaryText = "Uploading...";
-                    Packet p = new Packet();
-
-                    p.Command = "UPLOAD";
-                    p.Headers.Add("content-type", "file");
-                    p.Headers.Add("data-hash", MD5.Compute(data));
-                    p.Headers.Add("display-name", displayName);
-
-                    if (options?.DirectEnabled == true)
-                        p.Headers.Add("direct", "true");
-                    if (options?.ViewLimit > 0)
-                        p.Headers.Add("view-limit", options.ViewLimit.ToString());
-                    if (options?.ValidDuration != null)
-                        p.Headers.Add("valid-for", options.ValidDuration.Value.Ticks.ToString());
-
-                    const int chunk_size = 65535;
-                    int data_size = data.Count();
-                    view.ProgressTargetText = ((long)data_size).ToPrettySizeString(0);
-
-                    if (data_size > chunk_size)
-                    {
-                        p.Headers.Add("partitioned", "true");
-                        p.Headers.Add("file-size", data_size.ToString());
-
-                        for (int i = 0; i < data_size && !canceler.IsSet; i += chunk_size)
-                        {
-                            var size = Math.Min(chunk_size, data_size - i);
-                            bool last = i + chunk_size >= data_size;
-                            byte[] buffer = new byte[size];
-                            double progress = ((double)i + size) / data_size * 100;
-                            Buffer.BlockCopy(data, i, buffer, 0, size);
-
-                            if (i == 0)
-                            {
-                                p.PayloadBytes = buffer;
-                                await context.WriteAsync(p);
-                                var initial = await context.WaitPacketAsync();
-                                if (initial.Command != "CONTINUE")
-                                    throw new NotImplementedException();
-                                if (initial.Headers.ContainsKey("display-name"))
-                                    view.PrimaryText = initial.Headers["display-name"];
-                                view.UploadURL = initial.Payload;
-                            }
-                            else
-                            {
-                                //await Task.Delay(500); //remove, this is for testing.
-                                Packet chk = new Packet();
-                                chk.Command = "CHUNK";
-                                chk.Headers.Add("last", last ? "true" : "false");
-                                chk.PayloadBytes = buffer;
-                                await context.WriteAsync(chk);
-                            }
-                            view.ProgressCurrentText = ((long)Math.Min(i + chunk_size, data_size)).ToPrettySizeString(0);
-                            view.Progress = progress > 98 ? 98 : progress;
-                        }
-                    }
-                    else
-                    {
-                        p.PayloadBytes = data;
-                        view.ProgressCurrentText = ((long)data.Length / 3).ToPrettySizeString(0);
-                        view.Progress = 33;
-                        await context.WriteAsync(p);
-                    }
-
-                    if (canceler.IsSet)
-                        return null;
-
-                    var response = await context.WaitPacketAsync();
-                    if (response.Command == "COMPLETE" && response.HasPayload)
-                    {
-                        if (response.Headers.ContainsKey("display-name"))
-                            view.PrimaryText = response.Headers["display-name"];
-                        view.Progress = 100;
-                        view.ProgressCurrentText = ((long)data.Length).ToPrettySizeString(0);
-                        _window.Notify();
-                        view.SecondaryText = "Complete";
-                        view.UploadURL = response.Payload;
-                        return response.Payload;
-                    }
-                    else
-                        return null;
+                    view.Progress = 100;
+                    view.ProgressCurrentText = ((long) data.Length).ToPrettySizeString(0);
+                    _window.Notify();
+                    view.SecondaryText = "Complete";
                 }
+                return url;
             }
             catch (Exception e)
             {
@@ -141,7 +63,131 @@ namespace Clowd
             }
         }
 
-        public static async Task<UploadDTO[]> MyUploads(int offset = 0, int count = 10)
+        public static Task<UploadDTO[]> MyUploads(int offset = 0, int count = 10)
+        {
+            return _server.MyUploads(offset, count);
+        }
+
+        public static Task<AuthResult> Login(Credentials login)
+        {
+            return _server.Login(login);
+        }
+
+        public static void Logout()
+        {
+            _server.Logout();
+        }
+
+        public static void ShowWindow()
+        {
+            _window.Show();
+        }
+    }
+
+
+    public interface IStorageServer
+    {
+        bool Authenticated { get; }
+        Task<AuthResult> Login(Credentials login);
+        void Logout();
+        Task<string> Upload(byte[] data, string displayName, UploadOptions options, UploadTaskViewItem view, Func<bool> isCancelled);
+        Task<UploadDTO[]> MyUploads(int offset, int count);
+    }
+
+
+    public class ClowdStorageServer : IStorageServer
+    {
+        public bool Authenticated => _cache != null && (_cache.Credentials != null || !String.IsNullOrWhiteSpace(_cache.SessionKey));
+        private SessionCredentialStore _cache;
+
+        public async Task<string> Upload(byte[] data, string displayName, UploadOptions options, UploadTaskViewItem view, Func<bool> isCancelled)
+        {
+            UploadSession context;
+            using (context = await GetSession(true))
+            {
+                if (isCancelled())
+                    return null;
+
+                view.SecondaryText = "Uploading...";
+                Packet p = new Packet();
+
+                p.Command = "UPLOAD";
+                p.Headers.Add("content-type", "file");
+                p.Headers.Add("data-hash", MD5.Compute(data));
+                p.Headers.Add("display-name", displayName);
+
+                if (options?.DirectEnabled == true)
+                    p.Headers.Add("direct", "true");
+                if (options?.ViewLimit > 0)
+                    p.Headers.Add("view-limit", options.ViewLimit.ToString());
+                if (options?.ValidDuration != null)
+                    p.Headers.Add("valid-for", options.ValidDuration.Value.Ticks.ToString());
+
+                const int chunk_size = 65535;
+                int data_size = data.Count();
+                view.ProgressTargetText = ((long) data_size).ToPrettySizeString(0);
+
+                if (data_size > chunk_size)
+                {
+                    p.Headers.Add("partitioned", "true");
+                    p.Headers.Add("file-size", data_size.ToString());
+
+                    for (int i = 0; i < data_size && !isCancelled(); i += chunk_size)
+                    {
+                        var size = Math.Min(chunk_size, data_size - i);
+                        bool last = i + chunk_size >= data_size;
+                        byte[] buffer = new byte[size];
+                        double progress = ((double) i + size) / data_size * 100;
+                        Buffer.BlockCopy(data, i, buffer, 0, size);
+
+                        if (i == 0)
+                        {
+                            p.PayloadBytes = buffer;
+                            await context.WriteAsync(p);
+                            var initial = await context.WaitPacketAsync();
+                            if (initial.Command != "CONTINUE")
+                                throw new NotImplementedException();
+                            if (initial.Headers.ContainsKey("display-name"))
+                                view.PrimaryText = initial.Headers["display-name"];
+                            view.UploadURL = initial.Payload;
+                        }
+                        else
+                        {
+                            //await Task.Delay(500); //remove, this is for testing.
+                            Packet chk = new Packet();
+                            chk.Command = "CHUNK";
+                            chk.Headers.Add("last", last ? "true" : "false");
+                            chk.PayloadBytes = buffer;
+                            await context.WriteAsync(chk);
+                        }
+                        view.ProgressCurrentText = ((long) Math.Min(i + chunk_size, data_size)).ToPrettySizeString(0);
+                        view.Progress = progress > 98 ? 98 : progress;
+                    }
+                }
+                else
+                {
+                    p.PayloadBytes = data;
+                    view.ProgressCurrentText = ((long) data.Length / 3).ToPrettySizeString(0);
+                    view.Progress = 33;
+                    await context.WriteAsync(p);
+                }
+
+                if (isCancelled())
+                    return null;
+
+                var response = await context.WaitPacketAsync();
+                if (response.Command == "COMPLETE" && response.HasPayload)
+                {
+                    if (response.Headers.ContainsKey("display-name"))
+                        view.PrimaryText = response.Headers["display-name"];
+                    return response.Payload;
+                }
+                else
+                    return null;
+            }
+        }
+
+        public async Task<UploadDTO[]> MyUploads(int offset, int count)
         {
             try
             {
@@ -161,7 +207,7 @@ namespace Clowd
             }
         }
 
-        public static async Task<AuthResult> Login(Credentials login)
+        public async Task<AuthResult> Login(Credentials login)
         {
             using (var session = await GetSession(false))
             {
@@ -187,18 +233,14 @@ namespace Clowd
                 }
             }
         }
-        public static void Logout()
+
+        public void Logout()
         {
             _cache.Credentials.Dispose();
             _cache = null;
         }
 
-        public static void ShowWindow()
-        {
-            _window.Show();
-        }
-
-        private static async Task<UploadSession> GetSession(bool login = true)
+        private async Task<UploadSession> GetSession(bool login = true)
         {
             var session = await UploadSession.GetSession();
             if (session == null)
@@ -246,16 +288,16 @@ namespace Clowd
 
         private class UploadSession : IDisposable
         {
-            public CancellationTokenSource CancelToken { get; private set; }
-            public NetworkStream WriteStream { get; private set; }
-            public BufferBlock<Packet> PacketBuffer { get; set; }
+            private CancellationTokenSource CancelToken { get; set; }
+            private NetworkStream WriteStream { get; set; }
+            private BufferBlock<Packet> PacketBuffer { get; set; }
 
-            public bool Connected
+            private bool Connected
             {
                 get { return _client.Connected && !_readLoop.IsCompleted; }
             }
-            public bool Authenticated { get; private set; } = false;
-            public string Error { get; private set; }
+            public bool Authenticated { get; set; } = false;
+            private string Error { get; set; }
 
             private TcpClient _client;
             private Task _readLoop;
@@ -436,13 +478,13 @@ namespace Clowd
                         {
                             while (!token.IsCancellationRequested)
                             {
-                                byte[] commandByte = stream.ReadUntil((byte)'\n', false);
+                                byte[] commandByte = stream.ReadUntil((byte) '\n', false);
                                 if (commandByte == null) break;
                                 string command = commandByte.FromUtf8();
                                 if (String.IsNullOrWhiteSpace(command)) break;
                                 var tmpDict = new SortedDictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
                                 string tmpHeader;
-                                while (!String.IsNullOrWhiteSpace(tmpHeader = stream.ReadUntil((byte)'\n', false).FromUtf8()))
+                                while (!String.IsNullOrWhiteSpace(tmpHeader = stream.ReadUntil((byte) '\n', false).FromUtf8()))
                                 {
                                     var split = tmpHeader.Split(':');
                                     tmpDict.Add(split[0].Trim(), split[1].Trim());
@@ -471,6 +513,8 @@ namespace Clowd
             }
         }
     }
+
+
     public enum AuthResult
     {
         Success,
@@ -525,7 +569,7 @@ namespace Clowd
                 IntPtr ptr = System.Runtime.InteropServices.Marshal.SecureStringToBSTR(_password);
                 try
                 {
-                    return new string((char*)ptr);
+                    return new string((char*) ptr);
                 }
                 finally
                 {
