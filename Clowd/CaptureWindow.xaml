@@ -157,14 +157,14 @@
                             </TextBlock>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Video}">
+                    <!--<Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Video}">
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Path Width="26" Height="26" Fill="White" Data="M 8.5 6 C 2.5 6 0 6.81275 0 7.46875 L 0 18.5 C 0 19.141 2.5 20 8.5 20 C 14.5 20 17 19.18725 17 18.53125 L 17 7.5 C 17 6.859 14.5 6 8.5 6 z M 25.375 6.03125 C 25.199951 6.0388086 25.019125 6.102 24.90625 6.1875 L 18.40625 10.375 C 18.15625 10.563 18 10.8725 18 11.1875 L 18 14.8125 C 18 15.1265 18.15625 15.436 18.40625 15.625 L 24.90625 19.8125 C 25.08225 19.9455 25.9375 20.363 25.9375 19 L 25.9375 7 C 25.9375 6.2125 25.666748 6.0186523 25.375 6.03125 z" />
                             <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White">
                                 <Run TextDecorations="Underline">V</Run>IDEO
                             </TextBlock>
                         </StackPanel>
-                    </Button>
+                    </Button>-->
                     <Button Style="{StaticResource ButtonTool}" Width="50" Command="ApplicationCommands.Copy">
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Viewbox Height="25" Width="25">
