@@ -36,7 +36,7 @@ namespace Clowd
 
     [ImplementPropertyChanged]
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
-    public class GeneralSettings : SettingsBase, INotifyPropertyChanged
+    public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable
     {
         [Browsable(false), ClassifyIgnore]
         public new object Attribute { get; } = null;
@@ -107,10 +107,18 @@ namespace Clowd
 
         [Browsable(false), ClassifyNotNull]
         public int[] CustomColors { get; set; } = new int[0];
+
+        public void Dispose()
+        {
+            FileUploadShortcut?.Dispose();
+            OpenHomeShortcut?.Dispose();
+            CaptureSettings?.Dispose();
+            UploadSettings?.Dispose();
+        }
     }
 
     [ImplementPropertyChanged]
-    public class CaptureSettings
+    public class CaptureSettings : IDisposable
     {
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]
@@ -136,6 +144,13 @@ namespace Clowd
         [Category("Hotkeys"), DisplayName("Capture - Active Window"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureActiveShortcut { get; set; }
             = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Alt, App.Current.QuickCaptureCurrentWindow);
+
+        public void Dispose()
+        {
+            CaptureRegionShortcut?.Dispose();
+            CaptureFullscreenShortcut?.Dispose();
+            CaptureActiveShortcut?.Dispose();
+        }
     }
 
     [ImplementPropertyChanged]
@@ -166,13 +181,18 @@ namespace Clowd
     }
 
     [ImplementPropertyChanged]
-    public class UploadSettings
+    public class UploadSettings : IDisposable
     {
         [Category("Hotkeys"), DisplayName("Uploads - Activate Next"), ClassifyIgnoreIfDefault]
         [Description("This hotkey activates the next item in the task window. " +
                      "For instance, if the next item is an upload it will be copied to the clipboard.")]
         public GlobalTrigger ActivateNextShortcut { get; set; }
            = new GlobalTrigger(() => TaskWindow.Current?.ActivateNext());
+
+        public void Dispose()
+        {
+            ActivateNextShortcut?.Dispose();
+        }
     }
 
     [ImplementPropertyChanged]
