@@ -55,8 +55,11 @@
                     </Style>
                 </Button.Style>
             </Button>
-            <TextBlock  FontSize="20" Opacity="0.7" VerticalAlignment="Center">Settings</TextBlock>
+            <TextBlock FontSize="20" Opacity="0.7" VerticalAlignment="Center">Settings</TextBlock>
         </StackPanel>
+        <Label MouseDown="ResetSettingsClick" Grid.Row="0" Margin="0,10,20,0" FontSize="12" Padding="2" Foreground="{Binding Foreground}" HorizontalAlignment="Right" VerticalAlignment="Center" Cursor="Hand">
+            <TextBlock TextDecorations="Underline">Reset to defaults</TextBlock>
+        </Label>
         <ptools:PropertyGrid 
             x:Name="PropertyGrid1"
             SelectedObject="{Binding SelectedItem}"

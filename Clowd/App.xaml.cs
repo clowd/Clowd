@@ -345,8 +345,7 @@ namespace Clowd
         private void SetupSettings()
         {
             GeneralSettings tmp;
-            Classify.DefaultOptions = new ClassifyOptions()
-                .AddTypeOptions(typeof(Color), new ClassifyColorTypeOptions());
+            Classify.DefaultOptions = new ClassifyOptions().AddTypeOptions(typeof(Color), new ClassifyColorTypeOptions());
             SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
         }
@@ -572,6 +571,19 @@ namespace Clowd
             context.Items.Add(exit);
 
             _taskbarIcon.ContextMenu = context;
+        }
+
+        public void ResetSettings()
+        {
+            Settings.Dispose();
+            Settings = new GeneralSettings()
+            {
+                PasswordHash = Settings.PasswordHash,
+                Username = Settings.Username,
+                FirstRun = Settings.FirstRun,
+                LastUploadPath = Settings.LastUploadPath,
+            };
+            Settings.SaveQuiet();
         }
 
         public void FinishInit()
