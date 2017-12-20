@@ -1,8 +1,5 @@
 ﻿using Clowd.Interop;
 using Clowd.Utilities;
-using Exceptionless;
-using Exceptionless.Logging;
-using Exceptionless.Plugins;
 using Ionic.Zip;
 using NotifyIconLib;
 using RT.Util;
@@ -24,11 +21,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Exceptionless.Dependency;
 using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
 using Ionic.Zlib;
+using SharpRaven;
+using SharpRaven.Data;
 
 namespace Clowd
 {
@@ -93,10 +91,8 @@ namespace Clowd
                     {
                         var ex = new InvalidOperationException("The mutex was opened successfully, " +
                                                               $"but there are no {ClowdAppName} processes running. Uninstaller?");
-                        var dic = new Dictionary<string, object>();
-                        dic.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
-                        ContextData cd = new ContextData(dic);
-                        ex.ToExceptionless(cd).Submit();
+                        ex.Data.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
+                        ex.ToSentry();
                         Environment.Exit(1);
                     }
                     var config = new TaskDialogInterop.TaskDialogOptions();
@@ -140,7 +136,7 @@ namespace Clowd
             {
                 // we still want to report this, beacuse it was unexpected, but because we successfully opened the mutex
                 // we know there is another Clowd instance running (or uninstaller) and we should close.
-                ex.ToExceptionless().Submit();
+                ex.ToSentry();
                 Environment.Exit(1);
             }
 
@@ -217,7 +213,9 @@ namespace Clowd
 
         private void SetupExceptionHandling()
         {
-#if DEBUG
+            Sentry.Init("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
+
+#if false && DEBUG
             if (Debugger.IsAttached)
                 return;
 
@@ -233,69 +231,49 @@ namespace Clowd
                     MessageBox.Show($"Unhandled exception: {e.ExceptionObject}");
             };
 #else
-            // initialize custom exceptionless server at https://exless.caesa.ca if not debugging.
-            var exless = ExceptionlessClient.Default;
-            var exconf = exless.Configuration;
-            exconf.ApiKey = "Vpcq6Hv9C7qh9qJpSsnet4ALPlilrIeKq2zBtL3v";
-            exconf.ServerUrl = "https://exless.caesa.ca";
-            exconf.UseFolderStorage(Path.Combine(AppDataDirectory, "exless"));
 
 
             // only want to report and potentially swallow errors if we're not debugging
-            if (System.Diagnostics.Debugger.IsAttached)
+            if (Debugger.IsAttached)
             {
-                exconf.Enabled = false;
+                Sentry.Default.Enabled = false;
                 return;
             }
 
-            exless.Startup();
-
             // create event handlers for unhandled exceptions
-            Func<EventSubmittingEventArgs, bool> ShowDialog = (e) =>
-            {
-                var dialog = new Exceptionless.Dialogs.CrashReportDialog(e.Client, e.Event);
-                bool? result = dialog.ShowDialog();
-                return result.HasValue && result.Value;
-            };
-            EventHandler<EventSubmittingEventArgs> OnSubmitting = (sender, e) =>
-            {
-                if (!e.IsUnhandledError)
-                    return;
+            //Sentry.Default.BeforeSend = (req) =>
+            //{
+            //    // here we should check if the event is Fatal, if it is, show dialog and attach user feedback to the message
 
-                // we want to show an error dialog, give the user a chance to add details, but we will want to 
-                // send the error regardless of what the users chooses to do.
-                if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
-                {
-                    //e.Cancel = !(bool)Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog),
-                    //            DispatcherPriority.Send, e);
-                    Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog),
-                        DispatcherPriority.Send, e);
-                }
-                else
-                {
-                    //e.Cancel = !ShowDialog(e);
-                    ShowDialog(e);
-                }
-            };
-            EventHandler<EventSubmittedEventArgs> OnSubmitted = (sender, e) =>
-            {
-                if (e.IsUnhandledError)
-                    Environment.Exit(1);
-            };
+            //    if (!e.IsUnhandledError)
+            //        return;
+
+            //    // we want to show an error dialog, give the user a chance to add details, but we will want to 
+            //    // send the error regardless of what the users chooses to do.
+            //    if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+            //    {
+            //        Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog), DispatcherPriority.Send, e);
+            //    }
+            //    else
+            //    {
+            //        ShowDialog(e);
+            //    }
+            //};
+
             ThreadExceptionEventHandler OnApplicationThreadException = (sender, args) =>
             {
-                var contextData = new Exceptionless.Plugins.ContextData();
-                contextData.MarkAsUnhandledError();
-                contextData.SetSubmissionMethod("ApplicationThreadException");
-                args.Exception.ToExceptionless(contextData, exless).Submit();
+                var evt = new SentryEvent(args.Exception);
+                evt.Message = "ApplicationThreadException";
+                evt.Level = ErrorLevel.Fatal;
+                evt.Submit();
             };
+
             DispatcherUnhandledExceptionEventHandler OnApplicationDispatcherUnhandledException = (sender, args) =>
             {
-                var contextData = new Exceptionless.Plugins.ContextData();
-                contextData.MarkAsUnhandledError();
-                contextData.SetSubmissionMethod("DispatcherUnhandledException");
-                args.Exception.ToExceptionless(contextData, exless).Submit();
-                args.Handled = true;
+                var evt = new SentryEvent(args.Exception);
+                evt.Message = "DispatcherUnhandledException";
+                evt.Level = ErrorLevel.Fatal;
+                evt.Submit();
             };
 
             try
@@ -304,30 +282,17 @@ namespace Clowd
             }
             catch (Exception ex)
             {
-                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessClientExtensions), ex,
-                    "An error occurred while wiring up to the application thread exception event.");
+                ex.ToSentry();
             }
+
             try
             {
                 Application.Current.DispatcherUnhandledException += OnApplicationDispatcherUnhandledException;
             }
             catch (Exception ex)
             {
-                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessClientExtensions), ex,
-                    "An error occurred while wiring up to the application dispatcher exception event.");
+                ex.ToSentry();
             }
-            try
-            {
-                AppDomain.CurrentDomain.ProcessExit += (sender, e) => exless.ProcessQueue();
-            }
-            catch (Exception ex)
-            {
-                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessWpfExtensions), ex,
-                    "An error occurred while wiring up to the process exit event.");
-            }
-
-            exless.SubmittingEvent += OnSubmitting;
-            exless.SubmittedEvent += OnSubmitted;
 #endif
         }
         private void SetupServiceHost()
@@ -345,7 +310,9 @@ namespace Clowd
         private void SetupSettings()
         {
             GeneralSettings tmp;
-            Classify.DefaultOptions = new ClassifyOptions().AddTypeOptions(typeof(Color), new ClassifyColorTypeOptions());
+            Classify.DefaultOptions = new ClassifyOptions();
+            Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
+            Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
             SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
         }
@@ -590,7 +557,7 @@ namespace Clowd
         {
             if (_initialized)
             {
-                ExceptionlessClient.Default.SubmitLog(nameof(App), "FinishInit() called more than once.", LogLevel.Warn);
+                Sentry.Default.SubmitLog("FinishInit() called more than once.", ErrorLevel.Warning);
                 return;
             }
             _initialized = true;
