@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using RT.Util.ExtensionMethods;
 using Clowd.Shared;
-using Exceptionless;
 
 namespace Clowd
 {
@@ -182,7 +181,7 @@ namespace Clowd
                 }
                 catch (Exception e)
                 {
-                    e.ToExceptionless().Submit();
+                    e.ToSentry();
                     return AuthResult.NetworkError;
                 }
             }
