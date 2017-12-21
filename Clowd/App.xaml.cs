@@ -38,7 +38,6 @@ namespace Clowd
         public string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
 
         // static instead of const for debugging purposes.
-        public static string ClowdServerDomain { get; private set; } = "clowd.ca";
         public const string ClowdAppName = "Clowd";
         public const string ClowdNamedPipe = "ClowdRunningPipe";
         public const string ClowdMutex = "ClowdMutex000";
@@ -140,64 +139,20 @@ namespace Clowd
                 Environment.Exit(1);
             }
 
-            // if running from a debug location, offer prompt to target remote or local clowd server.
-#if DEBUG
-            var ddiag = new TaskDialogOptions();
-            ddiag.Title = "Clowd";
-            ddiag.MainInstruction = "Clowd running in debug mode.";
-            ddiag.Content = "Choose to target either a local or remote server location.";
-            ddiag.CustomButtons = new[] { "Remote (clowd.ca)", "Local" };
-            ddiag.MainIcon = VistaTaskDialogIcon.Information;
-            var ddiagResult = TaskDialog.Show(ddiag);
-            if (ddiagResult.CustomButtonResult == 1)
-                ClowdServerDomain = "localhost";
-
-#endif
             SetupServiceHost();
             SetupDpiScaling();
             SetupSettings();
             SetupTrayIcon();
             SetupAccentColors();
 
-            if (Settings.FirstRun || (String.IsNullOrEmpty(Settings.Username) && String.IsNullOrEmpty(Settings.PasswordHash)))
+            if (Settings.FirstRun)
             {
                 // there were no settings to load, show login window.
                 Settings.FirstRun = false;
                 Settings.Save();
-                var page = new LoginPage();
-                var login = TemplatedWindow.CreateWindow("CLOWD", page);
-                login.Closed += (sender, args) =>
-                {
-                    if (!_initialized)
-                        Application.Current.Shutdown();
-                };
-                login.Show();
             }
-            else if (Settings.Username == "anon" && String.IsNullOrEmpty(Settings.PasswordHash))
-            {
-                //use clowd anonymously.
-                FinishInit();
-            }
-            else
-            {
-                using (var details = new Credentials(Settings.Username, Settings.PasswordHash, true))
-                {
-                    var result = await UploadManager.Login(details);
-                    if (result == AuthResult.Success)
-                        FinishInit();
-                    else
-                    {
-                        var page = new LoginPage(result, Settings.Username);
-                        var login = TemplatedWindow.CreateWindow("CLOWD", page);
-                        login.Closed += (sender, args) =>
-                        {
-                            if (!_initialized)
-                                Application.Current.Shutdown();
-                        };
-                        login.Show();
-                    }
-                }
-            }
+
+            FinishInit();
 
 #if (!DEBUG)
             SetupUpdateTimer();
@@ -438,33 +393,33 @@ namespace Clowd
         }
         private void SetupUpdateTimer()
         {
-            // NAppUpdater uses relative paths, so the current directory must be set accordingly.
-            Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-            _updateManager = NAppUpdate.Framework.UpdateManager.Instance;
-            _updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
-            _updateManager.Config.TempFolder = Path.Combine(AppDataDirectory, "update");
-            _updateManager.Config.BackupFolder = Path.Combine(AppDataDirectory, "backup");
-            _updateManager.Config.UpdateProcessName = "ClowdUpdate";
-            var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ClowdServerDomain}/app_updates/feed.aspx");
-            _updateManager.UpdateSource = source;
+            //// NAppUpdater uses relative paths, so the current directory must be set accordingly.
+            //Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            //_updateManager = NAppUpdate.Framework.UpdateManager.Instance;
+            //_updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
+            //_updateManager.Config.TempFolder = Path.Combine(AppDataDirectory, "update");
+            //_updateManager.Config.BackupFolder = Path.Combine(AppDataDirectory, "backup");
+            //_updateManager.Config.UpdateProcessName = "ClowdUpdate";
+            //var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ClowdServerDomain}/app_updates/feed.aspx");
+            //_updateManager.UpdateSource = source;
 
-            _updateManager.ReinstateIfRestarted();
-            if (_updateManager.State == NAppUpdate.Framework.UpdateManager.UpdateProcessState.AfterRestart)
-            {
-                var config = new TaskDialogInterop.TaskDialogOptions();
-                config.Title = "Clowd";
-                config.MainInstruction = "Updates were installed successfully.";
-                config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
-                config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Information;
-                TaskDialogInterop.TaskDialog.Show(config);
-            }
-            _updateManager.CleanUp();
+            //_updateManager.ReinstateIfRestarted();
+            //if (_updateManager.State == NAppUpdate.Framework.UpdateManager.UpdateProcessState.AfterRestart)
+            //{
+            //    var config = new TaskDialogInterop.TaskDialogOptions();
+            //    config.Title = "Clowd";
+            //    config.MainInstruction = "Updates were installed successfully.";
+            //    config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
+            //    config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Information;
+            //    TaskDialogInterop.TaskDialog.Show(config);
+            //}
+            //_updateManager.CleanUp();
 
-            _updateTimer = new DispatcherTimer();
-            _updateTimer.Interval = Settings.UpdateCheckInterval;
-            _updateTimer.Tick += OnCheckForUpdates;
-            OnCheckForUpdates(null, null);
-            _updateTimer.Start();
+            //_updateTimer = new DispatcherTimer();
+            //_updateTimer.Interval = Settings.UpdateCheckInterval;
+            //_updateTimer.Tick += OnCheckForUpdates;
+            //OnCheckForUpdates(null, null);
+            //_updateTimer.Start();
         }
         private void SetupTrayContextMenu()
         {
@@ -545,8 +500,6 @@ namespace Clowd
             Settings.Dispose();
             Settings = new GeneralSettings()
             {
-                PasswordHash = Settings.PasswordHash,
-                Username = Settings.Username,
                 FirstRun = Settings.FirstRun,
                 LastUploadPath = Settings.LastUploadPath,
             };
@@ -680,14 +633,9 @@ namespace Clowd
                 return;
 
             var wnd = TemplatedWindow.GetWindow(typeof(HomePage))
-                ?? TemplatedWindow.GetWindow(typeof(SettingsPage));
-            if (wnd == null)
-            {
-                if (UploadManager.Authenticated)
-                    wnd = TemplatedWindow.CreateWindow("Clowd", new HomePage());
-                else
-                    wnd = TemplatedWindow.CreateWindow("Clowd", new LoginPage());
-            }
+                ?? TemplatedWindow.GetWindow(typeof(SettingsPage))
+                ?? TemplatedWindow.CreateWindow("Clowd", new HomePage());
+
             wnd.Show();
             wnd.MakeForeground();
         }
