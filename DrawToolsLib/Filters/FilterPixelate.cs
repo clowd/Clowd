@@ -62,7 +62,7 @@ namespace DrawToolsLib.Filters
             return brute[0].Pixel;
         }
 
-        public override void Handle(DrawingBrush brush, Point p)
+        protected override void HandleInternal(DrawingBrush brush, Point p)
         {
             // translate mouse point because relative to DPI and to the GraphicImage location / rotation
             p = Source.UnapplyRotation(p);
