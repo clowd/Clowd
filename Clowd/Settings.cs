@@ -50,12 +50,6 @@ namespace Clowd
         [Browsable(false)]
         public string LastUploadPath { get; set; }
 
-        [Browsable(false)]
-        public string Username { get; set; }
-
-        [Browsable(false)]
-        public string PasswordHash { get; set; }
-
         [Category("General"), DisplayName("Confirm before exit")]
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose { get; set; } = true;
