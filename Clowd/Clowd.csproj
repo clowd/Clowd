@@ -178,9 +178,6 @@
     <Compile Include="HomePage.xaml.cs">
       <DependentUpon>HomePage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="LoginPage.xaml.cs">
-      <DependentUpon>LoginPage.xaml</DependentUpon>
-    </Compile>
     <Compile Include="UploadManager.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="Utilities\AreoColor.cs" />
@@ -219,10 +216,6 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="HomePage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="LoginPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -298,6 +291,10 @@
     <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj">
       <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>
       <Name>DrawToolsLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\FileUploadLib\FileUploadLib.csproj">
+      <Project>{41d2687f-03b5-4d2e-8992-633ccc0290f8}</Project>
+      <Name>FileUploadLib</Name>
     </ProjectReference>
     <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
       <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
