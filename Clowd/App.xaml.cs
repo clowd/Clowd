@@ -715,6 +715,8 @@ namespace Clowd
 
         private async void OnCheckForUpdates(object sender, EventArgs e)
         {
+            return;
+
             if (System.Diagnostics.Debugger.IsAttached)
             {
                 return;
