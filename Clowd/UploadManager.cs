@@ -11,12 +11,16 @@ using System.Threading.Tasks.Dataflow;
 using RT.Util.ExtensionMethods;
 using Clowd.Shared;
 using Exceptionless;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Net;
+using RT.Util.Json;
 
 namespace Clowd
 {
     public static class UploadManager
     {
-        private static IStorageServer _server = new ClowdStorageServer();
+        private static IStorageServer _server = new MiniFileStorageServer("https://img.roman.st");
 
         public static bool Authenticated => _server.Authenticated;
 
@@ -49,6 +53,7 @@ namespace Clowd
                 {
                     view.Progress = 100;
                     view.ProgressCurrentText = ((long) data.Length).ToPrettySizeString(0);
+                    view.UploadURL = url;
                     _window.Notify();
                     view.SecondaryText = "Complete";
                 }
@@ -92,6 +97,54 @@ namespace Clowd
         void Logout();
         Task<string> Upload(byte[] data, string displayName, UploadOptions options, UploadTaskViewItem view, Func<bool> isCancelled);
         Task<UploadDTO[]> MyUploads(int offset, int count);
+    }
+
+
+    public class MiniFileStorageServer : IStorageServer
+    {
+        private string _server;
+
+        public MiniFileStorageServer(string server)
+        {
+            _server = server;
+        }
+
+        public bool Authenticated { get; private set; }
+
+        public Task<AuthResult> Login(Credentials login)
+        {
+            return Task.FromResult(AuthResult.Success);
+        }
+
+        public void Logout()
+        {
+        }
+
+        public Task<UploadDTO[]> MyUploads(int offset, int count)
+        {
+            return Task.FromResult(new UploadDTO[0]);
+        }
+
+        public async Task<string> Upload(byte[] data, string displayName, UploadOptions options, UploadTaskViewItem view, Func<bool> isCancelled)
+        {
+            view.SecondaryText = "Uploading...";
+            view.ProgressTargetText = data.LongLength.ToPrettySizeString(0);
+            var client = new HttpClient();
+            client.DefaultRequestHeaders.ExpectContinue = false;
+            HttpContent content = new ByteArrayContent(data);
+            content.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data") { Name = "file", FileName = "file" };
+            content = new MultipartContent("form-data") { content };
+            content.Headers.Add("X-UserId", "ww75m2cfssl9uvzd");
+            content.Headers.Add("X-UserPassword", "h8OM7f3xA2rMB");
+            content.Headers.Add("X-FileHash", MD5.Compute(data));
+            var resp = await client.PostAsync($"{_server}/upload", content);
+            if (resp.StatusCode != HttpStatusCode.OK)
+                throw new Exception();
+            view.ProgressCurrentText = data.LongLength.ToPrettySizeString(0);
+            view.Progress = 98;
+            var name = JsonDict.Parse(await resp.Content.ReadAsStringAsync())["name"].GetString();
+            return $"https://unblurify.com/#{_server}/f/{name}.png";
+        }
     }
 
 
