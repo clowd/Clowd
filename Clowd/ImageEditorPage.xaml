@@ -277,7 +277,7 @@
                 </Viewbox>
             </Button>
         </StackPanel>
-        <Canvas Grid.Row="1" x:Name="objectCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ClipToBounds="True">
+        <Canvas Grid.Row="1" x:Name="objectCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ClipToBounds="True" UseLayoutRounding="True">
             <Rectangle Fill="#1e1e1e"
                 Width="{Binding ActualWidth, ElementName=objectCanvas}"
                 Height="{Binding ActualHeight, ElementName=objectCanvas}">
