@@ -88,7 +88,7 @@ namespace Clowd
         private DrawingVisual GetRenderedVisual()
         {
             var bounds = drawingCanvas.GetArtworkBounds();
-            var transform = new TranslateTransform(Math.Floor(-bounds.Left), Math.Floor(-bounds.Top));
+            var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
 
             DrawingVisual vs = new DrawingVisual();
             using (DrawingContext dc = vs.RenderOpen())
@@ -103,7 +103,7 @@ namespace Clowd
         private RenderTargetBitmap GetRenderedBitmap()
         {
             var bounds = drawingCanvas.GetArtworkBounds();
-            var transform = new TranslateTransform(Math.Floor(-bounds.Left), Math.Floor(-bounds.Top));
+            var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
 
             RenderTargetBitmap bmp = new RenderTargetBitmap(
                 ScreenTools.WpfToScreen(bounds.Width),
@@ -115,7 +115,7 @@ namespace Clowd
             using (DrawingContext dc = background.RenderOpen())
             {
                 dc.PushTransform(transform);
-                dc.DrawRectangle(Brushes.White, null, new Rect(bounds.Left - 10, bounds.Top - 10, bounds.Width + 20, bounds.Height + 20));
+                dc.DrawRectangle(Brushes.White, null, bounds);
             }
             bmp.Render(background);
             drawingCanvas.Draw(null, bmp, transform, false);
