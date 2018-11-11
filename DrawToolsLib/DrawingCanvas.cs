@@ -84,6 +84,11 @@ namespace DrawToolsLib
                 point => new GraphicRectangle(this, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
+            tools[(int)ToolType.FilledRectangle] = new ToolDraggable<GraphicFilledRectangle>(
+                new Cursor(new MemoryStream(Properties.Resources.Rectangle)),
+                point => new GraphicFilledRectangle(this, new Rect(point, new Size(1, 1))),
+                (point, g) => g.MoveHandleTo(point, 5));
+
             tools[(int)ToolType.Ellipse] = new ToolDraggable<GraphicEllipse>(
                 new Cursor(new MemoryStream(Properties.Resources.Ellipse)),
                 point => new GraphicEllipse(this, new Rect(point, new Size(1, 1))),

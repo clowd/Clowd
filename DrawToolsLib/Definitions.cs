@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -12,6 +12,7 @@ namespace DrawToolsLib
         None,
         Pointer,
         Rectangle,
+        FilledRectangle,
         Ellipse,
         Line,
         Arrow,
