@@ -1,4 +1,4 @@
-﻿using Clowd.Controls;
+using Clowd.Controls;
 using Clowd.Utilities;
 using Microsoft.Win32;
 using ScreenVersusWpf;
@@ -180,7 +180,7 @@ namespace Clowd
     "</ControlTemplate>";
                 Style style = new Style(typeof(Thumb));
                 style.Setters.Add(new Setter(Thumb.BackgroundProperty, App.Current.Resources["HighlightBrush"]));
-                style.Setters.Add(new Setter(Thumb.TemplateProperty, (ControlTemplate) System.Windows.Markup.XamlReader.Parse(template)));
+                style.Setters.Add(new Setter(Thumb.TemplateProperty, (ControlTemplate)System.Windows.Markup.XamlReader.Parse(template)));
 
                 AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
                 ResizingAdorner myAdorner = new ResizingAdorner(selectionBorder, style);
@@ -356,8 +356,8 @@ namespace Clowd
             var w = TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped));
             var rectPos = TruncatedCroppingRect().ToWpfRect();
             var primaryScreen = ScreenTools.Screens.First().Bounds.ToWpfRect();
-            w.Left = rectPos.Left - primaryScreen.Left;
-            w.Top = rectPos.Top - primaryScreen.Top;
+            w.Left = rectPos.Left - primaryScreen.Left - App.Current.Settings.EditorSettings.CapturePadding - 7;
+            w.Top = rectPos.Top - primaryScreen.Top - App.Current.Settings.EditorSettings.CapturePadding - 60;
             w.Show();
         }
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
