@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -27,6 +27,7 @@ namespace DrawToolsLib
          XmlArrayItem(typeof(GraphicImage)),
          XmlArrayItem(typeof(GraphicPolyLine)),
          XmlArrayItem(typeof(GraphicRectangle)),
+         XmlArrayItem(typeof(GraphicFilledRectangle)),
          XmlArrayItem(typeof(GraphicText))]
         public GraphicBase[] Graphics { get; set; }
 

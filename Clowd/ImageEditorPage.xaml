@@ -59,6 +59,7 @@
         <KeyBinding Key="D" Command="{StaticResource Commands.SelectTool}" CommandParameter="None"/>
         <KeyBinding Key="S" Command="{StaticResource Commands.SelectTool}" CommandParameter="Pointer"/>
         <KeyBinding Key="R" Command="{StaticResource Commands.SelectTool}" CommandParameter="Rectangle"/>
+        <KeyBinding Key="F" Command="{StaticResource Commands.SelectTool}" CommandParameter="FilledRectangle"/>
         <KeyBinding Key="E" Command="{StaticResource Commands.SelectTool}" CommandParameter="Ellipse"/>
         <KeyBinding Key="L" Command="{StaticResource Commands.SelectTool}" CommandParameter="Line"/>
         <KeyBinding Key="A" Command="{StaticResource Commands.SelectTool}" CommandParameter="Arrow"/>
@@ -199,6 +200,15 @@
                           Style="{StaticResource ToggleToolButtonStyle}">
                 <Viewbox>
                     <Path Data="M 3 3 C 2.4777778 3 1.9395305 3.1854695 1.5625 3.5625 C 1.1854695 3.9395305 1 4.4777778 1 5 L 1 21 C 1 21.522222 1.1854695 22.060469 1.5625 22.4375 C 1.9395305 22.814531 2.4777778 23 3 23 L 23 23 C 23.522222 23 24.060469 22.814531 24.4375 22.4375 C 24.814531 22.060469 25 21.522222 25 21 L 25 5 C 25 4.4777778 24.814531 3.9395305 24.4375 3.5625 C 24.060469 3.1854695 23.522222 3 23 3 L 3 3 z M 3 5 L 23 5 L 23 21 L 3 21 L 3 5 z" />
+                </Viewbox>
+            </ToggleButton>
+            <ToggleButton ToolTip="Filled Rectangle (F)"
+                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
+                                     Converter={StaticResource convToolType}, ConverterParameter=FilledRectangle}"
+                          Command="{StaticResource Commands.SelectTool}" CommandParameter="FilledRectangle"
+                          Style="{StaticResource ToggleToolButtonStyle}">
+                <Viewbox>
+                    <Path Data="M 3 3 C 2.4777778 3 1.9395305 3.1854695 1.5625 3.5625 C 1.1854695 3.9395305 1 4.4777778 1 5 L 1 21 C 1 21.522222 1.1854695 22.060469 1.5625 22.4375 C 1.9395305 22.814531 2.4777778 23 3 23 L 23 23 C 23.522222 23 24.060469 22.814531 24.4375 22.4375 C 24.814531 22.060469 25 21.522222 25 21 L 25 5 C 25 4.4777778 24.814531 3.9395305 24.4375 3.5625 C 24.060469 3.1854695 23.522222 3 23 3 L 3 3 z" />
                 </Viewbox>
             </ToggleButton>
             <ToggleButton ToolTip="Ellipse (E)"
