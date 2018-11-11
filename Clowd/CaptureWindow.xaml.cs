@@ -97,7 +97,7 @@ namespace Clowd
                 GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
             }
         }
-        private CroppedBitmap CropBitmap()
+        private ScreenRect TruncatedCroppingRect()
         {
             var rect = CroppingRectangle;
             //x
@@ -112,7 +112,11 @@ namespace Clowd
             //height
             if (rect.Height > ScreenImage.PixelHeight)
                 rect.Height = ScreenImage.PixelHeight;
-
+            return rect;
+        }
+        private CroppedBitmap CropBitmap()
+        {
+            var rect = TruncatedCroppingRect();
             return new CroppedBitmap(ScreenImage, rect);
         }
 
@@ -348,7 +352,13 @@ namespace Clowd
         {
             var cropped = CropBitmap();
             Close();
-            TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped)).Show();
+
+            var w = TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped));
+            var rectPos = TruncatedCroppingRect().ToWpfRect();
+            var primaryScreen = ScreenTools.Screens.First().Bounds.ToWpfRect();
+            w.Left = rectPos.Left - primaryScreen.Left;
+            w.Top = rectPos.Top - primaryScreen.Top;
+            w.Show();
         }
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
