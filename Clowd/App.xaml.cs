@@ -217,7 +217,7 @@ namespace Clowd
 
         private void SetupExceptionHandling()
         {
-#if DEBUG
+#if DEBUG || true
             if (Debugger.IsAttached)
                 return;
 
