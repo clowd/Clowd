@@ -125,8 +125,12 @@ namespace Clowd
 
             var padding = App.Current.Settings.EditorSettings.CapturePadding;
             var sidebarWidth = rightSidepanel.Visibility != Visibility.Visible ? 0 : (ActualWidth - RightSidebarX() + 2 * RightSidebarMargin());
-            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + padding * 2 + sidebarWidth,
+            var wasActionRowHeight = actionRow.ActualHeight;
+            bool doFit() => TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + padding * 2 + sidebarWidth,
                 _imageSize.Height + actionRow.ActualHeight + padding * 2));
+            bool fit = doFit();
+            if (actionRow.ActualHeight != wasActionRowHeight)
+                fit = doFit(); // re-fit in case the action row has reflowed
 
             // just doing this to force a thread context switch.
             // by the time we get back on to the UI thread the window will be done resizing.
