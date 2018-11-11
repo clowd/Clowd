@@ -49,7 +49,9 @@ namespace Clowd
         private bool _prtscrWindowOpen = false;
         private bool _initialized = false;
         private DispatcherTimer _updateTimer;
+#if NAPPUPDATE
         private NAppUpdate.Framework.UpdateManager _updateManager;
+#endif
         private ResourceDictionary _lightBase;
         private ResourceDictionary _darkBase;
         private Mutex _mutex;
@@ -203,7 +205,7 @@ namespace Clowd
                 }
             }
 
-#if (!DEBUG)
+#if (!DEBUG && NAPPUPDATE)
             SetupUpdateTimer();
 #endif
         }
@@ -470,6 +472,7 @@ namespace Clowd
             var icon = new System.Drawing.Icon(sri.Stream, new System.Drawing.Size(nearest, nearest));
             _taskbarIcon.Icon = icon;
         }
+#if NAPPUPDATE
         private void SetupUpdateTimer()
         {
             // NAppUpdater uses relative paths, so the current directory must be set accordingly.
@@ -500,6 +503,7 @@ namespace Clowd
             OnCheckForUpdates(null, null);
             _updateTimer.Start();
         }
+#endif
         private void SetupTrayContextMenu()
         {
             ContextMenu context = new ContextMenu();
@@ -713,10 +717,9 @@ namespace Clowd
             wnd.MakeForeground();
         }
 
+#if NAPPUPDATE
         private async void OnCheckForUpdates(object sender, EventArgs e)
         {
-            return;
-
             if (System.Diagnostics.Debugger.IsAttached)
             {
                 return;
@@ -765,6 +768,7 @@ namespace Clowd
                 _updateManager.ApplyUpdates(true, false, false);
             }
         }
+#endif
         private void OnCommandLineArgsReceived(object sender, CommandLineEventArgs e)
         {
             if (_cmdBatchTimer.IsEnabled)

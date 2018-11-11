@@ -300,10 +300,6 @@
       <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>
       <Name>DrawToolsLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
-      <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
-      <Name>NAppUpdate.Framework</Name>
-    </ProjectReference>
     <ProjectReference Include="..\NotifyIconLib\NotifyIconLib.csproj">
       <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>
       <Name>NotifyIconLib</Name>
