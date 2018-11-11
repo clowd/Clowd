@@ -1,4 +1,4 @@
-﻿<local:TemplatedControl x:Class="Clowd.ImageEditorPage"
+<local:TemplatedControl x:Class="Clowd.ImageEditorPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
@@ -66,7 +66,7 @@
         <KeyBinding Key="P" Command="{StaticResource Commands.SelectTool}" CommandParameter="PolyLine"/>
         <KeyBinding Key="T" Command="{StaticResource Commands.SelectTool}" CommandParameter="Text"/>
         <KeyBinding Key="O" Command="{StaticResource Commands.SelectTool}" CommandParameter="Pixelate"/>
-        <KeyBinding Key="E" Command="{StaticResource Commands.SelectTool}" CommandParameter="Erase"/>
+        <KeyBinding Key="X" Command="{StaticResource Commands.SelectTool}" CommandParameter="Erase"/>
     </UserControl.InputBindings>
     <UserControl.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Print" Executed="PrintCommand" />
