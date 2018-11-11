@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -2044,24 +2044,24 @@ namespace DrawToolsLib
             ReleaseMouseCapture();
         }
 
-        public void ZoomPanFit()
+        public void ZoomPanFit(double? widthOverride = null)
         {
             var rect = GetArtworkBounds();
-            ContentScale = Math.Min(ActualWidth / rect.Width, ActualHeight / rect.Height);
-            ZoomPanCenter();
+            ContentScale = Math.Min((widthOverride ?? ActualWidth) / rect.Width, ActualHeight / rect.Height);
+            ZoomPanCenter(widthOverride);
         }
 
-        public void ZoomPanActualSize()
+        public void ZoomPanActualSize(double? widthOverride = null)
         {
             var rect = GetArtworkBounds();
             ContentScale = 1;
-            ZoomPanCenter();
+            ZoomPanCenter(widthOverride);
         }
 
-        public void ZoomPanCenter()
+        public void ZoomPanCenter(double? widthOverride = null)
         {
             var rect = GetArtworkBounds();
-            var x = ActualWidth / 2 - rect.Width * ContentScale / 2 - rect.Left * ContentScale;
+            var x = (widthOverride ?? ActualWidth) / 2 - rect.Width * ContentScale / 2 - rect.Left * ContentScale;
             var y = ActualHeight / 2 - rect.Height * ContentScale / 2 - rect.Top * ContentScale;
             ContentOffset = new Point(x, y);
         }
