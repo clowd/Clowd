@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CS.Wpf;
 using ScreenVersusWpf;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd
 {
@@ -178,7 +179,8 @@ namespace Clowd
 
             if (!Double.IsNaN(window.Left) && !Double.IsNaN(window.Top))
             {
-                WpfRect ctrlRect = new WpfRect(window.Left, window.Top, window.Width, window.Height);
+                WpfRect primaryScreenRect = ScreenTools.Screens.First().Bounds.ToWpfRect();
+                WpfRect ctrlRect = new WpfRect(window.Left + primaryScreenRect.Left, window.Top + primaryScreenRect.Top, window.Width, window.Height);
                 WpfRect screenRect = ScreenTools.GetScreenContaining(ctrlRect.ToScreenRect()).WorkingArea.ToWpfRect();
 
                 if (wndWidth > screenRect.Width || wndHeight > screenRect.Height)
@@ -190,10 +192,8 @@ namespace Clowd
                     window.Height = wndHeight;
                     window.Width = wndWidth;
 
-                    window.Left += Math.Min(0, screenRect.Left + screenRect.Width - window.Left - window.Width);
-                    window.Left -= Math.Min(0, window.Left - screenRect.Left);
-                    window.Top += Math.Min(0, screenRect.Top + screenRect.Height - window.Top - window.Height);
-                    window.Top -= Math.Min(0, window.Top - screenRect.Top);
+                    window.Left = window.Left.Clip(screenRect.Left - primaryScreenRect.Left, screenRect.Right - window.Width - primaryScreenRect.Left);
+                    window.Top = window.Top.Clip(screenRect.Top - primaryScreenRect.Top, screenRect.Bottom - window.Height - primaryScreenRect.Top);
                     return true;
                 }
             }
