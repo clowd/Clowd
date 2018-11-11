@@ -1,4 +1,4 @@
-using Clowd.Utilities;
+﻿using Clowd.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
@@ -124,10 +124,8 @@ namespace Clowd
                 return;
 
             var padding = App.Current.Settings.EditorSettings.CapturePadding;
-            // instead of 61 it should be actionRow.Height.Value but its likely that this value hasnt been properly computed yet
-            // so this is just a shortcut for now. (200 is padding for the zoom control)
-            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + (padding * 2) + 200,
-                _imageSize.Height + 61 + (padding * 2)));
+            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + padding * 2 + (ActualWidth - RightSidebarX() + 2 * RightSidebarMargin()),
+                _imageSize.Height + actionRow.ActualHeight + padding * 2));
 
             // just doing this to force a thread context switch.
             // by the time we get back on to the UI thread the window will be done resizing.
@@ -223,15 +221,25 @@ namespace Clowd
             }
         }
 
+        private double RightSidebarX()
+        {
+            if (rightSidepanel.Visibility != Visibility.Visible)
+                return 0;
+            return rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0)).X;
+        }
+
+        private double RightSidebarMargin()
+        {
+            if (rightSidepanel.Visibility != Visibility.Visible)
+                return 0;
+            return ActualWidth - rightSidepanel.TransformToVisual(this).Transform(new Point(rightSidepanel.Width, 0)).X;
+        }
+
         private void ZoomFit_Clicked(object sender, RoutedEventArgs e)
         {
             double? widthOverride = null;
             if (rightSidepanel.Visibility == Visibility.Visible)
-            {
-                var pos = rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0));
-                var rightMargin = ActualWidth - rightSidepanel.TransformToVisual(this).Transform(new Point(rightSidepanel.Width, 0)).X;
-                widthOverride = pos.X - rightMargin;
-            }
+                widthOverride = RightSidebarX() - RightSidebarMargin();
             drawingCanvas.ZoomPanFit(widthOverride);
         }
 
@@ -239,7 +247,7 @@ namespace Clowd
         {
             double? widthOverride = null;
             if (rightSidepanel.Visibility == Visibility.Visible)
-                widthOverride = rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0)).X;
+                widthOverride = RightSidebarX();
             drawingCanvas.ZoomPanActualSize(widthOverride);
         }
 
