@@ -10,7 +10,7 @@
              xmlns:util="clr-namespace:Clowd.Utilities"
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
              mc:Ignorable="d" Background="Transparent"
-             MinHeight="380" MinWidth="600"
+             MinHeight="200" MinWidth="450"
              d:DesignHeight="300" d:DesignWidth="800">
     <UserControl.Resources>
         <ResourceDictionary>
