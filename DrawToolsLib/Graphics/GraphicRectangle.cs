@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Resources;
@@ -120,7 +120,7 @@ namespace DrawToolsLib.Graphics
         {
             get
             {
-                var points = new[] { new Point(Left, Top), new Point(Right, Top), new Point(Left, Bottom), new Point(Right, Bottom) };
+                var points = new[] { new Point(Left - 5, Top - 5), new Point(Right + 5, Top - 5), new Point(Left - 5, Bottom + 5), new Point(Right + 5, Bottom + 5) };
                 var rotated = points.Select(ApplyRotation).ToArray();
                 var l = rotated.Min(p => p.X);
                 var t = rotated.Min(p => p.Y);
