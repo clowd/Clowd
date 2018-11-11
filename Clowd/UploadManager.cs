@@ -10,7 +10,9 @@ using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using RT.Util.ExtensionMethods;
 using Clowd.Shared;
+#if EXLESS
 using Exceptionless;
+#endif
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net;
@@ -281,7 +283,9 @@ namespace Clowd
                 }
                 catch (Exception e)
                 {
+#if EXLESS
                     e.ToExceptionless().Submit();
+#endif
                     return AuthResult.NetworkError;
                 }
             }
@@ -687,7 +691,7 @@ namespace Clowd
             return this.Clone();
         }
 
-        #region IDisposable Support
+#region IDisposable Support
         private bool disposedValue = false; // To detect redundant calls
 
         protected virtual void Dispose(bool disposing)
@@ -712,6 +716,6 @@ namespace Clowd
             Dispose(true);
         }
 
-        #endregion
+#endregion
     }
 }

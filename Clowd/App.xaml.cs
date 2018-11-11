@@ -1,8 +1,11 @@
 ﻿using Clowd.Interop;
 using Clowd.Utilities;
+#if EXLESS
 using Exceptionless;
 using Exceptionless.Logging;
 using Exceptionless.Plugins;
+using Exceptionless.Dependency;
+#endif
 using Ionic.Zip;
 using NotifyIconLib;
 using RT.Util;
@@ -24,7 +27,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Exceptionless.Dependency;
 using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
@@ -95,10 +97,14 @@ namespace Clowd
                     {
                         var ex = new InvalidOperationException("The mutex was opened successfully, " +
                                                               $"but there are no {ClowdAppName} processes running. Uninstaller?");
+#if EXLESS
                         var dic = new Dictionary<string, object>();
                         dic.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
                         ContextData cd = new ContextData(dic);
                         ex.ToExceptionless(cd).Submit();
+#else
+                        throw ex;
+#endif
                         Environment.Exit(1);
                     }
                     var config = new TaskDialogInterop.TaskDialogOptions();
@@ -142,7 +148,9 @@ namespace Clowd
             {
                 // we still want to report this, beacuse it was unexpected, but because we successfully opened the mutex
                 // we know there is another Clowd instance running (or uninstaller) and we should close.
+#if EXLESS
                 ex.ToExceptionless().Submit();
+#endif
                 Environment.Exit(1);
             }
 
@@ -582,7 +590,9 @@ namespace Clowd
         {
             if (_initialized)
             {
+#if EXLESS
                 ExceptionlessClient.Default.SubmitLog(nameof(App), "FinishInit() called more than once.", LogLevel.Warn);
+#endif
                 return;
             }
             _initialized = true;

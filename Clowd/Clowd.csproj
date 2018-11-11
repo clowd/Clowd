@@ -55,18 +55,6 @@
       <HintPath>..\packages\CS.Wpf.1.0.6.35\lib\net45\CS.Wpf.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Exceptionless.Extras, Version=3.3.1575.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Exceptionless.Wpf.3.3.1575\lib\net45\Exceptionless.Extras.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Exceptionless.Portable, Version=3.3.1575.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Exceptionless.Portable.3.3.1575\lib\net45\Exceptionless.Portable.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Exceptionless.Wpf, Version=3.3.1575.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Exceptionless.Wpf.3.3.1575\lib\net45\Exceptionless.Wpf.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="Ionic.Zip">
       <HintPath>..\packages\DotNetZip.1.9.8\lib\net20\Ionic.Zip.dll</HintPath>
       <Private>True</Private>
