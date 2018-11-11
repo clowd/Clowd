@@ -181,7 +181,7 @@ namespace Clowd
             {
                 WpfRect primaryScreenRect = ScreenTools.Screens.First().Bounds.ToWpfRect();
                 WpfRect ctrlRect = new WpfRect(window.Left + primaryScreenRect.Left, window.Top + primaryScreenRect.Top, window.Width, window.Height);
-                WpfRect screenRect = ScreenTools.GetScreenContaining(ctrlRect.ToScreenRect()).WorkingArea.ToWpfRect();
+                WpfRect screenRect = ScreenTools.GetScreenContaining(ctrlRect.ToScreenRect())?.WorkingArea.ToWpfRect() ?? primaryScreenRect;
 
                 if (wndWidth > screenRect.Width || wndHeight > screenRect.Height)
                 {
