@@ -15,6 +15,7 @@ namespace PropertyTools.Wpf
     using System.Windows.Controls;
     using System.Windows.Data;
     using System.Windows.Input;
+    using System.Windows.Media;
 
     /// <summary>
     /// Provides an editable text block.
@@ -99,6 +100,8 @@ namespace PropertyTools.Wpf
             var scope = FocusManager.GetFocusScope(this);
             this.oldfocus = FocusManager.GetFocusedElement(scope);
             this.textBox = new TextBox();
+            TextOptions.SetTextFormattingMode(this.textBox, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(this.textBox, TextRenderingMode.ClearType);
             this.textBox.SetBinding(
                 TextBox.TextProperty,
                 new Binding("Text") { Source = this, UpdateSourceTrigger = UpdateSourceTrigger.Explicit });
