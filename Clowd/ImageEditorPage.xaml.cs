@@ -124,7 +124,8 @@ namespace Clowd
                 return;
 
             var padding = App.Current.Settings.EditorSettings.CapturePadding;
-            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + padding * 2 + (ActualWidth - RightSidebarX() + 2 * RightSidebarMargin()),
+            var sidebarWidth = rightSidepanel.Visibility != Visibility.Visible ? 0 : (ActualWidth - RightSidebarX() + 2 * RightSidebarMargin());
+            bool fit = TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + padding * 2 + sidebarWidth,
                 _imageSize.Height + actionRow.ActualHeight + padding * 2));
 
             // just doing this to force a thread context switch.
