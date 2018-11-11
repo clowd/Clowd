@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Xml.Serialization;
 using DrawToolsLib.Filters;
 using DrawToolsLib.Graphics;
@@ -773,23 +774,12 @@ namespace DrawToolsLib
         /// <summary>
         /// Draw all graphics objects to DrawingContext supplied by client.
         /// Can be used for printing or saving image together with graphics
-        /// as single bitmap.
-        /// 
-        /// Selection tracker is not drawn.
-        /// </summary>
-        public void Draw(DrawingContext drawingContext)
-        {
-            Draw(drawingContext, false);
-        }
-
-        /// <summary>
-        /// Draw all graphics objects to DrawingContext supplied by client.
-        /// Can be used for printing or saving image together with graphics
-        /// as single bitmap.
+        /// as single bitmap. Don't use DrawingContext for rasterising as
+        /// the VisualBrush doesn't quite render properly in that scenario.
         /// 
         /// withSelection = true - draw selected objects with tracker.
         /// </summary>
-        public void Draw(DrawingContext drawingContext, bool withSelection)
+        public void Draw(DrawingContext drawingContext, RenderTargetBitmap bitmap, Transform transform, bool withSelection)
         {
             bool oldSelection = false;
 
@@ -806,9 +796,13 @@ namespace DrawToolsLib
                 vis.Effect = b.Effect;
                 using (var cx = vis.RenderOpen())
                 {
+                    cx.PushTransform(transform);
                     b.Draw(cx);
                 }
-                drawingContext.DrawRectangle(new VisualBrush(vis), null, vis.ContentBounds);
+                if (drawingContext != null)
+                    drawingContext.DrawRectangle(new VisualBrush(vis), null, vis.ContentBounds);
+                if (bitmap != null)
+                    bitmap.Render(vis);
 
                 if (!withSelection)
                 {

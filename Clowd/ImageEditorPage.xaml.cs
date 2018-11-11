@@ -88,27 +88,37 @@ namespace Clowd
         private DrawingVisual GetRenderedVisual()
         {
             var bounds = drawingCanvas.GetArtworkBounds();
+            var transform = new TranslateTransform(Math.Floor(-bounds.Left), Math.Floor(-bounds.Top));
 
             DrawingVisual vs = new DrawingVisual();
             using (DrawingContext dc = vs.RenderOpen())
             {
-                var transform = new TranslateTransform(Math.Floor(-bounds.Left), Math.Floor(-bounds.Top));
                 dc.PushTransform(transform);
                 dc.DrawRectangle(Brushes.White, null, bounds);
-                drawingCanvas.Draw(dc);
+                dc.Pop();
+                drawingCanvas.Draw(dc, null, transform, false);
             }
             return vs;
         }
         private RenderTargetBitmap GetRenderedBitmap()
         {
-            var drawingVisual = GetRenderedVisual();
+            var bounds = drawingCanvas.GetArtworkBounds();
+            var transform = new TranslateTransform(Math.Floor(-bounds.Left), Math.Floor(-bounds.Top));
+
             RenderTargetBitmap bmp = new RenderTargetBitmap(
-                ScreenTools.WpfToScreen(drawingVisual.ContentBounds.Width),
-                ScreenTools.WpfToScreen(drawingVisual.ContentBounds.Height),
+                ScreenTools.WpfToScreen(bounds.Width),
+                ScreenTools.WpfToScreen(bounds.Height),
                 ScreenTools.WpfToScreen(96),
                 ScreenTools.WpfToScreen(96),
                 PixelFormats.Pbgra32);
-            bmp.Render(drawingVisual);
+            DrawingVisual background = new DrawingVisual();
+            using (DrawingContext dc = background.RenderOpen())
+            {
+                dc.PushTransform(transform);
+                dc.DrawRectangle(Brushes.White, null, new Rect(bounds.Left - 10, bounds.Top - 10, bounds.Width + 20, bounds.Height + 20));
+            }
+            bmp.Render(background);
+            drawingCanvas.Draw(null, bmp, transform, false);
             return bmp;
         }
         private PngBitmapEncoder GetRenderedPng()
