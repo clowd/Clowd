@@ -10,6 +10,7 @@ using System.Xml.Serialization;
 using DrawToolsLib.Filters;
 using DrawToolsLib.Graphics;
 using DrawToolsLib.Tools;
+using ScreenVersusWpf;
 
 namespace DrawToolsLib
 {
@@ -1992,8 +1993,11 @@ namespace DrawToolsLib
             var pt = (Point)e.NewValue;
             if (me.ContentScale == 1)
             {
-                me._translateTransform.X = Math.Round(pt.X);
-                me._translateTransform.Y = Math.Round(pt.Y);
+                double dpiZoom = 0;
+                try { dpiZoom = ScreenTools.DpiZoom; }
+                catch { } // WPF designer hasn't initialised library
+                me._translateTransform.X = Math.Round(pt.X * dpiZoom) / dpiZoom;
+                me._translateTransform.Y = Math.Round(pt.Y * dpiZoom) / dpiZoom;
             }
             else
             {
