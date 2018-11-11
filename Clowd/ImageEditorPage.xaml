@@ -114,7 +114,7 @@
                     <Viewbox>
                         <Path Margin="-2" Data="M 5 3 C 3.9 3 3 3.9 3 5 L 3 19 C 3 20.1 3.9 21 5 21 L 19 21 C 20.1 21 21 20.1 21 19 L 21 13 L 19 11 L 19 19 L 5 19 L 5 5 L 13 5 L 11 3 L 5 3 z M 14 3 L 16.65625 5.65625 L 9.15625 13.15625 L 10.84375 14.84375 L 18.34375 7.34375 L 21 10 L 21 3 L 14 3 z" />
                     </Viewbox>
-                    <TextBlock>UPLOAD</TextBlock>
+                    <TextBlock>Upload</TextBlock>
                 </StackPanel>
             </Button>
             <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Command="ApplicationCommands.Copy">
@@ -122,15 +122,15 @@
                     <Viewbox >
                         <Path Data="M 4 0 C 1.795 0 0 1.795 0 4 L 0 17 C 0 19.205 1.795 21 4 21 L 9 21 L 9 19 L 4 19 C 2.896 19 2 18.104 2 17 L 2 4 C 2 2.896 2.896 2 4 2 L 8.28125 2 C 9.00225 2.184 9 3.0505 9 3.9375 L 9 6 C 9 6.249 9.099 6.48125 9.25 6.65625 C 9.809 5.11725 11.271 4 13 4 L 13.0625 4 C 12.8855 3.826 12.70825 3.64575 12.53125 3.46875 C 12.28325 3.22275 12.02125 2.994 11.78125 2.75 C 10.06925 1.003 9.063 5.9211895e-16 8 0 L 4 0 z M 14 5 C 11.795 5 10 6.795 10 9 L 10 22 C 10 24.205 11.795 26 14 26 L 22 26 C 24.205 26 26 24.205 26 22 L 26 13 C 26 11.938 25.02725 10.92975 23.28125 9.21875 C 23.03725 8.97875 22.77725 8.71675 22.53125 8.46875 C 22.28325 8.22275 22.02125 7.994 21.78125 7.75 C 20.06925 6.003 19.063 5 18 5 L 14 5 z M 14 7 L 18.28125 7 C 19.00225 7.184 19 8.0505 19 8.9375 L 19 11 C 19 11.551 19.449 12 20 12 L 22 12 C 22.998 12 24 12.005 24 13 L 24 22 C 24 23.104 23.104 24 22 24 L 14 24 C 12.896 24 12 23.104 12 22 L 12 9 C 12 7.896 12.896 7 14 7 z M 4 8 L 4 10 L 9 10 L 9 8 L 4 8 z M 4 11 L 4 13 L 9 13 L 9 11 L 4 11 z M 14 13 L 14 15 L 22 15 L 22 13 L 14 13 z M 4 14 L 4 16 L 9 16 L 9 14 L 4 14 z M 14 16 L 14 18 L 20 18 L 20 16 L 14 16 z M 14 19 L 14 21 L 22 21 L 22 19 L 14 19 z"  />
                     </Viewbox>
-                    <TextBlock>COPY</TextBlock>
+                    <TextBlock>Copy</TextBlock>
                 </StackPanel>
             </Button>
-            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Command="ApplicationCommands.Print">
+            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Command="ApplicationCommands.Print" Visibility="Collapsed">
                 <StackPanel Orientation="Horizontal">
                     <Viewbox>
                         <Path Data="M 6.96875 0 C 5.3236872 0 3.96875 1.3549372 3.96875 3 L 3.96875 8 L 3 8 C 1.344 8 0 9.344 0 11 L 0 17 C 0 18.656 1.344 20 3 20 L 3.96875 20 L 3.96875 23 C 3.96875 24.645063 5.3236872 26 6.96875 26 L 18.96875 26 C 20.614323 26 21.96875 24.644459 21.96875 23 L 21.96875 20 L 23 20 C 24.656 20 26 18.656 26 17 L 26 11 C 26 9.344 24.656 8 23 8 L 21.96875 8 L 21.96875 3 C 21.96875 1.3555411 20.614323 0 18.96875 0 L 6.96875 0 z M 6.96875 2 L 18.96875 2 C 19.533177 2 19.96875 2.4364589 19.96875 3 L 19.96875 8 L 5.96875 8 L 5.96875 3 C 5.96875 2.4370628 6.4058128 2 6.96875 2 z M 21.5 10 C 22.328 10 23 10.672 23 11.5 C 23 12.328 22.328 13 21.5 13 C 20.672 13 20 12.328 20 11.5 C 20 10.672 20.672 10 21.5 10 z M 5.96875 15 L 19.96875 15 L 19.96875 23 C 19.96875 23.563541 19.533177 24 18.96875 24 L 6.96875 24 C 6.4058128 24 5.96875 23.562937 5.96875 23 L 5.96875 15 z M 8 17 L 8 19 L 18 19 L 18 17 L 8 17 z M 8 20 L 8 22 L 15 22 L 15 20 L 8 20 z"  />
                     </Viewbox>
-                    <TextBlock>PRINT</TextBlock>
+                    <TextBlock>Print</TextBlock>
                 </StackPanel>
             </Button>
             <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Command="ApplicationCommands.Save">
@@ -138,14 +138,14 @@
                     <Viewbox>
                         <Path Data="M18,9h-3V2h3V9z M26,6v17c0,1.657-1.344,3-3,3H3c-1.656,0-3-1.343-3-3V3c0-1.657,1.344-3,3-3h17 c0.828,0,1.285,0.043,3.621,2.379S26,5.172,26,6z M5,9c0,0.551,0.449,1,1,1h13c0.551,0,1-0.449,1-1V2c0-0.551-0.449-1-1-1H6 C5.449,1,5,1.449,5,2V9z M23,14c0-0.551-0.449-1-1-1H4c-0.551,0-1,0.449-1,1v10c0,0.551,0.449,1,1,1h18c0.551,0,1-0.449,1-1V14z"  />
                     </Viewbox>
-                    <TextBlock>SAVE</TextBlock>
+                    <TextBlock>Save</TextBlock>
                 </StackPanel>
             </Button>
             <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Click="Brush_Clicked">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse Width="16" Height="16" Margin="5,0,5,0" Fill="{Binding ElementName=drawingCanvas, 
                         Path=ObjectColor, Mode=OneWay, Converter={StaticResource convColorToBrush}}" />
-                    <TextBlock>BRUSH</TextBlock>
+                    <TextBlock>Brush</TextBlock>
                 </StackPanel>
             </Button>
             <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Click="Font_Clicked">
@@ -153,8 +153,14 @@
                     <Viewbox>
                         <Path Data="M 1 1 L 1 2 L 1 6 L 3 6 L 3 3 L 6 3 L 6 1 L 2 1 L 1 1 z M 20 1 L 20 3 L 23 3 L 23 6 L 25 6 L 25 2 L 25 1 L 24 1 L 20 1 z M 12 7 L 8 19 L 10 19 L 10.65625 17 L 15.34375 17 L 16 19 L 18 19 L 14 7 L 12 7 z M 13 10 L 14.65625 15 L 11.34375 15 L 13 10 z M 1 20 L 1 24 L 1 25 L 2 25 L 6 25 L 6 23 L 3 23 L 3 20 L 1 20 z M 23 20 L 23 23 L 20 23 L 20 25 L 24 25 L 25 25 L 25 24 L 25 20 L 23 20 z" />
                     </Viewbox>
-                    <TextBlock>FONT</TextBlock>
+                    <TextBlock>Font</TextBlock>
                 </StackPanel>
+            </Button>
+            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Click="ZoomFit_Clicked">
+                <TextBlock Padding="5,0,0,0">Fit</TextBlock>
+            </Button>
+            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Click="ZoomActual_Clicked">
+                <TextBlock Padding="5,0,0,0">Actual</TextBlock>
             </Button>
         </StackPanel>
         <StackPanel Name="toolBar" Orientation="Horizontal" Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Bottom">
@@ -282,14 +288,14 @@
                                 Height="{Binding ActualHeight, ElementName=objectCanvas}"/>
         </Canvas>
         <StackPanel Width="70" Margin="0,0,10,0"  Orientation="Vertical" Grid.Row="1" 
-                    VerticalAlignment="Center" HorizontalAlignment="Right" Name="rightSidepanel">
+                    VerticalAlignment="Center" HorizontalAlignment="Right" Name="rightSidepanel" Visibility="Collapsed">
             <Border x:Name="shiftIndicator" Background="#70707a" Height="40" Margin="0,0,0,10" CornerRadius="10" Opacity=".7">
                 <StackPanel Orientation="Horizontal">
                     <Viewbox Height="20" HorizontalAlignment="Left" Margin="9,0,5,0">
                         <Path Fill="White" Data="M 12.8125 0 C 12.7375 0.0125 12.64375 0.04375 12.59375 0.09375 C 12.49375 0.19375 9.9125 2.6 8.3125 5 C 8.2125 5.2 8.2125 5.39375 8.3125 5.59375 C 8.4125 5.89375 8.6125 6 8.8125 6 L 11 6 L 11 11 L 6 11 L 6 8.8125 C 6 8.6125 5.8875 8.4125 5.6875 8.3125 C 5.4875 8.2125 5.2 8.2125 5 8.3125 C 2.6 9.9125 0.19375 12.49375 0.09375 12.59375 C 0.09375 12.69375 9.2518585e-18 12.9 0 13 C 0 13.1 -0.00625 13.30625 0.09375 13.40625 C 0.19375 13.50625 2.5 16.0875 5 17.6875 C 5.2 17.7875 5.4875 17.7875 5.6875 17.6875 C 5.8875 17.5875 6 17.3875 6 17.1875 L 6 15 L 11 15 L 11 20 L 8.8125 20 C 8.6125 20 8.4125 20.1125 8.3125 20.3125 C 8.2125 20.5125 8.2125 20.70625 8.3125 20.90625 C 9.9125 23.30625 12.49375 25.7125 12.59375 25.8125 C 12.69375 25.9125 12.8 25.90625 13 25.90625 C 13.2 25.90625 13.30625 25.9125 13.40625 25.8125 C 13.50625 25.7125 16.0875 23.40625 17.6875 20.90625 C 17.7875 20.80625 17.7875 20.5125 17.6875 20.3125 C 17.5875 20.1125 17.3875 20 17.1875 20 L 15 20 L 15 15 L 20 15 L 20 17.1875 C 20 17.3875 20.1125 17.5875 20.3125 17.6875 C 20.5125 17.7875 20.70625 17.7875 20.90625 17.6875 C 23.30625 16.0875 25.7125 13.50625 25.8125 13.40625 C 25.9125 13.30625 25.90625 13.2 25.90625 13 C 25.90625 12.8 25.9125 12.69375 25.8125 12.59375 C 25.7125 12.49375 23.40625 9.9125 20.90625 8.3125 C 20.70625 8.2125 20.5125 8.2125 20.3125 8.3125 C 20.1125 8.4125 20 8.6125 20 8.8125 L 20 11 L 15 11 L 15 6 L 17.1875 6 C 17.3875 6 17.5875 5.8875 17.6875 5.6875 C 17.7875 5.4875 17.7875 5.29375 17.6875 5.09375 C 16.0875 2.69375 13.50625 0.2875 13.40625 0.1875 C 13.30625 0.0875 13.1 0 13 0 C 12.95 0 12.8875 -0.0125 12.8125 0 z" />
                     </Viewbox>
                     <TextBlock Foreground="White" VerticalAlignment="Center">
-                        Hold<LineBreak/><Run FontWeight="SemiBold">Shift</Run> 
+                        Hold<LineBreak/><Run FontWeight="SemiBold">Shift</Run>
                     </TextBlock>
                 </StackPanel>
             </Border>
