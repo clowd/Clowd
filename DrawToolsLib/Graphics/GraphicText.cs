@@ -130,7 +130,7 @@ namespace DrawToolsLib.Graphics
 
         internal override Point GetHandle(int handleNumber)
         {
-            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1–8 are used for resizing.
+            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1ï¿½8 are used for resizing.
             if (handleNumber == 1)
                 return base.GetHandle(9);
             return base.GetHandle(0);
@@ -143,7 +143,7 @@ namespace DrawToolsLib.Graphics
 
         internal override void MoveHandleTo(Point point, int handleNumber)
         {
-            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1–8 are used for resizing.
+            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1ï¿½8 are used for resizing.
             base.MoveHandleTo(point, handleNumber == 1 ? 9 : 0);
         }
 
@@ -178,7 +178,9 @@ namespace DrawToolsLib.Graphics
                 FlowDirection.LeftToRight,
                 new Typeface(new FontFamily(FontName), FontStyle, FontWeight, FontStretch),
                 FontSize,
-                new SolidColorBrush(Color.FromArgb(220, 0, 0, 0)));
+                new SolidColorBrush(Color.FromArgb(220, 0, 0, 0)),
+                null,
+                TextFormattingMode.Display);
         }
 
         public override GraphicBase Clone()
