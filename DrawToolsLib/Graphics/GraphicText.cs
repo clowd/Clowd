@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows;
@@ -15,7 +15,7 @@ namespace DrawToolsLib.Graphics
     public class GraphicText : GraphicRectangle
     {
         [XmlIgnore]
-        public int Padding { get; } = 15;
+        public int Padding { get; } = 8;
 
         [XmlIgnore]
         public bool Editing
@@ -89,8 +89,8 @@ namespace DrawToolsLib.Graphics
         }
 
         private string _body;
-        private string _fontName = "Arial";
-        private double _fontSize = 12;
+        private string _fontName = "Segoe UI";
+        private double _fontSize = 14;
         private FontStyle _fontStyle = FontStyles.Normal;
         private FontWeight _fontWeight = FontWeights.Normal;
         private FontStretch _fontStretch = FontStretches.Normal;
@@ -99,15 +99,16 @@ namespace DrawToolsLib.Graphics
         private static Random _rnd = new Random();
         private static Color[] _colors = new Color[]
         {
-            Color.FromRgb(255, 255, 203),
-            Color.FromRgb(229, 203, 228),
-            Color.FromRgb(203, 228, 222),
-            Color.FromRgb(213, 198, 157)
+            Color.FromRgb(210, 210, 210),
+            //Color.FromRgb(255, 255, 203),
+            //Color.FromRgb(229, 203, 228),
+            //Color.FromRgb(203, 228, 222),
+            //Color.FromRgb(213, 198, 157)
         };
         private static int _nextColor = 0;
 
         public GraphicText(DrawingCanvas canvas, Point point)
-            : this(_colors[_nextColor], canvas.LineWidth, point, _rnd.NextDouble() * 8 - 4)
+            : this(_colors[_nextColor], canvas.LineWidth, point, 0)
         {
             _nextColor = (_nextColor + 1) % _colors.Length;
             FontName = canvas.TextFontFamilyName;
@@ -130,7 +131,7 @@ namespace DrawToolsLib.Graphics
 
         internal override Point GetHandle(int handleNumber)
         {
-            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1�8 are used for resizing.
+            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1–8 are used for resizing.
             if (handleNumber == 1)
                 return base.GetHandle(9);
             return base.GetHandle(0);
@@ -143,7 +144,7 @@ namespace DrawToolsLib.Graphics
 
         internal override void MoveHandleTo(Point point, int handleNumber)
         {
-            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1�8 are used for resizing.
+            // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1–8 are used for resizing.
             base.MoveHandleTo(point, handleNumber == 1 ? 9 : 0);
         }
 
