@@ -225,15 +225,22 @@ namespace Clowd
 
         private void ZoomFit_Clicked(object sender, RoutedEventArgs e)
         {
-            var pos = rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0));
-            var rightMargin = ActualWidth - rightSidepanel.TransformToVisual(this).Transform(new Point(rightSidepanel.Width, 0)).X;
-            drawingCanvas.ZoomPanFit(pos.X - rightMargin);
+            double? widthOverride = null;
+            if (rightSidepanel.Visibility == Visibility.Visible)
+            {
+                var pos = rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0));
+                var rightMargin = ActualWidth - rightSidepanel.TransformToVisual(this).Transform(new Point(rightSidepanel.Width, 0)).X;
+                widthOverride = pos.X - rightMargin;
+            }
+            drawingCanvas.ZoomPanFit(widthOverride);
         }
 
         private void ZoomActual_Clicked(object sender, RoutedEventArgs e)
         {
-            var pos = rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0));
-            drawingCanvas.ZoomPanActualSize(pos.X);
+            double? widthOverride = null;
+            if (rightSidepanel.Visibility == Visibility.Visible)
+                widthOverride = rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0)).X;
+            drawingCanvas.ZoomPanActualSize(widthOverride);
         }
 
         private void PrintCommand(object sender, ExecutedRoutedEventArgs e)
