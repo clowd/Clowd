@@ -1,4 +1,4 @@
-﻿using Clowd.Utilities;
+using Clowd.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
@@ -225,12 +225,15 @@ namespace Clowd
 
         private void ZoomFit_Clicked(object sender, RoutedEventArgs e)
         {
-            drawingCanvas.ZoomPanFit();
+            var pos = rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0));
+            var rightMargin = ActualWidth - rightSidepanel.TransformToVisual(this).Transform(new Point(rightSidepanel.Width, 0)).X;
+            drawingCanvas.ZoomPanFit(pos.X - rightMargin);
         }
 
         private void ZoomActual_Clicked(object sender, RoutedEventArgs e)
         {
-            drawingCanvas.ZoomPanActualSize();
+            var pos = rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0));
+            drawingCanvas.ZoomPanActualSize(pos.X);
         }
 
         private void PrintCommand(object sender, ExecutedRoutedEventArgs e)
