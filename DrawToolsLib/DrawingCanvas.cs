@@ -846,6 +846,12 @@ namespace DrawToolsLib
                 }
                 result.Union(rect);
             }
+            var right = Math.Round(result.Right * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
+            var bottom = Math.Round(result.Bottom * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
+            result.X = Math.Round(result.X * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
+            result.Y = Math.Round(result.Y * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
+            result.Width = right - result.X;
+            result.Height = bottom - result.Y;
             return result;
         }
 
