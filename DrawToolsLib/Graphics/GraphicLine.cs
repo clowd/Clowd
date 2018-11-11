@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -55,10 +55,10 @@ namespace DrawToolsLib.Graphics
             {
                 var start = _lineStart;
                 var end = _lineEnd;
-                return new Rect(Math.Min(start.X, end.X),
-                                Math.Min(start.Y, end.Y),
-                                Math.Abs(start.X - end.X),
-                                Math.Abs(start.Y - end.Y));
+                return new Rect(Math.Min(start.X, end.X) - 5,
+                                Math.Min(start.Y, end.Y) - 5,
+                                Math.Abs(start.X - end.X) + 10,
+                                Math.Abs(start.Y - end.Y) + 10);
             }
         }
 
