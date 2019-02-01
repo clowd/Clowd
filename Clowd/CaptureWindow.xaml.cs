@@ -363,8 +363,10 @@ namespace Clowd
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             var cropped = CropBitmap();
-            ClipboardEx.SetImage(cropped);
-            Close();
+            if (ClipboardEx.SetImage(cropped))
+                Close();
+            else
+                MessageBox.Show("Unable to set clipboard data; try again later.");
         }
         private void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
