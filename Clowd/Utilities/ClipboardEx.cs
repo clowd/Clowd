@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -25,7 +26,7 @@ namespace Clowd.Utilities
             return Clipboard.GetImage() ?? GetImageFromFile();
         }
 
-        public static void SetImage(Bitmap bmp)
+        public static bool SetImage(Bitmap bmp)
         {
             byte[] pngBytes;
             using (var ms = new MemoryStream())
@@ -37,10 +38,16 @@ namespace Clowd.Utilities
             IDataObject dataObject = new DataObject();
             dataObject.SetData(DataFormats.Bitmap, bmp, true);
             //dataObject.SetData("PNG", pngBytes, true);
-            Clipboard.SetDataObject(dataObject, true);
+            for (int retry = 0; retry < 10; retry++)
+            {
+                try
+                { Clipboard.SetDataObject(dataObject, true); return true; }
+                catch { Thread.Sleep(100); }
+            }
+            return false;
         }
 
-        public static void SetImage(BitmapSource bmp)
+        public static bool SetImage(BitmapSource bmp)
         {
             byte[] pngBytes;
             using (var ms = new MemoryStream())
@@ -52,7 +59,12 @@ namespace Clowd.Utilities
             IDataObject dataObject = new DataObject();
             dataObject.SetData(DataFormats.Bitmap, bmp, true);
             //dataObject.SetData("PNG", pngBytes, true);
-            Clipboard.SetDataObject(dataObject, true);
+            for (int retry = 0; retry < 10; retry++)
+            {
+                try { Clipboard.SetDataObject(dataObject, true); return true; }
+                catch { Thread.Sleep(100); }
+            }
+            return false;
         }
 
         public static void AddImageToData(IDataObject dataObject, BitmapSource bmp)
