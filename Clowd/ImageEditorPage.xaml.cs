@@ -156,7 +156,7 @@ namespace Clowd
         {
             // you need to focus a button, or some other control that holds keyboard focus.
             // if you don't do this, input bindings / keyboard shortcuts won't work.
-            Keyboard.Focus(uploadButton);
+            Keyboard.Focus(copyButton);
             ZoomFit_Clicked(null, null);
 
             _actionBarSize = actionBar.ActualWidth;
