@@ -1,4 +1,4 @@
-﻿using Clowd.Controls;
+using Clowd.Controls;
 using Clowd.Utilities;
 using Microsoft.Win32;
 using ScreenVersusWpf;
@@ -43,6 +43,7 @@ namespace Clowd
             InitializeComponent();
             this.SourceInitialized += CaptureWindow_SourceInitialized;
             this.Loaded += CaptureWindow_Loaded;
+            Width = Height = 1; // the window becomes visible very briefly before it's redrawn with the captured screenshot; this makes it unnoticeable
         }
 
         public static System.Drawing.Bitmap MakeGrayscale3(System.Drawing.Bitmap original)
