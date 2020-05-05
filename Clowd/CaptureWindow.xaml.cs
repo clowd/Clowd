@@ -1,4 +1,4 @@
-using Clowd.Controls;
+﻿using Clowd.Controls;
 using Clowd.Utilities;
 using Microsoft.Win32;
 using ScreenVersusWpf;
@@ -124,14 +124,11 @@ namespace Clowd
         {
             if (System.Diagnostics.Debugger.IsAttached)
                 this.Topmost = false;
-            this.Left = SystemParameters.VirtualScreenLeft;
-            this.Top = SystemParameters.VirtualScreenTop;
-            this.Width = SystemParameters.VirtualScreenWidth;
-            this.Height = SystemParameters.VirtualScreenHeight;
+            var primary = ScreenTools.Screens.First().Bounds;
+            var virt = ScreenTools.VirtualScreen.Bounds;
+            // WPF makes some fairly inconvenient DPI conversions to Left and Top which have also changed between NET 4.5 and 4.8; just use WinAPI instead of de-converting them
+            Interop.USER32.SetWindowPos(this.Handle, 0, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.SHOWWINDOW);
             Interop.USER32.SetForegroundWindow(this.Handle);
-            if (!System.Diagnostics.Debugger.IsAttached)
-                Interop.USER32.SetWindowPos(this.Handle, 0, 0, 0, 0, 0,
-                    Interop.SWP.NOMOVE | Interop.SWP.NOSIZE | Interop.SWP.SHOWWINDOW);
             if (initialRegion == null)
             {
                 UpdateCanvasMode(true);
