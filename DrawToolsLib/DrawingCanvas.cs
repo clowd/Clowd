@@ -77,6 +77,7 @@ namespace DrawToolsLib
             tools = new ToolBase[(int)ToolType.Max];
 
             ToolPointer = new ToolPointer();
+            tools[(int)ToolType.None] = ToolPointer;
             tools[(int)ToolType.Pointer] = ToolPointer;
 
             tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
