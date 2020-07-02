@@ -4,7 +4,7 @@ using Ionic.Zip;
 using NotifyIconLib;
 using RT.Util;
 using RT.Util.ExtensionMethods;
-using RT.Util.Serialization;
+using RT.Serialization;
 using ScreenVersusWpf;
 using System;
 using System.Collections.Generic;
@@ -270,6 +270,7 @@ namespace Clowd
             Classify.DefaultOptions = new ClassifyOptions();
             Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
             Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
+            //Classify.DefaultOptions.AddTypeSubstitution<>
             SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
         }
