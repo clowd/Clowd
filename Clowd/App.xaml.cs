@@ -45,8 +45,8 @@ namespace Clowd
         private TaskbarIcon _taskbarIcon;
         private bool _prtscrWindowOpen = false;
         private bool _initialized = false;
-        private DispatcherTimer _updateTimer;
 #if NAPPUPDATE
+        private DispatcherTimer _updateTimer;
         private NAppUpdate.Framework.UpdateManager _updateManager;
 #endif
         private ResourceDictionary _lightBase;
@@ -270,9 +270,16 @@ namespace Clowd
             Classify.DefaultOptions = new ClassifyOptions();
             Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
             Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
-            //Classify.DefaultOptions.AddTypeSubstitution<>
             SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
+
+            if (Settings.ExplorerMenuEnabled)
+            {
+                // this re-installs the context menu if present, making sure
+                // it includes any fixes and is pointing towards the current executable
+                Settings.ExplorerMenuEnabled = false;
+                Settings.ExplorerMenuEnabled = true;
+            }
         }
         private void SetupAccentColors()
         {
@@ -706,7 +713,7 @@ namespace Clowd
             }
             foreach (var f in e.Args)
             {
-                if (File.Exists(f))
+                if (File.Exists(f) || Directory.Exists(f))
                     _cmdCache.Add(f);
             }
             _cmdBatchTimer.IsEnabled = true;
@@ -751,7 +758,9 @@ namespace Clowd
                         using (ZipFile zip = new ZipFile())
                         {
                             if (filePaths.Length == 1)
+                            {
                                 archiveName = Path.GetFileNameWithoutExtension(filePaths[0]) + ".zip";
+                            }
                             foreach (var path in filePaths)
                             {
                                 if (Directory.Exists(path))

@@ -62,7 +62,7 @@ namespace Clowd
         [Description("If true, allows dropping files directly on to the windows tray icon to start an upload.")]
         public bool TrayDropEnabled { get; set; } = true;
 
-        [DisplayName("Add item to Explorer context menu")]
+        [DisplayName("Add Windows Explorer Context-Menu item")]
         [Description("If true, will add an item to the explorer context menu allowing you to right click to upload files.")]
         public bool ExplorerMenuEnabled
         {
@@ -72,17 +72,23 @@ namespace Clowd
             }
             set
             {
+                var assetPath = Assembly.GetExecutingAssembly().Location;
                 var feature = new Installer.Features.ContextMenu();
-                if (value)
+                var isInstalled = feature.CheckInstalled(assetPath, Installer.RegistryQuery.CurrentUser);
+                if (isInstalled != value)
                 {
-                    feature.Install(Assembly.GetExecutingAssembly().Location, Installer.InstallMode.CurrentUser);
-                }
-                else
-                {
-                    feature.Uninstall(Assembly.GetExecutingAssembly().Location, Installer.RegistryQuery.CurrentUser);
+                    if (value)
+                    {
+                        feature.Install(assetPath, Installer.InstallMode.CurrentUser);
+                    }
+                    else
+                    {
+                        feature.Uninstall(assetPath, Installer.RegistryQuery.CurrentUser);
+                    }
                 }
             }
         }
+
 
         [DisplayName("Accent color"), PData.EnableBy("AccentScheme", AccentScheme.User)]
         [Description("Allows you to set a custom accent color when the appropriate accent mode is also set.")]
