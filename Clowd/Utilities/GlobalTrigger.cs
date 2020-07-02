@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using RT.Util.Serialization;
+using RT.Serialization;
 
 namespace Clowd.Utilities
 {

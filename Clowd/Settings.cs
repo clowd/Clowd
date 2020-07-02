@@ -13,7 +13,7 @@ using System.Windows;
 using Clowd.Controls;
 using Clowd.Utilities;
 using PropertyTools.Wpf;
-using RT.Util.Serialization;
+using RT.Serialization;
 using PData = PropertyTools.DataAnnotations;
 
 namespace Clowd

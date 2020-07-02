@@ -1,4 +1,4 @@
-﻿using RT.Util.Serialization;
+﻿using RT.Serialization;
 using System.Globalization;
 using System.Windows.Media;
 using System.Xml.Linq;
