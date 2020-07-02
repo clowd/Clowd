@@ -24,7 +24,7 @@ namespace DrawToolsLib.Filters
             canvas.GraphicsList.RegisterSubElement(source, _visual);
         }
 
-        public override void Handle(DrawingBrush brush, Point p)
+        protected override void HandleInternal(DrawingBrush brush, Point p)
         {
             // transform mouse position
             p = Source.UnapplyRotation(p);

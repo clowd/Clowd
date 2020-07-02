@@ -56,6 +56,12 @@ namespace Clowd
             SelectedItem.SaveQuiet();
             TemplatedWindow.SetContent(this, new HomePage());
         }
+
+        private void ResetSettingsClick(object sender, MouseButtonEventArgs e)
+        {
+            App.Current.ResetSettings();
+            this.SelectedItem = App.Current.Settings;
+        }
     }
 
     public class DisplayModeToPropertyTabVisibilityConverter : IValueConverter

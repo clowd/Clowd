@@ -28,6 +28,7 @@
     <WarningLevel>4</WarningLevel>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseVSHostingProcess>false</UseVSHostingProcess>
+    <NoWarn>CS4014</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>x86</PlatformTarget>
@@ -47,16 +48,25 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CS.Util, Version=1.0.6.35, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\CS.Util.1.0.6.35\lib\net45\CS.Util.dll</HintPath>
+    <Reference Include="CS.Util, Version=1.0.6.53, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\CS.Util.1.0.6.53\lib\net45\CS.Util.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="CS.Wpf, Version=1.0.6.35, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\CS.Wpf.1.0.6.35\lib\net45\CS.Wpf.dll</HintPath>
+    <Reference Include="CS.Wpf, Version=1.0.6.53, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\CS.Wpf.1.0.6.53\lib\net45\CS.Wpf.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Ionic.Zip">
       <HintPath>..\packages\DotNetZip.1.9.8\lib\net20\Ionic.Zip.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="DotNetZip, Version=1.10.1.0, Culture=neutral, PublicKeyToken=6583c7c814667745, processorArchitecture=MSIL">
+      <HintPath>..\packages\DotNetZip.1.10.1\lib\net20\DotNetZip.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.Expression.Interactions, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL" />
+    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.6.0.8\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="MahApps.Metro, Version=1.1.2.0, Culture=neutral, PublicKeyToken=f4fb5a3c4d1e5b4f, processorArchitecture=MSIL">
@@ -73,6 +83,10 @@
     </Reference>
     <Reference Include="ScreenVersusWpf, Version=1.0.9.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\ScreenVersusWpf.1.0.9.0\lib\net451\ScreenVersusWpf.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="SharpRaven, Version=2.2.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\SharpRaven.2.2.0\lib\net45\SharpRaven.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -173,9 +187,6 @@
     <Compile Include="HomePage.xaml.cs">
       <DependentUpon>HomePage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="LoginPage.xaml.cs">
-      <DependentUpon>LoginPage.xaml</DependentUpon>
-    </Compile>
     <Compile Include="UploadManager.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="Utilities\AreoColor.cs" />
@@ -217,10 +228,6 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="LoginPage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
     <Page Include="SettingsPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -248,7 +255,9 @@
     <Resource Include="Assets\Raleway.ttf" />
     <None Include=".editorconfig" />
     <None Include="app.manifest" />
-    <None Include="packages.config" />
+    <None Include="packages.config">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -273,7 +282,9 @@
     <Resource Include="Images\Screenshot\Search-26.png" />
     <Resource Include="Images\Screenshot\Undo-26.png" />
     <Resource Include="Images\Screenshot\Text.png" />
-    <Resource Include="FodyWeavers.xml" />
+    <Resource Include="FodyWeavers.xml">
+      <SubType>Designer</SubType>
+    </Resource>
     <Resource Include="Images\Screenshot\Cancel-26.png" />
     <Resource Include="Images\Screenshot\Clipboard-26.png" />
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
@@ -290,6 +301,14 @@
     <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj">
       <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>
       <Name>DrawToolsLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\FileUploadLib\FileUploadLib.csproj">
+      <Project>{41d2687f-03b5-4d2e-8992-633ccc0290f8}</Project>
+      <Name>FileUploadLib</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
+      <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
+      <Name>NAppUpdate.Framework</Name>
     </ProjectReference>
     <ProjectReference Include="..\NotifyIconLib\NotifyIconLib.csproj">
       <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>

@@ -1,11 +1,5 @@
 ﻿using Clowd.Interop;
 using Clowd.Utilities;
-#if EXLESS
-using Exceptionless;
-using Exceptionless.Logging;
-using Exceptionless.Plugins;
-using Exceptionless.Dependency;
-#endif
 using Ionic.Zip;
 using NotifyIconLib;
 using RT.Util;
@@ -31,6 +25,8 @@ using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
 using Ionic.Zlib;
+using SharpRaven;
+using SharpRaven.Data;
 
 namespace Clowd
 {
@@ -42,7 +38,6 @@ namespace Clowd
         public string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
 
         // static instead of const for debugging purposes.
-        public static string ClowdServerDomain { get; private set; } = "clowd.ca";
         public const string ClowdAppName = "Clowd";
         public const string ClowdNamedPipe = "ClowdRunningPipe";
         public const string ClowdMutex = "ClowdMutex000";
@@ -97,14 +92,8 @@ namespace Clowd
                     {
                         var ex = new InvalidOperationException("The mutex was opened successfully, " +
                                                               $"but there are no {ClowdAppName} processes running. Uninstaller?");
-#if EXLESS
-                        var dic = new Dictionary<string, object>();
-                        dic.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
-                        ContextData cd = new ContextData(dic);
-                        ex.ToExceptionless(cd).Submit();
-#else
-                        throw ex;
-#endif
+                        ex.Data.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
+                        ex.ToSentry();
                         Environment.Exit(1);
                     }
                     var config = new TaskDialogInterop.TaskDialogOptions();
@@ -148,72 +137,26 @@ namespace Clowd
             {
                 // we still want to report this, beacuse it was unexpected, but because we successfully opened the mutex
                 // we know there is another Clowd instance running (or uninstaller) and we should close.
-#if EXLESS
-                ex.ToExceptionless().Submit();
-#endif
+                ex.ToSentry();
                 Environment.Exit(1);
             }
 
-            // if running from a debug location, offer prompt to target remote or local clowd server.
-#if DEBUG
-            var ddiag = new TaskDialogOptions();
-            ddiag.Title = "Clowd";
-            ddiag.MainInstruction = "Clowd running in debug mode.";
-            ddiag.Content = "Choose to target either a local or remote server location.";
-            ddiag.CustomButtons = new[] { "Remote (clowd.ca)", "Local" };
-            ddiag.MainIcon = VistaTaskDialogIcon.Information;
-            var ddiagResult = TaskDialog.Show(ddiag);
-            if (ddiagResult.CustomButtonResult == 1)
-                ClowdServerDomain = "localhost";
-
-#endif
             SetupServiceHost();
             SetupDpiScaling();
             SetupSettings();
             SetupTrayIcon();
             SetupAccentColors();
 
-            if (Settings.FirstRun || (String.IsNullOrEmpty(Settings.Username) && String.IsNullOrEmpty(Settings.PasswordHash)))
+            if (Settings.FirstRun)
             {
                 // there were no settings to load, show login window.
                 Settings.FirstRun = false;
                 Settings.Save();
-                var page = new LoginPage();
-                var login = TemplatedWindow.CreateWindow("CLOWD", page);
-                login.Closed += (sender, args) =>
-                {
-                    if (!_initialized)
-                        Application.Current.Shutdown();
-                };
-                login.Show();
-            }
-            else if (Settings.Username == "anon" && String.IsNullOrEmpty(Settings.PasswordHash))
-            {
-                //use clowd anonymously.
-                FinishInit();
-            }
-            else
-            {
-                using (var details = new Credentials(Settings.Username, Settings.PasswordHash, true))
-                {
-                    var result = await UploadManager.Login(details);
-                    if (result == AuthResult.Success)
-                        FinishInit();
-                    else
-                    {
-                        var page = new LoginPage(result, Settings.Username);
-                        var login = TemplatedWindow.CreateWindow("CLOWD", page);
-                        login.Closed += (sender, args) =>
-                        {
-                            if (!_initialized)
-                                Application.Current.Shutdown();
-                        };
-                        login.Show();
-                    }
-                }
             }
 
-#if (!DEBUG && NAPPUPDATE)
+            FinishInit();
+
+#if (!DEBUG)
             SetupUpdateTimer();
 #endif
         }
@@ -227,7 +170,9 @@ namespace Clowd
 
         private void SetupExceptionHandling()
         {
-#if DEBUG || true
+            Sentry.Init("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
+
+#if false && DEBUG
             if (Debugger.IsAttached)
                 return;
 
@@ -243,69 +188,49 @@ namespace Clowd
                     MessageBox.Show($"Unhandled exception: {e.ExceptionObject}");
             };
 #else
-            // initialize custom exceptionless server at https://exless.caesa.ca if not debugging.
-            var exless = ExceptionlessClient.Default;
-            var exconf = exless.Configuration;
-            exconf.ApiKey = "Vpcq6Hv9C7qh9qJpSsnet4ALPlilrIeKq2zBtL3v";
-            exconf.ServerUrl = "https://exless.caesa.ca";
-            exconf.UseFolderStorage(Path.Combine(AppDataDirectory, "exless"));
 
 
             // only want to report and potentially swallow errors if we're not debugging
-            if (System.Diagnostics.Debugger.IsAttached)
+            if (Debugger.IsAttached)
             {
-                exconf.Enabled = false;
+                Sentry.Default.Enabled = false;
                 return;
             }
 
-            exless.Startup();
-
             // create event handlers for unhandled exceptions
-            Func<EventSubmittingEventArgs, bool> ShowDialog = (e) =>
-            {
-                var dialog = new Exceptionless.Dialogs.CrashReportDialog(e.Client, e.Event);
-                bool? result = dialog.ShowDialog();
-                return result.HasValue && result.Value;
-            };
-            EventHandler<EventSubmittingEventArgs> OnSubmitting = (sender, e) =>
-            {
-                if (!e.IsUnhandledError)
-                    return;
+            //Sentry.Default.BeforeSend = (req) =>
+            //{
+            //    // here we should check if the event is Fatal, if it is, show dialog and attach user feedback to the message
 
-                // we want to show an error dialog, give the user a chance to add details, but we will want to 
-                // send the error regardless of what the users chooses to do.
-                if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
-                {
-                    //e.Cancel = !(bool)Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog),
-                    //            DispatcherPriority.Send, e);
-                    Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog),
-                        DispatcherPriority.Send, e);
-                }
-                else
-                {
-                    //e.Cancel = !ShowDialog(e);
-                    ShowDialog(e);
-                }
-            };
-            EventHandler<EventSubmittedEventArgs> OnSubmitted = (sender, e) =>
-            {
-                if (e.IsUnhandledError)
-                    Environment.Exit(1);
-            };
+            //    if (!e.IsUnhandledError)
+            //        return;
+
+            //    // we want to show an error dialog, give the user a chance to add details, but we will want to 
+            //    // send the error regardless of what the users chooses to do.
+            //    if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+            //    {
+            //        Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog), DispatcherPriority.Send, e);
+            //    }
+            //    else
+            //    {
+            //        ShowDialog(e);
+            //    }
+            //};
+
             ThreadExceptionEventHandler OnApplicationThreadException = (sender, args) =>
             {
-                var contextData = new Exceptionless.Plugins.ContextData();
-                contextData.MarkAsUnhandledError();
-                contextData.SetSubmissionMethod("ApplicationThreadException");
-                args.Exception.ToExceptionless(contextData, exless).Submit();
+                var evt = new SentryEvent(args.Exception);
+                evt.Message = "ApplicationThreadException";
+                evt.Level = ErrorLevel.Fatal;
+                evt.Submit();
             };
+
             DispatcherUnhandledExceptionEventHandler OnApplicationDispatcherUnhandledException = (sender, args) =>
             {
-                var contextData = new Exceptionless.Plugins.ContextData();
-                contextData.MarkAsUnhandledError();
-                contextData.SetSubmissionMethod("DispatcherUnhandledException");
-                args.Exception.ToExceptionless(contextData, exless).Submit();
-                args.Handled = true;
+                var evt = new SentryEvent(args.Exception);
+                evt.Message = "DispatcherUnhandledException";
+                evt.Level = ErrorLevel.Fatal;
+                evt.Submit();
             };
 
             try
@@ -314,30 +239,17 @@ namespace Clowd
             }
             catch (Exception ex)
             {
-                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessClientExtensions), ex,
-                    "An error occurred while wiring up to the application thread exception event.");
+                ex.ToSentry();
             }
+
             try
             {
                 Application.Current.DispatcherUnhandledException += OnApplicationDispatcherUnhandledException;
             }
             catch (Exception ex)
             {
-                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessClientExtensions), ex,
-                    "An error occurred while wiring up to the application dispatcher exception event.");
+                ex.ToSentry();
             }
-            try
-            {
-                AppDomain.CurrentDomain.ProcessExit += (sender, e) => exless.ProcessQueue();
-            }
-            catch (Exception ex)
-            {
-                exless.Configuration.Resolver.GetLog().Error(typeof(ExceptionlessWpfExtensions), ex,
-                    "An error occurred while wiring up to the process exit event.");
-            }
-
-            exless.SubmittingEvent += OnSubmitting;
-            exless.SubmittedEvent += OnSubmitted;
 #endif
         }
         private void SetupServiceHost()
@@ -355,8 +267,9 @@ namespace Clowd
         private void SetupSettings()
         {
             GeneralSettings tmp;
-            Classify.DefaultOptions = new ClassifyOptions()
-                .AddTypeOptions(typeof(Color), new ClassifyColorTypeOptions());
+            Classify.DefaultOptions = new ClassifyOptions();
+            Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
+            Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
             SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
         }
@@ -483,33 +396,33 @@ namespace Clowd
 #if NAPPUPDATE
         private void SetupUpdateTimer()
         {
-            // NAppUpdater uses relative paths, so the current directory must be set accordingly.
-            Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-            _updateManager = NAppUpdate.Framework.UpdateManager.Instance;
-            _updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
-            _updateManager.Config.TempFolder = Path.Combine(AppDataDirectory, "update");
-            _updateManager.Config.BackupFolder = Path.Combine(AppDataDirectory, "backup");
-            _updateManager.Config.UpdateProcessName = "ClowdUpdate";
-            var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ClowdServerDomain}/app_updates/feed.aspx");
-            _updateManager.UpdateSource = source;
+            //// NAppUpdater uses relative paths, so the current directory must be set accordingly.
+            //Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            //_updateManager = NAppUpdate.Framework.UpdateManager.Instance;
+            //_updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
+            //_updateManager.Config.TempFolder = Path.Combine(AppDataDirectory, "update");
+            //_updateManager.Config.BackupFolder = Path.Combine(AppDataDirectory, "backup");
+            //_updateManager.Config.UpdateProcessName = "ClowdUpdate";
+            //var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ClowdServerDomain}/app_updates/feed.aspx");
+            //_updateManager.UpdateSource = source;
 
-            _updateManager.ReinstateIfRestarted();
-            if (_updateManager.State == NAppUpdate.Framework.UpdateManager.UpdateProcessState.AfterRestart)
-            {
-                var config = new TaskDialogInterop.TaskDialogOptions();
-                config.Title = "Clowd";
-                config.MainInstruction = "Updates were installed successfully.";
-                config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
-                config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Information;
-                TaskDialogInterop.TaskDialog.Show(config);
-            }
-            _updateManager.CleanUp();
+            //_updateManager.ReinstateIfRestarted();
+            //if (_updateManager.State == NAppUpdate.Framework.UpdateManager.UpdateProcessState.AfterRestart)
+            //{
+            //    var config = new TaskDialogInterop.TaskDialogOptions();
+            //    config.Title = "Clowd";
+            //    config.MainInstruction = "Updates were installed successfully.";
+            //    config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
+            //    config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Information;
+            //    TaskDialogInterop.TaskDialog.Show(config);
+            //}
+            //_updateManager.CleanUp();
 
-            _updateTimer = new DispatcherTimer();
-            _updateTimer.Interval = Settings.UpdateCheckInterval;
-            _updateTimer.Tick += OnCheckForUpdates;
-            OnCheckForUpdates(null, null);
-            _updateTimer.Start();
+            //_updateTimer = new DispatcherTimer();
+            //_updateTimer.Interval = Settings.UpdateCheckInterval;
+            //_updateTimer.Tick += OnCheckForUpdates;
+            //OnCheckForUpdates(null, null);
+            //_updateTimer.Start();
         }
 #endif
         private void SetupTrayContextMenu()
@@ -586,13 +499,22 @@ namespace Clowd
             _taskbarIcon.ContextMenu = context;
         }
 
+        public void ResetSettings()
+        {
+            Settings.Dispose();
+            Settings = new GeneralSettings()
+            {
+                FirstRun = Settings.FirstRun,
+                LastUploadPath = Settings.LastUploadPath,
+            };
+            Settings.SaveQuiet();
+        }
+
         public void FinishInit()
         {
             if (_initialized)
             {
-#if EXLESS
-                ExceptionlessClient.Default.SubmitLog(nameof(App), "FinishInit() called more than once.", LogLevel.Warn);
-#endif
+                Sentry.Default.SubmitLog("FinishInit() called more than once.", ErrorLevel.Warning);
                 return;
             }
             _initialized = true;
@@ -715,14 +637,9 @@ namespace Clowd
                 return;
 
             var wnd = TemplatedWindow.GetWindow(typeof(HomePage))
-                ?? TemplatedWindow.GetWindow(typeof(SettingsPage));
-            if (wnd == null)
-            {
-                if (UploadManager.Authenticated)
-                    wnd = TemplatedWindow.CreateWindow("Clowd", new HomePage());
-                else
-                    wnd = TemplatedWindow.CreateWindow("Clowd", new LoginPage());
-            }
+                ?? TemplatedWindow.GetWindow(typeof(SettingsPage))
+                ?? TemplatedWindow.CreateWindow("Clowd", new HomePage());
+
             wnd.Show();
             wnd.MakeForeground();
         }
