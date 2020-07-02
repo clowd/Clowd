@@ -19,16 +19,15 @@ namespace DrawToolsLib
 
         private readonly List<GraphicBase> _graphics;
         private readonly VisualCollection _visuals;
-        private readonly ReaderWriterLockSlim _lock;
+        //private readonly ReaderWriterLockSlim _lock;
         private readonly DrawingCanvas _parent;
 
-        private Dictionary<GraphicBase, SubElementContainer> _extraLookup;
-
+        private readonly Dictionary<GraphicBase, SubElementContainer> _extraLookup;
 
         public GraphicCollection(DrawingCanvas parent)
         {
             _parent = parent;
-            _lock = new ReaderWriterLockSlim();
+            //_lock = new ReaderWriterLockSlim();
             _visuals = new VisualCollection(parent);
             _graphics = new List<GraphicBase>();
             _extraLookup = new Dictionary<GraphicBase, SubElementContainer>();
@@ -46,7 +45,7 @@ namespace DrawToolsLib
 
         public void Add(GraphicBase graphic)
         {
-            using (new WriteLockContext(_lock))
+            //using (new WriteLockContext(_lock))
             {
                 var vis = new DrawingVisual();
                 _graphics.Add(graphic);
@@ -58,7 +57,7 @@ namespace DrawToolsLib
 
         public Visual GetVisual(int index)
         {
-            using (new ReadLockContext(_lock))
+            //using (new ReadLockContext(_lock))
             {
                 int currentIndex = 0;
                 for (int i = 0; i < _visuals.Count; i++)
@@ -86,34 +85,34 @@ namespace DrawToolsLib
             }
         }
 
-        internal void RegisterSubElement(GraphicBase graphic, UIElement subVisual)
-        {
-            using (new WriteLockContext(_lock))
-            {
-                SubElementContainer container;
-                if (!_extraLookup.ContainsKey(graphic))
-                    container = _extraLookup[graphic] = new SubElementContainer(_parent);
-                else
-                    container = _extraLookup[graphic];
+        //internal void RegisterSubElement(GraphicBase graphic, UIElement subVisual)
+        //{
+        //    using (new WriteLockContext(_lock))
+        //    {
+        //        SubElementContainer container;
+        //        if (!_extraLookup.ContainsKey(graphic))
+        //            container = _extraLookup[graphic] = new SubElementContainer(_parent);
+        //        else
+        //            container = _extraLookup[graphic];
 
-                container.AddItemUnsafe(subVisual);
-            }
-        }
+        //        container.AddItemUnsafe(subVisual);
+        //    }
+        //}
 
-        internal void RemoveSubElement(GraphicBase graphic, UIElement subVisual)
-        {
-            using (new WriteLockContext(_lock))
-            {
-                if (_extraLookup.ContainsKey(graphic))
-                {
-                    _extraLookup[graphic].RemoveItemUnsafe(subVisual);
-                }
-            }
-        }
+        //internal void RemoveSubElement(GraphicBase graphic, UIElement subVisual)
+        //{
+        //    using (new WriteLockContext(_lock))
+        //    {
+        //        if (_extraLookup.ContainsKey(graphic))
+        //        {
+        //            _extraLookup[graphic].RemoveItemUnsafe(subVisual);
+        //        }
+        //    }
+        //}
 
         internal void RegisterSubElement(GraphicBase graphic, Visual subVisual)
         {
-            using (new WriteLockContext(_lock))
+            //using (new WriteLockContext(_lock))
             {
                 SubElementContainer container;
                 if (!_extraLookup.ContainsKey(graphic))
@@ -127,7 +126,7 @@ namespace DrawToolsLib
 
         internal void RemoveSubElement(GraphicBase graphic, Visual subVisual)
         {
-            using (new WriteLockContext(_lock))
+            //using (new WriteLockContext(_lock))
             {
                 if (_extraLookup.ContainsKey(graphic))
                 {
@@ -148,7 +147,7 @@ namespace DrawToolsLib
 
         public void Clear()
         {
-            using (new WriteLockContext(_lock))
+            //using (new WriteLockContext(_lock))
             {
                 _graphics.ForEach(g => g.ResetInvalidateEvent());
                 _graphics.Clear();
@@ -160,19 +159,19 @@ namespace DrawToolsLib
 
         public bool Contains(GraphicBase item)
         {
-            using (new ReadLockContext(_lock))
-                return _graphics.Contains(item);
+            //using (new ReadLockContext(_lock))
+            return _graphics.Contains(item);
         }
 
         public void CopyTo(GraphicBase[] array, int arrayIndex)
         {
-            using (new ReadLockContext(_lock))
-                _graphics.CopyTo(array, arrayIndex);
+            //using (new ReadLockContext(_lock))
+            _graphics.CopyTo(array, arrayIndex);
         }
 
         public bool Remove(GraphicBase item)
         {
-            using (new WriteLockContext(_lock))
+            //using (new WriteLockContext(_lock))
             {
                 var index = _graphics.IndexOf(item);
                 if (index < 0)
@@ -188,13 +187,13 @@ namespace DrawToolsLib
 
         public int IndexOf(GraphicBase item)
         {
-            using (new ReadLockContext(_lock))
-                return _graphics.IndexOf(item);
+            //using (new ReadLockContext(_lock))
+            return _graphics.IndexOf(item);
         }
 
         public void Insert(int index, GraphicBase item)
         {
-            using (new WriteLockContext(_lock))
+            //using (new WriteLockContext(_lock))
             {
                 var vis = new DrawingVisual();
                 _graphics.Insert(index, item);
@@ -206,7 +205,7 @@ namespace DrawToolsLib
 
         public void RemoveAt(int index)
         {
-            using (new WriteLockContext(_lock))
+            //using (new WriteLockContext(_lock))
             {
                 _graphics[index]?.ResetInvalidateEvent();
                 RemoveSubElementsUnsafe(_graphics[index]);
@@ -219,12 +218,12 @@ namespace DrawToolsLib
         {
             get
             {
-                using (new ReadLockContext(_lock))
-                    return _graphics[index];
+                //using (new ReadLockContext(_lock))
+                return _graphics[index];
             }
             set
             {
-                using (new WriteLockContext(_lock))
+                //using (new WriteLockContext(_lock))
                 {
                     _graphics[index].ResetInvalidateEvent();
                     RemoveSubElementsUnsafe(_graphics[index]);
@@ -236,6 +235,15 @@ namespace DrawToolsLib
                     value.Invalidated += (sender, args) => DrawGraphic(value, vis);
                     DrawGraphic(value, vis);
                 }
+            }
+        }
+
+        private void DrawGraphic(GraphicBase g, DrawingVisual v)
+        {
+            v.Effect = g.Effect;
+            using (var c = v.RenderOpen())
+            {
+                g.Draw(c);
             }
         }
 
@@ -293,57 +301,48 @@ namespace DrawToolsLib
             }
         }
 
-        private void DrawGraphic(GraphicBase g, DrawingVisual v)
-        {
-            v.Effect = g.Effect;
-            using (var c = v.RenderOpen())
-            {
-                g.Draw(c);
-            }
-        }
+        //private class ReadLockContext : IDisposable
+        //{
+        //    private readonly ReaderWriterLockSlim _lockSlim;
+        //    private bool _locked;
 
-        private class ReadLockContext : IDisposable
-        {
-            private readonly ReaderWriterLockSlim _lockSlim;
-            private bool _locked;
+        //    public ReadLockContext(ReaderWriterLockSlim lockSlim)
+        //    {
+        //        _lockSlim = lockSlim;
+        //        _lockSlim.EnterReadLock();
+        //        _locked = true;
+        //    }
 
-            public ReadLockContext(ReaderWriterLockSlim lockSlim)
-            {
-                _lockSlim = lockSlim;
-                _lockSlim.EnterReadLock();
-                _locked = true;
-            }
+        //    public void Dispose()
+        //    {
+        //        if (_locked)
+        //        {
+        //            _lockSlim.ExitReadLock();
+        //            _locked = false;
+        //        }
+        //    }
+        //}
 
-            public void Dispose()
-            {
-                if (_locked)
-                {
-                    _lockSlim.ExitReadLock();
-                    _locked = false;
-                }
-            }
-        }
+        //private class WriteLockContext : IDisposable
+        //{
+        //    private readonly ReaderWriterLockSlim _lockSlim;
+        //    private bool _locked;
 
-        private class WriteLockContext : IDisposable
-        {
-            private readonly ReaderWriterLockSlim _lockSlim;
-            private bool _locked;
+        //    public WriteLockContext(ReaderWriterLockSlim lockSlim)
+        //    {
+        //        _lockSlim = lockSlim;
+        //        _lockSlim.EnterWriteLock();
+        //        _locked = true;
+        //    }
 
-            public WriteLockContext(ReaderWriterLockSlim lockSlim)
-            {
-                _lockSlim = lockSlim;
-                _lockSlim.EnterWriteLock();
-                _locked = true;
-            }
-
-            public void Dispose()
-            {
-                if (_locked)
-                {
-                    _lockSlim.ExitWriteLock();
-                    _locked = false;
-                }
-            }
-        }
+        //    public void Dispose()
+        //    {
+        //        if (_locked)
+        //        {
+        //            _lockSlim.ExitWriteLock();
+        //            _locked = false;
+        //        }
+        //    }
+        //}
     }
 }
