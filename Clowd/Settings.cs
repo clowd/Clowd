@@ -15,6 +15,7 @@ using Clowd.Utilities;
 using PropertyTools.Wpf;
 using RT.Serialization;
 using PData = PropertyTools.DataAnnotations;
+using System.Reflection;
 
 namespace Clowd
 {
@@ -60,6 +61,28 @@ namespace Clowd
         [DisplayName("Tray-drop enabled")]
         [Description("If true, allows dropping files directly on to the windows tray icon to start an upload.")]
         public bool TrayDropEnabled { get; set; } = true;
+
+        [DisplayName("Add item to Explorer context menu")]
+        [Description("If true, will add an item to the explorer context menu allowing you to right click to upload files.")]
+        public bool ExplorerMenuEnabled
+        {
+            get
+            {
+                return (new Installer.Features.ContextMenu()).CheckInstalled(Assembly.GetExecutingAssembly().Location, Installer.RegistryQuery.CurrentUser);
+            }
+            set
+            {
+                var feature = new Installer.Features.ContextMenu();
+                if (value)
+                {
+                    feature.Install(Assembly.GetExecutingAssembly().Location, Installer.InstallMode.CurrentUser);
+                }
+                else
+                {
+                    feature.Uninstall(Assembly.GetExecutingAssembly().Location, Installer.RegistryQuery.CurrentUser);
+                }
+            }
+        }
 
         [DisplayName("Accent color"), PData.EnableBy("AccentScheme", AccentScheme.User)]
         [Description("Allows you to set a custom accent color when the appropriate accent mode is also set.")]
