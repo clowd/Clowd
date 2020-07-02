@@ -6,10 +6,13 @@ using System.Threading.Tasks;
 
 namespace FileUploadLib
 {
-    public class UploadOptions
+    public interface IUploadOptions
     {
-        public string FileName { get; set; }
-
+        bool UseUniqueUploadKey { get; }
+        string CustomUrlPattern { get; }
+    }
+    public class UploadOptions : IUploadOptions
+    {
         public bool UseUniqueUploadKey { get; set; } = true;
 
         /// <summary>

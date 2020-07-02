@@ -27,12 +27,14 @@ using Point = System.Windows.Point;
 using Ionic.Zlib;
 using SharpRaven;
 using SharpRaven.Data;
+using FileUploadLib;
 
 namespace Clowd
 {
     public partial class App : Application
     {
         public static new App Current => (App)Application.Current;
+        public static bool CanUpload => Current.Settings.UploadSettings.UploadProvider != UploadsProvider.None;
 
         public GeneralSettings Settings { get; private set; }
         public string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
@@ -401,39 +403,7 @@ namespace Clowd
             var icon = new System.Drawing.Icon(sri.Stream, new System.Drawing.Size(nearest, nearest));
             _taskbarIcon.Icon = icon;
         }
-#if NAPPUPDATE
-        private void SetupUpdateTimer()
-        {
-            //// NAppUpdater uses relative paths, so the current directory must be set accordingly.
-            //Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-            //_updateManager = NAppUpdate.Framework.UpdateManager.Instance;
-            //_updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
-            //_updateManager.Config.TempFolder = Path.Combine(AppDataDirectory, "update");
-            //_updateManager.Config.BackupFolder = Path.Combine(AppDataDirectory, "backup");
-            //_updateManager.Config.UpdateProcessName = "ClowdUpdate";
-            //var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ClowdServerDomain}/app_updates/feed.aspx");
-            //_updateManager.UpdateSource = source;
-
-            //_updateManager.ReinstateIfRestarted();
-            //if (_updateManager.State == NAppUpdate.Framework.UpdateManager.UpdateProcessState.AfterRestart)
-            //{
-            //    var config = new TaskDialogInterop.TaskDialogOptions();
-            //    config.Title = "Clowd";
-            //    config.MainInstruction = "Updates were installed successfully.";
-            //    config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
-            //    config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Information;
-            //    TaskDialogInterop.TaskDialog.Show(config);
-            //}
-            //_updateManager.CleanUp();
-
-            //_updateTimer = new DispatcherTimer();
-            //_updateTimer.Interval = Settings.UpdateCheckInterval;
-            //_updateTimer.Tick += OnCheckForUpdates;
-            //OnCheckForUpdates(null, null);
-            //_updateTimer.Start();
-        }
-#endif
-        private void SetupTrayContextMenu()
+        internal void SetupTrayContextMenu()
         {
             ContextMenu context = new ContextMenu();
             var capture = new MenuItem() { Header = "_Capture Screen" };
@@ -445,34 +415,45 @@ namespace Clowd
             };
             context.Items.Add(capture);
 
-            var paste = new MenuItem() { Header = "_Paste" };
-            paste.Click += (s, e) =>
+            if (App.CanUpload)
             {
-                Paste();
-            };
-            context.Items.Add(paste);
+                var paste = new MenuItem() { Header = "_Paste" };
+                paste.Click += (s, e) =>
+                {
+                    Paste();
+                };
+                context.Items.Add(paste);
 
-            var uploadFile = new MenuItem() { Header = "Upload _Files" };
-            uploadFile.Click += (s, e) =>
-            {
-                UploadFile();
-            };
-            context.Items.Add(uploadFile);
+                var uploadFile = new MenuItem() { Header = "Upload _Files" };
+                uploadFile.Click += (s, e) =>
+                {
+                    UploadFile();
+                };
+                context.Items.Add(uploadFile);
 
-            var uploads = new MenuItem() { Header = "Show _Uploads" };
-            uploads.Click += (s, e) =>
-            {
-                UploadManager.ShowWindow();
-            };
-            context.Items.Add(uploads);
+                var uploads = new MenuItem() { Header = "Show _Uploads" };
+                uploads.Click += (s, e) =>
+                {
+                    UploadManager.ShowWindow();
+                };
+                context.Items.Add(uploads);
+            }
+
             context.Items.Add(new Separator());
 
-            var home = new MenuItem() { Header = "Clowd _Home" };
+            var home = new MenuItem() { Header = "Open _Clowd" };
             home.Click += (s, e) =>
             {
                 ShowHome();
             };
             context.Items.Add(home);
+
+            var settings = new MenuItem() { Header = "_Settings" };
+            settings.Click += (s, e) =>
+            {
+                ShowHome(true);
+            };
+            context.Items.Add(settings);
 
             var exit = new MenuItem() { Header = "E_xit" };
             exit.Click += (s, e) =>
@@ -507,6 +488,39 @@ namespace Clowd
             _taskbarIcon.ContextMenu = context;
         }
 
+#if NAPPUPDATE
+        private void SetupUpdateTimer()
+        {
+            //// NAppUpdater uses relative paths, so the current directory must be set accordingly.
+            //Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            //_updateManager = NAppUpdate.Framework.UpdateManager.Instance;
+            //_updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
+            //_updateManager.Config.TempFolder = Path.Combine(AppDataDirectory, "update");
+            //_updateManager.Config.BackupFolder = Path.Combine(AppDataDirectory, "backup");
+            //_updateManager.Config.UpdateProcessName = "ClowdUpdate";
+            //var source = new NAppUpdate.Framework.Sources.SimpleWebSource($"http://{ClowdServerDomain}/app_updates/feed.aspx");
+            //_updateManager.UpdateSource = source;
+
+            //_updateManager.ReinstateIfRestarted();
+            //if (_updateManager.State == NAppUpdate.Framework.UpdateManager.UpdateProcessState.AfterRestart)
+            //{
+            //    var config = new TaskDialogInterop.TaskDialogOptions();
+            //    config.Title = "Clowd";
+            //    config.MainInstruction = "Updates were installed successfully.";
+            //    config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
+            //    config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Information;
+            //    TaskDialogInterop.TaskDialog.Show(config);
+            //}
+            //_updateManager.CleanUp();
+
+            //_updateTimer = new DispatcherTimer();
+            //_updateTimer.Interval = Settings.UpdateCheckInterval;
+            //_updateTimer.Tick += OnCheckForUpdates;
+            //OnCheckForUpdates(null, null);
+            //_updateTimer.Start();
+        }
+#endif
+
         public void ResetSettings()
         {
             Settings.Dispose();
@@ -517,7 +531,6 @@ namespace Clowd
             };
             Settings.SaveQuiet();
         }
-
         public void FinishInit()
         {
             if (_initialized)
@@ -544,7 +557,6 @@ namespace Clowd
                 OnCommandLineArgsReceived(this, new CommandLineEventArgs(_args));
             }
         }
-
         public async void StartCapture(ScreenRect? region = null)
         {
             if (_prtscrWindowOpen || !_initialized)
@@ -557,14 +569,12 @@ namespace Clowd
             };
             _prtscrWindowOpen = true;
         }
-
         public void QuickCaptureFullScreen()
         {
             if (!_initialized)
                 return;
             StartCapture(ScreenTools.VirtualScreen.Bounds);
         }
-
         public void QuickCaptureCurrentWindow()
         {
             if (!_initialized)
@@ -573,7 +583,6 @@ namespace Clowd
             var bounds = USER32EX.GetWindowRectangle(foreground);
             StartCapture(ScreenRect.FromSystem(bounds));
         }
-
         public void UploadFile(Window owner = null)
         {
             if (!_initialized)
@@ -639,14 +648,14 @@ namespace Clowd
                 OnFilesReceived(fileArray);
             }
         }
-        public void ShowHome()
+        public void ShowHome(bool openSettings = false)
         {
             if (!_initialized)
                 return;
 
             var wnd = TemplatedWindow.GetWindow(typeof(HomePage))
                 ?? TemplatedWindow.GetWindow(typeof(SettingsPage))
-                ?? TemplatedWindow.CreateWindow("Clowd", new HomePage());
+                ?? TemplatedWindow.CreateWindow("Clowd", openSettings ? (Control)(new SettingsPage()) : new HomePage());
 
             wnd.Show();
             wnd.MakeForeground();
@@ -704,6 +713,7 @@ namespace Clowd
             }
         }
 #endif
+
         private void OnCommandLineArgsReceived(object sender, CommandLineEventArgs e)
         {
             if (_cmdBatchTimer.IsEnabled)
@@ -727,7 +737,6 @@ namespace Clowd
                 _cmdCache.Clear();
             }
         }
-
         private void OnWndProcMessageReceived(uint obj)
         {
             if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED
@@ -736,7 +745,6 @@ namespace Clowd
                 SetupAccentColors();
             }
         }
-
         private async Task OnFilesReceived(string[] filePaths)
         {
             string url;
@@ -779,7 +787,6 @@ namespace Clowd
                 url = await UploadManager.Upload(File.ReadAllBytes(filePaths[0]), Path.GetFileName(filePaths[0]));
             }
         }
-
         private bool FileMightBeCompressible(string file)
         {
             using (var f = File.Open(file, FileMode.Open, FileAccess.Read))
@@ -793,7 +800,6 @@ namespace Clowd
                 }
             }
         }
-
         private void OnTaskbarIconDrop(object sender, DragEventArgs e)
         {
             var formats = e.Data.GetFormats();

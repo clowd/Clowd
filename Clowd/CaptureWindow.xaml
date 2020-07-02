@@ -18,6 +18,7 @@
         <conv:ColorToBrushConverter x:Key="convColorToBrush"/>
         <conv:RectConverter x:Key="rectConv" />
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
         <Style x:Key="ButtonTool" TargetType="{x:Type Button}">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="SnapsToDevicePixels" Value="True" />
@@ -138,7 +139,8 @@
                             <Path Width="16" Height="16" Fill="White" Data="M3.759,9.556C3.603,10.012,3.5,10.492,3.5,11c0,0.248,0.035,0.487,0.073,0.726C2.072,11.148,1,9.702,1,8 s1.073-3.149,2.573-3.726C3.534,4.512,3.5,4.751,3.5,5c0,0.508,0.103,0.988,0.259,1.444C3.3,6.811,3,7.368,3,8 C3,8.631,3.3,9.188,3.759,9.556z M6.76,6.552C6.302,6.185,6,5.631,6,5c0-1.103,0.897-2,2-2c0.632,0,1.189,0.3,1.556,0.759 C10.012,3.603,10.492,3.5,11,3.5c0.248,0,0.487,0.034,0.726,0.073C11.148,2.072,9.702,1,8,1C5.794,1,4,2.794,4,5 c0,1.02,0.395,1.941,1.025,2.649C5.507,7.221,6.079,6.902,6.71,6.712C6.727,6.659,6.742,6.605,6.76,6.552z M11,4 C9.299,4,7.853,5.072,7.275,6.572C7.513,6.533,7.752,6.499,8,6.499c0.508,0,0.989,0.104,1.444,0.259C9.812,6.3,10.369,6,11,6 c1.103,0,2,0.897,2,2c0,0.631-0.3,1.189-0.759,1.556C12.396,10.012,12.5,10.492,12.5,11c0,0.248-0.034,0.488-0.073,0.726 C13.928,11.148,15,9.702,15,8C15,5.794,13.206,4,11,4z M12,11c0-2.206-1.794-4.001-4-4.001S4,8.794,4,11s1.794,4,4,4 S12,13.206,12,11z M10,11c0,1.103-0.897,2-2,2c-1.103,0-2-0.897-2-2c0-1.104,0.897-2.001,2-2.001C9.103,8.999,10,9.896,10,11z" />
                         </Viewbox>
                     </Border>-->
-                    <Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Upload}" >
+                    <Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Upload}" 
+                            Visibility="{Binding Source={x:Static local:App.CanUpload}, Converter={StaticResource Bool2Vis}}">
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Viewbox Height="26" Width="26">
                                 <Path Width="16" Height="16" Fill="White" Data="{StaticResource PathLogoSmall16}" />
@@ -148,7 +150,8 @@
                             </TextBlock>
                         </StackPanel>
                     </Button>
-                    <Rectangle Fill="#373737" MinWidth="3" MinHeight="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
+                    <Rectangle Fill="#373737" MinWidth="3" MinHeight="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" 
+                               Visibility="{Binding Source={x:Static local:App.CanUpload}, Converter={StaticResource Bool2Vis}}"/>
                     <Button Style="{StaticResource ButtonTool}" Width="50" Command="{StaticResource Command.Photo}" >
                         <StackPanel Orientation="Vertical" Margin="5">
                             <Path Width="26" Height="26" Fill="White" Data="M 9.5 3 C 8.791 3 8.32075 3.2885 8.09375 3.6875 L 6.8125 6 L 4.9375 6 C 1.9975 6 5.9211895e-16 8.059 0 11 L 0 19.125 C 0 21.818 2.182 24 4.875 24 L 21.125 24 C 23.818 24 26 21.818 26 19.125 L 26 10.875 C 26 8.182 23.818 6 21.125 6 L 19.1875 6 L 17.90625 3.6875 C 17.68025 3.2885 17.18 3 16.5 3 L 9.5 3 z M 4 7.875 C 4.628 7.875 5.125 8.372 5.125 9 C 5.125 9.628 4.628 10.125 4 10.125 C 3.372 10.125 2.875 9.628 2.875 9 C 2.875 8.372 3.372 7.875 4 7.875 z M 13 7.9375 C 16.9 7.9375 20.0625 11.1 20.0625 15 C 20.0625 18.9 16.9 22.0625 13 22.0625 C 9.1 22.0625 5.9375 18.901 5.9375 15 C 5.9375 11.099 9.1 7.9375 13 7.9375 z M 13 10.1875 C 10.341853 10.1875 8.1875 12.341853 8.1875 15 C 8.1875 17.658147 10.341853 19.8125 13 19.8125 C 15.658147 19.8125 17.8125 17.658147 17.8125 15 C 17.8125 12.341853 15.658147 10.1875 13 10.1875 z" />
