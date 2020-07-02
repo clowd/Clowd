@@ -46,14 +46,19 @@ namespace Clowd
             if (win != null)
             {
                 _closeRegistered = true;
-                win.Closed += (s, e) => SelectedItem.SaveQuiet();
+                win.Closed += (s, e) => PerformSave();
             }
+        }
 
+        private void PerformSave()
+        {
+            SelectedItem.SaveQuiet();
+            App.Current.SetupTrayContextMenu();
         }
 
         private void Home_Clicked(object sender, RoutedEventArgs e)
         {
-            SelectedItem.SaveQuiet();
+            PerformSave();
             TemplatedWindow.SetContent(this, new HomePage());
         }
 
@@ -61,6 +66,7 @@ namespace Clowd
         {
             App.Current.ResetSettings();
             this.SelectedItem = App.Current.Settings;
+            PerformSave();
         }
     }
 

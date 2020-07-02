@@ -8,9 +8,8 @@ using System.Threading.Tasks;
 namespace FileUploadLib
 {
     public delegate void ProgressHandler(long bytesUploaded);
-    public interface IUploadProvider<in TOptions> 
-        where TOptions : UploadOptions 
+    public interface IUploadProvider
     {
-        Task<UploadResult> Upload(Stream fileStream, TOptions options, ProgressHandler progress);
+        Task<UploadResult> Upload(Stream fileStream, string fileName, ProgressHandler progress);
     }
 }

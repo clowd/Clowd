@@ -9,17 +9,24 @@ using Microsoft.WindowsAzure.Storage;
 
 namespace FileUploadLib.Providers
 {
-    public class AzureProvider : IUploadProvider<AzureOptions>
+    public class AzureProvider : IUploadProvider
     {
-        public async Task<UploadResult> Upload(Stream fileStream, AzureOptions options, ProgressHandler progress)
+        private readonly IAzureOptions _options;
+
+        public AzureProvider(IAzureOptions options)
+        {
+            this._options = options;
+        }
+
+        public async Task<UploadResult> Upload(Stream fileStream, string fileName, ProgressHandler progress)
         {
             var mimeDb = new MimeDbMimeProvider();
-            var mimeType = mimeDb.GetMimeFromExtension(Path.GetExtension(options.FileName)).ContentType;
+            var mimeType = mimeDb.GetMimeFromExtension(Path.GetExtension(fileName)).ContentType;
 
-            var account = CloudStorageAccount.Parse(options.ConnectionString);
+            var account = CloudStorageAccount.Parse(_options.AzureConnectionString);
             var storage = account.CreateCloudBlobClient();
-            var container = storage.GetContainerReference(options.ContainerName);
-            var key = options.UseUniqueUploadKey ? Guid.NewGuid().ToString().Replace("-", "") : options.FileName;
+            var container = storage.GetContainerReference(_options.AzureContainerName);
+            var key = _options.UseUniqueUploadKey ? Guid.NewGuid().ToString().Replace("-", "") : fileName;
             var blob = container.GetBlockBlobReference(key);
 
             const int blockSize = 256 * 1024;
@@ -54,19 +61,19 @@ namespace FileUploadLib.Providers
                 await blob.PutBlockListAsync(blockIds);
             }
 
-            blob.Properties.ContentDisposition = "attachment; filename=" + options.FileName;
+            blob.Properties.ContentDisposition = "attachment; filename=" + fileName;
             blob.Properties.ContentType = mimeType;
             await blob.SetPropertiesAsync();
 
-            var url = String.IsNullOrWhiteSpace(options.CustomUrlPattern)
+            var url = String.IsNullOrWhiteSpace(_options.CustomUrlPattern)
                 ? blob.Uri.ToString()
-                : UploadUtil.SubstituteUploadUrl(options.CustomUrlPattern, mimeType, key);
+                : UploadUtil.SubstituteUploadUrl(_options.CustomUrlPattern, mimeType, key);
 
             return new UploadResult()
             {
                 Provider = typeof(AzureProvider).AssemblyQualifiedName,
                 PublicUrl = url,
-                FileName = options.FileName,
+                FileName = fileName,
                 ContentType = mimeType,
                 UploadKey = key,
                 UploadTime = DateTimeOffset.UtcNow,
@@ -74,9 +81,15 @@ namespace FileUploadLib.Providers
         }
     }
 
-    public class AzureOptions : UploadOptions
+    public interface IAzureOptions : IUploadOptions
     {
-        public string ConnectionString { get; set; }
-        public string ContainerName { get; set; }
+        string AzureConnectionString { get; }
+        string AzureContainerName { get; }
+    }
+
+    public class AzureOptions : UploadOptions, IAzureOptions
+    {
+        public string AzureConnectionString { get; set; }
+        public string AzureContainerName { get; set; }
     }
 }
