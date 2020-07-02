@@ -108,6 +108,7 @@ namespace Screeney
 
             Console.WriteLine("Done.");
             Console.WriteLine($"Final Ellapsted time: {clock.Elapsed.TotalSeconds} // Frames Captured: {frameCount}");
+            Console.Read();
         }
     }
 }
