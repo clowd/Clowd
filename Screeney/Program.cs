@@ -25,6 +25,28 @@ namespace Screeney
         unsafe static void Main()
         {
             Clowd.Interop.USER32.SetProcessDPIAware();
+
+
+            Recorder r = new Recorder(new RecorderSettings
+            {
+                OutputDirectory = "output",
+                OutputQuality = BitrateMultiplier.Low,
+                OutputResolution = Resolution.HD_1080p,
+                TargetFramesPerSecond = 30
+            });
+
+            var cap = r.OpenCapture(new ScreenVersusWpf.ScreenRect(0, 0, 1920, 1080));
+
+            cap.Start();
+            Thread.Sleep(10 * 1000);
+            cap.Finish();
+            Console.WriteLine("done");
+            Console.Read();
+
+
+            return;
+
+
             Console.WriteLine("Recording");
 
             var mm_devices = new MMDeviceEnumerator().EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active);
@@ -77,6 +99,7 @@ namespace Screeney
                     // convert bitmap format and encode
                     rescaler.RescaleFrame(vFrameGen, vFrameEnc);
                     enc.EncodeFrame(vFrameEnc, clock.ElapsedMilliseconds / framerate);
+                    Console.WriteLine(clock.ElapsedMilliseconds / framerate);
                 }
             };
             audio.DataAvailable += (s, e) =>
