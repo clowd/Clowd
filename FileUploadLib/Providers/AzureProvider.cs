@@ -61,6 +61,7 @@ namespace FileUploadLib.Providers
                 await blob.PutBlockListAsync(blockIds);
             }
 
+            //blob.Properties.ContentEncoding = "gzip";
             blob.Properties.ContentDisposition = "attachment; filename=" + fileName;
             blob.Properties.ContentType = mimeType;
             await blob.SetPropertiesAsync();
