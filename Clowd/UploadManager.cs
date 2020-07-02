@@ -12,6 +12,7 @@ using RT.Util.ExtensionMethods;
 using Clowd.Shared;
 using FileUploadLib;
 using FileUploadLib.Providers;
+using System.Windows;
 
 namespace Clowd
 {
@@ -38,6 +39,29 @@ namespace Clowd
 
         public static async Task<string> Upload(Stream data, string displayName)
         {
+            IUploadProvider uploader;
+            var providerSelection = App.Current.Settings.UploadSettings.UploadProvider;
+            if (providerSelection == UploadsProvider.None)
+            {
+                var config = new TaskDialogInterop.TaskDialogOptions();
+                config.Title = $"{App.ClowdAppName}";
+                config.MainInstruction = $"{App.ClowdAppName} File Upload Not Configured";
+                config.Content =
+                    $"There is no uploads provider configured in the {App.ClowdAppName} settings. Please open settings and configure before uploading files.";
+                config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.Close;
+                config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Warning;
+                var response = TaskDialogInterop.TaskDialog.Show(config);
+                return null;
+            }
+            else if (providerSelection == UploadsProvider.Azure)
+            {
+                uploader = new AzureProvider(App.Current.Settings.UploadSettings);
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+
             string viewName = displayName;
             if (displayName.StartsWith("clowd-default", StringComparison.InvariantCultureIgnoreCase))
                 viewName = "Upload";
@@ -47,21 +71,12 @@ namespace Clowd
 
             try
             {
-                var uploader = new AzureProvider();
-
                 var data_size = data.Length;
 
                 view.SecondaryText = "Uploading...";
                 view.ProgressTargetText = ((long)data_size).ToPrettySizeString(0);
 
-                var options = new AzureOptions
-                {
-                    FileName = displayName,
-                    ConnectionString = "DefaultEndpointsProtocol=https;AccountName=zstcs01;AccountKey=IoFdW62MlMDQrgt6jdekT9QzG+5FNKhRtVi1x2qOxSbOsYUf9oT3jLOY+HOWZ9LiyR6yqP2Fkj1/A0+4uMGzHw==;EndpointSuffix=core.windows.net",
-                    ContainerName = "clowd",
-                };
-
-                var result = await uploader.Upload(data, options, (bytesUploaded) =>
+                var result = await uploader.Upload(data, displayName, (bytesUploaded) =>
                 {
                     view.ProgressCurrentText = ((long)Math.Min(bytesUploaded, data_size)).ToPrettySizeString(0);
                     var progress = (bytesUploaded / (double)data_size) * 100;
@@ -79,6 +94,7 @@ namespace Clowd
             catch (Exception e)
             {
                 view.Status = TaskViewItem.TaskStatus.Error;
+                view.Progress = 99;
                 view.SecondaryText = e.Message;
                 return null;
             }
@@ -86,6 +102,11 @@ namespace Clowd
 
         public static void ShowWindow()
         {
+            var providerSelection = App.Current.Settings.UploadSettings.UploadProvider;
+            if (providerSelection == UploadsProvider.None)
+            {
+                return;
+            }
             _window.Show();
         }
     }

@@ -69,7 +69,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="IUploadProvider.cs" />
+    <Compile Include="Providers\IUploadProvider.cs" />
     <Compile Include="MimeDbMimeProvider.cs" />
     <Compile Include="Providers\AzureProvider.cs" />
     <Compile Include="UploadOptions.cs" />
