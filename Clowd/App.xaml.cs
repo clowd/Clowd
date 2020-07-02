@@ -754,9 +754,8 @@ namespace Clowd
                 // • there is more than one file;
                 filePaths.Length > 1 ||
                 // • we are processing a directory rather than a file; or
-                (filePaths.Length == 1 && Directory.Exists(filePaths[0])) ||
-                // • we are processing a single file that might benefit from compression
-                (filePaths.Length == 1 && FileMightBeCompressible(filePaths[0])))
+                (filePaths.Length == 1 && Directory.Exists(filePaths[0]))
+                )
             {
                 using (MemoryStream ms = new MemoryStream())
                 {
@@ -785,19 +784,6 @@ namespace Clowd
             else
             {
                 url = await UploadManager.Upload(File.ReadAllBytes(filePaths[0]), Path.GetFileName(filePaths[0]));
-            }
-        }
-        private bool FileMightBeCompressible(string file)
-        {
-            using (var f = File.Open(file, FileMode.Open, FileAccess.Read))
-            {
-                var firstMB = f.Read(1024 * 1024);  // may be less if file is smaller
-                using (var mem = new MemoryStream())
-                {
-                    using (var gz = new GZipStream(mem, CompressionMode.Compress, CompressionLevel.BestCompression, leaveOpen: true))
-                        gz.Write(firstMB);
-                    return mem.Length <= firstMB.Length * 9 / 10;    // At least 10% compression achieved
-                }
             }
         }
         private void OnTaskbarIconDrop(object sender, DragEventArgs e)
