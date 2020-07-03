@@ -1,4 +1,4 @@
-﻿using BasicFFEncode;
+using BasicFFEncode;
 using Clowd.Interop;
 using Clowd.Interop.Gdi32;
 using RT.Util;
