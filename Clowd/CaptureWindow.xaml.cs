@@ -406,7 +406,14 @@ namespace Clowd
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            new VideoOverlayWindow(CroppingRectangle).Show();
+            int w = CroppingRectangle.Width, h = CroppingRectangle.Height;
+            if (w % 2 != 0 || h % 2 != 0)
+            {
+                MessageBox.Show("Recording dimensions must be divisible by two, the recording area has been automatically extended by 1 pixel.");
+                if (w % 2 != 0) w++;
+                if (h % 2 != 0) h++;
+            }
+            new VideoOverlayWindow(new ScreenRect(CroppingRectangle.Left, CroppingRectangle.Top, w, h)).Show();
             this.Close();
         }
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
