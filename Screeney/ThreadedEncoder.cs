@@ -148,7 +148,7 @@ namespace Screeney
         public unsafe VideoFrame(int width, int height, BasicPixelFormat pixelFormat)
             : base(width, height, pixelFormat)
         {
-            Bitmap = new Bitmap(width, height, width * 3, System.Drawing.Imaging.PixelFormat.Format24bppRgb, (IntPtr)GetBuffer(0));
+            Bitmap = new Bitmap(width, height, GetStride(0), System.Drawing.Imaging.PixelFormat.Format24bppRgb, (IntPtr)GetBuffer(0));
             Graphics = Graphics.FromImage(Bitmap);
         }
     }

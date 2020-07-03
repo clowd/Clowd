@@ -1,4 +1,4 @@
-using Clowd.Controls;
+﻿using Clowd.Controls;
 using Clowd.Utilities;
 using Microsoft.Win32;
 using ScreenVersusWpf;
@@ -311,7 +311,8 @@ namespace Clowd
                     WpfPoint diff = point - new WpfPoint(rect.Left, rect.Bottom);
                     return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
                 }
-                else { // VIII
+                else
+                { // VIII
                     return rect.Left - point.X;
                 }
             }
@@ -327,11 +328,13 @@ namespace Clowd
                     WpfPoint diff = point - new WpfPoint(rect.Right, rect.Bottom);
                     return Math.Sqrt((diff.X * diff.X) + (diff.Y * diff.Y));
                 }
-                else { // IV
+                else
+                { // IV
                     return point.X - rect.Right;
                 }
             }
-            else { // Region II, IX, or VI
+            else
+            { // Region II, IX, or VI
                 if (point.Y < rect.Top)
                 { // II
                     return rect.Top - point.Y;
@@ -340,7 +343,8 @@ namespace Clowd
                 { // VI
                     return point.Y - rect.Bottom;
                 }
-                else { // IX
+                else
+                { // IX
                     return 0d;
                 }
             }
@@ -402,9 +406,8 @@ namespace Clowd
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            //var rec = new Screeney.ScreeneyRecorder(new System.Drawing.Rectangle(0, 0, 100, 100));
-            //rec.GetVideoSources();
-            MessageBox.Show("This feature is temporarily disabled.");
+            new VideoOverlayWindow(CroppingRectangle).Show();
+            this.Close();
         }
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
         {
