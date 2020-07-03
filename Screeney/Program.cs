@@ -34,12 +34,15 @@ namespace Screeney
             ScreeneyRecorder r = new ScreeneyRecorder(new ScreeneyRecorderSettings
             {
                 OutputDirectory = "output",
-                OutputQuality = BitrateMultiplier.High,
-                OutputResolution = Resolution.Actual,
-                TargetFramesPerSecond = 30
+                OutputQuality = BitrateMultiplier.Medium,
+                OutputResolution = Resolution.HD_1080p,
+                TargetFramesPerSecond = 24
             });
 
-            var cap = r.OpenCapture(new ScreenVersusWpf.ScreenRect(0, 0, 1920, 1080));
+            var test = new Bitmap(1162, 894, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+
+            var cap = r.OpenCapture(new ScreenVersusWpf.ScreenRect(480, 270, 1162, 894));
+            //var cap = r.OpenCapture(new ScreenVersusWpf.ScreenRect(0, 0, 1920, 1080));
 
             cap.Start();
             //Console.Read();

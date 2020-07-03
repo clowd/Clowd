@@ -210,6 +210,9 @@
     <Compile Include="Utilities\AreoColor.cs" />
     <Compile Include="Utilities\Extensions.cs" />
     <Compile Include="Utilities\HSLColor.cs" />
+    <Compile Include="VideoOverlayWindow.xaml.cs">
+      <DependentUpon>VideoOverlayWindow.xaml</DependentUpon>
+    </Compile>
     <Page Include="Assets\CustomWindowStyle.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -251,6 +254,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="TaskWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="VideoOverlayWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -331,6 +338,10 @@
     <ProjectReference Include="..\PropertyTools.Wpf\PropertyTools.Wpf.csproj">
       <Project>{7168f82f-288a-42c4-9eb1-fbbe5112f211}</Project>
       <Name>PropertyTools.Wpf</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Screeney\Screeney.csproj">
+      <Project>{AF84F83B-28C3-4298-B388-C31DB95A6790}</Project>
+      <Name>Screeney</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

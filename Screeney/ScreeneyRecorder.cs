@@ -86,16 +86,17 @@ namespace Screeney
 
     public class Recording : IDisposable
     {
-        BasicEncoderSettings settings;
-        ThreadedEncoder encoder;
-        Thread thread;
-        Thread thread2;
-        bool _stopRequested = false;
-        string filename;
+        public string FileName { get; }
+
+        private BasicEncoderSettings settings;
+        private ThreadedEncoder encoder;
+        private Thread thread;
+        private Thread thread2;
+        private bool _stopRequested = false;
         private readonly ScreenRect captureArea;
         private int fps;
         private readonly bool cursor;
-        FpsCounter counter;
+        private FpsCounter counter;
 
         internal Recording(string filename, ScreenRect captureArea, int targetWidth, int targetHeight, int fps, ulong bitrate, bool cursor)
         {
@@ -116,7 +117,7 @@ namespace Screeney
             thread2 = new Thread(reportingThread);
             thread2.IsBackground = true; // don't prevent program shutting down if the thread is still running
 
-            this.filename = filename;
+            this.FileName = filename;
             this.captureArea = captureArea;
             this.fps = fps;
             this.cursor = cursor;
@@ -128,10 +129,9 @@ namespace Screeney
             thread2.Start();
         }
 
-        public string Finish()
+        public void Finish()
         {
             Dispose();
-            return filename;
         }
 
         public void Dispose()
@@ -192,12 +192,12 @@ namespace Screeney
                 if (_stopRequested) break;
 
                 // don't encode the first second of frames - helps us determine optimal capture parameters for this system
-                if (frameCount >= fps)
-                {
-                    encoder.QueueFrameToEncode(frame);
-                    while ((frame = encoder.GetFreeFrame()) == null)
-                        Thread.Yield();
-                }
+                //if (frameCount >= fps)
+                //{
+                encoder.QueueFrameToEncode(frame);
+                while ((frame = encoder.GetFreeFrame()) == null)
+                    Thread.Yield();
+                //}
 
                 counter.CountFrame();
 
@@ -230,7 +230,7 @@ namespace Screeney
                         iconX = cursorInfo.ptScreenPos.x - ((int)iconInfo.xHotspot) - captureArea.Left;
                         iconY = cursorInfo.ptScreenPos.y - ((int)iconInfo.yHotspot) - captureArea.Top;
 
-                        if (iconX > captureArea.Width || iconY > captureArea.Height)
+                        if (iconX < 0 || iconX > captureArea.Width || iconY < 0 || iconY > captureArea.Height)
                         {
                             // mouse is out of bounds
                             return;
@@ -241,7 +241,7 @@ namespace Screeney
                             Convert.ToBoolean(USER32.GetKeyState(VirtualKeyStates.VK_RBUTTON) & 0x8000 /*KEY_PRESSED*/))
                         {
                             _lastMouseClick = DateTime.Now;
-                            _lastMouseClickPosition = new Point(cursorInfo.ptScreenPos.x, cursorInfo.ptScreenPos.y);
+                            _lastMouseClickPosition = new Point(cursorInfo.ptScreenPos.x - captureArea.Left, cursorInfo.ptScreenPos.y - captureArea.Top);
                         }
                         const int animationDuration = 400; //ms 
                         const int animationMaxRadius = 25; //pixels 
