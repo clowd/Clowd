@@ -24,20 +24,25 @@ namespace Screeney
         [STAThread]
         unsafe static void Main()
         {
+            //while (true)
+            //{ Thread.Sleep(1); }
+
+
             Clowd.Interop.USER32.SetProcessDPIAware();
 
 
-            Recorder r = new Recorder(new RecorderSettings
+            ScreeneyRecorder r = new ScreeneyRecorder(new ScreeneyRecorderSettings
             {
                 OutputDirectory = "output",
-                OutputQuality = BitrateMultiplier.Low,
-                OutputResolution = Resolution.HD_1080p,
+                OutputQuality = BitrateMultiplier.High,
+                OutputResolution = Resolution.Actual,
                 TargetFramesPerSecond = 30
             });
 
             var cap = r.OpenCapture(new ScreenVersusWpf.ScreenRect(0, 0, 1920, 1080));
 
             cap.Start();
+            //Console.Read();
             Thread.Sleep(10 * 1000);
             cap.Finish();
             Console.WriteLine("done");
