@@ -17,6 +17,7 @@ using RT.Serialization;
 using PData = PropertyTools.DataAnnotations;
 using System.Reflection;
 using FileUploadLib.Providers;
+using Screeney;
 
 namespace Clowd
 {
@@ -134,6 +135,9 @@ namespace Clowd
         [ExpandAsCategory("Uploads")]
         public UploadSettings UploadSettings { get; set; } = new UploadSettings();
 
+        [ExpandAsCategory("Video")]
+        public VideoSettings VideoSettings { get; set; } = new VideoSettings();
+
         [Browsable(false)]
         public MagnifierSettings MagnifierSettings { get; set; } = new MagnifierSettings();
 
@@ -239,6 +243,27 @@ namespace Clowd
         public void Dispose()
         {
             ActivateNextShortcut?.Dispose();
+        }
+    }
+
+    [ImplementPropertyChanged]
+    public class VideoSettings : IDisposable, IRecorderSettings
+    {
+        public Resolution OutputResolution { get; set; } = Resolution.HD_1080p;
+
+        public BitrateMultiplier OutputQuality { get; set; } = BitrateMultiplier.Medium;
+
+        [PData.DirectoryPath]
+        public string OutputDirectory { get; set; }
+
+        [PData.Spinnable(2, 4, 4, 30)]
+        [DisplayName("Max FPS")]
+        public int TargetFramesPerSecond { get; set; } = 24;
+
+        public bool ShowCursor { get; set; } = true;
+
+        public void Dispose()
+        {
         }
     }
 
