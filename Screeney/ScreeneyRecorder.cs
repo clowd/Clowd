@@ -103,10 +103,9 @@ namespace Screeney
             settings.Video.Width = targetWidth;
             settings.Video.Height = targetHeight;
             settings.Video.Timebase = new Rational(1, fps * 10);
-            //settings.Video.Timebase = new Rational(1, 90000);
             settings.Video.Bitrate = bitrate;
             settings.Video.PixelFormat = BasicPixelFormat.YUV420P;
-            settings.Video.GopSize = fps * 10;
+            settings.Video.GopSize = 300;
 
             counter = new FpsCounter();
             encoder = new ThreadedEncoder(filename, settings, captureArea.Width, captureArea.Height, BasicPixelFormat.BGR24);
@@ -215,7 +214,7 @@ namespace Screeney
         private DateTime _lastMouseClick = DateTime.Now.AddSeconds(-5);
         private Point _lastMouseClickPosition = new Point(0, 0);
 
-        private void DrawCursor(VideoFrame frame)
+        private unsafe void DrawCursor(VideoFrame frame)
         {
             CURSORINFO cursorInfo;
             cursorInfo.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
@@ -277,34 +276,37 @@ namespace Screeney
                             using (Bitmap maskBitmap = Bitmap.FromHbitmap(iconInfo.hbmMask))
                             {
                                 var size = maskBitmap.Width;
+                                byte bpp = 3;
+                                var maskBits = maskBitmap.LockBits(new Rectangle(0, 0, maskBitmap.Width, maskBitmap.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                                var destBits = frame.Bitmap.LockBits(new Rectangle(0, 0, size, size), System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+                                byte* mscan0 = (byte*)maskBits.Scan0.ToPointer();
+                                byte* dscan0 = (byte*)destBits.Scan0.ToPointer();
+
                                 for (int y = 0; y < size; y++)
                                 {
                                     for (int x = 0; x < size; x++)
                                     {
-                                        bool AND = maskBitmap.GetPixel(x, y) == Color.FromArgb(255, 255, 255, 255);
-                                        bool XOR = maskBitmap.GetPixel(x, y + size) == Color.FromArgb(255, 255, 255, 255);
-
                                         int destX = iconX + x;
                                         int destY = iconY + y;
                                         if (destX >= frame.Bitmap.Width || destY >= frame.Bitmap.Height)
                                             continue;
 
-                                        if (!AND && !XOR) // black screen pixel
+                                        //data[0] = blue; data[1] = green; data[2] = red;
+
+                                        byte* ANDptr = mscan0 + (y * maskBits.Stride) + (x * bpp);
+                                        byte* XORptr = mscan0 + ((y + size) * maskBits.Stride) + (x * bpp);
+                                        byte* DESTptr = dscan0 + (destY * destBits.Stride) + (destX * bpp);
+
+                                        for (int p = 0; p < 3; p++)
                                         {
-                                            frame.Bitmap.SetPixel(destX, destY, Color.Black);
-                                        }
-                                        else if (!AND && XOR) // white screen pixel
-                                        {
-                                            frame.Bitmap.SetPixel(destX, destY, Color.White);
-                                        }
-                                        else if (AND && XOR) // invert screen pixel
-                                        {
-                                            var current = frame.Bitmap.GetPixel(destX, destY);
-                                            var inverted = Color.FromArgb(255 - current.R, 255 - current.G, 255 - current.B);
-                                            frame.Bitmap.SetPixel(destX, destY, inverted);
+                                            DESTptr[p] &= ANDptr[p];
+                                            DESTptr[p] ^= XORptr[p];
                                         }
                                     }
                                 }
+
+                                maskBitmap.UnlockBits(maskBits);
+                                frame.Bitmap.UnlockBits(destBits);
                             }
                         }
                     }
