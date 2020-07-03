@@ -70,7 +70,7 @@ namespace Screeney
             _frameRescaled = new BasicVideoFrame(settings.Video.Width, settings.Video.Height, settings.Video.PixelFormat);
             for (int i = 0; i < 10; i++)
                 _framesFree.Enqueue(new VideoFrame(sourceWidth, sourceHeight, sourcePixelFormat));
-            _rescaler = new BasicRescaler(sourceWidth, sourceHeight, sourcePixelFormat, settings.Video.Width, settings.Video.Height, settings.Video.PixelFormat, BasicRescalerFlags.Lanczos);
+            _rescaler = new BasicRescaler(sourceWidth, sourceHeight, sourcePixelFormat, settings.Video.Width, settings.Video.Height, settings.Video.PixelFormat, BasicRescalerFlags.FastBilinear);
 
             _thread = new Thread(encodingThread);
             _thread.IsBackground = true; // don't prevent program shutting down if the thread is still running

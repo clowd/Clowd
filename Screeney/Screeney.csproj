@@ -89,7 +89,7 @@
     <Compile Include="Duplication\MovedRegion.cs" />
     <Compile Include="Duplication\PointerInfo.cs" />
     <Compile Include="Interop.cs" />
-    <Compile Include="Recorder.cs" />
+    <Compile Include="ScreeneyRecorder.cs" />
     <Compile Include="ThreadedEncoder.cs" />
     <Compile Include="Video\ManagedGdiCaptureSource.cs" />
     <Compile Include="Audio\SilenceProvider.cs" />
