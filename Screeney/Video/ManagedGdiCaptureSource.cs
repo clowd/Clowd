@@ -245,8 +245,9 @@ namespace Screeney.Video
 
                             var resultHdc = g.GetHdc();
                             var size = maskBitmap.Width;
-                            GDI32.BitBlt(resultHdc, iconX, iconY, size, size, maskHdc, 0, 0, (int)TernaryRasterOperations.SRCAND);
-                            GDI32.BitBlt(resultHdc, iconX, iconY, size, size, maskHdc, 0, size, (int)TernaryRasterOperations.SRCINVERT);
+                            GDI32.BitBlt(resultHdc, iconX, iconY, size, size, maskHdc, 0, 0, TernaryRasterOperations.SRCCOPY);
+                            GDI32.BitBlt(resultHdc, iconX, iconY, size, size, maskHdc, 0, size, TernaryRasterOperations.SRCINVERT);
+                            
                             g.ReleaseHdc(resultHdc);
 
                             IntPtr newPtr = GDI32.SelectObject(maskHdc, oldPtr);
