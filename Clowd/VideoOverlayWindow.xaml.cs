@@ -152,6 +152,7 @@ namespace Clowd
 
             labelCountdown.Visibility = Visibility.Collapsed;
             _capture = _recorder.OpenCapture(CroppingRectangle);
+            this.DoRender(); // give a chance for the countdown to dissapear 
             _capture.Start();
         }
 

@@ -27,9 +27,7 @@ namespace Screeney
             //while (true)
             //{ Thread.Sleep(1); }
 
-
             Clowd.Interop.USER32.SetProcessDPIAware();
-
 
             ScreeneyRecorder r = new ScreeneyRecorder(new ScreeneyRecorderSettings
             {
