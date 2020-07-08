@@ -240,14 +240,17 @@ namespace Clowd
             else
             {
                 AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
-                var resize = adornerLayer.GetAdorners(selectionBorder).FirstOrDefault(a => a is ResizingAdorner);
-                if (resize != null)
-                    adornerLayer.Remove(resize);
+                if (adornerLayer != null)
+                {
+                    var resize = adornerLayer.GetAdorners(selectionBorder).FirstOrDefault(a => a is ResizingAdorner);
+                    if (resize != null)
+                        adornerLayer.Remove(resize);
 
-                selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseDownEvent);
-                selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseMoveEvent);
-                selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseUpEvent);
-                selectionBorder.Cursor = Cursors.Cross;
+                    selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseDownEvent);
+                    selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseMoveEvent);
+                    selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseUpEvent);
+                    selectionBorder.Cursor = Cursors.Cross;
+                }
             }
         }
 
