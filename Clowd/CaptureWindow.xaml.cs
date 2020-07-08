@@ -28,6 +28,9 @@ namespace Clowd
         public BitmapSource GrayScreenImage { get; private set; }
         public IntPtr Handle { get; private set; }
         public BitmapSource ScreenImage { get; private set; }
+        public BitmapSource PopupWindowImage { get; private set; }
+        public ScreenRect PopupWindowRectangle { get; set; }
+        public Rect PopupWindowRectangleWpf { get { return PopupWindowRectangle.ToWpfRect(); } private set { PopupWindowRectangle = new WpfRect(value).ToScreenRect(); } }
         public bool ShowMagnifier { get; private set; } = App.Current.Settings.CaptureSettings.MagnifierEnabled;
         public bool ShowTips { get; private set; } = App.Current.Settings.CaptureSettings.TipsEnabled;
 
@@ -43,6 +46,7 @@ namespace Clowd
             InitializeComponent();
             this.SourceInitialized += CaptureWindow_SourceInitialized;
             this.Loaded += CaptureWindow_Loaded;
+            this.Closed += CaptureWindow_Closed;
             Width = Height = 1; // the window becomes visible very briefly before it's redrawn with the captured screenshot; this makes it unnoticeable
         }
 
@@ -115,12 +119,27 @@ namespace Clowd
                 rect.Height = ScreenImage.PixelHeight;
             return rect;
         }
-        private CroppedBitmap CropBitmap()
+        private BitmapSource CropBitmap()
         {
             var rect = TruncatedCroppingRect();
-            return new CroppedBitmap(ScreenImage, rect);
+
+            if (PopupWindowImage != null)
+            {
+                rect = new ScreenRect(rect.Left - PopupWindowRectangle.Left, rect.Top - PopupWindowRectangle.Top, rect.Width, rect.Height);
+                return new CroppedBitmap(PopupWindowImage, rect);
+            }
+            else
+            {
+                return new CroppedBitmap(ScreenImage, rect);
+            }
         }
 
+        private void CaptureWindow_SourceInitialized(object sender, EventArgs e)
+        {
+            this.Handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            CaptureBitmap();
+            windowFinder.NewCapture();
+        }
         private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
         {
             if (System.Diagnostics.Debugger.IsAttached)
@@ -140,13 +159,15 @@ namespace Clowd
                 UpdateCanvasSelection(initialRegion.Value);
                 ManageSelectionResizeHandlers(true);
             }
-        }
 
-        private void CaptureWindow_SourceInitialized(object sender, EventArgs e)
+            if (App.Current.Settings.CaptureSettings.SelectedWindowPromotion != SelectedWindowForegroundPromotion.None)
+            {
+                windowFinder.PopulateWindowBitmaps();
+            }
+        }
+        private void CaptureWindow_Closed(object sender, EventArgs e)
         {
-            this.Handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            CaptureBitmap();
-            windowFinder.Capture();
+            windowFinder.Dispose();
         }
 
         private void ManageCanvasMouseHandlers(bool register)
@@ -279,7 +300,7 @@ namespace Clowd
             Canvas.SetTop(element, y);
             return new WpfPoint(x, y);
         }
-        public double DistancePointToRectangle(WpfPoint point, Rect rect)
+        private double DistancePointToRectangle(WpfPoint point, Rect rect)
         {
             //  Calculate a distance between a point and a rectangle.
             //  The area around/in the rectangle is defined in terms of
@@ -349,6 +370,10 @@ namespace Clowd
                 }
             }
         }
+        private double DistancePointToPoint(double x1, double y1, double x2, double y2)
+        {
+            return Math.Sqrt(Math.Pow((x2 - x1), 2) + Math.Pow((y2 - y1), 2));
+        }
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -406,14 +431,7 @@ namespace Clowd
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            int w = CroppingRectangle.Width, h = CroppingRectangle.Height;
-            if (w % 2 != 0 || h % 2 != 0)
-            {
-                MessageBox.Show("Recording dimensions must be divisible by two, the recording area has been automatically extended by 1 pixel.");
-                if (w % 2 != 0) w++;
-                if (h % 2 != 0) h++;
-            }
-            new VideoOverlayWindow(new ScreenRect(CroppingRectangle.Left, CroppingRectangle.Top, w, h)).Show();
+            new VideoOverlayWindow(CroppingRectangle).Show();
             this.Close();
         }
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -426,12 +444,22 @@ namespace Clowd
         {
             this.Close();
         }
+        private void ToggleMagnifierExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            ShowMagnifier = !ShowMagnifier;
+            if (capturing == true)
+            {
+                pixelMagnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Collapsed;
+                var args = new MouseEventArgs(Mouse.PrimaryDevice, 0);
+                args.RoutedEvent = MouseMoveEvent;
+                rootGrid.RaiseEvent(args);
+            }
+        }
 
         private void RootGrid_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.LeftButton == MouseButtonState.Pressed)
             {
-                var wfMouse = System.Windows.Forms.Cursor.Position;
                 ShowTips = false;
                 crosshair.CaptureMouse();
                 draggingArea = true;
@@ -482,9 +510,12 @@ namespace Clowd
             {
                 var window = windowFinder.GetWindowThatContainsPoint(currentPoint);
 
-                UpdateCanvasSelection(window.WindowRect == ScreenRect.Empty
+                UpdateCanvasSelection(window.ImageBoundsRect == ScreenRect.Empty
                     ? new ScreenRect(0, 0, 0, 0)
-                    : window.WindowRect);
+                    : window.ImageBoundsRect);
+
+                if (App.Current.Settings.CaptureSettings.SelectedWindowPromotion == SelectedWindowForegroundPromotion.WhenHovered)
+                    BringSelectedWindowToFront(window);
             }
             else
             {
@@ -500,16 +531,23 @@ namespace Clowd
 
             UpdateCanvasMode(false);
 
-            if (CroppingRectangle.Width < 15 && CroppingRectangle.Height < 15)
+            var currentMouse = ScreenTools.GetMousePosition();
+
+            // if the mouse hasn't moved far, let's treat it like a click event and find out what window they clicked on
+            if (DistancePointToPoint(currentMouse.X, currentMouse.Y, draggingOrigin.X, draggingOrigin.Y) < 10)
             {
                 var window = windowFinder.GetWindowThatContainsPoint(ScreenTools.GetMousePosition());
-                if (window.WindowRect == ScreenRect.Empty)
+
+                if (window.ImageBoundsRect == ScreenRect.Empty)
                 {
                     UpdateCanvasSelection(new ScreenRect(0, 0, 0, 0));
                 }
                 else
                 {
-                    UpdateCanvasSelection(window.WindowRect);
+                    UpdateCanvasSelection(window.ImageBoundsRect);
+                    if (App.Current.Settings.CaptureSettings.SelectedWindowPromotion == SelectedWindowForegroundPromotion.WhenClicked ||
+                        App.Current.Settings.CaptureSettings.SelectedWindowPromotion == SelectedWindowForegroundPromotion.WhenHovered)
+                        BringSelectedWindowToFront(window);
                 }
             }
         }
@@ -624,19 +662,21 @@ namespace Clowd
         }
         private void UpdateCanvasSelection(ScreenRect selection)
         {
+            PopupWindowImage = null;
+            PopupWindowRectangle = ScreenRect.Empty;
             CroppingRectangle = selection;
             UpdateCanvasPlacement();
         }
-
-        private void ToggleMagnifierExecuted(object sender, ExecutedRoutedEventArgs e)
+        private void BringSelectedWindowToFront(WindowFinder2.CachedWindow window)
         {
-            ShowMagnifier = !ShowMagnifier;
-            if (capturing == true)
+            if (window.IsPartiallyCovered)
             {
-                pixelMagnifier.Visibility = ShowMagnifier ? Visibility.Visible : Visibility.Collapsed;
-                var args = new MouseEventArgs(Mouse.PrimaryDevice, 0);
-                args.RoutedEvent = MouseMoveEvent;
-                rootGrid.RaiseEvent(args);
+                var parent = windowFinder.GetTopLevel(window);
+                if (parent.WindowBitmapWpf != null)
+                {
+                    PopupWindowImage = parent.WindowBitmapWpf;
+                    PopupWindowRectangle = parent.WindowRect;
+                }
             }
         }
     }
