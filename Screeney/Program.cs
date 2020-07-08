@@ -33,7 +33,7 @@ namespace Screeney
             {
                 OutputDirectory = "output",
                 OutputQuality = BitrateMultiplier.Medium,
-                OutputResolution = Resolution.HD_1080p,
+                OutputResolution = Resolution.Actual,
                 TargetFramesPerSecond = 24
             });
 

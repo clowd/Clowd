@@ -36,7 +36,6 @@ namespace Screeney
         string OutputDirectory { get; set; }
         int TargetFramesPerSecond { get; set; }
         bool ShowCursor { get; set; }
-
     }
 
     public class ScreeneyRecorderSettings : IRecorderSettings
@@ -60,6 +59,12 @@ namespace Screeney
         public Recording OpenCapture(ScreenRect captureArea)
         {
             int targetWidth = captureArea.Width, targetHeight = captureArea.Height;
+
+            // we need to record at even resolutions for most codecs 
+            if (targetWidth % 2 != 0) targetWidth++;
+            if (targetHeight % 2 != 0) targetHeight++;
+
+            captureArea = new ScreenRect(captureArea.Left, captureArea.Top, targetWidth, targetHeight);
 
             int resolutionHeightLimit = captureArea.Height;
             if (_settings.OutputResolution > 0)
@@ -93,7 +98,7 @@ namespace Screeney
         private Thread thread;
         private Thread thread2;
         private bool _stopRequested = false;
-        private readonly ScreenRect captureArea;
+        private readonly Rectangle captureArea;
         private int fps;
         private readonly bool cursor;
         private FpsCounter counter;
@@ -118,7 +123,7 @@ namespace Screeney
             thread2.IsBackground = true; // don't prevent program shutting down if the thread is still running
 
             this.FileName = filename;
-            this.captureArea = captureArea;
+            this.captureArea = captureArea.ToSystem();
             this.fps = fps;
             this.cursor = cursor;
         }
