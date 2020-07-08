@@ -24,7 +24,7 @@ namespace Clowd.Utilities
         private const int MinWinCaptureBounds = 200;
 
         private readonly List<CachedWindow> _cachedWindows = new List<CachedWindow>();
-        private readonly List<IntPtr> _hWndsAlreadyProcessed = new List<IntPtr>();
+        private readonly HashSet<IntPtr> _hWndsAlreadyProcessed = new HashSet<IntPtr>();
         private readonly Stack<CachedWindow> _parentStack = new Stack<CachedWindow>();
         private readonly IVirtualDesktopManager _virtualDesktop = VirtualDesktopManager.CreateNew();
 
@@ -41,13 +41,11 @@ namespace Clowd.Utilities
             this._hWndsAlreadyProcessed.Clear();
             PopulateAllMetadata();
         }
-
         public void PopulateWindowBitmaps()
         {
             foreach (var c in _cachedWindows.Where(w => w.IsVisible && w.Depth == 0 && w.IsPartiallyCovered))
                 c.PopulateBitmaps();
         }
-
         public CachedWindow GetWindowThatContainsPoint(ScreenPoint point)
         {
             foreach (var window in _cachedWindows)
@@ -56,18 +54,15 @@ namespace Clowd.Utilities
 
             return new CachedWindow();
         }
-
         public CachedWindow GetTopLevel(CachedWindow child)
         {
             if (child.Parent != null) return GetTopLevel(child.Parent);
             return child;
         }
-
         public void Dispose()
         {
             _cachedWindows.ForEach(c => c.Dispose());
         }
-
 
         private bool EvalWindow(IntPtr hWnd, IntPtr depth)
         {
@@ -251,7 +246,6 @@ namespace Clowd.Utilities
             public string ClassName { get; private set; }
             public bool IsVisible { get; set; }
             public bool IsPartiallyCovered { get; set; }
-
             public int Depth { get; private set; }
             public Bitmap WindowBitmap { get; private set; }
             public System.Windows.Media.Imaging.BitmapSource WindowBitmapWpf { get; private set; }
@@ -259,11 +253,6 @@ namespace Clowd.Utilities
 
             public CachedWindow()
             {
-            }
-
-            ~CachedWindow()
-            {
-                this.Dispose();
             }
 
             public CachedWindow(IntPtr handle, int depth, string className, string caption, ScreenRect windowRect, ScreenRect croppedRect, CachedWindow parent)
@@ -276,6 +265,11 @@ namespace Clowd.Utilities
                 //this.ProcessID = processId;
                 this.Depth = depth;
                 this.Parent = parent;
+            }
+
+            ~CachedWindow()
+            {
+                this.Dispose();
             }
 
             public void PopulateBitmaps()
@@ -349,7 +343,7 @@ namespace Clowd.Utilities
 
             public override int GetHashCode()
             {
-                return unchecked((int)this.Handle.ToInt64());
+                return this.Handle.GetHashCode();
             }
         }
     }
