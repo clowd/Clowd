@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -22,12 +22,13 @@ namespace Clowd.Utilities
         private readonly List<CachedWindow> _cachedWindows = new List<CachedWindow>();
         private readonly List<IntPtr> _hWndsAlreadyProcessed = new List<IntPtr>();
         private readonly Stack<ScreenRect> _parentRects = new Stack<ScreenRect>();
+        private readonly IVirtualDesktopManager _virtualDesktop = VirtualDesktopManager.CreateNew();
 
         public void Capture()
         {
             this._cachedWindows.Clear();
             USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(this.EvalWindow);
-            USER32.EnumWindows(enumWindowsProc, new IntPtr(0));
+            USER32.EnumWindows(enumWindowsProc, IntPtr.Zero);
             this._hWndsAlreadyProcessed.Clear();
 
         }
@@ -64,6 +65,10 @@ namespace Clowd.Utilities
         private bool EvalWindow(IntPtr hWnd, IntPtr depth)
         {
             var depthInt = depth.ToInt32();
+            // if the window is not on the current virtual desktop we want to ignore it and it's children
+            if (depthInt == 0 && !_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
+                return true;
+
             if (!this._hWndsAlreadyProcessed.Contains(hWnd) && USER32.IsWindowVisible(hWnd) && !USER32.IsIconic(hWnd))
             {
                 ScreenRect boundsOfScreenWorkspace = this.GetWindowBounds(hWnd);
