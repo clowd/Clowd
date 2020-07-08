@@ -74,6 +74,17 @@ namespace Clowd
             }
             return bs;
         }
+
+        public static System.Drawing.Bitmap Crop(this System.Drawing.Bitmap b, System.Drawing.Rectangle r)
+        {
+            System.Drawing.Bitmap nb = new System.Drawing.Bitmap(r.Width, r.Height);
+            using (System.Drawing.Graphics g = System.Drawing.Graphics.FromImage(nb))
+            {
+                g.DrawImage(b, -r.X, -r.Y);
+                return nb;
+            }
+        }
+
         public static void Save(this BitmapSource source, string filePath, ImageFormat format)
         {
             using (var ms = new MemoryStream())

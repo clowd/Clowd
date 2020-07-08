@@ -209,8 +209,17 @@ namespace Clowd.Interop
         [DllImport("user32.dll", SetLastError = true)]
         public static extern int GetWindowTextLength(IntPtr hWnd);
 
+        /// <summary>
+        /// Enumerates all top-level windows associated with the specified desktop. If <paramref name="hDesktop"/> is null, the current desktop is used.
+        /// </summary>
+        /// <returns></returns>
+        [DllImport("user32.dll", EntryPoint = "EnumDesktopWindows", ExactSpelling = false, CharSet = CharSet.Auto, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnumDesktopWindows(IntPtr hDesktop, EnumWindowProc lpEnumCallbackFunction, IntPtr lParam);
+
         [DllImport("user32.dll")]
         public static extern bool EnumWindows(EnumWindowProc enumFunc, IntPtr lParam);
+
         /// <summary>
         /// Enumerates the child windows that belong to the specified parent window by passing the handle to each child window, in turn, to an application-defined callback function. EnumChildWindows continues until the last child window is enumerated or the callback function returns FALSE.
         /// </summary>
@@ -309,9 +318,24 @@ namespace Clowd.Interop
         public static extern IntPtr GetDC(IntPtr hWnd);
 
         public delegate bool MonitorEnumDelegate(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+
         [DllImport("user32.dll")]
         public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumDelegate lpfnEnum, IntPtr dwData);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool PrintWindow(IntPtr hwnd, IntPtr hDC, PrintWindowDrawingOptions PrintWindowDrawingOptions);
     }
+
+    [Flags]
+    public enum PrintWindowDrawingOptions : uint
+    {
+        None = 0,
+        PW_CLIENTONLY = 0x00000001,
+        PW_RENDERFULLCONTENT = 0x00000002,
+    }
+
+    [Flags]
     public enum MonitorOptions : uint
     {
         MONITOR_DEFAULTTONULL = 0x00000000,

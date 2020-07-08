@@ -82,6 +82,12 @@
             </Image.Clip>
         </Image>
         <Canvas Name="dynamicCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Image Name="imagePopupWindow" Source="{Binding PopupWindowImage}" Stretch="Fill" ClipToBounds="True"
+                   Width="{Binding PopupWindowRectangleWpf.Width}"
+                   Height="{Binding PopupWindowRectangleWpf.Height}"
+                   Canvas.Left="{Binding PopupWindowRectangleWpf.Left}"
+                   Canvas.Top="{Binding PopupWindowRectangleWpf.Top }">
+            </Image>
             <UserControl Name="selectionBorder"
                      Width="{Binding CroppingRectangleWpf.Width}"
                      Height="{Binding CroppingRectangleWpf.Height}"

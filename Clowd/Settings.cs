@@ -45,6 +45,16 @@ namespace Clowd
         Azure
     }
 
+    public enum SelectedWindowForegroundPromotion
+    {
+        [Description("Disabled")]
+        None,
+        [Description("When Clicked")]
+        WhenClicked,
+        [Description("When Hovered")]
+        WhenHovered
+    }
+
     [ImplementPropertyChanged]
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
     public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable
@@ -168,6 +178,9 @@ namespace Clowd
 
         [Description("If this is true, the Capture window will try to detect and highlight different windows as you hover over them.")]
         public bool DetectWindows { get; set; } = true;
+
+        [DisplayName("Bring selected window to the foreground")]
+        public SelectedWindowForegroundPromotion SelectedWindowPromotion { get; set; } = SelectedWindowForegroundPromotion.WhenClicked;
 
         [Category("Hotkeys"), DisplayName("Capture - Region"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureRegionShortcut { get; set; }
