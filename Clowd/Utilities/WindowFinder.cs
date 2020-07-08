@@ -305,15 +305,19 @@ namespace Clowd.Utilities
                 // windows print outside their bounds (drop shadows, etc), GetWindowRect returns the true size (thus also the size of rectangle that PrintWindow needs
                 // but typically we want to omit the drop shadow and blending area and just show the logical window size. 
                 // To achieve this we need to print the window at full size and then crop away the margins
-                var dwmPadding = (basicBounds.Width - WindowRect.Width) / 2;
-                if (dwmPadding < 1)
+                // Additionally, when a window is full screen, it extends beyond the screen boundary 
+
+                var xoffset = this.WindowRect.Left - basicBounds.Left;
+                var yoffset = this.WindowRect.Top - basicBounds.Top;
+
+                if (xoffset < 1 && yoffset < 1)
                 {
                     WindowBitmap = initialBmp;
                     WindowBitmapWpf = initialBmp.ToBitmapSource();
                 }
                 else
                 {
-                    var croppingRectangle = new Rectangle(dwmPadding, 0, WindowRect.Width, WindowRect.Height);
+                    var croppingRectangle = new Rectangle(xoffset, yoffset, WindowRect.Width, WindowRect.Height);
                     var newBmp = initialBmp.Crop(croppingRectangle);
                     WindowBitmap = newBmp;
                     WindowBitmapWpf = newBmp.ToBitmapSource();
