@@ -23,6 +23,8 @@ namespace Clowd.Utilities
         private const int MaxWindowDepthToSearch = 4;
         private const int MinWinCaptureBounds = 200;
 
+        // this list will be ordered by topmost window handles first, so it can be enumerated easily to find the topmost window at a specific point
+        // sub-handles (child windows) will come before their parents, but the Depth property can be used to find the top level window
         private readonly List<CachedWindow> _cachedWindows = new List<CachedWindow>();
         private readonly HashSet<IntPtr> _hWndsAlreadyProcessed = new HashSet<IntPtr>();
         private readonly Stack<CachedWindow> _parentStack = new Stack<CachedWindow>();
@@ -39,7 +41,7 @@ namespace Clowd.Utilities
             USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(this.EvalWindow);
             USER32.EnumWindows(enumWindowsProc, IntPtr.Zero);
             this._hWndsAlreadyProcessed.Clear();
-            PopulateAllMetadata();
+            CalculateVisibilityMetadata();
         }
         public void PopulateWindowBitmaps()
         {
@@ -64,26 +66,50 @@ namespace Clowd.Utilities
             _cachedWindows.ForEach(c => c.Dispose());
         }
 
-        private bool EvalWindow(IntPtr hWnd, IntPtr depth)
+        private bool EvalWindow(IntPtr hWnd, IntPtr depthPtr)
         {
-            var depthInt = depth.ToInt32();
+            var depthInt = depthPtr.ToInt32();
             var parent = depthInt > 0 ? _parentStack.Peek() : null;
 
-            // if the window is not on the current virtual desktop we want to ignore it and it's children
-            if (depthInt == 0 && !_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
-                return true;
+            var winInfo = new WINDOWINFO(true);
+            if (!USER32.GetWindowInfo(hWnd, ref winInfo))
+                throw new Win32Exception();
+           
+            var caption = USER32EX.GetWindowCaption(hWnd);
+            var asclass = USER32EX.GetWindowClassName(hWnd);
 
-            if (!this._hWndsAlreadyProcessed.Contains(hWnd) && USER32.IsWindowVisible(hWnd) && !USER32.IsIconic(hWnd))
+            var winVisible = winInfo.dwStyle.HasFlag(WindowStyles.WS_VISIBLE);  
+            var winMinimized = winInfo.dwStyle.HasFlag(WindowStyles.WS_MINIMIZE);
+            var winMaximized = winInfo.dwStyle.HasFlag(WindowStyles.WS_MAXIMIZE);
+
+            if (depthInt == 0)
             {
-                ScreenRect windowRect = this.GetWindowBounds(hWnd);
+                if (!_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
+                {
+                    // if the window is not on the current virtual desktop we want to ignore it and it's children
+                    return true;
+                }
+
+                var winIsTool = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOOLWINDOW);
+                var winIsLayered = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_LAYERED);
+                var winIsTopMost = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOPMOST);
+
+                // if this is a top-level layered tool window, it's probably a transparent overlay and we don't want to capture it
+                if (winIsTool && winIsLayered && winIsTopMost)
+                    return true;
+            }
+
+            if (!this._hWndsAlreadyProcessed.Contains(hWnd) && winVisible && !winMinimized)
+            {
+                ScreenRect windowRect = ScreenRect.FromSystem(USER32EX.GetTrueWindowBounds(hWnd));
                 ScreenRect boundsOfScreenWorkspace = windowRect;
 
                 string className;
                 if (this.IsMetroOrPhantomWindow((IntPtr)hWnd, depthInt, out className))
                     return true;
 
-                // clip to workspace
-                if (this.IsTopLevelMaximizedWindow(hWnd, depthInt))
+                // clip to workspace if top level maximized window
+                if (depthInt == 0 && winMaximized)
                     boundsOfScreenWorkspace = ScreenTools.GetScreenContaining(boundsOfScreenWorkspace).WorkingArea;
 
                 // clip to parent window
@@ -95,16 +121,13 @@ namespace Clowd.Utilities
 
                 if (this.BoundsAreLargeEnoughForCapture(boundsOfScreenWorkspace, depthInt))
                 {
-                    //uint processID = 0;
-                    //USER32.GetWindowThreadProcessId(hWnd, out processID);
-                    var caption = USER32EX.GetWindowCaption(hWnd);
                     var cwin = new CachedWindow(hWnd, depthInt, className, caption, windowRect, boundsOfScreenWorkspace, parent);
 
                     if (depthInt < MaxWindowDepthToSearch)
                     {
                         this._parentStack.Push(cwin);
                         USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(this.EvalWindow);
-                        USER32.EnumChildWindows(hWnd, enumWindowsProc, IntPtr.Add(depth, 1));
+                        USER32.EnumChildWindows(hWnd, enumWindowsProc, IntPtr.Add(depthPtr, 1));
                         this._parentStack.Pop();
                     }
 
@@ -113,29 +136,6 @@ namespace Clowd.Utilities
                 }
             }
             return true;
-        }
-        private ScreenRect GetWindowBounds(IntPtr hWnd)
-        {
-            bool dwmSuccess = false;
-            RECT normalWindowBounds = new RECT();
-            try
-            {
-                bool flag;
-                DWMAPI.DwmIsCompositionEnabled(out flag);
-                if (flag)
-                {
-                    dwmSuccess = 0 == DWMAPI.DwmGetWindowAttribute(hWnd, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, out normalWindowBounds, Marshal.SizeOf(typeof(RECT)));
-                }
-            }
-            catch (DllNotFoundException) { }
-            if (!dwmSuccess)
-            {
-                if (!USER32.GetWindowRect(hWnd, out normalWindowBounds))
-                {
-                    throw new Exception(string.Format("Could not get boundary for window with handle: {0}", hWnd));
-                }
-            }
-            return ScreenRect.FromSystem(normalWindowBounds);
         }
         private bool IsMetroOrPhantomWindow(IntPtr hWnd, int depth, out string className)
         {
@@ -190,14 +190,6 @@ namespace Clowd.Utilities
             }
             return false;
         }
-        private bool IsTopLevelMaximizedWindow(IntPtr hWnd, int depth)
-        {
-            if (depth != 0)
-            {
-                return false;
-            }
-            return USER32.IsZoomed(hWnd);
-        }
         private bool BoundsAreLargeEnoughForCapture(ScreenRect windowBounds, int depth)
         {
             int minSize = (depth == 0) ? 25 : MinWinCaptureBounds;
@@ -206,7 +198,7 @@ namespace Clowd.Utilities
                 return false;
             return windowBounds.Width > minSize;
         }
-        private void PopulateAllMetadata()
+        private void CalculateVisibilityMetadata()
         {
             Region screen = new Region(ScreenTools.VirtualScreen.Bounds.ToSystem());
             for (int i = 0; i < _cachedWindows.Count; i++)
@@ -287,19 +279,28 @@ namespace Clowd.Utilities
                 var basicBounds = ScreenRect.FromSystem(normalWindowBounds);
 
                 Bitmap initialBmp = new Bitmap(basicBounds.Width, basicBounds.Height);
-                using (Graphics g = Graphics.FromImage(initialBmp))
+                try
                 {
-                    IntPtr dc = g.GetHdc();
-                    try
+                    using (Graphics g = Graphics.FromImage(initialBmp))
                     {
-                        bool success = USER32.PrintWindow(this.Handle, dc, PrintWindowDrawingOptions.PW_RENDERFULLCONTENT);
-                        if (!success)
-                            throw new Win32Exception();
+                        IntPtr dc = g.GetHdc();
+                        try
+                        {
+                            bool success = USER32.PrintWindow(this.Handle, dc, PrintWindowDrawingOptions.PW_RENDERFULLCONTENT);
+                            if (!success)
+                                throw new Win32Exception();
+                        }
+                        finally
+                        {
+                            g.ReleaseHdc(dc);
+                        }
                     }
-                    finally
-                    {
-                        g.ReleaseHdc(dc);
-                    }
+                }
+                catch (Exception e)
+                {
+                    // this most often occurs if the window is elevated or kernal mode and we do not have permission to capture it
+                    initialBmp.Dispose();
+                    return;
                 }
 
                 // windows print outside their bounds (drop shadows, etc), GetWindowRect returns the true size (thus also the size of rectangle that PrintWindow needs
@@ -323,6 +324,31 @@ namespace Clowd.Utilities
                     WindowBitmapWpf = newBmp.ToBitmapSource();
                     initialBmp.Dispose();
                 }
+            }
+
+            public void ShowDebug()
+            {
+                var info = new WINDOWINFO(true);
+                USER32.GetWindowInfo(Handle, ref info);
+
+                List<string> exStyles = new List<string>();
+                foreach (var env in Enum.GetValues(typeof(WindowStylesEx)).Cast<WindowStylesEx>())
+                {
+                    if (env == WindowStylesEx.WS_EX_LEFT)
+                        continue;
+                    if (info.dwExStyle.HasFlag(env))
+                        exStyles.Add(Enum.GetName(typeof(WindowStylesEx), env));
+                }
+
+                System.Windows.MessageBox.Show(
+$@"Window Debug Info:
+Title: '{Caption}'
+Class: '{ClassName}'
+Depth: '{Depth}'
+Bounds: '{WindowRect.ToString()}'
+Style: '{info.dwStyle.ToString()}'
+Ex Style: '{String.Join(" | ", exStyles)}'
+");
             }
 
             public override string ToString()

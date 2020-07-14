@@ -3,6 +3,7 @@ using Clowd.Utilities;
 using Microsoft.Win32;
 using ScreenVersusWpf;
 using System;
+using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
@@ -540,6 +541,10 @@ namespace Clowd
             if (DistancePointToPoint(currentMouse.X, currentMouse.Y, draggingOrigin.X, draggingOrigin.Y) < 10)
             {
                 var window = windowFinder.GetWindowThatContainsPoint(ScreenTools.GetMousePosition());
+
+                // show debug info if control key is being held while clicking
+                if (Keyboard.IsKeyDown(Key.LeftCtrl))
+                    window.ShowDebug();
 
                 if (window.ImageBoundsRect == ScreenRect.Empty)
                 {
