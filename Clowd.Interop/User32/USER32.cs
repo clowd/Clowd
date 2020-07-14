@@ -182,11 +182,10 @@ namespace Clowd.Interop
         public static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
 
         [DllImport("user32.dll", SetLastError = true)]
-        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+        public static extern long GetWindowLong(IntPtr hWnd, WindowLongIndex nIndex);
 
         [DllImport("user32.dll")]
         public static extern IntPtr WindowFromPoint(POINT Point);
-
 
         /// <summary>
         /// Retrieves a handle to the top-level window whose class name and window name match the specified strings. This function does not search child windows. This function does not perform a case-sensitive search.
@@ -253,7 +252,6 @@ namespace Clowd.Interop
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr MonitorFromPoint(POINT pt, MonitorOptions dwFlags);
 
-
         /// <summary>
         /// Retrieves information about a display monitor.
         /// </summary>
@@ -299,10 +297,13 @@ namespace Clowd.Interop
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetDesktopWindow();
+
         [DllImport("user32.dll")]
         public static extern IntPtr GetWindowDC(IntPtr hWnd);
+
         [DllImport("user32.dll")]
         public static extern IntPtr ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
         [DllImport("user32.dll")]
         public static extern int GetAsyncKeyState(int vKey);
 
@@ -311,6 +312,7 @@ namespace Clowd.Interop
 
         [DllImport("USER32.dll")]
         public static extern short GetKeyState(VirtualKeyStates nVirtKey);
+
         [DllImport("user32.dll")]
         public static extern bool RedrawWindow(IntPtr hWnd, [In] ref RECT lprcUpdate, IntPtr hrgnUpdate, RedrawWindowFlags flags);
 
@@ -325,6 +327,10 @@ namespace Clowd.Interop
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool PrintWindow(IntPtr hwnd, IntPtr hDC, PrintWindowDrawingOptions PrintWindowDrawingOptions);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetWindowInfo(IntPtr hwnd, ref WINDOWINFO pwi);
     }
 
     [Flags]
@@ -532,6 +538,33 @@ namespace Clowd.Interop
         public const int TB_SETROWS = 1063;
         public const int TB_SETSTATE = 1041;
         public const int TB_SETTOOLTIPS = 1060;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWINFO
+    {
+        public uint cbSize;
+        public RECT rcWindow;
+        public RECT rcClient;
+        public WindowStyles dwStyle;
+        public WindowStylesEx dwExStyle;
+        public WINDOWINFO_STATUS dwWindowStatus;
+        public uint cxWindowBorders;
+        public uint cyWindowBorders;
+        public ushort atomWindowType;
+        public ushort wCreatorVersion;
+
+        public WINDOWINFO(bool? filler) : this()   // Allows automatic initialization of "cbSize" with "new WINDOWINFO(null/true/false)".
+        {
+            cbSize = (uint)(Marshal.SizeOf(typeof(WINDOWINFO)));
+        }
+
+    }
+
+    public enum WINDOWINFO_STATUS : uint
+    {
+        Inactive = 0,
+        WS_ACTIVECAPTION = 0x0001
     }
 
     [StructLayout(LayoutKind.Sequential)]

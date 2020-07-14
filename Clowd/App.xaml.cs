@@ -1,4 +1,4 @@
-﻿using Clowd.Interop;
+using Clowd.Interop;
 using Clowd.Utilities;
 using Ionic.Zip;
 using NotifyIconLib;
@@ -580,7 +580,7 @@ namespace Clowd
             if (!_initialized)
                 return;
             var foreground = USER32.GetForegroundWindow();
-            var bounds = USER32EX.GetWindowRectangle(foreground);
+            var bounds = USER32EX.GetTrueWindowBounds(foreground);
             StartCapture(ScreenRect.FromSystem(bounds));
         }
         public void UploadFile(Window owner = null)

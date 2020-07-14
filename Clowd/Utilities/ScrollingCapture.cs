@@ -49,7 +49,7 @@ namespace Clowd.Utilities
         }
         public static bool CanScroll(IntPtr hWnd)
         {
-            int wndStyle = USER32.GetWindowLong(hWnd, (int)WindowLongIndex.GWL_STYLE);
+            var wndStyle = USER32.GetWindowLong(hWnd, WindowLongIndex.GWL_STYLE);
             bool vsVisible = (wndStyle & 0x00200000/*WS_VSCROLL*/) != 0;
             return vsVisible;
         }
@@ -114,7 +114,7 @@ namespace Clowd.Utilities
 
         private static ScrollBars GetVisibleScrollbars(IntPtr hWnd)
         {
-            int wndStyle = USER32.GetWindowLong(hWnd, (int)WindowLongIndex.GWL_STYLE);
+            var wndStyle = USER32.GetWindowLong(hWnd, WindowLongIndex.GWL_STYLE);
             bool hsVisible = (wndStyle & 0x00100000/*WM_HSCROLL*/) != 0;
             bool vsVisible = (wndStyle & 0x00200000/*WS_VSCROLL*/) != 0;
 
@@ -454,7 +454,7 @@ namespace Clowd.Utilities
         private void ScrollToTop()
         {
             FocusWindow();
-            _region = ScreenRect.FromSystem(USER32EX.GetWindowRectangle(_hWnd));
+            _region = ScreenRect.FromSystem(USER32EX.GetTrueWindowBounds(_hWnd));
             SendKeys.SendWait("{HOME}");
             SendKeys.Flush();
             USER32.SendMessage(_hWnd, (uint)WindowMessage.WM_VSCROLL, (IntPtr)6/*SB_TOP*/, (IntPtr)0);
