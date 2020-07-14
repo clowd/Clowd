@@ -29,7 +29,7 @@ namespace Clowd.Utilities
         public static Bitmap CaptureActiveWindow(bool captureCursor = false)
         {
             var foreground = USER32.GetForegroundWindow();
-            var bounds = USER32EX.GetWindowRectangle(foreground);
+            var bounds = USER32EX.GetTrueWindowBounds(foreground);
             return Capture(ScreenRect.FromSystem(bounds), captureCursor);
         }
 
