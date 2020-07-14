@@ -9,7 +9,7 @@
              xmlns:controls="clr-namespace:Clowd.Controls"
              mc:Ignorable="d" 
              DataContext="{Binding RelativeSource={RelativeSource Self}}"
-             Height="500" Width="450">
+             Height="600" Width="600">
     <UserControl.Resources>
         <local:AppSettingsItemFactory x:Key="itemFactory"></local:AppSettingsItemFactory>
         <local:AppSettingsControlFactory x:Key="controlFactory"></local:AppSettingsControlFactory>
@@ -32,7 +32,7 @@
             <RowDefinition  Height="51" />
         </Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal" Margin="20,10,20,0" VerticalAlignment="Center">
-            <Button Width="23" Height="23" Margin="0,0,10,0" Click="Home_Clicked">
+            <Button Width="23" Height="23" Margin="0,0,10,0" Click="Home_Clicked" Visibility="Collapsed">
                 <Button.Style>
                     <Style TargetType="{x:Type Button}">
                         <Setter Property="Foreground" Value="{DynamicResource AccentColorBrush2}"/>
