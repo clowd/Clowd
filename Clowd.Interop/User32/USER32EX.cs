@@ -1,6 +1,7 @@
 ﻿using Clowd.Interop.DwmApi;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -122,20 +123,23 @@ namespace Clowd.Interop
         /// </summary>
         /// <param name="handle">Window Handle</param>
         /// <returns>Window rectangle for the specified handle</returns>
-        public static Rectangle GetWindowRectangle(IntPtr handle)
+        public static Rectangle GetTrueWindowBounds(IntPtr handle)
         {
-            Rectangle rectangle;
-            if (Environment.OSVersion.Version.Major >= 6 && DWMWA_EXTENDED_FRAME_BOUNDS(handle, out rectangle))
+            try
             {
-                return rectangle;
+                if (Environment.OSVersion.Version.Major >= 6)
+                    if (0 == DWMAPI.DwmIsCompositionEnabled(out var dwmIsEnabled))
+                        if (dwmIsEnabled && DWMWA_EXTENDED_FRAME_BOUNDS(handle, out var rectangle))
+                            return rectangle;
             }
-            else
-            {
-                RECT rect;
-                USER32.GetWindowRect(handle, out rect);
-                rectangle = Rectangle.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
-                return rectangle;
-            }
+            catch (DllNotFoundException) { }
+
+            // fallback to old style calls if we can't query the DWM
+            RECT rect;
+            if (!USER32.GetWindowRect(handle, out rect))
+                throw new Win32Exception();
+
+            return Rectangle.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
         }
 
         private static bool DWMWA_EXTENDED_FRAME_BOUNDS(IntPtr handle, out Rectangle rectangle)
@@ -143,7 +147,7 @@ namespace Clowd.Interop
             RECT rect;
             var result = DWMAPI.DwmGetWindowAttribute(handle, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, out rect, Marshal.SizeOf(typeof(RECT)));
             rectangle = Rectangle.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
-            return result >= 0;
+            return result == 0;
         }
 
         /// <summary>
@@ -174,9 +178,9 @@ namespace Clowd.Interop
         }
         public static System.Windows.Forms.ScrollBars GetVisibleScrollbars(IntPtr hWnd)
         {
-            int wndStyle = USER32.GetWindowLong(hWnd, WindowStyle.GWL_STYLE);
-            bool hsVisible = (wndStyle & WindowStyle.WS_HSCROLL) != 0;
-            bool vsVisible = (wndStyle & WindowStyle.WS_VSCROLL) != 0;
+            long wndStyle = USER32.GetWindowLong(hWnd, WindowLongIndex.GWL_STYLE);
+            bool hsVisible = (wndStyle & (long)WindowStyles.WS_HSCROLL) != 0;
+            bool vsVisible = (wndStyle & (long)WindowStyles.WS_VSCROLL) != 0;
 
             if (hsVisible)
                 return vsVisible ? System.Windows.Forms.ScrollBars.Both : System.Windows.Forms.ScrollBars.Horizontal;
