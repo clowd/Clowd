@@ -49,6 +49,7 @@
     <Compile Include="DwmApi\DWMAPI.cs" />
     <Compile Include="DwmApi\DWMWINDOWATTRIBUTE.cs" />
     <Compile Include="DwmApi\MARGINS.cs" />
+    <Compile Include="FlagsHelper.cs" />
     <Compile Include="Gdi32\DEVICECAP.cs" />
     <Compile Include="Gdi32\GDI32.cs" />
     <Compile Include="Gdi32\TernaryRasterOperations.cs" />
