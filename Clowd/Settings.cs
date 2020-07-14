@@ -17,7 +17,7 @@ using RT.Serialization;
 using PData = PropertyTools.DataAnnotations;
 using System.Reflection;
 using FileUploadLib.Providers;
-using Screeney;
+//using Screeney;
 
 namespace Clowd
 {
@@ -259,18 +259,51 @@ namespace Clowd
         }
     }
 
-    [ImplementPropertyChanged]
-    public class VideoSettings : IDisposable, IRecorderSettings
+    public enum BitrateMultiplier : int
     {
-        public Resolution OutputResolution { get; set; } = Resolution.HD_1080p;
+        Low = 75,
+        Medium = 100,
+        High = 150,
+    }
+
+    public enum CaptureVideoCodec
+    {
+        [Description("h264")]
+        H264 = 1,
+    }
+
+    public enum Resolution : int
+    {
+        Uncapped = 0,
+        [Description("SD - 480p")]
+        _480p = 480,
+        [Description("HD - 720p")]
+        _720p = 720,
+        [Description("HD - 1080p")]
+        _1440p = 1440,
+        [Description("4K - 2160p")]
+        _2160p = 1440,
+    }
+
+    [ImplementPropertyChanged]
+    public class VideoSettings : IDisposable
+    {
+        public CaptureVideoCodec VideoCodec { get; set; } = CaptureVideoCodec.H264;
 
         public BitrateMultiplier OutputQuality { get; set; } = BitrateMultiplier.Medium;
+
+        public Resolution MaxResolution { get; set; } = Resolution._1080p;
+
+        [DisplayName("Use Hardware Acceleration")]
+        [Description("This may cause issues on some graphics cards with limited or no h264 encoding supported")]
+        public bool HardwareAcceleration { get; set; } = false;
 
         [PData.DirectoryPath]
         public string OutputDirectory { get; set; }
 
-        [PData.Spinnable(2, 4, 4, 30)]
-        [DisplayName("Max FPS")]
+        [PData.Spinnable(2, 4, 4, 60)]
+        [DisplayName("FPS")]
+        [Description("Target FPS - this may be lower than the selected value depending on your system hardware and available resources.")]
         public int TargetFramesPerSecond { get; set; } = 24;
 
         public bool ShowCursor { get; set; } = true;

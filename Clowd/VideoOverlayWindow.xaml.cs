@@ -14,7 +14,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
-using Screeney;
+using Clowd.Utilities;
+//using Screeney;
 using ScreenVersusWpf;
 
 namespace Clowd
@@ -28,8 +29,9 @@ namespace Clowd
 
         public Color BorderColor { get; set; } = Colors.Green;
 
-        private ScreeneyRecorder _recorder;
-        private Recording _capture;
+        private ScreenUtil.LiveScreenRecording recording;
+        //private ScreeneyRecorder _recorder;
+        //private Recording _capture;
 
         public VideoOverlayWindow(ScreenRect captureArea)
         {
@@ -38,23 +40,26 @@ namespace Clowd
             this.SourceInitialized += VideoOverlayWindow_SourceInitialized;
             this.Loaded += VideoOverlayWindow_Loaded;
             Width = Height = 1; // the window becomes visible very briefly before it's redrawn with the captured screenshot; this makes it unnoticeable
-            _recorder = new ScreeneyRecorder(App.Current.Settings.VideoSettings);
 
-            var topLeft = new ScreenPoint(captureArea.Left, captureArea.Top);
-            var bottomRight = new ScreenPoint(captureArea.Left + captureArea.Width, captureArea.Top + captureArea.Height);
-            try
-            {
-                ScreenTools.Screens.Single(s => s.Bounds.Contains(topLeft) && s.Bounds.Contains(bottomRight)).Bounds.ToWpfRect();
-            }
-            catch (Exception e)
-            {
-                MessageBox.Show("Video capture must be entirely contained within a single screen");
-            }
+            recording = ScreenUtil.PrepareVideoRecording(captureArea);
 
-            if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
-            {
-                MessageBox.Show("Please set a video output directory in the application video settings.");
-            }
+            //_recorder = new ScreeneyRecorder(App.Current.Settings.VideoSettings);
+
+            //var topLeft = new ScreenPoint(captureArea.Left, captureArea.Top);
+            //var bottomRight = new ScreenPoint(captureArea.Left + captureArea.Width, captureArea.Top + captureArea.Height);
+            //try
+            //{
+            //    ScreenTools.Screens.Single(s => s.Bounds.Contains(topLeft) && s.Bounds.Contains(bottomRight)).Bounds.ToWpfRect();
+            //}
+            //catch (Exception e)
+            //{
+            //    MessageBox.Show("Video capture must be entirely contained within a single screen");
+            //}
+
+            //if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
+            //{
+            //    MessageBox.Show("Please set a video output directory in the application video settings.");
+            //}
         }
 
         private void VideoOverlayWindow_SourceInitialized(object sender, EventArgs e)
@@ -151,17 +156,19 @@ namespace Clowd
             }
 
             labelCountdown.Visibility = Visibility.Collapsed;
-            _capture = _recorder.OpenCapture(CroppingRectangle);
-            this.DoRender(); // give a chance for the countdown to dissapear 
-            _capture.Start();
+            await recording.Start();
+            //_capture = _recorder.OpenCapture(CroppingRectangle);
+            //this.DoRender(); // give a chance for the countdown to dissapear 
+            //_capture.Start();
         }
 
         private async void buttonStop_Click(object sender, RoutedEventArgs e)
         {
-            _capture.Finish();
-            this.Close();
-            await Task.Delay(1000);
-            Process.Start("explorer.exe", $"/select,\"{_capture.FileName}\"");
+            await recording.Stop();
+            //_capture.Finish();
+            //this.Close();
+            //await Task.Delay(1000);
+            //Process.Start("explorer.exe", $"/select,\"{_capture.FileName}\"");
         }
     }
 }

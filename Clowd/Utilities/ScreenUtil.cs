@@ -1,10 +1,17 @@
 ﻿using Clowd.Interop;
 using Clowd.Interop.Gdi32;
+using NReco.VideoConverter;
+using PropertyChanged;
 using ScreenVersusWpf;
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.IO;
+using System.Management;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Clowd.Utilities
 {
@@ -87,5 +94,122 @@ namespace Clowd.Utilities
             }
         }
 
+        public static LiveScreenRecording PrepareVideoRecording(ScreenRect? bounds = null)
+        {
+            Rectangle rect = (bounds ?? ScreenTools.VirtualScreen.Bounds).ToSystem();
+            return new LiveScreenRecording(rect);
+        }
+
+        public class LiveScreenRecording
+        {
+            private readonly Rectangle bounds;
+            private readonly VideoSettings settings;
+            private readonly FFMpegConverter ffmpeg;
+            private Task runner;
+
+            public LiveScreenRecording(Rectangle bounds)
+            {
+                this.bounds = bounds;
+                settings = App.Current.Settings.VideoSettings;
+                ffmpeg = new FFMpegConverter();
+
+                //ffmpeg 
+                //-f gdigrab -i desktop -framerate 30 -offset_x 10 -offset_y 20 -video_size 640x480 -show_region 1
+            }
+
+            public async Task Start()
+            {
+                var args = String.Join(" ", cli_VideoSource(), cli_FilterGraph(), cli_VideoCodecAndOutput());
+
+                // run in a background thread
+                runner = Task.Factory.StartNew(() => ffmpeg.Invoke(args), TaskCreationOptions.LongRunning);
+
+                // wait a bit and then check if we failed to start recording, lets throw an exception
+                await Task.Delay(1000);
+                if (runner.Exception != null)
+                    throw runner.Exception;
+            }
+
+            public async Task Stop()
+            {
+                ffmpeg.Stop();
+                await runner;
+            }
+
+            private string cli_FilterGraph()
+            {
+                List<string> filters = new List<string>();
+                if (settings.MaxResolution != Resolution.Uncapped && bounds.Height > (int)settings.MaxResolution)
+                {
+                    // keep aspect ratio but limit height to specified max resolution
+                    filters.Add("scale=-1:" + (int)settings.MaxResolution);
+                }
+
+                //if (false)
+                //{
+                //    filters.Add("mpdecimate");
+                //    filters.Add("framerate=" + settings.TargetFramesPerSecond);
+                //}
+
+                return $"-filter:v \"{String.Join(",", filters)}\"";
+            }
+
+            private string cli_VideoSource()
+            {
+                return $"-f gdigrab -i desktop -framerate {settings.TargetFramesPerSecond} -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 1 -draw_mouse {(settings.ShowCursor ? "1" : "0")}";
+            }
+
+            private string cli_VideoCodecAndOutput()
+            {
+                string codec = "";
+                string extension = "";
+                switch (settings.VideoCodec)
+                {
+                    case CaptureVideoCodec.H264:
+                        codec = codec_H264();
+                        extension = "mp4";
+                        break;
+                    default:
+                        throw new NotImplementedException();
+                }
+
+                var filename = "capture_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "." + extension;
+                filename = Path.Combine(Path.GetFullPath(settings.OutputDirectory), filename);
+
+                return $"{codec} \"{filename}\"";
+            }
+
+            private string codec_H264()
+            {
+                if (settings.HardwareAcceleration)
+                {
+                    ManagementObjectSearcher searcher = new ManagementObjectSearcher("SELECT * FROM Win32_DisplayConfiguration");
+
+                    string graphicsCard = string.Empty;
+                    foreach (ManagementObject mo in searcher.Get())
+                    {
+                        foreach (PropertyData property in mo.Properties)
+                        {
+                            if (property.Name == "Description")
+                            {
+                                graphicsCard = property.Value.ToString();
+                            }
+                        }
+                    }
+
+                    if (graphicsCard.ToUpper().Contains("NVIDIA"))
+                    {
+                        return "-codec:v h264_nvenc";
+                    }
+
+                    if (graphicsCard.ToUpper().Contains("AMD"))
+                    {
+                        return "-codec:v h264_amf";
+                    }
+                }
+
+                return "-codec:v libx264";
+            }
+        }
     }
 }
