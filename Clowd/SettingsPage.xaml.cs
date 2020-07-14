@@ -15,6 +15,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Clowd.Controls;
 using Clowd.Utilities;
 using PropertyChanged;
@@ -27,27 +28,16 @@ namespace Clowd
     {
         public GeneralSettings SelectedItem { get; set; }
 
-        private bool _closeRegistered;
-
         public SettingsPage()
         {
             InitializeComponent();
             this.SelectedItem = App.Current.Settings;
-            // this is a work-around for now, to make sure the settings are saved when the window is closed.
-            this.PreviewMouseDown += (s, e) => CheckRegistered();
-            this.PreviewKeyDown += (s, e) => CheckRegistered();
+            this.Unloaded += SettingsPage_Unloaded;
         }
 
-        private void CheckRegistered()
+        private void SettingsPage_Unloaded(object sender, RoutedEventArgs e)
         {
-            if (_closeRegistered)
-                return;
-            var win = TemplatedWindow.GetWindow(this);
-            if (win != null)
-            {
-                _closeRegistered = true;
-                win.Closed += (s, e) => PerformSave();
-            }
+            PerformSave();
         }
 
         private void PerformSave()
