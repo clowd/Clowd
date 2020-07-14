@@ -441,12 +441,12 @@ namespace Clowd
 
             context.Items.Add(new Separator());
 
-            var home = new MenuItem() { Header = "Open _Clowd" };
-            home.Click += (s, e) =>
-            {
-                ShowHome();
-            };
-            context.Items.Add(home);
+            //var home = new MenuItem() { Header = "Open _Clowd" };
+            //home.Click += (s, e) =>
+            //{
+            //    ShowHome();
+            //};
+            //context.Items.Add(home);
 
             var settings = new MenuItem() { Header = "_Settings" };
             settings.Click += (s, e) =>
