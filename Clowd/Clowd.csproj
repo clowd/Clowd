@@ -335,13 +335,13 @@
       <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>
       <Name>NotifyIconLib</Name>
     </ProjectReference>
+    <ProjectReference Include="..\NReco.VideoConverter\NReco.VideoConverter.csproj">
+      <Project>{2b2ebe52-3253-4a47-b787-2164732a2ca4}</Project>
+      <Name>NReco.VideoConverter</Name>
+    </ProjectReference>
     <ProjectReference Include="..\PropertyTools.Wpf\PropertyTools.Wpf.csproj">
       <Project>{7168f82f-288a-42c4-9eb1-fbbe5112f211}</Project>
       <Name>PropertyTools.Wpf</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Screeney\Screeney.csproj">
-      <Project>{AF84F83B-28C3-4298-B388-C31DB95A6790}</Project>
-      <Name>Screeney</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
