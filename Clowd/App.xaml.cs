@@ -1,4 +1,4 @@
-using Clowd.Interop;
+﻿using Clowd.Interop;
 using Clowd.Utilities;
 using Ionic.Zip;
 using NotifyIconLib;
@@ -148,6 +148,13 @@ namespace Clowd
             SetupSettings();
             SetupTrayIcon();
             SetupAccentColors();
+
+#if DEBUG
+            // add references to ffmpeg dlls
+            var bitness = Environment.Is64BitProcess ? "x64" : "x86";
+            Interop.Kernel32.KERNEL32.SetDefaultDllDirectories(Interop.Kernel32.DirectoryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+            Interop.Kernel32.KERNEL32.AddDllDirectory(Path.GetFullPath($@"..\..\..\BasicFFEncode\FFmpeg\{bitness}\dll"));
+#endif
 
             if (Settings.FirstRun)
             {
