@@ -288,6 +288,19 @@ namespace Clowd
         _2160p = 2160,
     }
 
+    public enum H264Preset
+    {
+        ultrafast,
+        superfast,
+        veryfast,
+        faster,
+        fast,
+        medium,
+        slow,
+        slower,
+        veryslow
+    }
+
     [ImplementPropertyChanged]
     public class VideoSettings : IDisposable
     {
@@ -295,9 +308,19 @@ namespace Clowd
 
         [DisplayName("Use Hardware Acceleration")]
         [Description("This may cause issues on some graphics cards with limited or no h264 encoding supported")]
-        public bool HardwareAcceleration { get; set; } = false;
+        [PData.VisibleBy("VideoCodec", CaptureVideoCodec.H264)]
+        public bool HardwareAcceleration { get; set; } = true;
 
-        public BitrateMultiplier OutputQuality { get; set; } = BitrateMultiplier.Medium;
+        [DisplayName("h264 Preset")]
+        [PData.VisibleBy("VideoCodec", CaptureVideoCodec.H264)]
+        public H264Preset H264Preset { get; set; } = H264Preset.veryfast;
+
+        [DisplayName("h264 Constant Rate Factor")]
+        [PData.VisibleBy("VideoCodec", CaptureVideoCodec.H264)]
+        [Description("The encoding quality: Reasonable ranges from 18-28. Lower the CRF with a faster preset\nSet 0 for Lossless \nSet -1 for Automatic")]
+        public int H264CRF { get; set; } = -1;
+
+        //public BitrateMultiplier OutputQuality { get; set; } = BitrateMultiplier.Medium;
 
         [DisplayName("Max Resolution")]
         public MaxResolution MaxResolution { get; set; } = MaxResolution._1080p;
