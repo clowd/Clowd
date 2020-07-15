@@ -69,8 +69,6 @@ namespace Clowd
 
         private void VideoOverlayWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            if (System.Diagnostics.Debugger.IsAttached)
-                this.Topmost = false;
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
             // WPF makes some fairly inconvenient DPI conversions to Left and Top which have also changed between NET 4.5 and 4.8; just use WinAPI instead of de-converting them

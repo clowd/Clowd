@@ -21,13 +21,13 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using TaskDialogInterop;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
 using Ionic.Zlib;
 using SharpRaven;
 using SharpRaven.Data;
 using FileUploadLib;
+using Ookii.Dialogs.Wpf;
 
 namespace Clowd
 {
@@ -98,30 +98,38 @@ namespace Clowd
                         ex.ToSentry();
                         Environment.Exit(1);
                     }
-                    var config = new TaskDialogInterop.TaskDialogOptions();
-                    config.Title = $"{ClowdAppName}";
-                    config.MainInstruction = $"{ClowdAppName} Unresponsive";
-                    config.Content =
-                        $"{ClowdAppName} is already running but seems to be unresponsive. " +
-                        $"Would you like to restart {ClowdAppName}?";
-                    config.FooterText = "You may lose anything in-progress work.";
-                    config.FooterIcon = VistaTaskDialogIcon.Information;
-                    config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.YesNo;
-                    config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Warning;
-                    var response = TaskDialogInterop.TaskDialog.Show(config);
-                    if (response.Result == TaskDialogSimpleResult.Yes)
-                    {
-                        foreach (var p in processes)
-                            p.Kill();
-                        foreach (var p in processes)
-                            p.WaitForExit();
 
-                        Thread.Sleep(1000);
-                        _mutex = Mutex.OpenExisting(ClowdMutex);
-                    }
-                    else
+                    using (TaskDialog dialog = new TaskDialog())
                     {
-                        Environment.Exit(0);
+                        dialog.WindowTitle = $"{ClowdAppName}";
+                        dialog.MainInstruction = $"{ClowdAppName} Unresponsive";
+                        dialog.Content =
+                            $"{ClowdAppName} is already running but seems to be unresponsive. " +
+                            $"Would you like to restart {ClowdAppName}?";
+                        dialog.Footer = "You may lose anything in-progress work.";
+                        dialog.FooterIcon = TaskDialogIcon.Information;
+                        dialog.MainIcon = TaskDialogIcon.Warning;
+
+                        TaskDialogButton okButton = new TaskDialogButton(ButtonType.Yes);
+                        TaskDialogButton cancelButton = new TaskDialogButton(ButtonType.No);
+                        dialog.Buttons.Add(okButton);
+                        dialog.Buttons.Add(cancelButton);
+
+                        var clicked = dialog.Show();
+                        if (clicked == okButton)
+                        {
+                            foreach (var p in processes)
+                                p.Kill();
+                            foreach (var p in processes)
+                                p.WaitForExit();
+
+                            Thread.Sleep(1000);
+                            _mutex = Mutex.OpenExisting(ClowdMutex);
+                        }
+                        else
+                        {
+                            Environment.Exit(0);
+                        }
                     }
                 }
             }
@@ -279,6 +287,7 @@ namespace Clowd
             Classify.DefaultOptions = new ClassifyOptions();
             Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
             Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
+
             SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
 
@@ -467,21 +476,27 @@ namespace Clowd
             {
                 if (Settings.ConfirmClose)
                 {
-                    var config = new TaskDialogInterop.TaskDialogOptions();
-                    config.Title = "Clowd";
-                    config.MainInstruction = "Are you sure you wish to close Clowd?";
-                    config.Content = "If you close clowd, it will stop any in-progress uploads and you will be unable to upload anything new.";
-                    config.VerificationText = "Don't ask me this again";
-                    config.CommonButtons = TaskDialogInterop.TaskDialogCommonButtons.YesNo;
-                    config.MainIcon = TaskDialogInterop.VistaTaskDialogIcon.Warning;
-
-                    var res = TaskDialogInterop.TaskDialog.Show(config);
-                    if (res.Result == TaskDialogInterop.TaskDialogSimpleResult.Yes)
+                    using (TaskDialog dialog = new TaskDialog())
                     {
-                        if (res.VerificationChecked == true)
-                            Settings.ConfirmClose = false;
-                        Settings.Save();
-                        Application.Current.Shutdown();
+                        dialog.WindowTitle = "Clowd";
+                        dialog.MainInstruction = "Are you sure you wish to close Clowd?";
+                        dialog.Content = "If you close clowd, it will stop any in-progress uploads and you will be unable to upload anything new.";
+                        dialog.VerificationText = "Don't ask me this again";
+                        dialog.MainIcon = TaskDialogIcon.Warning;
+
+                        TaskDialogButton okButton = new TaskDialogButton(ButtonType.Yes);
+                        TaskDialogButton cancelButton = new TaskDialogButton(ButtonType.No);
+                        dialog.Buttons.Add(okButton);
+                        dialog.Buttons.Add(cancelButton);
+
+                        var clicked = dialog.Show();
+                        if (clicked == okButton)
+                        {
+                            if (dialog.IsVerificationChecked == true)
+                                Settings.ConfirmClose = false;
+                            Settings.Save();
+                            Application.Current.Shutdown();
+                        }
                     }
                 }
                 else
