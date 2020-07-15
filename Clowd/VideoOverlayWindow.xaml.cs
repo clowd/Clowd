@@ -29,7 +29,9 @@ namespace Clowd
 
         public Color BorderColor { get; set; } = Colors.Green;
 
-        private ScreenUtil.LiveScreenRecording recording;
+        private LiveScreenRecording _recording;
+        private bool _isCancelled = false;
+        private bool _isRecording = false;
         //private ScreeneyRecorder _recorder;
         //private Recording _capture;
 
@@ -41,7 +43,7 @@ namespace Clowd
             this.Loaded += VideoOverlayWindow_Loaded;
             Width = Height = 1; // the window becomes visible very briefly before it's redrawn with the captured screenshot; this makes it unnoticeable
 
-            recording = ScreenUtil.PrepareVideoRecording(captureArea);
+            _recording = new LiveScreenRecording(captureArea.ToSystem());
 
             //_recorder = new ScreeneyRecorder(App.Current.Settings.VideoSettings);
 
@@ -76,6 +78,7 @@ namespace Clowd
             Interop.USER32.SetForegroundWindow(this.Handle);
             this.DoRender();
             UpdateCanvasPlacement();
+            buttonStart_Click(sender, e);
         }
 
         private void UpdateCanvasPlacement()
@@ -151,22 +154,33 @@ namespace Clowd
             {
                 labelCountdown.Text = i.ToString();
                 await Task.Delay(1000);
+                if (_isCancelled)
+                    return;
             }
 
             labelCountdown.Visibility = Visibility.Collapsed;
-            await recording.Start();
-            //_capture = _recorder.OpenCapture(CroppingRectangle);
-            //this.DoRender(); // give a chance for the countdown to dissapear 
-            //_capture.Start();
+            selectionBorder.Visibility = Visibility.Collapsed;
+            this.DoRender(); // give a chance for the countdown to dissapear 
+            _isRecording = true;
+            await _recording.Start();
         }
 
         private async void buttonStop_Click(object sender, RoutedEventArgs e)
         {
-            await recording.Stop();
-            //_capture.Finish();
-            //this.Close();
-            //await Task.Delay(1000);
-            //Process.Start("explorer.exe", $"/select,\"{_capture.FileName}\"");
+            buttonCancel_Click(sender, e);
+            await Task.Delay(1000);
+            Process.Start("explorer.exe", $"/select,\"{_recording.FileName}\"");
+        }
+
+        private async void buttonCancel_Click(object sender, RoutedEventArgs e)
+        {
+            _isCancelled = true;
+            if (_isRecording)
+            {
+                _isRecording = false;
+                await _recording.Stop();
+            }
+            this.Close();
         }
     }
 }
