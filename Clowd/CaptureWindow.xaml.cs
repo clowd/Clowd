@@ -435,8 +435,15 @@ namespace Clowd
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            new VideoOverlayWindow(CroppingRectangle).Show();
-            this.Close();
+            if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
+            {
+                MessageBox.Show("Please update your Video output directory in the settings before recording a video");
+            }
+            else
+            {
+                new VideoOverlayWindow(CroppingRectangle).Show();
+                this.Close();
+            }
         }
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
         {
