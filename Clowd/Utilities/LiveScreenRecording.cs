@@ -101,7 +101,12 @@ namespace Clowd.Utilities
             this.FileName = filename;
 
             //ulong bitrate = (ulong)Math.Round(((decimal)bounds.Width * bounds.Height * settings.TargetFramesPerSecond) * ((decimal)settings.OutputQuality / 1000m), 0);
-            return $"{codec} -n \"{filename}\"";
+            string crf = "";
+            if (settings.H264CRF >= 0)
+            {
+                crf = " -crf " + ((int)settings.H264CRF).ToString();
+            }
+            return $"{codec}{crf} -n \"{filename}\"";
         }
 
         private string codec_H264()
@@ -134,7 +139,7 @@ namespace Clowd.Utilities
                 }
             }
 
-            return codec + " -preset veryfast -tune animation";
+            return codec + $" -preset {settings.H264Preset.ToString()} -tune animation";
         }
     }
 
