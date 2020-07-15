@@ -592,12 +592,12 @@ namespace NReco.VideoConverter
                     this.FFMpegProcess.PriorityClass = this.FFMpegProcessPriority;
                 string lastErrorLine = string.Empty;
                 this.FFMpegProcess.ErrorDataReceived += (DataReceivedEventHandler)((o, args) =>
-               {
-                   if (args.Data == null)
-                       return;
-                   lastErrorLine = args.Data;
-                   this.FFMpegLogHandler(args.Data);
-               });
+                {
+                    if (args.Data == null)
+                        return;
+                    lastErrorLine = args.Data;
+                    this.FFMpegLogHandler(args.Data);
+                });
                 this.FFMpegProcess.BeginErrorReadLine();
                 this.WaitFFMpegProcessForExit();
                 if (this.FFMpegProcess.ExitCode != 0)
@@ -747,6 +747,9 @@ namespace NReco.VideoConverter
 
                         if (File.Exists(path))
                         {
+                            if (!File.Exists(GetFFMpegExePath()))
+                                FFMpegExeName = fileName;
+
                             if (File.GetLastWriteTime(path) > File.GetLastWriteTime(executingAssembly.Location))
                                 continue;
                         }
@@ -759,11 +762,6 @@ namespace NReco.VideoConverter
                                 while ((count = gzipStream.Read(buffer, 0, buffer.Length)) > 0)
                                     fileStream.Write(buffer, 0, count);
                             }
-                        }
-
-                        if (!File.Exists(GetFFMpegExePath()))
-                        {
-                            FFMpegExeName = fileName;
                         }
                     }
                 }

@@ -132,6 +132,13 @@ namespace Clowd
 
             return base.CreateControl(property, options);
         }
+
+        protected override FrameworkElement CreateDirectoryPathControl(PropertyItem property)
+        {
+            var control = (DirectoryPicker)base.CreateDirectoryPathControl(property);
+            control.FolderBrowserDialogService = new BetterFolderBrowseDialog();
+            return control;
+        }
     }
     [AttributeUsage(AttributeTargets.Property)]
     public class ExpandAsCategoryAttribute : Attribute
@@ -140,6 +147,22 @@ namespace Clowd
         public ExpandAsCategoryAttribute(string category)
         {
             Category = category;
+        }
+    }
+
+    public class BetterFolderBrowseDialog : IFolderBrowserDialogService
+    {
+        public bool ShowFolderBrowserDialog(ref string directory, bool showNewFolderButton = true, string description = null, bool useDescriptionForTitle = true)
+        {
+            var dialog = new Ookii.Dialogs.Wpf.VistaFolderBrowserDialog();
+            dialog.Description = description;
+            dialog.UseDescriptionForTitle = useDescriptionForTitle; // This applies to the Vista style dialog only, not the old dialog.
+            dialog.ShowNewFolderButton = showNewFolderButton;
+            dialog.SelectedPath = directory;
+
+            var success = (bool)dialog.ShowDialog();
+            directory = dialog.SelectedPath;
+            return success;
         }
     }
 }

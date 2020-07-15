@@ -272,17 +272,20 @@ namespace Clowd
         H264 = 1,
     }
 
-    public enum Resolution : int
+    public enum MaxResolution : int
     {
+        [Description("Uncapped")]
         Uncapped = 0,
         [Description("SD - 480p")]
         _480p = 480,
         [Description("HD - 720p")]
         _720p = 720,
         [Description("HD - 1080p")]
+        _1080p = 1080,
+        [Description("HD - 1440p")]
         _1440p = 1440,
         [Description("4K - 2160p")]
-        _2160p = 1440,
+        _2160p = 2160,
     }
 
     [ImplementPropertyChanged]
@@ -290,21 +293,22 @@ namespace Clowd
     {
         public CaptureVideoCodec VideoCodec { get; set; } = CaptureVideoCodec.H264;
 
-        public BitrateMultiplier OutputQuality { get; set; } = BitrateMultiplier.Medium;
-
-        public Resolution MaxResolution { get; set; } = Resolution._1080p;
-
         [DisplayName("Use Hardware Acceleration")]
         [Description("This may cause issues on some graphics cards with limited or no h264 encoding supported")]
         public bool HardwareAcceleration { get; set; } = false;
 
+        public BitrateMultiplier OutputQuality { get; set; } = BitrateMultiplier.Medium;
+
+        [DisplayName("Max Resolution")]
+        public MaxResolution MaxResolution { get; set; } = MaxResolution._1080p;
+
         [PData.DirectoryPath]
         public string OutputDirectory { get; set; }
 
-        [PData.Spinnable(2, 4, 4, 60)]
-        [DisplayName("FPS")]
-        [Description("Target FPS - this may be lower than the selected value depending on your system hardware and available resources.")]
-        public int TargetFramesPerSecond { get; set; } = 24;
+        //[PData.Spinnable(2, 4, 4, 60)]
+        //[DisplayName("FPS")]
+        //[Description("Target FPS - this may be lower than the selected value depending on your system hardware and available resources.")]
+        //public int TargetFramesPerSecond { get; set; } = 24;
 
         public bool ShowCursor { get; set; } = true;
 
