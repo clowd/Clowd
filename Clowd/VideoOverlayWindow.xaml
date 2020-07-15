@@ -64,19 +64,17 @@
                             </Storyboard>
                         </ControlTemplate.Resources>
                         <Grid>
-                            <Rectangle
-                                 Stroke="#FFFFFF"
-                                 StrokeThickness="2"
-                                 SnapsToDevicePixels="True"
-                                 Margin="-2"
-                            />
+                            <Border Name="ButtonBorder"
+                                 BorderThickness="2"
+                                    Margin="-2"
+                                 Background="Transparent"
+                                 BorderBrush="{StaticResource HighlightBrush}">
+                            </Border>
                             <Rectangle Name="rectangle"
-                                 Stroke="#FFFF0000"
+                                 Stroke="#A5FFFFFF"
+                                    Margin="-2"
                                  StrokeThickness="2"
-                                 SnapsToDevicePixels="True"
-                                 Margin="-2"
-                                 StrokeDashArray="4 4"
-                            />
+                                 StrokeDashArray="4 4"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <EventTrigger RoutedEvent="Loaded">
@@ -129,7 +127,7 @@
             <Grid Width="{Binding CroppingRectangleWpf.Width}"
                   Height="{Binding CroppingRectangleWpf.Height}"
                   Canvas.Left="{Binding CroppingRectangleWpf.Left}"
-                  Canvas.Top="{Binding CroppingRectangleWpf.Top }">
+                  Canvas.Top="{Binding CroppingRectangleWpf.Top}">
                 <TextBlock x:Name="labelCountdown" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="120" Foreground="Red" Opacity="1">
                 </TextBlock>
             </Grid>
