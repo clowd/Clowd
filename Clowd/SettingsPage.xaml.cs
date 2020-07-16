@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,10 +33,25 @@ namespace Clowd
         {
             InitializeComponent();
             this.SelectedItem = App.Current.Settings;
-            this.Unloaded += SettingsPage_Unloaded;
+            RegisterSaveHandler();
         }
 
-        private void SettingsPage_Unloaded(object sender, RoutedEventArgs e)
+        private void RegisterSaveHandler()
+        {
+            SelectedItem.PropertyChanged += Setting_PropertyChanged;
+
+            var subSettings = SelectedItem
+                .GetType()
+                .GetProperties()
+                .Where(p => typeof(INotifyPropertyChanged).IsAssignableFrom(p.PropertyType))
+                .Select(p => p.GetValue(SelectedItem))
+                .Cast<INotifyPropertyChanged>();
+
+            foreach (var s in subSettings)
+                s.PropertyChanged += Setting_PropertyChanged;
+        }
+
+        private void Setting_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             PerformSave();
         }
@@ -57,6 +73,7 @@ namespace Clowd
             App.Current.ResetSettings();
             this.SelectedItem = App.Current.Settings;
             PerformSave();
+            RegisterSaveHandler();
         }
     }
 
