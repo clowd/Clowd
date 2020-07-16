@@ -743,13 +743,12 @@ namespace NReco.VideoConverter
                     if (name.StartsWith(str) && name.Contains(bitness))
                     {
                         string path = Path.Combine(this.FFMpegToolPath, Path.GetFileNameWithoutExtension(name.Substring(str.Length)));
-                        string fileName = Path.GetFileName(path);
+
+                        if (!File.Exists(GetFFMpegExePath()))
+                            FFMpegExeName = Path.GetFileName(path);
 
                         if (File.Exists(path))
                         {
-                            if (!File.Exists(GetFFMpegExePath()))
-                                FFMpegExeName = fileName;
-
                             if (File.GetLastWriteTime(path) > File.GetLastWriteTime(executingAssembly.Location))
                                 continue;
                         }
