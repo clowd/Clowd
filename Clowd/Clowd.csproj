@@ -416,11 +416,10 @@
   </Target>
   <PropertyGroup>
     <PreBuildEvent>if $(ConfigurationName) == Debug (
-  "%25ProgramFiles(x86)%25\Microsoft Visual Studio\2019\Community\Common7\IDE\TextTransform.exe" -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
+  "$(DevEnvDir)\TextTransform.exe" -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
 ) ELSE (
- "%25ProgramFiles(x86)%25\Microsoft Visual Studio\2019\Community\Common7\IDE\TextTransform.exe" -a !!revision!true -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
+ "$(DevEnvDir)\TextTransform.exe" -a !!revision!true -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
 )
-
 </PreBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
