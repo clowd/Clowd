@@ -110,7 +110,7 @@ namespace Clowd
         }
 
 
-        [DisplayName("Accent color"), PData.EnableBy("AccentScheme", AccentScheme.User)]
+        [DisplayName("Accent color"), PData.EnableBy(nameof(AccentScheme), AccentScheme.User)]
         [Description("Allows you to set a custom accent color when the appropriate accent mode is also set.")]
         public Color UserAccentColor { get; set; } = Color.FromRgb(59, 151, 210);
 
@@ -241,10 +241,10 @@ namespace Clowd
         [Category("Uploads"), DisplayName("Upload Storage Provider")]
         public UploadsProvider UploadProvider { get; set; } = UploadsProvider.None;
 
-        [PData.VisibleBy("UploadProvider", UploadsProvider.Azure)]
+        [PData.VisibleBy(nameof(UploadProvider), UploadsProvider.Azure)]
         public string AzureConnectionString { get; set; }
 
-        [PData.VisibleBy("UploadProvider", UploadsProvider.Azure)]
+        [PData.VisibleBy(nameof(UploadProvider), UploadsProvider.Azure)]
         public string AzureContainerName { get; set; }
 
         [Description("If true, the original filename will be ignored and a random one will be chosen for the upload.")]
@@ -266,12 +266,6 @@ namespace Clowd
         High = 150,
     }
 
-    public enum CaptureVideoCodec
-    {
-        [Description("h264")]
-        H264 = 1,
-    }
-
     public enum MaxResolution : int
     {
         [Description("Uncapped")]
@@ -288,53 +282,25 @@ namespace Clowd
         _2160p = 2160,
     }
 
-    public enum H264Preset
-    {
-        ultrafast,
-        superfast,
-        veryfast,
-        faster,
-        fast,
-        medium,
-        slow,
-        slower,
-        veryslow
-    }
-
     [ImplementPropertyChanged]
     public class VideoSettings : IDisposable
     {
-        public CaptureVideoCodec VideoCodec { get; set; } = CaptureVideoCodec.H264;
-
-        [DisplayName("Use Hardware Acceleration")]
-        [Description("This may cause issues on some graphics cards with limited or no h264 encoding supported")]
-        [PData.VisibleBy("VideoCodec", CaptureVideoCodec.H264)]
-        public bool HardwareAcceleration { get; set; } = true;
-
-        [DisplayName("h264 Preset")]
-        [PData.VisibleBy("VideoCodec", CaptureVideoCodec.H264)]
-        public H264Preset H264Preset { get; set; } = H264Preset.veryfast;
-
-        [DisplayName("h264 Constant Rate Factor")]
-        [PData.VisibleBy("VideoCodec", CaptureVideoCodec.H264)]
-        [Description("The encoding quality: Reasonable ranges from 18-28. Lower the CRF with a faster preset\nSet 0 for Lossless \nSet -1 for Automatic")]
-        public int H264CRF { get; set; } = -1;
-
-        //public BitrateMultiplier OutputQuality { get; set; } = BitrateMultiplier.Medium;
-
         [DisplayName("Max Resolution")]
         public MaxResolution MaxResolution { get; set; } = MaxResolution._1080p;
 
         [PData.DirectoryPath]
         public string OutputDirectory { get; set; }
 
-        //[PData.Spinnable(2, 4, 4, 60)]
-        //[DisplayName("FPS")]
-        //[Description("Target FPS - this may be lower than the selected value depending on your system hardware and available resources.")]
-        //public int TargetFramesPerSecond { get; set; } = 24;
-
         public bool ShowCursor { get; set; } = true;
 
+        public CaptureVideoCodec VideoCodec { get; set; } = CaptureVideoCodec.libx264;
+
+        [PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.h264_nvenc)]
+        public FFMpegCodecSettings_h264_nvenc h264_nvenc { get; set; } = new FFMpegCodecSettings_h264_nvenc();
+
+        [PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.libx264)]
+        public FFMpegCodecSettings_libx264 libx264 { get; set; } = new FFMpegCodecSettings_libx264();
+        
         public void Dispose()
         {
         }
