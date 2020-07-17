@@ -57,7 +57,7 @@ namespace Clowd
 
     [ImplementPropertyChanged]
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
-    public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable
+    public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable, IClassifyObjectProcessor
     {
         [Browsable(false), ClassifyIgnore]
         public new object Attribute { get; } = null;
@@ -154,12 +154,49 @@ namespace Clowd
         [Browsable(false), ClassifyNotNull]
         public int[] CustomColors { get; set; } = new int[0];
 
+        private IEnumerable<T> GetAllAssignableToT<T>(T root)
+        {
+            MethodInfo method = GetType().GetMethod(nameof(GetAllAssignableToT), BindingFlags.Instance | BindingFlags.NonPublic);
+            MethodInfo myself = method.MakeGenericMethod(typeof(T));
+
+            yield return root;
+
+            var subSettings = root
+                .GetType()
+                .GetProperties()
+                .Where(p => typeof(T).IsAssignableFrom(p.PropertyType))
+                .Select(p => p.GetValue(root))
+                .Cast<T>();
+
+            foreach (var s in subSettings)
+                foreach (var results in (IEnumerable<T>)myself.Invoke(this, new[] { (object)s }))
+                    yield return results;
+        }
+
         public void Dispose()
         {
-            FileUploadShortcut?.Dispose();
-            OpenHomeShortcut?.Dispose();
-            CaptureSettings?.Dispose();
-            UploadSettings?.Dispose();
+            foreach (var a in GetAllAssignableToT<IDisposable>(this))
+                a?.Dispose();
+        }
+
+        public void BeforeSerialize()
+        {
+            // do nothing
+        }
+
+        public void AfterDeserialize()
+        {
+            var debouncer = new Debouncer();
+            var tmp = GetAllAssignableToT<INotifyPropertyChanged>(this).ToArray();
+            foreach (var a in tmp)
+                if (a != null)
+                    a.PropertyChanged += (s, ev) => debouncer.Debounce(() => this.SaveQuiet());
+        }
+
+        public override void SaveQuiet(string filename = null, SettingsSerializer? serializer = null)
+        {
+            base.SaveQuiet(filename, serializer);
+            Console.WriteLine("Saved!!!!!!!");
         }
     }
 
@@ -300,7 +337,7 @@ namespace Clowd
 
         [PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.libx264)]
         public FFMpegCodecSettings_libx264 libx264 { get; set; } = new FFMpegCodecSettings_libx264();
-        
+
         public void Dispose()
         {
         }

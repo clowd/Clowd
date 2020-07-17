@@ -34,38 +34,10 @@ namespace Clowd
         {
             InitializeComponent();
             this.SelectedItem = App.Current.Settings;
-            RegisterSaveHandler();
-        }
-
-        private void RegisterSaveHandler()
-        {
-            SelectedItem.PropertyChanged += Setting_PropertyChanged;
-
-            var subSettings = SelectedItem
-                .GetType()
-                .GetProperties()
-                .Where(p => typeof(INotifyPropertyChanged).IsAssignableFrom(p.PropertyType))
-                .Select(p => p.GetValue(SelectedItem))
-                .Cast<INotifyPropertyChanged>();
-
-            foreach (var s in subSettings)
-                s.PropertyChanged += Setting_PropertyChanged;
-        }
-
-        private void Setting_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            PerformSave();
-        }
-
-        private void PerformSave()
-        {
-            SelectedItem.SaveQuiet();
-            App.Current.SetupTrayContextMenu();
         }
 
         private void Home_Clicked(object sender, RoutedEventArgs e)
         {
-            PerformSave();
             TemplatedWindow.SetContent(this, new HomePage());
         }
 
@@ -73,8 +45,7 @@ namespace Clowd
         {
             App.Current.ResetSettings();
             this.SelectedItem = App.Current.Settings;
-            PerformSave();
-            RegisterSaveHandler();
+            SelectedItem.SaveQuiet();
         }
     }
 
@@ -150,7 +121,7 @@ namespace Clowd
 
             if (typeof(FFMpegCodecSettings).IsAssignableFrom(property.ActualPropertyType))
             {
-                var editor = new FFMpegCodecSettingsEditor(() => { App.Current.Settings.Save(); });
+                var editor = new FFMpegCodecSettingsEditor(() => { App.Current.Settings.SaveQuiet(); });
                 editor.SetBinding(FFMpegCodecSettingsEditor.CodecSettingsProperty, property.CreateBinding());
                 return editor;
             }

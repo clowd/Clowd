@@ -169,6 +169,7 @@
     <Compile Include="Utilities\ButtonClickContextBehavior.cs" />
     <Compile Include="Utilities\ClassifyOptions.cs" />
     <Compile Include="Utilities\ClipboardEx.cs" />
+    <Compile Include="Utilities\Debouncer.cs" />
     <Compile Include="Utilities\ICommandLineProxy.cs" />
     <Compile Include="Utilities\GlobalTrigger.cs" />
     <Compile Include="Utilities\LiveScreenRecording.cs" />
