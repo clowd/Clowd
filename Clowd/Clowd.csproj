@@ -62,6 +62,7 @@
     <Reference Include="Microsoft.Expression.Interactions, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Expression.Blend.Sdk.WPF.1.0.1\lib\net45\Microsoft.Expression.Interactions.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <HintPath>..\packages\Newtonsoft.Json.6.0.8\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
@@ -142,6 +143,7 @@
     </Compile>
     <Compile Include="Controls\CornerClippingBorder.cs" />
     <Compile Include="Controls\Crosshair.cs" />
+    <Compile Include="Controls\FFMpegCodecSettingsEditor.cs" />
     <Compile Include="Controls\GlobalTriggerEditor.cs" />
     <Compile Include="Controls\PixelMagnifier.cs" />
     <Compile Include="Converters\TaskStatusToVisibilityConverter.cs" />
