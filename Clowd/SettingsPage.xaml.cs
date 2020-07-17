@@ -20,6 +20,7 @@ using System.Windows.Threading;
 using Clowd.Controls;
 using Clowd.Utilities;
 using PropertyChanged;
+using PropertyTools.DataAnnotations;
 using PropertyTools.Wpf;
 
 namespace Clowd
@@ -144,6 +145,13 @@ namespace Clowd
             {
                 var editor = new GlobalTriggerEditor();
                 editor.SetBinding(GlobalTriggerEditor.TriggerProperty, property.CreateBinding());
+                return editor;
+            }
+
+            if (typeof(FFMpegCodecSettings).IsAssignableFrom(property.ActualPropertyType))
+            {
+                var editor = new FFMpegCodecSettingsEditor(() => { App.Current.Settings.Save(); });
+                editor.SetBinding(FFMpegCodecSettingsEditor.CodecSettingsProperty, property.CreateBinding());
                 return editor;
             }
 
