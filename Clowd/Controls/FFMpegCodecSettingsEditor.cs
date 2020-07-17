@@ -142,7 +142,8 @@ namespace Clowd.Controls
             if (selected != CodecSettings.Preset)
             {
                 CodecSettings.Preset = selected;
-                save();
+                // updating the preset will cause an automatic save
+                // save();
             }
         }
     }

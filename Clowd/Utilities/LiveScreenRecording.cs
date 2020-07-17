@@ -198,11 +198,11 @@ namespace Clowd.Utilities
 
     public enum FFMpegCodecOptionPreset
     {
-        [Description("Fast / Low Quality")]
+        [Description("Fast / Lower Quality")]
         Fast_LowQuality = 1,
         [Description("Medium")]
         Medium = 2,
-        [Description("Slow / High Quality")]
+        [Description("Slow / Higher Quality")]
         Slow_HighQuality = 3,
         [Description("Custom")]
         Custom = 0,
@@ -218,13 +218,14 @@ namespace Clowd.Utilities
             }
             set
             {
-                _preset = value;
-
-                if (_preset != FFMpegCodecOptionPreset.Custom)
-                    _options = GetDefaultsForPreset(value);
-
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Preset)));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Options)));
+                if (_preset != value)
+                {
+                    _preset = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Preset)));
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Options)));
+                    if (_preset != FFMpegCodecOptionPreset.Custom)
+                        _options = GetDefaultsForPreset(value);
+                }
             }
         }
 
@@ -237,11 +238,11 @@ namespace Clowd.Utilities
 
                 return GetDefaultsForPreset(_preset);
             }
-            set
-            {
-                _options = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Options)));
-            }
+            //set
+            //{
+            //    _options = value;
+            //    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Options)));
+            //}
         }
 
         private FFMpegCodecOptionPreset _preset = FFMpegCodecOptionPreset.Medium;
@@ -342,24 +343,25 @@ namespace Clowd.Utilities
         }
 
         protected abstract string GetDefaultsCSVText();
-    }
 
-    public class FFMpegCodecOption
-    {
-        public string param_name { get; set; }
-        public string param_value { get; set; }
+        public class FFMpegCodecOption
+        {
+            public string param_name { get; set; }
+            public string param_value { get; set; }
+        }
     }
 
     public class FFMpegCodecSettings_libx264 : FFMpegCodecSettings
     {
         public override CaptureVideoCodec Codec => CaptureVideoCodec.libx264;
 
-        public override string Description => "Software x264 encoder. Good results, but requires a lot of CPU resources. Consider a hardware encoder if you have a supported graphics card.";
+        public override string Description => "Software x264 encoder. Best results, but requires a lot of CPU resources. Consider a hardware encoder if you have a supported graphics card or intel processor.";
 
         public override string Container => "mp4";
 
         protected override string GetDefaultsCSVText()
         {
+            // csv format: [param_name, fast_value, medium_value, slowhq_value]
             return
 @"codec:v,libx264,libx264,libx264
 preset:v,veryfast,veryfast,medium
@@ -381,6 +383,7 @@ coder:v,cabac,cabac,cabac";
 
         protected override string GetDefaultsCSVText()
         {
+            // csv format: [param_name, fast_value, medium_value, slowhq_value]
             return
 @"codec:v,h264_nvenc,h264_nvenc,h264_nvenc
 preset:v,fast,medium,slow
