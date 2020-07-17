@@ -38,7 +38,7 @@ namespace Clowd
         private bool? capturing = null;
         private bool draggingArea = false;
         private ScreenPoint draggingOrigin = default(ScreenPoint);
-        private WindowFinder2 windowFinder = new WindowFinder2();
+        private WindowFinder2 windowFinder;
         private ScreenRect? initialRegion = null;
 
         private CaptureWindow(ScreenRect? initial = null)
@@ -139,7 +139,7 @@ namespace Clowd
         {
             this.Handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             CaptureBitmap();
-            windowFinder.NewCapture();
+            windowFinder = WindowFinder2.NewCapture();
         }
         private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
         {
@@ -159,11 +159,6 @@ namespace Clowd
                 UpdateCanvasMode(false);
                 UpdateCanvasSelection(initialRegion.Value);
                 ManageSelectionResizeHandlers(true);
-            }
-
-            if (App.Current.Settings.CaptureSettings.SelectedWindowPromotion != SelectedWindowForegroundPromotion.None)
-            {
-                windowFinder.PopulateWindowBitmaps();
             }
         }
         private void CaptureWindow_Closed(object sender, EventArgs e)
@@ -684,9 +679,9 @@ namespace Clowd
         }
         private void BringSelectedWindowToFront(WindowFinder2.CachedWindow window)
         {
-            if (window.IsPartiallyCovered)
+            if (windowFinder.BitmapsReady && window.IsPartiallyCovered)
             {
-                var parent = windowFinder.GetTopLevel(window);
+                var parent = windowFinder.GetTopLevelWindow(window);
                 if (parent.WindowBitmapWpf != null)
                 {
                     PopupWindowImage = parent.WindowBitmapWpf;

@@ -15,11 +15,15 @@ using System.Drawing;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using Clowd.Interop.Com;
+using System.Threading;
 
 namespace Clowd.Utilities
 {
     public class WindowFinder2 : IDisposable
     {
+        public bool MetadataReady { get; private set; } = false;
+        public bool BitmapsReady { get; private set; } = false;
+
         private const int MaxWindowDepthToSearch = 4;
         private const int MinWinCaptureBounds = 200;
 
@@ -29,36 +33,48 @@ namespace Clowd.Utilities
         private readonly HashSet<IntPtr> _hWndsAlreadyProcessed = new HashSet<IntPtr>();
         private readonly Stack<CachedWindow> _parentStack = new Stack<CachedWindow>();
         private readonly IVirtualDesktopManager _virtualDesktop = VirtualDesktopManager.CreateNew();
+        private readonly int _myProcessId = System.Diagnostics.Process.GetCurrentProcess().Id;
 
         ~WindowFinder2()
         {
             this.Dispose();
         }
-
-        public void NewCapture()
+        private WindowFinder2()
         {
-            this._cachedWindows.Clear();
-            USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(this.EvalWindow);
-            USER32.EnumWindows(enumWindowsProc, IntPtr.Zero);
-            this._hWndsAlreadyProcessed.Clear();
-            CalculateVisibilityMetadata();
         }
-        public void PopulateWindowBitmaps()
+
+        public static WindowFinder2 NewCapture()
         {
-            foreach (var c in _cachedWindows.Where(w => w.IsVisible && w.Depth == 0 && w.IsPartiallyCovered))
-                c.PopulateBitmaps();
+            var ths = new WindowFinder2();
+
+            Task.Factory.StartNew(() =>
+            {
+                ths._cachedWindows.Clear();
+                USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(ths.EvalWindow);
+                USER32.EnumWindows(enumWindowsProc, IntPtr.Zero);
+                ths._hWndsAlreadyProcessed.Clear();
+                ths.CalculateVisibilityMetadata();
+                ths.MetadataReady = true;
+                ths.PopulateWindowBitmaps();
+                ths.BitmapsReady = true;
+            }, TaskCreationOptions.LongRunning);
+
+            return ths;
         }
         public CachedWindow GetWindowThatContainsPoint(ScreenPoint point)
         {
+            if (!MetadataReady)
+                return new CachedWindow();
+
             foreach (var window in _cachedWindows)
                 if (window.ImageBoundsRect.Contains(point))
                     return window;
 
             return new CachedWindow();
         }
-        public CachedWindow GetTopLevel(CachedWindow child)
+        public CachedWindow GetTopLevelWindow(CachedWindow child)
         {
-            if (child.Parent != null) return GetTopLevel(child.Parent);
+            if (child.Parent != null) return GetTopLevelWindow(child.Parent);
             return child;
         }
         public void Dispose()
@@ -74,33 +90,42 @@ namespace Clowd.Utilities
             var winInfo = new WINDOWINFO(true);
             if (!USER32.GetWindowInfo(hWnd, ref winInfo))
                 throw new Win32Exception();
-           
+
             var caption = USER32EX.GetWindowCaption(hWnd);
             var asclass = USER32EX.GetWindowClassName(hWnd);
 
-            var winVisible = winInfo.dwStyle.HasFlag(WindowStyles.WS_VISIBLE);  
+            var winVisible = winInfo.dwStyle.HasFlag(WindowStyles.WS_VISIBLE);
             var winMinimized = winInfo.dwStyle.HasFlag(WindowStyles.WS_MINIMIZE);
             var winMaximized = winInfo.dwStyle.HasFlag(WindowStyles.WS_MAXIMIZE);
 
-            if (depthInt == 0)
-            {
-                if (!_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
-                {
-                    // if the window is not on the current virtual desktop we want to ignore it and it's children
-                    return true;
-                }
-
-                var winIsTool = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOOLWINDOW);
-                var winIsLayered = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_LAYERED);
-                var winIsTopMost = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOPMOST);
-
-                // if this is a top-level layered tool window, it's probably a transparent overlay and we don't want to capture it
-                if (winIsTool && winIsLayered && winIsTopMost)
-                    return true;
-            }
-
             if (!this._hWndsAlreadyProcessed.Contains(hWnd) && winVisible && !winMinimized)
             {
+                // skip capture windows created by this process
+                USER32.GetWindowThreadProcessId(hWnd, out var processId);
+                if (processId == _myProcessId)
+                {
+                    var window = System.Windows.Interop.HwndSource.FromHwnd(hWnd)?.RootVisual;
+                    if (window is CaptureWindow || window is VideoOverlayWindow)
+                        return true;
+                }
+
+                if (depthInt == 0)
+                {
+                    if (!_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
+                    {
+                        // if the window is not on the current virtual desktop we want to ignore it and it's children
+                        return true;
+                    }
+
+                    var winIsTool = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOOLWINDOW);
+                    var winIsLayered = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_LAYERED);
+                    var winIsTopMost = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOPMOST);
+
+                    // if this is a top-level layered tool window, it's probably a transparent overlay and we don't want to capture it
+                    if (winIsTool && winIsLayered && winIsTopMost)
+                        return true;
+                }
+
                 ScreenRect windowRect = ScreenRect.FromSystem(USER32EX.GetTrueWindowBounds(hWnd));
                 ScreenRect boundsOfScreenWorkspace = windowRect;
 
@@ -215,7 +240,7 @@ namespace Clowd.Utilities
                         var whTest = _cachedWindows[z];
                         if (w.WindowRect.IntersectsWith(whTest.WindowRect))
                         {
-                            if (GetTopLevel(whTest) != GetTopLevel(w))
+                            if (GetTopLevelWindow(whTest) != GetTopLevelWindow(w))
                             {
                                 w.IsPartiallyCovered = true;
                                 break;
@@ -226,6 +251,27 @@ namespace Clowd.Utilities
 
                 if (w.Depth == 0)
                     screen.Exclude(rect);
+            }
+        }
+        private void PopulateWindowBitmaps()
+        {
+            foreach (var c in _cachedWindows.Where(w => w.IsVisible && w.Depth == 0 && w.IsPartiallyCovered))
+            {
+                Thread t = new Thread(new ThreadStart(() => { c.CaptureWindowBitmap(); }));
+                t.Start();
+                t.Join(1000);
+                if (!t.IsAlive)
+                    continue;
+
+                // the thread is taking too long, ie, stuck in a blocking operation that will never return (perhaps if the window never responds to our WM_PAINT message)
+                t.Interrupt();
+                t.Join(200);
+
+                if (!t.IsAlive)
+                    continue;
+
+                // the thread is _still_ alive, lets abort it.
+                t.Abort();
             }
         }
 
@@ -240,8 +286,19 @@ namespace Clowd.Utilities
             public bool IsPartiallyCovered { get; set; }
             public int Depth { get; private set; }
             public Bitmap WindowBitmap { get; private set; }
-            public System.Windows.Media.Imaging.BitmapSource WindowBitmapWpf { get; private set; }
+            public System.Windows.Media.Imaging.BitmapSource WindowBitmapWpf
+            {
+                get
+                {
+                    if (_wpfBitmap == null && WindowBitmap != null)
+                        _wpfBitmap = WindowBitmap.ToBitmapSource();
+
+                    return _wpfBitmap;
+                }
+            }
             public CachedWindow Parent { get; private set; }
+
+            private System.Windows.Media.Imaging.BitmapSource _wpfBitmap = null;
 
             public CachedWindow()
             {
@@ -264,7 +321,7 @@ namespace Clowd.Utilities
                 this.Dispose();
             }
 
-            public void PopulateBitmaps()
+            public void CaptureWindowBitmap()
             {
                 if (Depth > 0)
                     throw new InvalidOperationException("Must only call GetBitmap on a top-level window");
@@ -272,34 +329,45 @@ namespace Clowd.Utilities
                 if (WindowBitmap != null)
                     return;
 
-                RECT normalWindowBounds;
-                if (!USER32.GetWindowRect(this.Handle, out normalWindowBounds))
-                    throw new Win32Exception();
-
-                var basicBounds = ScreenRect.FromSystem(normalWindowBounds);
-
-                Bitmap initialBmp = new Bitmap(basicBounds.Width, basicBounds.Height);
+                Bitmap initialBmp;
+                ScreenRect basicBounds;
                 try
                 {
-                    using (Graphics g = Graphics.FromImage(initialBmp))
+
+                    RECT normalWindowBounds;
+                    if (!USER32.GetWindowRect(this.Handle, out normalWindowBounds))
+                        throw new Win32Exception();
+
+                    basicBounds = ScreenRect.FromSystem(normalWindowBounds);
+
+                    initialBmp = new Bitmap(basicBounds.Width, basicBounds.Height);
+                    try
                     {
-                        IntPtr dc = g.GetHdc();
-                        try
+                        using (Graphics g = Graphics.FromImage(initialBmp))
                         {
-                            bool success = USER32.PrintWindow(this.Handle, dc, PrintWindowDrawingOptions.PW_RENDERFULLCONTENT);
-                            if (!success)
-                                throw new Win32Exception();
-                        }
-                        finally
-                        {
-                            g.ReleaseHdc(dc);
+                            IntPtr dc = g.GetHdc();
+                            try
+                            {
+                                bool success = USER32.PrintWindow(this.Handle, dc, PrintWindowDrawingOptions.PW_RENDERFULLCONTENT);
+                                if (!success)
+                                    throw new Win32Exception();
+                            }
+                            finally
+                            {
+                                g.ReleaseHdc(dc);
+                            }
                         }
                     }
+                    catch (Exception e)
+                    {
+                        // this most often occurs if the window is elevated or kernal mode and we do not have permission to capture it
+                        initialBmp.Dispose();
+                        return;
+                    }
                 }
-                catch (Exception e)
+                catch (ThreadInterruptedException e)
                 {
-                    // this most often occurs if the window is elevated or kernal mode and we do not have permission to capture it
-                    initialBmp.Dispose();
+                    // if we're inturrupted here we should exit, as we were stuck in a blocking non-returning function call.
                     return;
                 }
 
@@ -314,14 +382,12 @@ namespace Clowd.Utilities
                 if (xoffset < 1 && yoffset < 1)
                 {
                     WindowBitmap = initialBmp;
-                    WindowBitmapWpf = initialBmp.ToBitmapSource();
                 }
                 else
                 {
                     var croppingRectangle = new Rectangle(xoffset, yoffset, WindowRect.Width, WindowRect.Height);
                     var newBmp = initialBmp.Crop(croppingRectangle);
                     WindowBitmap = newBmp;
-                    WindowBitmapWpf = newBmp.ToBitmapSource();
                     initialBmp.Dispose();
                 }
             }
