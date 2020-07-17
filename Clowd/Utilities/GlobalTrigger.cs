@@ -13,7 +13,7 @@ namespace Clowd.Utilities
     /// <summary>
     /// A serializable manager for global hotkeys
     /// </summary>
-    public class GlobalTrigger : IClassifyObjectProcessor, IDisposable
+    public class GlobalTrigger : IClassifyObjectProcessor, IDisposable, INotifyPropertyChanged
     {
         [ClassifyIgnore]
         public KeyGesture Gesture
@@ -27,6 +27,7 @@ namespace Clowd.Utilities
                 ThrowIfDisposed();
                 if (GestureEqualsCurrent(value))
                     return;
+                this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Gesture)));
                 _gesture = value;
                 RefreshHotkey();
             }
@@ -52,6 +53,8 @@ namespace Clowd.Utilities
 
         [ClassifyIgnore]
         private KeyGesture _gesture;
+
+        public event PropertyChangedEventHandler PropertyChanged;
 
         public GlobalTrigger(Key key, ModifierKeys modifier, Action action)
             : this(new KeyGesture(key, modifier), action)
