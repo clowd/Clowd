@@ -19,10 +19,30 @@ using System.Threading;
 
 namespace Clowd.Utilities
 {
-    public class WindowFinder2 : IDisposable
+    public class WindowFinder2 : IDisposable, INotifyPropertyChanged
     {
-        public bool MetadataReady { get; private set; } = false;
-        public bool BitmapsReady { get; private set; } = false;
+        public bool MetadataReady
+        {
+            get => _metadataReady;
+            set
+            {
+                _metadataReady = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MetadataReady)));
+            }
+        }
+
+        public bool BitmapsReady
+        {
+            get => _bitmapsReady;
+            set
+            {
+                _bitmapsReady = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BitmapsReady)));
+            }
+        }
+
+        private bool _metadataReady = false;
+        private bool _bitmapsReady = false;
 
         private const int MaxWindowDepthToSearch = 4;
         private const int MinWinCaptureBounds = 200;
@@ -34,6 +54,8 @@ namespace Clowd.Utilities
         private readonly Stack<CachedWindow> _parentStack = new Stack<CachedWindow>();
         private readonly IVirtualDesktopManager _virtualDesktop = VirtualDesktopManager.CreateNew();
         private readonly int _myProcessId = System.Diagnostics.Process.GetCurrentProcess().Id;
+
+        public event PropertyChangedEventHandler PropertyChanged;
 
         ~WindowFinder2()
         {
@@ -255,24 +277,33 @@ namespace Clowd.Utilities
         }
         private void PopulateWindowBitmaps()
         {
-            foreach (var c in _cachedWindows.Where(w => w.IsVisible && w.Depth == 0 && w.IsPartiallyCovered))
+            var windows = _cachedWindows.Where(w => w.IsVisible && w.Depth == 0 && w.IsPartiallyCovered);
+
+            Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (c) =>
             {
-                Thread t = new Thread(new ThreadStart(() => { c.CaptureWindowBitmap(); }));
-                t.Start();
-                t.Join(1000);
-                if (!t.IsAlive)
-                    continue;
+                try
+                {
+                    Thread t = new Thread(new ThreadStart(() => { c.CaptureWindowBitmap(); }));
+                    t.Start();
+                    t.Join(1000);
+                    if (!t.IsAlive)
+                        return;
 
-                // the thread is taking too long, ie, stuck in a blocking operation that will never return (perhaps if the window never responds to our WM_PAINT message)
-                t.Interrupt();
-                t.Join(200);
+                    // the thread is taking too long, ie, stuck in a blocking operation that will never return (perhaps if the window never responds to our WM_PAINT message)
+                    t.Interrupt();
+                    t.Join(200);
 
-                if (!t.IsAlive)
-                    continue;
+                    if (!t.IsAlive)
+                        return;
 
-                // the thread is _still_ alive, lets abort it.
-                t.Abort();
-            }
+                    // the thread is _still_ alive, lets abort it.
+                    t.Abort();
+                }
+                catch
+                {
+                    // who cares?
+                }
+            });
         }
 
         public class CachedWindow : IDisposable
