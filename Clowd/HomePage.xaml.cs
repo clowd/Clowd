@@ -25,19 +25,19 @@ namespace Clowd
             InitializeComponent();
         }
 
-        private async void Capture_Click(object sender, RoutedEventArgs e)
+        private void Capture_Click(object sender, RoutedEventArgs e)
         {
-            var window = TemplatedWindow.GetWindow(this);
-            window.WindowState = WindowState.Minimized;
-            await Task.Delay(600);
-            var capture = await CaptureWindow.ShowNew();
-            System.ComponentModel.CancelEventHandler close = null;
-            close = (s, evargs) =>
-            {
-                window.WindowState = WindowState.Normal;
-                capture.Closing -= close;
-            };
-            capture.Closing += close;
+            //var window = TemplatedWindow.GetWindow(this);
+            //window.WindowState = WindowState.Minimized;
+            //await Task.Delay(600);
+            //var capture = CaptureWindow.ShowNew();
+            //System.ComponentModel.CancelEventHandler close = null;
+            //close = (s, evargs) =>
+            //{
+            //    window.WindowState = WindowState.Normal;
+            //    capture.Closing -= close;
+            //};
+            //capture.Closing += close;
         }
 
         private void History_Click(object sender, RoutedEventArgs e)
