@@ -581,15 +581,10 @@ namespace Clowd
         }
         public async void StartCapture(ScreenRect? region = null)
         {
-            if (_prtscrWindowOpen || !_initialized)
+            if (!_initialized)
                 return;
 
-            var wnd = await CaptureWindow.ShowNew(region);
-            wnd.Closed += (s, e) =>
-            {
-                _prtscrWindowOpen = false;
-            };
-            _prtscrWindowOpen = true;
+            CaptureWindow.ShowNewCapture();
         }
         public void QuickCaptureFullScreen()
         {

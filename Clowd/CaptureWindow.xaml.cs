@@ -21,8 +21,6 @@ namespace Clowd
     [PropertyChanged.ImplementPropertyChanged]
     public partial class CaptureWindow : Window
     {
-        //Disclaimer, I started writing this using MVVM and then ditched that idea, so code is kind of inconsistant.
-
         public Cursor CanvasCursor { get; private set; } = Cursors.Cross;
         public ScreenRect CroppingRectangle { get; private set; } = new ScreenRect(0, 0, 0, 0);
         public Rect CroppingRectangleWpf { get { return CroppingRectangle.ToWpfRect(); } private set { CroppingRectangle = new WpfRect(value).ToScreenRect(); } }
@@ -39,127 +37,98 @@ namespace Clowd
         private bool draggingArea = false;
         private ScreenPoint draggingOrigin = default(ScreenPoint);
         private WindowFinder2 windowFinder;
-        private ScreenRect? initialRegion = null;
 
-        private CaptureWindow(ScreenRect? initial = null)
+        private static CaptureWindow _readyWindow = null;
+
+        private CaptureWindow()
         {
-            initialRegion = initial;
             InitializeComponent();
             this.SourceInitialized += CaptureWindow_SourceInitialized;
             this.Loaded += CaptureWindow_Loaded;
             this.Closed += CaptureWindow_Closed;
-            Width = Height = 1; // the window becomes visible very briefly before it's redrawn with the captured screenshot; this makes it unnoticeable
         }
 
-        public static System.Drawing.Bitmap MakeGrayscale3(System.Drawing.Bitmap original)
+        public static void ShowNewCapture()
         {
-            //create a blank bitmap the same size as original
-            var newBitmap = new System.Drawing.Bitmap(original.Width, original.Height);
-
-            //get a graphics object from the new image
-            var g = System.Drawing.Graphics.FromImage(newBitmap);
-
-            //create the grayscale ColorMatrix
-            var colorMatrix = new System.Drawing.Imaging.ColorMatrix(
-               new float[][]
-               {
-                 new float[] {.3f, .3f, .3f, 0, 0},
-                 new float[] {.59f, .59f, .59f, 0, 0},
-                 new float[] {.11f, .11f, .11f, 0, 0},
-                 new float[] {0, 0, 0, 1, 0},
-                 new float[] {0, 0, 0, 0, 1}
-               });
-
-            //create some image attributes
-            var attributes = new System.Drawing.Imaging.ImageAttributes();
-
-            //set the color matrix attribute
-            attributes.SetColorMatrix(colorMatrix);
-
-            //draw the original image on the new image
-            //using the grayscale color matrix
-            g.DrawImage(original, new System.Drawing.Rectangle(0, 0, original.Width, original.Height),
-               0, 0, original.Width, original.Height, System.Drawing.GraphicsUnit.Pixel, attributes);
-
-            //dispose the Graphics object
-            g.Dispose();
-            return newBitmap;
-        }
-        public static async Task<CaptureWindow> ShowNew(ScreenRect? captureRegion = null)
-        {
-            var c = new CaptureWindow(captureRegion);
-            if (TaskWindow.Current?.IsVisible == true)
+            PrepareNew();
+            _readyWindow.DoCaptureShowing();
+            _readyWindow.Closed += (s, e) =>
             {
-                await TaskWindow.Current.Hide();
-            }
-            c.Show();
-            return c;
+                _readyWindow = null;
+                PrepareNew();
+            };
         }
-        private void CaptureBitmap()
+
+        private static void PrepareNew()
         {
+            if (_readyWindow == null)
+            {
+                _readyWindow = new CaptureWindow();
+                _readyWindow.Show();
+            }
+        }
+
+        private void DoCaptureShowing()
+        {
+            windowFinder = WindowFinder2.NewCapture();
+
+            //windowFinder.PropertyChanged += (s, e) =>
+            //{
+            //    this.Dispatcher.Invoke(() =>
+            //    {
+            //        RootGrid_MouseMove(null, null);
+            //    });
+            //};
+
+            if (!System.Diagnostics.Debugger.IsAttached)
+                this.Topmost = true;
+
             using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
             {
                 ScreenImage = source.ToBitmapSource();
                 GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
             }
-        }
-        private ScreenRect TruncatedCroppingRect()
-        {
-            var rect = CroppingRectangle;
-            //x
-            if (rect.Left < 0)
-                rect.Left = 0;
-            //y
-            if (rect.Top < 0)
-                rect.Top = 0;
-            //width
-            if (rect.Width > ScreenImage.PixelWidth)
-                rect.Width = ScreenImage.PixelWidth;
-            //height
-            if (rect.Height > ScreenImage.PixelHeight)
-                rect.Height = ScreenImage.PixelHeight;
-            return rect;
-        }
-        private BitmapSource CropBitmap()
-        {
-            var rect = TruncatedCroppingRect();
 
-            if (PopupWindowImage != null)
-            {
-                rect = new ScreenRect(rect.Left - PopupWindowRectangle.Left, rect.Top - PopupWindowRectangle.Top, rect.Width, rect.Height);
-                return new CroppedBitmap(PopupWindowImage, rect);
-            }
-            else
-            {
-                return new CroppedBitmap(ScreenImage, rect);
-            }
-        }
-
-        private void CaptureWindow_SourceInitialized(object sender, EventArgs e)
-        {
-            this.Handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            CaptureBitmap();
-            windowFinder = WindowFinder2.NewCapture();
-        }
-        private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (System.Diagnostics.Debugger.IsAttached)
-                this.Topmost = false;
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
             // WPF makes some fairly inconvenient DPI conversions to Left and Top which have also changed between NET 4.5 and 4.8; just use WinAPI instead of de-converting them
             Interop.USER32.SetWindowPos(this.Handle, 0, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.SHOWWINDOW);
             Interop.USER32.SetForegroundWindow(this.Handle);
-            if (initialRegion == null)
-            {
-                UpdateCanvasMode(true);
-            }
-            else
-            {
-                UpdateCanvasMode(false);
-                UpdateCanvasSelection(initialRegion.Value);
-                ManageSelectionResizeHandlers(true);
-            }
+
+            //var asd = LogicalTreeHelper.FindLogicalNode(selectionBorder.Template, "rectange");
+
+            selectionBorder.ApplyTemplate();
+            var aa = selectionBorder.FindName("rectangle");
+            var rectangle = selectionBorder.Template.FindName("rectange", selectionBorder);
+            var dashAnimation = (System.Windows.Media.Animation.Storyboard)selectionBorder.Template.Resources["BorderDashAnimation"];
+
+            UpdateCanvasMode(true);
+            dashAnimation.Begin();
+            rootGrid.Visibility = Visibility.Visible;
+        }
+
+        private void CaptureWindow_SourceInitialized(object sender, EventArgs e)
+        {
+            this.Handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            //if (System.Diagnostics.Debugger.IsAttached)
+            //    this.Topmost = false;
+
+            //using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+            //{
+            //    ScreenImage = source.ToBitmapSource();
+            //    GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
+            //}
+        }
+        private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            //_readyWindow.UpdateCanvasMode(true);
+
+            //if (initialRegion != null)
+            //{
+            //    UpdateCanvasMode(false);
+            //    UpdateCanvasSelection(initialRegion.Value);
+            //    ManageSelectionResizeHandlers(true);
+            //}
         }
         private void CaptureWindow_Closed(object sender, EventArgs e)
         {
@@ -373,6 +342,37 @@ namespace Clowd
         {
             return Math.Sqrt(Math.Pow((x2 - x1), 2) + Math.Pow((y2 - y1), 2));
         }
+        private ScreenRect TruncatedCroppingRect()
+        {
+            var rect = CroppingRectangle;
+            //x
+            if (rect.Left < 0)
+                rect.Left = 0;
+            //y
+            if (rect.Top < 0)
+                rect.Top = 0;
+            //width
+            if (rect.Width > ScreenImage.PixelWidth)
+                rect.Width = ScreenImage.PixelWidth;
+            //height
+            if (rect.Height > ScreenImage.PixelHeight)
+                rect.Height = ScreenImage.PixelHeight;
+            return rect;
+        }
+        private BitmapSource CropBitmap()
+        {
+            var rect = TruncatedCroppingRect();
+
+            if (PopupWindowImage != null)
+            {
+                rect = new ScreenRect(rect.Left - PopupWindowRectangle.Left, rect.Top - PopupWindowRectangle.Top, rect.Width, rect.Height);
+                return new CroppedBitmap(PopupWindowImage, rect);
+            }
+            else
+            {
+                return new CroppedBitmap(ScreenImage, rect);
+            }
+        }
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -514,7 +514,7 @@ namespace Clowd
             }
             else if (App.Current.Settings.CaptureSettings.DetectWindows)
             {
-                var window = windowFinder.GetWindowThatContainsPoint(currentPoint);
+                var window = windowFinder?.GetWindowThatContainsPoint(currentPoint) ?? new WindowFinder2.CachedWindow();
 
                 UpdateCanvasSelection(window.ImageBoundsRect == ScreenRect.Empty
                     ? new ScreenRect(0, 0, 0, 0)

@@ -9,10 +9,23 @@
         xmlns:controls="clr-namespace:Clowd.Controls"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         DataContext="{Binding RelativeSource={RelativeSource Self}}"
-        mc:Ignorable="d" SnapsToDevicePixels="True"
+        mc:Ignorable="d" 
+        SnapsToDevicePixels="True"
         Icon="/Images/default.ico"
-        WindowStyle="None" ResizeMode="NoResize" Topmost="True"
-        Title="Capture" Height="500" Width="500">
+        WindowStyle="None" 
+        ResizeMode="NoResize" 
+        Topmost="False"
+        Title="Clowd Capture" 
+        Left="0"
+        Top="0"
+        Height="100" 
+        Width="100"
+        AllowsTransparency="True"
+        ShowInTaskbar="False"
+        >
+    <Window.Background>
+        <SolidColorBrush Color="#FFB0B0B0" Opacity="0.00" />
+    </Window.Background>
     <Window.Resources>
         <lib:ToolTypeConverter x:Key="convToolType"/>
         <conv:ColorToBrushConverter x:Key="convColorToBrush"/>
@@ -72,7 +85,7 @@
         <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyExecuted" />
         <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />
     </Window.CommandBindings>
-    <Grid Name="rootGrid" Cursor="{Binding CanvasCursor}">
+    <Grid Name="rootGrid" Cursor="{Binding CanvasCursor}" Visibility="Collapsed">
         <Image Name="imageBackground"  Source="{Binding GrayScreenImage}" Stretch="Fill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
         <Rectangle Fill="#77000000" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
         <Image Name="imageForeground"  Source="{Binding ScreenImage}" Stretch="Fill"
@@ -93,6 +106,19 @@
                     <RectangleGeometry Rect="{Binding CroppingRectangleWpf}"/>
                 </Canvas.Clip>
             </Canvas>
+            <Grid>
+                <Border Name="ButtonBorder"
+                                 BorderThickness="2"
+                                    Margin="-1"
+                                 Background="Transparent"
+                                 BorderBrush="{StaticResource HighlightBrush}">
+                </Border>
+                <Rectangle Name="rectangle"
+                                 Stroke="#A5FFFFFF"
+                                    Margin="-1"
+                                 StrokeThickness="2"
+                                 StrokeDashArray="4 4"/>
+            </Grid>
             <UserControl Name="selectionBorder"
                      Width="{Binding CroppingRectangleWpf.Width}"
                      Height="{Binding CroppingRectangleWpf.Height}"
@@ -101,7 +127,7 @@
                 <UserControl.Template>
                     <ControlTemplate TargetType="{x:Type UserControl}">
                         <ControlTemplate.Resources>
-                            <Storyboard x:Key="BorderDashAnimation" x:Name="BorderDashAnimation" RepeatBehavior="Forever">
+                            <Storyboard x:Key="BorderDashAnimation" x:Name="BorderDashAnimation" RepeatBehavior="Forever" >
                                 <DoubleAnimationUsingKeyFrames BeginTime="00:00:00"
                                  Storyboard.TargetName="rectangle"
                                  Storyboard.TargetProperty="(Shape.StrokeDashOffset)">
@@ -126,11 +152,11 @@
                                  StrokeThickness="2"
                                  StrokeDashArray="4 4"/>
                         </Grid>
-                        <ControlTemplate.Triggers>
+                        <!--<ControlTemplate.Triggers>
                             <EventTrigger RoutedEvent="Loaded">
                                 <BeginStoryboard Storyboard="{StaticResource BorderDashAnimation}"/>
                             </EventTrigger>
-                        </ControlTemplate.Triggers>
+                        </ControlTemplate.Triggers>-->
                     </ControlTemplate>
                 </UserControl.Template>
             </UserControl>
