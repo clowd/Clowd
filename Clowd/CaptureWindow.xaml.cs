@@ -1,4 +1,5 @@
 ﻿using Clowd.Controls;
+using Clowd.Interop;
 using Clowd.Utilities;
 using Microsoft.Win32;
 using ScreenVersusWpf;
@@ -14,6 +15,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 
 namespace Clowd
@@ -89,22 +91,14 @@ namespace Clowd
                 GrayScreenImage = new FormatConvertedBitmap(ScreenImage, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
             }
 
-            var primary = ScreenTools.Screens.First().Bounds;
-            var virt = ScreenTools.VirtualScreen.Bounds;
-            // WPF makes some fairly inconvenient DPI conversions to Left and Top which have also changed between NET 4.5 and 4.8; just use WinAPI instead of de-converting them
-            Interop.USER32.SetWindowPos(this.Handle, 0, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.SHOWWINDOW);
-            Interop.USER32.SetForegroundWindow(this.Handle);
+            Storyboard sb = this.FindResource("BorderDashAnimation") as Storyboard;
+            sb.Begin();
 
-            //var asd = LogicalTreeHelper.FindLogicalNode(selectionBorder.Template, "rectange");
+            RootGrid_MouseMove(null, null);
+            crosshair.ForceRender();
 
-            selectionBorder.ApplyTemplate();
-            var aa = selectionBorder.FindName("rectangle");
-            var rectangle = selectionBorder.Template.FindName("rectange", selectionBorder);
-            var dashAnimation = (System.Windows.Media.Animation.Storyboard)selectionBorder.Template.Resources["BorderDashAnimation"];
-
-            UpdateCanvasMode(true);
-            dashAnimation.Begin();
             rootGrid.Visibility = Visibility.Visible;
+            USER32.SetForegroundWindow(this.Handle);
         }
 
         private void CaptureWindow_SourceInitialized(object sender, EventArgs e)
@@ -121,6 +115,13 @@ namespace Clowd
         }
         private void CaptureWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            var primary = ScreenTools.Screens.First().Bounds;
+            var virt = ScreenTools.VirtualScreen.Bounds;
+            // WPF makes some fairly inconvenient DPI conversions to Left and Top which have also changed between NET 4.5 and 4.8; just use WinAPI instead of de-converting them
+            Interop.USER32.SetWindowPos(this.Handle, 0, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.SHOWWINDOW);
+            Interop.USER32.SetForegroundWindow(this.Handle);
+            UpdateCanvasMode(true);
+
             //_readyWindow.UpdateCanvasMode(true);
 
             //if (initialRegion != null)
