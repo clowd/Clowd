@@ -1,7 +1,8 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:local="clr-namespace:Clowd.Controls">
-    <Style TargetType="Window" x:Key="CustomWindowTitleBar">
+﻿<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Clowd.Controls">
+    <Style x:Key="CustomWindowTitleBar" TargetType="Window">
         <Setter Property="WindowChrome.WindowChrome">
             <Setter.Value>
                 <WindowChrome CaptionHeight="{x:Static SystemParameters.CaptionHeight}" />
@@ -11,21 +12,28 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Window">
                     <DockPanel LastChildFill="True">
-                        <Border Background="LightBlue" DockPanel.Dock="Top" 
-                            Height="{x:Static SystemParameters.CaptionHeight}" x:Name="titlebar">
+                        <Border
+                            x:Name="titlebar"
+                            Height="{x:Static SystemParameters.CaptionHeight}"
+                            Background="LightBlue"
+                            DockPanel.Dock="Top">
                             <Grid>
-                                <TextBlock Text="{TemplateBinding Title}" 
-                                        Margin="10,0,0,0"
-                                        VerticalAlignment="Center">
+                                <TextBlock
+                                    Margin="10,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Text="{TemplateBinding Title}">
                                     <TextBlock.Effect>
-                                        <DropShadowEffect Color="White" ShadowDepth="3"/>
+                                        <DropShadowEffect ShadowDepth="3" Color="White" />
                                     </TextBlock.Effect>
                                 </TextBlock>
                             </Grid>
                         </Border>
-                        <Border Background="{TemplateBinding Background}" BorderBrush="LightGray" 
-                            BorderThickness="1" Padding="4">
-                            <ContentPresenter/>
+                        <Border
+                            Padding="4"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="LightGray"
+                            BorderThickness="1">
+                            <ContentPresenter />
                         </Border>
                     </DockPanel>
                 </ControlTemplate>

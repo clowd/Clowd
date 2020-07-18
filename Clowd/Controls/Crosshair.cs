@@ -50,10 +50,16 @@ namespace Clowd.Controls
             this.PreviewMouseMove += OnPreviewMouseMove;
         }
 
+        public void ForceRender()
+        {
+            var currentPoint = ScreenTools.GetMousePosition();
+            var currentPointWpf = currentPoint.ToWpfPoint();
+            Draw(currentPointWpf, new WpfRect(0, 0, this.ActualWidth, this.ActualHeight));
+        }
+
         private void OnPreviewMouseMove(object sender, MouseEventArgs e)
         {
-            var sys = e.GetPosition(this);
-            Draw(sys);
+            ForceRender();
         }
 
         protected override HitTestResult HitTestCore(PointHitTestParameters hitTestParameters)
