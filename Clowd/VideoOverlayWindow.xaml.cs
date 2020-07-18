@@ -41,7 +41,6 @@ namespace Clowd
             InitializeComponent();
             this.SourceInitialized += VideoOverlayWindow_SourceInitialized;
             this.Loaded += VideoOverlayWindow_Loaded;
-            Width = Height = 1; // the window becomes visible very briefly before it's redrawn with the captured screenshot; this makes it unnoticeable
 
             _recording = new LiveScreenRecording(captureArea.ToSystem());
 

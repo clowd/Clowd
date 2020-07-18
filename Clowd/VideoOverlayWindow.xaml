@@ -4,13 +4,19 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Clowd"
-        mc:Ignorable="d"
-        Title="VideoOverlayWindow" Height="450" Width="800"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Topmost="True"
-        SnapsToDevicePixels="True"
         DataContext="{Binding RelativeSource={RelativeSource Self}}"
+        mc:Ignorable="d" 
+        SnapsToDevicePixels="True"
+        Icon="/Images/default.ico"
+        WindowStyle="None" 
+        ResizeMode="NoResize" 
+        Topmost="True"
+        Title="Clowd Capture" 
+        Left="0"
+        Top="0"
+        Height="1" 
+        Width="1"
+        AllowsTransparency="True"
         ShowInTaskbar="False"
         >
     <Window.Background>
@@ -132,6 +138,6 @@
                 </TextBlock>
             </Grid>
         </Canvas>
-        
+
     </Grid>
 </Window>
