@@ -16,6 +16,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using Clowd.Interop.Com;
 using System.Threading;
+using System.Diagnostics;
 
 namespace Clowd.Utilities
 {
@@ -69,14 +70,15 @@ namespace Clowd.Utilities
         {
             var ths = new WindowFinder2();
 
+            ths._cachedWindows.Clear();
+            USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(ths.EvalWindow);
+            USER32.EnumWindows(enumWindowsProc, IntPtr.Zero);
+            ths._hWndsAlreadyProcessed.Clear();
+            ths.CalculateVisibilityMetadata();
+            ths.MetadataReady = true;
+
             Task.Factory.StartNew(() =>
             {
-                ths._cachedWindows.Clear();
-                USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(ths.EvalWindow);
-                USER32.EnumWindows(enumWindowsProc, IntPtr.Zero);
-                ths._hWndsAlreadyProcessed.Clear();
-                ths.CalculateVisibilityMetadata();
-                ths.MetadataReady = true;
                 ths.PopulateWindowBitmaps();
                 ths.BitmapsReady = true;
             }, TaskCreationOptions.LongRunning);
@@ -127,6 +129,10 @@ namespace Clowd.Utilities
                 if (processId == _myProcessId)
                 {
                     var window = System.Windows.Interop.HwndSource.FromHwnd(hWnd)?.RootVisual;
+                    // ignore WPF debugging windows created by VS
+                    if (window.GetType().AssemblyQualifiedName.Contains("Microsoft.VisualStudio.DesignTools"))
+                        return true;
+                    // ignore my own fullscreen windows
                     if (window is CaptureWindow || window is VideoOverlayWindow)
                         return true;
                 }
@@ -286,9 +292,9 @@ namespace Clowd.Utilities
                     Thread t = new Thread(new ThreadStart(() => { c.CaptureWindowBitmap(); }));
                     t.Start();
                     t.Join(1000);
+                    Console.WriteLine("bmp done");
                     if (!t.IsAlive)
                         return;
-
                     // the thread is taking too long, ie, stuck in a blocking operation that will never return (perhaps if the window never responds to our WM_PAINT message)
                     t.Interrupt();
                     t.Join(200);
