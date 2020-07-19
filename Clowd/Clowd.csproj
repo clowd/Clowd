@@ -141,6 +141,9 @@
     <Compile Include="CaptureWindow.xaml.cs">
       <DependentUpon>CaptureWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="CaptureWindow2.xaml.cs">
+      <DependentUpon>CaptureWindow2.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Controls\CornerClippingBorder.cs" />
     <Compile Include="Controls\Crosshair.cs" />
     <Compile Include="Controls\FFMpegCodecSettingsEditor.cs" />
@@ -244,6 +247,10 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="CaptureWindow2.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="ImageEditorPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

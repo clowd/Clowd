@@ -61,6 +61,9 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+
+
+
             base.OnStartup(e);
             SetupExceptionHandling();
 
@@ -172,10 +175,6 @@ namespace Clowd
             }
 
             FinishInit();
-
-#if (!DEBUG)
-            SetupUpdateTimer();
-#endif
         }
         protected override void OnExit(ExitEventArgs e)
         {
@@ -579,12 +578,12 @@ namespace Clowd
                 OnCommandLineArgsReceived(this, new CommandLineEventArgs(_args));
             }
         }
-        public async void StartCapture(ScreenRect? region = null)
+        public void StartCapture(ScreenRect? region = null)
         {
             if (!_initialized)
                 return;
 
-            CaptureWindow.ShowNewCapture();
+            CaptureWindow2.ShowNewCapture();
         }
         public void QuickCaptureFullScreen()
         {

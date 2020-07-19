@@ -88,13 +88,13 @@ namespace Clowd.Utilities
         public CachedWindow GetWindowThatContainsPoint(ScreenPoint point)
         {
             if (!MetadataReady)
-                return new CachedWindow();
+                return null;
 
             foreach (var window in _cachedWindows)
                 if (window.ImageBoundsRect.Contains(point))
                     return window;
 
-            return new CachedWindow();
+            return null;
         }
         public CachedWindow GetTopLevelWindow(CachedWindow child)
         {
@@ -133,7 +133,7 @@ namespace Clowd.Utilities
                     if (window.GetType().AssemblyQualifiedName.Contains("Microsoft.VisualStudio.DesignTools"))
                         return true;
                     // ignore my own fullscreen windows
-                    if (window is CaptureWindow || window is VideoOverlayWindow)
+                    if (window is CaptureWindow || window is VideoOverlayWindow || window is CaptureWindow2)
                         return true;
                 }
 
