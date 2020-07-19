@@ -1,0 +1,53 @@
+﻿<Window
+    x:Class="Clowd.CaptureWindow2"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Clowd Capture"
+    Width="100"
+    Height="100"
+    AllowsTransparency="True"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    Icon="/Images/default.ico"
+    Left="0"
+    ResizeMode="NoResize"
+    ShowInTaskbar="True"
+    SnapsToDevicePixels="True"
+    Top="0"
+    Topmost="False"
+    WindowStyle="None"
+    mc:Ignorable="d">
+    <Window.Resources>
+        <RoutedCommand x:Key="Command.Upload" />
+        <RoutedCommand x:Key="Command.Photo" />
+        <RoutedCommand x:Key="Command.Video" />
+        <RoutedCommand x:Key="Command.Reset" />
+        <RoutedCommand x:Key="Command.SelectScreen" />
+        <RoutedCommand x:Key="Command.ToggleMagnifier" />
+    </Window.Resources>
+    <Window.InputBindings>
+        <KeyBinding Key="U" Command="{StaticResource Command.Upload}" />
+        <KeyBinding Key="P" Command="{StaticResource Command.Photo}" />
+        <KeyBinding Key="Enter" Command="{StaticResource Command.Photo}" />
+        <KeyBinding Key="V" Command="{StaticResource Command.Video}" />
+        <KeyBinding Key="R" Command="{StaticResource Command.Reset}" />
+        <KeyBinding Key="F" Command="{StaticResource Command.SelectScreen}" />
+        <KeyBinding Key="M" Command="{StaticResource Command.ToggleMagnifier}" />
+        <KeyBinding Key="C" Command="ApplicationCommands.Copy" />
+        <KeyBinding Key="S" Command="ApplicationCommands.SaveAs" />
+        <KeyBinding Key="Escape" Command="ApplicationCommands.Close" />
+    </Window.InputBindings>
+    <Window.CommandBindings>
+        <!--<CommandBinding Command="{StaticResource Command.Upload}" Executed="UploadExecuted" />
+        <CommandBinding Command="{StaticResource Command.Photo}" Executed="PhotoExecuted" />
+        <CommandBinding Command="{StaticResource Command.Video}" Executed="VideoExecuted" />
+        <CommandBinding Command="{StaticResource Command.Reset}" Executed="ResetExecuted" />
+        <CommandBinding Command="{StaticResource Command.SelectScreen}" Executed="SelectScreenExecuted" />
+        <CommandBinding Command="{StaticResource Command.ToggleMagnifier}" Executed="ToggleMagnifierExecuted" />
+        <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyExecuted" />
+        <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />-->
+        <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
+    </Window.CommandBindings>
+</Window>
