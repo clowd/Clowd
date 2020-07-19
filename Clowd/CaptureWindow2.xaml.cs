@@ -146,7 +146,7 @@ namespace Clowd
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - create handle");
             var hWnd = new WindowInteropHelper(_readyWindow).EnsureHandle();
-            //USER32.SetWindowPos(hWnd, SWP_HWND.HWND_BOTTOM, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
+            USER32.SetWindowPos(hWnd, SWP_HWND.HWND_BOTTOM, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - create handle success");
 
             await Task.WhenAll(step1);
@@ -169,10 +169,10 @@ namespace Clowd
             _readyWindow.fastCapturer.StartFastCapture_Part3(sw);
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - showing...");
-            _readyWindow.Left = ScreenTools.ScreenToWpf(-primary.Left);
-            _readyWindow.Top = ScreenTools.ScreenToWpf(-primary.Top);
-            _readyWindow.Width = ScreenTools.ScreenToWpf(virt.Width);
-            _readyWindow.Height = ScreenTools.ScreenToWpf(virt.Height);
+            //_readyWindow.Left = ScreenTools.ScreenToWpf(-primary.Left);
+            //_readyWindow.Top = ScreenTools.ScreenToWpf(-primary.Top);
+            //_readyWindow.Width = ScreenTools.ScreenToWpf(virt.Width);
+            //_readyWindow.Height = ScreenTools.ScreenToWpf(virt.Height);
             if (!Debugger.IsAttached) _readyWindow.Topmost = true;
             _readyWindow.ContentRendered += (s, e) =>
             {
