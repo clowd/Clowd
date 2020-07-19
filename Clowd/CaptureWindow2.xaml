@@ -6,8 +6,8 @@
     xmlns:local="clr-namespace:Clowd"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="Clowd Capture"
-    Width="100"
-    Height="100"
+    Width="1"
+    Height="1"
     AllowsTransparency="True"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     Icon="/Images/default.ico"
@@ -19,6 +19,9 @@
     Topmost="False"
     WindowStyle="None"
     mc:Ignorable="d">
+    <Window.Background>
+        <SolidColorBrush Opacity="0.00" Color="#FFFFFF" />
+    </Window.Background>
     <Window.Resources>
         <RoutedCommand x:Key="Command.Upload" />
         <RoutedCommand x:Key="Command.Photo" />
@@ -50,4 +53,5 @@
         <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />-->
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
     </Window.CommandBindings>
+    <local:ReallyFastCaptureRenderer x:Name="fastCapturer" />
 </Window>
