@@ -7,22 +7,14 @@
     xmlns:local="clr-namespace:Clowd"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="Clowd Capture"
-    Width="1"
-    Height="1"
-    AllowsTransparency="True"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     Icon="/Images/default.ico"
-    Left="0"
     ResizeMode="NoResize"
     ShowActivated="False"
-    ShowInTaskbar="True"
-    Top="0"
+    ShowInTaskbar="False"
     Topmost="False"
     WindowStyle="None"
     mc:Ignorable="d">
-    <Window.Background>
-        <SolidColorBrush Opacity="0.00" Color="#FFFFFF" />
-    </Window.Background>
     <Window.Resources>
         <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
         <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />
