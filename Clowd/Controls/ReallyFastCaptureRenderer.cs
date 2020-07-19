@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -102,7 +102,7 @@ namespace Clowd
             _backgroundImage = new DrawingVisual();
             _foregroundImage = new DrawingVisual();
             _crosshair = new DrawingVisual();
-            _magnifier = new DrawingVisual();
+            _magnifier = new MyDrawingVisual();
 
             _visuals = new VisualCollection(this);
             _visuals.Add(_backgroundImage);
@@ -623,6 +623,14 @@ namespace Clowd
             TopRight,
             BottomLeft,
             BottomRight
+        }
+
+        private class MyDrawingVisual : DrawingVisual
+        {
+            public MyDrawingVisual()
+            {
+                VisualBitmapScalingMode = BitmapScalingMode.NearestNeighbor;
+            }
         }
     }
 }
