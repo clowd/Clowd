@@ -148,7 +148,6 @@
     <Compile Include="Controls\Crosshair.cs" />
     <Compile Include="Controls\FFMpegCodecSettingsEditor.cs" />
     <Compile Include="Controls\GlobalTriggerEditor.cs" />
-    <Compile Include="Controls\InteropWindow.cs" />
     <Compile Include="Controls\PixelMagnifier.cs" />
     <Compile Include="Controls\ReallyFastCaptureRenderer.cs" />
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />

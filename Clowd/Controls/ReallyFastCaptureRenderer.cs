@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -35,7 +36,7 @@ namespace Clowd
             set { SetValue(IsCapturingProperty, value); }
         }
         public static readonly DependencyProperty IsCapturingProperty =
-            DependencyProperty.Register(nameof(IsCapturing), typeof(bool), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(false));
+            DependencyProperty.Register(nameof(IsCapturing), typeof(bool), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(true));
 
         public Color AccentColor
         {
@@ -126,20 +127,60 @@ namespace Clowd
             _finderSize = (_singlePixelSize * _zoomedPixels).ToWpfSize();
         }
 
-        public void DoFastCapture()
+        public void StartFastCapture_Part1(Stopwatch sw)
         {
-            if (_windowFinder != null)
-                return;
-
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part1 start (windowfinder)");
             _windowFinder = WindowFinder2.NewCapture();
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part1 complete (windowfinder)");
+        }
+
+        public void StartFastCapture_Part2(Stopwatch sw)
+        {
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part2 start (gdigrab)");
             using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
             {
                 _image = source.ToBitmapSource();
-                _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
             }
-
-            Reset();
+            _image.Freeze();
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part2 complete (gdigrab)");
         }
+
+        public void StartFastCapture_Part3(Stopwatch sw)
+        {
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part3 start (render)");
+            _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
+            Reset();
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part3 complete (render)");
+        }
+
+        public void StartFastCapture_Part4(Stopwatch sw)
+        {
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part4 start (bitmaps)");
+            _windowFinder.PopulateWindowBitmaps_Async();
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part4 complete (bitmaps)");
+        }
+
+        //public void DoFastCapture(Stopwatch sw)
+        //{
+        //    if (_windowFinder != null)
+        //        return;
+
+        //    _windowFinder = WindowFinder2.NewCapture();
+
+
+        //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - WindowFinder2 returns");
+
+
+        //    using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+        //    {
+        //        _image = source.ToBitmapSource();
+        //        _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
+        //    }
+
+        //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Bitmaps Captured");
+
+        //    Reset();
+        //}
 
         public void Reset()
         {
