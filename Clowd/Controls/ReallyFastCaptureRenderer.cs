@@ -62,8 +62,7 @@ namespace Clowd
         private static void SelectionRectangleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (ReallyFastCaptureRenderer)d;
-            ths._boundsPromotedWindow = null;
-            ths._imagePromotedWindow = null;
+            ths._selectedWindow = null;
             ths.DrawForegroundImage();
         }
 
@@ -72,12 +71,10 @@ namespace Clowd
 
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(0x77, 0, 0, 0));
 
+        WindowFinder2.CachedWindow _selectedWindow;
         WindowFinder2 _windowFinder;
         BitmapSource _image;
         BitmapSource _imageGray;
-
-        ScreenRect? _boundsPromotedWindow;
-        BitmapSource _imagePromotedWindow;
 
         VisualCollection _visuals;
         DrawingVisual _backgroundImage;
@@ -127,68 +124,49 @@ namespace Clowd
             _finderSize = (_singlePixelSize * _zoomedPixels).ToWpfSize();
         }
 
-        public void StartFastCapture_Part1(Stopwatch sw)
+        public async Task StartFastCapture(Stopwatch sw)
         {
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part1 start (windowfinder)");
-            _windowFinder = WindowFinder2.NewCapture();
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part1 complete (windowfinder)");
-        }
-
-        public void StartFastCapture_Part2(Stopwatch sw)
-        {
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part2 start (gdigrab)");
-            using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+            var tsk1 = Task.Run(() =>
             {
-                _image = source.ToBitmapSource();
-            }
-            _image.Freeze();
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part2 complete (gdigrab)");
-        }
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#1) Wnd Enum Start");
+                _windowFinder = WindowFinder2.NewCapture();
+                _windowFinder.PropertyChanged += (s, e) =>
+                {
+                    this.Dispatcher.Invoke(DrawForegroundImage, System.Windows.Threading.DispatcherPriority.Render);
+                };
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#1) Wnd Enum End");
+            });
 
-        public void StartFastCapture_Part3(Stopwatch sw)
-        {
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part3 start (render)");
+            var tsk2 = Task.Run(() =>
+            {
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Capture Start");
+                using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
+                {
+                    _image = source.ToBitmapSource();
+                }
+                _image.Freeze();
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Capture End");
+            });
+
+            await Task.WhenAll(tsk1, tsk2);
+
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render Start");
             _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
             Reset();
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part3 complete (render)");
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render End");
         }
 
-        public void StartFastCapture_Part4(Stopwatch sw)
+        public void FinishFastCapture()
         {
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part4 start (bitmaps)");
-            _windowFinder.PopulateWindowBitmaps_Async();
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Part4 complete (bitmaps)");
+            _windowFinder.PopulateWindowBitmapsInBackground();
         }
-
-        //public void DoFastCapture(Stopwatch sw)
-        //{
-        //    if (_windowFinder != null)
-        //        return;
-
-        //    _windowFinder = WindowFinder2.NewCapture();
-
-
-        //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - WindowFinder2 returns");
-
-
-        //    using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
-        //    {
-        //        _image = source.ToBitmapSource();
-        //        _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
-        //    }
-
-        //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Bitmaps Captured");
-
-        //    Reset();
-        //}
 
         public void Reset()
         {
             if (IsCapturing)
                 return;
 
-            _imagePromotedWindow = null;
-            _boundsPromotedWindow = null;
+            _selectedWindow = null;
             _dragBegin = null;
             IsCapturing = true;
             this.Cursor = Cursors.None;
@@ -249,11 +227,11 @@ namespace Clowd
         {
             var rect = SelectionRectangle.ToScreenRect();
 
-            if (_imagePromotedWindow != null && _boundsPromotedWindow.HasValue)
+            if (_selectedWindow != null && _selectedWindow.WindowBitmapWpf != null)
             {
-                var pwinrect = _boundsPromotedWindow.Value;
+                var pwinrect = _selectedWindow.WindowRect;
                 rect = new ScreenRect(rect.Left - pwinrect.Left, rect.Top - pwinrect.Top, rect.Width, rect.Height);
-                return new CroppedBitmap(_imagePromotedWindow, rect);
+                return new CroppedBitmap(_selectedWindow.WindowBitmapWpf, rect);
             }
             else
             {
@@ -339,14 +317,9 @@ namespace Clowd
                     SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
 
                     // bring bitmap of window to front if we can
-                    if (_windowFinder.BitmapsReady && window.IsPartiallyCovered)
+                    if (window.IsPartiallyCovered)
                     {
-                        var parent = _windowFinder.GetTopLevelWindow(window);
-                        if (parent.WindowBitmapWpf != null)
-                        {
-                            _imagePromotedWindow = parent.WindowBitmapWpf;
-                            _boundsPromotedWindow = parent.WindowRect;
-                        }
+                        _selectedWindow = _windowFinder.GetTopLevelWindow(window);
                     }
                 }
             }
@@ -370,10 +343,10 @@ namespace Clowd
                     var clipRect = new Rect(clip.Left, clip.Top, clip.Width, clip.Height);
                     context.PushClip(new RectangleGeometry(clipRect));
 
-                    if (_imagePromotedWindow != null && _boundsPromotedWindow != null)
+                    if (_selectedWindow != null && _selectedWindow.WindowBitmapWpf != null)
                     {
-                        var proBounds = _boundsPromotedWindow.Value.ToWpfRect();
-                        context.DrawImage(_imagePromotedWindow, new Rect(proBounds.Left, proBounds.Top, proBounds.Width, proBounds.Height));
+                        var proBounds = _selectedWindow.WindowRect.ToWpfRect();
+                        context.DrawImage(_selectedWindow.WindowBitmapWpf, new Rect(proBounds.Left, proBounds.Top, proBounds.Width, proBounds.Height));
                     }
                     else
                     {
