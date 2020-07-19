@@ -74,6 +74,8 @@ namespace Clowd
             ths.ManageSelectionResizeHandlers(!currently);
             if (!currently)
                 ths.UpdateButtonBarPosition();
+
+            ths.toolActionBar.Visibility = ths._initialized && !currently ? Visibility.Visible : Visibility.Hidden;
         }
 
         public double SharpLineWidth { get; set; }
@@ -87,6 +89,7 @@ namespace Clowd
         }
 
         private bool _adornerRegistered = false;
+        private bool _initialized = false;
 
         private static CaptureWindow2 _readyWindow;
         public static async void ShowNewCapture()
@@ -182,6 +185,7 @@ namespace Clowd
                 _readyWindow.fastCapturer.StartFastCapture_Part4(sw);
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - DONE");
                 sw.Stop();
+                _readyWindow._initialized = true;
             };
             _readyWindow.Show();
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - show complete");
