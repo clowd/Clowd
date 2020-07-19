@@ -16,7 +16,6 @@
     ResizeMode="NoResize"
     ShowActivated="False"
     ShowInTaskbar="False"
-    SnapsToDevicePixels="True"
     Top="0"
     Topmost="False"
     WindowStyle="None"
@@ -99,21 +98,20 @@
         <KeyBinding Key="Escape" Command="ApplicationCommands.Close" />
     </Window.InputBindings>
     <Window.CommandBindings>
-        <!--<CommandBinding Command="{StaticResource Command.Upload}" Executed="UploadExecuted" />
+        <CommandBinding Command="{StaticResource Command.Upload}" Executed="UploadExecuted" />
         <CommandBinding Command="{StaticResource Command.Photo}" Executed="PhotoExecuted" />
         <CommandBinding Command="{StaticResource Command.Video}" Executed="VideoExecuted" />
         <CommandBinding Command="{StaticResource Command.Reset}" Executed="ResetExecuted" />
         <CommandBinding Command="{StaticResource Command.SelectScreen}" Executed="SelectScreenExecuted" />
         <CommandBinding Command="{StaticResource Command.ToggleMagnifier}" Executed="ToggleMagnifierExecuted" />
         <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyExecuted" />
-        <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />-->
+        <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
     </Window.CommandBindings>
     <Canvas x:Name="rootGrid">
         <local:ReallyFastCaptureRenderer
             x:Name="fastCapturer"
             AccentColor="{StaticResource HighlightColor}"
-            Cursor="None"
             IsCapturing="{Binding IsCapturing, Mode=TwoWay}"
             SelectionRectangle="{Binding SelectionRectangle, Mode=TwoWay}" />
         <Grid
@@ -124,18 +122,16 @@
             Height="{Binding SelectionRectangle.Height}"
             IsHitTestVisible="False"
             Visibility="Collapsed">
-            <Border
-                Name="crectBottom"
-                Margin="-1"
-                Background="Transparent"
-                BorderBrush="{StaticResource HighlightBrush}"
-                BorderThickness="2" />
+            <Rectangle
+                x:Name="crectBottom"
+                Fill="Transparent"
+                Stroke="{StaticResource HighlightBrush}"
+                StrokeThickness="{Binding SharpLineWidth}" />
             <Rectangle
                 Name="crectTop"
-                Margin="-1"
                 Stroke="#A5FFFFFF"
-                StrokeDashArray="4 4"
-                StrokeThickness="2" />
+                StrokeDashArray="8 8"
+                StrokeThickness="{Binding SharpLineWidth}" />
         </Grid>
         <Border
             Name="toolActionBar"

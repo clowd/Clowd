@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -42,10 +42,22 @@ namespace Clowd
             get { return (Color)GetValue(AccentColorProperty); }
             set { SetValue(AccentColorProperty, value); }
         }
-
         public static readonly DependencyProperty AccentColorProperty =
             DependencyProperty.Register(nameof(AccentColor), typeof(Color), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(default(Color)));
 
+        public bool ShowMagnifier
+        {
+            get { return (bool)GetValue(ShowMagnifierProperty); }
+            set { SetValue(ShowMagnifierProperty, value); }
+        }
+        public static readonly DependencyProperty ShowMagnifierProperty =
+            DependencyProperty.Register(nameof(ShowMagnifier), typeof(bool), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(true, ShowMagnifierChanged));
+
+        private static void ShowMagnifierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var ths = (ReallyFastCaptureRenderer)d;
+            ths.DrawMagnifier();
+        }
         private static void SelectionRectangleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (ReallyFastCaptureRenderer)d;
@@ -136,6 +148,7 @@ namespace Clowd
 
             _imagePromotedWindow = null;
             _boundsPromotedWindow = null;
+            _dragBegin = null;
             IsCapturing = true;
             this.Cursor = Cursors.None;
 
@@ -151,8 +164,53 @@ namespace Clowd
                 var window = _windowFinder?.GetWindowThatContainsPoint(currentPoint);
                 SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
             }
+            else
+            {
+                SelectionRectangle = default(WpfRect);
+            }
 
             DrawCrosshair();
+        }
+
+        public void SelectScreen()
+        {
+            if (_dragBegin.HasValue || !IsCapturing)
+                return;
+
+            var screenContainingMouse = ScreenTools.GetScreenContaining(ScreenTools.GetMousePosition()).Bounds;
+            SelectionRectangle = screenContainingMouse.ToWpfRect();
+            StopCapture();
+        }
+
+        public void StopCapture()
+        {
+            this.ReleaseMouseCapture();
+
+            IsCapturing = false;
+            this.Cursor = Cursors.Arrow;
+
+            DrawForegroundImage();
+            DrawCrosshair();
+
+            this.MouseMove -= CaptureWindow2_MouseMove;
+            this.MouseDown -= CaptureWindow2_MouseDown;
+            this.MouseUp -= CaptureWindow2_MouseUp;
+        }
+
+        public BitmapSource GetSelectedBitmap()
+        {
+            var rect = SelectionRectangle.ToScreenRect();
+
+            if (_imagePromotedWindow != null && _boundsPromotedWindow.HasValue)
+            {
+                var pwinrect = _boundsPromotedWindow.Value;
+                rect = new ScreenRect(rect.Left - pwinrect.Left, rect.Top - pwinrect.Top, rect.Width, rect.Height);
+                return new CroppedBitmap(_imagePromotedWindow, rect);
+            }
+            else
+            {
+                return new CroppedBitmap(_image, rect);
+            }
         }
 
         private void CaptureWindow2_MouseDown(object sender, MouseButtonEventArgs e)
@@ -235,15 +293,7 @@ namespace Clowd
                 }
             }
 
-            IsCapturing = false;
-            this.Cursor = Cursors.Arrow;
-
-            DrawForegroundImage();
-            DrawCrosshair();
-
-            this.MouseMove -= CaptureWindow2_MouseMove;
-            this.MouseDown -= CaptureWindow2_MouseDown;
-            this.MouseUp -= CaptureWindow2_MouseUp;
+            StopCapture();
         }
 
         protected override Visual GetVisualChild(int index) => _visuals[index];
@@ -298,8 +348,8 @@ namespace Clowd
                 var bounds = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
                 var cursor = currentPoint.ToWpfPoint();
                 var offsetHalfPixel = ScreenTools.ScreenToWpf(0.5);
-                var x = Math.Min(cursor.X, bounds.Right) + offsetHalfPixel;
-                var y = Math.Min(cursor.Y, bounds.Bottom) + offsetHalfPixel;
+                var x = ScreenTools.WpfSnapToPixelsFloor(Math.Min(cursor.X, bounds.Right)) + offsetHalfPixel;
+                var y = ScreenTools.WpfSnapToPixelsFloor(Math.Min(cursor.Y, bounds.Bottom)) + offsetHalfPixel;
 
                 context.DrawLine(_sharpWhiteLineDashed, new Point(x, bounds.Top), new Point(x, y - crossRadius));
                 context.DrawLine(_sharpWhiteLineDashed, new Point(x, bounds.Bottom), new Point(x, y + crossRadius));
@@ -318,12 +368,14 @@ namespace Clowd
             }
         }
 
-        private void DrawMagnifier(ScreenPoint location)
+        private void DrawMagnifier(ScreenPoint? currentCursorLocation = null)
         {
             using (DrawingContext g = _magnifier.RenderOpen())
             {
-                if (_image == null || !IsCapturing)
+                if (_image == null || !IsCapturing || !ShowMagnifier)
                     return;
+
+                var location = currentCursorLocation ?? ScreenTools.GetMousePosition();
 
                 var currentPointWpf = location.ToWpfPoint();
                 var positionTransform = PositionWithinAScreen(_finderSize, currentPointWpf, HorizontalAlignment.Right, VerticalAlignment.Bottom, 20);

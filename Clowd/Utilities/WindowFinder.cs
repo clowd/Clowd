@@ -448,7 +448,9 @@ $@"Window Debug Info:
 Title: '{Caption}'
 Class: '{ClassName}'
 Depth: '{Depth}'
-Bounds: '{WindowRect.ToString()}'
+Borders: 'X {info.cxWindowBorders}, Y {info.cyWindowBorders}'
+ActualBounds: '{ScreenRect.FromSystem(info.rcWindow)}'
+CalcBounds: '{WindowRect.ToString()}'
 Style: '{info.dwStyle.ToString()}'
 Ex Style: '{String.Join(" | ", exStyles)}'
 ");
