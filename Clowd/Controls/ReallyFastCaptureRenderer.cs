@@ -162,7 +162,14 @@ namespace Clowd
             if (App.Current.Settings.CaptureSettings.DetectWindows)
             {
                 var window = _windowFinder?.GetWindowThatContainsPoint(currentPoint);
-                SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
+                if (window != null)
+                {
+                    SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
+                }
+                else
+                {
+                    SelectionRectangle = default(WpfRect);
+                }
             }
             else
             {
@@ -238,7 +245,14 @@ namespace Clowd
             else if (App.Current.Settings.CaptureSettings.DetectWindows)
             {
                 var window = _windowFinder?.GetWindowThatContainsPoint(currentPoint);
-                newSelectionWindow = window.ImageBoundsRect.ToWpfRect();
+                if (window != null)
+                {
+                    newSelectionWindow = window.ImageBoundsRect.ToWpfRect();
+                }
+                else
+                {
+                    newSelectionWindow = default(WpfRect);
+                }
             }
             else
             {
@@ -261,39 +275,43 @@ namespace Clowd
                 return; // huh??
 
             var draggingOrigin = _dragBegin.Value;
+            _dragBegin = null;
             var currentMouse = ScreenTools.GetMousePosition();
 
             // if the mouse hasn't moved far, let's treat it like a click event and find out what window they clicked on
             if (DistancePointToPoint(currentMouse.X, currentMouse.Y, draggingOrigin.X, draggingOrigin.Y) < _clickDistance)
             {
                 var window = _windowFinder.GetWindowThatContainsPoint(currentMouse);
-
-                // show debug info if control key is being held while clicking
-                if (Keyboard.IsKeyDown(Key.LeftCtrl))
-                    window.ShowDebug();
-
-                if (window.ImageBoundsRect == ScreenRect.Empty)
+                if (window != null)
                 {
-                    SelectionRectangle = default(WpfRect);
-                    _dragBegin = null;
-                    return;
-                }
+                    // show debug info if control key is being held while clicking
+                    if (Keyboard.IsKeyDown(Key.LeftCtrl))
+                        window.ShowDebug();
 
-                SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
-
-                // bring bitmap of window to front if we can
-                if (_windowFinder.BitmapsReady && window.IsPartiallyCovered)
-                {
-                    var parent = _windowFinder.GetTopLevelWindow(window);
-                    if (parent.WindowBitmapWpf != null)
+                    if (window.ImageBoundsRect == ScreenRect.Empty)
                     {
-                        _imagePromotedWindow = parent.WindowBitmapWpf;
-                        _boundsPromotedWindow = parent.WindowRect;
+                        SelectionRectangle = default(WpfRect);
+                        _dragBegin = null;
+                        return;
+                    }
+
+                    SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
+
+                    // bring bitmap of window to front if we can
+                    if (_windowFinder.BitmapsReady && window.IsPartiallyCovered)
+                    {
+                        var parent = _windowFinder.GetTopLevelWindow(window);
+                        if (parent.WindowBitmapWpf != null)
+                        {
+                            _imagePromotedWindow = parent.WindowBitmapWpf;
+                            _boundsPromotedWindow = parent.WindowRect;
+                        }
                     }
                 }
             }
 
-            StopCapture();
+            if (SelectionRectangle != default(WpfRect))
+                StopCapture();
         }
 
         protected override Visual GetVisualChild(int index) => _visuals[index];
