@@ -492,6 +492,7 @@ namespace Clowd.Interop
     /// <summary>
     /// SetWindowPos Flags
     /// </summary>
+    [Flags]
     public enum SWP : uint
     {
         NOSIZE = 0x0001,

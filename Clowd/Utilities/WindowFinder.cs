@@ -77,14 +77,18 @@ namespace Clowd.Utilities
             ths.CalculateVisibilityMetadata();
             ths.MetadataReady = true;
 
-            Task.Factory.StartNew(() =>
-            {
-                ths.PopulateWindowBitmaps();
-                ths.BitmapsReady = true;
-            }, TaskCreationOptions.LongRunning);
-
             return ths;
         }
+
+        public void PopulateWindowBitmaps_Async()
+        {
+            Task.Factory.StartNew(() =>
+            {
+                PopulateWindowBitmaps_Sync();
+                BitmapsReady = true;
+            }, TaskCreationOptions.LongRunning);
+        }
+
         public CachedWindow GetWindowThatContainsPoint(ScreenPoint point)
         {
             if (!MetadataReady)
@@ -130,7 +134,7 @@ namespace Clowd.Utilities
                 {
                     var window = System.Windows.Interop.HwndSource.FromHwnd(hWnd)?.RootVisual;
                     // ignore WPF debugging windows created by VS
-                    if (window.GetType().AssemblyQualifiedName.Contains("Microsoft.VisualStudio.DesignTools"))
+                    if (window != null && window.GetType().AssemblyQualifiedName.Contains("Microsoft.VisualStudio.DesignTools"))
                         return true;
                     // ignore my own fullscreen windows
                     if (window is CaptureWindow || window is VideoOverlayWindow || window is CaptureWindow2)
@@ -285,10 +289,9 @@ namespace Clowd.Utilities
                     screen.Exclude(rect);
             }
         }
-        private void PopulateWindowBitmaps()
+        private void PopulateWindowBitmaps_Sync()
         {
             var windows = _cachedWindows.Where(w => w.IsVisible && w.Depth == 0 && w.IsPartiallyCovered);
-
             Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (c) =>
             {
                 try
@@ -296,7 +299,6 @@ namespace Clowd.Utilities
                     Thread t = new Thread(new ThreadStart(() => { c.CaptureWindowBitmap(); }));
                     t.Start();
                     t.Join(1000);
-                    Console.WriteLine("bmp done");
                     if (!t.IsAlive)
                         return;
                     // the thread is taking too long, ie, stuck in a blocking operation that will never return (perhaps if the window never responds to our WM_PAINT message)
