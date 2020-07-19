@@ -79,207 +79,55 @@ namespace Clowd
         }
 
         public double SharpLineWidth { get; set; }
-        //public IntPtr Handle;
 
         private CaptureWindow2() : base()
         {
             SharpLineWidth = ScreenTools.WpfSnapToPixelsFloor(1);
             InitializeComponent();
-            //this.Handle = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
         }
 
         private bool _adornerRegistered = false;
         private bool _initialized = false;
-
         private static CaptureWindow2 _readyWindow;
+
         public static async void ShowNewCapture()
         {
             if (_readyWindow != null)
                 return;
-            //void newWin()
-            //{
-            //    _readyWindow = new CaptureWindow2();
-            //    _readyWindow.Show();
-            //    _readyWindow.Closed += (s, e) => newWin();
-            //}
-
-            //if (_readyWindow == null)
-            //{
-            //    // this only occurs the first time the window is ever shown.
-            //    newWin();
-            //}
-            //else if (_readyWindow._shown)
-            //{
-            //    // capture window is currently open already
-            //    return;
-            //}
-
-            //_readyWindow.Closed += (s, e) => newWin();
-            //_readyWindow._shown = true;
 
             Stopwatch sw = new Stopwatch();
             sw.Start();
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - START");
 
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create");
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Start");
             _readyWindow = new CaptureWindow2();
+            var fstCap = _readyWindow.fastCapturer.StartFastCapture(sw);
             _readyWindow.Closed += (s, e) => { _readyWindow = null; };
-            //_readyWindow.ContentRendered += (s, e) => Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - RENDERRRRRRRRRRRRR");
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create success");
-
+            var hWnd = new WindowInteropHelper(_readyWindow).EnsureHandle();
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
-            //var order = System.Diagnostics.Debugger.IsAttached ? Interop.SWP_HWND.HWND_TOP : Interop.SWP_HWND.HWND_TOPMOST;
-
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - bounds calculated");
-
-            //void async_pos()
-            //{
-            //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - asyncresize start");
-            //    Interop.USER32.SetWindowPos(_readyWindow.Handle, order, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.NOACTIVATE | Interop.SWP.ASYNCWINDOWPOS);
-            //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - asyncresize complete");
-            //}
-
-            var step1 = new Task[] {
-                //Task.Run(async_pos),
-                Task.Run(() => _readyWindow.fastCapturer.StartFastCapture_Part1(sw)),
-                Task.Run(() => _readyWindow.fastCapturer.StartFastCapture_Part2(sw)),
-            };
-
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - create handle");
-            var hWnd = new WindowInteropHelper(_readyWindow).EnsureHandle();
             USER32.SetWindowPos(hWnd, SWP_HWND.HWND_BOTTOM, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - create handle success");
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Complete");
 
-            await Task.WhenAll(step1);
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - === preparations complete ===");
+            await fstCap;
 
-            //EventHandler crendered = null;
-            //crendered = (s, e) =>
-            //{
-            //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - CONTENT RENDERED TRIGGERED");
-            //    Interop.USER32.SetForegroundWindow(_readyWindow.Handle);
-            //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - DONE");
-            //    sw.Stop();
-            //    _readyWindow.ContentRendered -= crendered;
-            //};
-            //_readyWindow.ContentRendered += crendered;
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Preparations Complete");
 
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - resize");
-            //Interop.USER32.SetWindowPos(_readyWindow.Handle, order, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.NOACTIVATE | SWP.SHOWWINDOW);
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - resize complete");
-            _readyWindow.fastCapturer.StartFastCapture_Part3(sw);
-
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - showing...");
-            //_readyWindow.Left = ScreenTools.ScreenToWpf(-primary.Left);
-            //_readyWindow.Top = ScreenTools.ScreenToWpf(-primary.Top);
-            //_readyWindow.Width = ScreenTools.ScreenToWpf(virt.Width);
-            //_readyWindow.Height = ScreenTools.ScreenToWpf(virt.Height);
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Showing Window");
             if (!Debugger.IsAttached) _readyWindow.Topmost = true;
-            _readyWindow.ContentRendered += (s, e) =>
+            _readyWindow.ContentRendered += async (s, e) =>
             {
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - activating...");
-                _readyWindow.Activate();
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - activated");
-                _readyWindow.fastCapturer.StartFastCapture_Part4(sw);
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - DONE");
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
                 sw.Stop();
-                _readyWindow._initialized = true;
+                await Task.Delay(100);
+                _readyWindow.fastCapturer.FinishFastCapture();
+
             };
             _readyWindow.Show();
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - show complete");
-
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - force rerender start");
-            //_readyWindow.CaptureWindowBitmap();
-            //_readyWindow.Dispatcher.Invoke(new Action(() => { }), System.Windows.Threading.DispatcherPriority.ContextIdle, null);
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - force rerender complete");
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - set foreground");
-            //Interop.USER32.SetForegroundWindow(_readyWindow.Handle);
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - set foreground complete");
-
-            //_readyWindow.fastCapturer.StartFastCapture_Part4(sw);
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - DONE");
-            //sw.Stop();
-
-
-            //EventHandler crendered = null;
-            //crendered = (s, e) =>
-            //{
-            //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - CONTENT RENDERED TRIGGERED");
-            //    Interop.USER32.SetForegroundWindow(_readyWindow.Handle);
-            //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - DONE");
-            //    sw.Stop();
-            //    _readyWindow.ContentRendered -= crendered;
-            //};
-            //_readyWindow.ContentRendered += crendered;
-            //HwndSource.FromHwnd(_readyWindow.Handle).AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
-            //{
-            //    var mssg = (Interop.WindowMessage)msg;
-            //    if (mssg == Interop.WindowMessage.WM_WINDOWPOSCHANGING)
-            //        Console.WriteLine();
-            //    Console.WriteLine(mssg);
-            //    return IntPtr.Zero;
-            //});
-
-            //_readyWindow.fastCapturer.StartFastCapture_Part3(sw);
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Resizing aaaaa (before)");
-            //Interop.USER32.SetWindowPos(_readyWindow.Handle, Interop.SWP_HWND.HWND_BOTTOM, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.NOACTIVATE);
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Resizing aaaaa (complete)");
-
-            //Interop.USER32.SetWindowPos(_readyWindow.Handle, order, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.NOACTIVATE);
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - force rerender start");
-            //_readyWindow.Dispatcher.Invoke(new Action(() => { }), System.Windows.Threading.DispatcherPriority.ContextIdle, null);
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - force rerender complete");
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Resizing SYNC (before)");
-            //var order = System.Diagnostics.Debugger.IsAttached ? Interop.SWP_HWND.HWND_TOP : Interop.SWP_HWND.HWND_TOPMOST;
-            //Interop.USER32.SetWindowPos(_readyWindow.Handle, order, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.NOACTIVATE);
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Resizing SYNC complete");
-
-            //_readyWindow.fastCapturer.StartFastCapture_Part3(sw);
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - force rerender start");
-            //_readyWindow.UpdateLayout();
-            //DoEvents();
-            //_readyWindow.Dispatcher.Invoke(new Action(() => { }), System.Windows.Threading.DispatcherPriority.SystemIdle, null);
-
-
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - force rerender complete");
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - set foreground");
-            //Interop.USER32.SetForegroundWindow(_readyWindow.Handle);
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - set foreground complete");
-
-            //_readyWindow.fastCapturer.StartFastCapture_Part4(sw);
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - DONE");
-            //sw.Stop();
-
-            //_readyWindow.Close();
-
-            //_readyWindow._shown = true;
-            //_readyWindow.fastCapturer.DoFastCapture(sw);
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Fast capture done");
-
-
-
-            //// we resize/rerender at the bottom of the window stack first, then bring to top afterwards. this removes the perceptible "flicker" that the user sees while the window is resizing.
-
-
-
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Resizing PASS 2 (before)");
-            //var order = System.Diagnostics.Debugger.IsAttached ? Interop.SWP_HWND.HWND_TOP : Interop.SWP_HWND.HWND_TOPMOST;
-            //Interop.USER32.SetWindowPos(_readyWindow.Handle, order, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.SHOWWINDOW);
-            //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Resizing PASS 2");
-            //sw.Stop();
+            _readyWindow._initialized = true;
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Show Complete");
         }
 
         private void ManageSelectionResizeHandlers(bool register)

@@ -79,16 +79,15 @@ namespace Clowd.Utilities
 
             return ths;
         }
-
-        public void PopulateWindowBitmaps_Async()
+        public void PopulateWindowBitmapsInBackground()
         {
-            Task.Factory.StartNew(() =>
+            // run on the thread pool
+            Task.Run(() =>
             {
                 PopulateWindowBitmaps_Sync();
                 BitmapsReady = true;
-            }, TaskCreationOptions.LongRunning);
+            });
         }
-
         public CachedWindow GetWindowThatContainsPoint(ScreenPoint point)
         {
             if (!MetadataReady)
@@ -137,7 +136,7 @@ namespace Clowd.Utilities
                     if (window != null && window.GetType().AssemblyQualifiedName.Contains("Microsoft.VisualStudio.DesignTools"))
                         return true;
                     // ignore my own fullscreen windows
-                    if (window is CaptureWindow || window is VideoOverlayWindow || window is CaptureWindow2)
+                    if (window is VideoOverlayWindow || window is CaptureWindow2)
                         return true;
                 }
 
@@ -291,6 +290,8 @@ namespace Clowd.Utilities
         }
         private void PopulateWindowBitmaps_Sync()
         {
+            // this code feels terrible, but we are blocking on the WndProc of other processes, and if one of those processes is locked or acting poorly
+            // we don't want it to break Clowd.
             var windows = _cachedWindows.Where(w => w.IsVisible && w.Depth == 0 && w.IsPartiallyCovered);
             Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (c) =>
             {
