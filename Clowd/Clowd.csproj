@@ -152,6 +152,7 @@
     <Compile Include="Controls\PixelMagnifier.cs" />
     <Compile Include="Controls\ReallyFastCaptureRenderer.cs" />
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
+    <Compile Include="Converters\SnapToPixelConverter.cs" />
     <Compile Include="Converters\TaskStatusToVisibilityConverter.cs" />
     <Compile Include="Features\AutoStart.cs" />
     <Compile Include="Features\Constants.cs" />

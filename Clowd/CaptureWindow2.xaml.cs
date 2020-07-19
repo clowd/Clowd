@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -16,6 +18,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Clowd.Controls;
 using Clowd.Utilities;
+using Microsoft.Win32;
+using PropertyChanged;
 using ScreenVersusWpf;
 
 namespace Clowd
@@ -68,8 +72,11 @@ namespace Clowd
                 ths.UpdateButtonBarPosition();
         }
 
+        public double SharpLineWidth { get; set; }
+
         private CaptureWindow2()
         {
+            SharpLineWidth = ScreenTools.WpfSnapToPixelsFloor(1);
             InitializeComponent();
         }
 
@@ -112,6 +119,7 @@ namespace Clowd
         {
             if (register && !_adornerRegistered)
             {
+                _adornerRegistered = true;
                 const string template =
     "<ControlTemplate TargetType=\"Thumb\" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\">" +
         "<Grid>" +
@@ -164,6 +172,7 @@ namespace Clowd
 
             if (!register && _adornerRegistered)
             {
+                _adornerRegistered = false;
                 AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
                 Console.WriteLine(adornerLayer);
                 Console.WriteLine(selectionBorder);
@@ -244,9 +253,88 @@ namespace Clowd
             Canvas.SetTop(toolActionBar, indTop);
         }
 
+        private BitmapSource CropBitmap()
+        {
+            return fastCapturer.GetSelectedBitmap();
+        }
+
+        private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            var cropped = CropBitmap();
+            Close();
+
+            var w = TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped));
+            var rectPos = SelectionRectangle;
+            var primaryScreen = ScreenTools.Screens.First().Bounds.ToWpfRect();
+            w.Left = rectPos.Left - primaryScreen.Left - App.Current.Settings.EditorSettings.CapturePadding - 7;
+            w.Top = rectPos.Top - primaryScreen.Top - App.Current.Settings.EditorSettings.CapturePadding - 60;
+            w.Show();
+        }
+        private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            var cropped = CropBitmap();
+            if (ClipboardEx.SetImage(cropped))
+                Close();
+            else
+                MessageBox.Show("Unable to set clipboard data; try again later.");
+        }
+        private void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            var cropped = CropBitmap();
+            SaveFileDialog dlg = new SaveFileDialog();
+            dlg.DefaultExt = ".png";
+            dlg.Filter = "PNG files (.png)|*.png|All files (*.*)|*.*"; // Filter files by extension
+            if (dlg.ShowDialog() == true)
+            {
+                cropped.Save(dlg.FileName, ImageFormat.Png);
+                Close();
+            }
+        }
+        private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            fastCapturer.Reset();
+        }
+        private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            var cropped = CropBitmap();
+            BitmapEncoder encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(cropped));
+            using (var ms = new MemoryStream())
+            {
+                encoder.Save(ms);
+                ms.Position = 0;
+                byte[] b;
+                using (BinaryReader br = new BinaryReader(ms))
+                {
+                    b = br.ReadBytes(Convert.ToInt32(ms.Length));
+                }
+                var task = UploadManager.Upload(b, "clowd-default.png");
+            }
+            this.Close();
+        }
+        private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
+            {
+                MessageBox.Show("Please update your Video output directory in the settings before recording a video");
+            }
+            else
+            {
+                new VideoOverlayWindow(SelectionRectangle.ToScreenRect()).Show();
+                this.Close();
+            }
+        }
+        private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            fastCapturer.SelectScreen();
+        }
         private void CloseExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
+        }
+        private void ToggleMagnifierExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            fastCapturer.ShowMagnifier = !fastCapturer.ShowMagnifier;
         }
     }
 }
