@@ -23,8 +23,8 @@ using System.Windows;
 
 // Version Information
 // Revision and build numbers are auto-incrimented.
-[assembly: AssemblyVersion("2.3.25.633")]
-[assembly: AssemblyFileVersion("2.3.25.633")]
+[assembly: AssemblyVersion("2.3.25.691")]
+[assembly: AssemblyFileVersion("2.3.25.691")]
 [assembly: NeutralResourcesLanguageAttribute("en-US")]
 
 // Assembly Information

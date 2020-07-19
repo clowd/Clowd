@@ -37,6 +37,7 @@ namespace Clowd
         public static bool CanUpload => Current.Settings.UploadSettings.UploadProvider != UploadsProvider.None;
 
         public GeneralSettings Settings { get; private set; }
+        public Color AccentColor { get; private set; }
         public string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
 
         // static instead of const for debugging purposes.
@@ -363,6 +364,7 @@ namespace Clowd
                 this.Resources["IdealForegroundColor"] = Colors.White;
             }
 
+            this.AccentColor = baseColor;
             this.Resources["HighlightColor"] = baseColor;
             this.Resources["AccentColor"] = Color.FromArgb(204, baseColor.R, baseColor.G, baseColor.B); //80%
             this.Resources["AccentColor2"] = Color.FromArgb(153, baseColor.R, baseColor.G, baseColor.B); //60%

@@ -8,13 +8,32 @@ using System.Threading.Tasks;
 
 namespace Clowd.Interop
 {
+    public enum SWP_HWND : int
+    {
+        /// <summary>
+        /// Places the window at the bottom of the Z order. If the hWnd parameter identifies a topmost window, the window loses its topmost status and is placed at the bottom of all other windows.
+        /// </summary>
+        HWND_BOTTOM = 1,
+        /// <summary>
+        /// Places the window above all non-topmost windows (that is, behind all topmost windows). This flag has no effect if the window is already a non-topmost window.
+        /// </summary>
+        HWND_NOTOPMOST = -2,
+        /// <summary>
+        /// Places the window at the top of the Z order.
+        /// </summary>
+        HWND_TOP = 0,
+        /// <summary>
+        /// Places the window above all non-topmost windows. The window maintains its topmost position even when it is deactivated.
+        /// </summary>
+        HWND_TOPMOST = -1,
+    }
     public partial class USER32
     {
         [DllImport("gdi32.dll")]
         public static extern IntPtr CreateDC(string lpszDriver, string lpszDevice, string lpszOutput, IntPtr lpInitData);
 
         [DllImport("user32.dll", EntryPoint = "SetWindowPos")]
-        public static extern IntPtr SetWindowPos(IntPtr hWnd, int hWndInsertAfter, int x, int Y, int cx, int cy, SWP wFlags);
+        public static extern IntPtr SetWindowPos(IntPtr hWnd, SWP_HWND hWndInsertAfter, int x, int Y, int cx, int cy, SWP wFlags);
 
         /// <summary>
         /// An application-defined callback function used with the EnumWindows or EnumDesktopWindows function. It receives top-level window handles. The WNDENUMPROC type defines a pointer to this callback function. EnumWindowsProc is a placeholder for the application-defined function name.
@@ -28,6 +47,9 @@ namespace Clowd.Interop
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr hWnd, ShowWindowCmd nCmdShow);
 
         [DllImport("user32.dll")]
         public static extern IntPtr SetActiveWindow(IntPtr hWnd);
