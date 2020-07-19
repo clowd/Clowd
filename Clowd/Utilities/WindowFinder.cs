@@ -200,6 +200,10 @@ namespace Clowd.Utilities
             {
                 switch (str)
                 {
+                    case "WorkerW":
+                    case "Progman":
+                    case "SHELLDLL_DefView": // windows desktop
+                    case "SysListView32": // windows desktop
                     case "Intermediate D3D Window": // Chrome / Chromium intermediate window
                     case "CEF-OSC-WIDGET": // NVIDIA GeForce Overlay
                     case "EdgeUiInputWndClass":

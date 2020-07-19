@@ -103,16 +103,18 @@ namespace Clowd
                 // capture window is currently open already
                 return;
             }
-
+            
             _readyWindow._shown = true;
             _readyWindow.fastCapturer.DoFastCapture();
 
             // WPF makes some fairly inconvenient DPI conversions to Left and Top which have also changed between NET 4.5 and 4.8; just use WinAPI instead of de-converting them
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
+
+            // we resize/rerender at the bottom of the window stack first, then bring to top afterwards. this removes the perceptible "flicker" that the user sees while the window is resizing.
+            Interop.USER32.SetWindowPos(_readyWindow.Handle, Interop.SWP_HWND.HWND_BOTTOM, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.NOACTIVATE);
             var order = System.Diagnostics.Debugger.IsAttached ? Interop.SWP_HWND.HWND_TOP : Interop.SWP_HWND.HWND_TOPMOST;
-            Interop.USER32.SetWindowPos(_readyWindow.Handle, order, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.NOACTIVATE);
-            Interop.USER32.SetForegroundWindow(_readyWindow.Handle);
+            Interop.USER32.SetWindowPos(_readyWindow.Handle, order, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.SHOWWINDOW);
         }
 
         private void ManageSelectionResizeHandlers(bool register)
