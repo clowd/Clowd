@@ -10,7 +10,6 @@
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     Icon="/Images/default.ico"
     ResizeMode="NoResize"
-    ShowActivated="False"
     ShowInTaskbar="False"
     Topmost="False"
     WindowStyle="None"
