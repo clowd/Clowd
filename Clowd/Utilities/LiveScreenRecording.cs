@@ -15,12 +15,15 @@ namespace Clowd.Utilities
     public class LiveScreenRecording
     {
         public string FileName { get; private set; }
+        public string ConsoleLog => log.ToString();
 
         private readonly Rectangle bounds;
         private readonly VideoSettings settings;
         private readonly FFMpegConverter ffmpeg;
         private Task runner;
         private StringBuilder log = new StringBuilder();
+
+        public event EventHandler<FFMpegLogEventArgs> LogReceived;
 
         public LiveScreenRecording(Rectangle bounds)
         {
@@ -31,23 +34,19 @@ namespace Clowd.Utilities
             {
                 Console.WriteLine(e.Data);
                 log.AppendLine(e.Data);
+                LogReceived?.Invoke(this, e);
             };
 
             //ffmpeg 
             //-f gdigrab -i desktop -framerate 30 -offset_x 10 -offset_y 20 -video_size 640x480 -show_region 1
         }
 
-        public async Task Start()
+        public Task Start()
         {
             var args = String.Join(" ", cli_VideoSource()?.Trim(), cli_FilterGraph()?.Trim(), cli_VideoCodecAndOutput()?.Trim());
 
             // run in a background thread
-            runner = Task.Factory.StartNew(() => ffmpeg.Invoke(args), TaskCreationOptions.LongRunning);
-
-            // wait a bit and then check if we failed to start recording, lets throw an exception
-            await Task.Delay(1000);
-            if (runner.Exception != null)
-                throw runner.Exception;
+            return Task.Factory.StartNew(() => ffmpeg.Invoke(args), TaskCreationOptions.LongRunning);
         }
 
         public async Task Stop()
@@ -81,7 +80,7 @@ namespace Clowd.Utilities
         private string cli_VideoSource()
         {
             //return $"-f gdigrab -framerate {settings.TargetFramesPerSecond} -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 1 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
-            return $"-f gdigrab -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 1 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
+            return $"-f gdigrab -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 0 -drawasd_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
         }
 
         private string cli_VideoCodecAndOutput()
