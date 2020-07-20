@@ -46,7 +46,8 @@ namespace Clowd.Utilities
             var args = String.Join(" ", cli_VideoSource()?.Trim(), cli_FilterGraph()?.Trim(), cli_VideoCodecAndOutput()?.Trim());
 
             // run in a background thread
-            return Task.Factory.StartNew(() => ffmpeg.Invoke(args), TaskCreationOptions.LongRunning);
+            runner = Task.Factory.StartNew(() => ffmpeg.Invoke(args), TaskCreationOptions.LongRunning);
+            return runner;
         }
 
         public async Task Stop()

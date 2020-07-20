@@ -334,6 +334,7 @@ namespace Clowd
         }
         private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            this.Close();
             var cropped = CropBitmap();
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(cropped));
@@ -348,7 +349,6 @@ namespace Clowd
                 }
                 var task = UploadManager.Upload(b, "clowd-default.png");
             }
-            this.Close();
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -358,6 +358,7 @@ namespace Clowd
             }
             else
             {
+                fastCapturer.SetSelectedWindowForeground();
                 new VideoOverlayWindow(SelectionRectangle.ToScreenRect()).Show();
                 this.Close();
             }

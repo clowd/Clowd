@@ -148,9 +148,6 @@ namespace Clowd
         [ExpandAsCategory("Video")]
         public VideoSettings VideoSettings { get; set; } = new VideoSettings();
 
-        [Browsable(false)]
-        public MagnifierSettings MagnifierSettings { get; set; } = new MagnifierSettings();
-
         [Browsable(false), ClassifyNotNull]
         public int[] CustomColors { get; set; } = new int[0];
 
@@ -341,16 +338,5 @@ namespace Clowd
         public void Dispose()
         {
         }
-    }
-
-    [ImplementPropertyChanged]
-    public class MagnifierSettings
-    {
-        public double Zoom { get; set; } = 12;
-        public int AreaSize { get; set; } = 13;
-        public double GridLineWidth { get; set; } = 0.7; // 1 pixel at <= 200% DPI; 2 pixels at 225% DPI; always rendered as a whole number of pixels
-        public double BorderWidth { get; set; } = 3;
-        public Color BorderColor { get; set; } = Colors.DarkGray;
-        public Color CrosshairColor { get; set; } = Color.FromArgb(125, 173, 216, 230); // light blue
     }
 }

@@ -56,20 +56,6 @@ namespace Clowd
         public static readonly DependencyProperty ShowMagnifierProperty =
             DependencyProperty.Register(nameof(ShowMagnifier), typeof(bool), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(true, ShowMagnifierChanged));
 
-        //public double FadeOpacity
-        //{
-        //    get { return (double)GetValue(FadeOpacityProperty); }
-        //    set { SetValue(FadeOpacityProperty, value); }
-        //}
-        //public static readonly DependencyProperty FadeOpacityProperty =
-        //    DependencyProperty.Register(nameof(FadeOpacity), typeof(double), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(0d, FadeOpacityChanged));
-
-        private static void FadeOpacityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            var ths = (ReallyFastCaptureRenderer)d;
-            ths.DrawBackgroundImage();
-        }
-
         private static void ShowMagnifierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (ReallyFastCaptureRenderer)d;
@@ -106,8 +92,11 @@ namespace Clowd
         WpfSize _finderSize;
         ScreenSize _singlePixelSize;
         int _zoomedPixels;
-        //DispatcherTimer _onTimer = new DispatcherTimer();
-        //double _onFade = 0d;
+        Color _accentColor;
+        Brush _accentBrush;
+        Brush _magCrosshairBrush;
+        Pen _magBorderPen;
+        double _sharpLineWidth;
 
         public ReallyFastCaptureRenderer()
         {
@@ -124,29 +113,31 @@ namespace Clowd
             _visuals.Add(_crosshair);
             _visuals.Add(_magnifier);
 
+            // here to apease the WPF designer
             if (App.IsDesignMode)
                 return;
 
-            // settings. these are extracted here to apease the WPF designer
-            var accentColor = App.Current.AccentColor;
-            var accentBrush = new SolidColorBrush(accentColor);
-            var magZoom = App.Current.Settings.MagnifierSettings.Zoom;
-            var magArea = App.Current.Settings.MagnifierSettings.AreaSize;
-            var dashLength = ScreenTools.WpfSnapToPixelsFloor(8);
-            var sharpLineWidth = ScreenTools.WpfSnapToPixelsFloor(1);
+            _accentColor = App.Current.AccentColor;
+            _accentBrush = new SolidColorBrush(_accentColor);
 
             // crosshair constants
-            _sharpBlackLineDashed = new Pen(Brushes.Black, sharpLineWidth);
+            var dashLength = ScreenTools.WpfSnapToPixelsFloor(8);
+            _sharpLineWidth = ScreenTools.WpfSnapToPixelsFloor(1);
+            _sharpBlackLineDashed = new Pen(Brushes.Black, _sharpLineWidth);
             _sharpBlackLineDashed.DashStyle = new DashStyle(new double[] { dashLength, dashLength }, 0);
-            _sharpWhiteLineDashed = new Pen(Brushes.White, sharpLineWidth);
+            _sharpWhiteLineDashed = new Pen(Brushes.White, _sharpLineWidth);
             _sharpWhiteLineDashed.DashStyle = new DashStyle(new double[] { dashLength, dashLength }, dashLength);
-            _sharpAccentLine = new Pen(accentBrush, sharpLineWidth);
-            _sharpAccentLineWide = new Pen(accentBrush, sharpLineWidth * 5);
+            _sharpAccentLine = new Pen(_accentBrush, _sharpLineWidth);
+            _sharpAccentLineWide = new Pen(_accentBrush, _sharpLineWidth * 5);
 
             // magnifier constants
+            var magZoom = 10;
+            var magArea = 10;
             _singlePixelSize = new WpfSize(magZoom, magZoom).ToScreenSize();
             _zoomedPixels = magArea - magArea % 2 + 1;
             _finderSize = (_singlePixelSize * _zoomedPixels).ToWpfSize();
+            _magBorderPen = new Pen(_accentBrush, 2);
+            _magCrosshairBrush = new SolidColorBrush(Color.FromArgb(125, 173, 216, 230));
         }
 
         public async Task StartFastCapture(Stopwatch sw)
@@ -290,6 +281,12 @@ namespace Clowd
             {
                 return new CroppedBitmap(_image, rect);
             }
+        }
+
+        public void SetSelectedWindowForeground()
+        {
+            if (_selectedWindow != null && _selectedWindow.WindowBitmapWpf != null)
+                Interop.USER32.SetForegroundWindow(_selectedWindow.Handle);
         }
 
         private void CaptureWindow2_MouseDown(object sender, MouseButtonEventArgs e)
@@ -517,7 +514,7 @@ namespace Clowd
                     targetRect.Height -= excess * zoomedPixel.Height;
                 }
 
-                var gridLinePixelWidth = Math.Max(ScreenTools.WpfToScreen(App.Current.Settings.MagnifierSettings.GridLineWidth), 1);
+                var gridLinePixelWidth = Math.Max(ScreenTools.WpfToScreen(_sharpLineWidth), 1);
                 var gridOffset = (gridLinePixelWidth % 2) * 0.5 * px; // offset the line by 0.5 pixels if the line width is odd, to avoid blurring
                 // Clip to the exact same ellipse as the border (thus clipping off half of the drawn border)
                 g.PushClip(new EllipseGeometry(new Point(_finderSize.Width / 2 + gridOffset, _finderSize.Height / 2 + gridOffset), _finderSize.Width / 2, _finderSize.Height / 2));
@@ -542,12 +539,11 @@ namespace Clowd
                     g.DrawLine(gridPen, new Point(targetRect.Left, y * zoomedPixel.Height), new Point(targetRect.Right, y * zoomedPixel.Height));
 
                 // Draw the crosshair
-                var xhairBrush = new SolidColorBrush(App.Current.Settings.MagnifierSettings.CrosshairColor);
                 var xhairGrow = gridLineWidth / 2; // make sure the crosshair rectangles cover the adjacent grid lines wholly on both sides
-                g.DrawRectangle(xhairBrush, null, new WpfRect(0, (_finderSize.Height - zoomedPixel.Height) / 2, (_finderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Left
-                g.DrawRectangle(xhairBrush, null, new WpfRect((_finderSize.Width + zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, (_finderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Right
-                g.DrawRectangle(xhairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, 0, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Top
-                g.DrawRectangle(xhairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height + zoomedPixel.Height) / 2, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Bottom
+                g.DrawRectangle(_magCrosshairBrush, null, new WpfRect(0, (_finderSize.Height - zoomedPixel.Height) / 2, (_finderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Left
+                g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width + zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, (_finderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Right
+                g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, 0, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Top
+                g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height + zoomedPixel.Height) / 2, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Bottom
 
                 // Draw a highlight around the pixel under cursor
                 var innerRect = new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, zoomedPixel.Width, zoomedPixel.Height);
@@ -556,8 +552,7 @@ namespace Clowd
                 g.Pop(); // grid line 0.5 px offset
 
                 // Draw the magnifier border
-                Pen pen = new Pen(new SolidColorBrush(App.Current.Settings.MagnifierSettings.BorderColor), App.Current.Settings.MagnifierSettings.BorderWidth);
-                g.DrawEllipse(null, pen, new Point(_finderSize.Width / 2 + gridOffset, _finderSize.Height / 2 + gridOffset), _finderSize.Width / 2, _finderSize.Height / 2);
+                g.DrawEllipse(null, _magBorderPen, new Point(_finderSize.Width / 2 + gridOffset, _finderSize.Height / 2 + gridOffset), _finderSize.Width / 2, _finderSize.Height / 2);
 
                 g.Pop(); // the circular clip
 
