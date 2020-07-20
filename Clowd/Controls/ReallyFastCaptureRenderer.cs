@@ -21,6 +21,7 @@ using ScreenVersusWpf;
 
 namespace Clowd
 {
+    [System.ComponentModel.DesignTimeVisible(false)]
     public class ReallyFastCaptureRenderer : FrameworkElement
     {
         public WpfRect SelectionRectangle
@@ -97,7 +98,6 @@ namespace Clowd
         DrawingVisual _foregroundImage;
         DrawingVisual _magnifier;
 
-        double _sharpLineWidth;
         Pen _sharpBlackLineDashed;
         Pen _sharpWhiteLineDashed;
         Pen _sharpAccentLine;
@@ -124,20 +124,28 @@ namespace Clowd
             _visuals.Add(_crosshair);
             _visuals.Add(_magnifier);
 
-            // Crosshair constants
-            var accentBrush = new SolidColorBrush(App.Current.AccentColor);
-            var dashLength = ScreenTools.WpfSnapToPixelsFloor(8);
-            _sharpLineWidth = ScreenTools.WpfSnapToPixelsFloor(1);
-            _sharpBlackLineDashed = new Pen(Brushes.Black, _sharpLineWidth);
-            _sharpBlackLineDashed.DashStyle = new DashStyle(new double[] { dashLength, dashLength }, 0);
-            _sharpWhiteLineDashed = new Pen(Brushes.White, _sharpLineWidth);
-            _sharpWhiteLineDashed.DashStyle = new DashStyle(new double[] { dashLength, dashLength }, dashLength);
-            _sharpAccentLine = new Pen(accentBrush, _sharpLineWidth);
-            _sharpAccentLineWide = new Pen(accentBrush, _sharpLineWidth * 5);
+            if (App.IsDesignMode)
+                return;
 
-            // Magnifier constants
-            _singlePixelSize = new WpfSize(App.Current.Settings.MagnifierSettings.Zoom, App.Current.Settings.MagnifierSettings.Zoom).ToScreenSize();
-            _zoomedPixels = App.Current.Settings.MagnifierSettings.AreaSize - App.Current.Settings.MagnifierSettings.AreaSize % 2 + 1;
+            // settings. these are extracted here to apease the WPF designer
+            var accentColor = App.Current.AccentColor;
+            var accentBrush = new SolidColorBrush(accentColor);
+            var magZoom = App.Current.Settings.MagnifierSettings.Zoom;
+            var magArea = App.Current.Settings.MagnifierSettings.AreaSize;
+            var dashLength = ScreenTools.WpfSnapToPixelsFloor(8);
+            var sharpLineWidth = ScreenTools.WpfSnapToPixelsFloor(1);
+
+            // crosshair constants
+            _sharpBlackLineDashed = new Pen(Brushes.Black, sharpLineWidth);
+            _sharpBlackLineDashed.DashStyle = new DashStyle(new double[] { dashLength, dashLength }, 0);
+            _sharpWhiteLineDashed = new Pen(Brushes.White, sharpLineWidth);
+            _sharpWhiteLineDashed.DashStyle = new DashStyle(new double[] { dashLength, dashLength }, dashLength);
+            _sharpAccentLine = new Pen(accentBrush, sharpLineWidth);
+            _sharpAccentLineWide = new Pen(accentBrush, sharpLineWidth * 5);
+
+            // magnifier constants
+            _singlePixelSize = new WpfSize(magZoom, magZoom).ToScreenSize();
+            _zoomedPixels = magArea - magArea % 2 + 1;
             _finderSize = (_singlePixelSize * _zoomedPixels).ToWpfSize();
         }
 

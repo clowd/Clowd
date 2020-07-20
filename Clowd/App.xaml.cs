@@ -33,8 +33,10 @@ namespace Clowd
 {
     public partial class App : Application
     {
-        public static new App Current => (App)Application.Current;
+        public static new App Current => IsDesignMode ? null : (App)Application.Current;
         public static bool CanUpload => Current.Settings.UploadSettings.UploadProvider != UploadsProvider.None;
+
+        public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
 
         public GeneralSettings Settings { get; private set; }
         public Color AccentColor { get; private set; }
