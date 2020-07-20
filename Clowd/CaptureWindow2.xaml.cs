@@ -104,8 +104,8 @@ namespace Clowd
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Start");
             _readyWindow = new CaptureWindow2();
+            _readyWindow.Closed += (s, e) => _readyWindow = null;
             var fstCap = _readyWindow.fastCapturer.StartFastCapture(sw);
-            _readyWindow.Closed += (s, e) => { _readyWindow = null; };
             var hWnd = new WindowInteropHelper(_readyWindow).EnsureHandle();
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
@@ -118,18 +118,13 @@ namespace Clowd
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Showing Window");
             if (!Debugger.IsAttached) _readyWindow.Topmost = true;
-            _readyWindow.ContentRendered += async (s, e) =>
+            _readyWindow.ContentRendered += (s, e) =>
             {
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
-                await Task.Delay(1); // can end up waiting like ~100ms or more, 
-                // basically we don't rejoin here until wpf is done rendering everything else. 
-                _readyWindow.Activate();
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Activated");
                 _readyWindow.fastCapturer.FinishFastCapture();
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
                 sw.Stop();
             };
-            _readyWindow.ShowActivated = false;
             _readyWindow.Show();
             _readyWindow._initialized = true;
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Show Complete");
