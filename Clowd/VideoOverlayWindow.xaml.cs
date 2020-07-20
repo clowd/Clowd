@@ -25,7 +25,6 @@ namespace Clowd
     public partial class VideoOverlayWindow : Window
     {
         public ScreenRect CroppingRectangle { get; private set; } = new ScreenRect(0, 0, 0, 0);
-        public Rect CroppingRectangleWpf { get { return CroppingRectangle.ToWpfRect(); } private set { CroppingRectangle = new WpfRect(value).ToScreenRect(); } }
         public IntPtr Handle { get; private set; }
 
         private LiveScreenRecording _recording;
@@ -49,18 +48,35 @@ namespace Clowd
         private void Recording_LogRecieved(object sender, FFMpegLogEventArgs e)
         {
             //frame=  219 fps= 31 q=10.0 size=       0kB time=00:00:05.80 bitrate=   0.1kbits/s dup=5 drop=0 speed=0.82x
-            var msg = e.Data;
-            var start = msg.IndexOf("fps=");
-            if (start < 0)
-                return;
-            msg = msg.Substring(start + 4).TrimStart();
-            msg = msg.Substring(0, msg.IndexOf(" "));
-            if (msg == "0.0") // first log from ffmpeg
-                return;
+
+            string getData(string label)
+            {
+                var msg = e.Data;
+                var start = msg.IndexOf(label);
+                if (start < 0)
+                    return null;
+                msg = msg.Substring(start + label.Length).TrimStart();
+                msg = msg.Substring(0, msg.IndexOf(" "));
+                if (msg == "0.0" || msg == "00:00:00.00")
+                    return null;
+
+                return msg;
+            }
+
+            var fps = getData("fps=");
+            var time = getData("time=");
 
             Dispatcher.Invoke(() =>
             {
-                recordingFpsLabel.Text = msg + " FPS";
+                if (DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0 && fps != null)
+                {
+                    recordingFpsLabel.Text = fps + " FPS";
+                }
+                else if (time != null)
+                {
+                    var ts = TimeSpan.Parse(time);
+                    recordingFpsLabel.Text = $"{((int)ts.TotalMinutes):D2}:{((int)ts.Seconds):D2}";
+                }
             });
         }
 
