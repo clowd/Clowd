@@ -116,13 +116,11 @@
             <Rectangle
                 x:Name="crectBottom"
                 Fill="Transparent"
-                Stroke="{StaticResource HighlightBrush}"
-                StrokeThickness="{Binding SharpLineWidth}" />
+                Stroke="{StaticResource HighlightBrush}" />
             <Rectangle
                 Name="crectTop"
                 Stroke="#A5FFFFFF"
-                StrokeDashArray="8 8"
-                StrokeThickness="{Binding SharpLineWidth}" />
+                StrokeDashArray="8 8" />
         </Grid>
         <Border
             Name="toolActionBar"
