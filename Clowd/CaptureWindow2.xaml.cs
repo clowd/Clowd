@@ -76,13 +76,15 @@ namespace Clowd
                 ths.UpdateButtonBarPosition();
 
             ths.toolActionBar.Visibility = ths._initialized && !currently ? Visibility.Visible : Visibility.Hidden;
-        }
 
-        public double SharpLineWidth { get; set; }
+            var lineW = ScreenTools.WpfSnapToPixelsFloor(currently ? 1 : 2);
+            var margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(currently ? 0 : 2));
+            ths.crectBottom.StrokeThickness = ths.crectTop.StrokeThickness = lineW;
+            ths.crectBottom.Margin = ths.crectTop.Margin = margin;
+        }
 
         private CaptureWindow2() : base()
         {
-            SharpLineWidth = ScreenTools.WpfSnapToPixelsFloor(1);
             InitializeComponent();
         }
 
@@ -107,7 +109,7 @@ namespace Clowd
             var hWnd = new WindowInteropHelper(_readyWindow).EnsureHandle();
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
-            USER32.SetWindowPos(hWnd, SWP_HWND.HWND_BOTTOM, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
+            USER32.SetWindowPos(hWnd, SWP_HWND.HWND_TOP, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Complete");
 
             await fstCap;
@@ -119,12 +121,13 @@ namespace Clowd
             _readyWindow.ContentRendered += async (s, e) =>
             {
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
+                await Task.Delay(1);
+                _readyWindow.fastCapturer.FinishFastCapture();
+                _readyWindow.Activate();
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
                 sw.Stop();
-                await Task.Delay(100);
-                _readyWindow.fastCapturer.FinishFastCapture();
-
             };
+            _readyWindow.ShowActivated = false;
             _readyWindow.Show();
             _readyWindow._initialized = true;
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Show Complete");

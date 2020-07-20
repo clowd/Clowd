@@ -14,6 +14,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Clowd.Controls;
 using Clowd.Utilities;
 using ScreenVersusWpf;
@@ -54,6 +55,20 @@ namespace Clowd
         public static readonly DependencyProperty ShowMagnifierProperty =
             DependencyProperty.Register(nameof(ShowMagnifier), typeof(bool), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(true, ShowMagnifierChanged));
 
+        //public double FadeOpacity
+        //{
+        //    get { return (double)GetValue(FadeOpacityProperty); }
+        //    set { SetValue(FadeOpacityProperty, value); }
+        //}
+        //public static readonly DependencyProperty FadeOpacityProperty =
+        //    DependencyProperty.Register(nameof(FadeOpacity), typeof(double), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(0d, FadeOpacityChanged));
+
+        private static void FadeOpacityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var ths = (ReallyFastCaptureRenderer)d;
+            ths.DrawBackgroundImage();
+        }
+
         private static void ShowMagnifierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (ReallyFastCaptureRenderer)d;
@@ -69,7 +84,7 @@ namespace Clowd
         ScreenPoint? _dragBegin = null;
         const int _clickDistance = 6;
 
-        Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(0x77, 0, 0, 0));
+        Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
 
         WindowFinder2.CachedWindow _selectedWindow;
         WindowFinder2 _windowFinder;
@@ -88,9 +103,11 @@ namespace Clowd
         Pen _sharpAccentLine;
         Pen _sharpAccentLineWide;
 
-        private WpfSize _finderSize;
-        private ScreenSize _singlePixelSize;
-        private int _zoomedPixels;
+        WpfSize _finderSize;
+        ScreenSize _singlePixelSize;
+        int _zoomedPixels;
+        //DispatcherTimer _onTimer = new DispatcherTimer();
+        //double _onFade = 0d;
 
         public ReallyFastCaptureRenderer()
         {
@@ -156,8 +173,36 @@ namespace Clowd
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render End");
         }
 
-        public void FinishFastCapture()
+        public async void FinishFastCapture(DateTime? animationStart = null)
         {
+            // http://gizma.com/easing/#cub3
+            //double cubicEaseInOut(double t, double b, double c, double d)
+            //{
+            //    t /= d / 2;
+            //    if (t < 1) return c / 2 * t * t * t + b;
+            //    t -= 2;
+            //    return c / 2 * (t * t * t + 2) + b;
+            //};
+
+            //_onTimer.Interval = TimeSpan.FromMilliseconds(10); // 60 fps
+            //_onTimer.Tick += (s, e) =>
+            //{
+            //    if (!animationStart.HasValue)
+            //        animationStart = DateTime.Now;
+
+            //    var curTime = DateTime.Now - animationStart.Value;
+            //    _onFade = cubicEaseInOut(curTime.TotalMilliseconds, 0, 1, 300);
+            //    Console.WriteLine($"time {curTime.TotalMilliseconds}, opacity {_onFade}");
+            //    if (_onFade >= 1)
+            //    {
+            //        _onTimer.Stop();
+            //        _onFade = 1;
+            //    }
+            //    DrawBackgroundImage();
+            //};
+            //_onTimer.Start();
+
+            await Task.Delay(100);
             _windowFinder.PopulateWindowBitmapsInBackground();
         }
 
@@ -361,6 +406,11 @@ namespace Clowd
             var windowBounds = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
             using (var context = _backgroundImage.RenderOpen())
             {
+                //if (_onFade < 1)
+                //{
+                //    context.DrawImage(_image, windowBounds);
+                //    context.PushOpacity(_onFade);
+                //}
                 context.DrawImage(_imageGray, windowBounds);
                 context.DrawRectangle(_overlayBrush, null, windowBounds);
             }
