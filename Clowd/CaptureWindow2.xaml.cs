@@ -52,12 +52,12 @@ namespace Clowd
             var newv = (WpfRect)e.NewValue;
 
             Storyboard sb = ths.FindResource("BorderDashAnimation") as Storyboard;
-            if (newv == default(WpfRect))
+            if (newv == default(WpfRect) && ths.selectionBorder.Visibility == Visibility.Visible)
             {
                 sb.Stop();
                 ths.selectionBorder.Visibility = Visibility.Collapsed;
             }
-            else
+            else if (ths.selectionBorder.Visibility == Visibility.Collapsed)
             {
                 ths.selectionBorder.Visibility = Visibility.Visible;
                 sb.Begin();
