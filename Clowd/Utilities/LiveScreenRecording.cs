@@ -80,7 +80,7 @@ namespace Clowd.Utilities
         private string cli_VideoSource()
         {
             //return $"-f gdigrab -framerate {settings.TargetFramesPerSecond} -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 1 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
-            return $"-f gdigrab -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 0 -drawasd_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
+            return $"-f gdigrab -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 0 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
         }
 
         private string cli_VideoCodecAndOutput()
