@@ -75,7 +75,7 @@ namespace Clowd
             if (!currently)
                 ths.UpdateButtonBarPosition();
 
-            ths.toolActionBar.Visibility = ths._initialized && !currently ? Visibility.Visible : Visibility.Hidden;
+            ths.toolActionBarStackPanel.Visibility = ths._initialized && !currently ? Visibility.Visible : Visibility.Hidden;
 
             var lineW = ScreenTools.WpfSnapToPixelsFloor(currently ? 1 : 2);
             var margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(currently ? 0 : 2));
@@ -216,79 +216,17 @@ namespace Clowd
                 }
             }
         }
+
         private void UpdateButtonBarPosition()
         {
-            var container = toolActionBar;
-            var panel = toolActionBarStackPanel;
-
-            var numberOfButtons = panel.Children
+            var numberOfActiveButtons = toolActionBarStackPanel.Children
                 .Cast<FrameworkElement>()
                 .Where(f => f is Button)
                 .Cast<Button>()
                 .Where(b => b.Command.CanExecute(null))
                 .Count();
 
-            var containerSize = numberOfButtons * 50;
-
-            var selection = SelectionRectangle;
-            var selectionScreen = ScreenTools.GetScreenContaining(SelectionRectangle.ToScreenRect()).Bounds.ToWpfRect();
-            var bottomSpace = Math.Max(selectionScreen.Bottom - selection.Bottom, 0);
-            var rightSpace = Math.Max(selectionScreen.Right - selection.Right, 0);
-            var leftSpace = Math.Max(selection.Left - selectionScreen.Left, 0);
-            double indLeft = 0, indTop = 0;
-            //we want to display (and clip) the controls on/to the primary screen -
-            //where the primary screen is the screen that contains the center of the cropping rectangle
-            var intersecting = selectionScreen.Intersect(selection);
-            if (intersecting == WpfRect.Empty)
-                return; // not supposed to happen since selectionScreen contains the center of selection rect
-            if (bottomSpace >= 50)
-            {
-                if (panel.Orientation == Orientation.Vertical)
-                {
-                    panel.Orientation = Orientation.Horizontal;
-                    //this extension will cause wpf to render the pending changes, so that we can calculate the
-                    //correct toolbar size below.
-                    this.DoRender();
-                }
-                indLeft = intersecting.Left + intersecting.Width / 2 - containerSize / 2;
-                indTop = bottomSpace >= 60 ? intersecting.Bottom + 5 : intersecting.Bottom;
-            }
-            else if (rightSpace >= 50)
-            {
-                if (panel.Orientation == Orientation.Horizontal)
-                {
-                    panel.Orientation = Orientation.Vertical;
-                    this.DoRender();
-                }
-                indLeft = rightSpace >= 60 ? intersecting.Right + 5 : intersecting.Right;
-                indTop = intersecting.Bottom - containerSize;
-            }
-            else if (leftSpace >= 50)
-            {
-                if (panel.Orientation == Orientation.Horizontal)
-                {
-                    panel.Orientation = Orientation.Vertical;
-                    this.DoRender();
-                }
-                indLeft = leftSpace >= 60 ? intersecting.Left - 55 : intersecting.Left - 50;
-                indTop = intersecting.Bottom - containerSize;
-            }
-            else
-            {
-                if (panel.Orientation == Orientation.Vertical)
-                {
-                    panel.Orientation = Orientation.Horizontal;
-                    this.DoRender();
-                }
-                indLeft = intersecting.Left + intersecting.Width / 2 - containerSize / 2;
-                indTop = intersecting.Bottom - 70;
-            }
-            if (indLeft < selectionScreen.Left)
-                indLeft = selectionScreen.Left;
-            else if (indLeft + containerSize > selectionScreen.Right)
-                indLeft = selectionScreen.Right - containerSize;
-            Canvas.SetLeft(container, indLeft);
-            Canvas.SetTop(container, indTop);
+            toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(SelectionRectangle, 2, 10, 50, numberOfActiveButtons * 50);
         }
 
         private BitmapSource CropBitmap()
