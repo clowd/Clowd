@@ -121,24 +121,18 @@ namespace Clowd
             _readyWindow.ContentRendered += async (s, e) =>
             {
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
-                await Task.Delay(1);
-                _readyWindow.fastCapturer.FinishFastCapture();
+                await Task.Delay(1); // can end up waiting like ~100ms or more, 
+                // basically we don't rejoin here until wpf is done rendering everything else. 
                 _readyWindow.Activate();
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Activated");
+                _readyWindow.fastCapturer.FinishFastCapture();
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
                 sw.Stop();
-                _readyWindow.WindowReady();
             };
             _readyWindow.ShowActivated = false;
             _readyWindow.Show();
             _readyWindow._initialized = true;
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Show Complete");
-        }
-
-        private void WindowReady()
-        {
-            var uploadCommand = Resources["Command.Upload"] as RoutedCommand;
-            if (!App.CanUpload)
-                CommandBindings.Remove(CommandBindings.Cast<CommandBinding>().Single(c => c.Command == uploadCommand));
         }
 
         private void ManageSelectionResizeHandlers(bool register)
@@ -234,6 +228,11 @@ namespace Clowd
             return fastCapturer.GetSelectedBitmap();
         }
 
+        private void UploadCanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = App.CanUpload;
+            e.Handled = true;
+        }
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             var cropped = CropBitmap();

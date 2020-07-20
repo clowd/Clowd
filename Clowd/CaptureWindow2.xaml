@@ -52,7 +52,10 @@
         <KeyBinding Key="Escape" Command="ApplicationCommands.Close" />
     </Window.InputBindings>
     <Window.CommandBindings>
-        <CommandBinding Command="{StaticResource Command.Upload}" Executed="UploadExecuted" />
+        <CommandBinding
+            CanExecute="UploadCanExecute"
+            Command="{StaticResource Command.Upload}"
+            Executed="UploadExecuted" />
         <CommandBinding Command="{StaticResource Command.Photo}" Executed="PhotoExecuted" />
         <CommandBinding Command="{StaticResource Command.Video}" Executed="VideoExecuted" />
         <CommandBinding Command="{StaticResource Command.Reset}" Executed="ResetExecuted" />
