@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -83,6 +84,7 @@ namespace Clowd
         DrawingVisual _crosshair;
         DrawingVisual _foregroundImage;
         DrawingVisual _magnifier;
+        DrawingVisual _sizeIndicator;
 
         Pen _sharpBlackLineDashed;
         Pen _sharpWhiteLineDashed;
@@ -104,12 +106,14 @@ namespace Clowd
 
             _backgroundImage = new DrawingVisual();
             _foregroundImage = new DrawingVisual();
+            _sizeIndicator = new DrawingVisual();
             _crosshair = new DrawingVisual();
             _magnifier = new MyDrawingVisual();
 
             _visuals = new VisualCollection(this);
             _visuals.Add(_backgroundImage);
             _visuals.Add(_foregroundImage);
+            _visuals.Add(_sizeIndicator);
             _visuals.Add(_crosshair);
             _visuals.Add(_magnifier);
 
@@ -384,6 +388,8 @@ namespace Clowd
 
         private void DrawForegroundImage()
         {
+            DrawAreaIndicator();
+
             var windowBounds = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
             using (var context = _foregroundImage.RenderOpen())
             {
@@ -418,6 +424,44 @@ namespace Clowd
                 //}
                 context.DrawImage(_imageGray, windowBounds);
                 context.DrawRectangle(_overlayBrush, null, windowBounds);
+            }
+        }
+
+        private void DrawAreaIndicator()
+        {
+            using (DrawingContext g = _sizeIndicator.RenderOpen())
+            {
+                if (_image == null || !IsCapturing)
+                    return;
+
+                var screen = SelectionRectangle.ToScreenRect();
+
+                var txt = new FormattedText(
+                    $"{screen.Width} × {screen.Height}",
+                    CultureInfo.CurrentUICulture,
+                    this.FlowDirection,
+                    new Typeface(new FontFamily("Microsoft Sans Serif"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                    12,
+                    new SolidColorBrush(Color.FromRgb(51, 51, 51)),
+                    VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+                const int padding = 10;
+                double indicatorWidth = txt.WidthIncludingTrailingWhitespace + (padding * 2);
+                double indicatorHeight = txt.Height + padding;
+
+                var pt = new WpfPoint(SelectionRectangle.Left + SelectionRectangle.Width / 2, SelectionRectangle.Bottom);
+                var positionTransform = PositionWithinAScreen(new WpfSize(indicatorWidth, indicatorHeight), pt, HorizontalAlignment.Center, VerticalAlignment.Bottom, padding);
+                g.PushTransform(new TranslateTransform(positionTransform.X, positionTransform.Y));
+                g.PushOpacity(0.8d);
+
+                var border = new Pen(_accentBrush, 2);
+                g.DrawRoundedRectangle(Brushes.White, border, new Rect(0, 0, indicatorWidth, indicatorHeight), indicatorHeight / 2, indicatorHeight / 2);
+
+                Point textLocation = new Point(
+                    (indicatorWidth / 2) - (txt.WidthIncludingTrailingWhitespace / 2) - 1,
+                    (indicatorHeight / 2) - (txt.Height / 2)
+                );
+                g.DrawText(txt, textLocation);
             }
         }
 
