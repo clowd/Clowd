@@ -83,7 +83,7 @@ namespace Clowd
             ths.crectBottom.Margin = ths.crectTop.Margin = margin;
         }
 
-        private CaptureWindow2() : base()
+        private CaptureWindow2()
         {
             InitializeComponent();
         }
@@ -126,11 +126,19 @@ namespace Clowd
                 _readyWindow.Activate();
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
                 sw.Stop();
+                _readyWindow.WindowReady();
             };
             _readyWindow.ShowActivated = false;
             _readyWindow.Show();
             _readyWindow._initialized = true;
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Show Complete");
+        }
+
+        private void WindowReady()
+        {
+            var uploadCommand = Resources["Command.Upload"] as RoutedCommand;
+            if (!App.CanUpload)
+                CommandBindings.Remove(CommandBindings.Cast<CommandBinding>().Single(c => c.Command == uploadCommand));
         }
 
         private void ManageSelectionResizeHandlers(bool register)
@@ -210,6 +218,18 @@ namespace Clowd
         }
         private void UpdateButtonBarPosition()
         {
+            var container = toolActionBar;
+            var panel = toolActionBarStackPanel;
+
+            var numberOfButtons = panel.Children
+                .Cast<FrameworkElement>()
+                .Where(f => f is Button)
+                .Cast<Button>()
+                .Where(b => b.Command.CanExecute(null))
+                .Count();
+
+            var containerSize = numberOfButtons * 50;
+
             var selection = SelectionRectangle;
             var selectionScreen = ScreenTools.GetScreenContaining(SelectionRectangle.ToScreenRect()).Bounds.ToWpfRect();
             var bottomSpace = Math.Max(selectionScreen.Bottom - selection.Bottom, 0);
@@ -223,52 +243,52 @@ namespace Clowd
                 return; // not supposed to happen since selectionScreen contains the center of selection rect
             if (bottomSpace >= 50)
             {
-                if (toolActionBarStackPanel.Orientation == Orientation.Vertical)
+                if (panel.Orientation == Orientation.Vertical)
                 {
-                    toolActionBarStackPanel.Orientation = Orientation.Horizontal;
+                    panel.Orientation = Orientation.Horizontal;
                     //this extension will cause wpf to render the pending changes, so that we can calculate the
                     //correct toolbar size below.
                     this.DoRender();
                 }
-                indLeft = intersecting.Left + intersecting.Width / 2 - toolActionBar.ActualWidth / 2;
+                indLeft = intersecting.Left + intersecting.Width / 2 - containerSize / 2;
                 indTop = bottomSpace >= 60 ? intersecting.Bottom + 5 : intersecting.Bottom;
             }
             else if (rightSpace >= 50)
             {
-                if (toolActionBarStackPanel.Orientation == Orientation.Horizontal)
+                if (panel.Orientation == Orientation.Horizontal)
                 {
-                    toolActionBarStackPanel.Orientation = Orientation.Vertical;
+                    panel.Orientation = Orientation.Vertical;
                     this.DoRender();
                 }
                 indLeft = rightSpace >= 60 ? intersecting.Right + 5 : intersecting.Right;
-                indTop = intersecting.Bottom - toolActionBar.ActualHeight;
+                indTop = intersecting.Bottom - containerSize;
             }
             else if (leftSpace >= 50)
             {
-                if (toolActionBarStackPanel.Orientation == Orientation.Horizontal)
+                if (panel.Orientation == Orientation.Horizontal)
                 {
-                    toolActionBarStackPanel.Orientation = Orientation.Vertical;
+                    panel.Orientation = Orientation.Vertical;
                     this.DoRender();
                 }
                 indLeft = leftSpace >= 60 ? intersecting.Left - 55 : intersecting.Left - 50;
-                indTop = intersecting.Bottom - toolActionBar.ActualHeight;
+                indTop = intersecting.Bottom - containerSize;
             }
             else
             {
-                if (toolActionBarStackPanel.Orientation == Orientation.Vertical)
+                if (panel.Orientation == Orientation.Vertical)
                 {
-                    toolActionBarStackPanel.Orientation = Orientation.Horizontal;
+                    panel.Orientation = Orientation.Horizontal;
                     this.DoRender();
                 }
-                indLeft = intersecting.Left + intersecting.Width / 2 - toolActionBar.ActualWidth / 2;
+                indLeft = intersecting.Left + intersecting.Width / 2 - containerSize / 2;
                 indTop = intersecting.Bottom - 70;
             }
             if (indLeft < selectionScreen.Left)
                 indLeft = selectionScreen.Left;
-            else if (indLeft + toolActionBar.ActualWidth > selectionScreen.Right)
-                indLeft = selectionScreen.Right - toolActionBar.ActualWidth;
-            Canvas.SetLeft(toolActionBar, indLeft);
-            Canvas.SetTop(toolActionBar, indTop);
+            else if (indLeft + containerSize > selectionScreen.Right)
+                indLeft = selectionScreen.Right - containerSize;
+            Canvas.SetLeft(container, indLeft);
+            Canvas.SetTop(container, indTop);
         }
 
         private BitmapSource CropBitmap()
