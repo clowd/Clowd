@@ -38,79 +38,76 @@
                     IsHitTestVisible="False"
                     Stroke="Red" />
             </Grid>
-            <Border Name="toolActionBar">
-                <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
-                    <Grid
-                        Width="50"
-                        Height="50"
-                        Background="{StaticResource HighlightBrush}">
-                        <StackPanel Margin="5" Orientation="Vertical">
-                            <Viewbox Width="26" Height="26">
-                                <Path
-                                    Width="16"
-                                    Height="16"
-                                    Data="{StaticResource PathLogoSmall16}"
-                                    Fill="White" />
-                            </Viewbox>
-                            <TextBlock
-                                x:Name="recordingFpsLabel"
-                                HorizontalAlignment="Center"
-                                FontSize="10"
-                                FontWeight="DemiBold"
-                                Foreground="White">
-                                REC in 4
-                            </TextBlock>
-                        </StackPanel>
-
-                    </Grid>
-                    <Rectangle
-                        MinWidth="3"
-                        MinHeight="3"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"
-                        Fill="#373737" />
-                    <Button
-                        x:Name="buttonStop"
-                        Background="#373737"
-                        Click="buttonStop_Click"
-                        Style="{StaticResource CaptureToolButtonStyle}">
-                        <StackPanel Margin="5" Orientation="Vertical">
-                            <Border
-                                Width="18"
-                                Height="18"
-                                Margin="4"
-                                Background="White"
-                                CornerRadius="4" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="10"
-                                FontWeight="DemiBold"
-                                Foreground="White">
-                                FINISH
-                            </TextBlock>
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        Background="#373737"
-                        Click="buttonCancel_Click"
-                        Style="{StaticResource CaptureToolButtonStyle}">
-                        <StackPanel Margin="5" Orientation="Vertical">
+            <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
+                <Grid
+                    Width="50"
+                    Height="50"
+                    Background="{StaticResource HighlightBrush}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Viewbox Width="26" Height="26">
                             <Path
-                                Width="26"
-                                Height="26"
-                                Data="M 6.65625 4 C 6.36875 4 6.10625 4.1125 5.90625 4.3125 L 4.3125 5.90625 C 3.9125 6.30625 3.9125 7 4.3125 7.5 L 9.8125 13 L 4.3125 18.5 C 3.9125 19 3.9125 19.69375 4.3125 20.09375 L 5.90625 21.6875 C 6.40625 22.0875 7.1 22.0875 7.5 21.6875 L 13 16.1875 L 18.5 21.6875 C 19 22.0875 19.69375 22.0875 20.09375 21.6875 L 21.6875 20.09375 C 22.0875 19.59375 22.0875 18.9 21.6875 18.5 L 16.1875 13 L 21.6875 7.5 C 22.0875 7 22.0875 6.30625 21.6875 5.90625 L 20.09375 4.3125 C 19.59375 3.9125 18.9 3.9125 18.5 4.3125 L 13 9.8125 L 7.5 4.3125 C 7.25 4.1125 6.94375 4 6.65625 4 z"
+                                Width="16"
+                                Height="16"
+                                Data="{StaticResource PathLogoSmall16}"
                                 Fill="White" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="10"
-                                FontWeight="DemiBold"
-                                Foreground="White">
-                                CANCEL
-                            </TextBlock>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </Border>
+                        </Viewbox>
+                        <TextBlock
+                            x:Name="recordingFpsLabel"
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="DemiBold"
+                            Foreground="White">
+                            REC in 4
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+                <Rectangle
+                    MinWidth="3"
+                    MinHeight="3"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Fill="#373737" />
+                <Button
+                    x:Name="buttonStop"
+                    Background="#373737"
+                    Click="buttonStop_Click"
+                    Style="{StaticResource CaptureToolButtonStyle}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Border
+                            Width="18"
+                            Height="18"
+                            Margin="4"
+                            Background="White"
+                            CornerRadius="4" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="DemiBold"
+                            Foreground="White">
+                            FINISH
+                        </TextBlock>
+                    </StackPanel>
+                </Button>
+                <Button
+                    Background="#373737"
+                    Click="buttonCancel_Click"
+                    Style="{StaticResource CaptureToolButtonStyle}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Path
+                            Width="26"
+                            Height="26"
+                            Data="M 6.65625 4 C 6.36875 4 6.10625 4.1125 5.90625 4.3125 L 4.3125 5.90625 C 3.9125 6.30625 3.9125 7 4.3125 7.5 L 9.8125 13 L 4.3125 18.5 C 3.9125 19 3.9125 19.69375 4.3125 20.09375 L 5.90625 21.6875 C 6.40625 22.0875 7.1 22.0875 7.5 21.6875 L 13 16.1875 L 18.5 21.6875 C 19 22.0875 19.69375 22.0875 20.09375 21.6875 L 21.6875 20.09375 C 22.0875 19.59375 22.0875 18.9 21.6875 18.5 L 16.1875 13 L 21.6875 7.5 C 22.0875 7 22.0875 6.30625 21.6875 5.90625 L 20.09375 4.3125 C 19.59375 3.9125 18.9 3.9125 18.5 4.3125 L 13 9.8125 L 7.5 4.3125 C 7.25 4.1125 6.94375 4 6.65625 4 z"
+                            Fill="White" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="DemiBold"
+                            Foreground="White">
+                            CANCEL
+                        </TextBlock>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
             <Grid
                 Canvas.Left="{Binding CroppingRectangleWpf.Left}"
                 Canvas.Top="{Binding CroppingRectangleWpf.Top}"

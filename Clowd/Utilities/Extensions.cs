@@ -15,6 +15,8 @@ using System.Windows.Media.Imaging;
 using SharpRaven;
 using SharpRaven.Data;
 using SharpRaven.Logging;
+using ScreenVersusWpf;
+using System.Windows.Controls;
 
 namespace Clowd
 {
@@ -118,6 +120,57 @@ namespace Clowd
             //dispose the Graphics object
             g.Dispose();
             return newBitmap;
+        }
+
+        public static void SetPanelCanvasPositionRelativeToSelection(this StackPanel panel, WpfRect selection, int minDistance, int maxDistance, int shortEdgePx, int longEdgePx)
+        {
+            var selectionScreen = ScreenTools.GetScreenContaining(selection.ToScreenRect()).Bounds.ToWpfRect();
+            // subtract 2 as that's the selection border width
+            var bottomSpace = Math.Max(selectionScreen.Bottom - selection.Bottom, 0) - minDistance;
+            var rightSpace = Math.Max(selectionScreen.Right - selection.Right, 0) - minDistance;
+            var leftSpace = Math.Max(selection.Left - selectionScreen.Left, 0) - minDistance;
+            double indLeft = 0, indTop = 0;
+
+            //we want to display (and clip) the controls on/to the primary screen -
+            //where the primary screen is the screen that contains the center of the cropping rectangle
+            var intersecting = selectionScreen.Intersect(selection);
+            if (intersecting == WpfRect.Empty)
+                return; // not supposed to happen since selectionScreen contains the center of selection rect
+
+            if (bottomSpace >= shortEdgePx)
+            {
+                panel.Orientation = Orientation.Horizontal;
+                indLeft = intersecting.Left + intersecting.Width / 2 - longEdgePx / 2;
+                indTop = Math.Min(selectionScreen.Bottom, intersecting.Bottom + maxDistance + shortEdgePx) - shortEdgePx;
+            }
+            else if (rightSpace >= shortEdgePx)
+            {
+                panel.Orientation = Orientation.Vertical;
+                indLeft = Math.Min(selectionScreen.Right, intersecting.Right + maxDistance + shortEdgePx) - shortEdgePx;
+                indTop = intersecting.Bottom - longEdgePx;
+            }
+            else if (leftSpace >= shortEdgePx)
+            {
+                panel.Orientation = Orientation.Vertical;
+                indLeft = Math.Max(intersecting.Left - maxDistance - shortEdgePx, 0);
+                indTop = intersecting.Bottom - longEdgePx;
+            }
+            else // inside capture rect
+            {
+                panel.Orientation = Orientation.Horizontal;
+                indLeft = intersecting.Left + intersecting.Width / 2 - longEdgePx / 2;
+                indTop = intersecting.Bottom - shortEdgePx - (maxDistance * 2);
+            }
+
+            var horizontalSize = panel.Orientation == Orientation.Horizontal ? longEdgePx : shortEdgePx;
+
+            if (indLeft < selectionScreen.Left)
+                indLeft = selectionScreen.Left;
+            else if (indLeft + horizontalSize > selectionScreen.Right)
+                indLeft = selectionScreen.Right - horizontalSize;
+
+            Canvas.SetLeft(panel, indLeft);
+            Canvas.SetTop(panel, indTop);
         }
 
         public static void Save(this BitmapSource source, string filePath, ImageFormat format)
