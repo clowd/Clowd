@@ -142,10 +142,8 @@
       <DependentUpon>CaptureWindow2.xaml</DependentUpon>
     </Compile>
     <Compile Include="Controls\CornerClippingBorder.cs" />
-    <Compile Include="Controls\Crosshair.cs" />
     <Compile Include="Controls\FFMpegCodecSettingsEditor.cs" />
     <Compile Include="Controls\GlobalTriggerEditor.cs" />
-    <Compile Include="Controls\PixelMagnifier.cs" />
     <Compile Include="Controls\ReallyFastCaptureRenderer.cs" />
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
     <Compile Include="Converters\SnapToPixelConverter.cs" />
