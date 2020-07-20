@@ -2,6 +2,7 @@
     x:Class="Clowd.VideoOverlayWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -20,134 +21,59 @@
     WindowStyle="None"
     mc:Ignorable="d">
     <Window.Background>
-        <SolidColorBrush Opacity="0.00" Color="#FFB0B0B0" />
+        <SolidColorBrush Opacity="0.00" Color="#FFFFFF" />
     </Window.Background>
-    <Window.Resources>
-        <Style x:Key="ButtonTool" TargetType="{x:Type Button}">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="SnapsToDevicePixels" Value="True" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type Button}">
-                        <Grid>
-                            <Rectangle
-                                Name="_bg"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                Fill="{TemplateBinding Background}" />
-                            <ContentPresenter
-                                x:Name="MyContentPresenter"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Content="{TemplateBinding Content}" />
-                            <Rectangle
-                                Name="_hover"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                Fill="#33ffffff"
-                                Visibility="Hidden" />
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="_hover" Property="Visibility" Value="Visible" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="MyContentPresenter" Property="Opacity" Value="0.5" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
     <Grid>
         <Canvas
             Name="dynamicCanvas"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch">
-            <UserControl
-                Name="selectionBorder"
+            <Grid
                 Canvas.Left="{Binding CroppingRectangleWpf.Left}"
                 Canvas.Top="{Binding CroppingRectangleWpf.Top}"
                 Width="{Binding CroppingRectangleWpf.Width}"
                 Height="{Binding CroppingRectangleWpf.Height}">
-                <UserControl.Template>
-                    <ControlTemplate TargetType="{x:Type UserControl}">
-                        <ControlTemplate.Resources>
-                            <Storyboard
-                                x:Key="BorderDashAnimation"
-                                x:Name="BorderDashAnimation"
-                                RepeatBehavior="Forever">
-                                <DoubleAnimationUsingKeyFrames
-                                    BeginTime="00:00:00"
-                                    Storyboard.TargetName="rectangle"
-                                    Storyboard.TargetProperty="(Shape.StrokeDashOffset)">
-                                    <SplineDoubleKeyFrame KeyTime="00:00:00" Value="0" />
-                                    <SplineDoubleKeyFrame KeyTime="00:00:00.4000000" Value="8" />
-                                    <SplineDoubleKeyFrame KeyTime="00:00:00.8000000" Value="16" />
-                                    <SplineDoubleKeyFrame KeyTime="00:00:01.2000000" Value="24" />
-                                    <SplineDoubleKeyFrame KeyTime="00:00:01.6000000" Value="32" />
-                                </DoubleAnimationUsingKeyFrames>
-                            </Storyboard>
-                        </ControlTemplate.Resources>
-                        <Grid>
-                            <Border
-                                Name="ButtonBorder"
-                                Margin="-2"
-                                Background="Transparent"
-                                BorderBrush="{StaticResource HighlightBrush}"
-                                BorderThickness="2" />
-                            <Rectangle
-                                Name="rectangle"
-                                Margin="-2"
-                                Stroke="#A5FFFFFF"
-                                StrokeDashArray="4 4"
-                                StrokeThickness="2" />
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <EventTrigger RoutedEvent="Loaded">
-                                <BeginStoryboard Storyboard="{StaticResource BorderDashAnimation}" />
-                            </EventTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </UserControl.Template>
-            </UserControl>
-            <Border
-                Name="toolActionBar"
-                Background="{StaticResource HighlightBrush}"
-                BorderBrush="LightGray"
-                BorderThickness="1">
+                <Rectangle
+                    x:Name="selectionBorder"
+                    IsHitTestVisible="False"
+                    Stroke="Red" />
+            </Grid>
+            <Border Name="toolActionBar">
                 <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
-                    <Button
-                        x:Name="buttonStart"
+                    <Grid
                         Width="50"
-                        Background="DarkGreen"
-                        Click="buttonStart_Click"
-                        Style="{StaticResource ButtonTool}">
+                        Height="50"
+                        Background="{StaticResource HighlightBrush}">
                         <StackPanel Margin="5" Orientation="Vertical">
                             <Viewbox Width="26" Height="26">
                                 <Path
-                                    Width="172"
-                                    Height="172"
-                                    Data="M133.67728,78.42849l-88.01562,-43.62019c-2.66166,-1.34375 -5.84015,-1.21454 -8.39844,0.33594c-2.55829,1.52464 -4.08294,4.26382 -4.08294,7.20974v87.31791c0,2.92007 1.52464,5.65925 4.08294,7.18389c1.39543,0.85276 2.94591,1.26622 4.52223,1.26622c1.34375,0 2.66166,-0.3101 3.87621,-0.90444l88.04147,-43.67188c2.89423,-1.42128 4.72896,-4.34135 4.72896,-7.54567c0,-3.20433 -1.86058,-6.1244 -4.75481,-7.57151z"
+                                    Width="16"
+                                    Height="16"
+                                    Data="{StaticResource PathLogoSmall16}"
                                     Fill="White" />
                             </Viewbox>
                             <TextBlock
+                                x:Name="recordingFpsLabel"
                                 HorizontalAlignment="Center"
                                 FontSize="10"
                                 FontWeight="DemiBold"
                                 Foreground="White">
-                                START
+                                REC in 4
                             </TextBlock>
                         </StackPanel>
-                    </Button>
+
+                    </Grid>
+                    <Rectangle
+                        MinWidth="3"
+                        MinHeight="3"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Fill="#373737" />
                     <Button
                         x:Name="buttonStop"
-                        Width="50"
-                        Background="DarkRed"
+                        Background="#373737"
                         Click="buttonStop_Click"
-                        Style="{StaticResource ButtonTool}"
-                        Visibility="Collapsed">
+                        Style="{StaticResource CaptureToolButtonStyle}">
                         <StackPanel Margin="5" Orientation="Vertical">
                             <Border
                                 Width="18"
@@ -160,25 +86,14 @@
                                 FontSize="10"
                                 FontWeight="DemiBold"
                                 Foreground="White">
-                                STOP
+                                FINISH
                             </TextBlock>
                         </StackPanel>
                     </Button>
-                    <!--<Button Style="{StaticResource ButtonTool}" Width="50" Background="#373737">
-                        <StackPanel Orientation="Vertical" Margin="5">
-                            <Viewbox Height="26" Width="26">
-                                <Path Width="172" Height="172" Fill="White" Data="M28.59668,21.43001c-2.91628,0.00077 -5.54133,1.76841 -6.63871,4.47035c-1.09737,2.70194 -0.44825,5.79937 1.64164,7.83336l12.77962,12.77962c-13.84505,11.11908 -22.82334,24.75204 -27.26693,32.75391c-2.37933,4.28567 -2.30117,9.44511 0.02799,13.75944c8.2775,15.32233 32.0752,50.30664 76.8597,50.30664c14.8749,0 27.27635,-3.90777 37.56901,-9.63021l14.69726,14.69726c1.79752,1.87223 4.46675,2.62641 6.97825,1.97168c2.5115,-0.65472 4.47282,-2.61605 5.12755,-5.12755c0.65472,-2.5115 -0.09946,-5.18073 -1.97168,-6.97825l-114.66667,-114.66667c-1.34928,-1.38698 -3.20203,-2.16948 -5.13704,-2.1696zM86,28.66667c-8.686,0 -16.44179,1.43132 -23.52962,3.66732l18.35059,18.35059c1.6985,-0.25083 3.40887,-0.5179 5.17903,-0.5179c19.78717,0 35.83333,16.04617 35.83333,35.83333c0,1.77017 -0.26707,3.48053 -0.51791,5.17903l24.57943,24.57943c7.697,-8.54267 13.33056,-17.20773 16.69889,-22.96973c2.537,-4.32867 2.52681,-9.64589 0.12598,-14.05339c-8.37783,-15.42983 -32.15023,-50.06868 -76.71973,-50.06868zM56.14355,66.27767l10.48405,10.48405c-1.35246,2.79422 -2.1276,5.917 -2.1276,9.23828c0,11.87517 9.62483,21.5 21.5,21.5c3.32128,0 6.44406,-0.77515 9.23828,-2.1276l10.49805,10.49805c-7.1205,4.72134 -16.00546,6.98355 -25.47526,5.51497c-15.03567,-2.33633 -27.31015,-14.61082 -29.64649,-29.64649c-1.46793,-9.46563 0.81167,-18.34232 5.52897,-25.46126z" />
-                            </Viewbox>
-                            <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White" HorizontalAlignment="Center">
-                                HIDE
-                            </TextBlock>
-                        </StackPanel>
-                    </Button>-->
                     <Button
-                        Width="50"
                         Background="#373737"
                         Click="buttonCancel_Click"
-                        Style="{StaticResource ButtonTool}">
+                        Style="{StaticResource CaptureToolButtonStyle}">
                         <StackPanel Margin="5" Orientation="Vertical">
                             <Path
                                 Width="26"
@@ -210,6 +125,5 @@
                     Opacity="1" />
             </Grid>
         </Canvas>
-
     </Grid>
 </Window>

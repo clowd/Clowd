@@ -17,42 +17,6 @@
     <Window.Resources>
         <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
         <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />
-        <Style x:Key="ButtonTool" TargetType="{x:Type Button}">
-            <Setter Property="Background" Value="{StaticResource HighlightBrush}" />
-            <Setter Property="SnapsToDevicePixels" Value="True" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type Button}">
-                        <Grid>
-                            <Rectangle
-                                Name="_bg"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                Fill="{TemplateBinding Background}" />
-                            <ContentPresenter
-                                x:Name="MyContentPresenter"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Content="{TemplateBinding Content}" />
-                            <Rectangle
-                                Name="_hover"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                Fill="#33ffffff"
-                                Visibility="Hidden" />
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="_hover" Property="Visibility" Value="Visible" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="MyContentPresenter" Property="Opacity" Value="0.5" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
         <Storyboard
             x:Key="BorderDashAnimation"
             x:Name="BorderDashAnimation"
@@ -125,9 +89,8 @@
             <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
                 <Button
                     x:Name="buttonUpload"
-                    Width="50"
                     Command="{StaticResource Command.Upload}"
-                    Style="{StaticResource ButtonTool}"
+                    Style="{StaticResource CaptureToolButtonStyle}"
                     Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={StaticResource Bool2Vis}}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Viewbox Width="26" Height="26">
@@ -153,10 +116,7 @@
                     VerticalAlignment="Stretch"
                     Fill="#373737"
                     Visibility="{Binding ElementName=buttonUpload, Path=IsEnabled, Mode=OneWay, Converter={StaticResource Bool2Vis}}" />
-                <Button
-                    Width="50"
-                    Command="{StaticResource Command.Photo}"
-                    Style="{StaticResource ButtonTool}">
+                <Button Command="{StaticResource Command.Photo}" Style="{StaticResource CaptureToolButtonStyle}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Path
                             Width="26"
@@ -172,10 +132,7 @@
                         </TextBlock>
                     </StackPanel>
                 </Button>
-                <Button
-                    Width="50"
-                    Command="{StaticResource Command.Video}"
-                    Style="{StaticResource ButtonTool}">
+                <Button Command="{StaticResource Command.Video}" Style="{StaticResource CaptureToolButtonStyle}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Path
                             Width="26"
@@ -191,10 +148,7 @@
                         </TextBlock>
                     </StackPanel>
                 </Button>
-                <Button
-                    Width="50"
-                    Command="ApplicationCommands.Copy"
-                    Style="{StaticResource ButtonTool}">
+                <Button Command="ApplicationCommands.Copy" Style="{StaticResource CaptureToolButtonStyle}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Viewbox Width="25" Height="25">
                             <Path
@@ -212,10 +166,7 @@
                         </TextBlock>
                     </StackPanel>
                 </Button>
-                <Button
-                    Width="50"
-                    Command="ApplicationCommands.SaveAs"
-                    Style="{StaticResource ButtonTool}">
+                <Button Command="ApplicationCommands.SaveAs" Style="{StaticResource CaptureToolButtonStyle}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Viewbox Width="25" Height="25">
                             <Path
@@ -242,10 +193,9 @@
                         </StackPanel>
                     </Button>-->
                 <Button
-                    Width="50"
                     Background="#373737"
                     Command="{StaticResource Command.Reset}"
-                    Style="{StaticResource ButtonTool}">
+                    Style="{StaticResource CaptureToolButtonStyle}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Path
                             Width="26"
@@ -262,10 +212,9 @@
                     </StackPanel>
                 </Button>
                 <Button
-                    Width="50"
                     Background="#373737"
                     Command="ApplicationCommands.Close"
-                    Style="{StaticResource ButtonTool}">
+                    Style="{StaticResource CaptureToolButtonStyle}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Path
                             Width="26"

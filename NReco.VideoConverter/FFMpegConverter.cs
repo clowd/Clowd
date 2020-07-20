@@ -605,10 +605,9 @@ namespace NReco.VideoConverter
                 this.FFMpegProcess.Close();
                 this.FFMpegProcess = (Process)null;
             }
-            catch (Exception ex)
+            finally
             {
                 this.EnsureFFMpegProcessStopped();
-                throw;
             }
         }
 

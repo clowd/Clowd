@@ -15,7 +15,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Clowd.Utilities;
-//using Screeney;
+using NReco.VideoConverter;
+using Ookii.Dialogs.Wpf;
 using ScreenVersusWpf;
 
 namespace Clowd
@@ -27,13 +28,9 @@ namespace Clowd
         public Rect CroppingRectangleWpf { get { return CroppingRectangle.ToWpfRect(); } private set { CroppingRectangle = new WpfRect(value).ToScreenRect(); } }
         public IntPtr Handle { get; private set; }
 
-        public Color BorderColor { get; set; } = Colors.Green;
-
         private LiveScreenRecording _recording;
         private bool _isCancelled = false;
         private bool _isRecording = false;
-        //private ScreeneyRecorder _recorder;
-        //private Recording _capture;
 
         public VideoOverlayWindow(ScreenRect captureArea)
         {
@@ -42,25 +39,29 @@ namespace Clowd
             this.SourceInitialized += VideoOverlayWindow_SourceInitialized;
             this.Loaded += VideoOverlayWindow_Loaded;
 
+            selectionBorder.StrokeThickness = ScreenTools.WpfSnapToPixelsFloor(2);
+            selectionBorder.Margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(2));
+
             _recording = new LiveScreenRecording(captureArea.ToSystem());
+            _recording.LogReceived += Recording_LogRecieved;
+        }
 
-            //_recorder = new ScreeneyRecorder(App.Current.Settings.VideoSettings);
+        private void Recording_LogRecieved(object sender, FFMpegLogEventArgs e)
+        {
+            //frame=  219 fps= 31 q=10.0 size=       0kB time=00:00:05.80 bitrate=   0.1kbits/s dup=5 drop=0 speed=0.82x
+            var msg = e.Data;
+            var start = msg.IndexOf("fps=");
+            if (start < 0)
+                return;
+            msg = msg.Substring(start + 4).TrimStart();
+            msg = msg.Substring(0, msg.IndexOf(" "));
+            if (msg == "0.0") // first log from ffmpeg
+                return;
 
-            //var topLeft = new ScreenPoint(captureArea.Left, captureArea.Top);
-            //var bottomRight = new ScreenPoint(captureArea.Left + captureArea.Width, captureArea.Top + captureArea.Height);
-            //try
-            //{
-            //    ScreenTools.Screens.Single(s => s.Bounds.Contains(topLeft) && s.Bounds.Contains(bottomRight)).Bounds.ToWpfRect();
-            //}
-            //catch (Exception e)
-            //{
-            //    MessageBox.Show("Video capture must be entirely contained within a single screen");
-            //}
-
-            //if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
-            //{
-            //    MessageBox.Show("Please set a video output directory in the application video settings.");
-            //}
+            Dispatcher.Invoke(() =>
+            {
+                recordingFpsLabel.Text = msg + " FPS";
+            });
         }
 
         private void VideoOverlayWindow_SourceInitialized(object sender, EventArgs e)
@@ -146,29 +147,59 @@ namespace Clowd
         private async void buttonStart_Click(object sender, RoutedEventArgs e)
         {
             labelCountdown.Visibility = Visibility.Visible;
-            buttonStart.Visibility = Visibility.Collapsed;
-            buttonStop.Visibility = Visibility.Visible;
 
             for (int i = 4; i >= 1; i--)
             {
                 labelCountdown.Text = i.ToString();
+                recordingFpsLabel.Text = "REC in " + i.ToString();
                 await Task.Delay(1000);
                 if (_isCancelled)
                     return;
             }
 
             labelCountdown.Visibility = Visibility.Collapsed;
-            selectionBorder.Visibility = Visibility.Collapsed;
-            this.DoRender(); // give a chance for the countdown to dissapear 
+            recordingFpsLabel.Text = "Starting";
+
             _isRecording = true;
-            await _recording.Start();
+
+            try
+            {
+                await _recording.Start();
+            }
+            catch (Exception ex)
+            {
+                this.Close();
+
+                var filename = "ffmpeg_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
+                File.WriteAllText(filename, _recording.ConsoleLog);
+
+                using (var dialog = new TaskDialog())
+                {
+                    dialog.MainIcon = TaskDialogIcon.Error;
+                    dialog.MainInstruction = "Recording Error";
+                    dialog.Content = "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.";
+
+                    var open = new TaskDialogButton("Open Error Log");
+                    var close = new TaskDialogButton(ButtonType.Close);
+                    dialog.Buttons.Add(open);
+                    dialog.Buttons.Add(close);
+                    if (open == dialog.Show())
+                    {
+                        Process.Start("notepad.exe", filename);
+                    }
+                }
+            }
         }
 
         private async void buttonStop_Click(object sender, RoutedEventArgs e)
         {
+            var wasRecording = _isRecording;
             buttonCancel_Click(sender, e);
-            await Task.Delay(1000);
-            Process.Start("explorer.exe", $"/select,\"{_recording.FileName}\"");
+            if (wasRecording)
+            {
+                await Task.Delay(1000);
+                Process.Start("explorer.exe", $"/select,\"{_recording.FileName}\"");
+            }
         }
 
         private async void buttonCancel_Click(object sender, RoutedEventArgs e)
