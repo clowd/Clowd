@@ -1,26 +1,26 @@
-﻿<Window x:Class="Clowd.VideoOverlayWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Clowd"
-        DataContext="{Binding RelativeSource={RelativeSource Self}}"
-        mc:Ignorable="d" 
-        SnapsToDevicePixels="True"
-        Icon="/Images/default.ico"
-        WindowStyle="None" 
-        ResizeMode="NoResize" 
-        Topmost="True"
-        Title="Clowd Capture" 
-        Left="0"
-        Top="0"
-        Height="1" 
-        Width="1"
-        AllowsTransparency="True"
-        ShowInTaskbar="False"
-        >
+﻿<Window
+    x:Class="Clowd.VideoOverlayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Clowd Capture"
+    Width="1"
+    Height="1"
+    AllowsTransparency="True"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    Icon="/Images/default.ico"
+    Left="0"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    SnapsToDevicePixels="True"
+    Top="0"
+    Topmost="True"
+    WindowStyle="None"
+    mc:Ignorable="d">
     <Window.Background>
-        <SolidColorBrush Color="#FFB0B0B0" Opacity="0.00" />
+        <SolidColorBrush Opacity="0.00" Color="#FFB0B0B0" />
     </Window.Background>
     <Window.Resources>
         <Style x:Key="ButtonTool" TargetType="{x:Type Button}">
@@ -30,16 +30,29 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type Button}">
                         <Grid>
-                            <Rectangle Name="_bg" Fill="{TemplateBinding Background}"  HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
-                            <ContentPresenter x:Name="MyContentPresenter" Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <Rectangle Name="_hover" Fill="#33ffffff"  HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Visibility="Hidden" />
+                            <Rectangle
+                                Name="_bg"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                Fill="{TemplateBinding Background}" />
+                            <ContentPresenter
+                                x:Name="MyContentPresenter"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Content="{TemplateBinding Content}" />
+                            <Rectangle
+                                Name="_hover"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                Fill="#33ffffff"
+                                Visibility="Hidden" />
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="_hover" Property="Visibility" Value="Visible"  />
+                                <Setter TargetName="_hover" Property="Visibility" Value="Visible" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Value="0.5" TargetName="MyContentPresenter" Property="Opacity" />
+                                <Setter TargetName="MyContentPresenter" Property="Opacity" Value="0.5" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -48,64 +61,105 @@
         </Style>
     </Window.Resources>
     <Grid>
-        <Canvas Name="dynamicCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-            <UserControl Name="selectionBorder"
-                     Width="{Binding CroppingRectangleWpf.Width}"
-                     Height="{Binding CroppingRectangleWpf.Height}"
-                     Canvas.Left="{Binding CroppingRectangleWpf.Left}"
-                     Canvas.Top="{Binding CroppingRectangleWpf.Top }">
+        <Canvas
+            Name="dynamicCanvas"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch">
+            <UserControl
+                Name="selectionBorder"
+                Canvas.Left="{Binding CroppingRectangleWpf.Left}"
+                Canvas.Top="{Binding CroppingRectangleWpf.Top}"
+                Width="{Binding CroppingRectangleWpf.Width}"
+                Height="{Binding CroppingRectangleWpf.Height}">
                 <UserControl.Template>
                     <ControlTemplate TargetType="{x:Type UserControl}">
                         <ControlTemplate.Resources>
-                            <Storyboard x:Key="BorderDashAnimation" x:Name="BorderDashAnimation" RepeatBehavior="Forever">
-                                <DoubleAnimationUsingKeyFrames BeginTime="00:00:00"
-                                 Storyboard.TargetName="rectangle"
-                                 Storyboard.TargetProperty="(Shape.StrokeDashOffset)">
-                                    <SplineDoubleKeyFrame KeyTime="00:00:00" Value="0"/>
-                                    <SplineDoubleKeyFrame KeyTime="00:00:00.4000000" Value="8"/>
-                                    <SplineDoubleKeyFrame KeyTime="00:00:00.8000000" Value="16"/>
-                                    <SplineDoubleKeyFrame KeyTime="00:00:01.2000000" Value="24"/>
-                                    <SplineDoubleKeyFrame KeyTime="00:00:01.6000000" Value="32"/>
+                            <Storyboard
+                                x:Key="BorderDashAnimation"
+                                x:Name="BorderDashAnimation"
+                                RepeatBehavior="Forever">
+                                <DoubleAnimationUsingKeyFrames
+                                    BeginTime="00:00:00"
+                                    Storyboard.TargetName="rectangle"
+                                    Storyboard.TargetProperty="(Shape.StrokeDashOffset)">
+                                    <SplineDoubleKeyFrame KeyTime="00:00:00" Value="0" />
+                                    <SplineDoubleKeyFrame KeyTime="00:00:00.4000000" Value="8" />
+                                    <SplineDoubleKeyFrame KeyTime="00:00:00.8000000" Value="16" />
+                                    <SplineDoubleKeyFrame KeyTime="00:00:01.2000000" Value="24" />
+                                    <SplineDoubleKeyFrame KeyTime="00:00:01.6000000" Value="32" />
                                 </DoubleAnimationUsingKeyFrames>
                             </Storyboard>
                         </ControlTemplate.Resources>
                         <Grid>
-                            <Border Name="ButtonBorder"
-                                 BorderThickness="2"
-                                    Margin="-2"
-                                 Background="Transparent"
-                                 BorderBrush="{StaticResource HighlightBrush}">
-                            </Border>
-                            <Rectangle Name="rectangle"
-                                 Stroke="#A5FFFFFF"
-                                    Margin="-2"
-                                 StrokeThickness="2"
-                                 StrokeDashArray="4 4"/>
+                            <Border
+                                Name="ButtonBorder"
+                                Margin="-2"
+                                Background="Transparent"
+                                BorderBrush="{StaticResource HighlightBrush}"
+                                BorderThickness="2" />
+                            <Rectangle
+                                Name="rectangle"
+                                Margin="-2"
+                                Stroke="#A5FFFFFF"
+                                StrokeDashArray="4 4"
+                                StrokeThickness="2" />
                         </Grid>
                         <ControlTemplate.Triggers>
                             <EventTrigger RoutedEvent="Loaded">
-                                <BeginStoryboard Storyboard="{StaticResource BorderDashAnimation}"/>
+                                <BeginStoryboard Storyboard="{StaticResource BorderDashAnimation}" />
                             </EventTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </UserControl.Template>
             </UserControl>
-            <Border Name="toolActionBar" Background="{StaticResource HighlightBrush}" BorderBrush="LightGray" BorderThickness="1">
+            <Border
+                Name="toolActionBar"
+                Background="{StaticResource HighlightBrush}"
+                BorderBrush="LightGray"
+                BorderThickness="1">
                 <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
-                    <Button x:Name="buttonStart" Style="{StaticResource ButtonTool}" Width="50" Background="DarkGreen" Click="buttonStart_Click">
-                        <StackPanel Orientation="Vertical" Margin="5">
-                            <Viewbox Height="26" Width="26">
-                                <Path Width="172" Height="172" Fill="White" Data="M133.67728,78.42849l-88.01562,-43.62019c-2.66166,-1.34375 -5.84015,-1.21454 -8.39844,0.33594c-2.55829,1.52464 -4.08294,4.26382 -4.08294,7.20974v87.31791c0,2.92007 1.52464,5.65925 4.08294,7.18389c1.39543,0.85276 2.94591,1.26622 4.52223,1.26622c1.34375,0 2.66166,-0.3101 3.87621,-0.90444l88.04147,-43.67188c2.89423,-1.42128 4.72896,-4.34135 4.72896,-7.54567c0,-3.20433 -1.86058,-6.1244 -4.75481,-7.57151z" />
+                    <Button
+                        x:Name="buttonStart"
+                        Width="50"
+                        Background="DarkGreen"
+                        Click="buttonStart_Click"
+                        Style="{StaticResource ButtonTool}">
+                        <StackPanel Margin="5" Orientation="Vertical">
+                            <Viewbox Width="26" Height="26">
+                                <Path
+                                    Width="172"
+                                    Height="172"
+                                    Data="M133.67728,78.42849l-88.01562,-43.62019c-2.66166,-1.34375 -5.84015,-1.21454 -8.39844,0.33594c-2.55829,1.52464 -4.08294,4.26382 -4.08294,7.20974v87.31791c0,2.92007 1.52464,5.65925 4.08294,7.18389c1.39543,0.85276 2.94591,1.26622 4.52223,1.26622c1.34375,0 2.66166,-0.3101 3.87621,-0.90444l88.04147,-43.67188c2.89423,-1.42128 4.72896,-4.34135 4.72896,-7.54567c0,-3.20433 -1.86058,-6.1244 -4.75481,-7.57151z"
+                                    Fill="White" />
                             </Viewbox>
-                            <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White" HorizontalAlignment="Center">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="10"
+                                FontWeight="DemiBold"
+                                Foreground="White">
                                 START
                             </TextBlock>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="buttonStop" Style="{StaticResource ButtonTool}" Width="50" Background="DarkRed" Click="buttonStop_Click" Visibility="Collapsed">
-                        <StackPanel Orientation="Vertical" Margin="5">
-                            <Border CornerRadius="4" Height="18" Width="18" Margin="4" Background="White" />
-                            <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White" HorizontalAlignment="Center">
+                    <Button
+                        x:Name="buttonStop"
+                        Width="50"
+                        Background="DarkRed"
+                        Click="buttonStop_Click"
+                        Style="{StaticResource ButtonTool}"
+                        Visibility="Collapsed">
+                        <StackPanel Margin="5" Orientation="Vertical">
+                            <Border
+                                Width="18"
+                                Height="18"
+                                Margin="4"
+                                Background="White"
+                                CornerRadius="4" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="10"
+                                FontWeight="DemiBold"
+                                Foreground="White">
                                 STOP
                             </TextBlock>
                         </StackPanel>
@@ -120,22 +174,40 @@
                             </TextBlock>
                         </StackPanel>
                     </Button>-->
-                    <Button Style="{StaticResource ButtonTool}" Width="50" Background="#373737" Click="buttonCancel_Click">
-                        <StackPanel Orientation="Vertical" Margin="5">
-                            <Path Width="26" Height="26" Fill="White" Data="M 6.65625 4 C 6.36875 4 6.10625 4.1125 5.90625 4.3125 L 4.3125 5.90625 C 3.9125 6.30625 3.9125 7 4.3125 7.5 L 9.8125 13 L 4.3125 18.5 C 3.9125 19 3.9125 19.69375 4.3125 20.09375 L 5.90625 21.6875 C 6.40625 22.0875 7.1 22.0875 7.5 21.6875 L 13 16.1875 L 18.5 21.6875 C 19 22.0875 19.69375 22.0875 20.09375 21.6875 L 21.6875 20.09375 C 22.0875 19.59375 22.0875 18.9 21.6875 18.5 L 16.1875 13 L 21.6875 7.5 C 22.0875 7 22.0875 6.30625 21.6875 5.90625 L 20.09375 4.3125 C 19.59375 3.9125 18.9 3.9125 18.5 4.3125 L 13 9.8125 L 7.5 4.3125 C 7.25 4.1125 6.94375 4 6.65625 4 z" />
-                            <TextBlock FontSize="10" FontWeight="DemiBold" Foreground="White" HorizontalAlignment="Center">
+                    <Button
+                        Width="50"
+                        Background="#373737"
+                        Click="buttonCancel_Click"
+                        Style="{StaticResource ButtonTool}">
+                        <StackPanel Margin="5" Orientation="Vertical">
+                            <Path
+                                Width="26"
+                                Height="26"
+                                Data="M 6.65625 4 C 6.36875 4 6.10625 4.1125 5.90625 4.3125 L 4.3125 5.90625 C 3.9125 6.30625 3.9125 7 4.3125 7.5 L 9.8125 13 L 4.3125 18.5 C 3.9125 19 3.9125 19.69375 4.3125 20.09375 L 5.90625 21.6875 C 6.40625 22.0875 7.1 22.0875 7.5 21.6875 L 13 16.1875 L 18.5 21.6875 C 19 22.0875 19.69375 22.0875 20.09375 21.6875 L 21.6875 20.09375 C 22.0875 19.59375 22.0875 18.9 21.6875 18.5 L 16.1875 13 L 21.6875 7.5 C 22.0875 7 22.0875 6.30625 21.6875 5.90625 L 20.09375 4.3125 C 19.59375 3.9125 18.9 3.9125 18.5 4.3125 L 13 9.8125 L 7.5 4.3125 C 7.25 4.1125 6.94375 4 6.65625 4 z"
+                                Fill="White" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="10"
+                                FontWeight="DemiBold"
+                                Foreground="White">
                                 CANCEL
                             </TextBlock>
                         </StackPanel>
                     </Button>
                 </StackPanel>
             </Border>
-            <Grid Width="{Binding CroppingRectangleWpf.Width}"
-                  Height="{Binding CroppingRectangleWpf.Height}"
-                  Canvas.Left="{Binding CroppingRectangleWpf.Left}"
-                  Canvas.Top="{Binding CroppingRectangleWpf.Top}">
-                <TextBlock x:Name="labelCountdown" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="120" Foreground="Red" Opacity="1">
-                </TextBlock>
+            <Grid
+                Canvas.Left="{Binding CroppingRectangleWpf.Left}"
+                Canvas.Top="{Binding CroppingRectangleWpf.Top}"
+                Width="{Binding CroppingRectangleWpf.Width}"
+                Height="{Binding CroppingRectangleWpf.Height}">
+                <TextBlock
+                    x:Name="labelCountdown"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    FontSize="120"
+                    Foreground="Red"
+                    Opacity="1" />
             </Grid>
         </Canvas>
 
