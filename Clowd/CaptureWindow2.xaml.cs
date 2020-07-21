@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -95,7 +95,10 @@ namespace Clowd
         public static async void ShowNewCapture()
         {
             if (_readyWindow != null)
+            {
+                _readyWindow.Activate();
                 return;
+            }
 
             Stopwatch sw = new Stopwatch();
             sw.Start();

@@ -521,14 +521,15 @@ namespace Clowd
                 // calculate size of color box. this changes the finder size
                 var zoomedColor = GetPixelColor(_image, location.X, location.Y);
                 var hsl = HSLColor.FromRGB(zoomedColor);
-                var txtColor = hsl.Lightness > 55 ? Brushes.Black : Brushes.White;
+                var txtColor = hsl.Lightness > 55 ? Color.FromArgb(200, 0, 0, 0) : Color.FromArgb(200, 255, 255, 255);
+                var txtBrush = new SolidColorBrush(txtColor);
                 var txt = new FormattedText(
                     $"rgb({zoomedColor.R},{zoomedColor.G},{zoomedColor.B})\r\n{zoomedColor.ToHexRgb()}",
                     CultureInfo.CurrentUICulture,
                     this.FlowDirection,
-                    new Typeface(new FontFamily("Microsoft Sans Serif"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
+                    new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
                     12,
-                    txtColor,
+                    txtBrush,
                     VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
                 double colorBoxWidth = txt.WidthIncludingTrailingWhitespace + (indBorderExclude * 2);
@@ -666,7 +667,7 @@ namespace Clowd
 
                     //var colorPen = new Pen(new SolidColorBrush(Color.FromRgb((byte)(255 - zoomedColor.R), (byte)(255 - zoomedColor.G), (byte)(255 - zoomedColor.B))), _sharpLineWidth);
 
-                    g.DrawGeometry(new SolidColorBrush(zoomedColor), new Pen(txtColor, _sharpLineWidth), colorGeo);
+                    g.DrawGeometry(new SolidColorBrush(zoomedColor), new Pen(txtBrush, _sharpLineWidth), colorGeo);
                     g.DrawText(txt, new Point(colorSquare.X + colorTxtOffsetX, colorSquare.Y + ((colorSquare.Height - txt.Height) / 2)));
                 }
                 
