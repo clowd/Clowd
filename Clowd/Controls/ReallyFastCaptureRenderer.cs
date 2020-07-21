@@ -287,6 +287,13 @@ namespace Clowd
             }
         }
 
+        public Color GetHoveredColor()
+        {
+            var location = ScreenTools.GetMousePosition();
+            var zoomedColor = GetPixelColor(_image, location.X, location.Y);
+            return zoomedColor;
+        }
+
         public void SetSelectedWindowForeground()
         {
             if (_selectedWindow != null && _selectedWindow.WindowBitmapWpf != null)
@@ -501,6 +508,9 @@ namespace Clowd
 
         private void DrawMagnifier(ScreenPoint? currentCursorLocation = null)
         {
+            const double indArrowSize = 60d;
+            const double indBorderExclude = 10d;
+
             using (DrawingContext g = _magnifier.RenderOpen())
             {
                 if (_image == null || !IsCapturing || !ShowMagnifier)
@@ -508,8 +518,24 @@ namespace Clowd
 
                 var location = currentCursorLocation ?? ScreenTools.GetMousePosition();
 
+                // calculate size of color box. this changes the finder size
+                var zoomedColor = GetPixelColor(_image, location.X, location.Y);
+                var hsl = HSLColor.FromRGB(zoomedColor);
+                var txtColor = hsl.Lightness > 55 ? Brushes.Black : Brushes.White;
+                var txt = new FormattedText(
+                    $"rgb({zoomedColor.R},{zoomedColor.G},{zoomedColor.B})\r\n{zoomedColor.ToHexRgb()}",
+                    CultureInfo.CurrentUICulture,
+                    this.FlowDirection,
+                    new Typeface(new FontFamily("Microsoft Sans Serif"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
+                    12,
+                    txtColor,
+                    VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+                double colorBoxWidth = txt.WidthIncludingTrailingWhitespace + (indBorderExclude * 2);
+                double colorBoxHeight = txt.Height + indBorderExclude;
+
                 var currentPointWpf = location.ToWpfPoint();
-                var positionTransform = PositionWithinAScreen(_finderSize, currentPointWpf, HorizontalAlignment.Right, VerticalAlignment.Bottom, 20);
+                var positionTransform = PositionWithinAScreen(_finderSize, currentPointWpf, HorizontalAlignment.Right, VerticalAlignment.Bottom, 20, colorBoxWidth);
                 g.PushTransform(new TranslateTransform(positionTransform.X, positionTransform.Y));
 
                 ArrowIndicatorPosition arrow;
@@ -600,37 +626,79 @@ namespace Clowd
 
                 g.Pop(); // the circular clip
 
-                // draw indicator pointer
-                const double indSize = 60d;
-                const double indBorder = 10d;
                 Rect indicatorSquare = Rect.Empty;
+                Rect colorSquare = Rect.Empty;
+                double colorTxtOffsetX = (indBorderExclude / 2);
+
                 switch (arrow)
                 {
                     case ArrowIndicatorPosition.TopLeft:
-                        indicatorSquare = new Rect(0, 0, indSize, indSize);
-                        break;
-                    case ArrowIndicatorPosition.TopRight:
-                        indicatorSquare = new Rect(_finderSize.Width - indSize, 0, indSize, indSize);
+                        indicatorSquare = new Rect(0, 0, indArrowSize, indArrowSize);
+                        colorSquare = new Rect(_finderSize.Width, (_finderSize.Height - colorBoxHeight) / 2, colorBoxWidth, colorBoxHeight);
+                        colorTxtOffsetX += indBorderExclude;
                         break;
                     case ArrowIndicatorPosition.BottomLeft:
-                        indicatorSquare = new Rect(0, _finderSize.Height - indSize, indSize, indSize);
+                        indicatorSquare = new Rect(0, _finderSize.Height - indArrowSize, indArrowSize, indArrowSize);
+                        colorSquare = new Rect(_finderSize.Width, (_finderSize.Height - colorBoxHeight) / 2, colorBoxWidth, colorBoxHeight);
+                        colorTxtOffsetX += indBorderExclude;
+                        break;
+                    case ArrowIndicatorPosition.TopRight:
+                        indicatorSquare = new Rect(_finderSize.Width - indArrowSize, 0, indArrowSize, indArrowSize);
+                        colorSquare = new Rect(0 - colorBoxWidth, (_finderSize.Height - colorBoxHeight) / 2, colorBoxWidth, colorBoxHeight);
                         break;
                     case ArrowIndicatorPosition.BottomRight:
-                        indicatorSquare = new Rect(_finderSize.Width - indSize, _finderSize.Height - indSize, indSize, indSize);
+                        indicatorSquare = new Rect(_finderSize.Width - indArrowSize, _finderSize.Height - indArrowSize, indArrowSize, indArrowSize);
+                        colorSquare = new Rect(0 - colorBoxWidth, (_finderSize.Height - colorBoxHeight) / 2, colorBoxWidth, colorBoxHeight);
                         break;
                 }
                 if (!indicatorSquare.IsEmpty)
                 {
                     var indicatorGeo = Geometry.Combine(
                         new RectangleGeometry(indicatorSquare),
-                        new EllipseGeometry(new Rect(-indBorder, -indBorder, _finderSize.Width + (indBorder * 2), _finderSize.Height + (indBorder * 2))),
+                        new EllipseGeometry(new Rect(-indBorderExclude, -indBorderExclude, _finderSize.Width + (indBorderExclude * 2), _finderSize.Height + (indBorderExclude * 2))),
                         GeometryCombineMode.Exclude, null);
                     g.DrawGeometry(new SolidColorBrush(Color.FromArgb(180, 135, 135, 135)), null, indicatorGeo);
-                }
 
+                    var colorGeo = Geometry.Combine(
+                      new RectangleGeometry(colorSquare, 4, 4),
+                      new EllipseGeometry(new Rect(-indBorderExclude, -indBorderExclude, _finderSize.Width + (indBorderExclude * 2), _finderSize.Height + (indBorderExclude * 2))),
+                      GeometryCombineMode.Exclude, null);
+
+                    //var colorPen = new Pen(new SolidColorBrush(Color.FromRgb((byte)(255 - zoomedColor.R), (byte)(255 - zoomedColor.G), (byte)(255 - zoomedColor.B))), _sharpLineWidth);
+
+                    g.DrawGeometry(new SolidColorBrush(zoomedColor), new Pen(txtColor, _sharpLineWidth), colorGeo);
+                    g.DrawText(txt, new Point(colorSquare.X + colorTxtOffsetX, colorSquare.Y + ((colorSquare.Height - txt.Height) / 2)));
+                }
+                
                 this.Width = _finderSize.Width;
                 this.Height = _finderSize.Height;
             }
+        }
+
+        private static Color GetPixelColor(BitmapSource bitmap, int x, int y)
+        {
+            Color color;
+            var bytesPerPixel = (bitmap.Format.BitsPerPixel + 7) / 8;
+            var bytes = new byte[bytesPerPixel];
+            var rect = new Int32Rect(x, y, 1, 1);
+
+            bitmap.CopyPixels(rect, bytes, bytesPerPixel, 0);
+
+            if (bitmap.Format == PixelFormats.Bgra32)
+            {
+                color = Color.FromArgb(bytes[3], bytes[2], bytes[1], bytes[0]);
+            }
+            else if (bitmap.Format == PixelFormats.Bgr32)
+            {
+                color = Color.FromRgb(bytes[2], bytes[1], bytes[0]);
+            }
+            // handle other required formats
+            else
+            {
+                color = Colors.Black;
+            }
+
+            return color;
         }
 
         private double DistancePointToPoint(double x1, double y1, double x2, double y2)
@@ -638,7 +706,7 @@ namespace Clowd
             return Math.Sqrt(Math.Pow((x2 - x1), 2) + Math.Pow((y2 - y1), 2));
         }
 
-        private WpfPoint PositionWithinAScreen(WpfSize objectRect, WpfPoint anchor, HorizontalAlignment horz, VerticalAlignment vert, double distance)
+        private WpfPoint PositionWithinAScreen(WpfSize objectRect, WpfPoint anchor, HorizontalAlignment horz, VerticalAlignment vert, double distance, double marginX = 0d)
         {
             var scr = ScreenTools.Screens.FirstOrDefault(s => s.Bounds.ToWpfRect().Contains(anchor));
             if (scr == null)
@@ -677,7 +745,7 @@ namespace Clowd
                 return anchorXY - elementSize / 2;
             });
 
-            double x = alignCoordinate(horz == HorizontalAlignment.Left ? -1 : horz == HorizontalAlignment.Right ? 1 : 0, anchor.X, objectRect.Width, screen.Left, screen.Right);
+            double x = alignCoordinate(horz == HorizontalAlignment.Left ? -1 : horz == HorizontalAlignment.Right ? 1 : 0, anchor.X, objectRect.Width, screen.Left + marginX, screen.Right - marginX);
             double y = alignCoordinate(vert == VerticalAlignment.Top ? -1 : vert == VerticalAlignment.Bottom ? 1 : 0, anchor.Y, objectRect.Height, screen.Top, screen.Bottom);
 
             x = Math.Max(screen.Left, Math.Min(screen.Right - objectRect.Width, x));
