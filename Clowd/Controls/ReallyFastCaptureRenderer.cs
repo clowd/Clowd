@@ -520,8 +520,10 @@ namespace Clowd
 
                 // calculate size of color box. this changes the finder size
                 var zoomedColor = GetPixelColor(_image, location.X, location.Y);
-                var hsl = HSLColor.FromRGB(zoomedColor);
-                var txtColor = hsl.Lightness > 55 ? Color.FromArgb(200, 0, 0, 0) : Color.FromArgb(200, 255, 255, 255);
+                // convert to grayscale and then calculate hsl
+                var grayScale = (0.3d * zoomedColor.R) + (0.59d * zoomedColor.G) + (0.11d * zoomedColor.G);
+                // if lightness is > 60% then we want to use black
+                var txtColor = grayScale > 127 ? Color.FromArgb(200, 0, 0, 0) : Color.FromArgb(200, 255, 255, 255);
                 var txtBrush = new SolidColorBrush(txtColor);
                 var txt = new FormattedText(
                     $"rgb({zoomedColor.R},{zoomedColor.G},{zoomedColor.B})\r\n{zoomedColor.ToHexRgb()}",
@@ -615,7 +617,7 @@ namespace Clowd
                 g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width + zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, (_finderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Right
                 g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, 0, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Top
                 g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height + zoomedPixel.Height) / 2, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Bottom
-
+                
                 // Draw a highlight around the pixel under cursor
                 var innerRect = new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, zoomedPixel.Width, zoomedPixel.Height);
                 g.DrawRectangle(null, new Pen(Brushes.White, gridLineWidth), innerRect);
