@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -306,6 +306,11 @@ namespace Clowd
         private void ToggleMagnifierExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             fastCapturer.ShowMagnifier = !fastCapturer.ShowMagnifier;
+        }
+        private void SelectColorExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            Clipboard.SetText(fastCapturer.GetHoveredColor().ToHexRgb());
+            this.Close();
         }
     }
 }

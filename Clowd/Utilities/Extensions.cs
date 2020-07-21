@@ -173,6 +173,11 @@ namespace Clowd
             Canvas.SetTop(panel, indTop);
         }
 
+        public static string ToHexRgb(this Color c)
+        {
+            return string.Format("#{0:X2}{1:X2}{2:X2}", c.R, c.G, c.B);
+        }
+
         public static void Save(this BitmapSource source, string filePath, ImageFormat format)
         {
             using (var ms = new MemoryStream())
