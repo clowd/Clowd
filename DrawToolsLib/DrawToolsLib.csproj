@@ -94,6 +94,7 @@
     <Compile Include="Graphics\GraphicFilledRectangle.cs" />
     <Compile Include="Graphics\GraphicImage.cs" />
     <Compile Include="Graphics\GraphicArrow.cs" />
+    <Compile Include="Graphics\GraphicPolyLine.cs" />
     <Compile Include="Graphics\GraphicText.cs" />
     <Compile Include="Graphics\IActivatableGraphic.cs" />
     <Compile Include="OriginIndicator.cs" />
@@ -112,7 +113,6 @@
     <Compile Include="HelperFunctions.cs" />
     <Compile Include="Graphics\GraphicEllipse.cs" />
     <Compile Include="Graphics\GraphicLine.cs" />
-    <Compile Include="Graphics\GraphicPolyLine.cs" />
     <Compile Include="Graphics\GraphicRectangle.cs" />
     <Compile Include="Graphics\GraphicSelectionRectangle.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
