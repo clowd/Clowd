@@ -278,7 +278,7 @@ namespace DrawToolsLib.Graphics
                     Angle = Math.Atan2(point.Y - unrotatedMid.Y, point.X - unrotatedMid.X) / Math.PI * 180;
                     break;
             }
-            OnPropertyChanged();
+            Normalize();
         }
 
         private static Cursor[] _resizeCursors = new Cursor[36];

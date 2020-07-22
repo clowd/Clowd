@@ -38,9 +38,6 @@ namespace DrawToolsLib.Graphics
             }
             set
             {
-                if (!_drawing)
-                    throw new InvalidOperationException("Points can only be updated before FinishDrawing has been called.");
-
                 _points = new List<Point>();
                 _builder = new CurveBuilder(4, 2);
 
@@ -54,7 +51,6 @@ namespace DrawToolsLib.Graphics
 
         private List<Point> _points;
         private CurveBuilder _builder;
-        private bool _drawing = true;
         private Geometry _geometry;
         private Rect _vectorBounds;
 
@@ -77,7 +73,6 @@ namespace DrawToolsLib.Graphics
             : base(objectColor, lineWidth, rect, filled, angle)
         {
             this.Points = points;
-            FinishDrawing();
         }
 
         internal override void DrawRectangle(DrawingContext context)
@@ -99,9 +94,6 @@ namespace DrawToolsLib.Graphics
 
         internal override void MoveHandleTo(Point point, int handleNumber)
         {
-            if (_drawing)
-                throw new InvalidOperationException("Must not move handles while drawing. Call FinishDrawing() first.");
-
             base.MoveHandleTo(point, handleNumber);
         }
 
@@ -109,7 +101,7 @@ namespace DrawToolsLib.Graphics
         {
             base.Move(deltaX, deltaY);
         }
-
+         
         internal override int MakeHitTest(Point point)
         {
             var rotatedPt = UnapplyRotation(point);
@@ -132,11 +124,6 @@ namespace DrawToolsLib.Graphics
             AddPointInternal(p, true);
         }
 
-        public void FinishDrawing()
-        {
-            _drawing = false;
-        }
-
         public override GraphicBase Clone()
         {
             return new GraphicPolyLine(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle, Points) { ObjectId = ObjectId };
@@ -144,9 +131,6 @@ namespace DrawToolsLib.Graphics
 
         private void AddPointInternal(Point p, bool updateGeometry)
         {
-            if (!_drawing)
-                throw new InvalidOperationException("Must not add points after FinishDrawing() has been called");
-
             Left = Math.Min(Left, p.X);
             Right = Math.Max(Right, p.X);
             Top = Math.Min(Top, p.Y);
