@@ -22,16 +22,6 @@ namespace Clowd.Utilities
 {
     public class WindowFinder2 : IDisposable, INotifyPropertyChanged
     {
-        public bool MetadataReady
-        {
-            get => _metadataReady;
-            set
-            {
-                _metadataReady = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MetadataReady)));
-            }
-        }
-
         public bool BitmapsReady
         {
             get => _bitmapsReady;
@@ -42,7 +32,6 @@ namespace Clowd.Utilities
             }
         }
 
-        private bool _metadataReady = false;
         private bool _bitmapsReady = false;
 
         private const int MaxWindowDepthToSearch = 4;
@@ -51,12 +40,13 @@ namespace Clowd.Utilities
         // this list will be ordered by topmost window handles first, so it can be enumerated easily to find the topmost window at a specific point
         // sub-handles (child windows) will come before their parents, but the Depth property can be used to find the top level window
         private readonly List<CachedWindow> _cachedWindows = new List<CachedWindow>();
-        private readonly HashSet<IntPtr> _hWndsAlreadyProcessed = new HashSet<IntPtr>();
         private readonly Stack<CachedWindow> _parentStack = new Stack<CachedWindow>();
         private readonly IVirtualDesktopManager _virtualDesktop = VirtualDesktopManager.CreateNew();
-        private readonly int _myProcessId = System.Diagnostics.Process.GetCurrentProcess().Id;
+        private WINDOWINFO _winInfo = new WINDOWINFO(true);
+        private Region _excludedArea = new Region(ScreenTools.VirtualScreen.Bounds.ToSystem());
 
         public event PropertyChangedEventHandler PropertyChanged;
+
 
         ~WindowFinder2()
         {
@@ -73,37 +63,68 @@ namespace Clowd.Utilities
             ths._cachedWindows.Clear();
             USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(ths.EvalWindow);
             USER32.EnumWindows(enumWindowsProc, IntPtr.Zero);
-            ths._hWndsAlreadyProcessed.Clear();
-            ths.CalculateVisibilityMetadata();
-            ths.MetadataReady = true;
 
             return ths;
         }
-        public void PopulateWindowBitmapsInBackground()
+
+        public static Task<WindowFinder2> NewCaptureAsync()
         {
-            // run on the thread pool
-            Task.Run(() =>
-            {
-                PopulateWindowBitmaps_Sync();
-                BitmapsReady = true;
-            });
+            return Task.Run(NewCapture);
         }
+
+        public void PopulateWindowBitmaps()
+        {
+            // this code feels terrible, but we are blocking on the WndProc of other processes, and if one of those processes is locked or acting poorly
+            // we don't want it to break Clowd.
+            var windows = _cachedWindows.Where(w => w.Depth == 0 && w.IsPartiallyCovered);
+            Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (c) =>
+            {
+                try
+                {
+                    Thread t = new Thread(new ThreadStart(() => { c.CaptureWindowBitmap(); }));
+                    t.Start();
+                    t.Join(1000);
+                    if (!t.IsAlive)
+                        return;
+                    // the thread is taking too long, ie, stuck in a blocking operation that will never return (perhaps if the window never responds to our WM_PAINT message)
+                    t.Interrupt();
+                    t.Join(200);
+
+                    if (!t.IsAlive)
+                        return;
+
+                    // the thread is _still_ alive, lets abort it.
+                    t.Abort();
+                }
+                catch
+                {
+                    // who cares?
+                }
+            });
+
+            BitmapsReady = true;
+        }
+
+        public Task PopulateWindowBitmapsAsync()
+        {
+            return Task.Run(PopulateWindowBitmaps);
+        }
+
         public CachedWindow GetWindowThatContainsPoint(ScreenPoint point)
         {
-            if (!MetadataReady)
-                return null;
-
             foreach (var window in _cachedWindows)
                 if (window.ImageBoundsRect.Contains(point))
                     return window;
 
             return null;
         }
+
         public CachedWindow GetTopLevelWindow(CachedWindow child)
         {
             if (child.Parent != null) return GetTopLevelWindow(child.Parent);
             return child;
         }
+
         public void Dispose()
         {
             _cachedWindows.ForEach(c => c.Dispose());
@@ -114,83 +135,100 @@ namespace Clowd.Utilities
             var depthInt = depthPtr.ToInt32();
             var parent = depthInt > 0 ? _parentStack.Peek() : null;
 
-            var winInfo = new WINDOWINFO(true);
-            if (!USER32.GetWindowInfo(hWnd, ref winInfo))
+            if (!USER32.GetWindowInfo(hWnd, ref _winInfo))
                 throw new Win32Exception();
 
-            var caption = USER32EX.GetWindowCaption(hWnd);
-            var asclass = USER32EX.GetWindowClassName(hWnd);
+            var winVisible = _winInfo.dwStyle.HasFlag(WindowStyles.WS_VISIBLE);
+            var winMinimized = _winInfo.dwStyle.HasFlag(WindowStyles.WS_MINIMIZE);
 
-            var winVisible = winInfo.dwStyle.HasFlag(WindowStyles.WS_VISIBLE);
-            var winMinimized = winInfo.dwStyle.HasFlag(WindowStyles.WS_MINIMIZE);
-            var winMaximized = winInfo.dwStyle.HasFlag(WindowStyles.WS_MAXIMIZE);
+            // ignore: not shown windows
+            if (winMinimized || !winVisible)
+                return true;
 
-            if (!this._hWndsAlreadyProcessed.Contains(hWnd) && winVisible && !winMinimized)
+            // ignore: 0 size windows
+            if (_winInfo.rcWindow.left == _winInfo.rcWindow.right || _winInfo.rcWindow.top == _winInfo.rcWindow.bottom)
+                return true;
+
+            // ignore: full screen windows created by this process
+            if (hWnd == CaptureWindow2.Current?.Handle)
+                return true;
+
+            // ignore: top level windows which are not visible to the user
+            ScreenRect windowRect = ScreenRect.FromSystem(USER32EX.GetTrueWindowBounds(hWnd));
+            if (depthInt == 0)
             {
-                // skip capture windows created by this process
-                USER32.GetWindowThreadProcessId(hWnd, out var processId);
-                if (processId == _myProcessId)
+                if (!_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
                 {
-                    var window = System.Windows.Interop.HwndSource.FromHwnd(hWnd)?.RootVisual;
-                    // ignore WPF debugging windows created by VS
-                    if (window != null && window.GetType().AssemblyQualifiedName.Contains("Microsoft.VisualStudio.DesignTools"))
-                        return true;
-                    // ignore my own fullscreen windows
-                    if (window is VideoOverlayWindow || window is CaptureWindow2)
-                        return true;
+                    // if the window is not on the current virtual desktop we want to ignore it and it's children
+                    return true;
                 }
 
-                if (depthInt == 0)
-                {
-                    if (!_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
-                    {
-                        // if the window is not on the current virtual desktop we want to ignore it and it's children
-                        return true;
-                    }
+                //var winIsTool = _winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOOLWINDOW);
+                //var winIsLayered = _winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_LAYERED);
+                //var winIsTopMost = _winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOPMOST);
 
-                    var winIsTool = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOOLWINDOW);
-                    var winIsLayered = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_LAYERED);
-                    var winIsTopMost = winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOPMOST);
+                //// if this is a top-level layered tool window, it's probably a transparent overlay and we don't want to capture it
+                //if (winIsTool && winIsLayered && winIsTopMost)
+                //    return true;
 
-                    // if this is a top-level layered tool window, it's probably a transparent overlay and we don't want to capture it
-                    if (winIsTool && winIsLayered && winIsTopMost)
-                        return true;
-                }
-
-                ScreenRect windowRect = ScreenRect.FromSystem(USER32EX.GetTrueWindowBounds(hWnd));
-                ScreenRect boundsOfScreenWorkspace = windowRect;
-
-                string className;
-                if (this.IsMetroOrPhantomWindow((IntPtr)hWnd, depthInt, out className))
+                // ignore: windows that are fully hidden by other windows higher on the z order
+                var checkRect = windowRect.ToSystem();
+                if (!_excludedArea.IsVisible(checkRect))
                     return true;
 
-                // clip to workspace if top level maximized window
-                if (depthInt == 0 && winMaximized)
-                    boundsOfScreenWorkspace = ScreenTools.GetScreenContaining(boundsOfScreenWorkspace).WorkingArea;
+                _excludedArea.Exclude(checkRect);
+            }
 
-                // clip to parent window
-                if (parent != null)
-                    boundsOfScreenWorkspace = boundsOfScreenWorkspace.Intersect(parent.ImageBoundsRect);
+            // ignore: window classes we know are garbage
+            string className;
+            if (this.IsMetroOrPhantomWindow((IntPtr)hWnd, depthInt, out className))
+                return true;
 
-                // clip to screen
-                boundsOfScreenWorkspace = ScreenTools.VirtualScreen.Bounds.Intersect(boundsOfScreenWorkspace);
+            ScreenRect clippedBounds = windowRect;
 
-                if (this.BoundsAreLargeEnoughForCapture(boundsOfScreenWorkspace, depthInt))
+            // clip to workspace if top level maximized window
+            var winMaximized = _winInfo.dwStyle.HasFlag(WindowStyles.WS_MAXIMIZE);
+            if (depthInt == 0 && winMaximized)
+                clippedBounds = ScreenTools.GetScreenContaining(clippedBounds).WorkingArea;
+
+            // clip to parent window
+            if (parent != null)
+                clippedBounds = clippedBounds.Intersect(parent.ImageBoundsRect);
+
+            // clip to screen
+            clippedBounds = ScreenTools.VirtualScreen.Bounds.Intersect(clippedBounds);
+
+            // ignore: windows that are too small, especially child windows that are small as they're usually buttons etc
+            if (!this.BoundsAreLargeEnoughForCapture(clippedBounds, depthInt))
+                return true;
+
+            var caption = USER32EX.GetWindowCaption(hWnd);
+            var cwin = new CachedWindow(hWnd, depthInt, className, caption, windowRect, clippedBounds, parent);
+
+            // enumerate windows on top of this one in the z-order to find out of any of them intersect
+            for (int z = _cachedWindows.Count - 1; z >= 0; z--)
+            {
+                var whTest = _cachedWindows[z];
+                if (cwin.WindowRect.IntersectsWith(whTest.WindowRect))
                 {
-                    var cwin = new CachedWindow(hWnd, depthInt, className, caption, windowRect, boundsOfScreenWorkspace, parent);
-
-                    if (depthInt < MaxWindowDepthToSearch)
+                    if (GetTopLevelWindow(whTest) != GetTopLevelWindow(cwin))
                     {
-                        this._parentStack.Push(cwin);
-                        USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(this.EvalWindow);
-                        USER32.EnumChildWindows(hWnd, enumWindowsProc, IntPtr.Add(depthPtr, 1));
-                        this._parentStack.Pop();
+                        cwin.IsPartiallyCovered = true;
+                        break;
                     }
-
-                    this._cachedWindows.Add(cwin);
-                    this._hWndsAlreadyProcessed.Add(hWnd);
                 }
             }
+
+            // add child windows before we add the parent one (so topmost windows come first in the list)
+            if (depthInt < MaxWindowDepthToSearch)
+            {
+                this._parentStack.Push(cwin);
+                USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(this.EvalWindow);
+                USER32.EnumChildWindows(hWnd, enumWindowsProc, IntPtr.Add(depthPtr, 1));
+                this._parentStack.Pop();
+            }
+
+            this._cachedWindows.Add(cwin);
             return true;
         }
         private bool IsMetroOrPhantomWindow(IntPtr hWnd, int depth, out string className)
@@ -205,10 +243,12 @@ namespace Clowd.Utilities
                 {
                     case "WorkerW":
                     case "Progman":
-                    case "SHELLDLL_DefView": // windows desktop
-                    case "SysListView32": // windows desktop
-                    case "Intermediate D3D Window": // Chrome / Chromium intermediate window
-                    case "CEF-OSC-WIDGET": // NVIDIA GeForce Overlay
+                    case "Shell_TrayWnd": // taskbar tray (has lots of tiny windows)
+                    //case "SHELLDLL_DefView": // windows desktop
+                    //case "SysListView32": // windows desktop
+                    //case "Intermediate D3D Window": // Chrome / Chromium intermediate window
+                    //case "CEF-OSC-WIDGET": // NVIDIA GeForce Overlay
+                    // case "DUIViewWndClassName": // inner explorer.exe window
                     case "EdgeUiInputWndClass":
                     case "TaskListThumbnailWnd":
                     case "LauncherTipWndClass":
@@ -258,66 +298,6 @@ namespace Clowd.Utilities
                 return false;
             return windowBounds.Width > minSize;
         }
-        private void CalculateVisibilityMetadata()
-        {
-            Region screen = new Region(ScreenTools.VirtualScreen.Bounds.ToSystem());
-            for (int i = 0; i < _cachedWindows.Count; i++)
-            {
-                var w = _cachedWindows[i];
-
-                var rect = w.WindowRect.ToSystem();
-                w.IsVisible = screen.IsVisible(rect);
-
-                if (w.IsVisible)
-                {
-                    for (int z = i; z >= 0; z--)
-                    {
-                        var whTest = _cachedWindows[z];
-                        if (w.WindowRect.IntersectsWith(whTest.WindowRect))
-                        {
-                            if (GetTopLevelWindow(whTest) != GetTopLevelWindow(w))
-                            {
-                                w.IsPartiallyCovered = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (w.Depth == 0)
-                    screen.Exclude(rect);
-            }
-        }
-        private void PopulateWindowBitmaps_Sync()
-        {
-            // this code feels terrible, but we are blocking on the WndProc of other processes, and if one of those processes is locked or acting poorly
-            // we don't want it to break Clowd.
-            var windows = _cachedWindows.Where(w => w.IsVisible && w.Depth == 0 && w.IsPartiallyCovered);
-            Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (c) =>
-            {
-                try
-                {
-                    Thread t = new Thread(new ThreadStart(() => { c.CaptureWindowBitmap(); }));
-                    t.Start();
-                    t.Join(1000);
-                    if (!t.IsAlive)
-                        return;
-                    // the thread is taking too long, ie, stuck in a blocking operation that will never return (perhaps if the window never responds to our WM_PAINT message)
-                    t.Interrupt();
-                    t.Join(200);
-
-                    if (!t.IsAlive)
-                        return;
-
-                    // the thread is _still_ alive, lets abort it.
-                    t.Abort();
-                }
-                catch
-                {
-                    // who cares?
-                }
-            });
-        }
 
         public class CachedWindow : IDisposable
         {
@@ -326,7 +306,6 @@ namespace Clowd.Utilities
             public ScreenRect WindowRect { get; private set; } = ScreenRect.Empty;
             public string Caption { get; private set; }
             public string ClassName { get; private set; }
-            public bool IsVisible { get; set; }
             public bool IsPartiallyCovered { get; set; }
             public int Depth { get; private set; }
             public Bitmap WindowBitmap { get; private set; }
@@ -414,6 +393,11 @@ namespace Clowd.Utilities
                     // if we're inturrupted here we should exit, as we were stuck in a blocking non-returning function call.
                     return;
                 }
+                catch (Win32Exception e)
+                {
+                    // this usually happens if the window closed while enumerating
+                    return;
+                }
 
                 // windows print outside their bounds (drop shadows, etc), GetWindowRect returns the true size (thus also the size of rectangle that PrintWindow needs
                 // but typically we want to omit the drop shadow and blending area and just show the logical window size. 
@@ -460,6 +444,7 @@ ActualBounds: '{ScreenRect.FromSystem(info.rcWindow)}'
 CalcBounds: '{WindowRect.ToString()}'
 Style: '{info.dwStyle.ToString()}'
 Ex Style: '{String.Join(" | ", exStyles)}'
+Partially Covered: '{IsPartiallyCovered}'
 ");
             }
 
