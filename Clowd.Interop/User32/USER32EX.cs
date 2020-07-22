@@ -135,8 +135,7 @@ namespace Clowd.Interop
             catch (DllNotFoundException) { }
 
             // fallback to old style calls if we can't query the DWM
-            RECT rect;
-            if (!USER32.GetWindowRect(handle, out rect))
+            if (!USER32.GetWindowRect(handle, out var rect))
                 throw new Win32Exception();
 
             return Rectangle.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);

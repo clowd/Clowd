@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -207,7 +207,7 @@ namespace Clowd
             //_onTimer.Start();
 
             await Task.Delay(100);
-            _windowFinder.PopulateWindowBitmapsInBackground();
+            await _windowFinder.PopulateWindowBitmapsAsync();
         }
 
         public void Reset()
@@ -618,7 +618,7 @@ namespace Clowd
                 g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width + zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, (_finderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Right
                 g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, 0, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Top
                 g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height + zoomedPixel.Height) / 2, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Bottom
-                
+
                 // Draw a highlight around the pixel under cursor
                 var innerRect = new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, zoomedPixel.Width, zoomedPixel.Height);
                 g.DrawRectangle(null, new Pen(Brushes.White, gridLineWidth), innerRect);
@@ -673,7 +673,7 @@ namespace Clowd
                     g.DrawGeometry(new SolidColorBrush(zoomedColor), new Pen(txtBrush, _sharpLineWidth), colorGeo);
                     g.DrawText(txt, new Point(colorSquare.X + colorTxtOffsetX, colorSquare.Y + ((colorSquare.Height - txt.Height) / 2)));
                 }
-                
+
                 this.Width = _finderSize.Width;
                 this.Height = _finderSize.Height;
             }
@@ -693,6 +693,10 @@ namespace Clowd
                 color = Color.FromArgb(bytes[3], bytes[2], bytes[1], bytes[0]);
             }
             else if (bitmap.Format == PixelFormats.Bgr32)
+            {
+                color = Color.FromRgb(bytes[2], bytes[1], bytes[0]);
+            }
+            else if (bitmap.Format == PixelFormats.Bgr24)
             {
                 color = Color.FromRgb(bytes[2], bytes[1], bytes[0]);
             }

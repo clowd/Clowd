@@ -83,6 +83,9 @@ namespace Clowd
             ths.crectBottom.Margin = ths.crectTop.Margin = margin;
         }
 
+        public static CaptureWindow2 Current { get; private set; }
+        public IntPtr Handle { get; private set; }
+
         private CaptureWindow2()
         {
             InitializeComponent();
@@ -90,13 +93,12 @@ namespace Clowd
 
         private bool _adornerRegistered = false;
         private bool _initialized = false;
-        private static CaptureWindow2 _readyWindow;
 
         public static async void ShowNewCapture()
         {
-            if (_readyWindow != null)
+            if (Current != null)
             {
-                _readyWindow.Activate();
+                Current.Activate();
                 return;
             }
 
@@ -106,10 +108,11 @@ namespace Clowd
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - START");
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Start");
-            _readyWindow = new CaptureWindow2();
-            _readyWindow.Closed += (s, e) => _readyWindow = null;
-            var fstCap = _readyWindow.fastCapturer.StartFastCapture(sw);
-            var hWnd = new WindowInteropHelper(_readyWindow).EnsureHandle();
+            Current = new CaptureWindow2();
+            Current.Closed += (s, e) => Current = null;
+            var fstCap = Current.fastCapturer.StartFastCapture(sw);
+            var hWnd = new WindowInteropHelper(Current).EnsureHandle();
+            Current.Handle = hWnd;
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
             USER32.SetWindowPos(hWnd, SWP_HWND.HWND_TOP, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
@@ -120,16 +123,16 @@ namespace Clowd
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Preparations Complete");
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Showing Window");
-            if (!Debugger.IsAttached) _readyWindow.Topmost = true;
-            _readyWindow.ContentRendered += (s, e) =>
+            if (!Debugger.IsAttached) Current.Topmost = true;
+            Current.ContentRendered += (s, e) =>
             {
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
-                _readyWindow.fastCapturer.FinishFastCapture();
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
-                sw.Stop();
+                Current.fastCapturer.FinishFastCapture();
+                //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
+                //sw.Stop();
             };
-            _readyWindow.Show();
-            _readyWindow._initialized = true;
+            Current.Show();
+            Current._initialized = true;
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Show Complete");
         }
 
