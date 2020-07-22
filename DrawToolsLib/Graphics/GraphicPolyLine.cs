@@ -1,4 +1,4 @@
-#if SYSTEM_WINDOWS_VECTOR
+﻿#if SYSTEM_WINDOWS_VECTOR
 using VECTOR = System.Windows.Vector;
 using FLOAT = System.Double;
 #elif SYSTEM_NUMERICS_VECTOR
@@ -27,184 +27,172 @@ using Path = System.Windows.Shapes.Path;
 
 namespace DrawToolsLib.Graphics
 {
-    public class GraphicPolyLine : GraphicBase
+    [Serializable]
+    public class GraphicPolyLine : GraphicRectangle
     {
         public Point[] Points
         {
-            get { return _points.ToArray(); }
+            get
+            {
+                return _points.ToArray();
+            }
             set
             {
-                _points = value.ToList();
+                if (!_drawing)
+                    throw new InvalidOperationException("Points can only be updated before FinishDrawing has been called.");
+
+                _points = new List<Point>();
+                _builder = new CurveBuilder(4, 2);
+
+                foreach (var v in value)
+                    AddPointInternal(v, false);
+
+                UpdateGeometry();
                 OnPropertyChanged(nameof(Points));
             }
         }
 
         private List<Point> _points;
-        private bool _drawing;
-        private Geometry _geoCache;
+        private CurveBuilder _builder;
+        private bool _drawing = true;
+        private Geometry _geometry;
+        private Rect _vectorBounds;
 
-        protected GraphicPolyLine()
+        protected GraphicPolyLine() // serializer constructor
         {
         }
 
-        public GraphicPolyLine(DrawingCanvas canvas, Point start) : this(canvas.ObjectColor, canvas.LineWidth, start)
+        public GraphicPolyLine(DrawingCanvas canvas, Point start)
+            : this(canvas.ObjectColor, canvas.LineWidth, start)
         {
         }
 
-        public GraphicPolyLine(Color objectColor, double lineWidth, Point start) : base(objectColor, lineWidth)
+        public GraphicPolyLine(Color objectColor, double lineWidth, Point start)
+            : base(objectColor, lineWidth, new Rect(start, new Size(1, 1)))
         {
-            _drawing = true;
-            _points = new List<Point>();
-            _points.Add(start);
+            this.Points = new[] { start };
         }
-        public GraphicPolyLine(Color objectColor, double lineWidth, List<Point> points) : base(objectColor, lineWidth)
+
+        public GraphicPolyLine(Color objectColor, double lineWidth, Rect rect, bool filled, double angle, Point[] points) // clone constructor
+            : base(objectColor, lineWidth, rect, filled, angle)
+        {
+            this.Points = points;
+            FinishDrawing();
+        }
+
+        internal override void DrawRectangle(DrawingContext context)
+        {
+            var desiredBounds = UnrotatedBounds;
+            double offsetX = desiredBounds.Left - _vectorBounds.Left;
+            double offsetY = desiredBounds.Top - _vectorBounds.Top;
+            double scaleX = (desiredBounds.Right - (_vectorBounds.Left + offsetX)) / _vectorBounds.Width;
+            double scaleY = (desiredBounds.Bottom - (_vectorBounds.Top + offsetY)) / _vectorBounds.Height;
+
+            var group = new TransformGroup();
+            group.Children.Add(new TranslateTransform(offsetX, offsetY));
+            group.Children.Add(new ScaleTransform(scaleX, scaleY, _vectorBounds.Left + offsetX, _vectorBounds.Top + offsetY));
+            _geometry.Transform = group;
+
+            Pen pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
+            context.DrawGeometry(null, pen, _geometry);
+        }
+
+        internal override void MoveHandleTo(Point point, int handleNumber)
+        {
+            if (_drawing)
+                throw new InvalidOperationException("Must not move handles while drawing. Call FinishDrawing() first.");
+
+            base.MoveHandleTo(point, handleNumber);
+        }
+
+        internal override void Move(double deltaX, double deltaY)
+        {
+            base.Move(deltaX, deltaY);
+        }
+
+        internal override int MakeHitTest(Point point)
+        {
+            var rotatedPt = UnapplyRotation(point);
+            if (IsSelected)
+            {
+                for (int i = 1; i <= HandleCount; i++)
+                {
+                    if (GetHandleRectangle(i).Contains(rotatedPt))
+                        return i;
+                }
+            }
+
+            var widened = _geometry.GetWidenedPathGeometry(new Pen(Brushes.Black, HitTestWidth));
+            var hit = widened.FillContains(rotatedPt);
+            return hit ? 0 : -1;
+        }
+
+        public void AddPoint(Point p)
+        {
+            AddPointInternal(p, true);
+        }
+
+        public void FinishDrawing()
         {
             _drawing = false;
-            _points = points;
         }
 
-        public override Rect Bounds
+        public override GraphicBase Clone()
         {
-            get
-            {
-                if (!_drawing && _geoCache != null && !_geoCache.Bounds.IsEmpty)
-                    return _geoCache.Bounds;
-
-                var xmin = _points.Min(p => p.X);
-                var xmax = _points.Max(p => p.X);
-                var ymin = _points.Min(p => p.Y);
-                var ymax = _points.Max(p => p.Y);
-
-                return new Rect(xmin, ymin, xmax - xmin, ymax - ymin);
-            }
+            return new GraphicPolyLine(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle, Points) { ObjectId = ObjectId };
         }
-        internal override int HandleCount => 0;
 
-        internal override void Draw(DrawingContext drawingContext)
+        private void AddPointInternal(Point p, bool updateGeometry)
         {
-            if (drawingContext == null)
-            {
-                throw new ArgumentNullException("drawingContext");
-            }
+            if (!_drawing)
+                throw new InvalidOperationException("Must not add points after FinishDrawing() has been called");
 
-            if (_drawing)
-            {
-                DrawBasicPoints(drawingContext);
-            }
-            else
-            {
-                DrawCurvedLine(drawingContext);
-            }
+            Left = Math.Min(Left, p.X);
+            Right = Math.Max(Right, p.X);
+            Top = Math.Min(Top, p.Y);
+            Bottom = Math.Max(Bottom, p.Y);
+
+            _points.Add(p);
+
+            var vector = new VECTOR((FLOAT)p.X, (FLOAT)p.Y);
+            _builder.AddPoint(vector);
+
+            if (updateGeometry)
+                UpdateGeometry();
         }
-        private void DrawBasicPoints(DrawingContext context)
-        {
-            var brush = new SolidColorBrush(ObjectColor);
-            foreach (var pt in _points)
-            {
-                context.DrawEllipse(brush, null, pt, LineWidth, LineWidth);
-            }
-        }
-        private void DrawCurvedLine(DrawingContext context)
-        {
-            var vectors = _points.Select(toVector).ToList();
-            CubicBezier[] curves = CurveFit.Fit(vectors, 8);
 
-            int i = 0;
-            Pen pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
+        private void UpdateGeometry()
+        {
+            var curves = _builder.Curves;
+            var curveLength = curves.Count();
+
+            Point toWpfPoint(VECTOR wpp)
+            {
+                return new Point(VectorHelper.GetX(wpp), VectorHelper.GetY(wpp));
+            }
+
             StreamGeometry geo = new StreamGeometry();
             using (StreamGeometryContext gctx = geo.Open())
             {
-                for (int index = 0; index < curves.Length; index++)
+                for (int index = 0; index < curveLength; index++)
                 {
                     CubicBezier curve = curves[index];
                     gctx.BeginFigure(toWpfPoint(curve.p0), false, false);
                     gctx.BezierTo(toWpfPoint(curve.p1), toWpfPoint(curve.p2), toWpfPoint(curve.p3), true, false);
                 }
             }
-            geo.Freeze();
-            _geoCache = geo.GetWidenedPathGeometry(new Pen(Brushes.Black, LineWidth));
 
-            if (IsSelected)
-            {
-                DrawDashedBorder(context, Bounds);
-            }
+            _geometry = geo;
 
-            context.DrawGeometry(null, pen, geo);
-        }
+            var xmin = _points.Min(p => p.X);
+            var xmax = _points.Max(p => p.X);
+            var ymin = _points.Min(p => p.Y);
+            var ymax = _points.Max(p => p.Y);
 
-        internal override bool Contains(Point point)
-        {
-            if (_geoCache == null)
-                return false;
-            return _geoCache.FillContains(point) ||
-                _geoCache.StrokeContains(new Pen(Brushes.Black, LineHitTestWidth), point);
-        }
-        internal override Point GetHandle(int handleNumber)
-        {
-            return new Point(0, 0);
-        }
-        internal override Cursor GetHandleCursor(int handleNumber)
-        {
-            return HelperFunctions.DefaultCursor;
-        }
+            _vectorBounds = new Rect(new Point(xmin, ymin), new Point(xmax, ymax));
 
-        internal override void MoveHandleTo(Point point, int handleNumber)
-        {
-        }
-
-        internal override void Move(double deltaX, double deltaY)
-        {
-            var pt = _points.ToArray();
-            for (int i = 0; i < pt.Length; i++)
-            {
-                pt[i].X += deltaX;
-                pt[i].Y += deltaY;
-            }
-            _points = pt.ToList();
-            InvalidateVisual();
-        }
-        internal override int MakeHitTest(Point point)
-        {
-            if (IsSelected)
-            {
-                for (int i = 1; i <= HandleCount; i++)
-                {
-                    if (GetHandleRectangle(i).Contains(point))
-                        return i;
-                }
-            }
-
-            if (Contains(point))
-                return 0;
-
-            return -1;
-        }
-        public override GraphicBase Clone()
-        {
-            return new GraphicPolyLine(ObjectColor, LineWidth, _points) { ObjectId = ObjectId };
-        }
-
-        public void AddPoint(Point point)
-        {
-            _points.Add(point);
-            InvalidateVisual();
-        }
-        public void FinishDrawing()
-        {
-            _drawing = false;
-            var vectors = _points.Select(toVector).ToList();
-            List<VECTOR> ppPts = CurvePreprocess.Linearize(vectors, 8);
-            _points = ppPts.Select(toWpfPoint).ToList();
             InvalidateVisual();
         }
 
-        private Point toWpfPoint(VECTOR p)
-        {
-            return new Point(VectorHelper.GetX(p), VectorHelper.GetY(p));
-        }
-        private VECTOR toVector(Point p)
-        {
-            return new VECTOR((FLOAT)p.X, (FLOAT)p.Y);
-        }
     }
 }
