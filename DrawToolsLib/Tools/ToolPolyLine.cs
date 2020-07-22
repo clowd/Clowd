@@ -43,7 +43,6 @@ namespace DrawToolsLib.Tools
 
             newPolyLine.AddPoint(p);
             newPolyLine.IsSelected = true;
-            newPolyLine.FinishDrawing();
             newPolyLine.Normalize();
 
             drawingCanvas.AddCommandToHistory(new CommandAdd(newPolyLine));
