@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -162,10 +162,11 @@ namespace Clowd
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Capture Start");
                 using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
                 {
-                    _image = source.ToBitmapSource();
+                    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Image Captured");
+                    _image = source.ConvertToBitmapSourceFast();
                 }
                 _image.Freeze();
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Capture End");
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Image Converted");
             });
 
             await Task.WhenAll(tsk1, tsk2);
