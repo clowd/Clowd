@@ -59,6 +59,7 @@ namespace Clowd
         }
 
         public static CaptureWindow2 Current { get; private set; }
+
         public IntPtr Handle { get; private set; }
 
         private CaptureWindow2()
@@ -104,8 +105,6 @@ namespace Clowd
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
                 Current.fastCapturer.FinishFastCapture();
                 Current.Activate();
-                //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
-                //sw.Stop();
             };
             Current.ShowActivated = true;
             Current.Show();
@@ -188,6 +187,7 @@ namespace Clowd
                 }
             }
         }
+
         private void UpdateButtonBarPosition()
         {
             var numberOfActiveButtons = toolActionBarStackPanel.Children
@@ -199,9 +199,10 @@ namespace Clowd
 
             toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(SelectionRectangle, 2, 10, 50, numberOfActiveButtons * 50);
         }
+
         private BitmapSource CropBitmap()
         {
-            return fastCapturer.GetSelectedWindowBitmap();
+            return fastCapturer.GetSelectedBitmap();
         }
 
         private void Dep_IsCaptureChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -238,7 +239,6 @@ namespace Clowd
             if (!IsCapturing)
                 UpdateButtonBarPosition();
         }
-
 
         private void UploadCanExecute(object sender, CanExecuteRoutedEventArgs e)
         {

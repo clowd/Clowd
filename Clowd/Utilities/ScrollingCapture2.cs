@@ -12,7 +12,6 @@ using System.Windows.Forms;
 using Clowd.Interop;
 using Clowd.Interop.Kernel32;
 using Clowd.Interop.Shell32;
-using MasterDevs.ChromeDevTools;
 using Newtonsoft.Json.Linq;
 using ScreenVersusWpf;
 
