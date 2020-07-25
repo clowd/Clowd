@@ -121,7 +121,8 @@ namespace Clowd.Utilities
 
         public CachedWindow GetTopLevelWindow(CachedWindow child)
         {
-            if (child.Parent != null) return GetTopLevelWindow(child.Parent);
+            if (child?.Parent != null) 
+                return GetTopLevelWindow(child.Parent);
             return child;
         }
 
