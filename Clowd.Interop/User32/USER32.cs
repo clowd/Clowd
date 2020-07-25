@@ -49,6 +49,16 @@ namespace Clowd.Interop
         public static extern bool SetForegroundWindow(IntPtr hWnd);
 
         [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CloseWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetParent(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetAncestor(IntPtr hWnd, GetAncestorFlags gaFlags);
+
+        [DllImport("user32.dll")]
         public static extern bool ShowWindow(IntPtr hWnd, ShowWindowCmd nCmdShow);
 
         [DllImport("user32.dll")]
@@ -336,6 +346,9 @@ namespace Clowd.Interop
         public static extern short GetKeyState(VirtualKeyStates nVirtKey);
 
         [DllImport("user32.dll")]
+        public static extern short VkKeyScan(char ch);
+
+        [DllImport("user32.dll")]
         public static extern bool RedrawWindow(IntPtr hWnd, [In] ref RECT lprcUpdate, IntPtr hrgnUpdate, RedrawWindowFlags flags);
 
         [DllImport("user32.dll")]
@@ -353,6 +366,13 @@ namespace Clowd.Interop
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetWindowInfo(IntPtr hwnd, ref WINDOWINFO pwi);
+    }
+
+    public enum GetAncestorFlags : uint
+    {
+        GA_PARENT = 1,
+        GA_ROOT = 2,
+        GA_ROOTOWNER = 3,
     }
 
     [Flags]
