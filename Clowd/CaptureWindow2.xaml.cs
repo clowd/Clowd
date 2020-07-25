@@ -49,38 +49,13 @@ namespace Clowd
         private static void SelectionRectangleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (CaptureWindow2)d;
-            var newv = (WpfRect)e.NewValue;
-
-            Storyboard sb = ths.FindResource("BorderDashAnimation") as Storyboard;
-            if (newv == default(WpfRect) && ths.selectionBorder.Visibility == Visibility.Visible)
-            {
-                sb.Stop();
-                ths.selectionBorder.Visibility = Visibility.Collapsed;
-            }
-            else if (ths.selectionBorder.Visibility == Visibility.Collapsed)
-            {
-                ths.selectionBorder.Visibility = Visibility.Visible;
-                sb.Begin();
-            }
-
-            if (!ths.IsCapturing)
-                ths.UpdateButtonBarPosition();
+            ths.Dep_SelectionRectangleChanged(d, e);
         }
 
         private static void IsCapturingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (CaptureWindow2)d;
-            var currently = (bool)e.NewValue;
-            ths.ManageSelectionResizeHandlers(!currently);
-            if (!currently)
-                ths.UpdateButtonBarPosition();
-
-            ths.toolActionBarStackPanel.Visibility = ths._initialized && !currently ? Visibility.Visible : Visibility.Hidden;
-
-            var lineW = ScreenTools.WpfSnapToPixelsFloor(currently ? 1 : 2);
-            var margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(currently ? 0 : 2));
-            ths.crectBottom.StrokeThickness = ths.crectTop.StrokeThickness = lineW;
-            ths.crectBottom.Margin = ths.crectTop.Margin = margin;
+            ths.Dep_IsCaptureChanged(d, e);
         }
 
         public static CaptureWindow2 Current { get; private set; }
@@ -128,9 +103,11 @@ namespace Clowd
             {
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
                 Current.fastCapturer.FinishFastCapture();
+                Current.Activate();
                 //Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - END");
                 //sw.Stop();
             };
+            Current.ShowActivated = true;
             Current.Show();
             Current._initialized = true;
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Show Complete");
@@ -211,7 +188,6 @@ namespace Clowd
                 }
             }
         }
-
         private void UpdateButtonBarPosition()
         {
             var numberOfActiveButtons = toolActionBarStackPanel.Children
@@ -223,11 +199,46 @@ namespace Clowd
 
             toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(SelectionRectangle, 2, 10, 50, numberOfActiveButtons * 50);
         }
-
         private BitmapSource CropBitmap()
         {
-            return fastCapturer.GetSelectedBitmap();
+            return fastCapturer.GetSelectedWindowBitmap();
         }
+
+        private void Dep_IsCaptureChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            var currently = (bool)e.NewValue;
+            ManageSelectionResizeHandlers(!currently);
+            if (!currently)
+                UpdateButtonBarPosition();
+
+            toolActionBarStackPanel.Visibility = _initialized && !currently ? Visibility.Visible : Visibility.Hidden;
+
+            var lineW = ScreenTools.WpfSnapToPixelsFloor(currently ? 1 : 2);
+            var margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(currently ? 0 : 2));
+            crectBottom.StrokeThickness = crectTop.StrokeThickness = lineW;
+            crectBottom.Margin = crectTop.Margin = margin;
+        }
+
+        private void Dep_SelectionRectangleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            var newv = (WpfRect)e.NewValue;
+
+            Storyboard sb = FindResource("BorderDashAnimation") as Storyboard;
+            if (newv == default(WpfRect) && selectionBorder.Visibility == Visibility.Visible)
+            {
+                sb.Stop();
+                selectionBorder.Visibility = Visibility.Collapsed;
+            }
+            else if (selectionBorder.Visibility == Visibility.Collapsed)
+            {
+                selectionBorder.Visibility = Visibility.Visible;
+                sb.Begin();
+            }
+
+            if (!IsCapturing)
+                UpdateButtonBarPosition();
+        }
+
 
         private void UploadCanExecute(object sender, CanExecuteRoutedEventArgs e)
         {

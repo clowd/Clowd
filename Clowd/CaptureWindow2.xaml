@@ -44,6 +44,7 @@
         <KeyBinding Key="U" Command="{StaticResource Command.Upload}" />
         <KeyBinding Key="P" Command="{StaticResource Command.Photo}" />
         <KeyBinding Key="Enter" Command="{StaticResource Command.Photo}" />
+        <KeyBinding Key="E" Command="{StaticResource Command.Photo}" />
         <KeyBinding Key="V" Command="{StaticResource Command.Video}" />
         <KeyBinding Key="R" Command="{StaticResource Command.Reset}" />
         <KeyBinding Key="F" Command="{StaticResource Command.SelectScreen}" />
