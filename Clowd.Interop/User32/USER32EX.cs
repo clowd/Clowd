@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace Clowd.Interop
 {
@@ -103,6 +104,7 @@ namespace Clowd.Interop
 
             return result;
         }
+
         internal static bool EnumChildWindow(IntPtr handle, IntPtr pointer)
         {
             GCHandle gch = GCHandle.FromIntPtr(pointer);
@@ -115,6 +117,19 @@ namespace Clowd.Interop
             list.Add(handle);
 
             return true;
+        }
+
+        public static Keys ConvertCharToVirtualKey(char ch)
+        {
+            short vkey = USER32.VkKeyScan(ch);
+            Keys retval = (Keys)(vkey & 0xff);
+
+            //int modifiers = vkey >> 8;
+            //if ((modifiers & 1) != 0) retval |= Keys.Shift;
+            //if ((modifiers & 2) != 0) retval |= Keys.Control;
+            //if ((modifiers & 4) != 0) retval |= Keys.Alt;
+
+            return retval;
         }
 
         /// <summary>
