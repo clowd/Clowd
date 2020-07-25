@@ -130,6 +130,9 @@ namespace Clowd.Interop.Kernel32
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         public static extern int AddDllDirectory(string dir);
+
+        [DllImport("Kernel32.dll")]
+        public static extern bool QueryFullProcessImageName([In] IntPtr hProcess, [In] uint dwFlags, [Out] StringBuilder lpExeName, [In, Out] ref uint lpdwSize);
     }
 
     [Flags]
