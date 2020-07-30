@@ -161,7 +161,7 @@ namespace Clowd
             var subSettings = root
                 .GetType()
                 .GetProperties()
-                .Where(p => typeof(T).IsAssignableFrom(p.PropertyType))
+                .Where(p => typeof(T).IsAssignableFrom(p.PropertyType) && (!p.PropertyType.IsGenericType || p.PropertyType.GetGenericTypeDefinition() != typeof(TrulyObservableCollection<>)))
                 .Select(p => p.GetValue(root))
                 .Cast<T>();
 
@@ -319,21 +319,24 @@ namespace Clowd
     [ImplementPropertyChanged]
     public class VideoSettings : IDisposable
     {
-        [DisplayName("Max Resolution")]
-        public MaxResolution MaxResolution { get; set; } = MaxResolution._1080p;
+        //[DisplayName("Max Resolution")]
+        //public MaxResolution MaxResolution { get; set; } = MaxResolution._1080p;
 
         [PData.DirectoryPath]
         public string OutputDirectory { get; set; }
 
         public bool ShowCursor { get; set; } = true;
 
-        public CaptureVideoCodec VideoCodec { get; set; } = CaptureVideoCodec.libx264;
+        //public CaptureVideoCodec VideoCodec { get; set; } = CaptureVideoCodec.libx264;
 
-        [PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.h264_nvenc)]
-        public FFMpegCodecSettings_h264_nvenc h264_nvenc { get; set; } = new FFMpegCodecSettings_h264_nvenc();
+        //[PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.h264_nvenc)]
+        //public FFMpegCodecSettings_h264_nvenc h264_nvenc { get; set; } = new FFMpegCodecSettings_h264_nvenc();
 
-        [PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.libx264)]
-        public FFMpegCodecSettings_libx264 libx264 { get; set; } = new FFMpegCodecSettings_libx264();
+        //[PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.libx264)]
+        //public FFMpegCodecSettings_libx264 libx264 { get; set; } = new FFMpegCodecSettings_libx264();
+
+        [DisplayName("Encoder Settings")]
+        public FFmpegSettings VideoCodec { get; set; } = new FFmpegSettings();
 
         public void Dispose()
         {

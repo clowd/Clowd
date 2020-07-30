@@ -1,0 +1,79 @@
+﻿<UserControl
+    x:Class="Clowd.Controls.FFMpegCodecSettingsEditor3"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="clr-namespace:Clowd.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ptools="http://propertytools.org/wpf"
+    d:DesignHeight="450"
+    d:DesignWidth="800"
+    Background="White"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    mc:Ignorable="d">
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
+        <local:AppSettingsItemFactory x:Key="itemFactory" />
+        <local:AppSettingsControlFactory x:Key="controlFactory" />
+    </UserControl.Resources>
+    <StackPanel Orientation="Vertical">
+        <TextBlock Margin="0,6,0,0">Preset:</TextBlock>
+        <ComboBox
+            x:Name="currentSelection"
+            DisplayMemberPath="Name"
+            ItemsSource="{Binding Path=CodecSettings.SavedPresets}"
+            SelectedItem="{Binding SelectedCodec}"
+            SelectedValuePath="Id"
+            SelectionChanged="ComboBox_SelectionChanged" />
+        <TextBlock
+            Margin="0,10,0,0"
+            Foreground="OrangeRed"
+            Text="{Binding SelectedCodec.Description}"
+            TextWrapping="Wrap" />
+        <ptools:PropertyGrid
+            x:Name="PropertyGrid1"
+            Margin="0,10,0,0"
+            CategoryControlType="Template"
+            DescriptionIcon="../Images/Help-25.png"
+            DescriptionIconAlignment="Right"
+            PropertyControlFactory="{StaticResource controlFactory}"
+            PropertyItemFactory="{StaticResource itemFactory}"
+            SelectedObject="{Binding SelectedCodec}"
+            TabStripPlacement="Left"
+            TabVisibility="Collapsed" />
+        <Button Margin="0,10,0,0" Click="Advanced_Click">Advanced Codec Settings</Button>
+        <Button
+            Margin="0,10,0,0"
+            Background="DarkRed"
+            Click="Delete_Clicked"
+            Foreground="White"
+            Visibility="{Binding Path=SelectedCodec.IsCustom, Converter={StaticResource Bool2Vis}}">
+            Delete Custom Preset
+        </Button>
+        <TextBlock
+            Margin="0,10,0,0"
+            Foreground="DarkGray"
+            TextWrapping="Wrap">
+            <Run FontWeight="Bold">Disclaimer:</Run>
+            <Run>The h264 encoding is licensed by the</Run>
+            <Hyperlink NavigateUri="https://www.mpegla.com/" RequestNavigate="Hyperlink_RequestNavigate">
+                <Run>MPEG-LA.</Run>
+            </Hyperlink>
+            <Run>Video encoding algorithms are provided by</Run>
+            <Hyperlink NavigateUri="http://ffmpeg.org" RequestNavigate="Hyperlink_RequestNavigate">
+                <Run>FFmpeg</Run>
+            </Hyperlink>
+            <Run>and the various libraries it contains.</Run>
+            <Run>FFmpeg is free open source software, made available under the</Run>
+            <Hyperlink NavigateUri="http://ffmpeg.org/legal.html" RequestNavigate="Hyperlink_RequestNavigate">
+                <Run>GPLv2 license.</Run>
+            </Hyperlink>
+            <Run>In accordance with the license terms,</Run>
+            <Hyperlink NavigateUri="http://ffmpeg.org/download.html" RequestNavigate="Hyperlink_RequestNavigate">
+                <Run>the source code of FFmpeg</Run>
+            </Hyperlink>
+            <Run>is available freely for download and modification.</Run>
+        </TextBlock>
+    </StackPanel>
+</UserControl>

@@ -119,11 +119,35 @@ namespace Clowd
                 return editor;
             }
 
-            if (typeof(FFMpegCodecSettings).IsAssignableFrom(property.ActualPropertyType))
+            //if (typeof(FFMpegCodecSettings).IsAssignableFrom(property.ActualPropertyType))
+            //{
+            //    var editor = new FFMpegCodecSettingsEditor(() => { App.Current.Settings.SaveQuiet(); });
+            //    editor.SetBinding(FFMpegCodecSettingsEditor.CodecSettingsProperty, property.CreateBinding());
+            //    return editor;
+            //}
+
+            if (property.Is(typeof(FFmpegSettings)))
             {
-                var editor = new FFMpegCodecSettingsEditor(() => { App.Current.Settings.SaveQuiet(); });
-                editor.SetBinding(FFMpegCodecSettingsEditor.CodecSettingsProperty, property.CreateBinding());
-                return editor;
+                var editor2 = new FFMpegCodecSettingsEditor3();
+                var bind = property.CreateBinding();
+                bind.Source = property.TargetObject;
+                editor2.SetBinding(FFMpegCodecSettingsEditor3.CodecSettingsProperty, bind);
+                return editor2;
+            }
+
+            if (property.Is(typeof(FFmpegDirectShowAudioDevice)))
+            {
+                var bind = property.CreateBinding();
+                bind.Source = property.TargetObject;
+                //var pinfo = property.GetDescriptor(property.PropertyName);
+                //var val = pinfo.GetValue(property.TargetObject);
+                var combo = new ComboBox();
+                combo.DisplayMemberPath = nameof(FFmpegDirectShowAudioDevice.FriendlyName);
+                combo.ItemsSource = FFmpegDirectShowAudioDevice.GetDevices();
+                combo.SetBinding(ComboBox.SelectedItemProperty, bind);
+                //combo.SelectedItem = val;
+                //combo.SelectionChanged += (s, e) => pinfo.SetValue(property.TargetObject, combo.SelectedItem);
+                return combo;
             }
 
             return base.CreateControl(property, options);
@@ -156,7 +180,7 @@ namespace Clowd
             dialog.ShowNewFolderButton = showNewFolderButton;
             dialog.SelectedPath = directory;
 
-            var success = (bool)dialog.ShowDialog();
+            var success = dialog.ShowDialog() == true;
             directory = dialog.SelectedPath;
             return success;
         }

@@ -32,8 +32,8 @@ namespace Clowd
 
         public interface ITemplatable
         {
-            void SetContent(Control control);
-            Control GetContent();
+            void SetContent(FrameworkElement control);
+            FrameworkElement GetContent();
         }
         private class modernWindow : MetroWindow, ITemplatable
         {
@@ -68,7 +68,7 @@ namespace Clowd
                 }
             }
 
-            public void SetContent(Control control)
+            public void SetContent(FrameworkElement control)
             {
                 var templatedOld = _content.Content as TemplatedControl;
                 if (templatedOld != null)
@@ -89,7 +89,7 @@ namespace Clowd
                     }
                 }
             }
-            public Control GetContent()
+            public FrameworkElement GetContent()
             {
                 return (Control)_content.Content;
             }
@@ -121,7 +121,7 @@ namespace Clowd
                 }
             }
 
-            public void SetContent(Control control)
+            public void SetContent(FrameworkElement control)
             {
                 var templatedOld = _content.Content as TemplatedControl;
                 if (templatedOld != null)
@@ -143,7 +143,7 @@ namespace Clowd
                     }
                 }
             }
-            public Control GetContent()
+            public FrameworkElement GetContent()
             {
                 return (Control)_content.Content;
             }
@@ -152,7 +152,7 @@ namespace Clowd
 
     public sealed class TemplatedWindow
     {
-        public static Window CreateWindow(string title, Control content)
+        public static Window CreateWindow(string title, FrameworkElement content)
         {
             var template = TemplatedControl.CreateTemplatedWindow();
             var window = (Window)template;
@@ -205,7 +205,7 @@ namespace Clowd
             return false;
         }
 
-        public static void SetContent(Window window, Control content)
+        public static void SetContent(Window window, FrameworkElement content)
         {
             var template = (TemplatedControl.ITemplatable)window;
             window.MinHeight = 0;
@@ -224,7 +224,7 @@ namespace Clowd
 
             template.SetContent(content);
         }
-        public static void SetContent(Control currentHost, Control content)
+        public static void SetContent(FrameworkElement currentHost, FrameworkElement content)
         {
             var window = GetWindow(currentHost);
             SetContent(window, content);
@@ -244,7 +244,7 @@ namespace Clowd
             template.SetContent(pr);
         }
 
-        public static Window GetWindow(Control content)
+        public static Window GetWindow(FrameworkElement content)
         {
             return Window.GetWindow(content);
         }

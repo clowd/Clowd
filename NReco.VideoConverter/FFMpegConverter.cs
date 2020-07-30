@@ -578,6 +578,7 @@ namespace NReco.VideoConverter
                     throw new FileNotFoundException("Cannot find ffmpeg tool: " + ffMpegExePath);
 
                 this.FFMpegLogHandler($"> {ffMpegExePath} {ffmpegArgs}");
+                this.FFMpegLogHandler(">");
 
                 ProcessStartInfo startInfo = new ProcessStartInfo(ffMpegExePath, ffmpegArgs);
                 startInfo.WindowStyle = ProcessWindowStyle.Hidden;

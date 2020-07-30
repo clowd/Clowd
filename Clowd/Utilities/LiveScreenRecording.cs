@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.VisualBasic.FileIO;
 using NReco.VideoConverter;
+using PropertyChanged;
 
 namespace Clowd.Utilities
 {
@@ -43,7 +44,7 @@ namespace Clowd.Utilities
 
         public Task Start()
         {
-            var args = String.Join(" ", cli_VideoSource()?.Trim(), cli_FilterGraph()?.Trim(), cli_VideoCodecAndOutput()?.Trim());
+            var args = String.Join(" ", cli_VideoSource()?.Trim(), cli_VideoCodecAndOutput()?.Trim());
 
             // run in a background thread
             runner = Task.Factory.StartNew(() => ffmpeg.Invoke(args), TaskCreationOptions.LongRunning);
@@ -56,27 +57,27 @@ namespace Clowd.Utilities
             await runner;
         }
 
-        private string cli_FilterGraph()
-        {
-            List<string> filters = new List<string>();
-            if (settings.MaxResolution != MaxResolution.Uncapped && bounds.Height > (int)settings.MaxResolution)
-            {
-                // keep aspect ratio but limit height to specified max resolution
-                filters.Add("scale=-1:" + (int)settings.MaxResolution);
-            }
+        //private string cli_FilterGraph()
+        //{
+        //    List<string> filters = new List<string>();
+        //    //if (settings.MaxResolution != MaxResolution.Uncapped && bounds.Height > (int)settings.MaxResolution)
+        //    //{
+        //    //    // keep aspect ratio but limit height to specified max resolution
+        //    //    filters.Add("scale=-1:" + (int)settings.MaxResolution);
+        //    //}
 
-            //if (false)
-            //{
-            //    filters.Add("mpdecimate");
-            //    filters.Add("framerate=" + settings.TargetFramesPerSecond);
-            //}
+        //    //if (false)
+        //    //{
+        //    //    filters.Add("mpdecimate");
+        //    //    filters.Add("framerate=" + settings.TargetFramesPerSecond);
+        //    //}
 
-            if (filters.Any())
-            {
-                return $"-filter:v \"{String.Join(",", filters)}\"";
-            }
-            else return null;
-        }
+        //    if (filters.Any())
+        //    {
+        //        return $"-filter:v \"{String.Join(",", filters)}\"";
+        //    }
+        //    else return null;
+        //}
 
         private string cli_VideoSource()
         {
@@ -86,10 +87,8 @@ namespace Clowd.Utilities
 
         private string cli_VideoCodecAndOutput()
         {
-            var allCodecSettings = new FFMpegCodecSettings[] { settings.libx264, settings.h264_nvenc };
-            var codec = allCodecSettings.Single(s => s.Codec == settings.VideoCodec);
-
-            string extension = codec.Container;
+            var codec = settings.VideoCodec.GetSelectedPreset();
+            string extension = codec.Extension;
 
             var filename = "capture_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "." + extension;
             filename = Path.Combine(Path.GetFullPath(settings.OutputDirectory), filename);
@@ -101,7 +100,10 @@ namespace Clowd.Utilities
             //{
             //    crf = " -crf " + ((int)settings.H264CRF).ToString();
             //}
-            return $"{codec.GetCliArguments(bounds.Width, bounds.Height, 30)} -n \"{filename}\"";
+
+            var options = codec.GetOptions();
+            var args = String.Join(" ", options.Select(o => $"-{o.param_name} {o.param_value}"));
+            return $"{args} -n \"{filename}\"";
         }
 
         //private string cli_VideoCodecAndOutput()
@@ -188,215 +190,5 @@ namespace Clowd.Utilities
         //}
     }
 
-    public enum CaptureVideoCodec
-    {
-        [Description("h264 - software")]
-        libx264 = 1,
-        [Description("h264 - hardware / nvenc")]
-        h264_nvenc = 2,
-    }
 
-    public enum FFMpegCodecOptionPreset
-    {
-        [Description("Fast / Lower Quality")]
-        Fast_LowQuality = 1,
-        [Description("Medium")]
-        Medium = 2,
-        [Description("Slow / Higher Quality")]
-        Slow_HighQuality = 3,
-        [Description("Custom")]
-        Custom = 0,
-    }
-
-    public abstract class FFMpegCodecSettings : INotifyPropertyChanged
-    {
-        public FFMpegCodecOptionPreset Preset
-        {
-            get
-            {
-                return _preset;
-            }
-            set
-            {
-                if (_preset != value)
-                {
-                    _preset = value;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Preset)));
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Options)));
-                    if (_preset != FFMpegCodecOptionPreset.Custom)
-                        _options = GetDefaultsForPreset(value);
-                }
-            }
-        }
-
-        public List<FFMpegCodecOption> Options
-        {
-            get
-            {
-                if (_preset == FFMpegCodecOptionPreset.Custom)
-                    return _options ?? GetDefaultsForPreset(FFMpegCodecOptionPreset.Medium);
-
-                return GetDefaultsForPreset(_preset);
-            }
-            //set
-            //{
-            //    _options = value;
-            //    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Options)));
-            //}
-        }
-
-        private FFMpegCodecOptionPreset _preset = FFMpegCodecOptionPreset.Medium;
-        private List<FFMpegCodecOption> _options;
-
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        public abstract CaptureVideoCodec Codec { get; }
-        public abstract string Description { get; }
-        public abstract string Container { get; }
-
-        public virtual string GetCliArguments(int width, int height, int framerate)
-        {
-            Dictionary<string, string> variables = new Dictionary<string, string>();
-            variables.Add("%width%", width.ToString());
-            variables.Add("%height%", height.ToString());
-            variables.Add("%rate%", framerate.ToString());
-            variables.Add("%whr%", (width * height * framerate).ToString());
-
-            StringBuilder sb = new StringBuilder();
-
-            string eval(string value)
-            {
-                if (String.IsNullOrWhiteSpace(value))
-                    return "";
-
-                foreach (var v in variables)
-                {
-                    value = value.Replace(v.Key, v.Value);
-                }
-
-                var spl = value.Split('*').Select(s => s.Trim()).ToArray();
-
-                if (spl.Length <= 1)
-                    return value;
-
-                decimal vint = Convert.ToDecimal(spl[0]);
-
-                foreach (var i in spl.Skip(1))
-                    vint = vint * Convert.ToDecimal(i);
-
-                return ((int)vint).ToString();
-            }
-
-            foreach (var item in Options)
-            {
-                if (String.IsNullOrWhiteSpace(item.param_name))
-                    continue;
-                if (String.IsNullOrWhiteSpace(item.param_value))
-                    continue;
-
-                if (item.param_name.StartsWith("%"))
-                {
-                    variables.Add(item.param_name, eval(item.param_value));
-                    continue;
-                }
-
-                sb.Append($" -{item.param_name} {eval(item.param_value)}");
-            }
-
-            return sb.ToString();
-        }
-
-        protected virtual List<FFMpegCodecOption> GetDefaultsForPreset(FFMpegCodecOptionPreset preset)
-        {
-            return GetDefaultsForIndex(ParseCSV(GetDefaultsCSVText()), (int)preset);
-        }
-
-        protected virtual List<FFMpegCodecOption> GetDefaultsForIndex(List<string[]> rawData, int index)
-        {
-            return rawData
-                .Select(r => new FFMpegCodecOption { param_name = r[0], param_value = r[index] })
-                .Where(o => !String.IsNullOrWhiteSpace(o.param_value))
-                .ToList();
-        }
-
-        protected virtual List<string[]> ParseCSV(string csvText)
-        {
-            var output = new List<string[]>();
-
-            byte[] defaultBytes = Encoding.UTF8.GetBytes(csvText);
-            MemoryStream ms = new MemoryStream();
-            ms.Write(defaultBytes, 0, defaultBytes.Length);
-            ms.Position = 0;
-
-            using (TextFieldParser parser = new TextFieldParser(ms))
-            {
-                parser.TextFieldType = FieldType.Delimited;
-                parser.SetDelimiters(",");
-                while (!parser.EndOfData)
-                {
-                    string[] fields = parser.ReadFields();
-                    output.Add(fields);
-                }
-            }
-
-            return output;
-        }
-
-        protected abstract string GetDefaultsCSVText();
-
-        public class FFMpegCodecOption
-        {
-            public string param_name { get; set; }
-            public string param_value { get; set; }
-        }
-    }
-
-    public class FFMpegCodecSettings_libx264 : FFMpegCodecSettings
-    {
-        public override CaptureVideoCodec Codec => CaptureVideoCodec.libx264;
-
-        public override string Description => "Software x264 encoder. Best results, but requires a lot of CPU resources. Consider a hardware encoder if you have a supported graphics card or intel processor.";
-
-        public override string Container => "mp4";
-
-        protected override string GetDefaultsCSVText()
-        {
-            // csv format: [param_name, fast_value, medium_value, slowhq_value]
-            return
-@"codec:v,libx264,libx264,libx264
-preset:v,veryfast,veryfast,medium
-profile:v,high,high,high
-tune:v,animation,animation,animation
-bf,3,4,4
-crf:v,26,20,20
-coder:v,cabac,cabac,cabac";
-        }
-    }
-
-    public class FFMpegCodecSettings_h264_nvenc : FFMpegCodecSettings
-    {
-        public override CaptureVideoCodec Codec => CaptureVideoCodec.h264_nvenc;
-
-        public override string Description => "Nvidia hardware encoding (nvenc) is available on Pascal, Turing, Volta and newer. Only use this option if you have a supported Nvidia graphics card.";
-
-        public override string Container => "mp4";
-
-        protected override string GetDefaultsCSVText()
-        {
-            // csv format: [param_name, fast_value, medium_value, slowhq_value]
-            return
-@"codec:v,h264_nvenc,h264_nvenc,h264_nvenc
-preset:v,fast,medium,slow
-profile:v,high,high,high
-rc:v,vbr,vbr,vbr_hq
-rc-lookahead:v,32,32,32
-bf,3,4,4
-b_ref_mode:v,middle,middle,middle
-coder:v,cabac,cabac,cabac
-%bmulti%,0.075,0.1,0.15
-b:v,%bmulti% * %whr%,%bmulti% * %whr%,%bmulti% * %whr%
-maxrate,1.25 * %bmulti% * %whr%,1.25 * %bmulti% * %whr%,1.25 * %bmulti% * %whr%
-bufsize,2 * %bmulti% * %whr%,2 * %bmulti% * %whr%,2 * %bmulti% * %whr%";
-        }
-    }
 }
