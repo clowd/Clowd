@@ -4,8 +4,10 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
 using Clowd.Utilities;
 using DirectShowLib;
+using Ookii.Dialogs.Wpf;
 using PropertyChanged;
 using RT.Serialization;
 
@@ -137,7 +139,27 @@ namespace Clowd
         public bool IsCustom => false;
 
         [PropertyTools.DataAnnotations.Category("Audio")]
-        public bool CaptureLoopbackAudio { get; set; } = false;
+        public bool CaptureLoopbackAudio
+        {
+            get
+            {
+                return _loopback && App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
+            }
+            set
+            {
+                var isInstalled = App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
+                if (!isInstalled && value)
+                {
+                    MessageBox.Show($"You must install 'Windows/DirectShow Add-ons' before {App.ClowdAppName} is able to capture loopback audio");
+                    _loopback = false;
+                }
+                else
+                {
+                    _loopback = value;
+                }
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CaptureLoopbackAudio)));
+            }
+        }
 
         public bool CaptureMicrophone { get; set; } = false;
 
@@ -147,6 +169,8 @@ namespace Clowd
         public event PropertyChangedEventHandler PropertyChanged;
 
         public abstract List<FFmpegCliOption> GetOptions();
+
+        private bool _loopback = false;
 
         public virtual void SetOptions(List<FFmpegCliOption> options)
         {
