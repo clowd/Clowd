@@ -95,7 +95,7 @@ namespace PropertyTools.Wpf
     /// </summary>
     [TemplatePart(Name = PartTabs, Type = typeof(TabControl))]
     [TemplatePart(Name = PartPanel, Type = typeof(StackPanel))]
-    [TemplatePart(Name = PartScrollViewer, Type = typeof(ScrollViewer))]
+    [TemplatePart(Name = PartScrollViewer, Type = typeof(ScrollViewerFixedNested))]
     public class PropertyGrid : Control, IPropertyGridOptions
     {
         /// <summary>
@@ -408,7 +408,7 @@ namespace PropertyTools.Wpf
         /// <summary>
         /// The scroll viewer.
         /// </summary>
-        private ScrollViewer scrollViewer;
+        private ScrollViewerFixedNested scrollViewer;
 
         /// <summary>
         /// The tab control.
@@ -1016,7 +1016,7 @@ namespace PropertyTools.Wpf
                 }
                 else
                 {
-                    tabItem.Content = new ScrollViewer
+                    tabItem.Content = new ScrollViewerFixedNested
                     {
                         VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                         Content = tabPanel,
@@ -1077,6 +1077,7 @@ namespace PropertyTools.Wpf
             this.panelControl.Children.Clear();
             this.tabControl.Visibility = Visibility.Hidden;
             this.scrollViewer.Visibility = Visibility.Visible;
+
             if (tabs == null)
             {
                 return;
@@ -1122,7 +1123,7 @@ namespace PropertyTools.Wpf
             base.OnApplyTemplate();
             this.tabControl = this.Template.FindName(PartTabs, this) as TabControl;
             this.panelControl = this.Template.FindName(PartPanel, this) as StackPanel;
-            this.scrollViewer = this.Template.FindName(PartScrollViewer, this) as ScrollViewer;
+            this.scrollViewer = this.Template.FindName(PartScrollViewer, this) as ScrollViewerFixedNested;
             this.UpdateControls();
         }
 
@@ -1837,6 +1838,32 @@ namespace PropertyTools.Wpf
                 {
                     this.SelectedTabId = tabItems[tabIndex].Name;
                 }
+            }
+        }
+    }
+
+    public class ScrollViewerFixedNested : ScrollViewer
+    {
+        private ScrollBar verticalScrollbar;
+
+        public override void OnApplyTemplate()
+        {
+            // Call base class
+            base.OnApplyTemplate();
+
+            // Obtain the vertical scrollbar
+            this.verticalScrollbar = this.GetTemplateChild("PART_VerticalScrollBar") as ScrollBar;
+        }
+
+        protected override void OnMouseWheel(MouseWheelEventArgs e)
+        {
+            // Only handle this message if the vertical scrollbar is in use
+            if (this.verticalScrollbar != null &&
+                this.verticalScrollbar.Visibility == Visibility.Visible &&
+                this.verticalScrollbar.IsEnabled)
+            {
+                // Perform default handling
+                base.OnMouseWheel(e);
             }
         }
     }
