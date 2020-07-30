@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -55,6 +55,9 @@
     <Reference Include="CS.Wpf, Version=1.0.6.53, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\CS.Wpf.1.0.6.53\lib\net45\CS.Wpf.dll</HintPath>
       <Private>True</Private>
+    </Reference>
+    <Reference Include="DirectShowLib, Version=2.1.0.1599, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\DirectShowLib.1.0.0\lib\DirectShowLib.dll</HintPath>
     </Reference>
     <Reference Include="DotNetZip, Version=1.13.8.0, Culture=neutral, PublicKeyToken=6583c7c814667745, processorArchitecture=MSIL">
       <HintPath>..\packages\DotNetZip.1.13.8\lib\net40\DotNetZip.dll</HintPath>
@@ -142,7 +145,9 @@
       <DependentUpon>CaptureWindow2.xaml</DependentUpon>
     </Compile>
     <Compile Include="Controls\CornerClippingBorder.cs" />
-    <Compile Include="Controls\FFMpegCodecSettingsEditor.cs" />
+    <Compile Include="Controls\FFMpegCodecSettingsEditor3.xaml.cs">
+      <DependentUpon>FFMpegCodecSettingsEditor3.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Controls\GlobalTriggerEditor.cs" />
     <Compile Include="Controls\ReallyFastCaptureRenderer.cs" />
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
@@ -153,6 +158,7 @@
     <Compile Include="Features\ContextMenuFeature.cs" />
     <Compile Include="Features\IFeatureInstaller.cs" />
     <Compile Include="Features\RegistryEx.cs" />
+    <Compile Include="FFmpegSettings.cs" />
     <Compile Include="ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
     </Compile>
@@ -243,6 +249,10 @@
       <SubType>Code</SubType>
     </Compile>
     <Page Include="CaptureWindow2.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Controls\FFMpegCodecSettingsEditor3.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
