@@ -66,17 +66,31 @@ namespace Clowd
 
             var fps = getData("fps=");
             var time = getData("time=");
+            TimeSpan ts = default(TimeSpan);
+
+            if (time != null)
+            {
+                try
+                {
+                    // sometimes ffmpeg gives us garbage timecodes, it depends on the input stream timestamp on the frames & the settings we use.
+                    ts = TimeSpan.Parse(time);
+                }
+                catch { }
+            }
 
             Dispatcher.Invoke(() =>
             {
-                if (DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0 && fps != null)
+                if (fps != null && (ts == default(TimeSpan) || DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0))
                 {
                     recordingFpsLabel.Text = fps + " FPS";
                 }
-                else if (time != null)
+                else if (ts != default(TimeSpan))
                 {
-                    var ts = TimeSpan.Parse(time);
                     recordingFpsLabel.Text = $"{((int)ts.TotalMinutes):D2}:{((int)ts.Seconds):D2}";
+                }
+                else
+                {
+                    recordingFpsLabel.Text = "NO DATA";
                 }
             });
         }

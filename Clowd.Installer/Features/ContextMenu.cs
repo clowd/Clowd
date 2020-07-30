@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Clowd.Installer.Features
 {
-    public class ContextMenu : IFeatureInstaller
+    public class ContextMenu : IFeature
     {
         private static readonly string[] ContextMenuInstallLocations = new[]
         {
@@ -15,39 +15,33 @@ namespace Clowd.Installer.Features
             @"Software\Classes\Directory\shell"
         };
 
-        public bool CheckInstalled(string assetPath, RegistryQuery context)
+        public bool CheckInstalled(string assetPath)
         {
+            var found = false;
             foreach (var str in ContextMenuInstallLocations)
             {
-                var disposableKeys = RegistryEx.OpenKeysFromRootPath(str, context);
-                try
+                foreach (var root in RegistryEx.OpenKeysFromRootPath(str, RegistryQuery.CurrentUser))
                 {
-                    foreach (var root in disposableKeys)
+                    //can't return here, need to dispose all of the registry keys created by OpenKeysFromRootPath
+                    var appkey = root.OpenSubKey(Constants.ContextMenuShellName);
+                    if (appkey != null)
                     {
-                        var subKey = root.OpenSubKey(Constants.ContextMenuShellName);
-                        if (subKey != null)
-                        {
-                            subKey.Dispose();
-                            return true;
-                        }
+                        var location = appkey.GetValue("Icon") as string;
+                        if (SystemEx.AreFileSystemObjectsEqual(location, assetPath))
+                            found = true;
                     }
-                }
-                finally
-                {
-                    foreach (var root in disposableKeys)
-                    {
-                        root.Dispose();
-                    }
+
+                    root.Dispose();
                 }
             }
-            return false;
+            return found;
         }
 
-        public void Install(string assetPath, InstallMode context)
+        public void Install(string assetPath)
         {
             foreach (var str in ContextMenuInstallLocations)
             {
-                using (var root = RegistryEx.CreateKeyFromRootPath(str, context))
+                using (var root = RegistryEx.CreateKeyFromRootPath(str, InstallMode.CurrentUser))
                 {
                     using (var clowd = root.CreateSubKey(Constants.ContextMenuShellName))
                     {
@@ -61,11 +55,16 @@ namespace Clowd.Installer.Features
             }
         }
 
-        public void Uninstall(string assetPath, RegistryQuery context)
+        public bool NeedsPrivileges()
+        {
+            return false;
+        }
+
+        public void Uninstall(string assetPath)
         {
             foreach (var str in ContextMenuInstallLocations)
             {
-                foreach (var root in RegistryEx.OpenKeysFromRootPath(str, context))
+                foreach (var root in RegistryEx.OpenKeysFromRootPath(str, RegistryQuery.CurrentUser))
                 {
                     root.DeleteSubKeyTree(Constants.ContextMenuShellName, false);
                     root.Dispose();

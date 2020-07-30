@@ -292,14 +292,6 @@ namespace Clowd
 
             SettingsUtil.LoadSettings(out tmp);
             Settings = tmp;
-
-            if (Settings.ExplorerMenuEnabled)
-            {
-                // this re-installs the context menu if present, making sure
-                // it includes any fixes and is pointing towards the current executable
-                Settings.ExplorerMenuEnabled = false;
-                Settings.ExplorerMenuEnabled = true;
-            }
         }
         private void SetupAccentColors()
         {
