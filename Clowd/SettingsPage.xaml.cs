@@ -139,15 +139,18 @@ namespace Clowd
             {
                 var bind = property.CreateBinding();
                 bind.Source = property.TargetObject;
-                //var pinfo = property.GetDescriptor(property.PropertyName);
-                //var val = pinfo.GetValue(property.TargetObject);
                 var combo = new ComboBox();
                 combo.DisplayMemberPath = nameof(FFmpegDirectShowAudioDevice.FriendlyName);
                 combo.ItemsSource = FFmpegDirectShowAudioDevice.GetDevices();
                 combo.SetBinding(ComboBox.SelectedItemProperty, bind);
-                //combo.SelectedItem = val;
-                //combo.SelectionChanged += (s, e) => pinfo.SetValue(property.TargetObject, combo.SelectedItem);
                 return combo;
+            }
+
+            if (typeof(Installer.Features.IFeature).IsAssignableFrom(property.ActualPropertyType))
+            {
+                var pinfo = property.GetDescriptor(property.PropertyName);
+                var val = pinfo.GetValue(property.TargetObject) as Installer.Features.IFeature;
+                return new FeatureInstallerControl(val);
             }
 
             return base.CreateControl(property, options);

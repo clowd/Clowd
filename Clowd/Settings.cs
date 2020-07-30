@@ -78,37 +78,10 @@ namespace Clowd
         [Description("Specifies whether to use the system default window chrome, or a metro design.")]
         public bool UseCustomWindowChrome { get; set; } = false;
 
+        [Browsable(false)]
         [DisplayName("Tray-drop enabled")]
         [Description("If true, allows dropping files directly on to the windows tray icon to start an upload.")]
-        public bool TrayDropEnabled { get; set; } = true;
-
-        [DisplayName("Add Windows Explorer Context-Menu item")]
-        [Description("If true, will add an item to the explorer context menu allowing you to right click to upload files.")]
-        public bool ExplorerMenuEnabled
-        {
-            get
-            {
-                return (new Installer.Features.ContextMenu()).CheckInstalled(Assembly.GetExecutingAssembly().Location, Installer.RegistryQuery.CurrentUser);
-            }
-            set
-            {
-                var assetPath = Assembly.GetExecutingAssembly().Location;
-                var feature = new Installer.Features.ContextMenu();
-                var isInstalled = feature.CheckInstalled(assetPath, Installer.RegistryQuery.CurrentUser);
-                if (isInstalled != value)
-                {
-                    if (value)
-                    {
-                        feature.Install(assetPath, Installer.InstallMode.CurrentUser);
-                    }
-                    else
-                    {
-                        feature.Uninstall(assetPath, Installer.RegistryQuery.CurrentUser);
-                    }
-                }
-            }
-        }
-
+        public bool TrayDropEnabled => false;
 
         [DisplayName("Accent color"), PData.EnableBy(nameof(AccentScheme), AccentScheme.User)]
         [Description("Allows you to set a custom accent color when the appropriate accent mode is also set.")]
@@ -144,6 +117,9 @@ namespace Clowd
 
         [ExpandAsCategory("Uploads")]
         public UploadSettings UploadSettings { get; set; } = new UploadSettings();
+
+        [ExpandAsCategory("Windows")]
+        public FeatureSettings FeatureSettings { get; set; } = new FeatureSettings();
 
         [ExpandAsCategory("Video")]
         public VideoSettings VideoSettings { get; set; } = new VideoSettings();
@@ -291,6 +267,21 @@ namespace Clowd
         {
             ActivateNextShortcut?.Dispose();
         }
+    }
+
+    public class FeatureSettings
+    {
+        [DisplayName("Auto Start on Login")]
+        public Installer.Features.IFeature AutoStart { get; } = new Installer.Features.AutoStart();
+
+        [DisplayName("Explorer context-menu entry")]
+        public Installer.Features.IFeature ContextMenu { get; } = new Installer.Features.ContextMenu();
+
+        [DisplayName("DirectShow Add-ons")]
+        public Installer.Features.IFeature DirectShow { get; } = new Installer.Features.DShowFilter();
+
+        [DisplayName("Desktop / Program Shortcuts")]
+        public Installer.Features.IFeature Shortcuts { get; } = new Installer.Features.Shortcuts();
     }
 
     public enum BitrateMultiplier : int
