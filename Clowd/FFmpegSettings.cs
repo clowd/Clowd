@@ -143,7 +143,13 @@ namespace Clowd
         {
             get
             {
-                return _loopback && App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
+                var ret = _loopback && App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
+                if (_loopback != ret)
+                {
+                    _loopback = ret;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CaptureLoopbackAudio)));
+                }
+                return ret;
             }
             set
             {
