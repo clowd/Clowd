@@ -736,6 +736,7 @@ namespace Clowd
 
         private void OnCommandLineArgsReceived(object sender, CommandLineEventArgs e)
         {
+            Console.WriteLine("command line args recieved:" + String.Join(",", e.Args));
             if (_cmdBatchTimer.IsEnabled)
             {
                 //restart timer.
@@ -753,6 +754,7 @@ namespace Clowd
             _cmdBatchTimer.IsEnabled = false;
             if (_cmdCache.Count > 0)
             {
+                Console.WriteLine("command line args being processed");
                 OnFilesReceived(_cmdCache.ToArray());
                 _cmdCache.Clear();
             }
