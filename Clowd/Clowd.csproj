@@ -145,6 +145,7 @@
       <DependentUpon>CaptureWindow2.xaml</DependentUpon>
     </Compile>
     <Compile Include="Controls\CornerClippingBorder.cs" />
+    <Compile Include="Controls\FeatureInstallerControl.cs" />
     <Compile Include="Controls\FFMpegCodecSettingsEditor3.xaml.cs">
       <DependentUpon>FFMpegCodecSettingsEditor3.xaml</DependentUpon>
     </Compile>
@@ -153,11 +154,6 @@
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
     <Compile Include="Converters\SnapToPixelConverter.cs" />
     <Compile Include="Converters\TaskStatusToVisibilityConverter.cs" />
-    <Compile Include="Features\AutoStart.cs" />
-    <Compile Include="Features\Constants.cs" />
-    <Compile Include="Features\ContextMenuFeature.cs" />
-    <Compile Include="Features\IFeatureInstaller.cs" />
-    <Compile Include="Features\RegistryEx.cs" />
     <Compile Include="FFmpegSettings.cs" />
     <Compile Include="ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
@@ -333,6 +329,10 @@
     <ProjectReference Include="..\..\clowd-shared\Clowd.Shared.csproj">
       <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
       <Name>Clowd.Shared</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj">
+      <Project>{ad6fd9e3-3c83-432e-9f19-74c71e881fe4}</Project>
+      <Name>Clowd.Installer</Name>
     </ProjectReference>
     <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj">
       <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>

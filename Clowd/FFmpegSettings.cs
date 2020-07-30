@@ -157,6 +157,7 @@ namespace Clowd
         {
             var loopback = CaptureLoopbackAudio;
             var microphone = CaptureMicrophone ? SelectedMicrophone : null;
+            //output.Add(new FFmpegCliOption("copyts", ""));
 
             if (loopback)
             {
@@ -169,6 +170,8 @@ namespace Clowd
                 output.Add(new FFmpegCliOption("f", "dshow"));
                 output.Add(new FFmpegCliOption("i", $"audio=\"{microphone.FriendlyName}\""));
             }
+
+            //output.Add(new FFmpegCliOption("muxdelay", "0"));
 
             if (loopback && microphone != null)
             {
