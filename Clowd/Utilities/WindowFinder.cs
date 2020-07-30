@@ -249,7 +249,7 @@ namespace Clowd.Utilities
                     //case "SysListView32": // windows desktop
                     //case "Intermediate D3D Window": // Chrome / Chromium intermediate window
                     //case "CEF-OSC-WIDGET": // NVIDIA GeForce Overlay
-                    // case "DUIViewWndClassName": // inner explorer.exe window
+                    //case "DUIViewWndClassName": // inner explorer.exe window
                     case "EdgeUiInputWndClass":
                     case "TaskListThumbnailWnd":
                     case "LauncherTipWndClass":

@@ -49,7 +49,9 @@ namespace Clowd.Utilities
 
             foreach (var data in dataToAdd)
             {
-                this.Items.Add(data);
+                int index = Items.Count;
+                InsertItem(index, data);
+                //this.Items.Add(data);
             }
 
             this.OnPropertyChanged(new PropertyChangedEventArgs("Count"));
