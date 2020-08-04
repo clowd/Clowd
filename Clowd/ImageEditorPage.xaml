@@ -310,7 +310,7 @@
                                 Height="{Binding ActualHeight, ElementName=objectCanvas}"/>
         </Canvas>
         <StackPanel Width="70" Margin="0,0,10,0"  Orientation="Vertical" Grid.Row="1" 
-                    VerticalAlignment="Center" HorizontalAlignment="Right" Name="rightSidepanel" Visibility="Visible">
+                    VerticalAlignment="Center" HorizontalAlignment="Right" Name="rightSidepanel" Visibility="Collapsed">
             <Border x:Name="shiftIndicator" Background="#70707a" Height="40" Margin="0,0,0,10" CornerRadius="10" Opacity=".7">
                 <StackPanel Orientation="Horizontal">
                     <Viewbox Height="20" HorizontalAlignment="Left" Margin="9,0,5,0">
