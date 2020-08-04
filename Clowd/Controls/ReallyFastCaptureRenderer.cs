@@ -74,6 +74,7 @@ namespace Clowd
         WpfPoint? _virtualPoint = null;
         ScreenPoint? _lastScreenPoint = null;
         const int _clickDistance = 2;
+        bool _dragging = false;
 
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
 
@@ -304,8 +305,10 @@ namespace Clowd
             }
 
             if (_virtualPoint.HasValue && _virtualDragBegin.HasValue
-                && DistancePointToPoint(_virtualPoint.Value.X, _virtualPoint.Value.Y, _virtualDragBegin.Value.X, _virtualDragBegin.Value.Y) > _clickDistance)
+                && (_dragging || DistancePointToPoint(_virtualPoint.Value.X, _virtualPoint.Value.Y, _virtualDragBegin.Value.X, _virtualDragBegin.Value.Y) > _clickDistance))
             {
+                _dragging = true;
+
                 double left, right;
                 if (_virtualDragBegin.Value.X < _virtualPoint.Value.X)
                 {
@@ -361,11 +364,13 @@ namespace Clowd
 
             var origin = _virtualDragBegin.Value;
             var current = _virtualPoint.Value;
+            var dragging = _dragging;
 
+            _dragging = false;
             _virtualDragBegin = null;
 
             // if the mouse hasn't moved far, let's treat it like a click event and find out what window they clicked on
-            if (DistancePointToPoint(origin.X, origin.Y, current.X, current.Y) < _clickDistance)
+            if (!dragging && DistancePointToPoint(origin.X, origin.Y, current.X, current.Y) < _clickDistance)
             {
                 var window = _windowFinder.GetWindowThatContainsPoint(current.ToScreenPoint());
                 if (window != null)
