@@ -70,9 +70,9 @@ namespace Clowd
             ths.Draw();
         }
 
+        WpfPoint? _virtualDragBegin = null;
         WpfPoint? _virtualPoint = null;
-        ScreenPoint? _lastPoint = null;
-        ScreenPoint? _dragBegin = null;
+        ScreenPoint? _lastScreenPoint = null;
         const int _clickDistance = 2;
 
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
@@ -207,7 +207,9 @@ namespace Clowd
                 return;
 
             _selectedWindow = null;
-            _dragBegin = null;
+            _virtualPoint = null;
+            _virtualDragBegin = null;
+            _lastScreenPoint = null;
             IsCapturing = true;
             this.Cursor = Cursors.None;
 
@@ -216,30 +218,12 @@ namespace Clowd
             this.MouseUp += CaptureWindow2_MouseUp;
             this.MouseWheel += CaptureWindow2_MouseWheel;
 
-            var currentPoint = ScreenTools.GetMousePosition();
-            if (App.Current.Settings.CaptureSettings.DetectWindows)
-            {
-                var window = _windowFinder?.GetWindowThatContainsPoint(currentPoint);
-                if (window != null)
-                {
-                    SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
-                }
-                else
-                {
-                    SelectionRectangle = default(WpfRect);
-                }
-            }
-            else
-            {
-                SelectionRectangle = default(WpfRect);
-            }
-
-            Draw();
+            CaptureWindow2_MouseMove(null, null);
         }
 
         public void SelectScreen()
         {
-            if (_dragBegin.HasValue || !IsCapturing)
+            if (_virtualDragBegin.HasValue || !IsCapturing)
                 return;
 
             var screenContainingMouse = ScreenTools.GetScreenContaining(ScreenTools.GetMousePosition()).Bounds;
@@ -295,69 +279,74 @@ namespace Clowd
         private void CaptureWindow2_MouseDown(object sender, MouseButtonEventArgs e)
         {
             this.CaptureMouse();
-            _dragBegin = ScreenTools.GetMousePosition();
+            _virtualDragBegin = _virtualPoint;
         }
 
         private void CaptureWindow2_MouseMove(object sender, MouseEventArgs e)
         {
-            var currentPoint = ScreenTools.GetMousePosition();
-
-            if (_globalZoom > 1)
+            if (_virtualPoint.HasValue && _lastScreenPoint.HasValue)
             {
-                if (_virtualPoint.HasValue && _lastPoint.HasValue)
-                {
-                    var xDelta = (currentPoint.X - _lastPoint.Value.X) / _globalZoom * ScreenTools.DpiZoom;
-                    var yDelta = (currentPoint.Y - _lastPoint.Value.Y) / _globalZoom * ScreenTools.DpiZoom;
+                var currentPoint = ScreenTools.GetMousePosition();
+                var xDelta = (currentPoint.X - _lastScreenPoint.Value.X) / _globalZoom * ScreenTools.DpiZoom;
+                var yDelta = (currentPoint.Y - _lastScreenPoint.Value.Y) / _globalZoom * ScreenTools.DpiZoom;
 
-                    _virtualPoint = new WpfPoint(_virtualPoint.Value.X + xDelta, _virtualPoint.Value.Y + yDelta);
-                    currentPoint = _virtualPoint.Value.ToScreenPoint();
-                    _lastPoint = currentPoint;
-                    System.Windows.Forms.Cursor.Position = currentPoint.ToSystem();
-                }
-                else
-                {
-                    _lastPoint = currentPoint;
-                    _virtualPoint = currentPoint.ToWpfPoint();
-                }
+                _virtualPoint = new WpfPoint(_virtualPoint.Value.X + xDelta, _virtualPoint.Value.Y + yDelta);
+
+                currentPoint = _virtualPoint.Value.ToScreenPoint();
+                _lastScreenPoint = currentPoint;
+                System.Windows.Forms.Cursor.Position = currentPoint.ToSystem();
             }
             else
             {
-                _lastPoint = null;
-                _virtualPoint = null;
+                var currentPoint = ScreenTools.GetMousePosition();
+                _lastScreenPoint = currentPoint;
+                _virtualPoint = currentPoint.ToWpfPoint();
             }
 
-            var newSelectionWindow = SelectionRectangle;
-
-            if (_dragBegin.HasValue && DistancePointToPoint(currentPoint.X, currentPoint.Y, _dragBegin.Value.X, _dragBegin.Value.Y) > _clickDistance)
+            if (_virtualPoint.HasValue && _virtualDragBegin.HasValue
+                && DistancePointToPoint(_virtualPoint.Value.X, _virtualPoint.Value.Y, _virtualDragBegin.Value.X, _virtualDragBegin.Value.Y) > _clickDistance)
             {
-                var draggingOrigin = _dragBegin.Value;
-                var rect = new ScreenRect();
-                rect.Left = Math.Min(draggingOrigin.X, currentPoint.X);
-                rect.Top = Math.Min(draggingOrigin.Y, currentPoint.Y);
-                rect.Width = Math.Abs(draggingOrigin.X - currentPoint.X);
-                rect.Height = Math.Abs(draggingOrigin.Y - currentPoint.Y);
-                newSelectionWindow = rect.ToWpfRect();
+                double left, right;
+                if (_virtualDragBegin.Value.X < _virtualPoint.Value.X)
+                {
+                    left = ScreenTools.WpfSnapToPixelsFloor(_virtualDragBegin.Value.X);
+                    right = ScreenTools.WpfSnapToPixelsCeil(_virtualPoint.Value.X);
+                }
+                else
+                {
+                    left = ScreenTools.WpfSnapToPixelsFloor(_virtualPoint.Value.X);
+                    right = ScreenTools.WpfSnapToPixelsCeil(_virtualDragBegin.Value.X);
+                }
+
+                double top, bottom;
+                if (_virtualDragBegin.Value.Y < _virtualPoint.Value.Y)
+                {
+                    top = ScreenTools.WpfSnapToPixelsFloor(_virtualDragBegin.Value.Y);
+                    bottom = ScreenTools.WpfSnapToPixelsCeil(_virtualPoint.Value.Y);
+                }
+                else
+                {
+                    top = ScreenTools.WpfSnapToPixelsFloor(_virtualPoint.Value.Y);
+                    bottom = ScreenTools.WpfSnapToPixelsCeil(_virtualDragBegin.Value.Y);
+                }
+
+                SelectionRectangle = new WpfRect(left, top, right - left, bottom - top).ToScreenRect().ToWpfRect();
             }
             else if (App.Current.Settings.CaptureSettings.DetectWindows)
             {
-                var window = _windowFinder?.GetWindowThatContainsPoint(currentPoint);
+                var window = _windowFinder?.GetWindowThatContainsPoint(_virtualPoint.Value.ToScreenPoint());
                 if (window != null)
                 {
-                    newSelectionWindow = window.ImageBoundsRect.ToWpfRect();
+                    SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
                 }
                 else
                 {
-                    newSelectionWindow = default(WpfRect);
+                    SelectionRectangle = default(WpfRect);
                 }
             }
             else
             {
-                newSelectionWindow = default(WpfRect);
-            }
-
-            if (newSelectionWindow != SelectionRectangle)
-            {
-                SelectionRectangle = newSelectionWindow;
+                SelectionRectangle = default(WpfRect);
             }
 
             Draw();
@@ -367,17 +356,18 @@ namespace Clowd
         {
             this.ReleaseMouseCapture();
 
-            if (!_dragBegin.HasValue)
+            if (!_virtualDragBegin.HasValue)
                 return; // huh??
 
-            var draggingOrigin = _dragBegin.Value;
-            _dragBegin = null;
-            var currentMouse = ScreenTools.GetMousePosition();
+            var origin = _virtualDragBegin.Value;
+            var current = _virtualPoint.Value;
+
+            _virtualDragBegin = null;
 
             // if the mouse hasn't moved far, let's treat it like a click event and find out what window they clicked on
-            if (DistancePointToPoint(currentMouse.X, currentMouse.Y, draggingOrigin.X, draggingOrigin.Y) < _clickDistance)
+            if (DistancePointToPoint(origin.X, origin.Y, current.X, current.Y) < _clickDistance)
             {
-                var window = _windowFinder.GetWindowThatContainsPoint(currentMouse);
+                var window = _windowFinder.GetWindowThatContainsPoint(current.ToScreenPoint());
                 if (window != null)
                 {
                     // show debug info if control key is being held while clicking
@@ -387,7 +377,6 @@ namespace Clowd
                     if (window.ImageBoundsRect == ScreenRect.Empty)
                     {
                         SelectionRectangle = default(WpfRect);
-                        _dragBegin = null;
                         return;
                     }
 
