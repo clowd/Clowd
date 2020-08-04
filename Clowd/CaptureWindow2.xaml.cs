@@ -212,7 +212,19 @@ namespace Clowd
             if (!currently)
                 UpdateButtonBarPosition();
 
-            toolActionBarStackPanel.Visibility = _initialized && !currently ? Visibility.Visible : Visibility.Hidden;
+            Storyboard sb = FindResource("BorderDashAnimation") as Storyboard;
+            if (_initialized && !currently)
+            {
+                toolActionBarStackPanel.Visibility = Visibility.Visible;
+                selectionBorder.Visibility = Visibility.Visible;
+                sb.Begin();
+            }
+            else
+            {
+                toolActionBarStackPanel.Visibility = Visibility.Collapsed;
+                selectionBorder.Visibility = Visibility.Collapsed;
+                sb.Stop();
+            }
 
             var lineW = ScreenTools.WpfSnapToPixelsFloor(currently ? 1 : 2);
             var margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(currently ? 0 : 2));
@@ -222,22 +234,25 @@ namespace Clowd
 
         private void Dep_SelectionRectangleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            var newv = (WpfRect)e.NewValue;
-
-            Storyboard sb = FindResource("BorderDashAnimation") as Storyboard;
-            if (newv == default(WpfRect) && selectionBorder.Visibility == Visibility.Visible)
-            {
-                sb.Stop();
-                selectionBorder.Visibility = Visibility.Collapsed;
-            }
-            else if (selectionBorder.Visibility == Visibility.Collapsed)
-            {
-                selectionBorder.Visibility = Visibility.Visible;
-                sb.Begin();
-            }
-
             if (!IsCapturing)
+            {
+                var newv = (WpfRect)e.NewValue;
+
+                Storyboard sb = FindResource("BorderDashAnimation") as Storyboard;
+
+                if (newv == default(WpfRect) && selectionBorder.Visibility == Visibility.Visible)
+                {
+                    sb.Stop();
+                    selectionBorder.Visibility = Visibility.Collapsed;
+                }
+                else if (selectionBorder.Visibility == Visibility.Collapsed)
+                {
+                    selectionBorder.Visibility = Visibility.Visible;
+                    sb.Begin();
+                }
+
                 UpdateButtonBarPosition();
+            }
         }
 
         private void UploadCanExecute(object sender, CanExecuteRoutedEventArgs e)
