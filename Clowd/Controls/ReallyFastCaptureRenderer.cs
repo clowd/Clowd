@@ -70,9 +70,8 @@ namespace Clowd
             ths.Draw();
         }
 
+        WpfPoint? _virtualPoint = null;
         ScreenPoint? _lastPoint = null;
-        double _lastPointDeltaX = 0;
-        double _lastPointDeltaY = 0;
         ScreenPoint? _dragBegin = null;
         const int _clickDistance = 2;
 
@@ -95,13 +94,8 @@ namespace Clowd
         Pen _sharpAccentLine;
         Pen _sharpAccentLineWide;
 
-        WpfSize _finderSize;
-        ScreenSize _singlePixelSize;
-        int _zoomedPixels;
         Color _accentColor;
         Brush _accentBrush;
-        Brush _magCrosshairBrush;
-        Pen _magBorderPen;
         double _sharpLineWidth;
 
         double _globalZoom = 1;
@@ -139,15 +133,6 @@ namespace Clowd
             _sharpWhiteLineDashed.DashStyle = new DashStyle(new double[] { dashLength, dashLength }, dashLength);
             _sharpAccentLine = new Pen(_accentBrush, _sharpLineWidth);
             _sharpAccentLineWide = new Pen(_accentBrush, _sharpLineWidth * 5);
-
-            // magnifier constants
-            var magZoom = 10;
-            var magArea = 10;
-            _singlePixelSize = new WpfSize(magZoom, magZoom).ToScreenSize();
-            _zoomedPixels = magArea - magArea % 2 + 1;
-            _finderSize = (_singlePixelSize * _zoomedPixels).ToWpfSize();
-            _magBorderPen = new Pen(_accentBrush, 2);
-            _magCrosshairBrush = new SolidColorBrush(Color.FromArgb(125, 173, 216, 230));
         }
 
         public async Task StartFastCapture(Stopwatch sw)
@@ -316,52 +301,29 @@ namespace Clowd
         private void CaptureWindow2_MouseMove(object sender, MouseEventArgs e)
         {
             var currentPoint = ScreenTools.GetMousePosition();
-            if (_lastPoint.HasValue && _globalZoom > 1)
+
+            if (_globalZoom > 1)
             {
-                var xDelta = (currentPoint.X - _lastPoint.Value.X) / _globalZoom * ScreenTools.DpiZoom;
-                var yDelta = (currentPoint.Y - _lastPoint.Value.Y) / _globalZoom * ScreenTools.DpiZoom;
-
-                _lastPointDeltaX += xDelta;
-                _lastPointDeltaY += yDelta;
-
-                var newX = _lastPoint.Value.X;
-                var newY = _lastPoint.Value.Y;
-
-                while (_lastPointDeltaX > 1)
+                if (_virtualPoint.HasValue && _lastPoint.HasValue)
                 {
-                    newX += 1;
-                    _lastPointDeltaX -= 1;
-                }
+                    var xDelta = (currentPoint.X - _lastPoint.Value.X) / _globalZoom * ScreenTools.DpiZoom;
+                    var yDelta = (currentPoint.Y - _lastPoint.Value.Y) / _globalZoom * ScreenTools.DpiZoom;
 
-                while (_lastPointDeltaX < 1)
+                    _virtualPoint = new WpfPoint(_virtualPoint.Value.X + xDelta, _virtualPoint.Value.Y + yDelta);
+                    currentPoint = _virtualPoint.Value.ToScreenPoint();
+                    _lastPoint = currentPoint;
+                    System.Windows.Forms.Cursor.Position = currentPoint.ToSystem();
+                }
+                else
                 {
-                    newX -= 1;
-                    _lastPointDeltaX += 1;
+                    _lastPoint = currentPoint;
+                    _virtualPoint = currentPoint.ToWpfPoint();
                 }
-
-                while (_lastPointDeltaY > 1)
-                {
-                    newY += 1;
-                    _lastPointDeltaY -= 1;
-                }
-
-                while (_lastPointDeltaY < 1)
-                {
-                    newY -= 1;
-                    _lastPointDeltaY += 1;
-                }
-
-                var slowPoint = new ScreenPoint(newX, newY);
-                _lastPoint = slowPoint;
-                Console.WriteLine($"(cursor) :: {currentPoint} -> {slowPoint} ... dx:{xDelta}/{_lastPointDeltaX}, dy:{yDelta}/{_lastPointDeltaY}");
-                System.Windows.Forms.Cursor.Position = slowPoint.ToSystem();
-                currentPoint = slowPoint;
             }
             else
             {
-                _lastPoint = currentPoint;
-                _lastPointDeltaX = 0;
-                _lastPointDeltaY = 0;
+                _lastPoint = null;
+                _virtualPoint = null;
             }
 
             var newSelectionWindow = SelectionRectangle;
@@ -399,7 +361,6 @@ namespace Clowd
             }
 
             Draw();
-            //DrawCrosshair();
         }
 
         private void CaptureWindow2_MouseUp(object sender, MouseButtonEventArgs e)
@@ -465,22 +426,20 @@ namespace Clowd
 
         private void Draw()
         {
-            var mouse = (_lastPoint.HasValue && _globalZoom > 1) ? _lastPoint.Value : ScreenTools.GetMousePosition();
+            var mouse = (_virtualPoint.HasValue && _globalZoom > 1) ? _virtualPoint.Value : ScreenTools.GetMousePosition().ToWpfPoint();
             DrawBackgroundImage(mouse);
             DrawForegroundImage(mouse);
             DrawCrosshair(mouse);
-            //DrawMagnifier(mouse);
             DrawAreaIndicator(mouse);
         }
 
-        private void DrawForegroundImage(ScreenPoint mousePoint)
+        private void DrawForegroundImage(WpfPoint mousePoint)
         {
             var windowBounds = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
             using (var context = _foregroundImage.RenderOpen())
             {
-                var wpfPoint = mousePoint.ToWpfPoint();
                 if (_globalZoom > 1)
-                    context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, wpfPoint.X, wpfPoint.Y));
+                    context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y));
 
                 if (SelectionRectangle != default(WpfRect))
                 {
@@ -501,14 +460,13 @@ namespace Clowd
             }
         }
 
-        private void DrawBackgroundImage(ScreenPoint mousePoint)
+        private void DrawBackgroundImage(WpfPoint mousePoint)
         {
             var windowBounds = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
             using (var context = _backgroundImage.RenderOpen())
             {
-                var wpfPoint = mousePoint.ToWpfPoint();
                 if (_globalZoom > 1)
-                    context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, wpfPoint.X, wpfPoint.Y));
+                    context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y));
                 //if (_onFade < 1)
                 //{
                 //    context.DrawImage(_image, windowBounds);
@@ -519,7 +477,7 @@ namespace Clowd
             }
         }
 
-        private void DrawAreaIndicator(ScreenPoint mousePoint)
+        private void DrawAreaIndicator(WpfPoint mousePoint)
         {
             using (DrawingContext g = _sizeIndicator.RenderOpen())
             {
@@ -542,6 +500,14 @@ namespace Clowd
                 double indicatorHeight = txt.Height + padding;
 
                 var pt = new WpfPoint(SelectionRectangle.Left + SelectionRectangle.Width / 2, SelectionRectangle.Bottom);
+
+                if (_globalZoom > 1)
+                {
+                    var transform = new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y);
+                    var newpt = transform.Transform(new Point(pt.X, pt.Y));
+                    pt = new WpfPoint(newpt.X, newpt.Y);
+                }
+
                 var positionTransform = PositionWithinAScreen(new WpfSize(indicatorWidth, indicatorHeight), pt, HorizontalAlignment.Center, VerticalAlignment.Bottom, padding);
                 g.PushTransform(new TranslateTransform(positionTransform.X, positionTransform.Y));
                 g.PushOpacity(0.8d);
@@ -557,7 +523,7 @@ namespace Clowd
             }
         }
 
-        private void DrawCrosshair(ScreenPoint mousePoint)
+        private void DrawCrosshair(WpfPoint mousePoint)
         {
             using (var context = _crosshair.RenderOpen())
             {
@@ -568,10 +534,9 @@ namespace Clowd
                 const double halfCrossRadius = crossRadius / 2;
 
                 var bounds = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
-                var cursor = mousePoint.ToWpfPoint();
                 var offsetHalfPixel = ScreenTools.ScreenToWpf(0.5);
-                var x = ScreenTools.WpfSnapToPixelsFloor(Math.Min(cursor.X, bounds.Right)) + offsetHalfPixel;
-                var y = ScreenTools.WpfSnapToPixelsFloor(Math.Min(cursor.Y, bounds.Bottom)) + offsetHalfPixel;
+                var x = ScreenTools.WpfSnapToPixelsFloor(Math.Min(mousePoint.X, bounds.Right)) + offsetHalfPixel;
+                var y = ScreenTools.WpfSnapToPixelsFloor(Math.Min(mousePoint.Y, bounds.Bottom)) + offsetHalfPixel;
 
                 context.DrawLine(_sharpWhiteLineDashed, new Point(x, bounds.Top), new Point(x, y - crossRadius));
                 context.DrawLine(_sharpWhiteLineDashed, new Point(x, bounds.Bottom), new Point(x, y + crossRadius));
@@ -593,7 +558,7 @@ namespace Clowd
                 if (SelectionRectangle != WpfRect.Empty)
                 {
                     if (_globalZoom > 1)
-                        context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, cursor.X, cursor.Y));
+                        context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y));
 
                     var selRec = new WpfRect(
                         SelectionRectangle.Left + (offsetHalfPixel / _globalZoom),
@@ -603,176 +568,6 @@ namespace Clowd
 
                     context.DrawRectangle(null, new Pen(_accentBrush, _sharpLineWidth / _globalZoom), selRec);
                 }
-            }
-        }
-
-        private void DrawMagnifier(ScreenPoint mousePoint)
-        {
-            const double indArrowSize = 60d;
-            const double indBorderExclude = 10d;
-
-            using (DrawingContext g = _magnifier.RenderOpen())
-            {
-                if (_image == null || !IsCapturing || !ShowMagnifier)
-                    return;
-
-                // calculate size of color box. this changes the finder size
-                var zoomedColor = GetPixelColor(_image, mousePoint.X, mousePoint.Y);
-                // convert to grayscale and then calculate hsl
-                var grayScale = (0.3d * zoomedColor.R) + (0.59d * zoomedColor.G) + (0.11d * zoomedColor.G);
-                // if lightness is > 60% then we want to use black
-                var txtColor = grayScale > 127 ? Color.FromArgb(200, 0, 0, 0) : Color.FromArgb(200, 255, 255, 255);
-                var txtBrush = new SolidColorBrush(txtColor);
-                var txt = new FormattedText(
-                    $"rgb({zoomedColor.R},{zoomedColor.G},{zoomedColor.B})\r\n{zoomedColor.ToHexRgb()}",
-                    CultureInfo.CurrentUICulture,
-                    this.FlowDirection,
-                    new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
-                    12,
-                    txtBrush,
-                    VisualTreeHelper.GetDpi(this).PixelsPerDip);
-
-                double colorBoxWidth = txt.WidthIncludingTrailingWhitespace + (indBorderExclude * 2);
-                double colorBoxHeight = txt.Height + indBorderExclude;
-
-                var currentPointWpf = mousePoint.ToWpfPoint();
-                var positionTransform = PositionWithinAScreen(_finderSize, currentPointWpf, HorizontalAlignment.Right, VerticalAlignment.Bottom, 20, colorBoxWidth);
-                g.PushTransform(new TranslateTransform(positionTransform.X, positionTransform.Y));
-
-                ArrowIndicatorPosition arrow;
-                if (positionTransform.X > currentPointWpf.X && positionTransform.Y > currentPointWpf.Y) // point is to the bottom right
-                    arrow = ArrowIndicatorPosition.TopLeft;
-                else if (positionTransform.X > currentPointWpf.X) // point is to the top right
-                    arrow = ArrowIndicatorPosition.BottomLeft;
-                else if (positionTransform.Y > currentPointWpf.Y) // point is to the bottom left
-                    arrow = ArrowIndicatorPosition.TopRight;
-                else // point is to the top left
-                    arrow = ArrowIndicatorPosition.BottomRight;
-
-                var cornerX = (int)mousePoint.X - _zoomedPixels / 2;
-                var cornerY = (int)mousePoint.Y - _zoomedPixels / 2;
-                var px = ScreenTools.ScreenToWpf(1);
-
-                var sourceRect = new ScreenRect(cornerX, cornerY, _zoomedPixels, _zoomedPixels);
-                var targetRect = new WpfRect(0, 0, _finderSize.Width, _finderSize.Height);
-
-                // Crop the source & target rectangles so that they don't go past the edges of the screen(s)
-                var zoomedPixel = _singlePixelSize.ToWpfSize();
-                if (sourceRect.Left < 0)
-                {
-                    sourceRect.Left -= cornerX;
-                    sourceRect.Width += cornerX;
-                    targetRect.Left -= cornerX * zoomedPixel.Width;
-                    targetRect.Width += cornerX * zoomedPixel.Width;
-                }
-                if (sourceRect.Top < 0)
-                {
-                    sourceRect.Top -= cornerY;
-                    sourceRect.Height += cornerY;
-                    targetRect.Top -= cornerY * zoomedPixel.Height;
-                    targetRect.Height += cornerY * zoomedPixel.Height;
-                }
-                if (sourceRect.Left + sourceRect.Width > _image.PixelWidth)
-                {
-                    int excess = sourceRect.Left + sourceRect.Width - _image.PixelWidth;
-                    sourceRect.Width -= excess;
-                    targetRect.Width -= excess * zoomedPixel.Width;
-                }
-                if (sourceRect.Top + sourceRect.Height > _image.PixelHeight)
-                {
-                    int excess = sourceRect.Top + sourceRect.Height - _image.PixelHeight;
-                    sourceRect.Height -= excess;
-                    targetRect.Height -= excess * zoomedPixel.Height;
-                }
-
-                var gridLinePixelWidth = Math.Max(ScreenTools.WpfToScreen(_sharpLineWidth), 1);
-                var gridOffset = (gridLinePixelWidth % 2) * 0.5 * px; // offset the line by 0.5 pixels if the line width is odd, to avoid blurring
-                // Clip to the exact same ellipse as the border (thus clipping off half of the drawn border)
-                g.PushClip(new EllipseGeometry(new Point(_finderSize.Width / 2 + gridOffset, _finderSize.Height / 2 + gridOffset), _finderSize.Width / 2, _finderSize.Height / 2));
-
-                // Draw the black background visible at the edge of the screen where no zoomed pixels are available
-                g.DrawRectangle(Brushes.Black, null, new Rect(0, 0, _finderSize.Width, _finderSize.Height));
-
-                // Draw the magnified image
-                var group = new DrawingGroup();
-                group.Children.Add(new ImageDrawing(new CroppedBitmap(_image, sourceRect), targetRect));
-                g.DrawDrawing(group);
-
-                // Draw the pixel grid lines
-                var gridLineWidth = ScreenTools.ScreenToWpf(gridLinePixelWidth);
-                var gridPen = new Pen(Brushes.DimGray, gridLineWidth);
-
-                // Apply grid offset transform and draw grid
-                g.PushTransform(new TranslateTransform(gridOffset, gridOffset));
-                for (int x = sourceRect.Left - cornerX; x <= sourceRect.Left + sourceRect.Width - cornerX; x++)
-                    g.DrawLine(gridPen, new Point(x * zoomedPixel.Width, targetRect.Top), new Point(x * zoomedPixel.Width, targetRect.Bottom));
-                for (int y = sourceRect.Top - cornerY; y <= sourceRect.Top + sourceRect.Height - cornerY; y++)
-                    g.DrawLine(gridPen, new Point(targetRect.Left, y * zoomedPixel.Height), new Point(targetRect.Right, y * zoomedPixel.Height));
-
-                // Draw the crosshair
-                var xhairGrow = gridLineWidth / 2; // make sure the crosshair rectangles cover the adjacent grid lines wholly on both sides
-                g.DrawRectangle(_magCrosshairBrush, null, new WpfRect(0, (_finderSize.Height - zoomedPixel.Height) / 2, (_finderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Left
-                g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width + zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, (_finderSize.Width - zoomedPixel.Width) / 2, zoomedPixel.Height).Grow(xhairGrow)); // Right
-                g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, 0, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Top
-                g.DrawRectangle(_magCrosshairBrush, null, new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height + zoomedPixel.Height) / 2, zoomedPixel.Width, (_finderSize.Height - zoomedPixel.Height) / 2).Grow(xhairGrow)); // Bottom
-
-                // Draw a highlight around the pixel under cursor
-                var innerRect = new WpfRect((_finderSize.Width - zoomedPixel.Width) / 2, (_finderSize.Height - zoomedPixel.Height) / 2, zoomedPixel.Width, zoomedPixel.Height);
-                g.DrawRectangle(null, new Pen(Brushes.White, gridLineWidth), innerRect);
-                g.DrawRectangle(null, new Pen(Brushes.Black, gridLineWidth), innerRect.Grow(gridLineWidth));
-                g.Pop(); // grid line 0.5 px offset
-
-                // Draw the magnifier border
-                g.DrawEllipse(null, _magBorderPen, new Point(_finderSize.Width / 2 + gridOffset, _finderSize.Height / 2 + gridOffset), _finderSize.Width / 2, _finderSize.Height / 2);
-
-                g.Pop(); // the circular clip
-
-                Rect indicatorSquare = Rect.Empty;
-                Rect colorSquare = Rect.Empty;
-                double colorTxtOffsetX = (indBorderExclude / 2);
-
-                switch (arrow)
-                {
-                    case ArrowIndicatorPosition.TopLeft:
-                        indicatorSquare = new Rect(0, 0, indArrowSize, indArrowSize);
-                        colorSquare = new Rect(_finderSize.Width, (_finderSize.Height - colorBoxHeight) / 2, colorBoxWidth, colorBoxHeight);
-                        colorTxtOffsetX += indBorderExclude;
-                        break;
-                    case ArrowIndicatorPosition.BottomLeft:
-                        indicatorSquare = new Rect(0, _finderSize.Height - indArrowSize, indArrowSize, indArrowSize);
-                        colorSquare = new Rect(_finderSize.Width, (_finderSize.Height - colorBoxHeight) / 2, colorBoxWidth, colorBoxHeight);
-                        colorTxtOffsetX += indBorderExclude;
-                        break;
-                    case ArrowIndicatorPosition.TopRight:
-                        indicatorSquare = new Rect(_finderSize.Width - indArrowSize, 0, indArrowSize, indArrowSize);
-                        colorSquare = new Rect(0 - colorBoxWidth, (_finderSize.Height - colorBoxHeight) / 2, colorBoxWidth, colorBoxHeight);
-                        break;
-                    case ArrowIndicatorPosition.BottomRight:
-                        indicatorSquare = new Rect(_finderSize.Width - indArrowSize, _finderSize.Height - indArrowSize, indArrowSize, indArrowSize);
-                        colorSquare = new Rect(0 - colorBoxWidth, (_finderSize.Height - colorBoxHeight) / 2, colorBoxWidth, colorBoxHeight);
-                        break;
-                }
-                if (!indicatorSquare.IsEmpty)
-                {
-                    var indicatorGeo = Geometry.Combine(
-                        new RectangleGeometry(indicatorSquare),
-                        new EllipseGeometry(new Rect(-indBorderExclude, -indBorderExclude, _finderSize.Width + (indBorderExclude * 2), _finderSize.Height + (indBorderExclude * 2))),
-                        GeometryCombineMode.Exclude, null);
-                    g.DrawGeometry(new SolidColorBrush(Color.FromArgb(180, 135, 135, 135)), null, indicatorGeo);
-
-                    var colorGeo = Geometry.Combine(
-                      new RectangleGeometry(colorSquare, 4, 4),
-                      new EllipseGeometry(new Rect(-indBorderExclude, -indBorderExclude, _finderSize.Width + (indBorderExclude * 2), _finderSize.Height + (indBorderExclude * 2))),
-                      GeometryCombineMode.Exclude, null);
-
-                    //var colorPen = new Pen(new SolidColorBrush(Color.FromRgb((byte)(255 - zoomedColor.R), (byte)(255 - zoomedColor.G), (byte)(255 - zoomedColor.B))), _sharpLineWidth);
-
-                    g.DrawGeometry(new SolidColorBrush(zoomedColor), new Pen(txtBrush, _sharpLineWidth), colorGeo);
-                    g.DrawText(txt, new Point(colorSquare.X + colorTxtOffsetX, colorSquare.Y + ((colorSquare.Height - txt.Height) / 2)));
-                }
-
-                this.Width = _finderSize.Width;
-                this.Height = _finderSize.Height;
             }
         }
 
