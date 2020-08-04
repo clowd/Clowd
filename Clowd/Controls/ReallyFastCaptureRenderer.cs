@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -478,8 +478,9 @@ namespace Clowd
             var windowBounds = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
             using (var context = _foregroundImage.RenderOpen())
             {
+                var wpfPoint = mousePoint.ToWpfPoint();
                 if (_globalZoom > 1)
-                    context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y));
+                    context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, wpfPoint.X, wpfPoint.Y));
 
                 if (SelectionRectangle != default(WpfRect))
                 {
@@ -505,10 +506,9 @@ namespace Clowd
             var windowBounds = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
             using (var context = _backgroundImage.RenderOpen())
             {
+                var wpfPoint = mousePoint.ToWpfPoint();
                 if (_globalZoom > 1)
-                {
-                    context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y));
-                }
+                    context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, wpfPoint.X, wpfPoint.Y));
                 //if (_onFade < 1)
                 //{
                 //    context.DrawImage(_image, windowBounds);
@@ -593,7 +593,7 @@ namespace Clowd
                 if (SelectionRectangle != WpfRect.Empty)
                 {
                     if (_globalZoom > 1)
-                        context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y));
+                        context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, cursor.X, cursor.Y));
 
                     var selRec = new WpfRect(
                         SelectionRectangle.Left + (offsetHalfPixel / _globalZoom),
