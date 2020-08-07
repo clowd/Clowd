@@ -262,6 +262,9 @@ namespace Clowd
         }
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                return;
+
             var cropped = CropBitmap();
             Close();
 
@@ -274,6 +277,9 @@ namespace Clowd
         }
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                return;
+
             var cropped = CropBitmap();
             if (ClipboardEx.SetImage(cropped))
                 Close();
@@ -282,6 +288,9 @@ namespace Clowd
         }
         private void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                return;
+
             var cropped = CropBitmap();
             SaveFileDialog dlg = new SaveFileDialog();
             dlg.DefaultExt = ".png";
@@ -294,10 +303,16 @@ namespace Clowd
         }
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                return;
+
             fastCapturer.Reset();
         }
         private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                return;
+
             this.Close();
             var cropped = CropBitmap();
             BitmapEncoder encoder = new PngBitmapEncoder();
@@ -316,6 +331,9 @@ namespace Clowd
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                return;
+
             if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
             {
                 MessageBox.Show("Please update your Video output directory in the settings before recording a video");
@@ -329,6 +347,9 @@ namespace Clowd
         }
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (!IsCapturing)
+                return;
+
             fastCapturer.SelectScreen();
         }
         private void CloseExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -337,10 +358,16 @@ namespace Clowd
         }
         private void ToggleMagnifierExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (!IsCapturing)
+                return;
+
             fastCapturer.ShowMagnifier = !fastCapturer.ShowMagnifier;
         }
         private void SelectColorExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (!IsCapturing)
+                return;
+
             Clipboard.SetText(fastCapturer.GetHoveredColor().ToHexRgb());
             this.Close();
         }
