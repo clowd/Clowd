@@ -73,7 +73,7 @@ namespace Clowd
         WpfPoint? _virtualDragBegin = null;
         WpfPoint? _virtualPoint = null;
         ScreenPoint? _lastScreenPoint = null;
-        const int _clickDistance = 2;
+        const int _clickDistance = 6;
         bool _dragging = false;
 
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
@@ -305,7 +305,7 @@ namespace Clowd
             }
 
             if (_virtualPoint.HasValue && _virtualDragBegin.HasValue
-                && (_dragging || DistancePointToPoint(_virtualPoint.Value.X, _virtualPoint.Value.Y, _virtualDragBegin.Value.X, _virtualDragBegin.Value.Y) > _clickDistance))
+                && (_dragging || DistancePointToPoint(_virtualPoint.Value.X, _virtualPoint.Value.Y, _virtualDragBegin.Value.X, _virtualDragBegin.Value.Y) > _clickDistance / _globalZoom))
             {
                 _dragging = true;
 
