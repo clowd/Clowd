@@ -28,9 +28,16 @@ namespace Clowd
         public Rect CroppingRectangleWpf { get { return CroppingRectangle.ToWpfRect(); } private set { CroppingRectangle = new WpfRect(value).ToScreenRect(); } }
         public IntPtr Handle { get; private set; }
 
+        public bool IsRecording { get; set; }
+        public bool IsStarted { get; set; }
+        public bool IsNotStarted => !IsStarted;
+        public bool IsAudioSupported { get; set; }
+
+        public bool IsMicrophoneEnabled { get; set; }
+        public bool IsLoopbackEnabled { get; set; }
+
         private LiveScreenRecording _recording;
         private bool _isCancelled = false;
-        private bool _isRecording = false;
 
         public VideoOverlayWindow(ScreenRect captureArea)
         {
@@ -44,6 +51,18 @@ namespace Clowd
 
             _recording = new LiveScreenRecording(captureArea.ToSystem());
             _recording.LogReceived += Recording_LogRecieved;
+
+            App.Current.Settings.VideoSettings.VideoCodec.PropertyChanged += SavedPresets_PropertyChanged;
+            App.Current.Settings.VideoSettings.VideoCodec.SavedPresets.PropertyChanged += SavedPresets_PropertyChanged;
+            this.Closed += (s, e) => App.Current.Settings.VideoSettings.VideoCodec.PropertyChanged -= SavedPresets_PropertyChanged;
+            this.Closed += (s, e) => App.Current.Settings.VideoSettings.VideoCodec.SavedPresets.PropertyChanged -= SavedPresets_PropertyChanged;
+
+            UpdateAudioState();
+        }
+
+        private void SavedPresets_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            UpdateAudioState();
         }
 
         private void Recording_LogRecieved(object sender, FFMpegLogEventArgs e)
@@ -88,10 +107,6 @@ namespace Clowd
                 {
                     recordingFpsLabel.Text = $"{((int)ts.TotalMinutes):D2}:{((int)ts.Seconds):D2}";
                 }
-                else
-                {
-                    recordingFpsLabel.Text = "NO DATA";
-                }
             });
         }
 
@@ -107,17 +122,20 @@ namespace Clowd
             // WPF makes some fairly inconvenient DPI conversions to Left and Top which have also changed between NET 4.5 and 4.8; just use WinAPI instead of de-converting them
             Interop.USER32.SetWindowPos(this.Handle, 0, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.SHOWWINDOW);
             Interop.USER32.SetForegroundWindow(this.Handle);
-            toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(CroppingRectangle.ToWpfRect(), 2, 10, 50, 153);
-            StartRecording();
+            toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(CroppingRectangle.ToWpfRect(), 2, 10, 50, 303);
+            //StartRecording();
         }
 
         private async void StartRecording()
         {
+            IsStarted = true;
+            UpdateAudioState();
             labelCountdown.Visibility = Visibility.Visible;
 
             for (int i = 4; i >= 1; i--)
             {
                 labelCountdown.Text = i.ToString();
+                labelCountdown.FontSize = 120;
                 recordingFpsLabel.Text = "REC in " + i.ToString();
                 await Task.Delay(1000);
                 if (_isCancelled)
@@ -127,7 +145,7 @@ namespace Clowd
             labelCountdown.Visibility = Visibility.Collapsed;
             recordingFpsLabel.Text = "Starting";
 
-            _isRecording = true;
+            IsRecording = true;
 
             try
             {
@@ -158,9 +176,31 @@ namespace Clowd
             }
         }
 
+        public void UpdateAudioState()
+        {
+            if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
+            {
+                IsAudioSupported = true;
+                IsMicrophoneEnabled = audio.CaptureMicrophone;
+                IsLoopbackEnabled = audio.CaptureLoopbackAudio;
+            }
+            else
+            {
+                IsMicrophoneEnabled = IsLoopbackEnabled = IsAudioSupported = false;
+            }
+
+            if (IsStarted)
+                IsAudioSupported = false;
+        }
+
+        private void buttonStart_Click(object sender, RoutedEventArgs e)
+        {
+            StartRecording();
+        }
+
         private async void buttonStop_Click(object sender, RoutedEventArgs e)
         {
-            var wasRecording = _isRecording;
+            var wasRecording = IsRecording;
             buttonCancel_Click(sender, e);
             if (wasRecording)
             {
@@ -172,12 +212,63 @@ namespace Clowd
         private async void buttonCancel_Click(object sender, RoutedEventArgs e)
         {
             _isCancelled = true;
-            if (_isRecording)
+            if (IsRecording)
             {
-                _isRecording = false;
+                IsRecording = false;
                 await _recording.Stop();
             }
             this.Close();
+        }
+
+        private void toggleMicrophone_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
+            {
+                if (!audio.CaptureMicrophone && audio.SelectedMicrophone == null)
+                {
+                    if (MessageBoxEx.ShowAction(
+                        this,
+                        "Unable to record microphone",
+                        "Please open the settings or click the TUNE button to select a microphone to record from.",
+                        TaskDialogIcon.Warning,
+                        "Open Settings"))
+                    {
+                        App.Current.ShowSettings(SettingsCategory.Video);
+                    }
+                    return;
+                }
+
+                audio.CaptureMicrophone = !audio.CaptureMicrophone;
+                IsMicrophoneEnabled = audio.CaptureMicrophone;
+            }
+        }
+
+        private void toggleSpeaker_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
+            {
+                if (!audio.CaptureLoopbackAudio && !audio.IsLoopbackInstalled)
+                {
+                    if (MessageBoxEx.ShowAction(
+                        this,
+                        "Unable to record speakers",
+                        "You must install the 'DirectShow Add-ons' from the settings page before enabling this feature.",
+                        TaskDialogIcon.Warning,
+                        "Open Settings"))
+                    {
+                        App.Current.ShowSettings(SettingsCategory.Windows);
+                    }
+                    return;
+                }
+
+                audio.CaptureLoopbackAudio = !audio.CaptureLoopbackAudio;
+                IsLoopbackEnabled = audio.CaptureLoopbackAudio;
+            }
+        }
+
+        private void settings_Click(object sender, RoutedEventArgs e)
+        {
+            App.Current.ShowSettings(SettingsCategory.Video);
         }
     }
 }
