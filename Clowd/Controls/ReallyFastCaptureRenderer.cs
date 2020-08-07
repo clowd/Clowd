@@ -401,13 +401,19 @@ namespace Clowd
 
         private void CaptureWindow2_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (e.Delta > 0)
+            if (Keyboard.Modifiers == ModifierKeys.Control)
             {
-                _globalZoom = Math.Ceiling(Math.Pow(_globalZoom, 1.2d) + 1);
+                if (e.Delta > 0)
+                    _globalZoom *= 1.05;
+                else
+                    _globalZoom /= 1.05;
             }
             else
             {
-                _globalZoom = Math.Floor(Math.Pow(_globalZoom, 1d / 1.2d) - 1);
+                if (e.Delta > 0)
+                    _globalZoom = Math.Ceiling(Math.Pow(_globalZoom, 1.2d) + 1);
+                else
+                    _globalZoom = Math.Floor(Math.Pow(_globalZoom, 1d / 1.2d) - 1);
             }
 
             _globalZoom = Math.Min(Math.Max(_globalZoom, 1), 100);
