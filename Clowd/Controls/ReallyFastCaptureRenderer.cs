@@ -285,7 +285,7 @@ namespace Clowd
 
         private void CaptureWindow2_MouseMove(object sender, MouseEventArgs e)
         {
-            if (_virtualPoint.HasValue && _lastScreenPoint.HasValue)
+            if (_globalZoom > 1 && _virtualPoint.HasValue && _lastScreenPoint.HasValue)
             {
                 var currentPoint = ScreenTools.GetMousePosition();
                 var xDelta = ScreenTools.ScreenToWpf((currentPoint.X - _lastScreenPoint.Value.X) / _globalZoom);
