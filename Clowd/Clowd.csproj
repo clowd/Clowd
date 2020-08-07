@@ -176,6 +176,7 @@
     <Compile Include="Utilities\ICommandLineProxy.cs" />
     <Compile Include="Utilities\GlobalTrigger.cs" />
     <Compile Include="Utilities\LiveScreenRecording.cs" />
+    <Compile Include="Utilities\MessageBoxEx.cs" />
     <Compile Include="Utilities\RelayCommand.cs" />
     <Compile Include="Utilities\ScrollingCapture.cs" />
     <Compile Include="Utilities\ScrollingCapture2.cs" />
