@@ -288,8 +288,8 @@ namespace Clowd
             if (_virtualPoint.HasValue && _lastScreenPoint.HasValue)
             {
                 var currentPoint = ScreenTools.GetMousePosition();
-                var xDelta = (currentPoint.X - _lastScreenPoint.Value.X) / _globalZoom * ScreenTools.DpiZoom;
-                var yDelta = (currentPoint.Y - _lastScreenPoint.Value.Y) / _globalZoom * ScreenTools.DpiZoom;
+                var xDelta = ScreenTools.ScreenToWpf((currentPoint.X - _lastScreenPoint.Value.X) / _globalZoom);
+                var yDelta = ScreenTools.ScreenToWpf((currentPoint.Y - _lastScreenPoint.Value.Y) / _globalZoom);
 
                 _virtualPoint = new WpfPoint(_virtualPoint.Value.X + xDelta, _virtualPoint.Value.Y + yDelta);
 
