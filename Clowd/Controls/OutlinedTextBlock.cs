@@ -171,6 +171,7 @@ namespace Clowd.Controls
             this.EnsureGeometry();
 
             drawingContext.DrawGeometry(this.Fill, new Pen(this.Stroke, this.StrokeThickness), this.textGeometry);
+            drawingContext.DrawGeometry(this.Fill, null, this.textGeometry);
         }
 
         protected override Size MeasureOverride(Size availableSize)
