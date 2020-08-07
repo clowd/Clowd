@@ -47,6 +47,11 @@ namespace Clowd
             this.SelectedItem = App.Current.Settings;
             SelectedItem.SaveQuiet();
         }
+
+        public void SetCurrentTab(SettingsCategory category)
+        {
+            this.PropertyGrid1.SelectedTabId = category.ToString();
+        }
     }
 
     public class DisplayModeToPropertyTabVisibilityConverter : IValueConverter

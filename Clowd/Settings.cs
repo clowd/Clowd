@@ -21,6 +21,16 @@ using FileUploadLib.Providers;
 
 namespace Clowd
 {
+    public enum SettingsCategory
+    {
+        General,
+        Hotkeys,
+        Capture,
+        Editor,
+        Uploads,
+        Windows,
+        Video,
+    }
     public enum AccentScheme
     {
         [Description("User defined")]
@@ -71,7 +81,7 @@ namespace Clowd
         [Browsable(false)]
         public string LastUploadPath { get; set; }
 
-        [Category("General"), DisplayName("Confirm before exit")]
+        [Category(nameof(SettingsCategory.General)), DisplayName("Confirm before exit")]
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose { get; set; } = true;
 
@@ -101,27 +111,27 @@ namespace Clowd
                      "or as a single scrolling page.")]
         public SettingsDisplayMode DisplayMode { get; set; } = SettingsDisplayMode.Tabbed;
 
-        [Category("Hotkeys"), DisplayName("General - File Upload"), ClassifyIgnoreIfDefault]
+        [Category(nameof(SettingsCategory.Hotkeys)), DisplayName("General - File Upload"), ClassifyIgnoreIfDefault]
         public GlobalTrigger FileUploadShortcut { get; set; }
             = new GlobalTrigger(() => App.Current.UploadFile());
 
-        [Category("Hotkeys"), DisplayName("General - Open Clowd"), ClassifyIgnoreIfDefault]
-        public GlobalTrigger OpenHomeShortcut { get; set; }
-            = new GlobalTrigger(() => App.Current.ShowHome());
+        //[Category("Hotkeys"), DisplayName("General - Open Clowd"), ClassifyIgnoreIfDefault]
+        //public GlobalTrigger OpenHomeShortcut { get; set; }
+        //    = new GlobalTrigger(() => App.Current.ShowHome());
 
-        [ExpandAsCategory("Capture")]
+        [ExpandAsCategory(nameof(SettingsCategory.Capture))]
         public CaptureSettings CaptureSettings { get; set; } = new CaptureSettings();
 
-        [ExpandAsCategory("Editor")]
+        [ExpandAsCategory(nameof(SettingsCategory.Editor))]
         public EditorSettings EditorSettings { get; set; } = new EditorSettings();
 
-        [ExpandAsCategory("Uploads")]
+        [ExpandAsCategory(nameof(SettingsCategory.Uploads))]
         public UploadSettings UploadSettings { get; set; } = new UploadSettings();
 
-        [ExpandAsCategory("Windows")]
+        [ExpandAsCategory(nameof(SettingsCategory.Windows))]
         public FeatureSettings FeatureSettings { get; set; } = new FeatureSettings();
 
-        [ExpandAsCategory("Video")]
+        [ExpandAsCategory(nameof(SettingsCategory.Video))]
         public VideoSettings VideoSettings { get; set; } = new VideoSettings();
 
         [Browsable(false), ClassifyNotNull]
@@ -192,15 +202,15 @@ namespace Clowd
         [DisplayName("Bring selected window to the foreground")]
         public SelectedWindowForegroundPromotion SelectedWindowPromotion { get; set; } = SelectedWindowForegroundPromotion.WhenClicked;
 
-        [Category("Hotkeys"), DisplayName("Capture - Region"), ClassifyIgnoreIfDefault]
+        [Category(nameof(SettingsCategory.Hotkeys)), DisplayName("Capture - Region"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureRegionShortcut { get; set; }
             = new GlobalTrigger(Key.PrintScreen, () => App.Current.StartCapture());
 
-        [Category("Hotkeys"), DisplayName("Capture - Fullscreen"), ClassifyIgnoreIfDefault]
+        [Category(nameof(SettingsCategory.Hotkeys)), DisplayName("Capture - Fullscreen"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureFullscreenShortcut { get; set; }
             = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Control, App.Current.QuickCaptureFullScreen);
 
-        [Category("Hotkeys"), DisplayName("Capture - Active Window"), ClassifyIgnoreIfDefault]
+        [Category(nameof(SettingsCategory.Hotkeys)), DisplayName("Capture - Active Window"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureActiveShortcut { get; set; }
             = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Alt, App.Current.QuickCaptureCurrentWindow);
 
@@ -242,13 +252,13 @@ namespace Clowd
     [ImplementPropertyChanged]
     public class UploadSettings : IDisposable, IAzureOptions
     {
-        [Category("Hotkeys"), DisplayName("Uploads - Activate Next"), ClassifyIgnoreIfDefault]
+        [Category(nameof(SettingsCategory.Hotkeys)), DisplayName("Uploads - Activate Next"), ClassifyIgnoreIfDefault]
         [Description("This hotkey activates the next item in the task window. " +
                      "For instance, if the next item is an upload it will be copied to the clipboard.")]
         public GlobalTrigger ActivateNextShortcut { get; set; }
            = new GlobalTrigger(() => TaskWindow.Current?.ActivateNext());
 
-        [Category("Uploads"), DisplayName("Upload Storage Provider")]
+        [Category(nameof(SettingsCategory.Uploads)), DisplayName("Upload Storage Provider")]
         public UploadsProvider UploadProvider { get; set; } = UploadsProvider.None;
 
         [PData.VisibleBy(nameof(UploadProvider), UploadsProvider.Azure)]
