@@ -143,7 +143,7 @@ namespace Clowd
         {
             get
             {
-                var ret = _loopback && App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
+                var ret = _loopback && IsLoopbackInstalled;
                 if (_loopback != ret)
                 {
                     _loopback = ret;
@@ -153,7 +153,7 @@ namespace Clowd
             }
             set
             {
-                var isInstalled = App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
+                var isInstalled = IsLoopbackInstalled;
                 if (!isInstalled && value)
                 {
                     MessageBox.Show($"You must install 'Windows/DirectShow Add-ons' before {App.ClowdAppName} is able to capture loopback audio");
@@ -168,6 +168,9 @@ namespace Clowd
         }
 
         public bool CaptureMicrophone { get; set; } = false;
+
+        [Browsable(false)]
+        public bool IsLoopbackInstalled => App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
 
         [PropertyTools.DataAnnotations.EnableBy(nameof(CaptureMicrophone), true)]
         public FFmpegDirectShowAudioDevice SelectedMicrophone { get; set; }
