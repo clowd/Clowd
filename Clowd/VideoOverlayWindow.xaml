@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:Clowd.Controls"
+    xmlns:conv="clr-namespace:Clowd.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -23,6 +24,10 @@
     <Window.Background>
         <SolidColorBrush Opacity="0.00" Color="#FFFFFF" />
     </Window.Background>
+    <Window.Resources>
+        <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
+        <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />
+    </Window.Resources>
     <Grid>
         <Canvas
             Name="dynamicCanvas"
@@ -57,7 +62,7 @@
                             FontSize="10"
                             FontWeight="DemiBold"
                             Foreground="White">
-                            REC in 4
+                            CLOWD
                         </TextBlock>
                     </StackPanel>
                 </Grid>
@@ -68,10 +73,33 @@
                     VerticalAlignment="Stretch"
                     Fill="#373737" />
                 <Button
-                    x:Name="buttonStop"
+                    Background="#373737"
+                    Click="buttonStart_Click"
+                    Style="{StaticResource CaptureToolButtonStyle}"
+                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2InverseVis}}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Viewbox Width="26" Height="26">
+                            <Path
+                                Width="172"
+                                Height="172"
+                                Data="M133.67728,78.42849l-88.01562,-43.62019c-2.66166,-1.34375 -5.84015,-1.21454 -8.39844,0.33594c-2.55829,1.52464 -4.08294,4.26382 -4.08294,7.20974v87.31791c0,2.92007 1.52464,5.65925 4.08294,7.18389c1.39543,0.85276 2.94591,1.26622 4.52223,1.26622c1.34375,0 2.66166,-0.3101 3.87621,-0.90444l88.04147,-43.67188c2.89423,-1.42128 4.72896,-4.34135 4.72896,-7.54567c0,-3.20433 -1.86058,-6.1244 -4.75481,-7.57151z"
+                                Fill="White" />
+                        </Viewbox>
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="DemiBold"
+                            Foreground="White">
+                            START
+                        </TextBlock>
+                    </StackPanel>
+                </Button>
+                <Button
                     Background="#373737"
                     Click="buttonStop_Click"
-                    Style="{StaticResource CaptureToolButtonStyle}">
+                    IsEnabled="{Binding IsRecording}"
+                    Style="{StaticResource CaptureToolButtonStyle}"
+                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Border
                             Width="18"
@@ -85,6 +113,164 @@
                             FontWeight="DemiBold"
                             Foreground="White">
                             FINISH
+                        </TextBlock>
+                    </StackPanel>
+                </Button>
+                <Button
+                    Background="#373737"
+                    Click="toggleMicrophone_Click"
+                    IsEnabled="{Binding IsAudioSupported}"
+                    Style="{StaticResource CaptureToolButtonStyle}"
+                    Visibility="{Binding IsMicrophoneEnabled, Converter={StaticResource Bool2Vis}}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Viewbox
+                            Width="26"
+                            Height="26"
+                            Margin="0,1,0,0">
+                            <Path
+                                Width="172"
+                                Height="172"
+                                Data="M86,14.33333c-11.87517,0 -21.5,9.62483 -21.5,21.5v43c0,11.87517 9.62483,21.5 21.5,21.5c11.87517,0 21.5,-9.62483 21.5,-21.5v-43c0,-11.87517 -9.62483,-21.5 -21.5,-21.5zM43.62988,78.83333c-4.343,0 -7.841,3.85365 -7.13867,8.14649c3.5108,21.49797 20.70692,38.35796 42.34212,41.46028v14.89323c0,3.956 3.21067,7.16667 7.16667,7.16667c3.956,0 7.16667,-3.21067 7.16667,-7.16667v-14.89323c21.63521,-3.10233 38.83133,-19.96231 42.34212,-41.46028c0.70233,-4.29283 -2.79567,-8.14649 -7.13867,-8.14649c-3.54033,0 -6.45985,2.60553 -7.05469,6.10286c-2.9025,16.87751 -17.60659,29.73047 -35.31543,29.73047c-17.70883,0 -32.41293,-12.85297 -35.31543,-29.73047c-0.59483,-3.49733 -3.50719,-6.10286 -7.05469,-6.10286z"
+                                Fill="White" />
+                        </Viewbox>
+                        <StackPanel
+                            Margin="0,-1,0,0"
+                            HorizontalAlignment="Center"
+                            Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="10"
+                                FontWeight="DemiBold"
+                                Foreground="White">
+                                MIC
+                            </TextBlock>
+                            <Border
+                                Width="10"
+                                Height="10"
+                                Margin="5,0,0,0"
+                                VerticalAlignment="Center"
+                                Background="LimeGreen"
+                                CornerRadius="5" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+                <Button
+                    Background="#373737"
+                    Click="toggleMicrophone_Click"
+                    IsEnabled="{Binding IsAudioSupported}"
+                    Style="{StaticResource CaptureToolButtonStyle}"
+                    ToolTip="Capture microphone Audio&#x0a;Must be using an encoder preset that supports audio&#x0a;Must have a microphone selected in settings"
+                    ToolTipService.ShowOnDisabled="True"
+                    Visibility="{Binding IsMicrophoneEnabled, Converter={StaticResource Bool2InverseVis}}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Viewbox Width="26" Height="26">
+                            <Path
+                                Width="172"
+                                Height="172"
+                                Data="M86,21.5c-11.87517,0 -21.5,9.62483 -21.5,21.5v43c0,11.87517 9.62483,21.5 21.5,21.5c11.87517,0 21.5,-9.62483 21.5,-21.5v-43c0,-11.87517 -9.62483,-21.5 -21.5,-21.5zM43.62988,86c-4.343,0 -7.841,3.86082 -7.13867,8.14649c3.50433,21.50444 20.70584,38.35789 42.34212,41.46028v14.89323c0,3.956 3.21067,7.16667 7.16667,7.16667c3.956,0 7.16667,-3.21067 7.16667,-7.16667v-14.90723c5.18974,-0.7623 10.14102,-2.28168 14.69726,-4.49316l-11.09993,-11.09993c-3.4185,1.08217 -6.98716,1.83366 -10.764,1.83366c-17.70883,0 -32.4201,-12.8458 -35.31543,-29.73047c-0.59483,-3.49016 -3.50036,-6.10286 -7.04069,-6.10286zM124.80078,110.46744c-1.83376,0 -3.66597,0.69853 -5.06706,2.09961c-2.80217,2.795 -2.80217,7.33195 0,10.13412l10.13412,10.13411l-10.13412,10.13412c-2.80217,2.795 -2.80217,7.33194 0,10.13411c2.795,2.80217 7.33195,2.80217 10.13412,0l10.13411,-10.13411l10.13412,10.13411c2.795,2.80217 7.33194,2.80217 10.13411,0c2.795,-2.80217 2.795,-7.33911 0,-10.13411l-10.13411,-10.13412l10.13411,-10.13411c2.80217,-2.795 2.80217,-7.33195 0,-10.13412c-2.80217,-2.795 -7.33911,-2.795 -10.13411,0l-10.13412,10.13412l-10.13411,-10.13412c-1.3975,-1.40108 -3.23329,-2.09961 -5.06706,-2.09961z"
+                                Fill="White"
+                                Opacity="0.6" />
+                        </Viewbox>
+                        <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="10"
+                                FontWeight="DemiBold"
+                                Foreground="White">
+                                MIC
+                            </TextBlock>
+                            <Border
+                                Width="10"
+                                Height="10"
+                                Margin="5,0,0,0"
+                                VerticalAlignment="Center"
+                                Background="IndianRed"
+                                CornerRadius="5" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+                <Button
+                    Background="#373737"
+                    Click="toggleSpeaker_Click"
+                    IsEnabled="{Binding IsAudioSupported}"
+                    Style="{StaticResource CaptureToolButtonStyle}"
+                    Visibility="{Binding IsLoopbackEnabled, Converter={StaticResource Bool2Vis}}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Viewbox Width="26" Height="26">
+                            <Path
+                                Width="172"
+                                Height="172"
+                                Data="M80.94694,28.66667c-1.23267,0 -2.48852,0.45206 -3.51334,1.46973l-34.4336,34.44759h-14.33333c-7.91917,0 -14.33333,6.41417 -14.33333,14.33333v14.33333c0,7.91917 6.41417,14.33333 14.33333,14.33333h14.33333l34.4336,34.43359c1.02483,1.02483 2.28068,1.46973 3.51334,1.46973c2.58,0 5.05306,-2.00073 5.05306,-5.02507v-104.7705c0,-3.02433 -2.47306,-5.02507 -5.05306,-5.02507zM150.5,35.83333c-3.95804,0 -7.16667,3.20863 -7.16667,7.16667c0,3.95804 3.20863,7.16667 7.16667,7.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM129,50.16667c-3.95804,0 -7.16667,3.20863 -7.16667,7.16667c0,3.95804 3.20863,7.16667 7.16667,7.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM107.5,64.5c-3.95804,0 -7.16667,3.20863 -7.16667,7.16667c0,3.95804 3.20863,7.16667 7.16667,7.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM129,78.83333c-3.95804,0 -7.16667,3.20863 -7.16667,7.16667c0,3.95804 3.20863,7.16667 7.16667,7.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM150.5,78.83333c-3.95804,0 -7.16667,3.20863 -7.16667,7.16667c0,3.95804 3.20863,7.16667 7.16667,7.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM107.5,93.16667c-3.95804,0 -7.16667,3.20863 -7.16667,7.16667c0,3.95804 3.20863,7.16667 7.16667,7.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM129,107.5c-3.95804,0 -7.16667,3.20863 -7.16667,7.16667c0,3.95804 3.20863,7.16667 7.16667,7.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM150.5,121.83333c-3.95804,0 -7.16667,3.20863 -7.16667,7.16667c0,3.95804 3.20863,7.16667 7.16667,7.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667z"
+                                Fill="White" />
+                        </Viewbox>
+                        <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="10"
+                                FontWeight="DemiBold"
+                                Foreground="White">
+                                SPK
+                            </TextBlock>
+                            <Border
+                                Width="10"
+                                Height="10"
+                                Margin="5,0,0,0"
+                                VerticalAlignment="Center"
+                                Background="LimeGreen"
+                                CornerRadius="5" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+                <Button
+                    Background="#373737"
+                    Click="toggleSpeaker_Click"
+                    IsEnabled="{Binding IsAudioSupported}"
+                    Style="{StaticResource CaptureToolButtonStyle}"
+                    ToolTip="Capture system audio&#x0a;Must be using an encoder preset that supports audio&#x0a;Must have 'DirectShow Add-ons' installed (check settings)"
+                    ToolTipService.ShowOnDisabled="True"
+                    Visibility="{Binding IsLoopbackEnabled, Converter={StaticResource Bool2InverseVis}}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Viewbox Width="26" Height="26">
+                            <Path
+                                Width="172"
+                                Height="172"
+                                Data="M80.94694,28.58268c-1.23267,0 -2.48852,0.46606 -3.51334,1.48372l-34.4336,34.43359h-14.33333c-7.91917,0 -14.33333,6.41417 -14.33333,14.33333v14.33333c0,7.91917 6.41417,14.33333 14.33333,14.33333h14.33333l34.4336,34.4336c1.02483,1.02483 2.28068,1.48372 3.51334,1.48372c2.58,0 5.05306,-2.00073 5.05306,-5.02507v-104.78451c0,-3.02433 -2.47306,-5.02507 -5.05306,-5.02507zM107.43001,57.26335c-2.91628,0.00077 -5.54133,1.76842 -6.6387,4.47035c-1.09737,2.70194 -0.44824,5.79937 1.64164,7.83336l16.43294,16.43294l-16.43294,16.43294c-1.87223,1.79752 -2.62641,4.46675 -1.97168,6.97825c0.65472,2.5115 2.61605,4.47282 5.12755,5.12755c2.5115,0.65472 5.18073,-0.09946 6.97825,-1.97168l16.43294,-16.43294l16.43294,16.43294c1.79752,1.87223 4.46675,2.62641 6.97825,1.97168c2.5115,-0.65472 4.47282,-2.61605 5.12755,-5.12755c0.65472,-2.5115 -0.09946,-5.18073 -1.97168,-6.97825l-16.43294,-16.43294l16.43294,-16.43294c2.11962,-2.06035 2.75694,-5.21064 1.60486,-7.93287c-1.15207,-2.72224 -3.85719,-4.45797 -6.81189,-4.37084c-1.86189,0.05548 -3.62905,0.83363 -4.92708,2.1696l-16.43294,16.43295l-16.43294,-16.43295c-1.34928,-1.38699 -3.20203,-2.16948 -5.13705,-2.1696z"
+                                Fill="White"
+                                Opacity="0.6" />
+                        </Viewbox>
+                        <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="10"
+                                FontWeight="DemiBold"
+                                Foreground="White">
+                                SPK
+                            </TextBlock>
+                            <Border
+                                Width="10"
+                                Height="10"
+                                Margin="5,0,0,0"
+                                VerticalAlignment="Center"
+                                Background="IndianRed"
+                                CornerRadius="5" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+                <Button
+                    Background="#373737"
+                    Click="settings_Click"
+                    IsEnabled="{Binding IsNotStarted}"
+                    Style="{StaticResource CaptureToolButtonStyle}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Viewbox Width="26" Height="26">
+                            <Path
+                                Width="172"
+                                Height="172"
+                                Data="M75.25,14.33333c-5.934,0 -10.75,4.816 -10.75,10.75v3.58333h-43c-2.58456,-0.03655 -4.98858,1.32136 -6.29153,3.55376c-1.30295,2.2324 -1.30295,4.99342 0,7.22582c1.30295,2.2324 3.70697,3.59031 6.29153,3.55376h43v3.58333c0,5.934 4.816,10.75 10.75,10.75c5.934,0 10.75,-4.816 10.75,-10.75v-21.5c0,-5.934 -4.816,-10.75 -10.75,-10.75zM100.33333,28.66667v14.33333h50.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM111.08333,64.5c-5.934,0 -10.75,4.816 -10.75,10.75v3.58333h-78.83333c-2.58456,-0.03655 -4.98858,1.32136 -6.29153,3.55376c-1.30295,2.2324 -1.30295,4.99342 0,7.22582c1.30295,2.2324 3.70697,3.59031 6.29153,3.55376h78.83333v3.58333c0,5.934 4.816,10.75 10.75,10.75c5.934,0 10.75,-4.816 10.75,-10.75v-21.5c0,-5.934 -4.816,-10.75 -10.75,-10.75zM136.16667,78.83333v14.33333h14.33333c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM39.41667,114.66667c-5.934,0 -10.75,4.816 -10.75,10.75v3.58333h-7.16667c-2.58456,-0.03655 -4.98858,1.32136 -6.29153,3.55376c-1.30295,2.2324 -1.30295,4.99342 0,7.22582c1.30295,2.2324 3.70697,3.59031 6.29153,3.55376h7.16667v3.58333c0,5.934 4.816,10.75 10.75,10.75c5.934,0 10.75,-4.816 10.75,-10.75v-21.5c0,-5.934 -4.816,-10.75 -10.75,-10.75zM64.5,129v14.33333h86c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667z"
+                                Fill="White" />
+                        </Viewbox>
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="DemiBold"
+                            Foreground="White">
+                            TUNE
                         </TextBlock>
                     </StackPanel>
                 </Button>
@@ -113,13 +299,16 @@
                 Canvas.Top="{Binding CroppingRectangleWpf.Top}"
                 Width="{Binding CroppingRectangleWpf.Width}"
                 Height="{Binding CroppingRectangleWpf.Height}">
-                <TextBlock
+                <controls:OutlinedTextBlock
                     x:Name="labelCountdown"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    FontSize="120"
-                    Foreground="Red"
-                    Opacity="1" />
+                    Fill="Red"
+                    FontSize="40"
+                    Opacity="1"
+                    Stroke="White"
+                    StrokeThickness="4"
+                    Text="Press Start" />
             </Grid>
         </Canvas>
     </Grid>
