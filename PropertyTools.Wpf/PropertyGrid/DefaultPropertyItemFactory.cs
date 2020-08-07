@@ -122,7 +122,7 @@ namespace PropertyTools.Wpf
                 var tabHeader = pi.Tab ?? string.Empty;
                 if (!tabs.ContainsKey(tabHeader))
                 {
-                    tabs.Add(tabHeader, new Tab { Header = pi.Tab });
+                    tabs.Add(tabHeader, new Tab { Header = pi.Tab, Id = pi.Tab });
                 }
 
                 var tab = tabs[tabHeader];

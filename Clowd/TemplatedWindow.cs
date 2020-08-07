@@ -262,6 +262,14 @@ namespace Clowd
             return null;
         }
 
+        public static T GetContent<T>(Window window) where T : FrameworkElement
+        {
+            var wnd = GetWindow(typeof(T));
+            if (wnd != null)
+                return (wnd.Content as ContentControl).Content as T;
+            return null;
+        }
+
         private static Size GetWindowBorderSize(Window wnd)
         {
             double titleHeight, borderWidth;
