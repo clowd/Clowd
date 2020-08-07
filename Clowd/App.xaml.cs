@@ -462,7 +462,7 @@ namespace Clowd
             var settings = new MenuItem() { Header = "_Settings" };
             settings.Click += (s, e) =>
             {
-                ShowHome(true);
+                ShowSettings();
             };
             context.Items.Add(settings);
 
@@ -660,17 +660,44 @@ namespace Clowd
                 OnFilesReceived(fileArray);
             }
         }
-        public void ShowHome(bool openSettings = false)
+
+        //public void ShowHome()
+        //{
+        //    if (!_initialized)
+        //        return;
+
+        //    var wnd = TemplatedWindow.GetWindow(typeof(HomePage))
+        //        ?? TemplatedWindow.GetWindow(typeof(SettingsPage))
+        //        ?? TemplatedWindow.CreateWindow("Clowd", openSettings ? (Control)(new SettingsPage()) : new HomePage());
+
+        //    wnd.Show();
+        //    wnd.MakeForeground();
+        //}
+
+        public void ShowSettings(SettingsCategory? category = null)
         {
             if (!_initialized)
                 return;
 
-            var wnd = TemplatedWindow.GetWindow(typeof(HomePage))
-                ?? TemplatedWindow.GetWindow(typeof(SettingsPage))
-                ?? TemplatedWindow.CreateWindow("Clowd", openSettings ? (Control)(new SettingsPage()) : new HomePage());
+            Window wnd;
+            if ((wnd = TemplatedWindow.GetWindow(typeof(SettingsPage))) != null)
+            {
+                wnd.MakeForeground();
+            }
+            else if ((wnd = TemplatedWindow.GetWindow(typeof(HomePage))) != null)
+            {
+                TemplatedWindow.SetContent(wnd, new SettingsPage());
+                wnd.MakeForeground();
+            }
+            else
+            {
+                wnd = TemplatedWindow.CreateWindow("Clowd", new SettingsPage());
+                wnd.Show();
+                wnd.MakeForeground();
+            }
 
-            wnd.Show();
-            wnd.MakeForeground();
+            if (category != null)
+                TemplatedWindow.GetContent<SettingsPage>(wnd).SetCurrentTab(category.Value);
         }
 
 #if NAPPUPDATE
