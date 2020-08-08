@@ -158,20 +158,9 @@ namespace Clowd
                 var filename = "ffmpeg_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
                 File.WriteAllText(filename, _recording.ConsoleLog);
 
-                using (var dialog = new TaskDialog())
+                if (this.ShowPrompt(MessageBoxIcon.Error, "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.", "Open Error Log"))
                 {
-                    dialog.MainIcon = TaskDialogIcon.Error;
-                    dialog.MainInstruction = "Recording Error";
-                    dialog.Content = "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.";
-
-                    var open = new TaskDialogButton("Open Error Log");
-                    var close = new TaskDialogButton(ButtonType.Close);
-                    dialog.Buttons.Add(open);
-                    dialog.Buttons.Add(close);
-                    if (open == dialog.Show())
-                    {
-                        Process.Start("notepad.exe", filename);
-                    }
+                    Process.Start("notepad.exe", filename);
                 }
             }
         }
@@ -245,15 +234,7 @@ namespace Clowd
             {
                 if (!audio.CaptureMicrophone && audio.SelectedMicrophone == null)
                 {
-                    if (MessageBoxEx.ShowAction(
-                        this,
-                        "Unable to record microphone",
-                        "Please open the settings or click the TUNE button to select a microphone to record from.",
-                        TaskDialogIcon.Warning,
-                        "Open Settings"))
-                    {
-                        App.Current.ShowSettings(SettingsCategory.Video);
-                    }
+                    this.ShowSettingsPrompt(SettingsCategory.Video, "Please select a microphone to record audio from before enabling this feature.");
                     return;
                 }
 
@@ -268,15 +249,7 @@ namespace Clowd
             {
                 if (!audio.CaptureLoopbackAudio && !audio.IsLoopbackInstalled)
                 {
-                    if (MessageBoxEx.ShowAction(
-                        this,
-                        "Unable to record speakers",
-                        "You must install the 'DirectShow Add-ons' from the settings page before enabling this feature.",
-                        TaskDialogIcon.Warning,
-                        "Open Settings"))
-                    {
-                        App.Current.ShowSettings(SettingsCategory.Windows);
-                    }
+                    this.ShowSettingsPrompt(SettingsCategory.Windows, "You must install the 'DirectShow Add-ons' from the settings page before enabling this feature.");
                     return;
                 }
 

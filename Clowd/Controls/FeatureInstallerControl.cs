@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Clowd.Installer.Features;
+using Clowd.Utilities;
 
 namespace Clowd.Controls
 {
@@ -61,7 +62,7 @@ namespace Clowd.Controls
             }
             catch (Exception ex)
             {
-                MessageBox.Show("An error has occured: " + ex.Message);
+                this.ShowNotice(MessageBoxIcon.Error, "An error has occured: " + ex.Message, "Unable to " + (installed ? "uninstall" : "install"));
             }
 
             Update();
