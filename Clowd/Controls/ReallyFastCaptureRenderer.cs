@@ -233,6 +233,14 @@ namespace Clowd
             StopCapture();
         }
 
+        public void SelectAll()
+        {
+            if (_virtualDragBegin.HasValue || !IsCapturing)
+                return;
+            SelectionRectangle = new WpfRect(0, 0, this.Width, this.Height);
+            StopCapture();
+        }
+
         public void StopCapture()
         {
             this.ReleaseMouseCapture();

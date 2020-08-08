@@ -37,6 +37,7 @@
         <RoutedCommand x:Key="Command.Video" />
         <RoutedCommand x:Key="Command.Reset" />
         <RoutedCommand x:Key="Command.SelectScreen" />
+        <RoutedCommand x:Key="Command.SelectAll" />
         <RoutedCommand x:Key="Command.ToggleMagnifier" />
         <RoutedCommand x:Key="Command.SelectColor" />
     </Window.Resources>
@@ -53,6 +54,7 @@
         <KeyBinding Key="S" Command="ApplicationCommands.SaveAs" />
         <KeyBinding Key="Escape" Command="ApplicationCommands.Close" />
         <KeyBinding Key="H" Command="{StaticResource Command.SelectColor}" />
+        <KeyBinding Key="A" Command="{StaticResource Command.SelectAll}" />
     </Window.InputBindings>
     <Window.CommandBindings>
         <CommandBinding
@@ -68,6 +70,7 @@
         <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
         <CommandBinding Command="{StaticResource Command.SelectColor}" Executed="SelectColorExecuted" />
+        <CommandBinding Command="{StaticResource Command.SelectAll}" Executed="SelectAllExecuted" />
     </Window.CommandBindings>
     <Canvas x:Name="rootGrid">
         <local:ReallyFastCaptureRenderer
