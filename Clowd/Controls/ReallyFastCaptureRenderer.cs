@@ -615,36 +615,39 @@ namespace Clowd
                 lines.Add((getText(shortcut, weight: FontWeights.ExtraBold), getText(text)));
             }
 
-            var screenMouse = mousePoint.ToScreenPoint();
-
-            var hoveredWindow = _windowFinder.GetWindowThatContainsPoint(screenMouse);
-            if (hoveredWindow != null)
-                hoveredWindow = _windowFinder.GetTopLevelWindow(hoveredWindow);
-            addLine("W", hoveredWindow?.Caption ?? " - ");
-
-            var zoomedColor = this.GetHoveredColor();
-            addLine("H", zoomedColor.ToHexRgb() + $"\nrgb({zoomedColor.R},{zoomedColor.G},{zoomedColor.B})");
-
-            addLine("-", "Scroll to zoom!");
-            addLine("F", "Select current screen");
-            addLine("A", "Select all screens");
-
-            const int shortcutWidth = 30;
-            const int colorWidth = 30;
-            const int margin = 10;
-            const int iconWidth = 50;
-            var title = getText("Shortcuts", 14, weight: FontWeights.ExtraBold);
-
-            double height = ScreenTools.WpfSnapToPixels(lines.Sum(l => Math.Max(l.text.Height, l.shortcut.Height)) + ((lines.Count + 2) * margin) + title.Height);
-            double width = ScreenTools.WpfSnapToPixels(lines.Max(l => l.text.WidthIncludingTrailingWhitespace) + iconWidth + shortcutWidth + (margin * 2));
-
-            _minTipsWidth = Math.Max(_minTipsWidth, width);
-            width = _minTipsWidth;
-
-            double textYPadding = margin * 2 + title.Height;
-
             using (DrawingContext g = _tipsPanel.RenderOpen())
             {
+                if (!IsCapturing)
+                    return;
+
+                var screenMouse = mousePoint.ToScreenPoint();
+
+                var hoveredWindow = _windowFinder.GetWindowThatContainsPoint(screenMouse);
+                if (hoveredWindow != null)
+                    hoveredWindow = _windowFinder.GetTopLevelWindow(hoveredWindow);
+                addLine("W", hoveredWindow?.Caption ?? " - ");
+
+                var zoomedColor = this.GetHoveredColor();
+                addLine("H", zoomedColor.ToHexRgb() + $"\nrgb({zoomedColor.R},{zoomedColor.G},{zoomedColor.B})");
+
+                addLine("-", "Scroll to zoom!");
+                addLine("F", "Select current screen");
+                addLine("A", "Select all screens");
+
+                const int shortcutWidth = 30;
+                const int colorWidth = 30;
+                const int margin = 10;
+                const int iconWidth = 50;
+                var title = getText("Shortcuts", 14, weight: FontWeights.ExtraBold);
+
+                double height = ScreenTools.WpfSnapToPixels(lines.Sum(l => Math.Max(l.text.Height, l.shortcut.Height)) + ((lines.Count + 2) * margin) + title.Height);
+                double width = ScreenTools.WpfSnapToPixels(lines.Max(l => l.text.WidthIncludingTrailingWhitespace) + iconWidth + shortcutWidth + (margin * 2));
+
+                _minTipsWidth = Math.Max(_minTipsWidth, width);
+                width = _minTipsWidth;
+
+                double textYPadding = margin * 2 + title.Height;
+
                 if (DistancePointToPoint(screenMouse.X, screenMouse.Y, _image.PixelWidth - 100 - (width / 2), _image.PixelHeight - 100 - (height / 2)) < width)
                 {
                     g.PushTransform(new TranslateTransform(100, _image.PixelHeight - 100 - height));
