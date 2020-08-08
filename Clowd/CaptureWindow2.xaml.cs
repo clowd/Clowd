@@ -356,13 +356,6 @@ namespace Clowd
         {
             this.Close();
         }
-        private void ToggleMagnifierExecuted(object sender, ExecutedRoutedEventArgs e)
-        {
-            if (!IsCapturing)
-                return;
-
-            fastCapturer.ShowMagnifier = !fastCapturer.ShowMagnifier;
-        }
         private void SelectColorExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             if (!IsCapturing)
