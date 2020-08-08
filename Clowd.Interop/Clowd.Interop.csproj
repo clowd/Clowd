@@ -62,6 +62,7 @@
     <Compile Include="POINT.cs" />
     <Compile Include="RECT.cs" />
     <Compile Include="Shell32\SHELL32.cs" />
+    <Compile Include="Shell32\WindowsExplorer.cs" />
     <Compile Include="User32\MonitorHelper.cs" />
     <Compile Include="SIZE.cs" />
     <Compile Include="User32\MouseOperations.cs" />

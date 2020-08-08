@@ -201,11 +201,26 @@ namespace Clowd
         private async void buttonStop_Click(object sender, RoutedEventArgs e)
         {
             var wasRecording = IsRecording;
-            buttonCancel_Click(sender, e);
+            _isCancelled = true;
+            if (IsRecording)
+            {
+                IsRecording = false;
+                await _recording.Stop();
+            }
+            this.Close();
+
             if (wasRecording)
             {
                 await Task.Delay(1000);
-                Process.Start("explorer.exe", $"/select,\"{_recording.FileName}\"");
+                try
+                {
+                    // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
+                    Interop.Shell32.WindowsExplorer.ShowFileOrFolder(_recording.FileName);
+                }
+                catch
+                {
+                    Process.Start("explorer.exe", $"/select,\"{_recording.FileName}\"");
+                }
             }
         }
 
