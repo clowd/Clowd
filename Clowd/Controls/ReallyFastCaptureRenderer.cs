@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -75,6 +75,7 @@ namespace Clowd
         ScreenPoint? _lastScreenPoint = null;
         const int _clickDistance = 6;
         bool _dragging = false;
+        double _minTipsWidth = 200;
 
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
 
@@ -87,8 +88,8 @@ namespace Clowd
         DrawingVisual _backgroundImage;
         DrawingVisual _crosshair;
         DrawingVisual _foregroundImage;
-        DrawingVisual _magnifier;
         DrawingVisual _sizeIndicator;
+        DrawingVisual _tipsPanel;
 
         Pen _sharpBlackLineDashed;
         Pen _sharpWhiteLineDashed;
@@ -109,14 +110,14 @@ namespace Clowd
             _foregroundImage = new MyDrawingVisual();
             _sizeIndicator = new DrawingVisual();
             _crosshair = new DrawingVisual();
-            _magnifier = new MyDrawingVisual();
+            _tipsPanel = new DrawingVisual();
 
             _visuals = new VisualCollection(this);
             _visuals.Add(_backgroundImage);
             _visuals.Add(_foregroundImage);
             _visuals.Add(_sizeIndicator);
             _visuals.Add(_crosshair);
-            _visuals.Add(_magnifier);
+            _visuals.Add(_tipsPanel);
 
             // here to apease the WPF designer
             if (App.IsDesignMode)
@@ -266,8 +267,10 @@ namespace Clowd
 
         public Color GetHoveredColor()
         {
-            var location = ScreenTools.GetMousePosition();
-            var zoomedColor = GetPixelColor(_image, location.X, location.Y);
+            var zoomedColor = GetPixelColor(
+                _image,
+                ScreenTools.WpfToScreen(ScreenTools.WpfSnapToPixelsFloor(_virtualPoint.Value.X)),
+                ScreenTools.WpfToScreen(ScreenTools.WpfSnapToPixelsFloor(_virtualPoint.Value.Y)));
             return zoomedColor;
         }
 
@@ -431,6 +434,7 @@ namespace Clowd
             DrawForegroundImage(mouse);
             DrawCrosshair(mouse);
             DrawAreaIndicator(mouse);
+            DrawTips(mouse);
         }
 
         private void DrawForegroundImage(WpfPoint mousePoint)
@@ -571,6 +575,130 @@ namespace Clowd
             }
         }
 
+        private void DrawTips(WpfPoint mousePoint)
+        {
+            List<(FormattedText shortcut, FormattedText text)> lines = new List<(FormattedText shortcut, FormattedText text)>();
+
+            FormattedText getText(string text, int fontSize = 12, FontWeight? weight = null, bool recurse = true)
+            {
+                FormattedText txt = new FormattedText(
+                    recurse ? text : (text + "..."),
+                    CultureInfo.CurrentUICulture,
+                    this.FlowDirection,
+                    new Typeface(new FontFamily("Microsoft Sans Serif"), FontStyles.Normal, weight ?? FontWeights.Normal, FontStretches.Normal),
+                    fontSize,
+                    new SolidColorBrush(Color.FromRgb(51, 51, 51)),
+                    VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+                if (recurse && txt.WidthIncludingTrailingWhitespace > 300)
+                {
+                    text = text.Substring(0, text.Length - 3);
+                    while (txt.WidthIncludingTrailingWhitespace > 300)
+                    {
+                        text = text.Substring(0, text.Length - 1);
+                        txt = getText(text, fontSize, weight, false);
+                    }
+                }
+                return txt;
+            }
+
+            void addLine(string shortcut, string text)
+            {
+                lines.Add((getText(shortcut, weight: FontWeights.ExtraBold), getText(text)));
+            }
+
+            var screenMouse = mousePoint.ToScreenPoint();
+
+            var hoveredWindow = _windowFinder.GetWindowThatContainsPoint(screenMouse);
+            if (hoveredWindow != null)
+                hoveredWindow = _windowFinder.GetTopLevelWindow(hoveredWindow);
+            addLine("W", hoveredWindow?.Caption ?? " - ");
+
+            var zoomedColor = this.GetHoveredColor();
+            addLine("H", zoomedColor.ToHexRgb() + $"\nrgb({zoomedColor.R},{zoomedColor.G},{zoomedColor.B})");
+
+            addLine("-", "Scroll to zoom!");
+            addLine("F", "Select current screen");
+            addLine("A", "Select all screens");
+
+            const int shortcutWidth = 30;
+            const int colorWidth = 30;
+            const int margin = 10;
+            const int iconWidth = 50;
+            var title = getText("Shortcuts", 14, weight: FontWeights.ExtraBold);
+
+            double height = ScreenTools.WpfSnapToPixels(lines.Sum(l => Math.Max(l.text.Height, l.shortcut.Height)) + ((lines.Count + 2) * margin) + title.Height);
+            double width = ScreenTools.WpfSnapToPixels(lines.Max(l => l.text.WidthIncludingTrailingWhitespace) + iconWidth + shortcutWidth + (margin * 2));
+
+            _minTipsWidth = Math.Max(_minTipsWidth, width);
+            width = _minTipsWidth;
+
+            double textYPadding = margin * 2 + title.Height;
+
+            using (DrawingContext g = _tipsPanel.RenderOpen())
+            {
+                if (DistancePointToPoint(screenMouse.X, screenMouse.Y, _image.PixelWidth - 100 - (width / 2), _image.PixelHeight - 100 - (height / 2)) < width)
+                {
+                    g.PushTransform(new TranslateTransform(100, _image.PixelHeight - 100 - height));
+                }
+                else
+                {
+                    g.PushTransform(new TranslateTransform(_image.PixelWidth - 100 - width, _image.PixelHeight - 100 - height));
+                }
+                g.PushOpacity(0.8d);
+                //var rounded = new RectangleGeometry(new Rect(0, 0, width, height), 5, 5);
+                //g.PushClip(rounded);
+
+                // draw background
+                g.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
+                g.DrawRectangle(_accentBrush, null, new Rect(0, 0, iconWidth, height));
+                g.DrawRectangle(null, new Pen(Brushes.Black, _sharpLineWidth), new Rect(_sharpLineWidth / 2, _sharpLineWidth / 2, width - _sharpLineWidth, height - _sharpLineWidth));
+
+                // draw info icon
+                var cp = new Pen(Brushes.White, 3);
+                var cr = (iconWidth - (margin * 2)) / 2;
+                var iHeight = iconWidth - (margin * 3) - 3;
+                var iMin = (iconWidth / 2) - (iHeight / 2);
+                var iMax = iMin + iHeight;
+                g.DrawEllipse(null, cp, new Point(iconWidth / 2, iconWidth / 2), cr, cr);
+                g.DrawLine(cp, new Point(iconWidth / 2, iMin + (iHeight / 3)), new Point(iconWidth / 2, iMax));
+                g.DrawEllipse(Brushes.White, null, new Point(iconWidth / 2, iMin), 2d, 2d);
+
+                // draw text
+                g.DrawText(title, new Point(iconWidth + margin, margin));
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    var l = lines[i];
+                    var textHeight = Math.Max(l.shortcut.Height, l.text.Height);
+
+                    if (i == 1) // color display.. this detection is very bad! fix this, maybe?? 
+                    {
+                        var colorRect = new Rect(iconWidth + shortcutWidth, textYPadding, colorWidth, textHeight);
+                        var screenRect = new WpfRect(colorRect).ToScreenRect();
+
+                        var grayScale = (0.3d * zoomedColor.R) + (0.59d * zoomedColor.G) + (0.11d * zoomedColor.G);
+
+                        if (grayScale > 127)
+                        {
+                            g.DrawRectangle(Brushes.Black, null, screenRect.ToWpfRect());
+                            screenRect = new ScreenRect(screenRect.Left + 1, screenRect.Top + 1, screenRect.Width - 2, screenRect.Height - 2);
+                        }
+
+                        g.DrawRectangle(new SolidColorBrush(zoomedColor), null, screenRect.ToWpfRect());
+                        g.DrawText(l.text, new Point(iconWidth + shortcutWidth + colorWidth + margin, textYPadding));
+                    }
+                    else
+                    {
+                        g.DrawText(l.text, new Point(iconWidth + shortcutWidth, textYPadding));
+                    }
+
+                    g.DrawText(l.shortcut, new Point((shortcutWidth / 2) - (l.shortcut.WidthIncludingTrailingWhitespace / 2) + iconWidth, textYPadding));
+
+                    textYPadding += textHeight + margin;
+                }
+            }
+        }
+
         private static Color GetPixelColor(BitmapSource bitmap, int x, int y)
         {
             Color color;
@@ -652,15 +780,6 @@ namespace Clowd
             y = Math.Max(screen.Top, Math.Min(screen.Bottom - objectRect.Height, y));
 
             return new WpfPoint(x, y);
-        }
-
-        private enum ArrowIndicatorPosition
-        {
-            None,
-            TopLeft,
-            TopRight,
-            BottomLeft,
-            BottomRight
         }
 
         private class MyDrawingVisual : DrawingVisual
