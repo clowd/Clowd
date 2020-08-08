@@ -1,19 +1,21 @@
-﻿<UserControl x:Class="Clowd.SettingsPage"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:Clowd"
-             xmlns:metro="http://metro.mahapps.com/winfx/xaml/controls"
-             xmlns:ptools="http://propertytools.org/wpf"
-             xmlns:controls="clr-namespace:Clowd.Controls"
-             mc:Ignorable="d" 
-             DataContext="{Binding RelativeSource={RelativeSource Self}}"
-             Height="600" Width="600">
+﻿<UserControl
+    x:Class="Clowd.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:metro="http://metro.mahapps.com/winfx/xaml/controls"
+    xmlns:ptools="http://propertytools.org/wpf"
+    Width="600"
+    Height="600"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    mc:Ignorable="d">
     <UserControl.Resources>
-        <local:AppSettingsItemFactory x:Key="itemFactory"></local:AppSettingsItemFactory>
-        <local:AppSettingsControlFactory x:Key="controlFactory"></local:AppSettingsControlFactory>
-        <local:DisplayModeToPropertyTabVisibilityConverter x:Key="visConverter"></local:DisplayModeToPropertyTabVisibilityConverter>
+        <local:AppSettingsItemFactory x:Key="itemFactory" />
+        <local:AppSettingsControlFactory x:Key="controlFactory" />
+        <local:DisplayModeToPropertyTabVisibilityConverter x:Key="visConverter" />
         <DataTemplate x:Key="tabHeaderTemplate" DataType="ptools:Tab">
             <StackPanel Orientation="Horizontal">
                 <Border Padding="10,1,10,1">
@@ -29,24 +31,35 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="50" />
             <RowDefinition />
-            <RowDefinition  Height="51" />
+            <RowDefinition Height="51" />
         </Grid.RowDefinitions>
-        <StackPanel Orientation="Horizontal" Margin="20,10,20,0" VerticalAlignment="Center">
-            <Button Width="23" Height="23" Margin="0,0,10,0" Click="Home_Clicked" Visibility="Collapsed">
+        <StackPanel
+            Margin="20,10,20,0"
+            VerticalAlignment="Center"
+            Orientation="Horizontal">
+            <Button
+                Width="23"
+                Height="23"
+                Margin="0,0,10,0"
+                Click="Home_Clicked"
+                Visibility="Collapsed">
                 <Button.Style>
                     <Style TargetType="{x:Type Button}">
-                        <Setter Property="Foreground" Value="{DynamicResource AccentColorBrush2}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource AccentColorBrush2}" />
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="{x:Type Button}">
-                                    <Border Width="{TemplateBinding Width}" Height="{TemplateBinding Height}" Background="#00000000">
+                                    <Border
+                                        Width="{TemplateBinding Width}"
+                                        Height="{TemplateBinding Height}"
+                                        Background="#00000000">
                                         <Viewbox>
-                                            <Path Fill="{TemplateBinding Foreground}" Data="{StaticResource IconHome26}"></Path>
+                                            <Path Data="{StaticResource IconHome26}" Fill="{TemplateBinding Foreground}" />
                                         </Viewbox>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Foreground" Value="{DynamicResource AccentColorBrush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentColorBrush}" />
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
@@ -55,23 +68,42 @@
                     </Style>
                 </Button.Style>
             </Button>
-            <TextBlock FontSize="20" Opacity="0.7" VerticalAlignment="Center">Settings</TextBlock>
+            <TextBlock
+                VerticalAlignment="Center"
+                FontSize="20"
+                Opacity="0.7">
+                Settings
+            </TextBlock>
         </StackPanel>
-        <Label MouseDown="ResetSettingsClick" Grid.Row="0" Margin="0,10,20,0" FontSize="12" Padding="2" Foreground="{Binding Foreground}" HorizontalAlignment="Right" VerticalAlignment="Center" Cursor="Hand">
+        <Label
+            Grid.Row="0"
+            Margin="0,10,20,0"
+            Padding="2"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            Cursor="Hand"
+            FontSize="12"
+            Foreground="{Binding Foreground}"
+            MouseDown="ResetSettingsClick">
             <TextBlock TextDecorations="Underline">Reset to defaults</TextBlock>
         </Label>
-        <ptools:PropertyGrid 
+        <ptools:PropertyGrid
             x:Name="PropertyGrid1"
-            SelectedObject="{Binding SelectedItem}"
             Grid.Row="1"
             Margin="5"
-            TabStripPlacement="Left"
-            TabHeaderTemplate="{StaticResource tabHeaderTemplate}"
-            TabVisibility="{Binding Path=SelectedItem.DisplayMode, Converter={StaticResource visConverter}}"
-            PropertyItemFactory="{StaticResource itemFactory}"
-            PropertyControlFactory="{StaticResource controlFactory}"
+            DescriptionIcon="Images/Help-25.png"
             DescriptionIconAlignment="Right"
-            DescriptionIcon="Images/Help-25.png"/>
-        <Path Grid.Row="2" Fill="{DynamicResource AccentColorBrush}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Data="{StaticResource PathWindowFooter}" />
+            PropertyControlFactory="{StaticResource controlFactory}"
+            PropertyItemFactory="{StaticResource itemFactory}"
+            SelectedObject="{Binding SelectedItem}"
+            TabHeaderTemplate="{StaticResource tabHeaderTemplate}"
+            TabStripPlacement="Left"
+            TabVisibility="{Binding Path=SelectedItem.DisplayMode, Converter={StaticResource visConverter}}" />
+        <Path
+            Grid.Row="2"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Data="{StaticResource PathWindowFooter}"
+            Fill="{DynamicResource AccentColorBrush}" />
     </Grid>
 </UserControl>
