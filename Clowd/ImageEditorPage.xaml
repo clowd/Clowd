@@ -1,17 +1,21 @@
-﻿<local:TemplatedControl x:Class="Clowd.ImageEditorPage"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:lib="clr-namespace:DrawToolsLib;assembly=DrawToolsLib"
-             xmlns:conv="clr-namespace:Clowd.Converters"
-             xmlns:controls="clr-namespace:Clowd.Controls"
-             xmlns:local="clr-namespace:Clowd"
-             xmlns:util="clr-namespace:Clowd.Utilities"
-             DataContext="{Binding RelativeSource={RelativeSource Self}}"
-             mc:Ignorable="d" Background="Transparent"
-             MinHeight="200" MinWidth="450"
-             d:DesignHeight="300" d:DesignWidth="800">
+﻿<local:TemplatedControl
+    x:Class="Clowd.ImageEditorPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.Controls"
+    xmlns:conv="clr-namespace:Clowd.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:lib="clr-namespace:DrawToolsLib;assembly=DrawToolsLib"
+    xmlns:local="clr-namespace:Clowd"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:util="clr-namespace:Clowd.Utilities"
+    MinWidth="450"
+    MinHeight="200"
+    d:DesignHeight="300"
+    d:DesignWidth="800"
+    Background="Transparent"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    mc:Ignorable="d">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -19,8 +23,8 @@
             </ResourceDictionary.MergedDictionaries>
             <RoutedUICommand x:Key="Commands.Upload" />
             <RoutedUICommand x:Key="Commands.SelectTool" />
-            <lib:ToolTypeConverter x:Key="convToolType"/>
-            <conv:ColorToBrushConverter x:Key="convColorToBrush"/>
+            <lib:ToolTypeConverter x:Key="convToolType" />
+            <conv:ColorToBrushConverter x:Key="convColorToBrush" />
             <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
             <Style x:Key="ToggleToolButtonStyle" TargetType="{x:Type ToggleButton}">
                 <Setter Property="Background" Value="Transparent" />
@@ -34,17 +38,21 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="{x:Type ToggleButton}">
                             <Grid>
-                                <Rectangle Name="_bg" Fill="Transparent"  HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
-                                <Border Padding="{TemplateBinding Padding}" >
-                                    <ContentPresenter x:Name="MyContentPresenter"  Content="{TemplateBinding Content}" />
+                                <Rectangle
+                                    Name="_bg"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    Fill="Transparent" />
+                                <Border Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter x:Name="MyContentPresenter" Content="{TemplateBinding Content}" />
                                 </Border>
                             </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsChecked" Value="True">
-                                    <Setter Value="#55FFFFFF" TargetName="_bg" Property="Fill" />
+                                    <Setter TargetName="_bg" Property="Fill" Value="#55FFFFFF" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Value="#66FFFFFF" TargetName="_bg" Property="Fill" />
+                                    <Setter TargetName="_bg" Property="Fill" Value="#66FFFFFF" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
@@ -55,18 +63,54 @@
     </UserControl.Resources>
     <UserControl.InputBindings>
         <KeyBinding Key="Enter" Command="{StaticResource Commands.Upload}" />
-        <KeyBinding Key="Esc" Command="{StaticResource Commands.SelectTool}" CommandParameter="Pointer"/>
-        <KeyBinding Key="D" Command="{StaticResource Commands.SelectTool}" CommandParameter="None"/>
-        <KeyBinding Key="S" Command="{StaticResource Commands.SelectTool}" CommandParameter="Pointer"/>
-        <KeyBinding Key="R" Command="{StaticResource Commands.SelectTool}" CommandParameter="Rectangle"/>
-        <KeyBinding Key="F" Command="{StaticResource Commands.SelectTool}" CommandParameter="FilledRectangle"/>
-        <KeyBinding Key="E" Command="{StaticResource Commands.SelectTool}" CommandParameter="Ellipse"/>
-        <KeyBinding Key="L" Command="{StaticResource Commands.SelectTool}" CommandParameter="Line"/>
-        <KeyBinding Key="A" Command="{StaticResource Commands.SelectTool}" CommandParameter="Arrow"/>
-        <KeyBinding Key="P" Command="{StaticResource Commands.SelectTool}" CommandParameter="PolyLine"/>
-        <KeyBinding Key="T" Command="{StaticResource Commands.SelectTool}" CommandParameter="Text"/>
-        <KeyBinding Key="O" Command="{StaticResource Commands.SelectTool}" CommandParameter="Pixelate"/>
-        <KeyBinding Key="X" Command="{StaticResource Commands.SelectTool}" CommandParameter="Erase"/>
+        <KeyBinding
+            Key="Esc"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Pointer" />
+        <KeyBinding
+            Key="D"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="None" />
+        <KeyBinding
+            Key="S"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Pointer" />
+        <KeyBinding
+            Key="R"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Rectangle" />
+        <KeyBinding
+            Key="F"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="FilledRectangle" />
+        <KeyBinding
+            Key="E"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Ellipse" />
+        <KeyBinding
+            Key="L"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Line" />
+        <KeyBinding
+            Key="A"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Arrow" />
+        <KeyBinding
+            Key="P"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="PolyLine" />
+        <KeyBinding
+            Key="T"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Text" />
+        <KeyBinding
+            Key="O"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Pixelate" />
+        <KeyBinding
+            Key="X"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Erase" />
     </UserControl.InputBindings>
     <UserControl.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Print" Executed="PrintCommand" />
@@ -82,15 +126,27 @@
         <CommandBinding Command="{StaticResource Commands.Upload}" Executed="UploadCommand" />
         <CommandBinding Command="{StaticResource Commands.SelectTool}" Executed="SelectToolCommand" />
     </UserControl.CommandBindings>
-    <Grid Name="rootGrid" PreviewKeyDown="rootGrid_PreviewKeyDown" PreviewKeyUp="rootGrid_PreviewKeyUp">
+    <Grid
+        Name="rootGrid"
+        PreviewKeyDown="rootGrid_PreviewKeyDown"
+        PreviewKeyUp="rootGrid_PreviewKeyUp">
         <Grid.RowDefinitions>
             <RowDefinition Name="actionRow" Height="30" />
             <RowDefinition />
         </Grid.RowDefinitions>
-        <Border Grid.Row="0" Background="#70707a"  UseLayoutRounding="True"/>
+        <Border
+            Grid.Row="0"
+            Background="#70707a"
+            UseLayoutRounding="True" />
 
-        <StackPanel Name="actionBar" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Left" 
-                    VerticalAlignment="Top" Height="30" UseLayoutRounding="True">
+        <StackPanel
+            Name="actionBar"
+            Grid.Column="1"
+            Height="30"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Orientation="Horizontal"
+            UseLayoutRounding="True">
             <StackPanel.Resources>
                 <Style TargetType="Path">
                     <Setter Property="Fill" Value="White" />
@@ -110,8 +166,12 @@
                     <Setter Property="Visibility" Value="{Binding ShowActionLabels, Converter={StaticResource Bool2Vis}}" />
                 </Style>
             </StackPanel.Resources>
-            <Button Name="uploadButton" Style="{StaticResource ToolButtonStyle}" Width="NaN" Command="{StaticResource Commands.Upload}"
-                    Visibility="{Binding Source={x:Static local:App.CanUpload}, Converter={StaticResource Bool2Vis}}">
+            <Button
+                Name="uploadButton"
+                Width="NaN"
+                Command="{StaticResource Commands.Upload}"
+                Style="{StaticResource ToolButtonStyle}"
+                Visibility="{Binding Source={x:Static local:App.CanUpload}, Converter={StaticResource Bool2Vis}}">
                 <StackPanel Orientation="Horizontal">
                     <Viewbox>
                         <Path Margin="-2" Data="M 5 3 C 3.9 3 3 3.9 3 5 L 3 19 C 3 20.1 3.9 21 5 21 L 19 21 C 20.1 21 21 20.1 21 19 L 21 13 L 19 11 L 19 19 L 5 19 L 5 5 L 13 5 L 11 3 L 5 3 z M 14 3 L 16.65625 5.65625 L 9.15625 13.15625 L 10.84375 14.84375 L 18.34375 7.34375 L 21 10 L 21 3 L 14 3 z" />
@@ -119,38 +179,59 @@
                     <TextBlock>Upload</TextBlock>
                 </StackPanel>
             </Button>
-            <Button Name="copyButton" Style="{StaticResource ToolButtonStyle}" Width="NaN" Command="ApplicationCommands.Copy">
+            <Button
+                Name="copyButton"
+                Width="NaN"
+                Command="ApplicationCommands.Copy"
+                Style="{StaticResource ToolButtonStyle}">
                 <StackPanel Orientation="Horizontal">
-                    <Viewbox >
-                        <Path Data="M 4 0 C 1.795 0 0 1.795 0 4 L 0 17 C 0 19.205 1.795 21 4 21 L 9 21 L 9 19 L 4 19 C 2.896 19 2 18.104 2 17 L 2 4 C 2 2.896 2.896 2 4 2 L 8.28125 2 C 9.00225 2.184 9 3.0505 9 3.9375 L 9 6 C 9 6.249 9.099 6.48125 9.25 6.65625 C 9.809 5.11725 11.271 4 13 4 L 13.0625 4 C 12.8855 3.826 12.70825 3.64575 12.53125 3.46875 C 12.28325 3.22275 12.02125 2.994 11.78125 2.75 C 10.06925 1.003 9.063 5.9211895e-16 8 0 L 4 0 z M 14 5 C 11.795 5 10 6.795 10 9 L 10 22 C 10 24.205 11.795 26 14 26 L 22 26 C 24.205 26 26 24.205 26 22 L 26 13 C 26 11.938 25.02725 10.92975 23.28125 9.21875 C 23.03725 8.97875 22.77725 8.71675 22.53125 8.46875 C 22.28325 8.22275 22.02125 7.994 21.78125 7.75 C 20.06925 6.003 19.063 5 18 5 L 14 5 z M 14 7 L 18.28125 7 C 19.00225 7.184 19 8.0505 19 8.9375 L 19 11 C 19 11.551 19.449 12 20 12 L 22 12 C 22.998 12 24 12.005 24 13 L 24 22 C 24 23.104 23.104 24 22 24 L 14 24 C 12.896 24 12 23.104 12 22 L 12 9 C 12 7.896 12.896 7 14 7 z M 4 8 L 4 10 L 9 10 L 9 8 L 4 8 z M 4 11 L 4 13 L 9 13 L 9 11 L 4 11 z M 14 13 L 14 15 L 22 15 L 22 13 L 14 13 z M 4 14 L 4 16 L 9 16 L 9 14 L 4 14 z M 14 16 L 14 18 L 20 18 L 20 16 L 14 16 z M 14 19 L 14 21 L 22 21 L 22 19 L 14 19 z"  />
+                    <Viewbox>
+                        <Path Data="M 4 0 C 1.795 0 0 1.795 0 4 L 0 17 C 0 19.205 1.795 21 4 21 L 9 21 L 9 19 L 4 19 C 2.896 19 2 18.104 2 17 L 2 4 C 2 2.896 2.896 2 4 2 L 8.28125 2 C 9.00225 2.184 9 3.0505 9 3.9375 L 9 6 C 9 6.249 9.099 6.48125 9.25 6.65625 C 9.809 5.11725 11.271 4 13 4 L 13.0625 4 C 12.8855 3.826 12.70825 3.64575 12.53125 3.46875 C 12.28325 3.22275 12.02125 2.994 11.78125 2.75 C 10.06925 1.003 9.063 5.9211895e-16 8 0 L 4 0 z M 14 5 C 11.795 5 10 6.795 10 9 L 10 22 C 10 24.205 11.795 26 14 26 L 22 26 C 24.205 26 26 24.205 26 22 L 26 13 C 26 11.938 25.02725 10.92975 23.28125 9.21875 C 23.03725 8.97875 22.77725 8.71675 22.53125 8.46875 C 22.28325 8.22275 22.02125 7.994 21.78125 7.75 C 20.06925 6.003 19.063 5 18 5 L 14 5 z M 14 7 L 18.28125 7 C 19.00225 7.184 19 8.0505 19 8.9375 L 19 11 C 19 11.551 19.449 12 20 12 L 22 12 C 22.998 12 24 12.005 24 13 L 24 22 C 24 23.104 23.104 24 22 24 L 14 24 C 12.896 24 12 23.104 12 22 L 12 9 C 12 7.896 12.896 7 14 7 z M 4 8 L 4 10 L 9 10 L 9 8 L 4 8 z M 4 11 L 4 13 L 9 13 L 9 11 L 4 11 z M 14 13 L 14 15 L 22 15 L 22 13 L 14 13 z M 4 14 L 4 16 L 9 16 L 9 14 L 4 14 z M 14 16 L 14 18 L 20 18 L 20 16 L 14 16 z M 14 19 L 14 21 L 22 21 L 22 19 L 14 19 z" />
                     </Viewbox>
                     <TextBlock>Copy</TextBlock>
                 </StackPanel>
             </Button>
-            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Command="ApplicationCommands.Print" Visibility="Collapsed">
+            <Button
+                Width="NaN"
+                Command="ApplicationCommands.Print"
+                Style="{StaticResource ToolButtonStyle}"
+                Visibility="Collapsed">
                 <StackPanel Orientation="Horizontal">
                     <Viewbox>
-                        <Path Data="M 6.96875 0 C 5.3236872 0 3.96875 1.3549372 3.96875 3 L 3.96875 8 L 3 8 C 1.344 8 0 9.344 0 11 L 0 17 C 0 18.656 1.344 20 3 20 L 3.96875 20 L 3.96875 23 C 3.96875 24.645063 5.3236872 26 6.96875 26 L 18.96875 26 C 20.614323 26 21.96875 24.644459 21.96875 23 L 21.96875 20 L 23 20 C 24.656 20 26 18.656 26 17 L 26 11 C 26 9.344 24.656 8 23 8 L 21.96875 8 L 21.96875 3 C 21.96875 1.3555411 20.614323 0 18.96875 0 L 6.96875 0 z M 6.96875 2 L 18.96875 2 C 19.533177 2 19.96875 2.4364589 19.96875 3 L 19.96875 8 L 5.96875 8 L 5.96875 3 C 5.96875 2.4370628 6.4058128 2 6.96875 2 z M 21.5 10 C 22.328 10 23 10.672 23 11.5 C 23 12.328 22.328 13 21.5 13 C 20.672 13 20 12.328 20 11.5 C 20 10.672 20.672 10 21.5 10 z M 5.96875 15 L 19.96875 15 L 19.96875 23 C 19.96875 23.563541 19.533177 24 18.96875 24 L 6.96875 24 C 6.4058128 24 5.96875 23.562937 5.96875 23 L 5.96875 15 z M 8 17 L 8 19 L 18 19 L 18 17 L 8 17 z M 8 20 L 8 22 L 15 22 L 15 20 L 8 20 z"  />
+                        <Path Data="M 6.96875 0 C 5.3236872 0 3.96875 1.3549372 3.96875 3 L 3.96875 8 L 3 8 C 1.344 8 0 9.344 0 11 L 0 17 C 0 18.656 1.344 20 3 20 L 3.96875 20 L 3.96875 23 C 3.96875 24.645063 5.3236872 26 6.96875 26 L 18.96875 26 C 20.614323 26 21.96875 24.644459 21.96875 23 L 21.96875 20 L 23 20 C 24.656 20 26 18.656 26 17 L 26 11 C 26 9.344 24.656 8 23 8 L 21.96875 8 L 21.96875 3 C 21.96875 1.3555411 20.614323 0 18.96875 0 L 6.96875 0 z M 6.96875 2 L 18.96875 2 C 19.533177 2 19.96875 2.4364589 19.96875 3 L 19.96875 8 L 5.96875 8 L 5.96875 3 C 5.96875 2.4370628 6.4058128 2 6.96875 2 z M 21.5 10 C 22.328 10 23 10.672 23 11.5 C 23 12.328 22.328 13 21.5 13 C 20.672 13 20 12.328 20 11.5 C 20 10.672 20.672 10 21.5 10 z M 5.96875 15 L 19.96875 15 L 19.96875 23 C 19.96875 23.563541 19.533177 24 18.96875 24 L 6.96875 24 C 6.4058128 24 5.96875 23.562937 5.96875 23 L 5.96875 15 z M 8 17 L 8 19 L 18 19 L 18 17 L 8 17 z M 8 20 L 8 22 L 15 22 L 15 20 L 8 20 z" />
                     </Viewbox>
                     <TextBlock>Print</TextBlock>
                 </StackPanel>
             </Button>
-            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Command="ApplicationCommands.Save">
+            <Button
+                Width="NaN"
+                Command="ApplicationCommands.Save"
+                Style="{StaticResource ToolButtonStyle}">
                 <StackPanel Orientation="Horizontal">
                     <Viewbox>
-                        <Path Data="M18,9h-3V2h3V9z M26,6v17c0,1.657-1.344,3-3,3H3c-1.656,0-3-1.343-3-3V3c0-1.657,1.344-3,3-3h17 c0.828,0,1.285,0.043,3.621,2.379S26,5.172,26,6z M5,9c0,0.551,0.449,1,1,1h13c0.551,0,1-0.449,1-1V2c0-0.551-0.449-1-1-1H6 C5.449,1,5,1.449,5,2V9z M23,14c0-0.551-0.449-1-1-1H4c-0.551,0-1,0.449-1,1v10c0,0.551,0.449,1,1,1h18c0.551,0,1-0.449,1-1V14z"  />
+                        <Path Data="M18,9h-3V2h3V9z M26,6v17c0,1.657-1.344,3-3,3H3c-1.656,0-3-1.343-3-3V3c0-1.657,1.344-3,3-3h17 c0.828,0,1.285,0.043,3.621,2.379S26,5.172,26,6z M5,9c0,0.551,0.449,1,1,1h13c0.551,0,1-0.449,1-1V2c0-0.551-0.449-1-1-1H6 C5.449,1,5,1.449,5,2V9z M23,14c0-0.551-0.449-1-1-1H4c-0.551,0-1,0.449-1,1v10c0,0.551,0.449,1,1,1h18c0.551,0,1-0.449,1-1V14z" />
                     </Viewbox>
                     <TextBlock>Save</TextBlock>
                 </StackPanel>
             </Button>
-            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Click="Brush_Clicked">
+            <Button
+                Width="NaN"
+                Click="Brush_Clicked"
+                Style="{StaticResource ToolButtonStyle}">
                 <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="16" Height="16" Margin="5,0,5,0" Fill="{Binding ElementName=drawingCanvas, Path=ObjectColor, Mode=OneWay, Converter={StaticResource convColorToBrush}}"/>
+                    <Ellipse
+                        Width="16"
+                        Height="16"
+                        Margin="5,0,5,0"
+                        Fill="{Binding ElementName=drawingCanvas, Path=ObjectColor, Mode=OneWay, Converter={StaticResource convColorToBrush}}" />
                     <TextBlock>Brush</TextBlock>
                 </StackPanel>
             </Button>
-            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Click="Font_Clicked"
-                    Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}">
+            <Button
+                Width="NaN"
+                Click="Font_Clicked"
+                Style="{StaticResource ToolButtonStyle}"
+                Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}">
                 <StackPanel Orientation="Horizontal">
                     <Viewbox>
                         <Path Data="M 1 1 L 1 2 L 1 6 L 3 6 L 3 3 L 6 3 L 6 1 L 2 1 L 1 1 z M 20 1 L 20 3 L 23 3 L 23 6 L 25 6 L 25 2 L 25 1 L 24 1 L 20 1 z M 12 7 L 8 19 L 10 19 L 10.65625 17 L 15.34375 17 L 16 19 L 18 19 L 14 7 L 12 7 z M 13 10 L 14.65625 15 L 11.34375 15 L 13 10 z M 1 20 L 1 24 L 1 25 L 2 25 L 6 25 L 6 23 L 3 23 L 3 20 L 1 20 z M 23 20 L 23 23 L 20 23 L 20 25 L 24 25 L 25 25 L 25 24 L 25 20 L 23 20 z" />
@@ -158,14 +239,26 @@
                     <TextBlock>Font</TextBlock>
                 </StackPanel>
             </Button>
-            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Click="ZoomFit_Clicked">
+            <Button
+                Width="NaN"
+                Click="ZoomFit_Clicked"
+                Style="{StaticResource ToolButtonStyle}">
                 <TextBlock Padding="5,0,0,0">Fit</TextBlock>
             </Button>
-            <Button Style="{StaticResource ToolButtonStyle}" Width="NaN" Click="ZoomActual_Clicked">
+            <Button
+                Width="NaN"
+                Click="ZoomActual_Clicked"
+                Style="{StaticResource ToolButtonStyle}">
                 <TextBlock Padding="5,0,0,0">Actual</TextBlock>
             </Button>
         </StackPanel>
-        <StackPanel Name="toolBar" Orientation="Horizontal" Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Bottom" UseLayoutRounding="True">
+        <StackPanel
+            Name="toolBar"
+            Grid.Row="0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Orientation="Horizontal"
+            UseLayoutRounding="True">
             <StackPanel.Resources>
                 <Style TargetType="Path">
                     <Setter Property="Fill" Value="White" />
@@ -176,152 +269,211 @@
                     <Setter Property="Width" Value="16" />
                 </Style>
             </StackPanel.Resources>
-            <ToggleButton  ToolTip="Pan Tool (D)"
-                           IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                      Converter={StaticResource convToolType}, ConverterParameter=None}"
-                           Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}"
-                           Command="{StaticResource Commands.SelectTool}" CommandParameter="None"
-                           Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="None"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=None}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Pan Tool (D)"
+                Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}">
                 <Viewbox>
                     <Path Data="M 12.8125 0 C 12.7375 0.0125 12.64375 0.04375 12.59375 0.09375 C 12.49375 0.19375 9.9125 2.6 8.3125 5 C 8.2125 5.2 8.2125 5.39375 8.3125 5.59375 C 8.4125 5.89375 8.6125 6 8.8125 6 L 11 6 L 11 11 L 6 11 L 6 8.8125 C 6 8.6125 5.8875 8.4125 5.6875 8.3125 C 5.4875 8.2125 5.2 8.2125 5 8.3125 C 2.6 9.9125 0.19375 12.49375 0.09375 12.59375 C 0.09375 12.69375 9.2518585e-18 12.9 0 13 C 0 13.1 -0.00625 13.30625 0.09375 13.40625 C 0.19375 13.50625 2.5 16.0875 5 17.6875 C 5.2 17.7875 5.4875 17.7875 5.6875 17.6875 C 5.8875 17.5875 6 17.3875 6 17.1875 L 6 15 L 11 15 L 11 20 L 8.8125 20 C 8.6125 20 8.4125 20.1125 8.3125 20.3125 C 8.2125 20.5125 8.2125 20.70625 8.3125 20.90625 C 9.9125 23.30625 12.49375 25.7125 12.59375 25.8125 C 12.69375 25.9125 12.8 25.90625 13 25.90625 C 13.2 25.90625 13.30625 25.9125 13.40625 25.8125 C 13.50625 25.7125 16.0875 23.40625 17.6875 20.90625 C 17.7875 20.80625 17.7875 20.5125 17.6875 20.3125 C 17.5875 20.1125 17.3875 20 17.1875 20 L 15 20 L 15 15 L 20 15 L 20 17.1875 C 20 17.3875 20.1125 17.5875 20.3125 17.6875 C 20.5125 17.7875 20.70625 17.7875 20.90625 17.6875 C 23.30625 16.0875 25.7125 13.50625 25.8125 13.40625 C 25.9125 13.30625 25.90625 13.2 25.90625 13 C 25.90625 12.8 25.9125 12.69375 25.8125 12.59375 C 25.7125 12.49375 23.40625 9.9125 20.90625 8.3125 C 20.70625 8.2125 20.5125 8.2125 20.3125 8.3125 C 20.1125 8.4125 20 8.6125 20 8.8125 L 20 11 L 15 11 L 15 6 L 17.1875 6 C 17.3875 6 17.5875 5.8875 17.6875 5.6875 C 17.7875 5.4875 17.7875 5.29375 17.6875 5.09375 C 16.0875 2.69375 13.50625 0.2875 13.40625 0.1875 C 13.30625 0.0875 13.1 0 13 0 C 12.95 0 12.8875 -0.0125 12.8125 0 z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Selection Tool (S)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=Pointer}"
-                          Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Pointer"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="Pointer"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pointer}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Selection Tool (S)"
+                Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}">
                 <Viewbox>
                     <Path Data="M7,2.014l13.162,12.328l-5.377,0.488l-0.977,0.088l0.406,0.894l3.263,7.145l-2.406,1.058l-3.113-7.222 l-0.391-0.91l-0.722,0.678l-3.819,3.582L7,2.014 M7,0.014c-0.27,0-0.54,0.054-0.797,0.166C5.472,0.497,4.999,1.219,5,2.017 l0.026,18.127c0.001,0.797,0.476,1.518,1.206,1.834c0.256,0.109,0.525,0.164,0.793,0.164c0.5,0,0.991-0.188,1.369-0.541 l2.463-2.311l2.377,5.516c0.211,0.489,0.61,0.874,1.104,1.069c0.235,0.093,0.484,0.139,0.732,0.139 c0.274,0,0.549-0.057,0.806-0.169l2.406-1.059c0.489-0.215,0.873-0.618,1.063-1.118c0.19-0.501,0.173-1.056-0.05-1.543l-2.498-5.47 l3.544-0.322c0.785-0.07,1.454-0.596,1.711-1.342c0.256-0.744,0.051-1.57-0.524-2.109L8.367,0.554C7.989,0.2,7.498,0.014,7,0.014 L7,0.014z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Rectangle (R)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=Rectangle}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Rectangle"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="Rectangle"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Rectangle}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Rectangle (R)">
                 <Viewbox>
                     <Path Data="M 3 3 C 2.4777778 3 1.9395305 3.1854695 1.5625 3.5625 C 1.1854695 3.9395305 1 4.4777778 1 5 L 1 21 C 1 21.522222 1.1854695 22.060469 1.5625 22.4375 C 1.9395305 22.814531 2.4777778 23 3 23 L 23 23 C 23.522222 23 24.060469 22.814531 24.4375 22.4375 C 24.814531 22.060469 25 21.522222 25 21 L 25 5 C 25 4.4777778 24.814531 3.9395305 24.4375 3.5625 C 24.060469 3.1854695 23.522222 3 23 3 L 3 3 z M 3 5 L 23 5 L 23 21 L 3 21 L 3 5 z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Filled Rectangle (F)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=FilledRectangle}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="FilledRectangle"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="FilledRectangle"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=FilledRectangle}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Filled Rectangle (F)">
                 <Viewbox>
                     <Path Data="M 3 3 C 2.4777778 3 1.9395305 3.1854695 1.5625 3.5625 C 1.1854695 3.9395305 1 4.4777778 1 5 L 1 21 C 1 21.522222 1.1854695 22.060469 1.5625 22.4375 C 1.9395305 22.814531 2.4777778 23 3 23 L 23 23 C 23.522222 23 24.060469 22.814531 24.4375 22.4375 C 24.814531 22.060469 25 21.522222 25 21 L 25 5 C 25 4.4777778 24.814531 3.9395305 24.4375 3.5625 C 24.060469 3.1854695 23.522222 3 23 3 L 3 3 z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Ellipse (E)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=Ellipse}"
-                          Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Ellipse"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="Ellipse"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Ellipse}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Ellipse (E)"
+                Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}">
                 <Viewbox>
                     <Path Data="M 13 3 C 9.4836265 3 6.2731443 4.0685793 3.90625 5.84375 C 1.5393557 7.6189207 0 10.154425 0 13 C 0 15.845575 1.5393557 18.381079 3.90625 20.15625 C 6.2731443 21.931421 9.4836265 23 13 23 C 16.516374 23 19.726856 21.931421 22.09375 20.15625 C 24.460644 18.381079 26 15.845575 26 13 C 26 10.154425 24.460644 7.6189207 22.09375 5.84375 C 19.726856 4.0685793 16.516374 3 13 3 z M 13 5 C 16.111043 5 18.898749 5.9553114 20.875 7.4375 C 22.851251 8.9196886 24 10.875012 24 13 C 24 15.124988 22.851251 17.080311 20.875 18.5625 C 18.898749 20.044689 16.111043 21 13 21 C 9.8889565 21 7.1012515 20.044689 5.125 18.5625 C 3.1487485 17.080311 2 15.124988 2 13 C 2 10.875012 3.1487485 8.9196886 5.125 7.4375 C 7.1012515 5.9553114 9.8889565 5 13 5 z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Line (L)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=Line}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Line"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="Line"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Line}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Line (L)">
                 <Viewbox>
                     <Path Data="M 24.09375 0.25 L 0.25 24.09375 L 1.90625 25.78125 L 25.78125 1.90625 L 24.09375 0.25 z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Arrow (A)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=Arrow}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Arrow"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="Arrow"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Arrow}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Arrow (A)">
                 <Viewbox>
                     <Path Data="M6.938,20.681l4.236,4.236H1.083V14.825l4.253,4.254L24.165,0.25l1.616,1.586L6.938,20.681z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Pencil (P)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=PolyLine}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="PolyLine"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="PolyLine"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=PolyLine}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Pencil (P)">
                 <Viewbox>
                     <Path Data="M 20.09375 0.25 C 19.49925 0.246875 18.91975 0.45525 18.46875 0.90625 L 17.46875 1.9375 L 24.0625 8.5625 L 25.0625 7.53125 C 25.9645 6.62925 25.9745 5.163 25.0625 4.25 L 21.75 0.9375 C 21.294 0.481 20.68825 0.253125 20.09375 0.25 z M 16.34375 2.84375 L 14.78125 4.34375 L 21.65625 11.21875 L 23.25 9.75 L 16.34375 2.84375 z M 13.78125 5.4375 L 2.96875 16.15625 A 0.97509752 0.97509752 0 0 0 2.46875 16.78125 L 0.15625 24.625 A 0.97509752 0.97509752 0 0 0 1.375 25.84375 L 9.21875 23.53125 A 0.97509752 0.97509752 0 0 0 10 22.875 L 20.65625 12.3125 L 19.1875 10.84375 L 8.25 21.8125 L 3.84375 23.09375 L 2.90625 22.15625 L 4.25 17.5625 L 15.09375 6.75 L 13.78125 5.4375 z M 16.15625 7.84375 L 5.1875 18.84375 L 6.78125 19.1875 L 7 20.65625 L 18 9.6875 L 16.15625 7.84375 z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Text (T)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=Text}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Text"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="Text"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Text}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Text (T)">
                 <Viewbox>
                     <Path Margin="2" Data="M19.32,26H6.679v-1.076c0.556-0.199,1.117-0.372,1.686-0.52c0.568-0.15,1.18-0.272,1.837-0.373V1.931H5.408 L3.401,7.244H2.455c-0.076-0.495-0.139-1.06-0.19-1.691C2.214,4.924,2.171,4.28,2.132,3.621c-0.039-0.652-0.069-1.3-0.093-1.929 C2.013,1.063,2,0.496,2,0h22c0,0.496-0.014,1.055-0.039,1.672c-0.026,0.619-0.058,1.257-0.097,1.913s-0.075,1.3-0.114,1.932 c-0.038,0.631-0.095,1.209-0.172,1.728h-0.996l-1.99-5.313h-4.756v22.101c0.656,0.125,1.27,0.248,1.836,0.373 c0.569,0.123,1.117,0.295,1.648,0.52V26z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Obscure (O)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=Pixelate}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Pixelate"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="Pixelate"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pixelate}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Obscure (O)">
                 <Viewbox>
-                    <Path Width="32" Height="32" Data="M16,0C7.179,0,0,7.18,0,16s7.179,16,16,16c8.82,0,16-7.18,16-16S24.82,0,16,0z M16,2.666c7.38,0,13.333,5.955,13.333,13.334 c0,7.38-5.953,13.333-13.333,13.333C8.621,29.333,2.667,23.38,2.667,16C2.667,8.621,8.621,2.666,16,2.666z M9.049,4.612v4.722H4.443 C5.559,7.399,7.146,5.773,9.049,4.612z M22.382,16V9.334h5.175c1.131,1.959,1.776,4.234,1.776,6.666 c0,0.945-0.098,1.868-0.284,2.757V16H22.382z M9.049,22.667h6.667v6.663c-2.442-0.051-4.719-0.754-6.667-1.942V22.667z M9.049,16 v6.667H4.443c-1.13-1.96-1.777-4.236-1.777-6.667H9.049z M22.382,9.334h-6.667V2.67C15.81,2.668,15.905,2.666,16,2.666 c2.314,0,4.488,0.586,6.382,1.617V9.334z M27.557,22.667c-1.225,2.123-3.019,3.875-5.175,5.049v-5.049H27.557z M15.715,16H9.049 V9.334h6.667V16z M22.382,16v6.667h-6.667V16H22.382z" />
+                    <Path
+                        Width="32"
+                        Height="32"
+                        Data="M16,0C7.179,0,0,7.18,0,16s7.179,16,16,16c8.82,0,16-7.18,16-16S24.82,0,16,0z M16,2.666c7.38,0,13.333,5.955,13.333,13.334 c0,7.38-5.953,13.333-13.333,13.333C8.621,29.333,2.667,23.38,2.667,16C2.667,8.621,8.621,2.666,16,2.666z M9.049,4.612v4.722H4.443 C5.559,7.399,7.146,5.773,9.049,4.612z M22.382,16V9.334h5.175c1.131,1.959,1.776,4.234,1.776,6.666 c0,0.945-0.098,1.868-0.284,2.757V16H22.382z M9.049,22.667h6.667v6.663c-2.442-0.051-4.719-0.754-6.667-1.942V22.667z M9.049,16 v6.667H4.443c-1.13-1.96-1.777-4.236-1.777-6.667H9.049z M22.382,9.334h-6.667V2.67C15.81,2.668,15.905,2.666,16,2.666 c2.314,0,4.488,0.586,6.382,1.617V9.334z M27.557,22.667c-1.225,2.123-3.019,3.875-5.175,5.049v-5.049H27.557z M15.715,16H9.049 V9.334h6.667V16z M22.382,16v6.667h-6.667V16H22.382z" />
                 </Viewbox>
             </ToggleButton>
-            <ToggleButton ToolTip="Erase (E)"
-                          IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay,
-                                     Converter={StaticResource convToolType}, ConverterParameter=Erase}"
-                          Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}"
-                          Command="{StaticResource Commands.SelectTool}" CommandParameter="Erase"
-                          Style="{StaticResource ToggleToolButtonStyle}">
+            <ToggleButton
+                Command="{StaticResource Commands.SelectTool}"
+                CommandParameter="Erase"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Erase}"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Erase (E)"
+                Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}">
                 <Viewbox>
-                    <Path Margin="-2,-2,0,0" Width="22" Height="22" Data="M 14.75 2 C 14.039044 2 13.316445 2.2460554 12.78125 2.78125 L 7.78125 7.78125 L 7.09375 8.5 L 2.78125 12.78125 C 1.7108607 13.851639 1.7108607 15.648361 2.78125 16.71875 L 7.28125 21.21875 C 8.3516393 22.289139 10.148361 22.289139 11.21875 21.21875 L 15.5 16.90625 L 16.21875 16.21875 L 16.90625 15.5 L 21.21875 11.21875 C 22.289139 10.148361 22.289139 8.3516393 21.21875 7.28125 L 16.71875 2.78125 C 16.183555 2.2460554 15.460956 2 14.75 2 z M 8.5 9.9375 L 14.0625 15.5 L 9.78125 19.78125 C 9.4516393 20.110861 9.0483607 20.110861 8.71875 19.78125 L 4.21875 15.28125 C 3.8891393 14.951639 3.8891393 14.548361 4.21875 14.21875 L 8.5 9.9375 z" />
+                    <Path
+                        Width="22"
+                        Height="22"
+                        Margin="-2,-2,0,0"
+                        Data="M 14.75 2 C 14.039044 2 13.316445 2.2460554 12.78125 2.78125 L 7.78125 7.78125 L 7.09375 8.5 L 2.78125 12.78125 C 1.7108607 13.851639 1.7108607 15.648361 2.78125 16.71875 L 7.28125 21.21875 C 8.3516393 22.289139 10.148361 22.289139 11.21875 21.21875 L 15.5 16.90625 L 16.21875 16.21875 L 16.90625 15.5 L 21.21875 11.21875 C 22.289139 10.148361 22.289139 8.3516393 21.21875 7.28125 L 16.71875 2.78125 C 16.183555 2.2460554 15.460956 2 14.75 2 z M 8.5 9.9375 L 14.0625 15.5 L 9.78125 19.78125 C 9.4516393 20.110861 9.0483607 20.110861 8.71875 19.78125 L 4.21875 15.28125 C 3.8891393 14.951639 3.8891393 14.548361 4.21875 14.21875 L 8.5 9.9375 z" />
                 </Viewbox>
             </ToggleButton>
-            <Button ToolTip="Undo (Ctrl+Z)" Style="{StaticResource ToolButtonStyle}" Command="ApplicationCommands.Undo"
-                    Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}"
-                    IsEnabled="{Binding ElementName=drawingCanvas, Path=CanUndo, Mode=OneWay}">
+            <Button
+                Command="ApplicationCommands.Undo"
+                IsEnabled="{Binding ElementName=drawingCanvas, Path=CanUndo, Mode=OneWay}"
+                Style="{StaticResource ToolButtonStyle}"
+                ToolTip="Undo (Ctrl+Z)"
+                Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}">
                 <Viewbox>
                     <Path Data="M10.477,1.965c-0.289-0.121-0.625-0.053-0.848,0.168L0.32,9.446c-0.304,0.302-0.304,0.797,0,1.1 l9.309,7.278c0.148,0.15,0.348,0.229,0.549,0.229c0.102,0,0.203-0.021,0.299-0.059c0.291-0.121,0.465-0.404,0.465-0.719v-4.359 c9.955,0,14.309,2.808,13.646,11.751c4.217-14.308-3.877-17.542-13.646-17.542V2.683C10.941,2.368,10.768,2.085,10.477,1.965z" />
                 </Viewbox>
             </Button>
-            <Button ToolTip="Redo (Ctrl+Y)" Style="{StaticResource ToolButtonStyle}" Command="ApplicationCommands.Redo"
-                    Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}"
-                    IsEnabled="{Binding ElementName=drawingCanvas, Path=CanRedo, Mode=OneWay}">
+            <Button
+                Command="ApplicationCommands.Redo"
+                IsEnabled="{Binding ElementName=drawingCanvas, Path=CanRedo, Mode=OneWay}"
+                Style="{StaticResource ToolButtonStyle}"
+                ToolTip="Redo (Ctrl+Y)"
+                Visibility="{Binding ElementName=moreTools, Path=IsChecked, Converter={StaticResource Bool2Vis}}">
                 <Viewbox>
                     <Path Data="M15.059,2.683v4.442c-9.77,0-17.863,3.234-13.646,17.542C0.75,15.724,5.104,12.916,15.059,12.916v4.359 c0,0.314,0.174,0.598,0.465,0.719c0.096,0.038,0.197,0.059,0.299,0.059c0.201,0,0.4-0.078,0.549-0.229l9.309-7.278 c0.304-0.303,0.304-0.798,0-1.1l-9.309-7.313c-0.223-0.221-0.559-0.289-0.848-0.168C15.232,2.085,15.059,2.368,15.059,2.683z" />
                 </Viewbox>
             </Button>
-            <ToggleButton ToolTip="More Tools" Style="{StaticResource ToggleToolButtonStyle}" Name="moreTools">
+            <ToggleButton
+                Name="moreTools"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="More Tools">
                 <Viewbox>
-                    <Path Width="40" Height="10" Data="M 5 0 A 5 5 0 0 0 0 5 A 5 5 0 0 0 5 10 A 5 5 0 0 0 10 5 A 5 5 0 0 0 5 0 z M 20 0 A 5 5 0 0 0 15 5 A 5 5 0 0 0 20 10 A 5 5 0 0 0 25 5 A 5 5 0 0 0 20 0 z M 35 0 A 5 5 0 0 0 30 5 A 5 5 0 0 0 35 10 A 5 5 0 0 0 40 5 A 5 5 0 0 0 35 0 z" />
+                    <Path
+                        Width="40"
+                        Height="10"
+                        Data="M 5 0 A 5 5 0 0 0 0 5 A 5 5 0 0 0 5 10 A 5 5 0 0 0 10 5 A 5 5 0 0 0 5 0 z M 20 0 A 5 5 0 0 0 15 5 A 5 5 0 0 0 20 10 A 5 5 0 0 0 25 5 A 5 5 0 0 0 20 0 z M 35 0 A 5 5 0 0 0 30 5 A 5 5 0 0 0 35 10 A 5 5 0 0 0 40 5 A 5 5 0 0 0 35 0 z" />
                 </Viewbox>
             </ToggleButton>
         </StackPanel>
-        <Canvas Grid.Row="1" x:Name="objectCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ClipToBounds="True" UseLayoutRounding="True">
-            <Rectangle Fill="#1e1e1e"
+        <Canvas
+            x:Name="objectCanvas"
+            Grid.Row="1"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            ClipToBounds="True"
+            UseLayoutRounding="True">
+            <Rectangle
                 Width="{Binding ActualWidth, ElementName=objectCanvas}"
-                Height="{Binding ActualHeight, ElementName=objectCanvas}">
-            </Rectangle>
-            <lib:DrawingCanvas x:Name="drawingCanvas" LineWidth="{Binding LineWidth}" 
-                                ObjectColor="{Binding ObjectColor}" Background="#00000000"
-                                Width="{Binding ActualWidth, ElementName=objectCanvas}"
-                                Height="{Binding ActualHeight, ElementName=objectCanvas}"/>
+                Height="{Binding ActualHeight, ElementName=objectCanvas}"
+                Fill="#1e1e1e" />
+            <lib:DrawingCanvas
+                x:Name="drawingCanvas"
+                Width="{Binding ActualWidth, ElementName=objectCanvas}"
+                Height="{Binding ActualHeight, ElementName=objectCanvas}"
+                Background="#00000000"
+                LineWidth="{Binding LineWidth}"
+                ObjectColor="{Binding ObjectColor}" />
         </Canvas>
-        <StackPanel Width="70" Margin="0,0,10,0"  Orientation="Vertical" Grid.Row="1" 
-                    VerticalAlignment="Center" HorizontalAlignment="Right" Name="rightSidepanel" Visibility="Collapsed">
-            <Border x:Name="shiftIndicator" Background="#70707a" Height="40" Margin="0,0,0,10" CornerRadius="10" Opacity=".7">
+        <StackPanel
+            Name="rightSidepanel"
+            Grid.Row="1"
+            Width="70"
+            Margin="0,0,10,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            Orientation="Vertical"
+            Visibility="Collapsed">
+            <Border
+                x:Name="shiftIndicator"
+                Height="40"
+                Margin="0,0,0,10"
+                Background="#70707a"
+                CornerRadius="10"
+                Opacity=".7">
                 <StackPanel Orientation="Horizontal">
-                    <Viewbox Height="20" HorizontalAlignment="Left" Margin="9,0,5,0">
-                        <Path Fill="White" Data="M 12.8125 0 C 12.7375 0.0125 12.64375 0.04375 12.59375 0.09375 C 12.49375 0.19375 9.9125 2.6 8.3125 5 C 8.2125 5.2 8.2125 5.39375 8.3125 5.59375 C 8.4125 5.89375 8.6125 6 8.8125 6 L 11 6 L 11 11 L 6 11 L 6 8.8125 C 6 8.6125 5.8875 8.4125 5.6875 8.3125 C 5.4875 8.2125 5.2 8.2125 5 8.3125 C 2.6 9.9125 0.19375 12.49375 0.09375 12.59375 C 0.09375 12.69375 9.2518585e-18 12.9 0 13 C 0 13.1 -0.00625 13.30625 0.09375 13.40625 C 0.19375 13.50625 2.5 16.0875 5 17.6875 C 5.2 17.7875 5.4875 17.7875 5.6875 17.6875 C 5.8875 17.5875 6 17.3875 6 17.1875 L 6 15 L 11 15 L 11 20 L 8.8125 20 C 8.6125 20 8.4125 20.1125 8.3125 20.3125 C 8.2125 20.5125 8.2125 20.70625 8.3125 20.90625 C 9.9125 23.30625 12.49375 25.7125 12.59375 25.8125 C 12.69375 25.9125 12.8 25.90625 13 25.90625 C 13.2 25.90625 13.30625 25.9125 13.40625 25.8125 C 13.50625 25.7125 16.0875 23.40625 17.6875 20.90625 C 17.7875 20.80625 17.7875 20.5125 17.6875 20.3125 C 17.5875 20.1125 17.3875 20 17.1875 20 L 15 20 L 15 15 L 20 15 L 20 17.1875 C 20 17.3875 20.1125 17.5875 20.3125 17.6875 C 20.5125 17.7875 20.70625 17.7875 20.90625 17.6875 C 23.30625 16.0875 25.7125 13.50625 25.8125 13.40625 C 25.9125 13.30625 25.90625 13.2 25.90625 13 C 25.90625 12.8 25.9125 12.69375 25.8125 12.59375 C 25.7125 12.49375 23.40625 9.9125 20.90625 8.3125 C 20.70625 8.2125 20.5125 8.2125 20.3125 8.3125 C 20.1125 8.4125 20 8.6125 20 8.8125 L 20 11 L 15 11 L 15 6 L 17.1875 6 C 17.3875 6 17.5875 5.8875 17.6875 5.6875 C 17.7875 5.4875 17.7875 5.29375 17.6875 5.09375 C 16.0875 2.69375 13.50625 0.2875 13.40625 0.1875 C 13.30625 0.0875 13.1 0 13 0 C 12.95 0 12.8875 -0.0125 12.8125 0 z" />
+                    <Viewbox
+                        Height="20"
+                        Margin="9,0,5,0"
+                        HorizontalAlignment="Left">
+                        <Path Data="M 12.8125 0 C 12.7375 0.0125 12.64375 0.04375 12.59375 0.09375 C 12.49375 0.19375 9.9125 2.6 8.3125 5 C 8.2125 5.2 8.2125 5.39375 8.3125 5.59375 C 8.4125 5.89375 8.6125 6 8.8125 6 L 11 6 L 11 11 L 6 11 L 6 8.8125 C 6 8.6125 5.8875 8.4125 5.6875 8.3125 C 5.4875 8.2125 5.2 8.2125 5 8.3125 C 2.6 9.9125 0.19375 12.49375 0.09375 12.59375 C 0.09375 12.69375 9.2518585e-18 12.9 0 13 C 0 13.1 -0.00625 13.30625 0.09375 13.40625 C 0.19375 13.50625 2.5 16.0875 5 17.6875 C 5.2 17.7875 5.4875 17.7875 5.6875 17.6875 C 5.8875 17.5875 6 17.3875 6 17.1875 L 6 15 L 11 15 L 11 20 L 8.8125 20 C 8.6125 20 8.4125 20.1125 8.3125 20.3125 C 8.2125 20.5125 8.2125 20.70625 8.3125 20.90625 C 9.9125 23.30625 12.49375 25.7125 12.59375 25.8125 C 12.69375 25.9125 12.8 25.90625 13 25.90625 C 13.2 25.90625 13.30625 25.9125 13.40625 25.8125 C 13.50625 25.7125 16.0875 23.40625 17.6875 20.90625 C 17.7875 20.80625 17.7875 20.5125 17.6875 20.3125 C 17.5875 20.1125 17.3875 20 17.1875 20 L 15 20 L 15 15 L 20 15 L 20 17.1875 C 20 17.3875 20.1125 17.5875 20.3125 17.6875 C 20.5125 17.7875 20.70625 17.7875 20.90625 17.6875 C 23.30625 16.0875 25.7125 13.50625 25.8125 13.40625 C 25.9125 13.30625 25.90625 13.2 25.90625 13 C 25.90625 12.8 25.9125 12.69375 25.8125 12.59375 C 25.7125 12.49375 23.40625 9.9125 20.90625 8.3125 C 20.70625 8.2125 20.5125 8.2125 20.3125 8.3125 C 20.1125 8.4125 20 8.6125 20 8.8125 L 20 11 L 15 11 L 15 6 L 17.1875 6 C 17.3875 6 17.5875 5.8875 17.6875 5.6875 C 17.7875 5.4875 17.7875 5.29375 17.6875 5.09375 C 16.0875 2.69375 13.50625 0.2875 13.40625 0.1875 C 13.30625 0.0875 13.1 0 13 0 C 12.95 0 12.8875 -0.0125 12.8125 0 z" Fill="White" />
                     </Viewbox>
-                    <TextBlock Foreground="White" VerticalAlignment="Center">
-                        Hold<LineBreak/><Run FontWeight="SemiBold">Shift</Run>
+                    <TextBlock VerticalAlignment="Center" Foreground="White">
+                        Hold<LineBreak /><Run FontWeight="SemiBold">Shift</Run>
                     </TextBlock>
                 </StackPanel>
             </Border>
-            <Border Background="#70707a" CornerRadius="10" Opacity=".7" Height="250">
+            <Border
+                Height="250"
+                Background="#70707a"
+                CornerRadius="10"
+                Opacity=".7">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="180" />
@@ -330,30 +482,81 @@
                     </Grid.RowDefinitions>
                     <Grid Margin="7,10,-7,10">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="0.8*"/>
-                            <RowDefinition Height="2*"/>
-                            <RowDefinition/>
-                            <RowDefinition/>
+                            <RowDefinition Height="0.8*" />
+                            <RowDefinition Height="2*" />
+                            <RowDefinition />
+                            <RowDefinition />
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" VerticalAlignment="Top" Foreground="White" FontWeight="SemiBold">&#160;3x -</TextBlock>
-                        <TextBlock Grid.Row="0" VerticalAlignment="Top" HorizontalAlignment="Right" 
-                           Foreground="White" FontWeight="SemiBold" Margin="0,0,15,0">+</TextBlock>
-                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold">&#160;2x -</TextBlock>
-                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold">&#160;1x -</TextBlock>
-                        <TextBlock Grid.Row="3" VerticalAlignment="Bottom" Foreground="White" FontWeight="SemiBold">.2x -</TextBlock>
-                        <TextBlock Grid.Row="3" VerticalAlignment="Bottom" HorizontalAlignment="Right" 
-                           Foreground="White" FontWeight="SemiBold" Margin="0,0,15,0">-</TextBlock>
-                        <Slider Orientation="Vertical" Height="160"
+                        <TextBlock
+                            Grid.Row="0"
+                            VerticalAlignment="Top"
+                            FontWeight="SemiBold"
+                            Foreground="White">
+                            &#160;3x -
+                        </TextBlock>
+                        <TextBlock
+                            Grid.Row="0"
+                            Margin="0,0,15,0"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            FontWeight="SemiBold"
+                            Foreground="White">
+                            +
+                        </TextBlock>
+                        <TextBlock
+                            Grid.Row="1"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Foreground="White">
+                            &#160;2x -
+                        </TextBlock>
+                        <TextBlock
+                            Grid.Row="2"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Foreground="White">
+                            &#160;1x -
+                        </TextBlock>
+                        <TextBlock
+                            Grid.Row="3"
+                            VerticalAlignment="Bottom"
+                            FontWeight="SemiBold"
+                            Foreground="White">
+                            .2x -
+                        </TextBlock>
+                        <TextBlock
+                            Grid.Row="3"
+                            Margin="0,0,15,0"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            FontWeight="SemiBold"
+                            Foreground="White">
+                            -
+                        </TextBlock>
+                        <Slider
+                            Grid.RowSpan="4"
+                            Height="160"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            Grid.RowSpan="4"  
+                            Maximum="3"
+                            Minimum="0.2"
+                            Orientation="Vertical"
                             Style="{StaticResource FlatSlider}"
-                            Minimum="0.2" Maximum="3" 
                             TickFrequency="0.2"
-                            Value="{Binding ElementName=drawingCanvas, Path=ContentScale}"/>
+                            Value="{Binding ElementName=drawingCanvas, Path=ContentScale}" />
                     </Grid>
-                    <Button Grid.Row="1" Margin="5" Click="ZoomFit_Clicked">Fit</Button>
-                    <Button Grid.Row="2" Margin="5,0,5,10" Click="ZoomActual_Clicked">Actual</Button>
+                    <Button
+                        Grid.Row="1"
+                        Margin="5"
+                        Click="ZoomFit_Clicked">
+                        Fit
+                    </Button>
+                    <Button
+                        Grid.Row="2"
+                        Margin="5,0,5,10"
+                        Click="ZoomActual_Clicked">
+                        Actual
+                    </Button>
                 </Grid>
             </Border>
         </StackPanel>
