@@ -39,7 +39,7 @@ namespace Clowd
             return Upload(new MemoryStream(data), displayName);
         }
 
-        public static async Task<string> Upload(Stream data, string displayName)
+        public static async Task<string> Upload(Stream data, string displayName, bool autoExecute = false)
         {
             IUploadProvider uploader;
             var providerSelection = App.Current.Settings.UploadSettings.UploadProvider;
@@ -82,7 +82,15 @@ namespace Clowd
                 view.SecondaryText = "Complete";
                 view.Progress = 100;
                 view.ProgressCurrentText = ((long)data_size).ToPrettySizeString(0);
-                _window.Notify();
+
+                if (autoExecute)
+                {
+                    view.SetExecuted();
+                }
+                else
+                {
+                    _window.Notify();
+                }
 
                 return result.PublicUrl;
             }

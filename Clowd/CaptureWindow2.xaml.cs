@@ -25,6 +25,7 @@ using Clowd.Utilities;
 using Microsoft.Win32;
 using PropertyChanged;
 using ScreenVersusWpf;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd
 {
@@ -321,12 +322,7 @@ namespace Clowd
             {
                 encoder.Save(ms);
                 ms.Position = 0;
-                byte[] b;
-                using (BinaryReader br = new BinaryReader(ms))
-                {
-                    b = br.ReadBytes(Convert.ToInt32(ms.Length));
-                }
-                var task = UploadManager.Upload(b, "clowd-default.png");
+                var task = UploadManager.Upload(ms, "clowd-default.png");
             }
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -371,6 +367,24 @@ namespace Clowd
                 return;
 
             fastCapturer.SelectAll();
+        }
+
+        private async void SearchExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (IsCapturing)
+                return;
+
+            this.Close();
+            var cropped = CropBitmap();
+            BitmapEncoder encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(cropped));
+            using (var ms = new MemoryStream())
+            {
+                encoder.Save(ms);
+                ms.Position = 0;
+                var task = await UploadManager.Upload(ms, "clowd-default.png", true);
+                Process.Start("https://images.google.com/searchbyimage?image_url=" + task.UrlEscape());
+            }
         }
     }
 }
