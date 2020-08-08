@@ -371,5 +371,13 @@ namespace Clowd
             Clipboard.SetText(fastCapturer.GetHoveredColor().ToHexRgb());
             this.Close();
         }
+
+        private void SelectAllExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (!IsCapturing)
+                return;
+
+            fastCapturer.SelectAll();
+        }
     }
 }
