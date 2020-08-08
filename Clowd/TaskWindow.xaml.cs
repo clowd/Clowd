@@ -507,7 +507,7 @@ namespace Clowd
             Status = TaskStatus.Canceled;
         }
 
-        private void SetExecuted()
+        public void SetExecuted()
         {
             if (Status != TaskStatus.InProgress && Status != TaskStatus.Waiting)
             {
