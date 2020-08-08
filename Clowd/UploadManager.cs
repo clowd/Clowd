@@ -14,6 +14,7 @@ using FileUploadLib;
 using FileUploadLib.Providers;
 using System.Windows;
 using Ookii.Dialogs.Wpf;
+using Clowd.Utilities;
 
 namespace Clowd
 {
@@ -44,17 +45,8 @@ namespace Clowd
             var providerSelection = App.Current.Settings.UploadSettings.UploadProvider;
             if (providerSelection == UploadsProvider.None)
             {
-                using (TaskDialog dialog = new TaskDialog())
-                {
-                    dialog.WindowTitle = $"{App.ClowdAppName}";
-                    dialog.MainInstruction = $"{App.ClowdAppName} File Upload Not Configured";
-                    dialog.Content = $"There is no uploads provider configured in the {App.ClowdAppName} settings. Please open settings and configure before uploading files.";
-                    dialog.MainIcon = TaskDialogIcon.Warning;
-                    TaskDialogButton okButton = new TaskDialogButton(ButtonType.Ok);
-                    dialog.Buttons.Add(okButton);
-                    dialog.Show();
-                    return null;
-                }
+                MessageBoxEx.ShowSettingsPrompt(null, SettingsCategory.Uploads, "There is no uploads provider configured. Please open settings and configure before uploading files.");
+                return null;
             }
             else if (providerSelection == UploadsProvider.Azure)
             {
