@@ -49,20 +49,6 @@ namespace Clowd
         public static readonly DependencyProperty AccentColorProperty =
             DependencyProperty.Register(nameof(AccentColor), typeof(Color), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(default(Color)));
 
-        public bool ShowMagnifier
-        {
-            get { return (bool)GetValue(ShowMagnifierProperty); }
-            set { SetValue(ShowMagnifierProperty, value); }
-        }
-        public static readonly DependencyProperty ShowMagnifierProperty =
-            DependencyProperty.Register(nameof(ShowMagnifier), typeof(bool), typeof(ReallyFastCaptureRenderer), new PropertyMetadata(true, ShowMagnifierChanged));
-
-        private static void ShowMagnifierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            var ths = (ReallyFastCaptureRenderer)d;
-            ths.Draw();
-        }
-
         private static void SelectionRectangleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (ReallyFastCaptureRenderer)d;

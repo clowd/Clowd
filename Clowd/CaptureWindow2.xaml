@@ -38,7 +38,6 @@
         <RoutedCommand x:Key="Command.Reset" />
         <RoutedCommand x:Key="Command.SelectScreen" />
         <RoutedCommand x:Key="Command.SelectAll" />
-        <RoutedCommand x:Key="Command.ToggleMagnifier" />
         <RoutedCommand x:Key="Command.SelectColor" />
     </Window.Resources>
     <Window.InputBindings>
@@ -49,7 +48,6 @@
         <KeyBinding Key="V" Command="{StaticResource Command.Video}" />
         <KeyBinding Key="R" Command="{StaticResource Command.Reset}" />
         <KeyBinding Key="F" Command="{StaticResource Command.SelectScreen}" />
-        <KeyBinding Key="M" Command="{StaticResource Command.ToggleMagnifier}" />
         <KeyBinding Key="C" Command="ApplicationCommands.Copy" />
         <KeyBinding Key="S" Command="ApplicationCommands.SaveAs" />
         <KeyBinding Key="Escape" Command="ApplicationCommands.Close" />
@@ -65,7 +63,6 @@
         <CommandBinding Command="{StaticResource Command.Video}" Executed="VideoExecuted" />
         <CommandBinding Command="{StaticResource Command.Reset}" Executed="ResetExecuted" />
         <CommandBinding Command="{StaticResource Command.SelectScreen}" Executed="SelectScreenExecuted" />
-        <CommandBinding Command="{StaticResource Command.ToggleMagnifier}" Executed="ToggleMagnifierExecuted" />
         <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyExecuted" />
         <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
