@@ -284,7 +284,7 @@ namespace Clowd
             if (ClipboardEx.SetImage(cropped))
                 Close();
             else
-                MessageBox.Show("Unable to set clipboard data; try again later.");
+                this.ShowNotice(MessageBoxIcon.Error, "Unable to set clipboard data; try again later.");
         }
         private void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -336,7 +336,7 @@ namespace Clowd
 
             if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
             {
-                MessageBox.Show("Please update your Video output directory in the settings before recording a video");
+                this.ShowSettingsPrompt(SettingsCategory.Video, "You must set a video save directory in the video capture settings before recording a video");
             }
             else
             {

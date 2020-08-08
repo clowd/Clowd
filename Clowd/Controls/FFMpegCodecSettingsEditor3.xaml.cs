@@ -158,19 +158,14 @@ namespace Clowd.Controls
             {
                 if (hasChanged && !hasSaved)
                 {
-                    using (var dialog = new TaskDialog())
+                    if (this.ShowPrompt(
+                        MessageBoxIcon.Warning,
+                        "You have made changes to the codec settings. Would you like to go back and save them, or exit and discard your changes?",
+                        "Exit without saving?",
+                        "Cancel",
+                        "Exit Without Saving"))
                     {
-                        dialog.MainIcon = TaskDialogIcon.Warning;
-                        dialog.MainInstruction = "Exit without saving?";
-                        dialog.Content = "You have made changes to the codec settings. Would you like to go back and save them, or exit and discard your changes?";
-                        var cancel = new TaskDialogButton("Go Back");
-                        var exit = new TaskDialogButton("Exit Without Saving");
-                        dialog.Buttons.Add(cancel);
-                        dialog.Buttons.Add(exit);
-
-                        var result = dialog.ShowDialog(wnd);
-                        if (result == cancel)
-                            ev.Cancel = true;
+                        ev.Cancel = true;
                     }
                 }
             };
