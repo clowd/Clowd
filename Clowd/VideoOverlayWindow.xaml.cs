@@ -218,6 +218,10 @@ namespace Clowd
                 await _recording.Stop();
             }
             this.Close();
+
+            await Task.Delay(5000);
+            if (File.Exists(_recording.FileName))
+                File.Delete(_recording.FileName);
         }
 
         private void toggleMicrophone_Click(object sender, RoutedEventArgs e)
