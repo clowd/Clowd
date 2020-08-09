@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -178,7 +178,6 @@ namespace DrawToolsLib.Tools
             double xOffset, yOffset;
 
             ComputeTextOffset(_textBox, out xOffset, out yOffset);
-
 
             Canvas.SetLeft(_textBox, Canvas.GetLeft(_textBox) - xOffset);
             Canvas.SetTop(_textBox, Canvas.GetTop(_textBox) - yOffset);

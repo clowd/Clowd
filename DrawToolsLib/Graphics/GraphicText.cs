@@ -15,7 +15,7 @@ namespace DrawToolsLib.Graphics
     public class GraphicText : GraphicRectangle
     {
         [XmlIgnore]
-        public int Padding { get; } = 8;
+        public int Padding { get; } = 15;
 
         [XmlIgnore]
         public bool Editing
@@ -90,7 +90,7 @@ namespace DrawToolsLib.Graphics
 
         private string _body;
         private string _fontName = "Segoe UI";
-        private double _fontSize = 14;
+        private double _fontSize = 12;
         private FontStyle _fontStyle = FontStyles.Normal;
         private FontWeight _fontWeight = FontWeights.Normal;
         private FontStretch _fontStretch = FontStretches.Normal;
@@ -99,16 +99,15 @@ namespace DrawToolsLib.Graphics
         private static Random _rnd = new Random();
         private static Color[] _colors = new Color[]
         {
-            Color.FromRgb(210, 210, 210),
-            //Color.FromRgb(255, 255, 203),
-            //Color.FromRgb(229, 203, 228),
-            //Color.FromRgb(203, 228, 222),
-            //Color.FromRgb(213, 198, 157)
+            // Color.FromRgb(210,210,210),
+            Color.FromRgb(255, 255, 203),
+            Color.FromRgb(229, 203, 228),
+            Color.FromRgb(203, 228, 222),
         };
         private static int _nextColor = 0;
 
         public GraphicText(DrawingCanvas canvas, Point point)
-            : this(_colors[_nextColor], canvas.LineWidth, point, 0)
+            : this(_colors[_nextColor], canvas.LineWidth, point, _rnd.NextDouble() * 8 - 4)
         {
             _nextColor = (_nextColor + 1) % _colors.Length;
             FontName = canvas.TextFontFamilyName;
