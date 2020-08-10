@@ -352,7 +352,7 @@ namespace Clowd
             if (!IsCapturing)
                 return;
 
-            Clipboard.SetText(fastCapturer.GetHoveredColor().ToHexRgb());
+            NiceDialog.ShowColorDialog(null, fastCapturer.GetHoveredColor());
             this.Close();
         }
 
