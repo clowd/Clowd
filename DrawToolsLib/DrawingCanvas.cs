@@ -28,6 +28,7 @@ namespace DrawToolsLib
 
         // Dependency properties
         public static readonly DependencyProperty ToolProperty;
+        public static readonly DependencyProperty ArtworkBackgroundProperty;
 
         public static readonly DependencyProperty LineWidthProperty;
         public static readonly DependencyProperty ObjectColorProperty;
@@ -135,7 +136,13 @@ namespace DrawToolsLib
             Children.Add(_clickable);
 
             _artworkRectangle = new Border();
-            _artworkRectangle.Background = new SolidColorBrush(Colors.White);
+            //_artworkRectangle.Background = new SolidColorBrush(Colors.White);
+
+            var binding = new System.Windows.Data.Binding(nameof(ArtworkBackground));
+            binding.Source = this;
+            binding.Mode = System.Windows.Data.BindingMode.OneWay;
+            _artworkRectangle.SetBinding(Border.BackgroundProperty, binding);
+
             Children.Add(_artworkRectangle);
         }
 
@@ -154,6 +161,10 @@ namespace DrawToolsLib
             ToolProperty = DependencyProperty.Register(
                 "Tool", typeof(ToolType), typeof(DrawingCanvas),
                 metaData);
+
+            // ArtworkBackground
+            metaData = new PropertyMetadata(Brushes.Purple);
+            ArtworkBackgroundProperty = DependencyProperty.Register(nameof(ArtworkBackground), typeof(Brush), typeof(DrawingCanvas), metaData);
 
             // LineWidth
             metaData = new PropertyMetadata(
@@ -319,6 +330,19 @@ namespace DrawToolsLib
         }
 
         #endregion Tool
+
+        public Brush ArtworkBackground
+        {
+            get
+            {
+                return (Brush)GetValue(ArtworkBackgroundProperty);
+            }
+            set
+            {
+                SetValue(ArtworkBackgroundProperty, value);
+            }
+        }
+
 
         #region CanUndo
 
