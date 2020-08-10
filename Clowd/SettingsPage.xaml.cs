@@ -158,6 +158,21 @@ namespace Clowd
                 return new FeatureInstallerControl(val);
             }
 
+            if (property.ActualPropertyType.IsGenericType && property.ActualPropertyType.GetGenericTypeDefinition() == typeof(AutoDictionary<,>))
+            {
+                var btn = new Button();
+                btn.Content = "Reset";
+                btn.Click += (s, e) =>
+                {
+                    if (btn.ShowYesNoPrompt(MessageBoxIcon.Warning, "Are you sure you wish to reset these settings to defaults?"))
+                    {
+                        var pinfo = property.GetDescriptor(property.PropertyName);
+                        pinfo.SetValue(property.TargetObject, Activator.CreateInstance(property.ActualPropertyType));
+                    }
+                };
+                return btn;
+            }
+
             return base.CreateControl(property, options);
         }
 

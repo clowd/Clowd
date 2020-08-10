@@ -224,24 +224,7 @@ namespace Clowd
     [ImplementPropertyChanged]
     public class EditorSettings
     {
-        [DisplayName("Object color")]
-        public Color ObjectDrawingColor { get; set; } = Colors.Red;
-
-        [PData.Spinnable(1, 2, 1, 10)]
-        public int ObjectLineWidth { get; set; } = 2;
-
         public Color CanvasBackground { get; set; } = Colors.White;
-
-        [DisplayName("Font family"), PData.FontPreview(16), ClassifyIgnore]
-        public FontFamily DefaultFont
-        {
-            get { return new FontFamily(_defaultFontString); }
-            set { _defaultFontString = value.Source; }
-        }
-        private string _defaultFontString = "Arial";
-
-        [DisplayName("Font size"), PData.Spinnable(2, 4, 6, 48)]
-        public int DefaultFontSize { get; set; } = 8;
 
         public RememberPromptChoice OpenCaptureInExistingEditor { get; set; } = RememberPromptChoice.Ask;
 
@@ -249,8 +232,7 @@ namespace Clowd
         [Description("Controls how much space (in pixels) there is between an opened capture and the editors window edge.")]
         public int CapturePadding { get; set; } = 30;
 
-        [Browsable(false)]
-        public Dictionary<DrawToolsLib.ToolType, SavedToolSettings> ToolSettings { get; set; } = new Dictionary<DrawToolsLib.ToolType, SavedToolSettings>();
+        public AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings> ToolSettings { get; set; } = new AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings>();
     }
 
     [ImplementPropertyChanged]
