@@ -170,12 +170,27 @@ namespace Clowd
             return window;
         }
 
-        public static bool SizeToContent(Window window, Size size)
+        //public static bool SizeToBounds(Window window, WpfRect bounds, double offsetX = 0, double offsetY = 0)
+        //{
+        //    var border = GetWindowBorderSize(window);
+        //    var primaryScreen = ScreenTools.Screens.First().Bounds.ToWpfRect();
+        //    window.Left = bounds.Left - primaryScreen.Left - border.Width + offsetX;
+        //    window.Top = bounds.Top - primaryScreen.Top - border.Height + offsetY;
+        //    return SizeToContent(window, new Size(bounds.Width, bounds.Height));
+        //}
+
+        public static bool SizeToContent(Window window, Size size, double contentLeft = Double.NaN, double contentTop = Double.NaN)
         {
             var border = GetWindowBorderSize(window);
 
-            var wndHeight = size.Height + border.Height;
-            var wndWidth = size.Width + border.Width;
+            var wndHeight = size.Height + border.TotalBorderHeight;
+            var wndWidth = size.Width + border.TotalBorderWidth;
+
+            if (!Double.IsNaN(contentLeft) && !Double.IsNaN(contentTop))
+            {
+                window.Left = contentLeft - border.BorderEdgeSize;
+                window.Top = contentTop - border.TitleBarHeight;
+            }
 
             if (!Double.IsNaN(window.Left) && !Double.IsNaN(window.Top))
             {
@@ -213,9 +228,9 @@ namespace Clowd
 
             var border = GetWindowBorderSize(window);
             if (!Double.IsNaN(content.MinHeight))
-                window.MinHeight = content.MinHeight + border.Height;
+                window.MinHeight = content.MinHeight + border.TotalBorderHeight;
             if (!Double.IsNaN(content.MinWidth))
-                window.MinWidth = content.MinWidth + border.Width;
+                window.MinWidth = content.MinWidth + border.TotalBorderWidth;
 
             content.Width = Double.NaN;
             content.Height = Double.NaN;
@@ -250,16 +265,33 @@ namespace Clowd
         }
         public static Window GetWindow(Type contentType)
         {
-            foreach (Window wnd in Application.Current.Windows)
-            {
-                var tcc = wnd.Content as Controls.TransitioningContentControl;
-                if (tcc != null)
-                {
-                    if (tcc.Content.GetType() == contentType)
-                        return wnd;
-                }
-            }
-            return null;
+            var windows = Application.Current.Windows.Cast<Window>().ToArray();
+            return (
+                from window in Application.Current.Windows.Cast<Window>()
+                let content = window.Content as ContentControl
+                where content != null && content.Content != null
+                where content.Content.GetType() == contentType
+                select window
+            ).LastOrDefault();
+
+            //return Application.Current.Windows
+            //    .Cast<Window>()
+            //    .Select(w => w.Content as ContentControl)
+            //    .Where(c => c != null)
+            //    .Where(c => c.Content.GetType() == contentType)
+            //    .LastOrDefault();
+
+
+            //foreach (Window wnd in Application.Current.Windows)
+            //{
+            //    var tcc = wnd.Content as Controls.TransitioningContentControl;
+            //    if (tcc != null)
+            //    {
+            //        if (tcc.Content.GetType() == contentType)
+            //            return wnd;
+            //    }
+            //}
+            //return null;
         }
 
         public static T GetContent<T>(Window window) where T : FrameworkElement
@@ -270,7 +302,7 @@ namespace Clowd
             return null;
         }
 
-        private static Size GetWindowBorderSize(Window wnd)
+        public static BorderSize GetWindowBorderSize(Window wnd)
         {
             double titleHeight, borderWidth;
             if (wnd is MetroWindow)
@@ -285,7 +317,20 @@ namespace Clowd
                 borderWidth = SystemParameters.ResizeFrameVerticalBorderWidth;
             }
 
-            return new Size(borderWidth * 2, borderWidth + titleHeight);
+            return new BorderSize(titleHeight, borderWidth);
+        }
+
+        public class BorderSize
+        {
+            public double TitleBarHeight { get; set; }
+            public double BorderEdgeSize { get; set; }
+            public double TotalBorderWidth => BorderEdgeSize * 2;
+            public double TotalBorderHeight => TitleBarHeight + BorderEdgeSize;
+            public BorderSize(double titleBar, double borderEdge)
+            {
+                TitleBarHeight = titleBar;
+                BorderEdgeSize = borderEdge;
+            }
         }
     }
 }
