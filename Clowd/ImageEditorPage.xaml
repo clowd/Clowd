@@ -382,6 +382,35 @@
                     CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}"
                     DefaultValue="1" />
             </StackPanel>
+            <StackPanel x:Name="panelBackground">
+                <TextBlock VerticalAlignment="Center">
+                    <Run>Background:</Run>
+                </TextBlock>
+                <Border
+                    Width="22"
+                    Height="22"
+                    Margin="4,0,0,0"
+                    BorderBrush="Black"
+                    BorderThickness="1">
+                    <Border
+                        BorderBrush="White"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        MouseDown="backgroundColor_Click">
+                        <Border.Background>
+                            <DrawingBrush
+                                TileMode="Tile"
+                                Viewport="0,0,10,10"
+                                ViewportUnits="Absolute">
+                                <DrawingBrush.Drawing>
+                                    <GeometryDrawing Brush="LightGray" Geometry="M0,0 H1 V1 H2 V2 H1 V1 H0Z" />
+                                </DrawingBrush.Drawing>
+                            </DrawingBrush>
+                        </Border.Background>
+                        <Rectangle Fill="{Binding ElementName=drawingCanvas, Path=ArtworkBackground, Mode=OneWay}" />
+                    </Border>
+                </Border>
+            </StackPanel>
             <StackPanel x:Name="panelStroke">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Stroke:</Run>
