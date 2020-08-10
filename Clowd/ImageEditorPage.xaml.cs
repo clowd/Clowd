@@ -1,10 +1,8 @@
-﻿using Clowd.Utilities;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Drawing.Imaging;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -16,65 +14,148 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using Clowd.Interop.Gdi32;
-using CS.Util.Extensions;
+using Clowd.Controls;
+using Clowd.Utilities;
+using Cyotek.Windows.Forms;
+using DrawToolsLib;
 using DrawToolsLib.Graphics;
+using RT.Util;
 using ScreenVersusWpf;
 
 namespace Clowd
 {
-    [PropertyChanged.ImplementPropertyChanged]
     public partial class ImageEditorPage : TemplatedControl
     {
-        public override string Title => "Editor";
-        public bool ShowActionLabels { get; set; } = true;
+        public override string Title => "Edit";
 
         private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
-        private BitmapSource _image;
-        private Size _imageSize;
-        private double _actionBarSize = double.NaN;
-        private bool _actionBarLabels;
+        private BitmapSource _initialImage;
+        private WpfRect? _initialBounds;
 
-        public ImageEditorPage() : this(null)
-        {
-        }
-
-        public ImageEditorPage(BitmapSource initImage)
+        private ImageEditorPage()
         {
             InitializeComponent();
             drawingCanvas.SetResourceReference(DrawToolsLib.DrawingCanvas.HandleColorProperty, "AccentColor");
-            drawingCanvas.ObjectColor = Colors.Red;
-            drawingCanvas.LineWidth = 2;
-            this.Loaded += ImageEditorPage_Loaded;
-            this.SizeChanged += ImageEditorPage_SizeChanged;
-            _image = initImage;
-            if (_image != null)
+
+            // register tool changed listener
+            var toolDescriptor = DependencyPropertyDescriptor.FromProperty(DrawingCanvas.ToolProperty, typeof(DrawingCanvas));
+            toolDescriptor.AddValueChanged(drawingCanvas, drawingCanvas_ToolChanged);
+
+            this.Loaded += ImageEditorPage2_Loaded;
+            drawingCanvas.MouseUp += drawingCanvas_MouseUp;
+            SyncToolState();
+        }
+
+        private void ImageEditorPage2_Loaded(object sender, RoutedEventArgs e)
+        {
+            Keyboard.Focus(buttonFocus);
+        }
+
+        public static void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null)
+        {
+            ImageEditorPage page = null;
+            Window window = TemplatedWindow.GetWindow(typeof(ImageEditorPage));
+
+            if (window != null)
             {
-                _imageSize = new Size(ScreenTools.ScreenToWpf(initImage.PixelWidth),
-                    ScreenTools.ScreenToWpf(initImage.Height));
-                var graphic = new GraphicImage(drawingCanvas, new Rect(new Point(0, 0), _imageSize), _image);
-                drawingCanvas.AddGraphic(graphic);
+                if ((page = TemplatedWindow.GetContent<ImageEditorPage>(window)) != null)
+                {
+                    var memory = App.Current.Settings.EditorSettings.OpenCaptureInExistingEditor;
+                    var result = window.ShowPrompt(
+                        MessageBoxIcon.Information,
+                        "There is already an editor open, would you like to insert the captured image here or open a new window?",
+                        "Open new window?",
+                        "Insert",
+                        "Open new window",
+                        ref memory);
+                    App.Current.Settings.EditorSettings.OpenCaptureInExistingEditor = memory;
+                    if (result)
+                    {
+                        page.AddImage(image);
+                        window.Activate();
+                        return;
+                    }
+                }
+            }
+
+            page = new ImageEditorPage();
+            page._initialImage = image;
+            page._initialBounds = screenBounds;
+            window = TemplatedWindow.CreateWindow("Edit Capture", page);
+            page.DoWindowFit(window);
+            window.Show();
+        }
+
+        protected override async void OnActivated(Window wnd)
+        {
+            if (_initialImage == null)
+                return;
+
+            AddImage(_initialImage);
+
+            var wasSidebarWidth = toolBar.ActualWidth;
+            var wasActionRowHeight = propertiesBar.ActualHeight;
+
+            bool fit = DoWindowFit(wnd);
+            if (propertiesBar.ActualHeight != wasActionRowHeight || toolBar.ActualWidth != wasSidebarWidth)
+                fit = DoWindowFit(wnd); // re-fit in case the action row has reflowed
+
+            // just doing this to force a thread context switch.
+            // by the time we get back on to the UI thread the window will be done resizing.
+            await Task.Delay(10);
+
+            if (fit)
+                drawingCanvas.ZoomPanActualSize();
+            else
+                drawingCanvas.ZoomPanFit();
+        }
+
+        #region Helpers
+
+        private void AddImage(BitmapSource img)
+        {
+            if (img == null)
+                return;
+
+            var width = ScreenTools.ScreenToWpf(img.PixelWidth);
+            var height = ScreenTools.ScreenToWpf(img.PixelHeight);
+            var graphic = new GraphicImage(drawingCanvas, new Rect(
+                drawingCanvas.WorldOffset.X - (width / 2),
+                drawingCanvas.WorldOffset.Y - (height / 2),
+                width, height), img);
+
+            drawingCanvas.AddGraphic(graphic);
+        }
+
+        private bool DoWindowFit(Window wnd)
+        {
+            if (_initialImage == null)
+                return true;
+
+            var imageSize = new Size(ScreenTools.ScreenToWpf(_initialImage.PixelWidth), ScreenTools.ScreenToWpf(_initialImage.Height));
+            var capturePadding = App.Current.Settings.EditorSettings.CapturePadding;
+            var contentOffsetX = capturePadding + Math.Max(30, toolBar.ActualWidth);
+            var contentOffsetY = capturePadding + Math.Max(30, propertiesBar.ActualHeight);
+
+            var contentSize = new Size(imageSize.Width + contentOffsetX + capturePadding, imageSize.Height + contentOffsetY + capturePadding);
+
+            if (_initialBounds != null)
+            {
+                //var w = TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped));
+                //var rectPos = SelectionRectangle;
+                //var primaryScreen = ScreenTools.Screens.First().Bounds.ToWpfRect();
+                //w.Left = rectPos.Left - primaryScreen.Left - App.Current.Settings.EditorSettings.CapturePadding - 7;
+                //w.Top = rectPos.Top - primaryScreen.Top - App.Current.Settings.EditorSettings.CapturePadding - 60;
+                //w.Show();
+
+                return TemplatedWindow.SizeToContent(wnd, contentSize, _initialBounds.Value.Left - contentOffsetX, _initialBounds.Value.Top - contentOffsetY);
+            }
+            else
+            {
+                return TemplatedWindow.SizeToContent(wnd, contentSize);
             }
         }
 
-        private void MoveCommandsToChrome()
-        {
-            var window = TemplatedWindow.GetWindow(this);
-            if (window is MahApps.Metro.Controls.MetroWindow)
-            {
-                window.Title = "";
-                var metro = window as MahApps.Metro.Controls.MetroWindow;
-                var left = new MahApps.Metro.Controls.WindowCommands();
-                var right = new MahApps.Metro.Controls.WindowCommands();
-                rootGrid.Children.Remove(actionBar);
-                rootGrid.Children.Remove(toolBar);
-                left.Items.Add(actionBar);
-                right.Items.Add(toolBar);
-                metro.LeftWindowCommands = left;
-                metro.RightWindowCommands = right;
-                rootGrid.RowDefinitions[0].Height = new GridLength(0);
-            }
-        }
         private bool VerifyArtworkExists()
         {
             var b = drawingCanvas.GetArtworkBounds();
@@ -85,6 +166,7 @@ namespace Clowd
             }
             return true;
         }
+
         private DrawingVisual GetRenderedVisual()
         {
             var bounds = drawingCanvas.GetArtworkBounds();
@@ -100,6 +182,7 @@ namespace Clowd
             }
             return vs;
         }
+
         private RenderTargetBitmap GetRenderedBitmap()
         {
             var bounds = drawingCanvas.GetArtworkBounds();
@@ -121,6 +204,7 @@ namespace Clowd
             drawingCanvas.Draw(null, bmp, transform, false);
             return bmp;
         }
+
         private PngBitmapEncoder GetRenderedPng()
         {
             var enc = new PngBitmapEncoder();
@@ -128,143 +212,130 @@ namespace Clowd
             return enc;
         }
 
-        protected override async void OnActivated(Window wnd)
+        private void SyncToolState()
         {
-            if (_imageSize.IsEmpty || _imageSize.IsDefault())
+            var selection = drawingCanvas.Selection.ToArray();
+            panelAngle.Visibility = Visibility.Collapsed;
+            panelFont.Visibility = Visibility.Collapsed;
+
+            var actionType = drawingCanvas.GetToolActionType(drawingCanvas.Tool);
+            if (selection.Length == 0 && (actionType == DrawToolsLib.ToolActionType.Cursor || actionType == ToolActionType.Drawing))
+            {
+                this.labelSelectionType.Text = "Tool: ";
+                this.labelTool.Text = drawingCanvas.Tool.ToString();
+                panelColor.Visibility = Visibility.Collapsed;
+                panelStroke.Visibility = Visibility.Collapsed;
                 return;
-
-            var padding = App.Current.Settings.EditorSettings.CapturePadding;
-            var sidebarWidth = rightSidepanel.Visibility != Visibility.Visible ? 0 : (ActualWidth - RightSidebarX() + 2 * RightSidebarMargin());
-            var wasActionRowHeight = actionRow.ActualHeight;
-            bool doFit() => TemplatedWindow.SizeToContent(wnd, new Size(_imageSize.Width + padding * 2 + sidebarWidth,
-                _imageSize.Height + actionRow.ActualHeight + padding * 2));
-            bool fit = doFit();
-            if (actionRow.ActualHeight != wasActionRowHeight)
-                fit = doFit(); // re-fit in case the action row has reflowed
-
-            // just doing this to force a thread context switch.
-            // by the time we get back on to the UI thread the window will be done resizing.
-            await Task.Delay(10);
-
-            if (fit)
-                ZoomActual_Clicked(null, null);
-            else
-                ZoomFit_Clicked(null, null);
-        }
-
-        private void ImageEditorPage_Loaded(object sender, RoutedEventArgs e)
-        {
-            // you need to focus a button, or some other control that holds keyboard focus.
-            // if you don't do this, input bindings / keyboard shortcuts won't work.
-            Keyboard.Focus(copyButton);
-            ZoomFit_Clicked(null, null);
-
-            _actionBarSize = actionBar.ActualWidth;
-            _actionBarLabels = ShowActionLabels = true;
-        }
-
-        private void ImageEditorPage_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            // probably need to bring this back soon, just ommiting for now and recording in source control.
-
-            //if (!Double.IsNaN(_actionBarSize) && rootGrid.ActualWidth < _actionBarSize && ShowActionLabels)
-            //{
-            //    ShowActionLabels = false;
-            //}
-            //else if(_actionBarLabels && rootGrid.ActualWidth > _actionBarSize && !ShowActionLabels)
-            //{
-            //    ShowActionLabels = true;
-            //}
-
-            if (toolBar.ActualWidth + actionBar.ActualWidth > rootGrid.ActualWidth)
-            {
-                actionRow.Height = new GridLength(61);
-                toolBar.HorizontalAlignment = HorizontalAlignment.Left;
             }
             else
             {
-                actionRow.Height = new GridLength(30);
-                toolBar.HorizontalAlignment = HorizontalAlignment.Right;
+                panelColor.Visibility = Visibility.Visible;
+                panelStroke.Visibility = Visibility.Visible;
             }
-        }
 
-        private void Font_Clicked(object sender, RoutedEventArgs e)
-        {
-            System.Windows.Forms.FontDialog dlg = new System.Windows.Forms.FontDialog();
-            float wfSize = (float)ScreenTools.ScreenToWpf(drawingCanvas.TextFontSize) / 96 * 72;
-            System.Drawing.FontStyle wfStyle;
-            if (drawingCanvas.TextFontStyle == FontStyles.Italic)
-                wfStyle = System.Drawing.FontStyle.Italic;
+            if (selection.Length == 1)
+            {
+                var obj = selection.First();
+                this.labelSelectionType.Text = "Selection: ";
+
+                var gtxt = obj.GetType().Name;
+
+                if (gtxt.StartsWith("Graphic"))
+                    gtxt = gtxt.Substring(7);
+
+                this.labelTool.Text = gtxt;
+
+                if (obj is GraphicImage)
+                {
+                    panelColor.Visibility = Visibility.Collapsed;
+                    panelStroke.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                if (obj.GetType().GetProperty("Angle") != null)
+                {
+                    panelAngle.Visibility = Visibility.Visible;
+                    var angleBinding = new Binding("Angle");
+                    angleBinding.Source = obj;
+                    angleBinding.Mode = BindingMode.TwoWay;
+                    angleBinding.Converter = new Converters.AngleConverter();
+                    textObjectAngle.SetBinding(TextBox.TextProperty, angleBinding);
+                    var angleResetBinding = new Binding("Angle");
+                    angleResetBinding.Source = obj;
+                    angleResetBinding.Mode = BindingMode.TwoWay;
+                    resetObjectAngle.SetBinding(ResetDefaultButton.CurrentValueProperty, angleResetBinding);
+                }
+
+                if (obj is GraphicText txt)
+                {
+                    panelFont.Visibility = Visibility.Visible;
+                    drawingCanvas.TextFontFamilyName = txt.FontName;
+                    drawingCanvas.TextFontSize = txt.FontSize;
+                    drawingCanvas.TextFontStretch = txt.FontStretch;
+                    drawingCanvas.TextFontStyle = txt.FontStyle;
+                    drawingCanvas.TextFontWeight = txt.FontWeight;
+                }
+
+                if (obj is GraphicBase g)
+                {
+                    drawingCanvas.LineWidth = g.LineWidth;
+                    drawingCanvas.ObjectColor = g.ObjectColor;
+                }
+            }
+            else if (selection.Length > 1)
+            {
+                this.labelSelectionType.Text = "Selection: ";
+                this.labelTool.Text = "Multiple";
+            }
             else
-                wfStyle = System.Drawing.FontStyle.Regular;
-            if (drawingCanvas.TextFontWeight.ToOpenTypeWeight() > 400)
-                wfStyle |= System.Drawing.FontStyle.Bold;
-            dlg.Font = new System.Drawing.Font(drawingCanvas.TextFontFamilyName, wfSize, wfStyle);
-            dlg.FontMustExist = true;
-            dlg.MaxSize = 64;
-            dlg.MinSize = 8;
-            dlg.ShowColor = false;
-            dlg.ShowEffects = false;
-            dlg.ShowHelp = false;
-            dlg.AllowVerticalFonts = false;
-            dlg.AllowVectorFonts = true;
-            dlg.AllowScriptChange = false;
-            if (dlg.ShowDialog(Window.GetWindow(this)) == System.Windows.Forms.DialogResult.OK)
             {
-                drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
-                drawingCanvas.TextFontSize = ScreenTools.WpfToScreen(dlg.Font.Size / 72 * 96);
-                drawingCanvas.TextFontStyle = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Italic) ? FontStyles.Italic : FontStyles.Normal;
-                drawingCanvas.TextFontWeight = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Bold) ? FontWeights.Bold : FontWeights.Normal;
+                this.labelSelectionType.Text = "Tool: ";
+                this.labelTool.Text = drawingCanvas.Tool.ToString();
+
+                if (drawingCanvas.Tool == ToolType.Text)
+                    panelFont.Visibility = Visibility.Visible;
+
+                if (actionType != ToolActionType.Cursor)
+                {
+                    var tools = App.Current.Settings.EditorSettings.ToolSettings;
+                    if (!tools.ContainsKey(drawingCanvas.Tool))
+                        tools[drawingCanvas.Tool] = new SavedToolSettings();
+                    var settings = tools[drawingCanvas.Tool];
+
+                    drawingCanvas.LineWidth = settings.LineWidth;
+                    drawingCanvas.ObjectColor = settings.ObjectColor;
+                    drawingCanvas.TextFontFamilyName = settings.FontFamily;
+                    drawingCanvas.TextFontSize = settings.FontSize;
+                    drawingCanvas.TextFontStretch = settings.FontStretch;
+                    drawingCanvas.TextFontStyle = settings.FontStyle;
+                    drawingCanvas.TextFontWeight = settings.FontWeight;
+                }
             }
         }
 
-        private void Brush_Clicked(object sender, RoutedEventArgs e)
+        private Color ShowSelectNewColorDialog(Color initial)
         {
-            System.Windows.Forms.ColorDialog dlg = new System.Windows.Forms.ColorDialog();
-            dlg.AnyColor = true;
-            dlg.FullOpen = true;
-            dlg.ShowHelp = false;
-            dlg.CustomColors = App.Current.Settings.CustomColors;
-            var initial = drawingCanvas.ObjectColor;
-            dlg.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
-            if (dlg.ShowDialog(Window.GetWindow(this)) == System.Windows.Forms.DialogResult.OK)
+            ColorPickerDialog dialog = new ColorPickerDialog();
+            dialog.Text = "Clowd - Color Picker";
+            dialog.ShowAlphaChannel = true;
+            dialog.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            dialog.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
+            var result = dialog.ShowDialog(new Extensions.Wpf32Window(TemplatedWindow.GetWindow(this)));
+
+            if (result == System.Windows.Forms.DialogResult.OK)
             {
-                App.Current.Settings.CustomColors = dlg.CustomColors;
-                App.Current.Settings.Save();
-                var final = dlg.Color;
-                drawingCanvas.ObjectColor = Color.FromArgb(final.A, final.R, final.G, final.B);
+                var final = dialog.Color;
+                return Color.FromArgb(final.A, final.R, final.G, final.B);
+            }
+            else
+            {
+                return initial;
             }
         }
 
-        private double RightSidebarX()
-        {
-            if (rightSidepanel.Visibility != Visibility.Visible)
-                return 0;
-            return rightSidepanel.TransformToVisual(this).Transform(new Point(0, 0)).X;
-        }
+        #endregion
 
-        private double RightSidebarMargin()
-        {
-            if (rightSidepanel.Visibility != Visibility.Visible)
-                return 0;
-            return ActualWidth - rightSidepanel.TransformToVisual(this).Transform(new Point(rightSidepanel.Width, 0)).X;
-        }
-
-        private void ZoomFit_Clicked(object sender, RoutedEventArgs e)
-        {
-            double? widthOverride = null;
-            if (rightSidepanel.Visibility == Visibility.Visible)
-                widthOverride = RightSidebarX() - RightSidebarMargin();
-            drawingCanvas.ZoomPanFit(widthOverride);
-        }
-
-        private void ZoomActual_Clicked(object sender, RoutedEventArgs e)
-        {
-            double? widthOverride = null;
-            if (rightSidepanel.Visibility == Visibility.Visible)
-                widthOverride = RightSidebarX();
-            drawingCanvas.ZoomPanActualSize(widthOverride);
-        }
+        #region Commands
 
         private void PrintCommand(object sender, ExecutedRoutedEventArgs e)
         {
@@ -379,6 +450,8 @@ namespace Clowd
         {
             if (Mouse.LeftButton == MouseButtonState.Pressed)
                 return;
+            if (drawingCanvas.CanUnselectAll)
+                drawingCanvas.UnselectAll();
             var tool = (DrawToolsLib.ToolType)Enum.Parse(typeof(DrawToolsLib.ToolType), (string)e.Parameter);
             drawingCanvas.Tool = tool;
         }
@@ -389,15 +462,7 @@ namespace Clowd
                 return;
 
             var img = ClipboardEx.GetImage();
-            if (img == null)
-                return;
-            var width = ScreenTools.ScreenToWpf(img.PixelWidth);
-            var height = ScreenTools.ScreenToWpf(img.PixelHeight);
-            var graphic = new GraphicImage(drawingCanvas, new Rect(
-                drawingCanvas.WorldOffset.X - (width / 2),
-                drawingCanvas.WorldOffset.Y - (height / 2),
-                width, height), img);
-            drawingCanvas.AddGraphic(graphic);
+            AddImage(img);
         }
 
         private void SelectAllCommand(object sender, ExecutedRoutedEventArgs e)
@@ -405,16 +470,50 @@ namespace Clowd
             drawingCanvas.SelectAll();
         }
 
+        #endregion
+
+        #region Events
+
         private void rootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (Keyboard.FocusedElement is TextBox)
+            if (Keyboard.FocusedElement is TextBox textBox)
+            {
+                if (e.Key == Key.Return && Keyboard.Modifiers == ModifierKeys.None)
+                {
+                    e.Handled = true;
+                    Keyboard.Focus(buttonFocus);
+                }
+
+                // Handle A-Z here, so that keybindings to those keys will be handled here
+                if ((int)e.Key >= 44 && (int)e.Key <= 69 && Keyboard.Modifiers == ModifierKeys.None)
+                {
+                    e.Handled = true;
+                    var key = (char)KeyInterop.VirtualKeyFromKey(e.Key);
+                    string str = key.ToString().ToLower();
+                    if (Console.CapsLock)
+                        str = str.ToUpper();
+
+                    if (!String.IsNullOrWhiteSpace(str))
+                    {
+                        var comp = new TextComposition(InputManager.Current, textBox, str);
+                        textBox.RaiseEvent(new TextCompositionEventArgs(InputManager.Current.PrimaryKeyboardDevice, comp)
+                        {
+                            RoutedEvent = TextCompositionManager.TextInputEvent
+                        });
+                        e.Handled = true;
+                        return;
+                    }
+                }
                 return;
+            }
             if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool == null && Mouse.LeftButton != MouseButtonState.Pressed)
             {
                 _shiftPanPreviousTool = drawingCanvas.Tool;
                 drawingCanvas.Tool = DrawToolsLib.ToolType.None;
-                shiftIndicator.Background = (Brush)App.Current.Resources["AccentColorBrush"];
-                shiftIndicator.Opacity = 1;
+                // i need to change a random property here so WPF updates. really weird, fix it some day?
+                buttonFocus.Opacity = 0.02;
+                //shiftIndicator.Background = (Brush)App.Current.Resources["AccentColorBrush"];
+                //shiftIndicator.Opacity = 1;
             }
         }
 
@@ -424,9 +523,78 @@ namespace Clowd
             {
                 drawingCanvas.Tool = _shiftPanPreviousTool.Value;
                 _shiftPanPreviousTool = null;
-                shiftIndicator.Background = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-                shiftIndicator.Opacity = 0.8;
+                // i need to change a random property here so WPF updates. really weird, fix it some day?
+                buttonFocus.Opacity = 0.03;
+                //shiftIndicator.Background = new SolidColorBrush(Color.FromRgb(112, 112, 112));
+                //shiftIndicator.Opacity = 0.8;
             }
         }
+
+        private void drawingCanvas_ToolChanged(object sender, EventArgs e)
+        {
+            SyncToolState();
+        }
+
+        private void drawingCanvas_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            SyncToolState();
+        }
+
+        private void objectColor_Click(object sender, MouseButtonEventArgs e)
+        {
+            drawingCanvas.ObjectColor = ShowSelectNewColorDialog(drawingCanvas.ObjectColor);
+            if (drawingCanvas.SelectionCount == 0)
+                App.Current.Settings.EditorSettings.ToolSettings[drawingCanvas.Tool].ObjectColor = drawingCanvas.ObjectColor;
+        }
+
+        private void font_Click(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Forms.FontDialog dlg = new System.Windows.Forms.FontDialog();
+            float wfSize = (float)ScreenTools.ScreenToWpf(drawingCanvas.TextFontSize) / 96 * 72;
+            System.Drawing.FontStyle wfStyle;
+            if (drawingCanvas.TextFontStyle == FontStyles.Italic)
+                wfStyle = System.Drawing.FontStyle.Italic;
+            else
+                wfStyle = System.Drawing.FontStyle.Regular;
+            if (drawingCanvas.TextFontWeight.ToOpenTypeWeight() > 400)
+                wfStyle |= System.Drawing.FontStyle.Bold;
+            dlg.Font = new System.Drawing.Font(drawingCanvas.TextFontFamilyName, wfSize, wfStyle, System.Drawing.GraphicsUnit.Point);
+            dlg.FontMustExist = true;
+            dlg.MaxSize = 64;
+            dlg.MinSize = 8;
+            dlg.ShowColor = false;
+            dlg.ShowEffects = false;
+            dlg.ShowHelp = false;
+            dlg.AllowVerticalFonts = false;
+            dlg.AllowVectorFonts = true;
+            dlg.AllowScriptChange = false;
+            if (dlg.ShowDialog(Window.GetWindow(this)) == System.Windows.Forms.DialogResult.OK)
+            {
+                drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
+                drawingCanvas.TextFontSize = ScreenTools.WpfToScreen(dlg.Font.SizeInPoints / 72 * 96);
+                drawingCanvas.TextFontStyle = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Italic) ? FontStyles.Italic : FontStyles.Normal;
+                drawingCanvas.TextFontWeight = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Bold) ? FontWeights.Bold : FontWeights.Normal;
+
+                if (drawingCanvas.SelectionCount == 0)
+                {
+                    var toolset = App.Current.Settings.EditorSettings.ToolSettings[drawingCanvas.Tool];
+                    toolset.FontFamily = drawingCanvas.TextFontFamilyName;
+                    toolset.FontSize = drawingCanvas.TextFontSize;
+                    toolset.FontStyle = drawingCanvas.TextFontStyle;
+                    toolset.FontWeight = drawingCanvas.TextFontWeight;
+                }
+            }
+        }
+
+        private void strokeWidth_Changed(object sender, TextChangedEventArgs e)
+        {
+            if (drawingCanvas.SelectionCount == 0)
+            {
+                var toolset = App.Current.Settings.EditorSettings.ToolSettings[drawingCanvas.Tool];
+                toolset.LineWidth = drawingCanvas.LineWidth;
+            }
+        }
+
+        #endregion
     }
 }

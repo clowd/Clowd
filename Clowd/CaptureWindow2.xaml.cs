@@ -269,12 +269,7 @@ namespace Clowd
             var cropped = CropBitmap();
             Close();
 
-            var w = TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped));
-            var rectPos = SelectionRectangle;
-            var primaryScreen = ScreenTools.Screens.First().Bounds.ToWpfRect();
-            w.Left = rectPos.Left - primaryScreen.Left - App.Current.Settings.EditorSettings.CapturePadding - 7;
-            w.Top = rectPos.Top - primaryScreen.Top - App.Current.Settings.EditorSettings.CapturePadding - 60;
-            w.Show();
+            ImageEditorPage.ShowNewEditor(cropped, SelectionRectangle);
         }
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {

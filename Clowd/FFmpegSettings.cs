@@ -93,8 +93,8 @@ namespace Clowd
 
     public class FFmpegDirectShowAudioDevice
     {
-        public string FriendlyName { get; set; }
-        public string DevicePath { get; set; }
+        public string FriendlyName { get; private set; }
+        public string DevicePath { get; private set; }
 
         public static FFmpegDirectShowAudioDevice[] GetDevices()
         {

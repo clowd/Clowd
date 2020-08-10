@@ -26,9 +26,7 @@ namespace Clowd.Utilities
             Task.Delay(milliseconds).ContinueWith(task =>
             {
                 action();
-            },
-                tokenSrc.Token
-            );
+            }, tokenSrc.Token);
         }
 
         public void Cancel(CancellationTokenSource source)
