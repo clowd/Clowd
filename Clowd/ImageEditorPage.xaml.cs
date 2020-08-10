@@ -318,26 +318,6 @@ namespace Clowd
             }
         }
 
-        private Color ShowSelectNewColorDialog(Color initial)
-        {
-            ColorPickerDialog dialog = new ColorPickerDialog();
-            dialog.Text = "Clowd - Color Picker";
-            dialog.ShowAlphaChannel = true;
-            dialog.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            dialog.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
-            var result = dialog.ShowDialog(new Extensions.Wpf32Window(TemplatedWindow.GetWindow(this)));
-
-            if (result == System.Windows.Forms.DialogResult.OK)
-            {
-                var final = dialog.Color;
-                return Color.FromArgb(final.A, final.R, final.G, final.B);
-            }
-            else
-            {
-                return initial;
-            }
-        }
-
         #endregion
 
         #region Commands
@@ -545,17 +525,17 @@ namespace Clowd
             SyncToolState();
         }
 
-        private void objectColor_Click(object sender, MouseButtonEventArgs e)
+        private async void objectColor_Click(object sender, MouseButtonEventArgs e)
         {
-            drawingCanvas.ObjectColor = ShowSelectNewColorDialog(drawingCanvas.ObjectColor);
+            drawingCanvas.ObjectColor = await this.ShowColorDialog(drawingCanvas.ObjectColor);
             if (drawingCanvas.SelectionCount == 0)
                 App.Current.Settings.EditorSettings.ToolSettings[drawingCanvas.Tool].ObjectColor = drawingCanvas.ObjectColor;
         }
 
-        private void backgroundColor_Click(object sender, MouseButtonEventArgs e)
+        private async void backgroundColor_Click(object sender, MouseButtonEventArgs e)
         {
             var oldColor = drawingCanvas.ArtworkBackground as SolidColorBrush;
-            var newColor = ShowSelectNewColorDialog(oldColor?.Color ?? Colors.White);
+            var newColor = await this.ShowColorDialog(oldColor?.Color ?? Colors.White);
             drawingCanvas.ArtworkBackground = new SolidColorBrush(newColor);
             App.Current.Settings.EditorSettings.CanvasBackground = newColor;
         }
