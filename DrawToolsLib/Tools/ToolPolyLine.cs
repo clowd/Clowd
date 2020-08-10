@@ -11,6 +11,8 @@ namespace DrawToolsLib.Tools
 {
     internal class ToolPolyLine : ToolBase
     {
+        internal override ToolActionType ActionType => ToolActionType.Object;
+
         private GraphicPolyLine newPolyLine;
 
         public ToolPolyLine() : base(new Cursor(new MemoryStream(Properties.Resources.Pencil)))
