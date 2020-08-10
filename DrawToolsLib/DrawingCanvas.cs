@@ -829,6 +829,11 @@ namespace DrawToolsLib
             AddCommandToHistory(new CommandAdd(g));
         }
 
+        public ToolActionType GetToolActionType(ToolType type)
+        {
+            return this.tools[(int)type].ActionType;
+        }
+
         /// <summary>
         /// Gets a bounding rectangle of all of the current graphics objects (selection handles not included)
         /// </summary>
@@ -1294,34 +1299,18 @@ namespace DrawToolsLib
         /// <summary>
         /// Get number of selected graphic objects
         /// </summary>
-		internal int SelectionCount
-        {
-            get
-            {
-                int n = 0;
-
-                foreach (GraphicBase g in this.GraphicsList)
-                {
-                    if (g.IsSelected)
-                    {
-                        n++;
-                    }
-                }
-
-                return n;
-            }
-        }
+		public int SelectionCount => Selection.Count();
 
         /// <summary>
         /// Return list of graphics
         /// </summary>
-        internal GraphicCollection GraphicsList => graphicsList;
+        public GraphicCollection GraphicsList => graphicsList;
 
         /// <summary>
         /// Returns INumerable which may be used for enumeration
         /// of selected objects.
         /// </summary>
-        internal IEnumerable<GraphicBase> Selection
+        public IEnumerable<GraphicBase> Selection
         {
             get
             {
@@ -1333,7 +1322,6 @@ namespace DrawToolsLib
                     }
                 }
             }
-
         }
 
         #endregion Internal Properties

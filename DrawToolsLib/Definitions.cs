@@ -4,9 +4,6 @@ using System.Text;
 
 namespace DrawToolsLib
 {
-    /// <summary>
-    /// Defines drawing tool
-    /// </summary>
     public enum ToolType
     {
         None,
@@ -23,9 +20,13 @@ namespace DrawToolsLib
         Max
     };
 
-    /// <summary>
-    /// Context menu command types
-    /// </summary>
+    public enum ToolActionType
+    {
+        Cursor,
+        Object,
+        Drawing,
+    }
+
     internal enum ContextMenuCommand
     {
         SelectAll,

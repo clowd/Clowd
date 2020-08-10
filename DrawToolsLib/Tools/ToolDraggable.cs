@@ -32,6 +32,8 @@ namespace DrawToolsLib.Tools
             _end = end;
         }
 
+        internal override ToolActionType ActionType => ToolActionType.Object;
+
         public override void OnMouseDown(DrawingCanvas canvas, MouseButtonEventArgs e)
         {
             base.OnMouseDown(canvas, e);

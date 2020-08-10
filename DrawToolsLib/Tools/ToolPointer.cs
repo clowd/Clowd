@@ -11,6 +11,8 @@ namespace DrawToolsLib.Tools
 {
     internal class ToolPointer : ToolBase
     {
+        internal override ToolActionType ActionType => ToolActionType.Cursor;
+
         private enum SelectionMode
         {
             None,
