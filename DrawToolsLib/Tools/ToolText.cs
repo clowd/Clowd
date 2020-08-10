@@ -54,9 +54,7 @@ namespace DrawToolsLib.Tools
         /// </summary>
         public override void OnMouseUp(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
-            drawingCanvas.Tool = ToolType.Pointer;
-            drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
-            drawingCanvas.ReleaseMouseCapture();
+            base.OnMouseUp(drawingCanvas, e);
 
             if (drawingCanvas.Count > 0)
             {
