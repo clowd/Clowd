@@ -37,6 +37,17 @@ namespace Clowd.Interop
             return result;
         }
 
+        public static void SetNativeEnabled(IntPtr handle, bool enabled)
+        {
+            USER32.SetWindowLong(handle, WindowLongIndex.GWL_STYLE, USER32.GetWindowLong(handle, WindowLongIndex.GWL_STYLE) & ~(int)WindowStyles.WS_DISABLED | (enabled ? 0 : (int)WindowStyles.WS_DISABLED));
+        }
+
+        public static void SetNativeOwner(IntPtr child, IntPtr newOwner)
+        {
+            var oldOwner = USER32.GetWindowLong(child, WindowLongIndex.GWL_HWNDPARENT);
+            USER32.SetWindowLong(child, WindowLongIndex.GWL_HWNDPARENT, newOwner);
+        }
+
         /// <summary>
         /// Enumerates windows with the class name 'ToolbarWindow32'.
         /// </summary>

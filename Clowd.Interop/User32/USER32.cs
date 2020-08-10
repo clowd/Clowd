@@ -112,6 +112,9 @@ namespace Clowd.Interop
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetScrollInfo(IntPtr hwnd, int fnBar, ref SCROLLINFO lpsi);
@@ -213,8 +216,14 @@ namespace Clowd.Interop
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern long GetWindowLong(IntPtr hWnd, WindowLongIndex nIndex);
+        [DllImport("user32.dll")]
+        public static extern int GetWindowLong(IntPtr hWnd, WindowLongIndex nIndex);
+
+        [DllImport("user32.dll")]
+        public static extern int SetWindowLong(IntPtr hWnd, WindowLongIndex nIndex, int dwNewLong);
+
+        [DllImport("user32.dll")]
+        public static extern int SetWindowLong(IntPtr hWnd, WindowLongIndex nIndex, IntPtr dwNewLong);
 
         [DllImport("user32.dll")]
         public static extern IntPtr WindowFromPoint(POINT Point);
@@ -507,7 +516,8 @@ namespace Clowd.Interop
         GWL_EXSTYLE = -20,
         GWL_STYLE = -16,
         GWL_ID = -12,
-        GWL_WNDPROC = -4
+        GWL_WNDPROC = -4,
+        GWL_HWNDPARENT = -8,
     }
     /// <summary>
     /// SetWindowPos Flags

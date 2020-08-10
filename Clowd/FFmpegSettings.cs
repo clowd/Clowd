@@ -156,7 +156,7 @@ namespace Clowd
                 var isInstalled = IsLoopbackInstalled;
                 if (!isInstalled && value)
                 {
-                    MessageBoxEx.ShowSettingsPrompt(
+                    NiceDialog.ShowSettingsPrompt(
                         TemplatedWindow.GetWindow(typeof(SettingsPage)),
                         SettingsCategory.Windows,
                         $"You must install 'Windows/DirectShow Add-ons' before {App.ClowdAppName} is able to capture loopback audio");

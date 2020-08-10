@@ -4,7 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using Clowd.Interop;
+using Cyotek.Windows.Forms;
 using Ookii.Dialogs.Wpf;
+using ScreenVersusWpf;
 
 namespace Clowd.Utilities
 {
@@ -23,7 +28,7 @@ namespace Clowd.Utilities
         No = 2,
     }
 
-    public static class MessageBoxEx
+    public static class NiceDialog
     {
         //public static void ShowNotice(MessageBoxIcon icon, string content)
         //{
@@ -52,7 +57,7 @@ namespace Clowd.Utilities
                 var btn = new TaskDialogButton(ButtonType.Ok);
                 dialog.Buttons.Add(btn);
 
-                Show(wnd, dialog);
+                ShowTaskDialog(wnd, dialog);
             }
         }
 
@@ -86,7 +91,7 @@ namespace Clowd.Utilities
                 dialog.Buttons.Add(trueBtn);
                 dialog.Buttons.Add(falseBtn);
 
-                TaskDialogButton result = Show(wnd, dialog);
+                TaskDialogButton result = ShowTaskDialog(wnd, dialog);
                 return result == trueBtn;
             }
         }
@@ -113,7 +118,7 @@ namespace Clowd.Utilities
 
                 dialog.VerificationText = "Don't ask me this again";
 
-                TaskDialogButton result = Show(wnd, dialog);
+                TaskDialogButton result = ShowTaskDialog(wnd, dialog);
                 var ret = result == trueBtn;
 
                 if (dialog.IsVerificationChecked)
@@ -158,7 +163,101 @@ namespace Clowd.Utilities
             }
         }
 
-        private static TaskDialogButton Show(FrameworkElement wnd, TaskDialog dialog)
+        public static async Task<Color> ShowColorDialog(this FrameworkElement wnd, Color initial)
+        {
+            bool isFake;
+            var window = GetRealOrFakeWindow(wnd, out isFake);
+
+            ColorPickerDialog dialog = new ColorPickerDialog();
+            dialog.Text = "Clowd - Color Picker";
+            dialog.ShowAlphaChannel = true;
+            dialog.StartPosition = isFake ? System.Windows.Forms.FormStartPosition.CenterScreen : System.Windows.Forms.FormStartPosition.CenterParent;
+            dialog.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
+
+            await FakeShowWinFormAsDialog(window, dialog);
+
+            var result = dialog.DialogResult;
+
+            if (isFake)
+                window.Close();
+
+            if (result == System.Windows.Forms.DialogResult.OK)
+            {
+                var final = dialog.Color;
+                return Color.FromArgb(final.A, final.R, final.G, final.B);
+            }
+            else
+            {
+                return initial;
+            }
+        }
+
+        private static async Task FakeShowWinFormAsDialog(Window window, System.Windows.Forms.Form form)
+        {
+            TaskCompletionSource<bool> source = new TaskCompletionSource<bool>();
+            var hWnd = new WindowInteropHelper(window).EnsureHandle();
+
+            // disable parent window
+            window.IsEnabled = false;
+            USER32EX.SetNativeEnabled(hWnd, false);
+
+            form.Load += (_, e) =>
+            {
+                if (form.StartPosition == System.Windows.Forms.FormStartPosition.CenterParent)
+                {
+                    // center to parent
+                    var mth = form.GetType().GetMethod("CenterToParent", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    mth.Invoke(form, new object[0]);
+                }
+                else if (form.StartPosition == System.Windows.Forms.FormStartPosition.CenterScreen)
+                {
+                    // https://referencesource.microsoft.com/#System.Windows.Forms/winforms/Managed/System/WinForms/Form.cs,23f615d34fbe4eb3,references
+                    var p = new System.Drawing.Point();
+                    var desktop = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Control.MousePosition);
+                    var screenRect = desktop.WorkingArea;
+                    p.X = Math.Max(screenRect.X, screenRect.X + (screenRect.Width - form.Width) / 2);
+                    p.Y = Math.Max(screenRect.Y, screenRect.Y + (screenRect.Height - form.Height) / 2);
+                    form.Location = p;
+                }
+            };
+            form.Closed += (s, e) => source.SetResult(true);
+            form.Show(new Extensions.Wpf32Window(window));
+
+            await source.Task;
+
+            // enable parent window
+            USER32EX.SetNativeEnabled(hWnd, true);
+            window.IsEnabled = true;
+        }
+
+        private static Window GetRealOrFakeWindow(FrameworkElement wnd, out bool isFake)
+        {
+            if (wnd != null && !(wnd is Window))
+                wnd = TemplatedWindow.GetWindow(wnd);
+
+            if (wnd != null && wnd is Window window)
+            {
+                isFake = false;
+                return window;
+            }
+
+            var owner = new Window()
+            {
+                ShowActivated = false,
+                Opacity = 0,
+                WindowStyle = System.Windows.WindowStyle.None,
+                ResizeMode = ResizeMode.NoResize,
+                AllowsTransparency = true,
+                Width = 1,
+                Height = 1
+            };
+
+            owner.Show();
+            isFake = true;
+            return owner;
+        }
+
+        private static TaskDialogButton ShowTaskDialog(FrameworkElement wnd, TaskDialog dialog)
         {
             TaskDialogButton result;
 
