@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Media;
 
@@ -27,13 +27,13 @@ namespace DrawToolsLib.Graphics
         {
             drawingContext.DrawRectangle(
                 null,
-                new Pen(Brushes.White, LineWidth),
+                new Pen(Brushes.White, 1),
                 Bounds);
 
             DashStyle dashStyle = new DashStyle();
             dashStyle.Dashes.Add(4);
 
-            Pen dashedPen = new Pen(Brushes.Black, LineWidth);
+            Pen dashedPen = new Pen(Brushes.Black, 1);
             dashedPen.DashStyle = dashStyle;
 
             drawingContext.DrawRectangle(
