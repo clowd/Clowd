@@ -1,4 +1,4 @@
-﻿using Clowd.Interop;
+using Clowd.Interop;
 using Clowd.Utilities;
 using Ionic.Zip;
 using NotifyIconLib;
@@ -34,7 +34,7 @@ namespace Clowd
     public partial class App : Application
     {
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
-        public static bool CanUpload => Current.Settings.UploadSettings.UploadProvider != UploadsProvider.None;
+        public static bool CanUpload => IsDesignMode ? false : Current.Settings.UploadSettings.UploadProvider != UploadsProvider.None;
 
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
 
@@ -64,9 +64,6 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
-
-
-
             base.OnStartup(e);
             SetupExceptionHandling();
 
