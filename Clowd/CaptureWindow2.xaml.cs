@@ -378,6 +378,8 @@ namespace Clowd
                 encoder.Save(ms);
                 ms.Position = 0;
                 var task = await UploadManager.Upload(ms, "clowd-default.png", true);
+                if (task == null)
+                    return;
                 Process.Start("https://images.google.com/searchbyimage?image_url=" + task.UrlEscape());
             }
         }
