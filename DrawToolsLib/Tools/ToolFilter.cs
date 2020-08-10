@@ -15,6 +15,8 @@ namespace DrawToolsLib.Tools
     internal class ToolFilter<T> : ToolBase
         where T : FilterBase
     {
+        internal override ToolActionType ActionType => ToolActionType.Drawing;
+
         private FilterBase _filter;
         private DrawingBrush _brush;
         private CommandChangeState _state;

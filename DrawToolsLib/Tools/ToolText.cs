@@ -11,12 +11,13 @@ namespace DrawToolsLib.Tools
 {
     internal class ToolText : ToolBase
     {
+        internal override ToolActionType ActionType => ToolActionType.Object;
+
         TextBox _textBox;
         string oldText;
 
         GraphicText editedGraphicsText;
         DrawingCanvas drawingCanvas;
-
 
         public ToolText(DrawingCanvas drawingCanvas)
             : base(new Cursor(new MemoryStream(Properties.Resources.Text)))

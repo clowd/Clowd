@@ -11,6 +11,8 @@ namespace DrawToolsLib.Tools
     {
         protected readonly Cursor Cursor;
 
+        internal abstract ToolActionType ActionType { get; }
+
         protected ToolBase(Cursor cursor)
         {
             Cursor = cursor;
