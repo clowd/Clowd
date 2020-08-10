@@ -172,6 +172,7 @@
     <Compile Include="TaskWindow.xaml.cs">
       <DependentUpon>TaskWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Utilities\AutoDictionary.cs" />
     <Compile Include="Utilities\ButtonClickContextBehavior.cs" />
     <Compile Include="Utilities\ClassifyOptions.cs" />
     <Compile Include="Utilities\ClipboardEx.cs" />
