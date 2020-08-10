@@ -563,7 +563,7 @@ namespace Clowd
         private void font_Click(object sender, RoutedEventArgs e)
         {
             System.Windows.Forms.FontDialog dlg = new System.Windows.Forms.FontDialog();
-            float wfSize = (float)ScreenTools.ScreenToWpf(drawingCanvas.TextFontSize) / 96 * 72;
+            float wfSize = (float)drawingCanvas.TextFontSize / 96 * 72;
             System.Drawing.FontStyle wfStyle;
             if (drawingCanvas.TextFontStyle == FontStyles.Italic)
                 wfStyle = System.Drawing.FontStyle.Italic;
@@ -584,7 +584,7 @@ namespace Clowd
             if (dlg.ShowDialog(Window.GetWindow(this)) == System.Windows.Forms.DialogResult.OK)
             {
                 drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
-                drawingCanvas.TextFontSize = ScreenTools.WpfToScreen(dlg.Font.SizeInPoints / 72 * 96);
+                drawingCanvas.TextFontSize = dlg.Font.SizeInPoints / 72 * 96;
                 drawingCanvas.TextFontStyle = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Italic) ? FontStyles.Italic : FontStyles.Normal;
                 drawingCanvas.TextFontWeight = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Bold) ? FontWeights.Bold : FontWeights.Normal;
 
