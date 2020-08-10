@@ -222,7 +222,12 @@ namespace Clowd
             encoder.Save(stream);
         }
 
-        private class Wpf32Window : System.Windows.Forms.IWin32Window
+        public static bool IsOpen(this Window window)
+        {
+            return Application.Current.Windows.Cast<Window>().Any(x => x == window);
+        }
+
+        public class Wpf32Window : System.Windows.Forms.IWin32Window
         {
             public IntPtr Handle { get; private set; }
 
