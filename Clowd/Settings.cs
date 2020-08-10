@@ -67,7 +67,7 @@ namespace Clowd
 
     [ImplementPropertyChanged]
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
-    public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable, IClassifyObjectProcessor
+    public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable
     {
         [Browsable(false), ClassifyIgnore]
         public new object Attribute { get; } = null;
@@ -162,24 +162,23 @@ namespace Clowd
                 a?.Dispose();
         }
 
-        public void BeforeSerialize()
-        {
-            // do nothing
-        }
-
-        public void AfterDeserialize()
-        {
-            var debouncer = new Debouncer();
-            var tmp = GetAllAssignableToT<INotifyPropertyChanged>(this).ToArray();
-            foreach (var a in tmp)
-                if (a != null)
-                    a.PropertyChanged += (s, ev) => debouncer.Debounce(() => this.SaveQuiet());
-        }
-
         public override void SaveQuiet(string filename = null, SettingsSerializer? serializer = null)
         {
             base.SaveQuiet(filename, serializer);
             Console.WriteLine("Saved!!!!!!!");
+        }
+    }
+
+    public static class PropertyChangedNotificationInterceptor
+    {
+        private static Debouncer _deboucer = new Debouncer();
+        public static void Intercept(object target, Action onPropertyChangedAction, string propertyName)
+        {
+            if (App.Current != null && App.Current.Settings != null)
+            {
+                onPropertyChangedAction();
+                _deboucer.Debounce(() => App.Current.Settings.SaveQuiet());
+            }
         }
     }
 
@@ -244,9 +243,26 @@ namespace Clowd
         [DisplayName("Font size"), PData.Spinnable(2, 4, 6, 48)]
         public int DefaultFontSize { get; set; } = 8;
 
+        public RememberPromptChoice OpenCaptureInExistingEditor { get; set; } = RememberPromptChoice.Ask;
+
         [DisplayName("Capture padding (px)"), PData.Spinnable(5, 10, 0, 100)]
         [Description("Controls how much space (in pixels) there is between an opened capture and the editors window edge.")]
         public int CapturePadding { get; set; } = 30;
+
+        [Browsable(false)]
+        public Dictionary<DrawToolsLib.ToolType, SavedToolSettings> ToolSettings { get; set; } = new Dictionary<DrawToolsLib.ToolType, SavedToolSettings>();
+    }
+
+    [ImplementPropertyChanged]
+    public class SavedToolSettings
+    {
+        public Color ObjectColor { get; set; } = Colors.Red;
+        public double LineWidth { get; set; } = 2d;
+        public string FontFamily { get; set; } = "Segoe UI";
+        public double FontSize { get; set; } = 12d;
+        public FontStyle FontStyle { get; set; } = FontStyles.Normal;
+        public FontWeight FontWeight { get; set; } = FontWeights.Normal;
+        public FontStretch FontStretch { get; set; } = FontStretches.Normal;
     }
 
     [ImplementPropertyChanged]
@@ -279,6 +295,7 @@ namespace Clowd
         }
     }
 
+    [ImplementPropertyChanged]
     public class FeatureSettings
     {
         [DisplayName("Auto Start on Login")]

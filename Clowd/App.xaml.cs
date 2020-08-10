@@ -1,4 +1,4 @@
-using Clowd.Interop;
+﻿using Clowd.Interop;
 using Clowd.Utilities;
 using Ionic.Zip;
 using NotifyIconLib;
