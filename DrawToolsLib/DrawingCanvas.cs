@@ -1672,6 +1672,19 @@ namespace DrawToolsLib
             menuItem.Tag = ContextMenuCommand.ResetRotation;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            menuItem = new MenuItem();
+            menuItem.Header = "Zoom to fit content";
+            menuItem.Click += (s, e) => this.ZoomPanFit();
+            contextMenu.Items.Add(menuItem);
+
+            menuItem = new MenuItem();
+            menuItem.Header = "Zoom to actual size";
+            menuItem.Click += (s, e) => this.ZoomPanActualSize();
+            contextMenu.Items.Add(menuItem);
+
         }
 
         /// <summary>
@@ -1718,10 +1731,8 @@ namespace DrawToolsLib
             {
                 item = obj as MenuItem;
 
-                if (item != null)
+                if (item != null && item.Tag is ContextMenuCommand command)
                 {
-                    ContextMenuCommand command = (ContextMenuCommand)item.Tag;
-
                     switch (command)
                     {
                         case ContextMenuCommand.SelectAll:
