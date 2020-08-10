@@ -16,6 +16,13 @@ namespace Clowd.Utilities
         Warning = 65535
     }
 
+    public enum RememberPromptChoice
+    {
+        Ask = 0,
+        Yes = 1,
+        No = 2,
+    }
+
     public static class MessageBoxEx
     {
         //public static void ShowNotice(MessageBoxIcon icon, string content)
@@ -81,6 +88,40 @@ namespace Clowd.Utilities
 
                 TaskDialogButton result = Show(wnd, dialog);
                 return result == trueBtn;
+            }
+        }
+
+        public static bool ShowPrompt(this FrameworkElement wnd, MessageBoxIcon icon, string content, string mainInstruction, string promptTxt, string cancelTxt, ref RememberPromptChoice rememberSetting)
+        {
+            if (rememberSetting != RememberPromptChoice.Ask)
+            {
+                return rememberSetting == RememberPromptChoice.Yes;
+            }
+
+            using (var dialog = new TaskDialog())
+            {
+                dialog.WindowTitle = App.ClowdAppName;
+                dialog.MainInstruction = mainInstruction;
+                dialog.Content = content;
+                dialog.MainIcon = (TaskDialogIcon)(int)icon;
+
+                var trueBtn = new TaskDialogButton(promptTxt);
+                var falseBtn = new TaskDialogButton(cancelTxt);
+
+                dialog.Buttons.Add(trueBtn);
+                dialog.Buttons.Add(falseBtn);
+
+                dialog.VerificationText = "Don't ask me this again";
+
+                TaskDialogButton result = Show(wnd, dialog);
+                var ret = result == trueBtn;
+
+                if (dialog.IsVerificationChecked)
+                {
+                    rememberSetting = ret ? RememberPromptChoice.Yes : RememberPromptChoice.No;
+                }
+
+                return ret;
             }
         }
 
