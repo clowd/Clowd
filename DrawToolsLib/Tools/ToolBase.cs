@@ -26,8 +26,8 @@ namespace DrawToolsLib.Tools
 
         public virtual void OnMouseUp(DrawingCanvas canvas, MouseButtonEventArgs e)
         {
-            canvas.Tool = ToolType.Pointer;
-            canvas.Cursor = HelperFunctions.DefaultCursor;
+            //canvas.Tool = ToolType.Pointer;
+            //canvas.Cursor = HelperFunctions.DefaultCursor;
             canvas.ReleaseMouseCapture();
         }
 
