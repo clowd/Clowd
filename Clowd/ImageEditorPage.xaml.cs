@@ -41,8 +41,9 @@ namespace Clowd
             var toolDescriptor = DependencyPropertyDescriptor.FromProperty(DrawingCanvas.ToolProperty, typeof(DrawingCanvas));
             toolDescriptor.AddValueChanged(drawingCanvas, drawingCanvas_ToolChanged);
 
-            this.Loaded += ImageEditorPage2_Loaded;
+            drawingCanvas.ArtworkBackground = new SolidColorBrush(App.Current.Settings.EditorSettings.CanvasBackground);
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
+            this.Loaded += ImageEditorPage2_Loaded;
             SyncToolState();
         }
 
@@ -217,6 +218,8 @@ namespace Clowd
             var selection = drawingCanvas.Selection.ToArray();
             panelAngle.Visibility = Visibility.Collapsed;
             panelFont.Visibility = Visibility.Collapsed;
+            panelBackground.Visibility = Visibility.Collapsed;
+            panelZoom.Visibility = Visibility.Collapsed;
 
             var actionType = drawingCanvas.GetToolActionType(drawingCanvas.Tool);
             if (selection.Length == 0 && (actionType == DrawToolsLib.ToolActionType.Cursor || actionType == ToolActionType.Drawing))
@@ -225,6 +228,8 @@ namespace Clowd
                 this.labelTool.Text = drawingCanvas.Tool.ToString();
                 panelColor.Visibility = Visibility.Collapsed;
                 panelStroke.Visibility = Visibility.Collapsed;
+                panelBackground.Visibility = Visibility.Visible;
+                panelZoom.Visibility = Visibility.Visible;
                 return;
             }
             else
@@ -547,6 +552,14 @@ namespace Clowd
                 App.Current.Settings.EditorSettings.ToolSettings[drawingCanvas.Tool].ObjectColor = drawingCanvas.ObjectColor;
         }
 
+        private void backgroundColor_Click(object sender, MouseButtonEventArgs e)
+        {
+            var oldColor = drawingCanvas.ArtworkBackground as SolidColorBrush;
+            var newColor = ShowSelectNewColorDialog(oldColor?.Color ?? Colors.White);
+            drawingCanvas.ArtworkBackground = new SolidColorBrush(newColor);
+            App.Current.Settings.EditorSettings.CanvasBackground = newColor;
+        }
+
         private void font_Click(object sender, RoutedEventArgs e)
         {
             System.Windows.Forms.FontDialog dlg = new System.Windows.Forms.FontDialog();
@@ -596,5 +609,6 @@ namespace Clowd
         }
 
         #endregion
+
     }
 }
