@@ -9,6 +9,9 @@ namespace Clowd.Interop.Kernel32
 {
     public class KERNEL32
     {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint GetCurrentThreadId();
+
         /// <summary>
         /// Opens an existing local process object.
         /// </summary>

@@ -219,11 +219,25 @@ namespace Clowd.Interop
         [DllImport("user32.dll")]
         public static extern int GetWindowLong(IntPtr hWnd, WindowLongIndex nIndex);
 
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+        public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, WindowLongIndex nIndex);
+
         [DllImport("user32.dll")]
         public static extern int SetWindowLong(IntPtr hWnd, WindowLongIndex nIndex, int dwNewLong);
 
         [DllImport("user32.dll")]
         public static extern int SetWindowLong(IntPtr hWnd, WindowLongIndex nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowsHookEx", SetLastError = true)]
+        public static extern IntPtr SetWindowsHookEx(HookType idHook, CallHookProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll")]
+        public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        public delegate int CallHookProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        public static extern int CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll")]
         public static extern IntPtr WindowFromPoint(POINT Point);
@@ -270,6 +284,10 @@ namespace Clowd.Interop
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnumThreadWindows(uint dwThreadId, EnumWindowProc lpEnumFunc, IntPtr lParam);
 
         /// <summary>
         /// Retrieves the cursor's position, in screen coordinates.
@@ -375,6 +393,25 @@ namespace Clowd.Interop
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetWindowInfo(IntPtr hwnd, ref WINDOWINFO pwi);
+    }
+
+    public enum HookType : int
+    {
+        WH_JOURNALRECORD = 0,
+        WH_JOURNALPLAYBACK = 1,
+        WH_KEYBOARD = 2,
+        WH_GETMESSAGE = 3,
+        WH_CALLWNDPROC = 4,
+        WH_CBT = 5,
+        WH_SYSMSGFILTER = 6,
+        WH_MOUSE = 7,
+        WH_HARDWARE = 8,
+        WH_DEBUG = 9,
+        WH_SHELL = 10,
+        WH_FOREGROUNDIDLE = 11,
+        WH_CALLWNDPROCRET = 12,
+        WH_KEYBOARD_LL = 13,
+        WH_MOUSE_LL = 14
     }
 
     public enum GetAncestorFlags : uint
@@ -549,6 +586,14 @@ namespace Clowd.Interop
         CURSOR_SUPPRESSED = 2
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CWPSTRUCT
+    {
+        public IntPtr lparam;
+        public IntPtr wparam;
+        public int message;
+        public IntPtr hwnd;
+    }
     public struct TOOLBAR_CTRL
     {
         public const int TB_ADDBITMAP = 1043;
