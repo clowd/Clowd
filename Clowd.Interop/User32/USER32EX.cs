@@ -97,6 +97,25 @@ namespace Clowd.Interop
             return result;
         }
 
+        public static List<IntPtr> GetThreadWindows(uint thread)
+        {
+            List<IntPtr> result = new List<IntPtr>();
+            GCHandle listHandle = GCHandle.Alloc(result);
+
+            try
+            {
+                USER32.EnumWindowProc childProc = new USER32.EnumWindowProc(EnumChildWindow);
+                USER32.EnumThreadWindows(thread, childProc, GCHandle.ToIntPtr(listHandle));
+            }
+            finally
+            {
+                if (listHandle.IsAllocated)
+                    listHandle.Free();
+            }
+
+            return result;
+        }
+
         public static List<IntPtr> GetChildWindows(IntPtr parent)
         {
             List<IntPtr> result = new List<IntPtr>();
