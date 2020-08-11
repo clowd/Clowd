@@ -158,7 +158,7 @@ namespace Clowd
                 var filename = "ffmpeg_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
                 File.WriteAllText(filename, _recording.ConsoleLog);
 
-                if (this.ShowPrompt(MessageBoxIcon.Error, "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.", "Open Error Log"))
+                if (await NiceDialog.ShowPromptAsync(this, NiceDialogIcon.Error, "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.", "Open Error Log"))
                 {
                     Process.Start("notepad.exe", filename);
                 }
@@ -234,7 +234,7 @@ namespace Clowd
             {
                 if (!audio.CaptureMicrophone && audio.SelectedMicrophone == null)
                 {
-                    this.ShowSettingsPrompt(SettingsCategory.Video, "Please select a microphone to record audio from before enabling this feature.");
+                    NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "Please select a microphone to record audio from before enabling this feature.");
                     return;
                 }
 
@@ -249,7 +249,7 @@ namespace Clowd
             {
                 if (!audio.CaptureLoopbackAudio && !audio.IsLoopbackInstalled)
                 {
-                    this.ShowSettingsPrompt(SettingsCategory.Windows, "You must install the 'DirectShow Add-ons' from the settings page before enabling this feature.");
+                    NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Windows, "You must install the 'DirectShow Add-ons' from the settings page before enabling this feature.");
                     return;
                 }
 

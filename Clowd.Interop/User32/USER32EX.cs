@@ -44,7 +44,7 @@ namespace Clowd.Interop
 
         public static void SetNativeOwner(IntPtr child, IntPtr newOwner)
         {
-            var oldOwner = USER32.GetWindowLong(child, WindowLongIndex.GWL_HWNDPARENT);
+            //var oldOwner = USER32.GetWindowLong(child, WindowLongIndex.GWL_HWNDPARENT);
             USER32.SetWindowLong(child, WindowLongIndex.GWL_HWNDPARENT, newOwner);
         }
 

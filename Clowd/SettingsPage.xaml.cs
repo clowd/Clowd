@@ -162,9 +162,9 @@ namespace Clowd
             {
                 var btn = new Button();
                 btn.Content = "Reset";
-                btn.Click += (s, e) =>
+                btn.Click += async (s, e) =>
                 {
-                    if (btn.ShowYesNoPrompt(MessageBoxIcon.Warning, "Are you sure you wish to reset these settings to defaults?"))
+                    if (await NiceDialog.ShowYesNoPromptAsync(btn, NiceDialogIcon.Warning, "Are you sure you wish to reset these settings to defaults?"))
                     {
                         var pinfo = property.GetDescriptor(property.PropertyName);
                         pinfo.SetValue(property.TargetObject, Activator.CreateInstance(property.ActualPropertyType));
@@ -179,7 +179,7 @@ namespace Clowd
         protected override FrameworkElement CreateDirectoryPathControl(PropertyItem property)
         {
             var control = (DirectoryPicker)base.CreateDirectoryPathControl(property);
-            control.FolderBrowserDialogService = new BetterFolderBrowseDialog();
+            control.FolderBrowserDialogService = new BetterFolderBrowseDialog(control);
             return control;
         }
     }
@@ -195,6 +195,12 @@ namespace Clowd
 
     public class BetterFolderBrowseDialog : IFolderBrowserDialogService
     {
+        private readonly FrameworkElement _parentControl;
+
+        public BetterFolderBrowseDialog(FrameworkElement parentControl)
+        {
+            this._parentControl = parentControl;
+        }
         public bool ShowFolderBrowserDialog(ref string directory, bool showNewFolderButton = true, string description = null, bool useDescriptionForTitle = true)
         {
             var dialog = new Ookii.Dialogs.Wpf.VistaFolderBrowserDialog();
@@ -203,7 +209,7 @@ namespace Clowd
             dialog.ShowNewFolderButton = showNewFolderButton;
             dialog.SelectedPath = directory;
 
-            var success = dialog.ShowDialog() == true;
+            var success = dialog.ShowDialog(TemplatedWindow.GetWindow(_parentControl)) == true;
             directory = dialog.SelectedPath;
             return success;
         }

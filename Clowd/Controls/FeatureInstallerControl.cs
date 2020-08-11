@@ -62,7 +62,7 @@ namespace Clowd.Controls
             }
             catch (Exception ex)
             {
-                this.ShowNotice(MessageBoxIcon.Error, "An error has occured: " + ex.Message, "Unable to " + (installed ? "uninstall" : "install"));
+                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "An error has occured: " + ex.Message, "Unable to " + (installed ? "uninstall" : "install"));
             }
 
             Update();
