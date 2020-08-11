@@ -52,7 +52,7 @@ namespace Clowd
             Keyboard.Focus(buttonFocus);
         }
 
-        public static void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null)
+        public static async void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null)
         {
             ImageEditorPage page = null;
             Window window = TemplatedWindow.GetWindow(typeof(ImageEditorPage));
@@ -61,15 +61,16 @@ namespace Clowd
             {
                 if ((page = TemplatedWindow.GetContent<ImageEditorPage>(window)) != null)
                 {
-                    var memory = App.Current.Settings.EditorSettings.OpenCaptureInExistingEditor;
-                    var result = window.ShowPrompt(
-                        MessageBoxIcon.Information,
+                    var result = await NiceDialog.ShowPromptAsync(
+                        window,
+                        NiceDialogIcon.Information,
                         "There is already an editor open, would you like to insert the captured image here or open a new window?",
                         "Open new window?",
                         "Insert",
                         "Open new window",
-                        ref memory);
-                    App.Current.Settings.EditorSettings.OpenCaptureInExistingEditor = memory;
+                        App.Current.Settings.EditorSettings,
+                        s => s.OpenCaptureInExistingEditor);
+
                     if (result)
                     {
                         page.AddImage(image);
@@ -527,7 +528,7 @@ namespace Clowd
 
         private async void objectColor_Click(object sender, MouseButtonEventArgs e)
         {
-            drawingCanvas.ObjectColor = await this.ShowColorDialog(drawingCanvas.ObjectColor);
+            drawingCanvas.ObjectColor = await NiceDialog.ShowColorDialogAsync(this, drawingCanvas.ObjectColor);
             if (drawingCanvas.SelectionCount == 0)
                 App.Current.Settings.EditorSettings.ToolSettings[drawingCanvas.Tool].ObjectColor = drawingCanvas.ObjectColor;
         }
@@ -535,7 +536,7 @@ namespace Clowd
         private async void backgroundColor_Click(object sender, MouseButtonEventArgs e)
         {
             var oldColor = drawingCanvas.ArtworkBackground as SolidColorBrush;
-            var newColor = await this.ShowColorDialog(oldColor?.Color ?? Colors.White);
+            var newColor = await NiceDialog.ShowColorDialogAsync(this, oldColor?.Color ?? Colors.White);
             drawingCanvas.ArtworkBackground = new SolidColorBrush(newColor);
             App.Current.Settings.EditorSettings.CanvasBackground = newColor;
         }

@@ -45,7 +45,7 @@ namespace Clowd
             var providerSelection = App.Current.Settings.UploadSettings.UploadProvider;
             if (providerSelection == UploadsProvider.None)
             {
-                NiceDialog.ShowSettingsPrompt(null, SettingsCategory.Uploads, "There is no uploads provider configured. Please open settings and configure before uploading files.");
+                await NiceDialog.ShowSettingsPromptAsync(null, SettingsCategory.Uploads, "There is no uploads provider configured. Please open settings and configure before uploading files.");
                 return null;
             }
             else if (providerSelection == UploadsProvider.Azure)
