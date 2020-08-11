@@ -141,7 +141,7 @@ namespace Clowd.Interop
             if (hookPtr == IntPtr.Zero)
                 throw new Win32Exception();
 
-            return new HwndWindowHook(hookPtr);
+            return new HwndWindowHook(hookPtr, hook);
         }
 
         public static implicit operator IntPtr(HwndWindow w) => w.Handle;
@@ -179,12 +179,14 @@ namespace Clowd.Interop
         public class HwndWindowHook : IDisposable
         {
             private readonly IntPtr _hookPtr;
+            private USER32.CallHookProc _hook; // this is here so it is not garbage collected while the hook is active
             private bool _disposed;
 
-            public HwndWindowHook(IntPtr hookPtr)
+            public HwndWindowHook(IntPtr hookPtr, USER32.CallHookProc hook)
             {
                 _disposed = false;
                 _hookPtr = hookPtr;
+                _hook = hook;
             }
 
             public void Dispose()
@@ -194,6 +196,8 @@ namespace Clowd.Interop
 
                 if (!USER32.UnhookWindowsHookEx(_hookPtr))
                     throw new Win32Exception();
+
+                _hook = null;
 
                 _disposed = true;
             }
