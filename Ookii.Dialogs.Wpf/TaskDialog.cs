@@ -1022,10 +1022,10 @@ namespace Ookii.Dialogs.Wpf
         /// </para>
         /// </exception>
         /// <exception cref="NotSupportedException">Task dialogs are not supported on the current operating system.</exception>
-        public TaskDialogButton Show()
-        {
-            return ShowDialog(IntPtr.Zero);
-        }
+        //public TaskDialogButton Show()
+        //{
+        //    return ShowDialog(IntPtr.Zero);
+        //}
 
         /// <summary>
         /// Shows the task dialog as a modal dialog.
@@ -1048,10 +1048,10 @@ namespace Ookii.Dialogs.Wpf
         /// </para>
         /// </exception>
         /// <exception cref="NotSupportedException">Task dialogs are not supported on the current operating system.</exception>
-        public TaskDialogButton ShowDialog()
-        {
-            return ShowDialog((Window)null);
-        }
+        //public TaskDialogButton ShowDialog()
+        //{
+        //    return ShowDialog((Window)null);
+        //}
 
         /// <summary>
         /// Shows the task dialog as a modal dialog.
@@ -1221,7 +1221,10 @@ namespace Ookii.Dialogs.Wpf
 
         #region Private members
 
-        private TaskDialogButton ShowDialog(IntPtr owner)
+        /// <summary>
+        ///  Shows the task dialog as a modal dialog.
+        /// </summary>
+        public TaskDialogButton ShowDialog(IntPtr owner)
         {
             if( !OSSupportsTaskDialogs )
                 throw new NotSupportedException(Properties.Resources.TaskDialogsNotSupportedError);
