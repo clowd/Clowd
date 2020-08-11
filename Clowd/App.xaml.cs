@@ -175,6 +175,8 @@ namespace Clowd
             }
 
             FinishInit();
+
+            TemplatedWindow.CreateWindow("home", new HomePage()).Show();
         }
         protected override void OnExit(ExitEventArgs e)
         {
@@ -592,37 +594,37 @@ namespace Clowd
             var bounds = USER32EX.GetTrueWindowBounds(foreground);
             StartCapture(ScreenRect.FromSystem(bounds));
         }
-        public void UploadFile(Window owner = null)
+        public async void UploadFile(Window owner = null)
         {
             if (!_initialized)
                 return;
 
-            var dlg = new Microsoft.Win32.OpenFileDialog();
+            var dlg = new System.Windows.Forms.OpenFileDialog();
             if (Settings.LastUploadPath != null)
                 dlg.InitialDirectory = Settings.LastUploadPath;
             dlg.Multiselect = true;
             // we need to create a temporary (and invisible) window to act as the parent to the file selection dialog
             // on windows 8+. this has the added and unintential bonus of adding a taskbar item for the dialog.
-            bool temp = false;
-            if (owner == null)
-            {
-                owner = new Window()
-                {
-                    ShowActivated = false,
-                    Opacity = 0,
-                    WindowStyle = System.Windows.WindowStyle.None,
-                    ResizeMode = ResizeMode.NoResize,
-                    AllowsTransparency = true,
-                    Width = 1,
-                    Height = 1
-                };
-                owner.Show();
-                temp = true;
-            }
-            var result = dlg.ShowDialog(owner);
-            if (temp)
-                owner.Close();
-            if (result == true && dlg.FileNames.Length > 0)
+            //bool temp = false;
+            //if (owner == null)
+            //{
+            //    owner = new Window()
+            //    {
+            //        ShowActivated = false,
+            //        Opacity = 0,
+            //        WindowStyle = System.Windows.WindowStyle.None,
+            //        ResizeMode = ResizeMode.NoResize,
+            //        AllowsTransparency = true,
+            //        Width = 1,
+            //        Height = 1
+            //    };
+            //    owner.Show();
+            //    temp = true;
+            //}
+            var result = await dlg.ShowAsNiceDialogAsync(owner);
+            //if (temp)
+            //    owner.Close();
+            if (result == System.Windows.Forms.DialogResult.OK && dlg.FileNames.Length > 0)
                 OnFilesReceived(dlg.FileNames);
         }
         public void Paste()

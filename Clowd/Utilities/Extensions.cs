@@ -55,10 +55,10 @@ namespace Clowd
         {
             element.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, EmptyDelegate);
         }
-        public static System.Windows.Forms.DialogResult ShowDialog(this System.Windows.Forms.CommonDialog dialog, Window parent)
-        {
-            return dialog.ShowDialog(new Wpf32Window(parent));
-        }
+        //public static System.Windows.Forms.DialogResult ShowDialog(this System.Windows.Forms.CommonDialog dialog, Window parent)
+        //{
+        //    return dialog.ShowDialog(new Wpf32Window(parent));
+        //}
 
         public static BitmapSource ToBitmapSource(this System.Drawing.Bitmap original)
         {
@@ -227,15 +227,6 @@ namespace Clowd
             return Application.Current.Windows.Cast<Window>().Any(x => x == window);
         }
 
-        public class Wpf32Window : System.Windows.Forms.IWin32Window
-        {
-            public IntPtr Handle { get; private set; }
-
-            public Wpf32Window(Window wpfWindow)
-            {
-                Handle = new System.Windows.Interop.WindowInteropHelper(wpfWindow).Handle;
-            }
-        }
         public static Task AsTask(this WaitHandle handle)
         {
             return AsTask(handle, Timeout.InfiniteTimeSpan);
