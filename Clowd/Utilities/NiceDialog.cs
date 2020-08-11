@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
@@ -174,10 +176,8 @@ namespace Clowd
             dialog.Text = App.ClowdAppName + " - Color Picker";
             dialog.ShowAlphaChannel = true;
             dialog.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
-            
-            await FakeShowFormAsDialogAsync(parent, dialog);
 
-            var result = dialog.DialogResult;
+            var result = await dialog.ShowAsNiceDialogAsync(parent);
 
             if (result == System.Windows.Forms.DialogResult.OK)
             {
@@ -190,29 +190,76 @@ namespace Clowd
             }
         }
 
-        private static async Task<TaskDialogButton> FakeShowTaskDialogBlockingOrAsync(FrameworkElement parent, TaskDialog dialog, bool blocking)
+        public static async Task<System.Windows.Forms.DialogResult> ShowAsNiceDialogAsync(this System.Windows.Forms.CommonDialog dialog, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
 
             try
             {
-                dialog.Created += (s, e) =>
-                {
-                    // update dialog positioning
-                    USER32.GetWindowRect(dialog.Handle, out var childRect);
-                    var size = new System.Drawing.Size(childRect.right - childRect.left, childRect.bottom - childRect.top);
-                    var p = GetDialogPosition(size, ownerHandle, isFake);
-                    USER32.SetWindowPos(dialog.Handle, SWP_HWND.HWND_TOP, p.X, p.Y, size.Width, size.Height, 0);
-                };
+                var taskSource = new TaskCompletionSource<System.Windows.Forms.DialogResult>();
+                uint threadId = 0;
 
-                if (blocking)
+                Thread t = new Thread(() =>
                 {
-                    return dialog.ShowDialog(ownerHandle);
-                }
-                else
+                    threadId = Interop.Kernel32.KERNEL32.GetCurrentThreadId();
+                    taskSource.SetResult(dialog.ShowDialog(new Win32Window(ownerHandle)));
+                });
+
+                t.SetApartmentState(ApartmentState.STA);
+                t.Start();
+
+                // basically, since we opened the dialog in a new thread, we can be sure it is one of the only windows in that thread
+                // so we enumerate GetThreadWindows until the window handle is created, and then update the window position
+
+                HwndWindow.HwndWindowHook dialogWindowHook = null;
+
+                while (true)
                 {
-                    return await Task.Run(() => dialog.ShowDialog(ownerHandle));
+                    if (taskSource.Task.IsCompleted)
+                        break;
+
+                    await Task.Delay(20);
+
+                    if (threadId == 0)
+                        continue;
+
+                    var children = USER32EX.GetThreadWindows(threadId);
+
+                    if (children.Count > 0)
+                    {
+                        var dialogHandle = children
+                            .Select(s => HwndWindow.FromHandle(s))
+                            .FirstOrDefault(w => w.Owner != null && w.Owner.Handle == ownerHandle);
+
+                        if (dialogHandle == null)
+                            continue;
+
+                        AutoPositionNativeWindowHandle(dialogHandle, ownerHandle, isFake);
+
+                        if (dialogHandle.CanHookWndProc)
+                        {
+                            dialogWindowHook = dialogHandle.AddWndProcHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam) =>
+                            {
+                                if (msg == (int)WindowMessage.WM_SIZE)
+                                {
+                                    // the window has changed size and it was not the user who resized it (see next condition)
+                                    AutoPositionNativeWindowHandle(dialogHandle, ownerHandle, isFake);
+                                }
+                                else if (msg == (int)WindowMessage.WM_SIZING || msg == (int)WindowMessage.WM_SETCURSOR || msg == (int)WindowMessage.WM_MOUSEACTIVATE)
+                                {
+                                    // dispose of this hook if the user has interacted with the dialog
+                                    dialogWindowHook.Dispose();
+                                }
+                            });
+                        }
+
+                        break;
+                    }
                 }
+
+                var result = await taskSource.Task;
+
+                return result;
             }
             catch
             {
@@ -224,7 +271,17 @@ namespace Clowd
             }
         }
 
-        private static async Task FakeShowFormAsDialogAsync(FrameworkElement parent, System.Windows.Forms.Form form)
+        public static Task<TaskDialogButton> ShowAsNiceDialogAsync(this TaskDialog dialog, FrameworkElement parent)
+        {
+            return FakeShowTaskDialogBlockingOrAsync(parent, dialog, false);
+        }
+
+        public static TaskDialogButton ShowAsNiceDialog(this TaskDialog dialog, FrameworkElement parent)
+        {
+            return FakeShowTaskDialogBlockingOrAsync(parent, dialog, true).Result;
+        }
+
+        public static async Task<System.Windows.Forms.DialogResult> ShowAsNiceDialogAsync(this System.Windows.Forms.Form form, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
 
@@ -237,9 +294,41 @@ namespace Clowd
                     form.Location = GetDialogPosition(new System.Drawing.Size(form.Width, form.Height), ownerHandle, isFake);
                 };
                 form.Closed += (s, e) => taskSource.SetResult(true);
-                form.Show(new Extensions.Wpf32Window(ownerWindow));
+                form.Show(new Win32Window(ownerHandle));
 
                 await taskSource.Task;
+
+                return form.DialogResult;
+            }
+            catch
+            {
+                throw;
+            }
+            finally
+            {
+                ReleaseOwner(ownerWindow, isFake);
+            }
+        }
+
+        private static async Task<TaskDialogButton> FakeShowTaskDialogBlockingOrAsync(FrameworkElement parent, TaskDialog dialog, bool blocking)
+        {
+            CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
+
+            try
+            {
+                dialog.Created += (s, e) =>
+                {
+                    AutoPositionNativeWindowHandle(dialog.Handle, ownerHandle, isFake);
+                };
+
+                if (blocking)
+                {
+                    return dialog.ShowDialog(ownerHandle);
+                }
+                else
+                {
+                    return await Task.Run(() => dialog.ShowDialog(ownerHandle));
+                }
             }
             catch
             {
@@ -288,7 +377,7 @@ namespace Clowd
 
         private static void ReleaseOwner(Window ownerWindow, bool isFake)
         {
-            var ownerHandle = new WindowInteropHelper(ownerWindow).EnsureHandle();
+            var ownerHandle = new WindowInteropHelper(ownerWindow).Handle;
             if (isFake)
             {
                 ownerWindow.Close();
@@ -299,6 +388,16 @@ namespace Clowd
                 USER32EX.SetNativeEnabled(ownerHandle, true);
                 ownerWindow.IsEnabled = true;
             }
+        }
+
+        private static void AutoPositionNativeWindowHandle(IntPtr childHandle, IntPtr ownerHandle, bool isFake)
+        {
+            // update dialog positioning
+            USER32.GetWindowRect(childHandle, out var childRect);
+            Console.WriteLine(((System.Drawing.Rectangle)childRect).ToString());
+            var size = new System.Drawing.Size(childRect.right - childRect.left, childRect.bottom - childRect.top);
+            var p = GetDialogPosition(size, ownerHandle, isFake);
+            USER32.SetWindowPos(childHandle, SWP_HWND.HWND_TOP, p.X, p.Y, size.Width, size.Height, 0);
         }
 
         private static System.Drawing.Point GetDialogPosition(System.Drawing.Size dialogSize, IntPtr ownerHandle, bool ownerIsFake)
@@ -367,6 +466,16 @@ namespace Clowd
                     type));
 
             return propInfo;
+        }
+
+        private class Win32Window : System.Windows.Forms.IWin32Window
+        {
+            public IntPtr Handle { get; private set; }
+
+            public Win32Window(IntPtr handle)
+            {
+                Handle = handle;
+            }
         }
     }
 }
