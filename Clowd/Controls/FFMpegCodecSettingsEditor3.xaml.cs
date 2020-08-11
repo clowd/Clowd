@@ -158,8 +158,9 @@ namespace Clowd.Controls
             {
                 if (hasChanged && !hasSaved)
                 {
-                    if (this.ShowPrompt(
-                        MessageBoxIcon.Warning,
+                    if (NiceDialog.ShowPromptBlocking(
+                        wnd,
+                        NiceDialogIcon.Warning,
                         "You have made changes to the codec settings. Would you like to go back and save them, or exit and discard your changes?",
                         "Exit without saving?",
                         "Cancel",
@@ -169,6 +170,7 @@ namespace Clowd.Controls
                     }
                 }
             };
+            wnd.Owner = TemplatedWindow.GetWindow(this);
             wnd.Show();
         }
 

@@ -280,7 +280,7 @@ namespace Clowd
             if (ClipboardEx.SetImage(cropped))
                 Close();
             else
-                this.ShowNotice(MessageBoxIcon.Error, "Unable to set clipboard data; try again later.");
+                NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "Unable to set clipboard data; try again later.");
         }
         private void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -327,7 +327,7 @@ namespace Clowd
 
             if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
             {
-                this.ShowSettingsPrompt(SettingsCategory.Video, "You must set a video save directory in the video capture settings before recording a video");
+                NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "You must set a video save directory in the video capture settings before recording a video");
             }
             else
             {
@@ -352,7 +352,7 @@ namespace Clowd
             if (!IsCapturing)
                 return;
 
-            NiceDialog.ShowColorDialog(null, fastCapturer.GetHoveredColor());
+            NiceDialog.ShowColorDialogAsync(null, fastCapturer.GetHoveredColor());
             this.Close();
         }
 
