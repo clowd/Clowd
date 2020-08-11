@@ -74,9 +74,6 @@
       <HintPath>..\packages\MahApps.Metro.1.1.2.0\lib\net45\MahApps.Metro.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Ookii.Dialogs.Wpf, Version=1.0.0.0, Culture=neutral, PublicKeyToken=0c15020868fd6249, processorArchitecture=MSIL">
-      <HintPath>..\packages\Ookii.Dialogs.1.0\lib\net35\Ookii.Dialogs.Wpf.dll</HintPath>
-    </Reference>
     <Reference Include="RT.Json, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\RT.Json.2.0.1654\lib\netstandard2.0\RT.Json.dll</HintPath>
     </Reference>
@@ -362,6 +359,10 @@
     <ProjectReference Include="..\NReco.VideoConverter\NReco.VideoConverter.csproj">
       <Project>{2b2ebe52-3253-4a47-b787-2164732a2ca4}</Project>
       <Name>NReco.VideoConverter</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj">
+      <Project>{d01b1d20-8f5b-4834-8e5c-c7ec6dd587d4}</Project>
+      <Name>Ookii.Dialogs.Wpf</Name>
     </ProjectReference>
     <ProjectReference Include="..\PropertyTools.Wpf\PropertyTools.Wpf.csproj">
       <Project>{7168f82f-288a-42c4-9eb1-fbbe5112f211}</Project>
