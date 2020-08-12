@@ -251,13 +251,6 @@ namespace Clowd
 
                 this.labelTool.Text = gtxt;
 
-                if (obj is GraphicImage)
-                {
-                    panelColor.Visibility = Visibility.Collapsed;
-                    panelStroke.Visibility = Visibility.Collapsed;
-                    return;
-                }
-
                 if (obj.GetType().GetProperty("Angle") != null)
                 {
                     panelAngle.Visibility = Visibility.Visible;
@@ -270,6 +263,13 @@ namespace Clowd
                     angleResetBinding.Source = obj;
                     angleResetBinding.Mode = BindingMode.TwoWay;
                     resetObjectAngle.SetBinding(ResetDefaultButton.CurrentValueProperty, angleResetBinding);
+                }
+
+                if (obj is GraphicImage)
+                {
+                    panelColor.Visibility = Visibility.Collapsed;
+                    panelStroke.Visibility = Visibility.Collapsed;
+                    return;
                 }
 
                 if (obj is GraphicText txt)
@@ -387,11 +387,13 @@ namespace Clowd
         private void UndoCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Undo();
+            SyncToolState();
         }
 
         private void RedoCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Redo();
+            SyncToolState();
         }
 
         private void CopyCommand(object sender, ExecutedRoutedEventArgs e)
@@ -408,11 +410,13 @@ namespace Clowd
         {
             CopyCommand(sender, e);
             drawingCanvas.DeleteAll();
+            SyncToolState();
         }
 
         private void DeleteCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.Delete();
+            SyncToolState();
         }
 
         private void UploadCommand(object sender, ExecutedRoutedEventArgs e)
@@ -449,11 +453,23 @@ namespace Clowd
 
             var img = ClipboardEx.GetImage();
             AddImage(img);
+            SyncToolState();
         }
 
         private void SelectAllCommand(object sender, ExecutedRoutedEventArgs e)
         {
             drawingCanvas.SelectAll();
+            SyncToolState();
+        }
+
+        private void ZoomActualCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            drawingCanvas.ZoomPanActualSize();
+        }
+
+        private void ZoomFitCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            drawingCanvas.ZoomPanFit();
         }
 
         #endregion
@@ -590,6 +606,7 @@ namespace Clowd
         }
 
         #endregion
+
 
     }
 }
