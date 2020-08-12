@@ -238,12 +238,9 @@ namespace Clowd
 
             StateCapabilities currentState = Capabilities, newState = _manager.GetObjectCapabilities(newStateObj);
 
-            if (newState != currentState)
-            {
-                currentState.ExitState(this);
-                Capabilities = newState;
-                newState.EnterState(this, newStateObj);
-            }
+            currentState.ExitState(this);
+            Capabilities = newState;
+            newState.EnterState(this, newStateObj);
         }
 
         #endregion
@@ -413,6 +410,7 @@ namespace Clowd
                 {
                     e.Handled = true;
                     Keyboard.Focus(buttonFocus);
+                    SyncToolState();
                 }
 
                 // Handle A-Z here, so that keybindings to those keys will be handled here
