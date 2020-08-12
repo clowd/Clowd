@@ -145,6 +145,7 @@ namespace Clowd.Interop
         }
 
         public static implicit operator IntPtr(HwndWindow w) => w.Handle;
+        public static implicit operator HwndWindow(IntPtr w) => FromHandle(w);
 
         public override string ToString()
         {

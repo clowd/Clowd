@@ -160,13 +160,6 @@ namespace Clowd
             SetupTrayIcon();
             SetupAccentColors();
 
-#if DEBUG
-            // add references to ffmpeg dlls
-            var bitness = Environment.Is64BitProcess ? "x64" : "x86";
-            Interop.Kernel32.KERNEL32.SetDefaultDllDirectories(Interop.Kernel32.DirectoryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-            Interop.Kernel32.KERNEL32.AddDllDirectory(Path.GetFullPath($@"..\..\..\BasicFFEncode\FFmpeg\{bitness}\dll"));
-#endif
-
             if (Settings.FirstRun)
             {
                 // there were no settings to load, show login window.
@@ -175,8 +168,6 @@ namespace Clowd
             }
 
             FinishInit();
-
-            TemplatedWindow.CreateWindow("home", new HomePage()).Show();
         }
         protected override void OnExit(ExitEventArgs e)
         {
@@ -599,33 +590,9 @@ namespace Clowd
             if (!_initialized)
                 return;
 
-            var dlg = new System.Windows.Forms.OpenFileDialog();
-            if (Settings.LastUploadPath != null)
-                dlg.InitialDirectory = Settings.LastUploadPath;
-            dlg.Multiselect = true;
-            // we need to create a temporary (and invisible) window to act as the parent to the file selection dialog
-            // on windows 8+. this has the added and unintential bonus of adding a taskbar item for the dialog.
-            //bool temp = false;
-            //if (owner == null)
-            //{
-            //    owner = new Window()
-            //    {
-            //        ShowActivated = false,
-            //        Opacity = 0,
-            //        WindowStyle = System.Windows.WindowStyle.None,
-            //        ResizeMode = ResizeMode.NoResize,
-            //        AllowsTransparency = true,
-            //        Width = 1,
-            //        Height = 1
-            //    };
-            //    owner.Show();
-            //    temp = true;
-            //}
-            var result = await dlg.ShowAsNiceDialogAsync(owner);
-            //if (temp)
-            //    owner.Close();
-            if (result == System.Windows.Forms.DialogResult.OK && dlg.FileNames.Length > 0)
-                OnFilesReceived(dlg.FileNames);
+            var result = await NiceDialog.ShowSelectFilesDialog(owner, "Select files to upload", Settings.LastUploadPath, true);
+            if (result != null)
+                OnFilesReceived(result);
         }
         public void Paste()
         {

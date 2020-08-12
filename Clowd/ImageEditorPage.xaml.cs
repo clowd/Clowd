@@ -562,7 +562,7 @@ namespace Clowd
             dlg.AllowVerticalFonts = false;
             dlg.AllowVectorFonts = true;
             dlg.AllowScriptChange = false;
-            if (await dlg.ShowAsNiceDialogAsync(this) == System.Windows.Forms.DialogResult.OK)
+            if (await dlg.ShowAsNiceDialogAsync(this))
             {
                 drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
                 drawingCanvas.TextFontSize = dlg.Font.SizeInPoints / 72 * 96;
