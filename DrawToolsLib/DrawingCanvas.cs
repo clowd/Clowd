@@ -1431,6 +1431,13 @@ namespace DrawToolsLib
             }
             else if (e.ChangedButton == MouseButton.Right)
             {
+                if (tools[(int)Tool] is ToolPointer pointer && pointer.Selection != ToolPointer.SelectionMode.None)
+                {
+                    // fake a mouse up for left mouse button if user is in the middle of an operation
+                    var newArgs = new MouseButtonEventArgs(e.MouseDevice, e.Timestamp, MouseButton.Left, e.StylusDevice);
+                    DrawingCanvas_MouseUp(sender, newArgs);
+                }
+
                 ShowContextMenu(e);
             }
         }
