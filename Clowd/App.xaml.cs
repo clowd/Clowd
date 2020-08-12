@@ -102,37 +102,29 @@ namespace Clowd
                         Environment.Exit(1);
                     }
 
-                    using (TaskDialog dialog = new TaskDialog())
+                    var isYes = NiceDialog.ShowPromptBlocking(
+                        null,
+                        NiceDialogIcon.Warning,
+                        $"{ClowdAppName} is already running but seems to be unresponsive. Would you like to restart {ClowdAppName}?",
+                        $"{ClowdAppName} is unresponsive",
+                        "Restart",
+                        "Close",
+                        NiceDialogIcon.Information,
+                        "You may lose anything in-progress work or uploads.");
+
+                    if (isYes)
                     {
-                        dialog.WindowTitle = $"{ClowdAppName}";
-                        dialog.MainInstruction = $"{ClowdAppName} Unresponsive";
-                        dialog.Content =
-                            $"{ClowdAppName} is already running but seems to be unresponsive. " +
-                            $"Would you like to restart {ClowdAppName}?";
-                        dialog.Footer = "You may lose anything in-progress work.";
-                        dialog.FooterIcon = TaskDialogIcon.Information;
-                        dialog.MainIcon = TaskDialogIcon.Warning;
+                        foreach (var p in processes)
+                            p.Kill();
+                        foreach (var p in processes)
+                            p.WaitForExit();
 
-                        TaskDialogButton okButton = new TaskDialogButton(ButtonType.Yes);
-                        TaskDialogButton cancelButton = new TaskDialogButton(ButtonType.No);
-                        dialog.Buttons.Add(okButton);
-                        dialog.Buttons.Add(cancelButton);
-
-                        var clicked = dialog.Show();
-                        if (clicked == okButton)
-                        {
-                            foreach (var p in processes)
-                                p.Kill();
-                            foreach (var p in processes)
-                                p.WaitForExit();
-
-                            Thread.Sleep(1000);
-                            _mutex = Mutex.OpenExisting(ClowdMutex);
-                        }
-                        else
-                        {
-                            Environment.Exit(0);
-                        }
+                        Thread.Sleep(1000);
+                        _mutex = Mutex.OpenExisting(ClowdMutex);
+                    }
+                    else
+                    {
+                        Environment.Exit(0);
                     }
                 }
             }
@@ -457,7 +449,7 @@ namespace Clowd
             context.Items.Add(settings);
 
             var exit = new MenuItem() { Header = "E_xit" };
-            exit.Click += (s, e) =>
+            exit.Click += async (s, e) =>
             {
                 if (Settings.ConfirmClose)
                 {
@@ -474,7 +466,7 @@ namespace Clowd
                         dialog.Buttons.Add(okButton);
                         dialog.Buttons.Add(cancelButton);
 
-                        var clicked = dialog.Show();
+                        var clicked = await dialog.ShowAsNiceDialogAsync(null);
                         if (clicked == okButton)
                         {
                             if (dialog.IsVerificationChecked == true)

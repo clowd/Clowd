@@ -47,7 +47,7 @@ namespace Clowd
 
         public static Task<bool> ShowPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content, string promptTxt)
         {
-            return ShowPromptAsync(parent, icon, content, icon.ToString(), promptTxt);
+            return ShowPromptAsync(parent, icon, content, icon.ToString(), promptTxt, "Close");
         }
 
         public static Task<bool> ShowYesNoPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content)
@@ -62,7 +62,7 @@ namespace Clowd
 
         public static async Task ShowSettingsPromptAsync(FrameworkElement parent, SettingsCategory category, string content)
         {
-            if (await ShowPromptAsync(parent, NiceDialogIcon.Warning, content, category.ToString() + " configuration required", "Open Settings"))
+            if (await ShowPromptAsync(parent, NiceDialogIcon.Warning, content, category.ToString() + " configuration required", "Open Settings", "Close"))
             {
                 App.Current.ShowSettings(category);
             }
@@ -74,7 +74,7 @@ namespace Clowd
             string content,
             string mainInstruction,
             string trueTxt,
-            string falseTxt = "Close")
+            string falseTxt)
         {
             return ShowPromptAsync<object>(parent, icon, content, mainInstruction, trueTxt, falseTxt, null, null);
         }
@@ -90,7 +90,20 @@ namespace Clowd
             Expression<Func<TSettings, RememberPromptChoice>> memory)
             where TSettings : class
         {
-            return ShowPromptBlockingOrAsync(false, parent, icon, content, mainInstruction, trueTxt, falseTxt, settings, memory);
+            return ShowPromptBlockingOrAsync(false, parent, icon, content, mainInstruction, trueTxt, falseTxt, settings, memory, 0, null);
+        }
+
+        public static Task<bool> ShowPromptAsync(
+            FrameworkElement parent,
+            NiceDialogIcon icon,
+            string content,
+            string mainInstruction,
+            string trueTxt,
+            string falseTxt,
+            NiceDialogIcon footerIcon,
+            string footerTxt)
+        {
+            return ShowPromptBlockingOrAsync<object>(false, parent, icon, content, mainInstruction, trueTxt, falseTxt, null, null, footerIcon, footerTxt);
         }
 
         public static bool ShowPromptBlocking(
@@ -99,7 +112,7 @@ namespace Clowd
             string content,
             string mainInstruction,
             string trueTxt,
-            string falseTxt = "Close")
+            string falseTxt)
         {
             return ShowPromptBlocking<object>(parent, icon, content, mainInstruction, trueTxt, falseTxt, null, null);
         }
@@ -115,7 +128,20 @@ namespace Clowd
             Expression<Func<TSettings, RememberPromptChoice>> memory)
             where TSettings : class
         {
-            return ShowPromptBlockingOrAsync(true, parent, icon, content, mainInstruction, trueTxt, falseTxt, settings, memory).Result;
+            return ShowPromptBlockingOrAsync(true, parent, icon, content, mainInstruction, trueTxt, falseTxt, settings, memory, 0, null).Result;
+        }
+
+        public static bool ShowPromptBlocking(
+            FrameworkElement parent,
+            NiceDialogIcon icon,
+            string content,
+            string mainInstruction,
+            string trueTxt,
+            string falseTxt,
+            NiceDialogIcon footerIcon,
+            string footerTxt)
+        {
+            return ShowPromptBlockingOrAsync<object>(true, parent, icon, content, mainInstruction, trueTxt, falseTxt, null, null, footerIcon, footerTxt).Result;
         }
 
         private static async Task<bool> ShowPromptBlockingOrAsync<TSettings>(
@@ -127,7 +153,9 @@ namespace Clowd
             string trueTxt,
             string falseTxt,
             TSettings settings,
-            Expression<Func<TSettings, RememberPromptChoice>> memory)
+            Expression<Func<TSettings, RememberPromptChoice>> memory,
+            NiceDialogIcon footerIcon,
+            string footerTxt)
             where TSettings : class
         {
             var hasMemoryStorage = settings != null && memory != null;
@@ -147,6 +175,12 @@ namespace Clowd
                 dialog.MainInstruction = mainInstruction;
                 dialog.Content = content;
                 dialog.MainIcon = (TaskDialogIcon)(int)icon;
+
+                if (!String.IsNullOrWhiteSpace(footerTxt))
+                {
+                    dialog.FooterIcon = (TaskDialogIcon)(int)footerIcon;
+                    dialog.Footer = footerTxt;
+                }
 
                 var trueBtn = new TaskDialogButton(trueTxt);
                 dialog.Buttons.Add(trueBtn);
