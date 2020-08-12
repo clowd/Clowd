@@ -13,7 +13,9 @@ namespace DrawToolsLib.Tools
     {
         internal override ToolActionType ActionType => ToolActionType.Cursor;
 
-        private enum SelectionMode
+        public SelectionMode Selection => _selectMode;
+
+        public enum SelectionMode
         {
             None,
             Move,               // object(s) are moved
