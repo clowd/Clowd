@@ -855,7 +855,14 @@ namespace DrawToolsLib
 
         public ToolActionType GetToolActionType(ToolType type)
         {
-            return this.tools[(int)type].ActionType;
+            try
+            {
+                return this.tools[(int)type].ActionType;
+            }
+            catch (IndexOutOfRangeException)
+            {
+                return ToolActionType.Cursor;
+            }
         }
 
         /// <summary>
