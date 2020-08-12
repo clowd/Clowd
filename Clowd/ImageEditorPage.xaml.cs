@@ -621,8 +621,7 @@ namespace Clowd
 
             public override bool HasAngle => false;
 
-            //public override bool CanCanvasZoom => throw new NotImplementedException();
-            //public override bool CanChangeCanvasBackground => throw new NotImplementedException();
+            public override bool CanChangeCanvasBackground => _action == ToolActionType.Cursor;
 
             public ToolStateCapabilities(ToolType tool)
             {
@@ -736,6 +735,8 @@ namespace Clowd
             public override bool HasFont => IsOneOf(typeof(GraphicText));
 
             public override bool HasAngle => typeof(TGraphic).GetProperty(ANGLE_NAME) != null;
+
+            public override bool CanChangeCanvasBackground => false;
 
             public ObjectStateCapabilities()
             {
