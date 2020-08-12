@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -190,19 +191,84 @@ namespace Clowd
             }
         }
 
-        public static async Task<System.Windows.Forms.DialogResult> ShowAsNiceDialogAsync(this System.Windows.Forms.CommonDialog dialog, FrameworkElement parent)
+        public static async Task<string[]> ShowSelectFilesDialog(FrameworkElement parent, string title = null, string initialDirectory = null, bool multiSelect = false, string filter = null)
+        {
+            var dialog = new System.Windows.Forms.OpenFileDialog();
+
+            if (!String.IsNullOrWhiteSpace(title))
+                dialog.Title = title;
+
+            if (!String.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
+                dialog.InitialDirectory = initialDirectory;
+
+            dialog.Multiselect = multiSelect;
+
+            if (!String.IsNullOrWhiteSpace(filter))
+                dialog.Filter = filter;
+
+            if (await dialog.ShowAsNiceDialogAsync(parent) && dialog.FileNames.Any())
+                return dialog.FileNames;
+
+            return null;
+        }
+
+        [Obsolete("You should prefer the System.Windows.Forms variant of CommonDialog's as those do not require reflection to be shown nicely")]
+        public static async Task<bool> ShowAsNiceDialogAsync(this Microsoft.Win32.CommonDialog dialog, FrameworkElement parent)
+        {
+            try
+            {
+                return await FakeShowCommonDialogAsync((owner) =>
+                {
+                    var dyn = Exposed.From(dialog);
+                    return dyn.RunDialog(owner);
+                }, parent);
+            }
+            catch (Exception e)
+            {
+                // only viable fallback for Microsoft.Win32.CommonDialog is synchronous execution.
+                // dialog.ShowDialog() checks that it is being called on the same thread that created the class
+                // therefore, even creating a new WPF window in the new thread won't overcome this issue.
+                // using reflection there are a few other async options (such as updating the thread reference)
+                // but none are as robust as the above so they are not included.
+
+                CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
+                var result = dialog.ShowDialog(ownerWindow);
+                ReleaseOwner(ownerWindow, isFake);
+                return result == true;
+            }
+        }
+
+        public static Task<bool> ShowAsNiceDialogAsync(this System.Windows.Forms.CommonDialog dialog, FrameworkElement parent)
+        {
+            return FakeShowCommonDialogAsync((owner) =>
+            {
+                // thank fuck someone with brains wrote the System.Windows.Forms.CommonDialog and the IWin32Window interface.
+                var result = dialog.ShowDialog(new Win32Window(owner));
+                return result == System.Windows.Forms.DialogResult.OK || result == System.Windows.Forms.DialogResult.Yes;
+            }, parent);
+        }
+
+        private static async Task<bool> FakeShowCommonDialogAsync(Func<IntPtr, bool> showDialog, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
+            HwndWindow.HwndWindowHook dialogWindowHook = null;
 
             try
             {
-                var taskSource = new TaskCompletionSource<System.Windows.Forms.DialogResult>();
+                var taskSource = new TaskCompletionSource<bool>();
                 uint threadId = 0;
 
                 Thread t = new Thread(() =>
                 {
-                    threadId = Interop.Kernel32.KERNEL32.GetCurrentThreadId();
-                    taskSource.SetResult(dialog.ShowDialog(new Win32Window(ownerHandle)));
+                    try
+                    {
+                        threadId = Interop.Kernel32.KERNEL32.GetCurrentThreadId();
+                        taskSource.SetResult(showDialog(ownerHandle));
+                    }
+                    catch (Exception e)
+                    {
+                        taskSource.SetException(e);
+                    }
                 });
 
                 t.SetApartmentState(ApartmentState.STA);
@@ -210,8 +276,6 @@ namespace Clowd
 
                 // basically, since we opened the dialog in a new thread, we can be sure it is one of the only windows in that thread
                 // so we enumerate GetThreadWindows until the window handle is created, and then update the window position
-
-                HwndWindow.HwndWindowHook dialogWindowHook = null;
 
                 while (true)
                 {
@@ -227,6 +291,7 @@ namespace Clowd
 
                     if (children.Count > 0)
                     {
+                        // there are some other "COM" windows that get created in the thread, so we should look for the window that is a child of our ownerWindow or patchWindow.
                         var dialogHandle = children
                             .Select(s => HwndWindow.FromHandle(s))
                             .FirstOrDefault(w => w.Owner != null && w.Owner.Handle == ownerHandle);
@@ -234,6 +299,8 @@ namespace Clowd
                         if (dialogHandle == null)
                             continue;
 
+                        // first pass positioning this dialog. these dialogs like to resize themselves a bunch during rendering, so we will install a hook if we can.
+                        // the hook will detect if the size has changed and will update the window position again. the hook will abort when the user has interacted with the dialog.
                         AutoPositionNativeWindowHandle(dialogHandle, ownerHandle, isFake);
 
                         if (dialogHandle.CanHookWndProc)
@@ -257,9 +324,7 @@ namespace Clowd
                     }
                 }
 
-                var result = await taskSource.Task;
-
-                return result;
+                return await taskSource.Task;
             }
             catch
             {
@@ -267,6 +332,9 @@ namespace Clowd
             }
             finally
             {
+                if (dialogWindowHook != null)
+                    dialogWindowHook.Dispose();
+
                 ReleaseOwner(ownerWindow, isFake);
             }
         }
@@ -340,6 +408,22 @@ namespace Clowd
             }
         }
 
+        private static Window ShowNewFakeOwnerWindow()
+        {
+            var ownerWindow = new Window()
+            {
+                ShowActivated = false,
+                Opacity = 0,
+                WindowStyle = System.Windows.WindowStyle.None,
+                ResizeMode = ResizeMode.NoResize,
+                AllowsTransparency = true,
+                Width = 1,
+                Height = 1
+            };
+            ownerWindow.Show();
+            return ownerWindow;
+        }
+
         private static void CaptureOwner(FrameworkElement parent, out Window ownerWindow, out IntPtr ownerHandle, out bool isFake)
         {
             if (parent != null && !(parent is Window))
@@ -354,20 +438,9 @@ namespace Clowd
             else
             {
                 isFake = true;
-                ownerWindow = new Window()
-                {
-                    ShowActivated = false,
-                    Opacity = 0,
-                    WindowStyle = System.Windows.WindowStyle.None,
-                    ResizeMode = ResizeMode.NoResize,
-                    AllowsTransparency = true,
-                    Width = 1,
-                    Height = 1
-                };
-                ownerWindow.Show();
+                ownerWindow = ShowNewFakeOwnerWindow();
             }
 
-            //ownerWindow = GetRealOrFakeWindow(parent, out isFake);
             ownerHandle = new WindowInteropHelper(ownerWindow).EnsureHandle();
 
             // disable parent window
