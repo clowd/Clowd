@@ -27,6 +27,7 @@
             <conv:StringPixelConverter x:Key="convPixel2String" />
             <conv:ColorToBrushConverter x:Key="convColorToBrush" />
             <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
+            <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />
             <Style x:Key="ToggleToolButtonStyle" TargetType="{x:Type ToggleButton}">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="SnapsToDevicePixels" Value="True" />
@@ -385,26 +386,23 @@
             </WrapPanel.Resources>
             <StackPanel>
                 <TextBlock VerticalAlignment="Center">
-                    <Run x:Name="labelSelectionType" />
-                    <Run x:Name="labelTool" FontWeight="Bold" />
+                    <Run Text="{Binding Capabilities.Description, Mode=OneWay}" />
+                    <Run FontWeight="Bold" Text="{Binding Capabilities.Name, Mode=OneWay}" />
                 </TextBlock>
             </StackPanel>
-            <StackPanel x:Name="panelZoom">
+            <StackPanel Visibility="{Binding Capabilities.CanCanvasZoom, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Zoom:</Run>
                 </TextBlock>
-                <TextBox
-                    x:Name="textZoom"
-                    Style="{StaticResource ToolTextBox}"
-                    Text="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay, Converter={StaticResource convZoomScale}}" />
+                <TextBox Style="{StaticResource ToolTextBox}" Text="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay, Converter={StaticResource convZoomScale}}" />
                 <controls:ResetDefaultButton
                     Margin="4,0,0,0"
                     CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}"
                     DefaultValue="1" />
             </StackPanel>
-            <StackPanel x:Name="panelBackground">
+            <StackPanel Visibility="{Binding Capabilities.CanChangeCanvasBackground, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
-                    <Run>Background:</Run>
+                    <Run>Canvas:</Run>
                 </TextBlock>
                 <Border
                     Width="22"
@@ -431,17 +429,13 @@
                     </Border>
                 </Border>
             </StackPanel>
-            <StackPanel x:Name="panelStroke">
+            <StackPanel Visibility="{Binding Capabilities.HasStroke, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Stroke:</Run>
                 </TextBlock>
-                <TextBox
-                    x:Name="textStroke"
-                    Style="{StaticResource ToolTextBox}"
-                    Text="{Binding ElementName=drawingCanvas, Path=LineWidth, Converter={StaticResource convPixel2String}}"
-                    TextChanged="strokeWidth_Changed" />
+                <TextBox Style="{StaticResource ToolTextBox}" Text="{Binding ElementName=drawingCanvas, Path=LineWidth, Converter={StaticResource convPixel2String}}" />
             </StackPanel>
-            <StackPanel x:Name="panelColor">
+            <StackPanel Visibility="{Binding Capabilities.HasColor, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Color:</Run>
                 </TextBlock>
@@ -450,7 +444,8 @@
                     Height="22"
                     Margin="4,0,0,0"
                     BorderBrush="Black"
-                    BorderThickness="1">
+                    BorderThickness="1"
+                    Visibility="{Binding ElementName=chkColorAuto, Path=IsChecked, Converter={StaticResource Bool2InverseVis}}">
                     <Border
                         BorderBrush="White"
                         BorderThickness="1"
@@ -469,8 +464,24 @@
                         <Rectangle Fill="{Binding ElementName=drawingCanvas, Path=ObjectColor, Mode=OneWay, Converter={StaticResource convColorToBrush}}" />
                     </Border>
                 </Border>
+                <StackPanel
+                    Height="20"
+                    Margin="4,0,0,0"
+                    VerticalAlignment="Center"
+                    Orientation="Vertical"
+                    Visibility="{Binding Capabilities.HasAutoColor, Converter={StaticResource Bool2Vis}}">
+                    <Viewbox Width="10" Height="10">
+                        <CheckBox
+                            x:Name="chkColorAuto"
+                            Margin="0"
+                            Padding="0"
+                            HorizontalAlignment="Center"
+                            Visibility="Visible" />
+                    </Viewbox>
+                    <TextBlock HorizontalAlignment="Center" FontSize="8">Auto</TextBlock>
+                </StackPanel>
             </StackPanel>
-            <StackPanel x:Name="panelFont">
+            <StackPanel Visibility="{Binding Capabilities.HasFont, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Font:</Run>
                 </TextBlock>
@@ -482,7 +493,7 @@
                     FontStyle="{Binding ElementName=drawingCanvas, Path=TextFontStyle, Mode=OneWay}"
                     Style="{StaticResource InnerToolButtonStyle}" />
             </StackPanel>
-            <StackPanel x:Name="panelAngle">
+            <StackPanel Visibility="{Binding Capabilities.HasAngle, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Angle:</Run>
                 </TextBlock>
