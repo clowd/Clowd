@@ -183,7 +183,7 @@ namespace Clowd
             using (DrawingContext dc = vs.RenderOpen())
             {
                 dc.PushTransform(transform);
-                dc.DrawRectangle(Brushes.White, null, bounds);
+                dc.DrawRectangle(new SolidColorBrush(App.Current.Settings.EditorSettings.CanvasBackground), null, bounds);
                 dc.Pop();
                 drawingCanvas.Draw(dc, null, transform, false);
             }
@@ -205,7 +205,7 @@ namespace Clowd
             using (DrawingContext dc = background.RenderOpen())
             {
                 dc.PushTransform(transform);
-                dc.DrawRectangle(Brushes.White, null, bounds);
+                dc.DrawRectangle(new SolidColorBrush(App.Current.Settings.EditorSettings.CanvasBackground), null, bounds);
             }
             bmp.Render(background);
             drawingCanvas.Draw(null, bmp, transform, false);
