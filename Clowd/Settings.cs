@@ -238,6 +238,7 @@ namespace Clowd
     [ImplementPropertyChanged]
     public class SavedToolSettings
     {
+        public bool TextObjectColorIsAuto { get; set; } = true;
         public Color ObjectColor { get; set; } = Colors.Red;
         public double LineWidth { get; set; } = 2d;
         public string FontFamily { get; set; } = "Segoe UI";
