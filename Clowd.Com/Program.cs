@@ -12,30 +12,44 @@ using System.Text;
 
 namespace Clowd.Com
 {
-    public class Main
+    [ComVisible(false)]
+    public class Program
     {
-        [DllExport("DllRegisterServer", CallingConvention.StdCall)]
-        public static int DllRegisterServer()
+        internal static int Main(string[] args)
         {
-            return InstallCOMTypes() ? 0 : -1;
+            //var success = InstallCOMTypes();
+            var asuccess = UninstallCOMTypes();
+
+            //var filter = new AudioCaptureFilter();
+            //DirectShow.AMMediaType mt = null;
+            //filter.Pins[0].GetMediaType(0, ref mt);
+
+            return 0;
+            //return 0;
         }
 
-        [DllExport("DllUnregisterServer", CallingConvention.StdCall)]
-        public static int DllUnregisterServer()
-        {
-            return UninstallCOMTypes() ? 0 : -1;
-        }
+        //[DllExport("DllRegisterServer", CallingConvention.StdCall)]
+        //public static int DllRegisterServer()
+        //{
+        //    return InstallCOMTypes() ? 0 : -1;
+        //}
+
+        //[DllExport("DllUnregisterServer", CallingConvention.StdCall)]
+        //public static int DllUnregisterServer()
+        //{
+        //    return UninstallCOMTypes() ? 0 : -1;
+        //}
 
         public static bool InstallCOMTypes()
         {
             RegistrationServices regService = new RegistrationServices();
-            return regService.RegisterAssembly(typeof(Main).Assembly, AssemblyRegistrationFlags.SetCodeBase);
+            return regService.RegisterAssembly(typeof(Program).Assembly, AssemblyRegistrationFlags.SetCodeBase);
         }
 
         public static bool UninstallCOMTypes()
         {
             RegistrationServices regService = new RegistrationServices();
-            return regService.UnregisterAssembly(typeof(Main).Assembly);
+            return regService.UnregisterAssembly(typeof(Program).Assembly);
         }
 
         public static bool InstallCOMTypesRegAsm()

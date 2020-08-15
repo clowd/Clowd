@@ -2366,6 +2366,22 @@ namespace DirectShow
 
     [StructLayout(LayoutKind.Sequential)]
     [ComVisible(false)]
+    public class AudioStreamConfigCaps
+    {
+        public Guid guid;
+        public uint MinimumChannels;
+        public uint MaximumChannels;
+        public uint ChannelsGranularity;
+        public uint MinimumBitsPerSample;
+        public uint MaximumBitsPerSample;
+        public uint BitsPerSampleGranularity;
+        public uint MinimumSampleFrequency;
+        public uint MaximumSampleFrequency;
+        public uint SampleFrequencyGranularity;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    [ComVisible(false)]
     public class VideoStreamConfigCaps
     {
         public Guid guid;

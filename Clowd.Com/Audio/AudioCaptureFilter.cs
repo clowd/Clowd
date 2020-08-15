@@ -1,12 +1,16 @@
 ﻿using DirectShow;
 using DirectShow.BaseClasses;
+using NAudio.CoreAudioApi;
+using NAudio.Wave;
 using Sonic;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace Clowd.Com
@@ -14,14 +18,18 @@ namespace Clowd.Com
     [ComVisible(true)]
     [Guid("98957b9c-71c2-46b7-95a9-eec80d9317e7")]
     [AMovieSetup(Merit.Normal, AMovieSetup.CLSID_AudioInputDeviceCategory)]
-    class AudioCaptureFilter : BaseSourceFilter, IAMFilterMiscFlags
+    public class AudioCaptureFilter : BaseSourceFilter, IAMStreamConfig, IKsPropertySet, IAMFilterMiscFlags
     {
         public const string FRIENDLY_NAME = "clowd-audio";
+
+        private AudioCaptureStream _stream;
+
         public AudioCaptureFilter() : base(FRIENDLY_NAME)
         {
-            AddPin(new AudioCaptureStream("Capture", this));
-
+            _stream = new AudioCaptureStream("CaptureAudioPin", this);
+            AddPin(_stream);
         }
+
         protected override int OnInitializePins()
         {
             return NOERROR;
@@ -37,34 +45,54 @@ namespace Clowd.Com
             return base.Stop();
         }
 
-        public override int GetState(int dwMilliSecsTimeout, out FilterState filtState)
+        protected override HRESULT WriteToStream(Stream _stream)
         {
-            return base.GetState(dwMilliSecsTimeout, out filtState);
+            return base.WriteToStream(_stream);
         }
 
-        [ComVisible(false)]
-        public class AudioCaptureStream : SourceStream
+        protected override HRESULT ReadFromStream(Stream _stream)
         {
-            public AudioCaptureStream(string _name, BaseSourceFilter _filter)
-                : base(_name, _filter)
-            {
+            return base.ReadFromStream(_stream);
+        }
 
-            }
+        public int SetFormat([In, MarshalAs(UnmanagedType.LPStruct)] AMMediaType pmt)
+        {
+            return _stream.SetFormat(pmt);
+        }
 
-            public override int DecideBufferSize(ref IMemAllocatorImpl pAlloc, ref AllocatorProperties prop)
-            {
-                throw new NotImplementedException();
-            }
+        public int GetFormat([Out] out AMMediaType pmt)
+        {
+            return _stream.GetFormat(out pmt);
+        }
 
-            public override int FillBuffer(ref IMediaSampleImpl _sample)
-            {
-                throw new NotImplementedException();
-            }
+        public int GetNumberOfCapabilities(IntPtr piCount, IntPtr piSize)
+        {
+            return _stream.GetNumberOfCapabilities(piCount, piSize);
+        }
+
+        public int GetStreamCaps([In] int iIndex, [In, Out] IntPtr ppmt, [In] IntPtr pSCC)
+        {
+            return _stream.GetStreamCaps(iIndex, ppmt, pSCC);
+        }
+
+        public int Set([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidPropSet, [In] int dwPropID, [In] IntPtr pInstanceData, [In] int cbInstanceData, [In] IntPtr pPropData, [In] int cbPropData)
+        {
+            return _stream.Set(guidPropSet, dwPropID, pInstanceData, cbInstanceData, pPropData, cbPropData);
+        }
+
+        public int Get([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidPropSet, [In] int dwPropID, [In] IntPtr pInstanceData, [In] int cbInstanceData, [In, Out] IntPtr pPropData, [In] int cbPropData, [Out] out int pcbReturned)
+        {
+            return _stream.Get(guidPropSet, dwPropID, pInstanceData, cbInstanceData, pPropData, cbPropData, out pcbReturned);
+        }
+
+        public int QuerySupported([In, MarshalAs(UnmanagedType.LPStruct)] Guid guidPropSet, [In] int dwPropID, [Out] out KSPropertySupport pTypeSupport)
+        {
+            return _stream.QuerySupported(guidPropSet, dwPropID, out pTypeSupport);
         }
 
         public int GetMiscFlags()
         {
-            return (int)AMFilterMiscFlags.IsSource;
+            return _stream.GetMiscFlags();
         }
     }
 }
