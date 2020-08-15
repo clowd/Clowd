@@ -34,7 +34,7 @@ namespace Clowd.Com
         public VideoCaptureFilter() : base(FRIENDLY_NAME)
         {
             m_bmi.bmiHeader = new BitmapInfoHeader();
-            AddPin(new SourceFilterStream("Capture", this));
+            AddPin(new SourceFilterStream("CaptureVideoPin", this));
         }
 
         public int GetMiscFlags()
