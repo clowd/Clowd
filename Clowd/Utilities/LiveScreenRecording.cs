@@ -7,6 +7,7 @@ using System.Linq;
 using System.Management;
 using System.Text;
 using System.Threading.Tasks;
+using Clowd.Installer.Features;
 using Microsoft.VisualBasic.FileIO;
 using NReco.VideoConverter;
 using PropertyChanged;
@@ -81,8 +82,16 @@ namespace Clowd.Utilities
 
         private string cli_VideoSource()
         {
-            //return $"-f gdigrab -framerate {settings.TargetFramesPerSecond} -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 1 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
-            return $"-f gdigrab -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 0 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
+            if (DShowFilter.DefaultVideo != null && settings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio && audio.CaptureLoopbackAudio && audio.EnhancedAudioVideoSync)
+            {
+                // if the above is true, the video will be added to the same audio clock in order to sync the video capture with the audio
+                return "";
+            }
+            else
+            {
+                //return $"-f gdigrab -framerate {settings.TargetFramesPerSecond} -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 1 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
+                return $"-f gdigrab -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 0 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
+            }
         }
 
         private string cli_VideoCodecAndOutput()

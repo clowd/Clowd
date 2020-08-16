@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using Clowd.Installer.Features;
 using Clowd.Utilities;
 using DirectShowLib;
 using Ookii.Dialogs.Wpf;
@@ -171,6 +172,9 @@ namespace Clowd
             }
         }
 
+        [PropertyTools.DataAnnotations.EnableBy(nameof(CaptureLoopbackAudio), true)]
+        public bool EnhancedAudioVideoSync { get; set; } = true;
+
         public bool CaptureMicrophone { get; set; } = false;
 
         [Browsable(false)]
@@ -192,14 +196,22 @@ namespace Clowd
 
         protected void AddAudioPresets(List<FFmpegCliOption> output)
         {
-            var loopback = CaptureLoopbackAudio;
+            var loopback = CaptureLoopbackAudio ? DShowFilter.DefaultAudio : null;
             var microphone = CaptureMicrophone ? SelectedMicrophone : null;
             //output.Add(new FFmpegCliOption("copyts", ""));
 
-            if (loopback)
+            if (loopback != null)
             {
                 output.Add(new FFmpegCliOption("f", "dshow"));
-                output.Add(new FFmpegCliOption("i", "audio=\"clowd-audio-capturer\""));
+
+                if (EnhancedAudioVideoSync && DShowFilter.DefaultVideo != null)
+                {
+                    output.Add(new FFmpegCliOption("i", $"video=\"{DShowFilter.DefaultVideo.FilterName}\":audio=\"{loopback.FilterName}\""));
+                }
+                else
+                {
+                    output.Add(new FFmpegCliOption("i", $"audio=\"{loopback.FilterName}\""));
+                }
             }
 
             if (microphone != null)
@@ -210,14 +222,14 @@ namespace Clowd
 
             //output.Add(new FFmpegCliOption("muxdelay", "0"));
 
-            if (loopback && microphone != null)
+            if (loopback != null && microphone != null)
             {
                 // https://stackoverflow.com/questions/14498539/how-to-overlay-downmix-two-audio-files-using-ffmpeg
                 // -filter_complex amix=inputs=2:duration=longest
                 output.Add(new FFmpegCliOption("filter_complex", "amix=inputs=2:duration=longest"));
             }
 
-            if (loopback || microphone != null)
+            if (loopback != null || microphone != null)
             {
                 output.Add(new FFmpegCliOption("codec:a", "libmp3lame"));
                 output.Add(new FFmpegCliOption("aq", "2"));

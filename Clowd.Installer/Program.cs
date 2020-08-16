@@ -32,7 +32,7 @@ namespace Clowd.Installer
         }
         internal static int Main(string[] args)
         {
-            // we only auto-elevate if running inside clowd and not from command line
+            // we should only auto-elevate if running inside clowd and not from command line
             CanElevate = false;
 
             var types = new Type[] {

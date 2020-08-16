@@ -22,6 +22,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -56,11 +57,13 @@
     <Compile Include="Features\ControlPanel.cs" />
     <Compile Include="Features\Util\ControlPanelInfo.cs" />
     <Compile Include="Features\Util\DirectShow.cs" />
+    <Compile Include="Features\Util\DirectShowFilterInfo.cs" />
     <Compile Include="Features\Util\DSBaseClasses.cs" />
     <Compile Include="Features\Util\DSHelper.cs" />
     <Compile Include="Features\DShowFilter.cs" />
     <Compile Include="Features\IFeature.cs" />
     <Compile Include="Features\Shortcuts.cs" />
+    <Compile Include="Features\Util\UScreen.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RegistryEx.cs" />
