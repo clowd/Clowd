@@ -9,6 +9,7 @@ namespace Clowd.Installer
     public static class Constants
     {
         public const string AppName = "Clowd";
+        public const string DirectShowAppName = "ClowdDirectShow";
         public static readonly string ShortcutName = $"{AppName}.lnk";
         public const string PublishingCompany = "Caesa Consulting Ltd.";
         public const string ContextMenuShellName = "Upload with Clowd";
