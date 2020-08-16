@@ -32,6 +32,9 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>Embedded\default.ico</ApplicationIcon>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -60,10 +63,15 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <EmbeddedResource Include="Embedded\UScreenCapture-x64.ax" />
+    <EmbeddedResource Include="Embedded\UScreenCapture-x86.ax" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Embedded\loopback-audio-x64.dll" />
     <EmbeddedResource Include="Embedded\loopback-audio-x86.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Embedded\default.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
