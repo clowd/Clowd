@@ -475,11 +475,20 @@ namespace Clowd
                 ownerWindow = ShowNewFakeOwnerWindow();
             }
 
-            ownerHandle = new WindowInteropHelper(ownerWindow).EnsureHandle();
+            try
+            {
 
-            // disable parent window
-            ownerWindow.IsEnabled = false;
-            USER32EX.SetNativeEnabled(ownerHandle, false);
+                ownerHandle = new WindowInteropHelper(ownerWindow).EnsureHandle();
+
+                // disable parent window
+                ownerWindow.IsEnabled = false;
+                USER32EX.SetNativeEnabled(ownerHandle, false);
+            }
+            catch when (!isFake)
+            {
+                // if we tried to capture a real window and it failed, the window is probably closed.. so lets just create a fake one
+                CaptureOwner(null, out ownerWindow, out ownerHandle, out isFake);
+            }
         }
 
         private static void ReleaseOwner(Window ownerWindow, bool isFake)
