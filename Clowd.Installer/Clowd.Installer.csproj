@@ -38,7 +38,9 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Management" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -52,6 +54,10 @@
     <Compile Include="Features\AutoStart.cs" />
     <Compile Include="Features\ContextMenu.cs" />
     <Compile Include="Features\ControlPanel.cs" />
+    <Compile Include="Features\Util\ControlPanelInfo.cs" />
+    <Compile Include="Features\Util\DirectShow.cs" />
+    <Compile Include="Features\Util\DSBaseClasses.cs" />
+    <Compile Include="Features\Util\DSHelper.cs" />
     <Compile Include="Features\DShowFilter.cs" />
     <Compile Include="Features\IFeature.cs" />
     <Compile Include="Features\Shortcuts.cs" />
