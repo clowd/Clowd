@@ -46,7 +46,7 @@ namespace Clowd.Installer.Features
         {
             foreach (var root in RegistryEx.OpenKeysFromRootPath("SOFTWARE", RegistryQuery.System))
                 using (root)
-                    root.DeleteSubKey("UNREAL", false);
+                    root.DeleteSubKeyTree("UNREAL", false);
         }
     }
 }

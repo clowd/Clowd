@@ -247,7 +247,7 @@ namespace Clowd
         {
             if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
             {
-                if (!audio.CaptureLoopbackAudio && !audio.IsLoopbackInstalled)
+                if (!audio.CaptureLoopbackAudio && !audio.IsDirectShowInstalled)
                 {
                     NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Windows, "You must install the 'DirectShow Add-ons' from the settings page before enabling this feature.");
                     return;

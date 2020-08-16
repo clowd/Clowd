@@ -320,21 +320,13 @@ namespace Clowd
     [ImplementPropertyChanged]
     public class VideoSettings : IDisposable
     {
-        //[DisplayName("Max Resolution")]
-        //public MaxResolution MaxResolution { get; set; } = MaxResolution._1080p;
-
         [PData.DirectoryPath]
         public string OutputDirectory { get; set; }
 
         public bool ShowCursor { get; set; } = true;
 
-        //public CaptureVideoCodec VideoCodec { get; set; } = CaptureVideoCodec.libx264;
-
-        //[PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.h264_nvenc)]
-        //public FFMpegCodecSettings_h264_nvenc h264_nvenc { get; set; } = new FFMpegCodecSettings_h264_nvenc();
-
-        //[PData.VisibleBy(nameof(VideoCodec), CaptureVideoCodec.libx264)]
-        //public FFMpegCodecSettings_libx264 libx264 { get; set; } = new FFMpegCodecSettings_libx264();
+        [PropertyTools.DataAnnotations.Slidable(Minimum = 5, Maximum = 60, SnapToTicks = true, TickFrequency = 5, SmallChange = 5, LargeChange = 5)]
+        public int FPS { get; set; } = 15;
 
         [DisplayName("Encoder Settings")]
         public FFmpegSettings VideoCodec { get; set; } = new FFmpegSettings();

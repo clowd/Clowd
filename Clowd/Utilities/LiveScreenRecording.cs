@@ -45,7 +45,8 @@ namespace Clowd.Utilities
 
         public Task Start()
         {
-            var args = String.Join(" ", cli_VideoSource()?.Trim(), cli_VideoCodecAndOutput()?.Trim());
+            //var args = String.Join(" ", cli_VideoSource()?.Trim(), cli_VideoCodecAndOutput()?.Trim());
+            var args = cli_VideoCodecAndOutput().Trim();
 
             // run in a background thread
             runner = Task.Factory.StartNew(() => ffmpeg.Invoke(args), TaskCreationOptions.LongRunning);
@@ -80,19 +81,20 @@ namespace Clowd.Utilities
         //    else return null;
         //}
 
-        private string cli_VideoSource()
-        {
-            if (DShowFilter.DefaultVideo != null && settings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio && audio.CaptureLoopbackAudio && audio.EnhancedAudioVideoSync)
-            {
-                // if the above is true, the video will be added to the same audio clock in order to sync the video capture with the audio
-                return "";
-            }
-            else
-            {
-                //return $"-f gdigrab -framerate {settings.TargetFramesPerSecond} -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 1 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
-                return $"-f gdigrab -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 0 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
-            }
-        }
+        //private string cli_VideoSource()
+        //{
+        //    //if (DShowFilter.DefaultVideo != null && settings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio && audio.CaptureLoopbackAudio && audio.EnhancedAudioVideoSync)
+        //    if (true)
+        //    {
+        //        // if the above is true, the video will be added to the same audio clock in order to sync the video capture with the audio
+        //        return "";
+        //    }
+        //    else
+        //    {
+        //        //return $"-f gdigrab -framerate {settings.TargetFramesPerSecond} -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 1 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
+        //        return $"-f gdigrab -offset_x {bounds.Left} -offset_y {bounds.Top} -video_size {bounds.Width}x{bounds.Height} -show_region 0 -draw_mouse {(settings.ShowCursor ? "1" : "0")} -i desktop";
+        //    }
+        //}
 
         private string cli_VideoCodecAndOutput()
         {
@@ -111,6 +113,33 @@ namespace Clowd.Utilities
             //}
 
             var options = codec.GetOptions();
+
+            var gdigrabIndex = options.FindIndex(k => k.param_value.Equals("gdigrab", StringComparison.OrdinalIgnoreCase));
+            var uscreenIndex = options.FindIndex(k => k.param_value.Contains("UScreenCapture"));
+
+            if (gdigrabIndex < 0 && uscreenIndex < 0)
+                throw new Exception("Error in video codec settings: Unknown screen capture mechanism. Can not supply desired screen coordinates to FFmpeg.");
+
+            var fps = Math.Min(settings.FPS, 60);
+
+            if (gdigrabIndex >= 0)
+            {
+                var gdiOptions = new List<FFmpegCliOption>()
+                {
+                    new FFmpegCliOption("framerate", fps),
+                    new FFmpegCliOption("offset_x", bounds.Left),
+                    new FFmpegCliOption("offset_y", bounds.Top),
+                    new FFmpegCliOption("video_size", $"{bounds.Width}x{bounds.Height}"),
+                    new FFmpegCliOption("draw_mouse", settings.ShowCursor ? "1" : "0"),
+                };
+                options.InsertRange(gdigrabIndex + 1, gdiOptions);
+            }
+
+            if (uscreenIndex >= 0)
+            {
+                UScreen.SetProperties(bounds, fps, settings.ShowCursor, true);
+            }
+
             var args = String.Join(" ", options.Select(o => $"-{o.param_name} {o.param_value}"));
             return $"{args} -n \"{filename}\"";
         }
