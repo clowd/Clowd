@@ -49,11 +49,7 @@ namespace Clowd.Installer.Features
                 {
                     if (filterInfo.FileExists)
                     {
-                        if (filterInfo.IsInstalled)
-                        {
-                            regsvr32(false, filterInfo.FilePath);
-                        }
-
+                        regsvr32(false, filterInfo.FilePath);
                         File.Delete(filterInfo.FilePath);
                     }
                     continue;
