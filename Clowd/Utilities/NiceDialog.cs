@@ -383,33 +383,21 @@ namespace Clowd
             return FakeShowTaskDialogBlockingOrAsync(parent, dialog, true).Result;
         }
 
-        public static async Task<System.Windows.Forms.DialogResult> ShowAsNiceDialogAsync(this System.Windows.Forms.Form form, FrameworkElement parent)
+        public static Task<System.Windows.Forms.DialogResult> ShowAsNiceDialogAsync(this System.Windows.Forms.Form form, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
 
-            try
-            {
-                var taskSource = new TaskCompletionSource<bool>();
+            var taskSource = new TaskCompletionSource<System.Windows.Forms.DialogResult>();
 
-                form.Load += (_, e) =>
-                {
-                    form.Location = GetDialogPosition(new System.Drawing.Size(form.Width, form.Height), ownerHandle, isFake);
-                };
-                form.Closed += (s, e) => taskSource.SetResult(true);
-                form.Show(new Win32Window(ownerHandle));
-
-                await taskSource.Task;
-
-                return form.DialogResult;
-            }
-            catch
+            form.Load += (_, e) =>
             {
-                throw;
-            }
-            finally
-            {
-                ReleaseOwner(ownerWindow, isFake);
-            }
+                form.Location = GetDialogPosition(new System.Drawing.Size(form.Width, form.Height), ownerHandle, isFake);
+            };
+            form.FormClosing += (s, e) => ReleaseOwner(ownerWindow, isFake);
+            form.Closed += (s, e) => taskSource.SetResult(form.DialogResult);
+            form.Show(new Win32Window(ownerHandle));
+
+            return taskSource.Task;
         }
 
         private static async Task<TaskDialogButton> FakeShowTaskDialogBlockingOrAsync(FrameworkElement parent, TaskDialog dialog, bool blocking)
@@ -477,7 +465,6 @@ namespace Clowd
 
             try
             {
-
                 ownerHandle = new WindowInteropHelper(ownerWindow).EnsureHandle();
 
                 // disable parent window
