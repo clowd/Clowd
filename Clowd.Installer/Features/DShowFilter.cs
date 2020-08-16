@@ -83,7 +83,7 @@ start /b """" cmd /c rd /s /q ""%~dp0"" & msg * /self /w ""Uninstallation of {Co
             // write icon for uninstall programs list
             var programIcon = ResourcesEx.WriteResourceToFile("default.ico", InstallDirectory);
 
-            var info = new ControlPanel.ControlPanelInfo()
+            var info = new ControlPanelInfo()
             {
                 DisplayName = Constants.DirectShowAppName,
                 UninstallString = uninstallFilePath,
@@ -91,7 +91,7 @@ start /b """" cmd /c rd /s /q ""%~dp0"" & msg * /self /w ""Uninstallation of {Co
                 DisplayIconPath = programIcon,
             };
 
-            ControlPanel.ControlPanelInfo.Install(Constants.DirectShowAppName, info);
+            ControlPanelInfo.Install(Constants.DirectShowAppName, info);
         }
 
         public bool NeedsPrivileges()
@@ -123,7 +123,7 @@ start /b """" cmd /c rd /s /q ""%~dp0"" & msg * /self /w ""Uninstallation of {Co
             else
                 throw new Exception("regsvr32 unable to uninstall files: \n" + String.Join("\n", files));
 
-            ControlPanel.ControlPanelInfo.Uninstall(Constants.DirectShowAppName);
+            ControlPanelInfo.Uninstall(Constants.DirectShowAppName);
         }
 
         private int regsvr32(bool install, string filepath)
