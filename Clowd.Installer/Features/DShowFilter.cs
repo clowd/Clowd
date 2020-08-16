@@ -10,15 +10,19 @@ namespace Clowd.Installer.Features
 {
     public class DShowFilter : IFeature
     {
-        public string InstallDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Constants.DirectShowAppName);
+        public static string InstallDirectory => Path.Combine(RegistryEx.GetInstallPath(InstallMode.System), Constants.DirectShowAppName);
 
-        public string[] FilterNames => new string[]
+        public static DirectShowFilterInfo[] Filters => new DirectShowFilterInfo[]
         {
-            "loopback-audio-x86.dll",
-            "loopback-audio-x64.dll",
-            "UScreenCapture-x86.ax",
-            "UScreenCapture-x64.ax",
+            new DirectShowFilterInfo(DirectShowFilterType.Audio, "clowd-audio-capturer", "loopback-audio-x86.dll", true),
+            new DirectShowFilterInfo(DirectShowFilterType.Audio, "clowd-audio-capturer", "loopback-audio-x64.dll", true),
+            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x86.ax", true),
+            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x64.ax", true),
         };
+
+        public static DirectShowFilterInfo DefaultVideo => Filters.OrderBy(f => f.IsLatest).FirstOrDefault(f => f.FilterType == DirectShowFilterType.Video && f.IsInstalled);
+
+        public static DirectShowFilterInfo DefaultAudio => Filters.OrderBy(f => f.IsLatest).FirstOrDefault(f => f.FilterType == DirectShowFilterType.Audio && f.IsInstalled);
 
         public bool CheckInstalled(string assetPath)
         {
@@ -38,20 +42,22 @@ namespace Clowd.Installer.Features
 
             StringBuilder revsvrUninstallCommands = new StringBuilder();
 
-            foreach (var f in FilterNames)
+            foreach (var filterInfo in Filters)
             {
+                var f = filterInfo.ResourceName;
+
                 if (f.Contains("x64") && !Environment.Is64BitOperatingSystem)
                     continue; // skip 64 assy on 32 bit systems
 
-                var file = ResourcesEx.WriteResourceToFile(f, InstallDirectory);
-                var code = regsvr32(true, file);
+                var filterFilePath = ResourcesEx.WriteResourceToFile(f, InstallDirectory);
+                var code = regsvr32(true, filterFilePath);
                 if (code != 0)
                 {
                     Uninstall(assetPath);
                     throw new Exception("regsvr32 returned non-zero exit code: " + code);
                 }
 
-                revsvrUninstallCommands.AppendLine(regsvr32_command(false, file));
+                revsvrUninstallCommands.AppendLine(regsvr32_command(false, filterFilePath));
             }
 
             //This works great, but it might be a good idea to move the cd command to the start (this insures that the path is also available to the elevated script -
@@ -70,7 +76,11 @@ EXIT
 :ADMINTASKS
 {revsvrUninstallCommands.ToString()}
 
-reg delete ""HKEY_CURRENT_USER\{Constants.UninstallRegistryPath}\{Constants.DirectShowAppName}"" /f
+reg delete ""{RegistryEx.GetRegistryHiveName(InstallMode.System)}\{Constants.UninstallRegistryPath}\{Constants.DirectShowAppName}"" /f /reg:32
+reg delete ""{RegistryEx.GetRegistryHiveName(InstallMode.System)}\{Constants.UninstallRegistryPath}\{Constants.DirectShowAppName}"" /f /reg:64
+
+reg delete ""{RegistryEx.GetRegistryHiveName(InstallMode.System)}\SOFTWARE\UNREAL"" /f /reg:32
+reg delete ""{RegistryEx.GetRegistryHiveName(InstallMode.System)}\SOFTWARE\UNREAL"" /f /reg:64
 
 start /b """" cmd /c rd /s /q ""%~dp0"" & msg * /self /w ""Uninstallation of {Constants.DirectShowAppName} has been successful""";
 
@@ -91,7 +101,7 @@ start /b """" cmd /c rd /s /q ""%~dp0"" & msg * /self /w ""Uninstallation of {Co
                 DisplayIconPath = programIcon,
             };
 
-            ControlPanelInfo.Install(Constants.DirectShowAppName, info);
+            ControlPanelInfo.Install(Constants.DirectShowAppName, info, InstallMode.System);
         }
 
         public bool NeedsPrivileges()
@@ -123,7 +133,8 @@ start /b """" cmd /c rd /s /q ""%~dp0"" & msg * /self /w ""Uninstallation of {Co
             else
                 throw new Exception("regsvr32 unable to uninstall files: \n" + String.Join("\n", files));
 
-            ControlPanelInfo.Uninstall(Constants.DirectShowAppName);
+            ControlPanelInfo.Uninstall(Constants.DirectShowAppName, RegistryQuery.System);
+            UScreen.DeleteProperties();
         }
 
         private int regsvr32(bool install, string filepath)
