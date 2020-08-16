@@ -39,7 +39,7 @@ namespace Clowd.Installer.Features
         // URLUpdateInfo
         // URLInfoAbout
 
-        public static void Install(string appkey, ControlPanelInfo info, InstallMode mode = InstallMode.CurrentUser)
+        public static void Install(string appkey, ControlPanelInfo info, InstallMode mode)
         {
             if (String.IsNullOrEmpty(info.DisplayName))
                 throw new ArgumentNullException(nameof(DisplayName));
@@ -87,7 +87,7 @@ namespace Clowd.Installer.Features
             }
         }
 
-        public static ControlPanelInfo GetInfo(string appKey, RegistryQuery query = RegistryQuery.CurrentUser)
+        public static ControlPanelInfo GetInfo(string appKey, RegistryQuery query)
         {
             foreach (var root in RegistryEx.OpenKeysFromRootPath(Constants.UninstallRegistryPath, query))
             {
@@ -114,7 +114,7 @@ namespace Clowd.Installer.Features
             return null;
         }
 
-        public static void Uninstall(string appKey, RegistryQuery query = RegistryQuery.CurrentUser)
+        public static void Uninstall(string appKey, RegistryQuery query)
         {
             foreach (var root in RegistryEx.OpenKeysFromRootPath(Constants.UninstallRegistryPath, query))
             {
