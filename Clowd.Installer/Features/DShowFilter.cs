@@ -16,8 +16,8 @@ namespace Clowd.Installer.Features
         {
             new DirectShowFilterInfo(DirectShowFilterType.Audio, "clowd-audio-capturer", "loopback-audio-x86.dll", true),
             new DirectShowFilterInfo(DirectShowFilterType.Audio, "clowd-audio-capturer", "loopback-audio-x64.dll", true),
-            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x86.ax", true),
-            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x64.ax", true),
+            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x86.ax", false),
+            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x64.ax", false),
         };
 
         public static DirectShowFilterInfo DefaultVideo => Filters.OrderBy(f => f.IsLatest).FirstOrDefault(f => f.FilterType == DirectShowFilterType.Video && f.IsInstalled);
@@ -44,6 +44,21 @@ namespace Clowd.Installer.Features
 
             foreach (var filterInfo in Filters)
             {
+                // check if we need to uninstall anything
+                if (!filterInfo.IsLatest)
+                {
+                    if (filterInfo.FileExists)
+                    {
+                        if (filterInfo.IsInstalled)
+                        {
+                            regsvr32(false, filterInfo.FilePath);
+                        }
+
+                        File.Delete(filterInfo.FilePath);
+                    }
+                    continue;
+                }
+
                 var f = filterInfo.ResourceName;
 
                 if (f.Contains("x64") && !Environment.Is64BitOperatingSystem)
