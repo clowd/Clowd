@@ -175,6 +175,7 @@
     <Compile Include="Utilities\ClipboardEx.cs" />
     <Compile Include="Utilities\Debouncer.cs" />
     <Compile Include="Utilities\Exposed.cs" />
+    <Compile Include="Utilities\Expr.cs" />
     <Compile Include="Utilities\ICommandLineProxy.cs" />
     <Compile Include="Utilities\GlobalTrigger.cs" />
     <Compile Include="Utilities\LiveScreenRecording.cs" />
