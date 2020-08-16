@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -78,6 +79,12 @@ namespace Clowd
             param_value = value;
         }
 
+        public FFmpegCliOption(string name, int value)
+        {
+            param_name = name;
+            param_value = value.ToString();
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
     }
 
@@ -142,51 +149,62 @@ namespace Clowd
         [PropertyTools.DataAnnotations.Category("Audio")]
         public bool CaptureLoopbackAudio
         {
-            get
-            {
-                var ret = _loopback && IsLoopbackInstalled;
-                if (_loopback != ret)
-                {
-                    _loopback = ret;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CaptureLoopbackAudio)));
-                }
-                return ret;
-            }
-            set
-            {
-                var isInstalled = IsLoopbackInstalled;
-                if (!isInstalled && value)
-                {
-                    NiceDialog.ShowSettingsPromptAsync(
-                        TemplatedWindow.GetWindow(typeof(SettingsPage)),
-                        SettingsCategory.Windows,
-                        $"You must install 'Windows/DirectShow Add-ons' before {App.ClowdAppName} is able to capture loopback audio");
-
-                    _loopback = false;
-                }
-                else
-                {
-                    _loopback = value;
-                }
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CaptureLoopbackAudio)));
-            }
+            get => GetDirectShowDependency(IsDirectShowInstalled, nameof(CaptureLoopbackAudio), this, l => l._loopback);
+            set => SetDirectShowDependency(IsDirectShowInstalled, value, nameof(CaptureLoopbackAudio), this, l => l._loopback);
         }
+        //public bool CaptureLoopbackAudio
+        //{
+        //    get
+        //    {
+        //        var ret = _loopback && IsLoopbackInstalled;
+        //        if (_loopback != ret)
+        //        {
+        //            _loopback = ret;
+        //            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CaptureLoopbackAudio)));
+        //        }
+        //        return ret;
+        //    }
+        //    set
+        //    {
+        //        var isInstalled = IsLoopbackInstalled;
+        //        if (!isInstalled && value)
+        //        {
+        //            NiceDialog.ShowSettingsPromptAsync(
+        //                TemplatedWindow.GetWindow(typeof(SettingsPage)),
+        //                SettingsCategory.Windows,
+        //                $"You must install 'Windows/DirectShow Add-ons' before {App.ClowdAppName} is able to capture loopback audio");
 
-        [PropertyTools.DataAnnotations.EnableBy(nameof(CaptureLoopbackAudio), true)]
-        public bool EnhancedAudioVideoSync { get; set; } = true;
+        //            _loopback = false;
+        //        }
+        //        else
+        //        {
+        //            _loopback = value;
+        //        }
+        //        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CaptureLoopbackAudio)));
+        //    }
+        //}
 
         public bool CaptureMicrophone { get; set; } = false;
 
         [Browsable(false)]
-        public bool IsLoopbackInstalled => App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
+        public bool IsDirectShowInstalled => App.Current.Settings.FeatureSettings.DirectShow.CheckInstalled(System.Reflection.Assembly.GetEntryAssembly().Location);
 
         [PropertyTools.DataAnnotations.EnableBy(nameof(CaptureMicrophone), true)]
         public FFmpegDirectShowAudioDevice SelectedMicrophone { get; set; }
+
+        [PropertyTools.DataAnnotations.Category("Video")]
+        [Description("This may solve some DPI related bugs, and also improves audio sync if capturing loopback audio")]
+        public bool EnhancedVideoCapture
+        {
+            get => GetDirectShowDependency(IsDirectShowInstalled, nameof(CaptureLoopbackAudio), this, l => l._enhanced);
+            set => SetDirectShowDependency(IsDirectShowInstalled, value, nameof(CaptureLoopbackAudio), this, l => l._enhanced);
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         public abstract List<FFmpegCliOption> GetOptions();
 
+        private bool _enhanced = false;
         private bool _loopback = false;
 
         public virtual void SetOptions(List<FFmpegCliOption> options)
@@ -194,25 +212,55 @@ namespace Clowd
             throw new NotImplementedException();
         }
 
-        protected void AddAudioPresets(List<FFmpegCliOption> output)
+        protected void AddAudioVideoPresets(List<FFmpegCliOption> output)
         {
             var loopback = CaptureLoopbackAudio ? DShowFilter.DefaultAudio : null;
+            var enhancedVideo = EnhancedVideoCapture ? DShowFilter.DefaultVideo : null;
             var microphone = CaptureMicrophone ? SelectedMicrophone : null;
-            //output.Add(new FFmpegCliOption("copyts", ""));
 
-            if (loopback != null)
+            if (loopback != null && enhancedVideo != null) // video=dshow, audio=dshow
             {
                 output.Add(new FFmpegCliOption("f", "dshow"));
-
-                if (EnhancedAudioVideoSync && DShowFilter.DefaultVideo != null)
+                output.Add(new FFmpegCliOption("i", $"video=\"{enhancedVideo.FilterName}\":audio=\"{loopback.FilterName}\""));
+            }
+            else
+            {
+                if (enhancedVideo != null) // video=dshow, audio=null
                 {
-                    output.Add(new FFmpegCliOption("i", $"video=\"{DShowFilter.DefaultVideo.FilterName}\":audio=\"{loopback.FilterName}\""));
+                    output.Add(new FFmpegCliOption("f", "dshow"));
+                    output.Add(new FFmpegCliOption("i", $"video=\"{enhancedVideo.FilterName}\""));
                 }
                 else
                 {
+                    output.Add(new FFmpegCliOption("f", "gdigrab"));
+                    output.Add(new FFmpegCliOption("i", "desktop"));
+                }
+
+                if (loopback != null)
+                {
+                    output.Add(new FFmpegCliOption("f", "dshow"));
                     output.Add(new FFmpegCliOption("i", $"audio=\"{loopback.FilterName}\""));
                 }
             }
+
+            //else if (loopback != null) // video=gdigrab, audio=dshow
+            //{
+            //    output.Add(new FFmpegCliOption("f", "gdigrab"));
+            //    output.Add(new FFmpegCliOption("i", "desktop"));
+
+            //    output.Add(new FFmpegCliOption("f", "dshow"));
+            //    output.Add(new FFmpegCliOption("i", $"audio=\"{loopback.FilterName}\""));
+            //}
+            //else if (enhancedVideo != null) // video=dshow, audio=null
+            //{
+            //    output.Add(new FFmpegCliOption("f", "dshow"));
+            //    output.Add(new FFmpegCliOption("i", $"video=\"{enhancedVideo.FilterName}\""));
+            //}
+            //else // video=gdigrab, audio=null
+            //{
+            //    output.Add(new FFmpegCliOption("f", "gdigrab"));
+            //    output.Add(new FFmpegCliOption("i", "desktop"));
+            //}
 
             if (microphone != null)
             {
@@ -220,8 +268,7 @@ namespace Clowd
                 output.Add(new FFmpegCliOption("i", $"audio=\"{microphone.FriendlyName}\""));
             }
 
-            //output.Add(new FFmpegCliOption("muxdelay", "0"));
-
+            // if capturing both loopback, and mic, we need to amix them
             if (loopback != null && microphone != null)
             {
                 // https://stackoverflow.com/questions/14498539/how-to-overlay-downmix-two-audio-files-using-ffmpeg
@@ -229,11 +276,47 @@ namespace Clowd
                 output.Add(new FFmpegCliOption("filter_complex", "amix=inputs=2:duration=longest"));
             }
 
+            // audio codec - video codec added later
             if (loopback != null || microphone != null)
             {
                 output.Add(new FFmpegCliOption("codec:a", "libmp3lame"));
                 output.Add(new FFmpegCliOption("aq", "2"));
             }
+        }
+
+        protected void SetDirectShowDependency<TObj>(bool condition, bool requestedValue, string propertyName, TObj source, Expression<Func<TObj, bool>> localField)
+        {
+            var field = Expr.GetFieldInfoFromExpression(localField);
+
+            if (!condition && requestedValue)
+            {
+                NiceDialog.ShowSettingsPromptAsync(
+                    TemplatedWindow.GetWindow(typeof(SettingsPage)),
+                    SettingsCategory.Windows,
+                    $"You must install 'Windows/DirectShow Add-ons' before {App.ClowdAppName} is able to capture loopback audio");
+
+                field.SetValue(this, false);
+            }
+            else
+            {
+                field.SetValue(this, requestedValue);
+            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        protected bool GetDirectShowDependency<TObj>(bool condition, string propertyName, TObj source, Expression<Func<TObj, bool>> localField)
+        {
+            var field = Expr.GetFieldInfoFromExpression(localField);
+
+            var currentValue = (bool)field.GetValue(this);
+
+            var ret = currentValue && condition;
+            if (currentValue != ret)
+            {
+                field.SetValue(this, ret);
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            }
+            return ret;
         }
     }
 
@@ -264,7 +347,7 @@ namespace Clowd
         {
             var output = new List<FFmpegCliOption>();
 
-            AddAudioPresets(output);
+            AddAudioVideoPresets(output);
 
             int resolution = (int)MaxResolution;
             if (resolution > 0)
@@ -360,7 +443,7 @@ namespace Clowd
         {
             var output = new List<FFmpegCliOption>();
 
-            AddAudioPresets(output);
+            AddAudioVideoPresets(output);
 
             int resolution = (int)MaxResolution;
             if (resolution > 0)
