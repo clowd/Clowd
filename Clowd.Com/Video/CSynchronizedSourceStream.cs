@@ -93,8 +93,8 @@ namespace Clowd.Com.Video
             int hr = _clock.GetTime(out frameEnd);
 
             // some basic end time correction if we are drifting
-            if (_avgTimePerFrame > 0 && _avgTimePerFrame * 3 < frameEnd - _rtClockStart)
-                frameEnd = _rtClockStart + _avgTimePerFrame;
+            //if (_avgTimePerFrame > 0 && _avgTimePerFrame * 3 < frameEnd - _rtClockStart)
+            //    frameEnd = _rtClockStart + _avgTimePerFrame;
 
             _rtClockStart = frameEnd; // next frame starts where this one ends
             return hr;
