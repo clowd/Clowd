@@ -11,18 +11,15 @@ using System.Threading;
 namespace Clowd.Com.Video
 {
     [ComVisible(false)]
-    public abstract class CSynchronizedSourceStream : SourceStream, IAMLatency
+    public abstract class SynchronizedSourceStream : CaptureStream, IAMLatency
     {
-        public static HRESULT E_PROP_SET_UNSUPPORTED { get { unchecked { return (HRESULT)0x80070492; } } }
-        public static HRESULT E_PROP_ID_UNSUPPORTED { get { unchecked { return (HRESULT)0x80070490; } } }
-
         private IReferenceClockImpl _clock = null;
         private Semaphore _semaphore = null;
         private int _dwAdviseToken = 0;
         private long _rtClockStart = 0;
         private long _avgTimePerFrame;
 
-        public CSynchronizedSourceStream(string name, long defaultLatency, BaseSourceFilter filter) : base(name, filter)
+        public SynchronizedSourceStream(string name, long defaultLatency, BaseSourceFilter filter) : base(name, filter)
         {
             _avgTimePerFrame = defaultLatency;
         }
