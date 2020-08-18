@@ -7,8 +7,10 @@ using System.Text;
 
 namespace Clowd.Com.Video
 {
-    interface IFrameProvider
+    interface IFrameProvider : IDisposable
     {
-        int CopyScreenToSamplePtr(Rectangle captureArea, ref IMediaSampleImpl _sample);
+        int SetCaptureProperties(CaptureProperties properties);
+        int GetCaptureProperties(out CaptureProperties properties);
+        int CopyScreenToSamplePtr(ref IMediaSampleImpl _sample);
     }
 }
