@@ -34,7 +34,7 @@ namespace Clowd.Com.Video
     }
 
     [ComVisible(false)]
-    public class SourceFilterStream2 : CSynchronizedSourceStream, IKsPropertySet, IAMStreamConfig, IAMBufferNegotiation
+    public class SourceFilterStream2 : SynchronizedSourceStream, IKsPropertySet, IAMStreamConfig, IAMBufferNegotiation
     {
         protected AllocatorProperties m_pProperties = null;
         private IFrameProvider m_frameProvider = null;
@@ -107,25 +107,21 @@ namespace Clowd.Com.Video
             if (_bmi.BitCount != 24 && _bmi.BitCount != 32)
                 return VFW_E_TYPE_NOT_ACCEPTED;
 
+            // Check video size is within capabilities
             VideoStreamConfigCaps _caps;
             GetDefaultCaps(0, out _caps);
             if (_bmi.Width < _caps.MinOutputSize.Width || _bmi.Width > _caps.MaxOutputSize.Width)
                 return VFW_E_INVALIDMEDIATYPE;
+
+            // Check framerate is within capabilities
             long _rate = 0;
             VideoInfoHeader _pvi = pmt;
             if (_pvi != null)
-            {
                 _rate = _pvi.AvgTimePerFrame;
-            }
-            _pvi = pmt;
-            if (_pvi != null)
-            {
-                _rate = _pvi.AvgTimePerFrame;
-            }
+
             if (_rate < _caps.MinFrameInterval || _rate > _caps.MaxFrameInterval)
-            {
                 return VFW_E_INVALIDMEDIATYPE;
-            }
+
             return NOERROR;
         }
 
@@ -137,12 +133,14 @@ namespace Clowd.Com.Video
 
             if (CurrentMediaType.majorType == MediaType.Video)
             {
+                // if CurrentMediaType has already been set, lets just return that. 
                 pMediaType.Set(CurrentMediaType);
                 return NOERROR;
             }
 
-            pMediaType.majorType = DirectShow.MediaType.Video;
-            pMediaType.formatType = DirectShow.FormatType.VideoInfo;
+            // if not, lets return the default media type
+            pMediaType.majorType = MediaType.Video;
+            pMediaType.formatType = FormatType.VideoInfo;
 
             GetLatency(out var latency);
 
@@ -157,12 +155,14 @@ namespace Clowd.Com.Video
 
             if (vih.BmiHeader.BitCount == 32)
             {
-                pMediaType.subType = DirectShow.MediaSubType.RGB32;
+                pMediaType.subType = MediaSubType.RGB32;
             }
+
             if (vih.BmiHeader.BitCount == 24)
             {
-                pMediaType.subType = DirectShow.MediaSubType.RGB24;
+                pMediaType.subType = MediaSubType.RGB24;
             }
+
             AMMediaType.SetFormat(ref pMediaType, ref vih);
             pMediaType.fixedSizeSamples = true;
             pMediaType.sampleSize = vih.BmiHeader.ImageSize;
@@ -170,52 +170,36 @@ namespace Clowd.Com.Video
             return NOERROR;
         }
 
-        public override int DecideBufferSize(ref IMemAllocatorImpl pAlloc, ref AllocatorProperties pProperties)
+        public override int DecideBufferSize(ref IMemAllocatorImpl pAlloc, ref AllocatorProperties allocRequest)
         {
+            if (pAlloc == null)
+                return E_POINTER;
+
+            if (allocRequest == null)
+                return E_POINTER;
+
             if (!IsConnected)
                 return VFW_E_NOT_CONNECTED;
 
-            AllocatorProperties _actual = new AllocatorProperties();
-            HRESULT hr = (HRESULT)GetAllocatorProperties(_actual);
-            if (SUCCEEDED(hr) && _actual.cBuffers <= pProperties.cBuffers && _actual.cbBuffer <= pProperties.cbBuffer && _actual.cbAlign == pProperties.cbAlign)
-            {
-                AllocatorProperties Actual = new AllocatorProperties();
-                hr = (HRESULT)pAlloc.SetProperties(pProperties, Actual);
-                if (SUCCEEDED(hr))
-                {
-                    pProperties.cbAlign = Actual.cbAlign;
-                    pProperties.cbBuffer = Actual.cbBuffer;
-                    pProperties.cbPrefix = Actual.cbPrefix;
-                    pProperties.cBuffers = Actual.cBuffers;
-                }
-            }
-
-            return DecideBufferSize2(ref pAlloc, ref pProperties);
-        }
-
-        public int DecideBufferSize2(ref IMemAllocatorImpl pAlloc, ref AllocatorProperties prop)
-        {
-            AllocatorProperties _actual = new AllocatorProperties();
             m_frameProvider.GetCaptureProperties(out var capt);
-
             BitmapInfoHeader _bmi = CurrentMediaType;
-            prop.cbBuffer = _bmi.GetBitmapSize();
+            int maxSize = Math.Max(Math.Max(_bmi.GetBitmapSize(), _bmi.ImageSize), capt.Size);
 
-            if (prop.cbBuffer < _bmi.ImageSize)
-            {
-                prop.cbBuffer = _bmi.ImageSize;
-            }
+            allocRequest.cbAlign = 1;
+            allocRequest.cbPrefix = 0;
+            allocRequest.cBuffers = 1;
+            allocRequest.cbBuffer = maxSize;
 
-            if (prop.cbBuffer < capt.Size)
-            {
-                prop.cbBuffer = capt.Size;
-            }
+            AllocatorProperties allocActual = new AllocatorProperties();
+            var hr = pAlloc.SetProperties(allocRequest, allocActual);
+            if (FAILED(hr))
+                return hr;
 
-            prop.cBuffers = 1;
-            prop.cbAlign = 1;
-            prop.cbPrefix = 0;
-            int hr = pAlloc.SetProperties(prop, _actual);
-            return hr;
+            // we've asked the allocator for maxSize, but it may not have allocated the memory we requested.. so we need to check
+            if (allocActual.cbBuffer < allocRequest.cbBuffer)
+                return E_FAIL;
+
+            return S_OK;
         }
 
         public override int FillBuffer(ref IMediaSampleImpl _sample)
@@ -235,9 +219,6 @@ namespace Clowd.Com.Video
 
             return hr;
         }
-
-
-        #region IAMBufferNegotiation Members
 
         public int SuggestAllocatorProperties2(AllocatorProperties pprop)
         {
@@ -321,10 +302,6 @@ namespace Clowd.Com.Video
             }
             return GetAllocatorProperties2(pprop);
         }
-
-        #endregion
-
-        #region IAMStreamConfig Members
 
         public int SetFormat(AMMediaType pmt)
         {
@@ -468,53 +445,5 @@ namespace Clowd.Com.Video
             }
             return hr;
         }
-
-        #endregion
-
-        #region IKsPropertySet Members
-
-        public int Set(Guid guidPropSet, int dwPropID, IntPtr pInstanceData, int cbInstanceData, IntPtr pPropData, int cbPropData)
-        {
-            return E_NOTIMPL;
-        }
-
-        public int Get(Guid guidPropSet, int dwPropID, IntPtr pInstanceData, int cbInstanceData, IntPtr pPropData, int cbPropData, out int pcbReturned)
-        {
-            pcbReturned = Marshal.SizeOf(typeof(Guid));
-            if (guidPropSet != PropSetID.Pin)
-            {
-                return E_PROP_SET_UNSUPPORTED;
-            }
-            if (dwPropID != (int)AMPropertyPin.Category)
-            {
-                return E_PROP_ID_UNSUPPORTED;
-            }
-            if (pPropData == IntPtr.Zero)
-            {
-                return NOERROR;
-            }
-            if (cbPropData < Marshal.SizeOf(typeof(Guid)))
-            {
-                return E_UNEXPECTED;
-            }
-            Marshal.StructureToPtr(PinCategory.Capture, pPropData, false);
-            return NOERROR;
-        }
-
-        public int QuerySupported(Guid guidPropSet, int dwPropID, out KSPropertySupport pTypeSupport)
-        {
-            pTypeSupport = KSPropertySupport.Get;
-            if (guidPropSet != PropSetID.Pin)
-            {
-                return E_PROP_SET_UNSUPPORTED;
-            }
-            if (dwPropID != (int)AMPropertyPin.Category)
-            {
-                return E_PROP_ID_UNSUPPORTED;
-            }
-            return S_OK;
-        }
-
-        #endregion
     }
 }
