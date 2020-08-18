@@ -17,12 +17,45 @@ namespace Clowd.Com
     {
         internal static int Main(string[] args)
         {
-            //var success = InstallCOMTypes();
-            var asuccess = UninstallCOMTypes();
+            bool install = true;
+
+            if (install)
+            {
+                var success = InstallCOMTypes();
+                Console.WriteLine("Installed: " + success); ;
+            }
+            else
+            {
+                var asuccess = UninstallCOMTypes();
+                Console.WriteLine("Uninstalled: " + asuccess);
+            }
+
+            Console.WriteLine();
+            Console.WriteLine();
 
             //var filter = new AudioCaptureFilter();
             //DirectShow.AMMediaType mt = null;
             //filter.Pins[0].GetMediaType(0, ref mt);
+
+            Console.WriteLine("Video - ");
+            DSCategory cat = new DSCategory(new Guid(AMovieSetup.CLSID_VideoInputDeviceCategory));
+            foreach (var inputDevice in cat)
+            {
+                Console.WriteLine($"{inputDevice.Name}");
+                Console.WriteLine($"{inputDevice.DevicePath}");
+                Console.WriteLine("------");
+            }
+            Console.WriteLine();
+            Console.WriteLine("Audio - ");
+            cat = new DSCategory(new Guid(AMovieSetup.CLSID_AudioInputDeviceCategory));
+            foreach (var inputDevice in cat)
+            {
+                Console.WriteLine($"{inputDevice.Name}");
+                Console.WriteLine($"{inputDevice.DevicePath}");
+                Console.WriteLine("------");
+            }
+
+            Console.ReadKey();
 
             return 0;
             //return 0;

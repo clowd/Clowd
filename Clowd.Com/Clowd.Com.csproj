@@ -92,6 +92,8 @@
     <Compile Include="DShow\DSBaseClasses.cs" />
     <Compile Include="DShow\DirectShow.cs" />
     <Compile Include="DShow\DSHelper.cs" />
+    <Compile Include="Video\CVideoSource.cs" />
+    <Compile Include="Video\CVideoSource2.cs" />
     <Compile Include="Video\FrameSize.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
