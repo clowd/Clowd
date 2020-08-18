@@ -420,10 +420,10 @@ namespace Clowd.Com
             _caps.StretchTapsY = 0;
             _caps.ShrinkTapsX = 0;
             _caps.ShrinkTapsY = 0;
-            _caps.MinFrameInterval = UNITS / 30;
+            _caps.MinFrameInterval = UNITS / 60;
             _caps.MaxFrameInterval = UNITS / 15;
             _caps.MinBitsPerSecond = (_caps.MinOutputSize.Width * _caps.MinOutputSize.Height * _bitCount) * 15; //(minfps)
-            _caps.MaxBitsPerSecond = (_caps.MaxOutputSize.Width * _caps.MaxOutputSize.Height * _bitCount) * 30; //(maxfps)
+            _caps.MaxBitsPerSecond = (_caps.MaxOutputSize.Width * _caps.MaxOutputSize.Height * _bitCount) * 60; //(maxfps)
 
             return NOERROR;
         }
