@@ -11,9 +11,9 @@ using System.Windows.Forms;
 
 namespace Clowd.Com
 {
-    [ComVisible(true)]
-    [Guid("47e87240-d32c-48cb-a756-e9a006423a8c")]
-    [AMovieSetup(Merit.Normal, AMovieSetup.CLSID_VideoInputDeviceCategory)]
+    [ComVisible(false)]
+    //[Guid("47e87240-d32c-48cb-a756-e9a006423a8c")]
+    //[AMovieSetup(Merit.Normal, AMovieSetup.CLSID_VideoInputDeviceCategory)]
     public class VideoCaptureFilter : BaseSourceFilter, IAMFilterMiscFlags
     {
         public const string FRIENDLY_NAME = "clowd-video";
