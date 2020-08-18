@@ -1,4 +1,4 @@
-﻿using DirectShow;
+using DirectShow;
 using DirectShow.BaseClasses;
 using Sonic;
 using System;
@@ -34,51 +34,30 @@ namespace Clowd.Com.Video
     }
 
     [ComVisible(false)]
-    public class SourceFilterStream2 : CSynchronizedSourceStream
-                , IKsPropertySet
-                , IAMStreamConfig
-                , IAMBufferNegotiation
+    public class SourceFilterStream2 : CSynchronizedSourceStream, IKsPropertySet, IAMStreamConfig, IAMBufferNegotiation
     {
         protected AllocatorProperties m_pProperties = null;
-
-        protected int _bitCount = 32;
-        protected int _captureWidth = 0;
-        protected int _captureHeight = 0;
-        protected int _captureX = 0;
-        protected int _captureY = 0;
-        protected long _avgTimePerFrame = UNITS / 30;
-        IntPtr _srcContext = IntPtr.Zero;
-        IntPtr _destContext = IntPtr.Zero;
-        private GDI32.BitmapInfo m_bmi = new GDI32.BitmapInfo();
-
-        #region Constructor
+        private IFrameProvider m_frameProvider = null;
 
         public SourceFilterStream2(string _name, BaseSourceFilter _filter) : base(_name, UNITS / 30, _filter)
         {
-            m_bmi.bmiHeader = new BitmapInfoHeader();
             m_mt.majorType = Guid.Empty;
             GetMediaType(0, ref m_mt);
-
-            _srcContext = USER32.GetWindowDC(IntPtr.Zero);
-            _destContext = GDI32.CreateCompatibleDC(_srcContext);
+            m_frameProvider = new GdiFrameProvider();
         }
-
-        #endregion
-
-        #region Overridden Methods
 
         public override int SetMediaType(AMMediaType mt)
         {
-            if (mt == null) return E_POINTER;
-            if (mt.formatPtr == IntPtr.Zero) return VFW_E_INVALIDMEDIATYPE;
-            HRESULT hr = (HRESULT)CheckMediaType(mt);
-            if (hr.Failed) return hr;
-            hr = (HRESULT)base.SetMediaType(mt);
-            if (hr.Failed) return hr;
+            int hr = CheckMediaType(mt);
+            if (FAILED(hr))
+                return hr;
+
+            hr = base.SetMediaType(mt);
+            if (FAILED(hr))
+                return hr;
+
             if (m_pProperties != null)
-            {
                 SuggestAllocatorProperties(m_pProperties);
-            }
 
             var pmt = mt;
             lock (m_Filter.FilterLock)
@@ -112,18 +91,23 @@ namespace Clowd.Com.Video
         {
             if (pmt == null)
                 return E_POINTER;
+
             if (pmt.formatPtr == IntPtr.Zero)
                 return VFW_E_INVALIDMEDIATYPE;
+
             if (pmt.majorType != MediaType.Video)
                 return VFW_E_INVALIDMEDIATYPE;
+
             if (pmt.subType != MediaSubType.RGB24 && pmt.subType != MediaSubType.RGB32 && pmt.subType != MediaSubType.ARGB32)
                 return VFW_E_INVALIDMEDIATYPE;
 
             BitmapInfoHeader _bmi = pmt;
             if (_bmi == null)
                 return E_UNEXPECTED;
+
             if (_bmi.Compression != BI_RGB)
                 return VFW_E_TYPE_NOT_ACCEPTED;
+
             if (_bmi.BitCount != 24 && _bmi.BitCount != 32)
                 return VFW_E_TYPE_NOT_ACCEPTED;
 
@@ -192,7 +176,9 @@ namespace Clowd.Com.Video
 
         public override int DecideBufferSize(ref IMemAllocatorImpl pAlloc, ref AllocatorProperties pProperties)
         {
-            if (!IsConnected) return VFW_E_NOT_CONNECTED;
+            if (!IsConnected)
+                return VFW_E_NOT_CONNECTED;
+
             AllocatorProperties _actual = new AllocatorProperties();
             HRESULT hr = (HRESULT)GetAllocatorProperties(_actual);
             if (SUCCEEDED(hr) && _actual.cBuffers <= pProperties.cBuffers && _actual.cbBuffer <= pProperties.cbBuffer && _actual.cbAlign == pProperties.cbAlign)
@@ -240,8 +226,7 @@ namespace Clowd.Com.Video
 
             WaitFrameStart(out var frameStart);
 
-            var captureArea = new Rectangle(_captureX, _captureY, _captureWidth, _captureHeight);
-            hr = (HRESULT)VideoUtil.CopyScreenToSamplePtr(_srcContext, _destContext, captureArea, ref m_bmi, ref _sample);
+            hr = m_frameProvider.CopyScreenToSamplePtr(ref _sample);
             if (FAILED(hr) || S_FALSE == hr) return hr;
 
             MarkFrameEnd(out var frameEnd);
@@ -253,7 +238,6 @@ namespace Clowd.Com.Video
             return hr;
         }
 
-        #endregion
 
         #region IAMBufferNegotiation Members
 
@@ -385,13 +369,15 @@ namespace Clowd.Com.Video
 
         public int GetDefaultCaps(int nIndex, out VideoStreamConfigCaps _caps)
         {
+            m_frameProvider.GetCaptureProperties(out var capt);
+
             _caps = new VideoStreamConfigCaps();
 
             _caps.guid = FormatType.VideoInfo;
             _caps.VideoStandard = AnalogVideoStandard.None;
 
-            _caps.InputSize.Width = _captureWidth;
-            _caps.InputSize.Height = _captureHeight;
+            _caps.InputSize.Width = capt.PixelWidth;
+            _caps.InputSize.Height = capt.PixelHeight;
 
             _caps.MinCroppingSize.Width = 320;
             _caps.MinCroppingSize.Height = 240;
@@ -419,8 +405,8 @@ namespace Clowd.Com.Video
 
             _caps.MinFrameInterval = UNITS / maxfps; // this is the reference INTERVAL, so the min/max is reversed
             _caps.MaxFrameInterval = UNITS / minfps;
-            _caps.MinBitsPerSecond = (_caps.MinOutputSize.Width * _caps.MinOutputSize.Height * _bitCount) * minfps; //(minfps)
-            _caps.MaxBitsPerSecond = (_caps.MaxOutputSize.Width * _caps.MaxOutputSize.Height * _bitCount) * maxfps; //(maxfps)
+            _caps.MinBitsPerSecond = (_caps.MinOutputSize.Width * _caps.MinOutputSize.Height * 24) * minfps; //(minfps)
+            _caps.MaxBitsPerSecond = (_caps.MaxOutputSize.Width * _caps.MaxOutputSize.Height * 32) * maxfps; //(maxfps)
 
             return NOERROR;
         }
