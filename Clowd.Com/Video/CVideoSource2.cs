@@ -49,12 +49,11 @@ namespace Clowd.Com.Video
 
         #region Variables
 
-        protected object m_csPinLock = new object();
-        protected long m_rtStart = 0;
         protected AllocatorProperties m_pProperties = null;
         protected IReferenceClockImpl m_pClock = null;
         protected int m_dwAdviseToken = 0;
         protected Semaphore m_hSemaphore = null;
+        protected long m_rtStart = 0;
         protected long m_rtClockStart = 0;
         protected long m_rtClockStop = 0;
         protected int _bitCount = 32;
@@ -63,11 +62,11 @@ namespace Clowd.Com.Video
         protected int _captureX = 0;
         protected int _captureY = 0;
         protected long _avgTimePerFrame = UNITS / 30;
-        private GDI32.BitmapInfo m_bmi = new GDI32.BitmapInfo();
-        private DateTime _lastMouseClick = DateTime.Now.AddSeconds(-5);
-        private Point _lastMouseClickPosition = new Point(0, 0);
+        //private DateTime _lastMouseClick = DateTime.Now.AddSeconds(-5);
+        //private Point _lastMouseClickPosition = new Point(0, 0);
         IntPtr _srcContext = IntPtr.Zero;
         IntPtr _destContext = IntPtr.Zero;
+        private GDI32.BitmapInfo m_bmi = new GDI32.BitmapInfo();
 
         #endregion
 
@@ -256,9 +255,12 @@ namespace Clowd.Com.Video
         {
             if (_srcContext == IntPtr.Zero)
                 _srcContext = USER32.GetWindowDC(IntPtr.Zero);
+
             if (_destContext == IntPtr.Zero)
                 _destContext = GDI32.CreateCompatibleDC(_srcContext);
+
             m_rtStart = 0;
+
             lock (m_Filter.FilterLock)
             {
                 m_pClock = m_Filter.Clock;
@@ -268,6 +270,7 @@ namespace Clowd.Com.Video
                     m_hSemaphore = new Semaphore(0, 0x7FFFFFFF);
                 }
             }
+
             return base.Active();
         }
 
@@ -278,11 +281,13 @@ namespace Clowd.Com.Video
                 USER32.ReleaseDC(IntPtr.Zero, _srcContext);
                 _srcContext = IntPtr.Zero;
             }
+
             if (_destContext != IntPtr.Zero)
             {
                 GDI32.DeleteDC(_destContext);
                 _destContext = IntPtr.Zero;
             }
+
             HRESULT hr = (HRESULT)base.Inactive();
             if (m_pClock != null)
             {
@@ -300,78 +305,6 @@ namespace Clowd.Com.Video
                 }
             }
             return hr;
-        }
-
-        public unsafe int FillBuffer2(ref IMediaSampleImpl _sample)
-        {
-            IntPtr _ptr;
-            _sample.GetPointer(out _ptr);
-
-            //create bitmap to copy to
-            IntPtr destBitmap = GDI32.CreateCompatibleBitmap(_srcContext, _captureWidth, _captureHeight);
-            //select destBitmap with _destContext
-            IntPtr hOld = GDI32.SelectObject(_destContext, destBitmap);
-            //copy screen to context.
-            GDI32.BitBlt(_destContext, 0, 0, _captureWidth, _captureHeight, _srcContext, _captureX, _captureY, GDI32.SRCCOPY/* | GDI32.CAPTUREBLT*/);
-            //handle drawing cursor and click animations
-            try
-            {
-                USER32.CURSORINFO cursorInfo;
-                cursorInfo.cbSize = Marshal.SizeOf(typeof(USER32.CURSORINFO));
-                if (USER32.GetCursorInfo(out cursorInfo) && cursorInfo.flags == 0x00000001 /*CURSOR_SHOWING*/)
-                {
-                    var iconPointer = USER32.CopyIcon(cursorInfo.hCursor);
-                    USER32.ICONINFO iconInfo;
-                    int iconX, iconY;
-                    if (USER32.GetIconInfo(iconPointer, out iconInfo))
-                    {
-                        IntPtr hicon = USER32.CopyIcon(cursorInfo.hCursor);
-                        Icon curIcon = Icon.FromHandle(hicon);
-                        Bitmap curBitmap = curIcon.ToBitmap();
-                        iconX = cursorInfo.ptScreenPos.x - ((int)iconInfo.xHotspot);
-                        iconY = cursorInfo.ptScreenPos.y - ((int)iconInfo.yHotspot);
-
-                        if (Convert.ToBoolean(USER32.GetKeyState(USER32.VirtualKeyStates.VK_LBUTTON) & 0x8000 /*KEY_PRESSED*/) ||
-                            Convert.ToBoolean(USER32.GetKeyState(USER32.VirtualKeyStates.VK_RBUTTON) & 0x8000 /*KEY_PRESSED*/))
-                        {
-                            _lastMouseClick = DateTime.Now;
-                            _lastMouseClickPosition = new Point(cursorInfo.ptScreenPos.x, cursorInfo.ptScreenPos.y);
-                        }
-                        using (Graphics g = Graphics.FromHdc(_destContext))
-                        {
-                            const int animationDuration = 500; //ms
-                            const int animationMaxRadius = 25; //pixels
-                            var lastClickSpan = Convert.ToInt32((DateTime.Now - _lastMouseClick).TotalMilliseconds);
-                            if (lastClickSpan < animationDuration)
-                            {
-                                const int maxRadius = animationMaxRadius;
-                                SolidBrush semiTransBrush = new SolidBrush(
-                                    Color.FromArgb((int)((1 - (lastClickSpan / (double)animationDuration)) * 255), 255, 0, 0));
-                                //int radius = Math.Max(5, (int)((lastClickSpan / (double)animationDuration) * maxRadius));
-                                int radius = (int)((lastClickSpan / (double)animationDuration) * maxRadius);
-                                var rect = new Rectangle(_lastMouseClickPosition.X - radius, _lastMouseClickPosition.Y - radius, radius * 2, radius * 2);
-                                g.FillEllipse(semiTransBrush, rect);
-                                semiTransBrush.Dispose();
-                            }
-                            g.DrawImage(curBitmap, iconX, iconY);
-                            curBitmap.Dispose();
-                            curIcon.Dispose();
-                        }
-                    }
-                }
-            }
-            catch { /* dont want to crash if there is an error rendering the cursor*/ }
-
-            //restore old selection (deselect destBitmap)
-            GDI32.SelectObject(_destContext, hOld);
-            //copy destBitmap bits to _ptr
-            GDI32.GetDIBits(_destContext, destBitmap, 0, (uint)Math.Abs(_captureHeight), _ptr, ref m_bmi, 0);
-            //clean up
-            GDI32.DeleteObject(destBitmap);
-
-            _sample.SetActualDataLength(_sample.GetSize());
-            _sample.SetSyncPoint(true);
-            return NOERROR;
         }
 
         public override int FillBuffer(ref IMediaSampleImpl _sample)
@@ -416,7 +349,10 @@ namespace Clowd.Com.Video
                 _stop = m_rtStart + 1;
                 _sample.SetTime(_start, _stop);
 
-                hr = (HRESULT)FillBuffer2(ref _sample);
+                var captureArea = new Rectangle(_captureX, _captureY, _captureWidth, _captureHeight);
+                hr = (HRESULT)VideoUtil.CopyScreenToSamplePtr(_srcContext, _destContext, captureArea, ref m_bmi, ref _sample);
+                _sample.SetActualDataLength(_sample.GetSize());
+                _sample.SetSyncPoint(true);
 
                 if (FAILED(hr) || S_FALSE == hr) return hr;
 
