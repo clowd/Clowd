@@ -311,7 +311,7 @@ namespace Clowd.Com.Video
 
             IntPtr destBitmap = GDI32.CreateCompatibleBitmap(_srcContext, mt_captureWidth, mt_captureHeight);
             IntPtr hOld = GDI32.SelectObject(_destContext, destBitmap);
-            GDI32.BitBlt(_destContext, 0, 0, mt_captureWidth, mt_captureHeight, _srcContext, _captureX, _captureY, GDI32.SRCCOPY /* | GDI32.CAPTUREBLT*/);
+            GDI32.BitBlt(_destContext, 0, 0, mt_captureWidth, mt_captureHeight, _srcContext, _captureX, _captureY, GDI32.TernaryRasterOperations.SRCCOPY | GDI32.TernaryRasterOperations.CAPTUREBLT);
             GDI32.SelectObject(_destContext, hOld);
             GDI32.GetDIBits(_destContext, destBitmap, 0, (uint)Math.Abs(mt_captureHeight), _ptr, ref mt_bmi, 0);
             GDI32.DeleteObject(destBitmap);

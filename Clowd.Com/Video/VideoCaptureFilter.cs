@@ -236,7 +236,7 @@ namespace Clowd.Com
             //select destBitmap with _destContext
             IntPtr hOld = GDI32.SelectObject(_destContext, destBitmap);
             //copy screen to context.
-            GDI32.BitBlt(_destContext, 0, 0, _captureWidth, _captureHeight, _srcContext, _captureX, _captureY, GDI32.SRCCOPY/* | GDI32.CAPTUREBLT*/);
+            GDI32.BitBlt(_destContext, 0, 0, _captureWidth, _captureHeight, _srcContext, _captureX, _captureY, GDI32.TernaryRasterOperations.SRCCOPY/* | GDI32.CAPTUREBLT*/);
             //handle drawing cursor and click animations
             try
             {
