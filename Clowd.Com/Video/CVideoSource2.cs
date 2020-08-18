@@ -41,9 +41,9 @@ namespace Clowd.Com.Video
 
         public SourceFilterStream2(string _name, BaseSourceFilter _filter) : base(_name, UNITS / 30, _filter)
         {
+            m_frameProvider = new GdiFrameProvider();
             m_mt.majorType = Guid.Empty;
             GetMediaType(0, ref m_mt);
-            m_frameProvider = new GdiFrameProvider();
         }
 
         public override int SetMediaType(AMMediaType mt)
@@ -63,25 +63,21 @@ namespace Clowd.Com.Video
             lock (m_Filter.FilterLock)
             {
                 BitmapInfoHeader _bmi = pmt;
-                m_bmi.bmiHeader.BitCount = _bmi.BitCount;
-                if (_bmi.Height != 0) m_bmi.bmiHeader.Height = _bmi.Height;
-                if (_bmi.Width > 0) m_bmi.bmiHeader.Width = _bmi.Width;
-                m_bmi.bmiHeader.Compression = BI_RGB;
-                m_bmi.bmiHeader.Planes = 1;
-                m_bmi.bmiHeader.ImageSize = ALIGN16(m_bmi.bmiHeader.Width) * ALIGN16(Math.Abs(m_bmi.bmiHeader.Height)) * m_bmi.bmiHeader.BitCount / 8;
-                _captureWidth = _bmi.Width;
-                _captureHeight = _bmi.Height;
-                _bitCount = _bmi.BitCount;
+                var capt = new CaptureProperties()
+                {
+                    BitCount = _bmi.BitCount,
+                    X = 0,
+                    Y = 0,
+                    PixelHeight = _bmi.Height,
+                    PixelWidth = _bmi.Width,
+                };
+
+                m_frameProvider.SetCaptureProperties(capt);
 
                 VideoInfoHeader _pvi = pmt;
                 if (_pvi != null)
                 {
-                    _avgTimePerFrame = _pvi.AvgTimePerFrame;
-                }
-                _pvi = pmt;
-                if (_pvi != null)
-                {
-                    _avgTimePerFrame = _pvi.AvgTimePerFrame;
+                    SetLatency(_pvi.AvgTimePerFrame);
                 }
             }
             return NOERROR;
@@ -137,9 +133,7 @@ namespace Clowd.Com.Video
         {
             VideoStreamConfigCaps _caps;
             GetDefaultCaps(0, out _caps);
-
-            int nWidth = 0;
-            int nHeight = 0;
+            m_frameProvider.GetCaptureProperties(out var capt);
 
             if (CurrentMediaType.majorType == MediaType.Video)
             {
@@ -150,12 +144,14 @@ namespace Clowd.Com.Video
             pMediaType.majorType = DirectShow.MediaType.Video;
             pMediaType.formatType = DirectShow.FormatType.VideoInfo;
 
+            GetLatency(out var latency);
+
             VideoInfoHeader vih = new VideoInfoHeader();
-            vih.AvgTimePerFrame = _avgTimePerFrame;
+            vih.AvgTimePerFrame = latency;
             vih.BmiHeader.Compression = BI_RGB;
-            vih.BmiHeader.BitCount = (short)_bitCount;
-            vih.BmiHeader.Width = nWidth;
-            vih.BmiHeader.Height = nHeight;
+            vih.BmiHeader.BitCount = capt.BitCount;
+            vih.BmiHeader.Width = capt.PixelWidth;
+            vih.BmiHeader.Height = capt.PixelHeight;
             vih.BmiHeader.Planes = 1;
             vih.BmiHeader.ImageSize = vih.BmiHeader.Width * Math.Abs(vih.BmiHeader.Height) * vih.BmiHeader.BitCount / 8;
 
@@ -200,6 +196,7 @@ namespace Clowd.Com.Video
         public int DecideBufferSize2(ref IMemAllocatorImpl pAlloc, ref AllocatorProperties prop)
         {
             AllocatorProperties _actual = new AllocatorProperties();
+            m_frameProvider.GetCaptureProperties(out var capt);
 
             BitmapInfoHeader _bmi = CurrentMediaType;
             prop.cbBuffer = _bmi.GetBitmapSize();
@@ -208,9 +205,10 @@ namespace Clowd.Com.Video
             {
                 prop.cbBuffer = _bmi.ImageSize;
             }
-            if (prop.cbBuffer < m_bmi.bmiHeader.ImageSize)
+
+            if (prop.cbBuffer < capt.Size)
             {
-                prop.cbBuffer = m_bmi.bmiHeader.ImageSize;
+                prop.cbBuffer = capt.Size;
             }
 
             prop.cBuffers = 1;
