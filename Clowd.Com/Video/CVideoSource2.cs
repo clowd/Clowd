@@ -34,50 +34,33 @@ namespace Clowd.Com.Video
     }
 
     [ComVisible(false)]
-    public class SourceFilterStream2 : SourceStream
+    public class SourceFilterStream2 : CSynchronizedSourceStream
                 , IKsPropertySet
                 , IAMStreamConfig
                 , IAMBufferNegotiation
     {
-
-        #region Constants
-
-        public static HRESULT E_PROP_SET_UNSUPPORTED { get { unchecked { return (HRESULT)0x80070492; } } }
-        public static HRESULT E_PROP_ID_UNSUPPORTED { get { unchecked { return (HRESULT)0x80070490; } } }
-
-        #endregion
-
-        #region Variables
-
         protected AllocatorProperties m_pProperties = null;
-        protected IReferenceClockImpl m_pClock = null;
-        protected int m_dwAdviseToken = 0;
-        protected Semaphore m_hSemaphore = null;
-        protected long m_rtStart = 0;
-        protected long m_rtClockStart = 0;
-        protected long m_rtClockStop = 0;
+
         protected int _bitCount = 32;
         protected int _captureWidth = 0;
         protected int _captureHeight = 0;
         protected int _captureX = 0;
         protected int _captureY = 0;
         protected long _avgTimePerFrame = UNITS / 30;
-        //private DateTime _lastMouseClick = DateTime.Now.AddSeconds(-5);
-        //private Point _lastMouseClickPosition = new Point(0, 0);
         IntPtr _srcContext = IntPtr.Zero;
         IntPtr _destContext = IntPtr.Zero;
         private GDI32.BitmapInfo m_bmi = new GDI32.BitmapInfo();
 
-        #endregion
-
         #region Constructor
 
-        public SourceFilterStream2(string _name, BaseSourceFilter _filter)
-            : base(_name, _filter)
+        public SourceFilterStream2(string _name, BaseSourceFilter _filter) : base(_name, UNITS / 30, _filter)
         {
             m_bmi.bmiHeader = new BitmapInfoHeader();
             m_mt.majorType = Guid.Empty;
             GetMediaType(0, ref m_mt);
+
+            _srcContext = USER32.GetWindowDC(IntPtr.Zero);
+            _destContext = GDI32.CreateCompatibleDC(_srcContext);
         }
 
         #endregion
@@ -251,128 +234,23 @@ namespace Clowd.Com.Video
             return hr;
         }
 
-        public override int Active()
-        {
-            if (_srcContext == IntPtr.Zero)
-                _srcContext = USER32.GetWindowDC(IntPtr.Zero);
-
-            if (_destContext == IntPtr.Zero)
-                _destContext = GDI32.CreateCompatibleDC(_srcContext);
-
-            m_rtStart = 0;
-
-            lock (m_Filter.FilterLock)
-            {
-                m_pClock = m_Filter.Clock;
-                if (m_pClock.IsValid)
-                {
-                    m_pClock._AddRef();
-                    m_hSemaphore = new Semaphore(0, 0x7FFFFFFF);
-                }
-            }
-
-            return base.Active();
-        }
-
-        public override int Inactive()
-        {
-            if (_srcContext != IntPtr.Zero)
-            {
-                USER32.ReleaseDC(IntPtr.Zero, _srcContext);
-                _srcContext = IntPtr.Zero;
-            }
-
-            if (_destContext != IntPtr.Zero)
-            {
-                GDI32.DeleteDC(_destContext);
-                _destContext = IntPtr.Zero;
-            }
-
-            HRESULT hr = (HRESULT)base.Inactive();
-            if (m_pClock != null)
-            {
-                if (m_dwAdviseToken != 0)
-                {
-                    m_pClock.Unadvise(m_dwAdviseToken);
-                    m_dwAdviseToken = 0;
-                }
-                m_pClock._Release();
-                m_pClock = null;
-                if (m_hSemaphore != null)
-                {
-                    m_hSemaphore.Close();
-                    m_hSemaphore = null;
-                }
-            }
-            return hr;
-        }
-
         public override int FillBuffer(ref IMediaSampleImpl _sample)
         {
-            {
-                AMMediaType pmt;
-                if (S_OK == _sample.GetMediaType(out pmt))
-                {
-                    if (FAILED(SetMediaType(pmt)))
-                    {
-                        ASSERT(false);
-                        _sample.SetMediaType(null);
-                    }
-                    pmt.Free();
-                }
-            }
-            long _start, _stop;
-            HRESULT hr = NOERROR;
-            long rtLatency = _avgTimePerFrame;
-            //if (FAILED(GetLatency(out rtLatency)))
-            //{
-            //    rtLatency = UNITS / 30;
-            //}
-            bool bShouldDeliver = false;
-            do
-            {
-                if (m_dwAdviseToken == 0)
-                {
-                    m_pClock.GetTime(out m_rtClockStart);
-                    hr = (HRESULT)m_pClock.AdvisePeriodic(m_rtClockStart + rtLatency, rtLatency, m_hSemaphore.Handle, out m_dwAdviseToken);
-                    hr.Assert();
-                }
-                else
-                {
-                    if (!m_hSemaphore.WaitOne())
-                    {
-                        ASSERT(FALSE);
-                    }
-                }
-                bShouldDeliver = TRUE;
-                _start = m_rtStart;
-                _stop = m_rtStart + 1;
-                _sample.SetTime(_start, _stop);
+            int hr = S_OK;
 
-                var captureArea = new Rectangle(_captureX, _captureY, _captureWidth, _captureHeight);
-                hr = (HRESULT)VideoUtil.CopyScreenToSamplePtr(_srcContext, _destContext, captureArea, ref m_bmi, ref _sample);
-                _sample.SetActualDataLength(_sample.GetSize());
-                _sample.SetSyncPoint(true);
+            WaitFrameStart(out var frameStart);
 
-                if (FAILED(hr) || S_FALSE == hr) return hr;
+            var captureArea = new Rectangle(_captureX, _captureY, _captureWidth, _captureHeight);
+            hr = (HRESULT)VideoUtil.CopyScreenToSamplePtr(_srcContext, _destContext, captureArea, ref m_bmi, ref _sample);
+            if (FAILED(hr) || S_FALSE == hr) return hr;
 
-                m_pClock.GetTime(out m_rtClockStop);
-                _sample.GetTime(out _start, out _stop);
+            MarkFrameEnd(out var frameEnd);
 
-                if (rtLatency > 0 && rtLatency * 3 < m_rtClockStop - m_rtClockStart)
-                {
-                    m_rtClockStop = m_rtClockStart + rtLatency;
-                }
-                _stop = _start + (m_rtClockStop - m_rtClockStart);
-                m_rtStart = _stop;
-                _sample.SetTime(_start, _stop);
-                m_rtClockStart = m_rtClockStop;
+            _sample.SetTime(frameStart, frameEnd);
+            _sample.SetActualDataLength(_sample.GetSize());
+            _sample.SetSyncPoint(true);
 
-                bShouldDeliver = ((_start >= 0) && (_stop >= 0));
-            }
-            while (!bShouldDeliver);
-
-            return NOERROR;
+            return hr;
         }
 
         #endregion

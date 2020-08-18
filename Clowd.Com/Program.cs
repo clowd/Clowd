@@ -38,21 +38,35 @@ namespace Clowd.Com
             //filter.Pins[0].GetMediaType(0, ref mt);
 
             Console.WriteLine("Video - ");
-            DSCategory cat = new DSCategory(new Guid(AMovieSetup.CLSID_VideoInputDeviceCategory));
-            foreach (var inputDevice in cat)
+            try
             {
-                Console.WriteLine($"{inputDevice.Name}");
-                Console.WriteLine($"{inputDevice.DevicePath}");
-                Console.WriteLine("------");
+                DSCategory cat = new DSCategory(new Guid(AMovieSetup.CLSID_VideoInputDeviceCategory));
+                foreach (var inputDevice in cat)
+                {
+                    Console.WriteLine($"{inputDevice.Name}");
+                    Console.WriteLine($"{inputDevice.DevicePath}");
+                    Console.WriteLine("------");
+                }
+            }
+            catch
+            {
+                Console.WriteLine("Could not enumerate video devices (or none found)");
             }
             Console.WriteLine();
             Console.WriteLine("Audio - ");
-            cat = new DSCategory(new Guid(AMovieSetup.CLSID_AudioInputDeviceCategory));
-            foreach (var inputDevice in cat)
+            try
             {
-                Console.WriteLine($"{inputDevice.Name}");
-                Console.WriteLine($"{inputDevice.DevicePath}");
-                Console.WriteLine("------");
+                var cat = new DSCategory(new Guid(AMovieSetup.CLSID_AudioInputDeviceCategory));
+                foreach (var inputDevice in cat)
+                {
+                    Console.WriteLine($"{inputDevice.Name}");
+                    Console.WriteLine($"{inputDevice.DevicePath}");
+                    Console.WriteLine("------");
+                }
+            }
+            catch
+            {
+                Console.WriteLine("Could not enumerate audio devices (or none found)");
             }
 
             Console.ReadKey();
