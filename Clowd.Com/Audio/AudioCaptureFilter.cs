@@ -15,7 +15,7 @@ using System.Windows.Forms;
 
 namespace Clowd.Com
 {
-    [ComVisible(true)]
+    [ComVisible(false)]
     [Guid("98957b9c-71c2-46b7-95a9-eec80d9317e7")]
     [AMovieSetup(Merit.Normal, AMovieSetup.CLSID_AudioInputDeviceCategory)]
     public class AudioCaptureFilter : BaseSourceFilter, IAMStreamConfig, IKsPropertySet, IAMFilterMiscFlags
