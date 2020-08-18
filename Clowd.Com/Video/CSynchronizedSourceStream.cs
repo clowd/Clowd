@@ -11,7 +11,7 @@ using System.Threading;
 namespace Clowd.Com.Video
 {
     [ComVisible(false)]
-    public abstract class CSynchronizedSourceStream : SourceStream
+    public abstract class CSynchronizedSourceStream : SourceStream, IAMLatency
     {
         public static HRESULT E_PROP_SET_UNSUPPORTED { get { unchecked { return (HRESULT)0x80070492; } } }
         public static HRESULT E_PROP_ID_UNSUPPORTED { get { unchecked { return (HRESULT)0x80070490; } } }
@@ -100,19 +100,19 @@ namespace Clowd.Com.Video
             return hr;
         }
 
-        protected int GetReferenceLatency(out long refLatency)
-        {
-            refLatency = _avgTimePerFrame;
-            return S_OK;
-        }
-
-        protected int SetDesiredLatency(long refLatency)
+        protected int SetLatency(long refLatency)
         {
             // can not update latency while filter is running / AdvisePeriodic is set
             if (_dwAdviseToken != 0)
                 return E_FAIL;
 
             _avgTimePerFrame = refLatency;
+            return S_OK;
+        }
+
+        public int GetLatency(out long prtLatency)
+        {
+            prtLatency = _avgTimePerFrame;
             return S_OK;
         }
     }
