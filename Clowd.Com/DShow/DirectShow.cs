@@ -1178,7 +1178,7 @@ namespace DirectShow
     [ComVisible(false)]
     public class Mpeg2VideoInfo
     {
-        public VideoInfoHeader2    hdr;
+        public VideoInfoHeader2 hdr;
         public uint dwStartTimeCode;
         public uint cbSequenceHeader;
         public uint dwProfile;
@@ -1276,7 +1276,7 @@ namespace DirectShow
         public IntPtr unkPtr;
         public int formatSize;
         public IntPtr formatPtr;
-        
+
         #endregion
 
         #region Constructor
@@ -1593,7 +1593,7 @@ namespace DirectShow
             {
                 byte[] _buffer = new byte[_size];
                 Marshal.Copy(_data, _buffer, 0, _size);
-                AddFormatExtraData(_buffer,_size);
+                AddFormatExtraData(_buffer, _size);
             }
         }
 
@@ -3573,13 +3573,13 @@ namespace DirectShow
 
         [PreserveSig]
         int IsDirty();
-        
+
         [PreserveSig]
         int Load(IntPtr pStm);
-        
+
         [PreserveSig]
         int Save(IntPtr pStm, [MarshalAs(UnmanagedType.Bool)] bool fClearDirty);
-        
+
         [PreserveSig]
         int GetSizeMax(out long pcbSize);
     }
@@ -3878,16 +3878,16 @@ namespace DirectShow
 
         [PreserveSig]
         int AddSourceFilter(
-            [In]											string strFilename,
-            [Out, MarshalAs(UnmanagedType.IDispatch)]	out object ppUnk);
+            [In]                                            string strFilename,
+            [Out, MarshalAs(UnmanagedType.IDispatch)]   out object ppUnk);
 
         [PreserveSig]
         int get_FilterCollection(
-            [Out, MarshalAs(UnmanagedType.IDispatch)]	out object ppUnk);
+            [Out, MarshalAs(UnmanagedType.IDispatch)]   out object ppUnk);
 
         [PreserveSig]
         int get_RegFilterCollection(
-            [Out, MarshalAs(UnmanagedType.IDispatch)]	out object ppUnk);
+            [Out, MarshalAs(UnmanagedType.IDispatch)]   out object ppUnk);
 
         [PreserveSig]
         int StopWhenReady();
@@ -4319,12 +4319,14 @@ namespace DirectShow
         int GetAllocatorProperties([Out] AllocatorProperties pprop);
     }
 
-    public enum AMSTREAMSELECTINFOFLAGS: uint
+    [ComVisible(false)]
+    public enum AMSTREAMSELECTINFOFLAGS : uint
     {
         ENABLED = 0x1,
         EXCLUSIVE = 0x2
     }
 
+    [ComVisible(false)]
     public enum AMSTREAMSELECTENABLEFLAGS : uint
     {
         DISABLE = 0x0,
@@ -4341,9 +4343,9 @@ namespace DirectShow
         int Count(
             [Out] out int pcStreams
             );
-        
+
         [PreserveSig]
-        int Info( 
+        int Info(
             [In] int lIndex,
             [In, Out] IntPtr ppmt, // AMMediaType
             [In, Out] IntPtr pdwFlags, // DWORD * AMSTREAMSELECTINFOFLAGS
@@ -4352,9 +4354,9 @@ namespace DirectShow
             [In, Out] IntPtr ppszName, // WCHAR **
             [In, Out] IntPtr ppObject, // IUnknown * 
             [In, Out] IntPtr ppUnk); // IUnknown * 
-        
+
         [PreserveSig]
-        int Enable( 
+        int Enable(
             [In] int lIndex,
             [In] AMSTREAMSELECTENABLEFLAGS dwFlags);
     }
@@ -4418,7 +4420,7 @@ namespace DirectShow
 
         private delegate int GetTimeProc(
             IntPtr pUnk,
-            out long pTimeStart, 
+            out long pTimeStart,
             out long pTimeEnd
             );
 
@@ -4780,7 +4782,7 @@ namespace DirectShow
         #region Constructor
 
         public IMemInputPinImpl(IntPtr pMemInputPin)
-            : base(pMemInputPin,false)
+            : base(pMemInputPin, false)
         {
 
         }
@@ -4856,8 +4858,8 @@ namespace DirectShow
 
             return (HRESULT)_Proc(
                         m_pUnknown,
-                        pSamples, 
-                        nSamples, 
+                        pSamples,
+                        nSamples,
                         out nSamplesProcessed
                         );
         }
@@ -5163,7 +5165,7 @@ namespace DirectShow
         private delegate int EnumMediaTypesProc(
             IntPtr pUnk,
             [Out] out IntPtr ppEnum);
-            //[Out] out IEnumMediaTypes ppEnum);
+        //[Out] out IEnumMediaTypes ppEnum);
 
         private delegate int QueryInternalConnectionsProc(
             IntPtr pUnk,
@@ -5423,7 +5425,7 @@ namespace DirectShow
     public class ISeekingPassThruImpl : VTableInterface, ISeekingPassThru
     {
         #region Delegate
- 
+
         private delegate int InitProc(
             IntPtr pUnk,
             [In, MarshalAs(UnmanagedType.Bool)] bool bSupportRendering,
@@ -5980,7 +5982,7 @@ namespace DirectShow
 
             return (HRESULT)_Proc(
                         m_pUnknown,
-                        baseTime, streamTime, hEvent, out pdwAdviseCookie 
+                        baseTime, streamTime, hEvent, out pdwAdviseCookie
                         );
         }
 
@@ -6161,7 +6163,7 @@ namespace DirectShow
 
             return (HRESULT)_Proc(
                         m_pUnknown,
-                        dwTimeout,out ppSample, out pdwUser
+                        dwTimeout, out ppSample, out pdwUser
                         );
         }
 
@@ -6239,15 +6241,15 @@ namespace DirectShow
     }
 
     [ComVisible(false)]
-    public class IStreamImpl: VTableInterface, IStream
+    public class IStreamImpl : VTableInterface, IStream
     {
         #region Delegate
 
         private delegate int ReadProc(
             IntPtr pUnk,
-            [In, Out,MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] byte[] pv, 
-            [In] int cb, 
-            [In,Out] IntPtr pcbRead
+            [In, Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] byte[] pv,
+            [In] int cb,
+            [In, Out] IntPtr pcbRead
             );
 
         private delegate int WriteProc(
@@ -6448,7 +6450,7 @@ namespace DirectShow
                         );
             hr.Throw();
         }
-      
+
         public void Stat(out System.Runtime.InteropServices.ComTypes.STATSTG pstatstg, int grfStatFlag)
         {
             if (m_pUnknown == IntPtr.Zero) E_NOINTERFACE.Throw();
