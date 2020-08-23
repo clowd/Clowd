@@ -18,6 +18,7 @@ namespace Clowd.Utilities
     {
         public string FileName { get; private set; }
         public string ConsoleLog => log.ToString();
+        public string OutputDirectory => settings.OutputDirectory;
 
         private readonly Rectangle bounds;
         private readonly VideoSettings settings;
