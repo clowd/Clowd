@@ -156,7 +156,10 @@ namespace Clowd
                 this.Close();
 
                 var filename = "ffmpeg_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
+                filename = System.IO.Path.Combine(System.IO.Path.GetFullPath(_recording.OutputDirectory), filename);
+
                 File.WriteAllText(filename, _recording.ConsoleLog);
+                File.AppendAllText(filename, Environment.NewLine + Environment.NewLine + ex.ToString());
 
                 if (await NiceDialog.ShowPromptAsync(this, NiceDialogIcon.Error, "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.", "Open Error Log"))
                 {
