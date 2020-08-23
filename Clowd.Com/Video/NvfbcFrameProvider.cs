@@ -1,97 +1,97 @@
-﻿using DirectShow;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
+﻿//using DirectShow;
+//using System;
+//using System.Collections.Generic;
+//using System.Linq;
+//using System.Runtime.InteropServices;
+//using System.Text;
 
-namespace Clowd.Com.Video
-{
-    class NvfbcFrameProvider : IFrameProvider
-    {
-        public NvfbcFrameProvider()
-        {
+//namespace Clowd.Com.Video
+//{
+//    class NvfbcFrameProvider : IFrameProvider
+//    {
+//        public NvfbcFrameProvider()
+//        {
 
-        }
-        public int CopyScreenToSamplePtr(ref IMediaSampleImpl _sample)
-        {
-            throw new NotImplementedException();
-        }
+//        }
+//        public int CopyScreenToSamplePtr(ref IMediaSampleImpl _sample)
+//        {
+//            throw new NotImplementedException();
+//        }
 
-        public void Dispose()
-        {
-            throw new NotImplementedException();
-        }
+//        public void Dispose()
+//        {
+//            throw new NotImplementedException();
+//        }
 
-        public int GetCaptureProperties(out CaptureProperties properties)
-        {
-            throw new NotImplementedException();
-        }
+//        public int GetCaptureProperties(out CaptureProperties properties)
+//        {
+//            throw new NotImplementedException();
+//        }
 
-        public int SetCaptureProperties(CaptureProperties properties)
-        {
-            throw new NotImplementedException();
-        }
-    }
+//        public int SetCaptureProperties(CaptureProperties properties)
+//        {
+//            throw new NotImplementedException();
+//        }
+//    }
 
-    class NvfbcWrapper
-    {
-#if _WIN64
-        const string NVFBC_DLL = "NvFBC64.dll";
-#else
-        const string NVFBC_DLL = "NvFBC.dll";
-#endif
-
-
-        //[DllImport(NVFBC_DLL, EntryPoint = "NvFBC_GetSDKVersion")]
-        //GetSDKVersion
+//    class NvfbcWrapper
+//    {
+//#if _WIN64
+//        const string NVFBC_DLL = "NvFBC64.dll";
+//#else
+//        const string NVFBC_DLL = "NvFBC.dll";
+//#endif
 
 
-    }
-    //NvIFR64.dll:
+//        //[DllImport(NVFBC_DLL, EntryPoint = "NvFBC_GetSDKVersion")]
+//        //GetSDKVersion
 
-    //NvIFR_ConnectToCrossProcessSharedSurfaceEXT
 
-    //NvIFR_CopyFromCrossProcessSharedSurfaceEXT
+//    }
+//    //NvIFR64.dll:
 
-    //NvIFR_CopyFromSharedSurfaceEXT
+//    //NvIFR_ConnectToCrossProcessSharedSurfaceEXT
 
-    //NvIFR_CopyToCrossProcessSharedSurfaceEXT
+//    //NvIFR_CopyFromCrossProcessSharedSurfaceEXT
 
-    //NvIFR_CopyToSharedSurfaceEXT
+//    //NvIFR_CopyFromSharedSurfaceEXT
 
-    //NvIFR_Create
+//    //NvIFR_CopyToCrossProcessSharedSurfaceEXT
 
-    //NvIFR_CreateCrossProcessSharedSurfaceEXT
+//    //NvIFR_CopyToSharedSurfaceEXT
 
-    //NvIFR_CreateEx
+//    //NvIFR_Create
 
-    //NvIFR_CreateSharedSurfaceEXT
+//    //NvIFR_CreateCrossProcessSharedSurfaceEXT
 
-    //NvIFR_DestroyCrossProcessSharedSurfaceEXT
+//    //NvIFR_CreateEx
 
-    //NvIFR_DestroySharedSurfaceEXT
+//    //NvIFR_CreateSharedSurfaceEXT
 
-    //NvIFR_GetSDKVersion
+//    //NvIFR_DestroyCrossProcessSharedSurfaceEXT
 
-    //NvIFROpenGL64.dll:
+//    //NvIFR_DestroySharedSurfaceEXT
 
-    //NvIFROGLCreateInstance
+//    //NvIFR_GetSDKVersion
 
-    //NvFBC64.dll:
+//    //NvIFROpenGL64.dll:
 
-    //NvFBC_Create
+//    //NvIFROGLCreateInstance
 
-    //NvFBC_CreateEx
+//    //NvFBC64.dll:
 
-    //NvFBC_Enable
+//    //NvFBC_Create
 
-    //NvFBC_GetSDKVersion
+//    //NvFBC_CreateEx
 
-    //NvFBC_GetStatus
+//    //NvFBC_Enable
 
-    //NvFBC_GetStatusEx
+//    //NvFBC_GetSDKVersion
 
-    //NvFBC_SetGlobalFlags
+//    //NvFBC_GetStatus
 
-}
+//    //NvFBC_GetStatusEx
+
+//    //NvFBC_SetGlobalFlags
+
+//}

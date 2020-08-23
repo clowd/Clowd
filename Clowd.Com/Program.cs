@@ -1,5 +1,4 @@
 ﻿using DirectShow.BaseClasses;
-using RGiesecke.DllExport;
 using Sonic;
 using System;
 using System.Collections.Generic;
