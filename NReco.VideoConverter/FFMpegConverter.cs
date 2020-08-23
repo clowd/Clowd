@@ -768,6 +768,11 @@ namespace NReco.VideoConverter
                     }
                 }
             }
+
+            // we need to make ffmpeg per-monitor dpi aware so gdigrab / dshow filters can get correct screen coordinates.
+            // https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
+            var manifestPath = GetFFMpegExePath() + ".manifest";
+            File.WriteAllText(manifestPath, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\" xmlns:asmv3=\"urn:schemas-microsoft-com:asm.v3\">\r\n<asmv3:application>\r\n<asmv3:windowsSettings>\r\n<dpiAware xmlns=\"http://schemas.microsoft.com/SMI/2005/WindowsSettings\">true</dpiAware>\r\n<dpiAwareness xmlns=\"http://schemas.microsoft.com/SMI/2016/WindowsSettings\">PerMonitorV2</dpiAwareness>\r\n</asmv3:windowsSettings>\r\n</asmv3:application>\r\n</assembly>");
         }
 
         /// <summary>
