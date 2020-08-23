@@ -613,7 +613,7 @@ namespace Clowd
 
             public override bool HasColor => _action == ToolActionType.Object;
 
-            public override bool HasStroke => _action == ToolActionType.Object;
+            public override bool HasStroke => _action == ToolActionType.Object && _tool != ToolType.FilledRectangle && _tool != ToolType.Text;
 
             public override bool HasFont => _tool == ToolType.Text;
 
