@@ -75,7 +75,9 @@ namespace Clowd
         {
             if (Current != null)
             {
-                Current.Activate();
+                // if Handle == IntPtr.Zero, the window is still opening, so will be activated when that is finished
+                if (Current.Handle != IntPtr.Zero)
+                    Current.Activate();
                 return;
             }
 
