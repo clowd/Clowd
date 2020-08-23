@@ -16,8 +16,8 @@ namespace Clowd.Installer.Features
         {
             new DirectShowFilterInfo(DirectShowFilterType.Audio, "clowd-audio-capturer", "loopback-audio-x86.dll", true),
             new DirectShowFilterInfo(DirectShowFilterType.Audio, "clowd-audio-capturer", "loopback-audio-x64.dll", true),
-            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x86.ax", true),
-            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x64.ax", true),
+            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x86.ax", false),
+            new DirectShowFilterInfo(DirectShowFilterType.Video, "UScreenCapture", "UScreenCapture-x64.ax", false),
         };
 
         public static DirectShowFilterInfo DefaultVideo => Filters.OrderBy(f => f.IsLatest).FirstOrDefault(f => f.FilterType == DirectShowFilterType.Video && f.IsInstalled);
