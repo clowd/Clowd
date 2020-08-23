@@ -78,6 +78,15 @@
       <HintPath>..\packages\UnmanagedExports.1.2.7\lib\net\RGiesecke.DllExport.Metadata.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="SharpDX, Version=4.2.0.0, Culture=neutral, PublicKeyToken=b4dcf0f35e5521f1, processorArchitecture=MSIL">
+      <HintPath>..\packages\SharpDX.4.2.0\lib\net40\SharpDX.dll</HintPath>
+    </Reference>
+    <Reference Include="SharpDX.Direct3D11, Version=4.2.0.0, Culture=neutral, PublicKeyToken=b4dcf0f35e5521f1, processorArchitecture=MSIL">
+      <HintPath>..\packages\SharpDX.Direct3D11.4.2.0\lib\net40\SharpDX.Direct3D11.dll</HintPath>
+    </Reference>
+    <Reference Include="SharpDX.DXGI, Version=4.2.0.0, Culture=neutral, PublicKeyToken=b4dcf0f35e5521f1, processorArchitecture=MSIL">
+      <HintPath>..\packages\SharpDX.DXGI.4.2.0\lib\net40\SharpDX.DXGI.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
@@ -95,6 +104,9 @@
     <Compile Include="Video\CaptureProperties.cs" />
     <Compile Include="Video\CaptureStream.cs" />
     <Compile Include="Video\CVideoPin.cs" />
+    <Compile Include="Video\DxgiFrameProvider.cs" />
+    <Compile Include="Video\FrameProviderBase.cs" />
+    <Compile Include="Video\NvfbcFrameProvider.cs" />
     <Compile Include="Video\SynchronizedSourceStream.cs" />
     <Compile Include="Video\CVideoSource.cs" />
     <Compile Include="Video\FrameSize.cs" />
