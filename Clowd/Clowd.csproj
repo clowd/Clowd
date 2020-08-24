@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -66,6 +66,9 @@
       <HintPath>..\packages\Expression.Blend.Sdk.WPF.1.0.1\lib\net45\Microsoft.Expression.Interactions.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualBasic" />
+    <Reference Include="NAudio, Version=1.10.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\NAudio.1.10.0\lib\net35\NAudio.dll</HintPath>
+    </Reference>
     <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <HintPath>..\packages\Newtonsoft.Json.6.0.8\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
@@ -141,6 +144,8 @@
     <Compile Include="CaptureWindow2.xaml.cs">
       <DependentUpon>CaptureWindow2.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Capture\AudioLevelsMonitor.cs" />
+    <Compile Include="Capture\NAudioItem.cs" />
     <Compile Include="Controls\CornerClippingBorder.cs" />
     <Compile Include="Controls\FeatureInstallerControl.cs" />
     <Compile Include="Controls\FFMpegCodecSettingsEditor3.xaml.cs">
@@ -151,6 +156,7 @@
     <Compile Include="Controls\ReallyFastCaptureRenderer.cs" />
     <Compile Include="Controls\ResetDefaultButton.cs" />
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
+    <Compile Include="Converters\OnOffBrushConverter.cs" />
     <Compile Include="Converters\SnapToPixelConverter.cs" />
     <Compile Include="Converters\TaskStatusToVisibilityConverter.cs" />
     <Compile Include="Converters\DrawingCanvasEditConverter.cs" />

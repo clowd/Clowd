@@ -14,6 +14,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Clowd.Capture;
 using Clowd.Utilities;
 using NReco.VideoConverter;
 using Ookii.Dialogs.Wpf;
@@ -27,6 +28,7 @@ namespace Clowd
         public ScreenRect CroppingRectangle { get; private set; } = new ScreenRect(0, 0, 0, 0);
         public Rect CroppingRectangleWpf { get { return CroppingRectangle.ToWpfRect(); } private set { CroppingRectangle = new WpfRect(value).ToScreenRect(); } }
         public IntPtr Handle { get; private set; }
+        public AudioLevelsMonitor AudioLevel { get; private set; }
 
         public bool IsRecording { get; set; }
         public bool IsStarted { get; set; }
@@ -52,12 +54,30 @@ namespace Clowd
             _recording = new LiveScreenRecording(captureArea.ToSystem());
             _recording.LogReceived += Recording_LogRecieved;
 
-            App.Current.Settings.VideoSettings.VideoCodec.PropertyChanged += SavedPresets_PropertyChanged;
-            App.Current.Settings.VideoSettings.VideoCodec.SavedPresets.PropertyChanged += SavedPresets_PropertyChanged;
-            this.Closed += (s, e) => App.Current.Settings.VideoSettings.VideoCodec.PropertyChanged -= SavedPresets_PropertyChanged;
-            this.Closed += (s, e) => App.Current.Settings.VideoSettings.VideoCodec.SavedPresets.PropertyChanged -= SavedPresets_PropertyChanged;
+            var settings = App.Current.Settings.VideoSettings;
+            settings.VideoCodec.PropertyChanged += SavedPresets_PropertyChanged;
+            settings.VideoCodec.SavedPresets.PropertyChanged += SavedPresets_PropertyChanged;
+            AudioLevel = new AudioLevelsMonitor(settings);
+            AudioLevel.PropertyChanged += AudioLevel_PropertyChanged;
+
+            this.Closed += (s, e) =>
+            {
+                App.Current.Settings.VideoSettings.VideoCodec.PropertyChanged -= SavedPresets_PropertyChanged;
+                App.Current.Settings.VideoSettings.VideoCodec.SavedPresets.PropertyChanged -= SavedPresets_PropertyChanged;
+                AudioLevel.PropertyChanged -= AudioLevel_PropertyChanged;
+                AudioLevel.Dispose();
+            };
 
             UpdateAudioState();
+        }
+
+        private void AudioLevel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            this.Dispatcher.Invoke(() =>
+            {
+                levelSpeaker.Value = AudioLevel.SpeakerPeakLevel;
+                levelMic.Value = AudioLevel.MicPeakLevel;
+            });
         }
 
         private void SavedPresets_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
