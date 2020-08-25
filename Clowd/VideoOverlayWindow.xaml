@@ -126,7 +126,11 @@
                     ToolTipService.ShowOnDisabled="True">
                     <StackPanel Orientation="Horizontal">
                         <Border Width="4" Margin="5,5,0,5">
-                            <ProgressBar x:Name="levelMic" Height="4">
+                            <ProgressBar
+                                x:Name="levelMic"
+                                Height="4"
+                                Maximum="0"
+                                Minimum="-60">
                                 <ProgressBar.LayoutTransform>
                                     <RotateTransform Angle="-90" />
                                 </ProgressBar.LayoutTransform>
@@ -182,7 +186,11 @@
                     ToolTipService.ShowOnDisabled="True">
                     <StackPanel Orientation="Horizontal">
                         <Border Width="4" Margin="5,5,0,5">
-                            <ProgressBar x:Name="levelSpeaker" Height="4">
+                            <ProgressBar
+                                x:Name="levelSpeaker"
+                                Height="4"
+                                Maximum="0"
+                                Minimum="-60">
                                 <ProgressBar.LayoutTransform>
                                     <RotateTransform Angle="-90" />
                                 </ProgressBar.LayoutTransform>
