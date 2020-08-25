@@ -28,6 +28,32 @@
         <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
         <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />
         <conv:OnOffBrushConverter x:Key="OnOffBrush" />
+        <Style x:Key="AudioLevelProgressBarStyle" TargetType="ProgressBar">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Height" Value="2" />
+            <Setter Property="Margin" Value="0,5" />
+            <Setter Property="LayoutTransform">
+                <Setter.Value>
+                    <RotateTransform Angle="-90" />
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid Name="TemplateRoot" SnapsToDevicePixels="True">
+                            <Rectangle
+                                Name="PART_Track"
+                                Fill="White"
+                                Opacity="0.6" />
+                            <Rectangle
+                                Name="PART_Indicator"
+                                HorizontalAlignment="Left"
+                                Fill="{StaticResource AccentColorBrush}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <Grid>
         <Canvas
@@ -124,26 +150,12 @@
                     Style="{StaticResource CaptureToolButtonStyle}"
                     ToolTip="Capture microphone Audio&#x0a;Must be using an encoder preset that supports audio&#x0a;Must have a microphone selected in settings"
                     ToolTipService.ShowOnDisabled="True">
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="4" Margin="5,5,0,5">
-                            <ProgressBar x:Name="levelMic" Height="4">
-                                <ProgressBar.LayoutTransform>
-                                    <RotateTransform Angle="-90" />
-                                </ProgressBar.LayoutTransform>
-                            </ProgressBar>
-                        </Border>
+                    <Grid>
+                        <ProgressBar
+                            x:Name="levelMic"
+                            Style="{StaticResource AudioLevelProgressBarStyle}"
+                            Visibility="{Binding IsMicrophoneEnabled, Converter={StaticResource Bool2Vis}}" />
                         <StackPanel Margin="5" Orientation="Vertical">
-                            <Viewbox
-                                Width="26"
-                                Height="26"
-                                Margin="0,1,0,-1"
-                                Visibility="{Binding IsMicrophoneEnabled, Converter={StaticResource Bool2Vis}}">
-                                <Path
-                                    Width="172"
-                                    Height="172"
-                                    Data="M86,14.33333c-11.87517,0 -21.5,9.62483 -21.5,21.5v43c0,11.87517 9.62483,21.5 21.5,21.5c11.87517,0 21.5,-9.62483 21.5,-21.5v-43c0,-11.87517 -9.62483,-21.5 -21.5,-21.5zM43.62988,78.83333c-4.343,0 -7.841,3.85365 -7.13867,8.14649c3.5108,21.49797 20.70692,38.35796 42.34212,41.46028v14.89323c0,3.956 3.21067,7.16667 7.16667,7.16667c3.956,0 7.16667,-3.21067 7.16667,-7.16667v-14.89323c21.63521,-3.10233 38.83133,-19.96231 42.34212,-41.46028c0.70233,-4.29283 -2.79567,-8.14649 -7.13867,-8.14649c-3.54033,0 -6.45985,2.60553 -7.05469,6.10286c-2.9025,16.87751 -17.60659,29.73047 -35.31543,29.73047c-17.70883,0 -32.41293,-12.85297 -35.31543,-29.73047c-0.59483,-3.49733 -3.50719,-6.10286 -7.05469,-6.10286z"
-                                    Fill="White" />
-                            </Viewbox>
                             <Viewbox
                                 Width="26"
                                 Height="26"
@@ -154,6 +166,17 @@
                                     Data="M86,21.5c-11.87517,0 -21.5,9.62483 -21.5,21.5v43c0,11.87517 9.62483,21.5 21.5,21.5c11.87517,0 21.5,-9.62483 21.5,-21.5v-43c0,-11.87517 -9.62483,-21.5 -21.5,-21.5zM43.62988,86c-4.343,0 -7.841,3.86082 -7.13867,8.14649c3.50433,21.50444 20.70584,38.35789 42.34212,41.46028v14.89323c0,3.956 3.21067,7.16667 7.16667,7.16667c3.956,0 7.16667,-3.21067 7.16667,-7.16667v-14.90723c5.18974,-0.7623 10.14102,-2.28168 14.69726,-4.49316l-11.09993,-11.09993c-3.4185,1.08217 -6.98716,1.83366 -10.764,1.83366c-17.70883,0 -32.4201,-12.8458 -35.31543,-29.73047c-0.59483,-3.49016 -3.50036,-6.10286 -7.04069,-6.10286zM124.80078,110.46744c-1.83376,0 -3.66597,0.69853 -5.06706,2.09961c-2.80217,2.795 -2.80217,7.33195 0,10.13412l10.13412,10.13411l-10.13412,10.13412c-2.80217,2.795 -2.80217,7.33194 0,10.13411c2.795,2.80217 7.33195,2.80217 10.13412,0l10.13411,-10.13411l10.13412,10.13411c2.795,2.80217 7.33194,2.80217 10.13411,0c2.795,-2.80217 2.795,-7.33911 0,-10.13411l-10.13411,-10.13412l10.13411,-10.13411c2.80217,-2.795 2.80217,-7.33195 0,-10.13412c-2.80217,-2.795 -7.33911,-2.795 -10.13411,0l-10.13412,10.13412l-10.13411,-10.13412c-1.3975,-1.40108 -3.23329,-2.09961 -5.06706,-2.09961z"
                                     Fill="White"
                                     Opacity="0.6" />
+                            </Viewbox>
+                            <Viewbox
+                                Width="26"
+                                Height="26"
+                                Margin="0,1,0,-1"
+                                Visibility="{Binding IsMicrophoneEnabled, Converter={StaticResource Bool2Vis}}">
+                                <Path
+                                    Width="172"
+                                    Height="172"
+                                    Data="M86,14.33333c-11.87517,0 -21.5,9.62483 -21.5,21.5v43c0,11.87517 9.62483,21.5 21.5,21.5c11.87517,0 21.5,-9.62483 21.5,-21.5v-43c0,-11.87517 -9.62483,-21.5 -21.5,-21.5zM43.62988,78.83333c-4.343,0 -7.841,3.85365 -7.13867,8.14649c3.5108,21.49797 20.70692,38.35796 42.34212,41.46028v14.89323c0,3.956 3.21067,7.16667 7.16667,7.16667c3.956,0 7.16667,-3.21067 7.16667,-7.16667v-14.89323c21.63521,-3.10233 38.83133,-19.96231 42.34212,-41.46028c0.70233,-4.29283 -2.79567,-8.14649 -7.13867,-8.14649c-3.54033,0 -6.45985,2.60553 -7.05469,6.10286c-2.9025,16.87751 -17.60659,29.73047 -35.31543,29.73047c-17.70883,0 -32.41293,-12.85297 -35.31543,-29.73047c-0.59483,-3.49733 -3.50719,-6.10286 -7.05469,-6.10286z"
+                                    Fill="White" />
                             </Viewbox>
                             <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
                                 <TextBlock
@@ -171,7 +194,7 @@
                                     CornerRadius="5" />
                             </StackPanel>
                         </StackPanel>
-                    </StackPanel>
+                    </Grid>
                 </Button>
                 <Button
                     Background="#373737"
@@ -180,15 +203,12 @@
                     Style="{StaticResource CaptureToolButtonStyle}"
                     ToolTip="Capture system audio&#x0a;Must be using an encoder preset that supports audio&#x0a;Must have 'DirectShow Add-ons' installed (check settings)"
                     ToolTipService.ShowOnDisabled="True">
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="4" Margin="5,5,0,5">
-                            <ProgressBar x:Name="levelSpeaker" Height="4">
-                                <ProgressBar.LayoutTransform>
-                                    <RotateTransform Angle="-90" />
-                                </ProgressBar.LayoutTransform>
-                            </ProgressBar>
-                        </Border>
-                        <StackPanel Margin="3,5,5,5" Orientation="Vertical">
+                    <Grid>
+                        <ProgressBar
+                            x:Name="levelSpeaker"
+                            Style="{StaticResource AudioLevelProgressBarStyle}"
+                            Visibility="{Binding IsLoopbackEnabled, Converter={StaticResource Bool2Vis}}" />
+                        <StackPanel Margin="5" Orientation="Vertical">
                             <Viewbox
                                 Width="26"
                                 Height="26"
@@ -226,7 +246,7 @@
                                     CornerRadius="5" />
                             </StackPanel>
                         </StackPanel>
-                    </StackPanel>
+                    </Grid>
                 </Button>
                 <Button
                     Background="#373737"
