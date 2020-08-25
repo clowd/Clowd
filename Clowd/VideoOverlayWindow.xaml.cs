@@ -28,7 +28,6 @@ namespace Clowd
         public ScreenRect CroppingRectangle { get; private set; } = new ScreenRect(0, 0, 0, 0);
         public Rect CroppingRectangleWpf { get { return CroppingRectangle.ToWpfRect(); } private set { CroppingRectangle = new WpfRect(value).ToScreenRect(); } }
         public IntPtr Handle { get; private set; }
-        public AudioLevelsMonitor AudioLevel { get; private set; }
 
         public bool IsRecording { get; set; }
         public bool IsStarted { get; set; }
@@ -40,6 +39,9 @@ namespace Clowd
 
         private LiveScreenRecording _recording;
         private bool _isCancelled = false;
+        private NAudioItem speaker;
+        private NAudioItem mic;
+        private System.Timers.Timer audioTimer;
 
         public VideoOverlayWindow(ScreenRect captureArea)
         {
@@ -57,26 +59,39 @@ namespace Clowd
             var settings = App.Current.Settings.VideoSettings;
             settings.VideoCodec.PropertyChanged += SavedPresets_PropertyChanged;
             settings.VideoCodec.SavedPresets.PropertyChanged += SavedPresets_PropertyChanged;
-            AudioLevel = new AudioLevelsMonitor(settings);
-            AudioLevel.PropertyChanged += AudioLevel_PropertyChanged;
 
             this.Closed += (s, e) =>
             {
                 App.Current.Settings.VideoSettings.VideoCodec.PropertyChanged -= SavedPresets_PropertyChanged;
                 App.Current.Settings.VideoSettings.VideoCodec.SavedPresets.PropertyChanged -= SavedPresets_PropertyChanged;
-                AudioLevel.PropertyChanged -= AudioLevel_PropertyChanged;
-                AudioLevel.Dispose();
+
+                mic?.Dispose();
+                speaker?.Dispose();
+                mic = speaker = null;
+                audioTimer.Enabled = false;
+                audioTimer.Dispose();
             };
 
             UpdateAudioState();
+
+            // start audio update timer
+            audioTimer = new System.Timers.Timer(20);
+            audioTimer.Elapsed += AudioTimer_Elapsed; ;
+            audioTimer.AutoReset = true;
+            audioTimer.Enabled = true;
+            audioTimer.Start();
         }
 
-        private void AudioLevel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        private void AudioTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
         {
+            // don't bother the UI thread if we're not capturing audio.
+            if (mic == null && speaker == null)
+                return;
+
             this.Dispatcher.Invoke(() =>
             {
-                levelSpeaker.Value = AudioLevel.SpeakerPeakLevel;
-                levelMic.Value = AudioLevel.MicPeakLevel;
+                levelSpeaker.Value = speaker != null ? (speaker.PeakLevel * 100) : 0;
+                levelMic.Value = mic != null ? (mic.PeakLevel * 100) : 0;
             });
         }
 
@@ -190,11 +205,30 @@ namespace Clowd
 
         public void UpdateAudioState()
         {
+            // dispose of all sounds stuff and re-create it. this doesn't happen too often (when settings change) so it's okay
+            mic?.Dispose();
+            speaker?.Dispose();
+            mic = speaker = null;
+            levelSpeaker.Value = levelMic.Value = 0;
+
             if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
             {
                 IsAudioSupported = true;
                 IsMicrophoneEnabled = audio.CaptureMicrophone;
                 IsLoopbackEnabled = audio.CaptureLoopbackAudio;
+
+                if (IsMicrophoneEnabled && (audio.SelectedMicrophone != null || audio.SelectedMicrophone.FriendlyName != mic?.Name))
+                {
+                    mic?.Dispose();
+                    mic = NAudioItem.Microphones.FirstOrDefault(m => m.Name == audio.SelectedMicrophone.FriendlyName);
+                    mic?.StartListeningForPeakLevel();
+                }
+
+                if (IsLoopbackEnabled && speaker == null)
+                {
+                    speaker = NAudioItem.DefaultSpeaker;
+                    speaker?.StartListeningForPeakLevel();
+                }
             }
             else
             {
