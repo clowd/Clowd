@@ -98,14 +98,14 @@ namespace Clowd
         private double ConvertLevelToDb(NAudioItem item)
         {
             if (item == null)
-                return -100;
+                return 0;
 
             double level = item.PeakLevel;
 
             if (level > 0 && level <= 1)
-                return 20 * Math.Log10(level);
+                return (20 * Math.Log10(level)) / 60 * 100 + 100;
 
-            return -100;
+            return 0;
         }
 
         private void SavedPresets_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
