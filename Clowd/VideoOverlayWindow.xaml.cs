@@ -90,9 +90,22 @@ namespace Clowd
 
             this.Dispatcher.Invoke(() =>
             {
-                levelSpeaker.Value = speaker != null ? (speaker.PeakLevel * 100) : 0;
-                levelMic.Value = mic != null ? (mic.PeakLevel * 100) : 0;
+                levelSpeaker.Value = ConvertLevelToDb(speaker);
+                levelMic.Value = ConvertLevelToDb(mic); 
             });
+        }
+
+        private double ConvertLevelToDb(NAudioItem item)
+        {
+            if (item == null)
+                return -100;
+
+            double level = item.PeakLevel;
+
+            if (level > 0 && level <= 1)
+                return 20 * Math.Log10(level);
+
+            return -100;
         }
 
         private void SavedPresets_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
