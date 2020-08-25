@@ -144,7 +144,6 @@
     <Compile Include="CaptureWindow2.xaml.cs">
       <DependentUpon>CaptureWindow2.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Capture\AudioLevelsMonitor.cs" />
     <Compile Include="Capture\NAudioItem.cs" />
     <Compile Include="Controls\CornerClippingBorder.cs" />
     <Compile Include="Controls\FeatureInstallerControl.cs" />
