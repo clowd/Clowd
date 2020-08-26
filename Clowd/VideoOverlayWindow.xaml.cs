@@ -286,7 +286,7 @@ namespace Clowd
             }
             this.Close();
 
-            await Task.Delay(5000);
+            await Task.Delay(10 * 1000);
             if (File.Exists(_recording.FileName))
                 File.Delete(_recording.FileName);
         }
