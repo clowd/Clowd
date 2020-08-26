@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -161,6 +162,10 @@ namespace Clowd.Interop.Shell32
             try
             {
                 SHOpenFolderAndSelectItems(pidl, null, edit);
+            }
+            catch
+            {
+                Process.Start("explorer.exe", $"/select,\"{path}\"");
             }
             finally
             {

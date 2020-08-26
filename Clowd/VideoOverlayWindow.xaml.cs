@@ -91,7 +91,7 @@ namespace Clowd
             this.Dispatcher.Invoke(() =>
             {
                 levelSpeaker.Value = ConvertLevelToDb(speaker);
-                levelMic.Value = ConvertLevelToDb(mic); 
+                levelMic.Value = ConvertLevelToDb(mic);
             });
         }
 
@@ -271,15 +271,8 @@ namespace Clowd
             if (wasRecording)
             {
                 await Task.Delay(1000);
-                try
-                {
-                    // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
-                    Interop.Shell32.WindowsExplorer.ShowFileOrFolder(_recording.FileName);
-                }
-                catch
-                {
-                    Process.Start("explorer.exe", $"/select,\"{_recording.FileName}\"");
-                }
+                // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
+                Interop.Shell32.WindowsExplorer.ShowFileOrFolder(_recording.FileName);
             }
         }
 
