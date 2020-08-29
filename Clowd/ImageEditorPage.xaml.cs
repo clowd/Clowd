@@ -36,18 +36,19 @@ namespace Clowd
         private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private BitmapSource _initialImage;
         private WpfRect? _initialBounds;
+        private PropertyChangeNotifier toolNotifier;
 
         private ImageEditorPage()
         {
             InitializeComponent();
-            drawingCanvas.SetResourceReference(DrawToolsLib.DrawingCanvas.HandleColorProperty, "AccentColor");
-
-            // register tool changed listener
-            var toolDescriptor = DependencyPropertyDescriptor.FromProperty(DrawingCanvas.ToolProperty, typeof(DrawingCanvas));
-            toolDescriptor.AddValueChanged(drawingCanvas, drawingCanvas_ToolChanged);
-
+            drawingCanvas.SetResourceReference(DrawingCanvas.HandleColorProperty, "AccentColor");
             drawingCanvas.ArtworkBackground = new SolidColorBrush(App.Current.Settings.EditorSettings.CanvasBackground);
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
+
+            // register tool changed listener
+            toolNotifier = new PropertyChangeNotifier(drawingCanvas, DrawingCanvas.ToolProperty);
+            toolNotifier.ValueChanged += drawingCanvas_ToolChanged;
+
             this.Loaded += ImageEditorPage2_Loaded;
             SyncToolState();
         }
@@ -551,7 +552,7 @@ namespace Clowd
         }
 
 
-        public abstract class StateCapabilities
+        public abstract class StateCapabilities : INotifyPropertyChanged
         {
             public abstract string Description { get; }
             public abstract string Name { get; }
@@ -562,6 +563,9 @@ namespace Clowd
             public abstract bool HasAngle { get; }
             public virtual bool CanCanvasZoom { get; } = true;
             public virtual bool CanChangeCanvasBackground { get; } = true;
+
+            public event PropertyChangedEventHandler PropertyChanged;
+
             public abstract void EnterState(ImageEditorPage page, object obj);
             public abstract void ExitState(ImageEditorPage page);
             public abstract bool IsSupported(object obj);
