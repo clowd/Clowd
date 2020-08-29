@@ -116,6 +116,8 @@ namespace Clowd
                 drawingCanvas.ZoomPanActualSize();
             else
                 drawingCanvas.ZoomPanFit();
+
+            SyncToolState();
         }
 
         #region Helpers
@@ -237,11 +239,15 @@ namespace Clowd
                 newStateObj = null;
             }
 
-            StateCapabilities currentState = Capabilities, newState = _manager.GetObjectCapabilities(newStateObj);
-
-            currentState.ExitState(this);
-            Capabilities = newState;
-            newState.EnterState(this, newStateObj);
+            // if the state object has changed (IsCurrent) then we need to enter a new capability state
+            var currentState = Capabilities;
+            if (!currentState.IsCurrent(newStateObj))
+            {
+                var newState = _manager.GetObjectCapabilities(newStateObj);
+                currentState.ExitState(this);
+                Capabilities = newState;
+                newState.EnterState(this, newStateObj);
+            }
         }
 
         #endregion
@@ -371,6 +377,8 @@ namespace Clowd
 
             var tool = (ToolType)Enum.Parse(typeof(ToolType), (string)e.Parameter);
             drawingCanvas.Tool = tool;
+
+            SyncToolState();
         }
 
         private void PasteCommand(object sender, ExecutedRoutedEventArgs e)
@@ -436,6 +444,7 @@ namespace Clowd
                 }
                 return;
             }
+
             if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool == null && Mouse.LeftButton != MouseButtonState.Pressed)
             {
                 _shiftPanPreviousTool = drawingCanvas.Tool;
@@ -569,6 +578,7 @@ namespace Clowd
             public abstract void EnterState(ImageEditorPage page, object obj);
             public abstract void ExitState(ImageEditorPage page);
             public abstract bool IsSupported(object obj);
+            public abstract bool IsCurrent(object obj);
         }
 
         public class EmptyCapabilities : StateCapabilities
@@ -593,6 +603,11 @@ namespace Clowd
 
             public override void ExitState(ImageEditorPage page)
             {
+            }
+
+            public override bool IsCurrent(object obj)
+            {
+                return false;
             }
 
             public override bool IsSupported(object obj)
@@ -639,6 +654,7 @@ namespace Clowd
             public override void EnterState(ImageEditorPage page, object obj)
             {
                 _page = page;
+
                 var canvas = page.drawingCanvas;
 
                 var settings = GetToolSettings();
@@ -688,6 +704,8 @@ namespace Clowd
                 settings.FontStretch = canvas.TextFontStretch;
                 settings.FontStyle = canvas.TextFontStyle;
                 settings.FontWeight = canvas.TextFontWeight;
+
+                _page = null;
             }
 
             private void ChkColorAuto_Click(object sender, RoutedEventArgs e)
@@ -711,6 +729,14 @@ namespace Clowd
             }
 
             private SavedToolSettings GetToolSettings() => App.Current.Settings.EditorSettings.ToolSettings[_tool];
+
+            public override bool IsCurrent(object obj)
+            {
+                if (obj is ToolType toolc)
+                    return toolc == _tool;
+
+                return false;
+            }
         }
 
         public class ObjectStateCapabilities<TGraphic> : StateCapabilities where TGraphic : GraphicBase
@@ -746,9 +772,11 @@ namespace Clowd
             }
 
             private const string ANGLE_NAME = "Angle";
+            private object _currentGraphic;
 
             public override void EnterState(ImageEditorPage page, object obj)
             {
+                _currentGraphic = obj;
                 var canvas = page.drawingCanvas;
 
                 if (obj is GraphicBase g)
@@ -786,6 +814,7 @@ namespace Clowd
 
             public override void ExitState(ImageEditorPage page)
             {
+                _currentGraphic = null;
             }
 
             public override bool IsSupported(object obj)
@@ -795,6 +824,11 @@ namespace Clowd
 
             private bool IsNotOneOf(params Type[] types) => types.All(t => t != typeof(TGraphic));
             private bool IsOneOf(params Type[] types) => types.Any(t => t == typeof(TGraphic));
+
+            public override bool IsCurrent(object obj)
+            {
+                return obj == _currentGraphic;
+            }
         }
     }
 }
