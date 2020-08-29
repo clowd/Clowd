@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -57,12 +57,12 @@ namespace Clowd
             Keyboard.Focus(buttonFocus);
         }
 
-        public static async void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null)
+        public static async void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null, bool allowPrompt = true)
         {
             ImageEditorPage page = null;
             Window window = TemplatedWindow.GetWindow(typeof(ImageEditorPage));
 
-            if (window != null)
+            if (window != null && image != null && allowPrompt)
             {
                 if ((page = TemplatedWindow.GetContent<ImageEditorPage>(window)) != null)
                 {
