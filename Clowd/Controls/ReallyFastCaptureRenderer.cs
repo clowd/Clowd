@@ -139,13 +139,9 @@ namespace Clowd
             var tsk2 = Task.Run(() =>
             {
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Capture Start");
-                using (var source = ScreenUtil.Capture(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor))
-                {
-                    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Image Captured");
-                    _image = source.ConvertToBitmapSourceFast();
-                }
+                _image = ScreenUtil.CaptureScreenWpf(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor);
                 _image.Freeze();
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Image Converted");
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Image End");
             });
 
             await Task.WhenAll(tsk1, tsk2);
@@ -251,6 +247,7 @@ namespace Clowd
             {
                 var pwinrect = _selectedWindow.WindowRect;
                 rect = new ScreenRect(rect.Left - pwinrect.Left, rect.Top - pwinrect.Top, rect.Width, rect.Height);
+
                 return new CroppedBitmap(_selectedWindow.WindowBitmapWpf, rect);
             }
             else
