@@ -156,6 +156,7 @@ namespace Clowd
         {
             var template = TemplatedControl.CreateTemplatedWindow();
             var window = (Window)template;
+            window.Closing += (s, e) => { System.Windows.Input.Keyboard.ClearFocus(); };
             window.Title = title;
 
             if (!Double.IsNaN(content.Width) && !Double.IsNaN(content.Height))
