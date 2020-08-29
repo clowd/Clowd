@@ -185,6 +185,7 @@
     <Compile Include="Utilities\GlobalTrigger.cs" />
     <Compile Include="Capture\LiveScreenRecording.cs" />
     <Compile Include="Utilities\NiceDialog.cs" />
+    <Compile Include="Utilities\PropertyChangeNotifier.cs" />
     <Compile Include="Utilities\RelayCommand.cs" />
     <Compile Include="Capture\ScrollingCapture.cs" />
     <Compile Include="Capture\ScrollingCapture2.cs" />
