@@ -594,21 +594,15 @@ namespace Clowd
             if (Clipboard.ContainsImage())
             {
                 var img = System.Windows.Forms.Clipboard.GetImage();
-                byte[] b;
-                using (var ms = new MemoryStream())
-                {
-                    img.Save(ms, ImageFormat.Png);
-                    ms.Position = 0;
-                    using (BinaryReader br = new BinaryReader(ms))
-                    {
-                        b = br.ReadBytes(Convert.ToInt32(ms.Length));
-                    }
-                }
-                UploadManager.Upload(b, "clowd-default.png");
+                var ms = new MemoryStream();
+                img.Save(ms, ImageFormat.Png);
+                ms.Position = 0;
+                UploadManager.Upload(ms, "png", "Pasted Image", null);
             }
             else if (Clipboard.ContainsText())
             {
-                UploadManager.Upload(Clipboard.GetText().ToUtf8(), "clowd-default.txt");
+                var ms = new MemoryStream(Clipboard.GetText().ToUtf8());
+                UploadManager.Upload(ms, "txt", "Pasted Text", null);
             }
             else if (Clipboard.ContainsFileDropList())
             {
@@ -752,37 +746,43 @@ namespace Clowd
             if (
                 // • there is more than one file;
                 filePaths.Length > 1 ||
-                // • we are processing a directory rather than a file; or
+                // • we are processing a directory rather than a file
                 (filePaths.Length == 1 && Directory.Exists(filePaths[0]))
                 )
             {
-                using (MemoryStream ms = new MemoryStream())
+                MemoryStream ms = new MemoryStream();
+                string archiveName = null;
+                await Clowd.Shared.Extensions.ToTask(() =>
                 {
-                    var archiveName = "clowd-default.zip";
-                    await Clowd.Shared.Extensions.ToTask(() =>
+                    using (ZipFile zip = new ZipFile())
                     {
-                        using (ZipFile zip = new ZipFile())
+                        if (filePaths.Length == 1)
                         {
-                            if (filePaths.Length == 1)
-                            {
-                                archiveName = Path.GetFileNameWithoutExtension(filePaths[0]) + ".zip";
-                            }
-                            foreach (var path in filePaths)
-                            {
-                                if (Directory.Exists(path))
-                                    zip.AddDirectory(path, Path.GetFileName(path));
-                                else if (File.Exists(path))
-                                    zip.AddFile(path, "");
-                            }
-                            zip.Save(ms);
+                            archiveName = Path.GetFileNameWithoutExtension(filePaths[0]);
                         }
-                    });
-                    url = await UploadManager.Upload(ms.ToArray(), archiveName);
-                }
+                        foreach (var path in filePaths)
+                        {
+                            if (Directory.Exists(path))
+                                zip.AddDirectory(path, Path.GetFileName(path));
+                            else if (File.Exists(path))
+                                zip.AddFile(path, "");
+                        }
+                        zip.Save(ms);
+                    }
+                });
+
+                string viewName = null;
+                if (archiveName != null)
+                    viewName = archiveName + ".zip";
+                else
+                    viewName = $"zip ({filePaths.Length} files)";
+
+                url = await UploadManager.Upload(ms, "zip", viewName, archiveName);
             }
             else
             {
-                url = await UploadManager.Upload(File.ReadAllBytes(filePaths[0]), Path.GetFileName(filePaths[0]));
+                var path = filePaths[0];
+                url = await UploadManager.Upload(File.OpenRead(path), Path.GetExtension(path), Path.GetFileName(path), Path.GetFileNameWithoutExtension(path));
             }
         }
         private void OnTaskbarIconDrop(object sender, DragEventArgs e)
@@ -796,7 +796,9 @@ namespace Clowd
             else if (formats.Contains(DataFormats.Text))
             {
                 var data = (string)e.Data.GetData(DataFormats.Text);
-                UploadManager.Upload(data.ToUtf8(), "clowd-default.txt");
+
+                var ms = new MemoryStream(data.ToUtf8());
+                UploadManager.Upload(ms, "txt", "Text", null);
             }
         }
     }

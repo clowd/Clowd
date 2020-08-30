@@ -34,13 +34,19 @@ namespace Clowd
         }
         private static TaskWindow _windowBacking;
 
-        public static Task<string> Upload(byte[] data, string displayName)
+        public static async Task<string> Upload(Stream data, string extension, string viewName, string fileName, bool autoExecute = false)
         {
-            return Upload(new MemoryStream(data), displayName);
-        }
+            if (String.IsNullOrWhiteSpace(extension))
+                throw new ArgumentNullException(nameof(extension));
 
-        public static async Task<string> Upload(Stream data, string displayName, bool autoExecute = false)
-        {
+            extension = extension.Trim('.').Trim();
+
+            if (String.IsNullOrWhiteSpace(viewName))
+                viewName = "Upload";
+
+            if (String.IsNullOrWhiteSpace(fileName))
+                fileName = CS.Util.RandomEx.GetString(8);
+
             IUploadProvider uploader;
             var providerSelection = App.Current.Settings.UploadSettings.UploadProvider;
             if (providerSelection == UploadsProvider.None)
@@ -57,9 +63,6 @@ namespace Clowd
                 throw new NotImplementedException();
             }
 
-            string viewName = displayName;
-            if (displayName.StartsWith("clowd-default", StringComparison.InvariantCultureIgnoreCase))
-                viewName = "Upload";
             var canceler = new ManualResetEventSlim(false);
             var view = new UploadTaskViewItem(viewName, "Connecting...", canceler);
             _window.AddTask(view);
@@ -71,7 +74,7 @@ namespace Clowd
                 view.SecondaryText = "Uploading...";
                 view.ProgressTargetText = ((long)data_size).ToPrettySizeString(0);
 
-                var result = await uploader.Upload(data, displayName, (bytesUploaded) =>
+                var result = await uploader.Upload(data, $"{fileName}.{extension}", (bytesUploaded) =>
                 {
                     view.ProgressCurrentText = ((long)Math.Min(bytesUploaded, data_size)).ToPrettySizeString(0);
                     var progress = (bytesUploaded / (double)data_size) * 100;
