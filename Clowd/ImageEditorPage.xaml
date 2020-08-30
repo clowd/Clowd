@@ -235,6 +235,10 @@
                     <Setter Property="Width" Value="16" />
                 </Style>
             </WrapPanel.Resources>
+            <Rectangle
+                Height="1"
+                Margin="4,0,4,0"
+                Fill="#666666" />
             <controls:NonTogglableToggleButton
                 Command="{StaticResource Commands.SelectTool}"
                 CommandParameter="None"
@@ -371,19 +375,19 @@
                 </Viewbox>
             </Button>
         </WrapPanel>
-        <WrapPanel
+        <controls:DockAndWrapPanel
             x:Name="propertiesBar"
             Grid.ColumnSpan="2"
             HorizontalAlignment="Stretch"
             ItemHeight="30"
             Orientation="Horizontal">
-            <WrapPanel.Resources>
+            <controls:DockAndWrapPanel.Resources>
                 <Style TargetType="{x:Type StackPanel}">
                     <Setter Property="Margin" Value="4,0,4,0" />
                     <Setter Property="Height" Value="30" />
                     <Setter Property="Orientation" Value="Horizontal" />
                 </Style>
-            </WrapPanel.Resources>
+            </controls:DockAndWrapPanel.Resources>
             <StackPanel>
                 <TextBlock VerticalAlignment="Center">
                     <Run Text="{Binding Capabilities.Description, Mode=OneWay}" />
@@ -515,7 +519,49 @@
                     Margin="4,0,0,0"
                     DefaultValue="0" />
             </StackPanel>
-        </WrapPanel>
+            <Button
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{StaticResource Commands.Upload}"
+                Style="{StaticResource ToolButtonStyle}"
+                ToolTip="Upload">
+                <Viewbox Width="20" Height="20">
+                    <Path
+                        Width="16"
+                        Height="16"
+                        Data="{StaticResource PathLogoSmall16}"
+                        Fill="White" />
+                </Viewbox>
+            </Button>
+            <Button
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="ApplicationCommands.Copy"
+                Style="{StaticResource ToolButtonStyle}"
+                ToolTip="Copy">
+                <Viewbox Width="20" Height="20">
+                    <Path
+                        Width="172"
+                        Height="172"
+                        Data="M28.66667,14.33333c-7.91917,0 -14.33333,6.41417 -14.33333,14.33333v93.16667c0,3.956 3.21067,7.16667 7.16667,7.16667c3.956,0 7.16667,-3.21067 7.16667,-7.16667v-93.16667h93.16667c3.956,0 7.16667,-3.21067 7.16667,-7.16667c0,-3.956 -3.21067,-7.16667 -7.16667,-7.16667zM57.33333,43c-7.91917,0 -14.33333,6.41417 -14.33333,14.33333v86c0,7.91917 6.41417,14.33333 14.33333,14.33333h86c7.91917,0 14.33333,-6.41417 14.33333,-14.33333v-86c0,-7.91917 -6.41417,-14.33333 -14.33333,-14.33333zM57.33333,57.33333h86v86h-86z"
+                        Fill="White" />
+                </Viewbox>
+            </Button>
+            <Button
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="ApplicationCommands.Save"
+                Style="{StaticResource ToolButtonStyle}"
+                ToolTip="Save">
+                <Viewbox
+                    Width="22"
+                    Height="22"
+                    Margin="0,-1,0,0">
+                    <Path
+                        Width="172"
+                        Height="172"
+                        Data="M35.83333,21.5c-7.84216,0 -14.33333,6.49117 -14.33333,14.33333v100.33333c0,7.84216 6.49117,14.33333 14.33333,14.33333h100.33333c7.84216,0 14.33333,-6.49117 14.33333,-14.33333v-86l-28.66667,-28.66667zM35.83333,35.83333h80.0651l20.26823,20.26823v80.0651h-100.33333zM50.16667,50.16667v21.5h57.33333v-21.5zM82.41667,86c-9.8951,0 -17.91667,8.02156 -17.91667,17.91667c0,9.8951 8.02156,17.91667 17.91667,17.91667c9.8951,0 17.91667,-8.02156 17.91667,-17.91667c0,-9.8951 -8.02156,-17.91667 -17.91667,-17.91667z"
+                        Fill="White" />
+                </Viewbox>
+            </Button>
+        </controls:DockAndWrapPanel>
         <Canvas
             x:Name="objectCanvas"
             Grid.Row="1"
