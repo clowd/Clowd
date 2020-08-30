@@ -527,6 +527,7 @@ namespace Clowd
             {
                 FirstRun = Settings.FirstRun,
                 LastUploadPath = Settings.LastUploadPath,
+                LastSavePath = Settings.LastSavePath,
             };
             Settings.SaveQuiet();
         }
