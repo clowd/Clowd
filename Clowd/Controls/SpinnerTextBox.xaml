@@ -1,0 +1,78 @@
+﻿<UserControl
+    x:Class="Clowd.Controls.SpinnerTextBox"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Width="70"
+    Height="22"
+    Margin="4,0,0,0"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    mc:Ignorable="d">
+    <UserControl.Resources>
+        <ControlTemplate x:Key="SimpleTextBox" TargetType="{x:Type TextBoxBase}">
+            <ScrollViewer x:Name="PART_ContentHost" Margin="0,2,0,0" />
+        </ControlTemplate>
+        <ControlTemplate x:Key="SimpleButton" TargetType="{x:Type Button}">
+            <Border x:Name="_bg" Background="#33FFFFFF">
+                <TextBlock Text="{TemplateBinding Content}" TextAlignment="Center" />
+                <!--<ContentPresenter
+                    x:Name="MyContentPresenter"
+                    Margin="0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Content="{TemplateBinding Content}" />-->
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="_bg" Property="Background" Value="#66FFFFFF" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+    </UserControl.Resources>
+    <Grid PreviewMouseWheel="Grid_PreviewMouseWheel">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition />
+            <ColumnDefinition Width="16" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition />
+            <RowDefinition />
+        </Grid.RowDefinitions>
+        <Border
+            Grid.RowSpan="2"
+            Grid.ColumnSpan="2"
+            Background="#454545"
+            BorderBrush="#666666"
+            BorderThickness="1"
+            CornerRadius="0" />
+        <TextBox
+            Grid.RowSpan="2"
+            BorderThickness="0"
+            CaretBrush="White"
+            Foreground="White"
+            PreviewKeyDown="TextBox_PreviewKeyDown"
+            Template="{StaticResource SimpleTextBox}"
+            Text="{Binding Text}"
+            TextAlignment="Center" />
+        <Button
+            Grid.Column="1"
+            Margin="0,2,2,1"
+            Padding="0"
+            Click="SpinUp"
+            Content="&#x25B2;"
+            FontSize="6"
+            Foreground="White"
+            Template="{StaticResource SimpleButton}" />
+        <Button
+            Grid.Row="1"
+            Grid.Column="1"
+            Margin="0,1,2,2"
+            Click="SpinDown"
+            Content="&#x25BC;"
+            FontSize="6"
+            Foreground="White"
+            Template="{StaticResource SimpleButton}" />
+    </Grid>
+</UserControl>

@@ -394,7 +394,10 @@
                 <TextBlock VerticalAlignment="Center">
                     <Run>Zoom:</Run>
                 </TextBlock>
-                <TextBox Style="{StaticResource ToolTextBox}" Text="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay, Converter={StaticResource convZoomScale}}" />
+                <controls:SpinnerTextBox
+                    Min="0.1"
+                    SpinAmount="0.1"
+                    Text="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay, Converter={StaticResource convZoomScale}}" />
                 <controls:ResetDefaultButton
                     Margin="4,0,0,0"
                     CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}"
@@ -433,7 +436,11 @@
                 <TextBlock VerticalAlignment="Center">
                     <Run>Stroke:</Run>
                 </TextBlock>
-                <TextBox Style="{StaticResource ToolTextBox}" Text="{Binding ElementName=drawingCanvas, Path=LineWidth, Converter={StaticResource convPixel2String}}" />
+                <controls:SpinnerTextBox
+                    Min="0"
+                    SnapToWholeNumber="True"
+                    SpinAmount="1"
+                    Text="{Binding ElementName=drawingCanvas, Path=LineWidth, Mode=TwoWay, Converter={StaticResource convPixel2String}}" />
             </StackPanel>
             <StackPanel Visibility="{Binding Capabilities.HasColor, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
@@ -497,7 +504,12 @@
                 <TextBlock VerticalAlignment="Center">
                     <Run>Angle:</Run>
                 </TextBlock>
-                <TextBox x:Name="textObjectAngle" Style="{StaticResource ToolTextBox}" />
+                <controls:SpinnerTextBox
+                    x:Name="textObjectAngle"
+                    Max="180"
+                    Min="-180"
+                    SnapToWholeNumber="True"
+                    SpinAmount="10" />
                 <controls:ResetDefaultButton
                     x:Name="resetObjectAngle"
                     Margin="4,0,0,0"
