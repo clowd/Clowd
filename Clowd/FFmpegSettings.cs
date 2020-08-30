@@ -192,13 +192,13 @@ namespace Clowd
         [PropertyTools.DataAnnotations.EnableBy(nameof(CaptureMicrophone), true)]
         public FFmpegDirectShowAudioDevice SelectedMicrophone { get; set; }
 
-        [PropertyTools.DataAnnotations.Category("Video")]
-        [Description("This may solve some DPI related bugs, and also improves audio sync if capturing loopback audio")]
-        public bool EnhancedVideoCapture
-        {
-            get => GetDirectShowDependency(IsDirectShowInstalled, nameof(CaptureLoopbackAudio), this, l => l._enhanced);
-            set => SetDirectShowDependency(IsDirectShowInstalled, value, nameof(CaptureLoopbackAudio), this, l => l._enhanced);
-        }
+        //[PropertyTools.DataAnnotations.Category("Video")]
+        //[Description("This may solve some DPI related bugs, and also improves audio sync if capturing loopback audio")]
+        //public bool EnhancedVideoCapture
+        //{
+        //    get => GetDirectShowDependency(IsDirectShowInstalled, nameof(CaptureLoopbackAudio), this, l => l._enhanced);
+        //    set => SetDirectShowDependency(IsDirectShowInstalled, value, nameof(CaptureLoopbackAudio), this, l => l._enhanced);
+        //}
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -215,7 +215,7 @@ namespace Clowd
         protected void AddAudioVideoPresets(List<FFmpegCliOption> output)
         {
             var loopback = CaptureLoopbackAudio ? DShowFilter.DefaultAudio : null;
-            var enhancedVideo = EnhancedVideoCapture ? DShowFilter.DefaultVideo : null;
+            DirectShowFilterInfo enhancedVideo = null;// EnhancedVideoCapture ? DShowFilter.DefaultVideo : null;
             var microphone = CaptureMicrophone ? SelectedMicrophone : null;
 
             if (loopback != null && enhancedVideo != null) // video=dshow, audio=dshow
