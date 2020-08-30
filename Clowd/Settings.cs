@@ -81,6 +81,9 @@ namespace Clowd
         [Browsable(false)]
         public string LastUploadPath { get; set; }
 
+        [Browsable(false)]
+        public string LastSavePath { get; set; }
+
         [Category(nameof(SettingsCategory.General)), DisplayName("Confirm before exit")]
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose { get; set; } = true;
