@@ -315,12 +315,10 @@ namespace Clowd
             var cropped = CropBitmap();
             BitmapEncoder encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(cropped));
-            using (var ms = new MemoryStream())
-            {
-                encoder.Save(ms);
-                ms.Position = 0;
-                var task = UploadManager.Upload(ms, "clowd-default.png");
-            }
+            var ms = new MemoryStream();
+            encoder.Save(ms);
+            ms.Position = 0;
+            var task = UploadManager.Upload(ms, "clowd-default.png");
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
