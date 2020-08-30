@@ -350,14 +350,15 @@ namespace Clowd
             SyncToolState();
         }
 
-        private void UploadCommand(object sender, ExecutedRoutedEventArgs e)
+        private async void UploadCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
                 return;
             var ms = new MemoryStream();
             GetRenderedPng().Save(ms);
             ms.Position = 0;
-            var task = UploadManager.Upload(ms, "clowd-default.png");
+
+            await UploadManager.Upload(ms, "png", "Image", null);
         }
 
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)

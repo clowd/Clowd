@@ -208,6 +208,17 @@ namespace Clowd
             return fastCapturer.GetSelectedBitmap();
         }
 
+        private Stream GetCompressedImageStream()
+        {
+            var cropped = CropBitmap();
+            BitmapEncoder encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(cropped));
+            var ms = new MemoryStream();
+            encoder.Save(ms);
+            ms.Position = 0;
+            return ms;
+        }
+
         private void Dep_IsCaptureChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             var currently = (bool)e.NewValue;
@@ -306,19 +317,14 @@ namespace Clowd
 
             fastCapturer.Reset();
         }
-        private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
+        private async void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             if (IsCapturing)
                 return;
 
             this.Close();
-            var cropped = CropBitmap();
-            BitmapEncoder encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(cropped));
-            var ms = new MemoryStream();
-            encoder.Save(ms);
-            ms.Position = 0;
-            var task = UploadManager.Upload(ms, "clowd-default.png");
+
+            await UploadManager.Upload(GetCompressedImageStream(), "png", "Screenshot", null);
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -370,18 +376,12 @@ namespace Clowd
                 return;
 
             this.Close();
-            var cropped = CropBitmap();
-            BitmapEncoder encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(cropped));
-            using (var ms = new MemoryStream())
-            {
-                encoder.Save(ms);
-                ms.Position = 0;
-                var task = await UploadManager.Upload(ms, "clowd-default.png", true);
-                if (task == null)
-                    return;
-                Process.Start("https://images.google.com/searchbyimage?image_url=" + task.UrlEscape());
-            }
+
+            var task = await UploadManager.Upload(GetCompressedImageStream(), "png", "Search", null);
+            if (task == null)
+                return;
+
+            Process.Start("https://images.google.com/searchbyimage?image_url=" + task.UrlEscape());
         }
     }
 }
