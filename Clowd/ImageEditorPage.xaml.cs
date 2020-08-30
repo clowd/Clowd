@@ -802,7 +802,7 @@ namespace Clowd
                         angleBinding.Source = obj;
                         angleBinding.Mode = BindingMode.TwoWay;
                         angleBinding.Converter = new Converters.AngleConverter();
-                        page.textObjectAngle.SetBinding(TextBox.TextProperty, angleBinding);
+                        page.textObjectAngle.SetBinding(SpinnerTextBox.TextProperty, angleBinding);
 
                         var angleResetBinding = new Binding(ANGLE_NAME);
                         angleResetBinding.Source = obj;

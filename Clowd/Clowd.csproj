@@ -154,6 +154,9 @@
     <Compile Include="Controls\NonTogglableToggleButton.cs" />
     <Compile Include="Controls\ReallyFastCaptureRenderer.cs" />
     <Compile Include="Controls\ResetDefaultButton.cs" />
+    <Compile Include="Controls\SpinnerTextBox.xaml.cs">
+      <DependentUpon>SpinnerTextBox.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
     <Compile Include="Converters\OnOffBrushConverter.cs" />
     <Compile Include="Converters\SnapToPixelConverter.cs" />
@@ -259,6 +262,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Controls\FFMpegCodecSettingsEditor3.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Controls\SpinnerTextBox.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
