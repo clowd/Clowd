@@ -13,9 +13,63 @@ namespace FileUploadLib.Providers
     {
         private readonly IAzureOptions _options;
 
+        const string AZURE_SERVICE_VERSION = "2019-12-12";
+
         public AzureProvider(IAzureOptions options)
         {
             this._options = options;
+        }
+
+        public Stream BeginLargeUpload(string fileName, bool isContentGzipped)
+        {
+            var account = CloudStorageAccount.Parse(_options.AzureConnectionString);
+            var storage = account.CreateCloudBlobClient();
+            var serviceProperties = storage.GetServiceProperties();
+            serviceProperties.DefaultServiceVersion = AZURE_SERVICE_VERSION;
+            storage.SetServiceProperties(serviceProperties);
+
+            var container = storage.GetContainerReference(_options.AzureContainerName);
+            var key = _options.UseUniqueUploadKey ? Guid.NewGuid().ToString().Replace("-", "") : fileName;
+            var blob = container.GetBlockBlobReference(key);
+
+            return new AzureBlobStream(blob, key, fileName, isContentGzipped);
+        }
+
+        public async Task<UploadResult> EndLargeUpload(Stream genStream)
+        {
+            var stream = genStream as AzureBlobStream;
+            if (stream == null)
+                throw new ArgumentException(nameof(genStream));
+
+            await stream.CommitBlocks();
+            var blob = stream.Blob;
+            var fileName = stream.FileName;
+            var key = stream.UploadKey;
+
+            var mimeDb = new MimeDbMimeProvider();
+            var mimeType = mimeDb.GetMimeFromExtension(Path.GetExtension(fileName)).ContentType;
+
+            blob.Properties.ContentDisposition = $"attachment; filename=\"{fileName}\"";
+            blob.Properties.ContentType = mimeType;
+
+            if (stream.Gzip)
+                blob.Properties.ContentEncoding = "gzip";
+
+            await blob.SetPropertiesAsync();
+
+            var url = String.IsNullOrWhiteSpace(_options.CustomUrlPattern)
+                ? blob.Uri.ToString()
+                : UploadUtil.SubstituteUploadUrl(_options.CustomUrlPattern, mimeType, key);
+
+            return new UploadResult()
+            {
+                Provider = typeof(AzureProvider).AssemblyQualifiedName,
+                PublicUrl = url,
+                FileName = fileName,
+                ContentType = mimeType,
+                UploadKey = key,
+                UploadTime = DateTimeOffset.UtcNow,
+            };
         }
 
         public async Task<UploadResult> Upload(Stream fileStream, string fileName, ProgressHandler progress)
@@ -25,6 +79,10 @@ namespace FileUploadLib.Providers
 
             var account = CloudStorageAccount.Parse(_options.AzureConnectionString);
             var storage = account.CreateCloudBlobClient();
+            var serviceProperties = storage.GetServiceProperties();
+            serviceProperties.DefaultServiceVersion = AZURE_SERVICE_VERSION;
+            storage.SetServiceProperties(serviceProperties);
+
             var container = storage.GetContainerReference(_options.AzureContainerName);
             var key = _options.UseUniqueUploadKey ? Guid.NewGuid().ToString().Replace("-", "") : fileName;
             var blob = container.GetBlockBlobReference(key);
@@ -62,7 +120,7 @@ namespace FileUploadLib.Providers
             }
 
             //blob.Properties.ContentEncoding = "gzip";
-            blob.Properties.ContentDisposition = "attachment; filename=" + fileName;
+            blob.Properties.ContentDisposition = $"attachment; filename=\"{fileName}\"";
             blob.Properties.ContentType = mimeType;
             await blob.SetPropertiesAsync();
 
