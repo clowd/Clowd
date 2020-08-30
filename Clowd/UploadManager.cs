@@ -41,7 +41,7 @@ namespace Clowd
             var uploader = await GetProvider();
             InternalUploadDelegate func = async (name, updateProgress) =>
             {
-                using (var uploadStream = uploader.BeginLargeUpload(name, false))
+                using (var uploadStream = await uploader.BeginLargeUpload(name, false))
                 {
                     Dictionary<string, long> byteCounter = new Dictionary<string, long>();
                     zip.SaveProgress += (s, e) =>
@@ -80,7 +80,7 @@ namespace Clowd
             {
                 func = async (name, updateProgress) =>
                 {
-                    using (var uploadStream = uploader.BeginLargeUpload(name, true))
+                    using (var uploadStream = await uploader.BeginLargeUpload(name, true))
                     {
                         using (var progressStream = new ProgressStream(data))
                         using (GZipStream compress = new GZipStream(uploadStream, CompressionMode.Compress, true))
@@ -114,7 +114,7 @@ namespace Clowd
                 viewName = "Upload";
 
             if (String.IsNullOrWhiteSpace(fileName))
-                fileName = CS.Util.RandomEx.GetString(8);
+                fileName = CS.Util.RandomEx.GetString(8).ToLower();
 
             var canceler = new ManualResetEventSlim(false);
             var view = new UploadTaskViewItem(viewName, "Connecting...", canceler);
