@@ -146,6 +146,7 @@
     </Compile>
     <Compile Include="Capture\NAudioItem.cs" />
     <Compile Include="Controls\CornerClippingBorder.cs" />
+    <Compile Include="Controls\DockAndWrapPanel.cs" />
     <Compile Include="Controls\FeatureInstallerControl.cs" />
     <Compile Include="Controls\FFMpegCodecSettingsEditor3.xaml.cs">
       <DependentUpon>FFMpegCodecSettingsEditor3.xaml</DependentUpon>
