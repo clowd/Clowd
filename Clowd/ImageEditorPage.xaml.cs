@@ -272,46 +272,24 @@ namespace Clowd
             Window.GetWindow(this)?.Close();
         }
 
-        private void SaveCommand(object sender, ExecutedRoutedEventArgs e)
+        private async void SaveCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
                 return;
-            string directory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            string defaultName = "screenshot";
-            string extension = ".png";
-            // generate unique file name (screenshot1.png, screenshot2.png etc)
-            if (File.Exists(System.IO.Path.Combine(directory, $"{defaultName}{extension}")))
-            {
-                int i = 1;
-                while (File.Exists(System.IO.Path.Combine(directory, $"{defaultName}{i}{extension}")))
-                {
-                    i++;
-                }
-                defaultName = defaultName + i.ToString();
-            }
-            Microsoft.Win32.SaveFileDialog dlg = new Microsoft.Win32.SaveFileDialog();
-            dlg.FileName = defaultName; // Default file name
-            dlg.DefaultExt = extension; // Default file extension
-            dlg.Filter = $"Images ({extension})|*{extension}"; // Filter files by extension
-            dlg.OverwritePrompt = true;
-            dlg.InitialDirectory = directory;
 
-            // Show save file dialog box
-            Nullable<bool> result = dlg.ShowDialog();
-            // Process save file dialog box results
-            string filename = "";
-            if (result == true)
-            {
-                // Save document
-                filename = dlg.FileName;
-            }
-            else return;
+            var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Image", App.Current.Settings.LastSavePath, "screenshot", "png");
 
-            if (File.Exists(filename))
-                File.Delete(filename);
-            using (var fs = new FileStream(filename, FileMode.Create, FileAccess.Write))
+            if (String.IsNullOrWhiteSpace(filename))
             {
-                GetRenderedPng().Save(fs);
+                return;
+            }
+            else
+            {
+                using (var fs = new FileStream(filename, FileMode.Create, FileAccess.Write))
+                    GetRenderedPng().Save(fs);
+
+                Interop.Shell32.WindowsExplorer.ShowFileOrFolder(filename);
+                App.Current.Settings.LastSavePath = System.IO.Path.GetDirectoryName(filename);
             }
         }
 

@@ -246,6 +246,48 @@ namespace Clowd
             return null;
         }
 
+        public static async Task<string> ShowSelectSaveFileDialog(FrameworkElement parent, string title, string directory, string defaultName, string extension)
+        {
+            directory = directory ?? Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            extension = "." + extension.Trim('.').Trim();
+
+            // generate unique file name (screenshot-1.png, screenshot-2.png etc)
+            string initialName = $"{defaultName}{extension}";
+            if (File.Exists(Path.Combine(directory, initialName)))
+            {
+                int i = 1;
+                do
+                {
+                    initialName = $"{defaultName}-{i}{extension}";
+                    i++;
+                }
+                while (File.Exists(Path.Combine(directory, initialName)));
+            }
+
+            var dlg = new System.Windows.Forms.SaveFileDialog();
+
+            dlg.Title = title;
+            dlg.FileName = initialName; // Default file name
+            dlg.DefaultExt = extension; // Default file extension
+            dlg.Filter = $"{defaultName}|*{extension}"; // Filter files by extension
+            dlg.OverwritePrompt = true;
+            dlg.InitialDirectory = directory;
+
+            // Show save file dialog box
+            Nullable<bool> result = await dlg.ShowAsNiceDialogAsync(parent);
+
+            if (result == true)
+            {
+                var file = dlg.FileName;
+                // OverwritePrompt is true so the user will have already been asked if they are happy to overwrite this file
+                if (File.Exists(file))
+                    File.Delete(file);
+                return file;
+            }
+
+            return null;
+        }
+
         [Obsolete("You should prefer the System.Windows.Forms variant of CommonDialog's as those do not require reflection to be shown nicely")]
         public static async Task<bool> ShowAsNiceDialogAsync(this Microsoft.Win32.CommonDialog dialog, FrameworkElement parent)
         {

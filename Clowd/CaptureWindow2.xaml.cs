@@ -295,19 +295,24 @@ namespace Clowd
             else
                 NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "Unable to set clipboard data; try again later.");
         }
-        private void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
+        private async void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             if (IsCapturing)
                 return;
 
-            var cropped = CropBitmap();
-            SaveFileDialog dlg = new SaveFileDialog();
-            dlg.DefaultExt = ".png";
-            dlg.Filter = "PNG files (.png)|*.png|All files (*.*)|*.*"; // Filter files by extension
-            if (dlg.ShowDialog() == true)
+            var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Screenshot", App.Current.Settings.LastSavePath, "screenshot", "png");
+
+            if (String.IsNullOrWhiteSpace(filename))
             {
-                cropped.Save(dlg.FileName, ImageFormat.Png);
-                Close();
+                return;
+            }
+            else
+            {
+                this.Close();
+                var cropped = CropBitmap();
+                cropped.Save(filename, ImageFormat.Png);
+                Interop.Shell32.WindowsExplorer.ShowFileOrFolder(filename);
+                App.Current.Settings.LastSavePath = System.IO.Path.GetDirectoryName(filename);
             }
         }
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
