@@ -69,6 +69,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Providers\AzureBlobStream.cs" />
     <Compile Include="Providers\IUploadProvider.cs" />
     <Compile Include="MimeDbMimeProvider.cs" />
     <Compile Include="Providers\AzureProvider.cs" />
