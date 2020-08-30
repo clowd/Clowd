@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -354,17 +354,10 @@ namespace Clowd
         {
             if (!VerifyArtworkExists())
                 return;
-            using (var ms = new MemoryStream())
-            {
-                GetRenderedPng().Save(ms);
-                ms.Position = 0;
-                byte[] b;
-                using (BinaryReader br = new BinaryReader(ms))
-                {
-                    b = br.ReadBytes(Convert.ToInt32(ms.Length));
-                }
-                var task = UploadManager.Upload(b, "clowd-default.png");
-            }
+            var ms = new MemoryStream();
+            GetRenderedPng().Save(ms);
+            ms.Position = 0;
+            var task = UploadManager.Upload(ms, "clowd-default.png");
         }
 
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)
