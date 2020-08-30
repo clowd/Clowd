@@ -187,6 +187,7 @@
     <Compile Include="Utilities\ICommandLineProxy.cs" />
     <Compile Include="Utilities\GlobalTrigger.cs" />
     <Compile Include="Capture\LiveScreenRecording.cs" />
+    <Compile Include="Utilities\ProxyMetaObject.cs" />
     <Compile Include="Utilities\NiceDialog.cs" />
     <Compile Include="Utilities\PropertyChangeNotifier.cs" />
     <Compile Include="Utilities\RelayCommand.cs" />

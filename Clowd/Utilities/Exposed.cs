@@ -1,4 +1,4 @@
-﻿// Author:
+// Author:
 // Leszek Ciesielski (skolima@gmail.com)
 // Manuel Josupeit-Walter (josupeit-walter@cis-gmbh.de)
 //
@@ -29,6 +29,8 @@ using System.Collections.Generic;
 using System.Dynamic;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using Microsoft.CSharp.RuntimeBinder;
 
 namespace Clowd
 {
@@ -132,10 +134,96 @@ namespace Clowd
             return new MetaObject(parameter, this, value == null);
         }
 
+        public override bool TryGetIndex(GetIndexBinder binder, object[] indexes, out object result)
+        {
+            if (indexes.Length != 1)
+                throw new InvalidOperationException("Exposed indexing expression must only have one index");
+
+            var memberName = indexes[0] as string;
+            if (string.IsNullOrWhiteSpace(memberName))
+                throw new InvalidOperationException("Exposed indexing expression must be a non-null string");
+
+            var member = GetMemberInfo(memberName);
+            result = GetMemberValue(member, this.value);
+            return true;
+        }
+
+        public override bool TrySetIndex(SetIndexBinder binder, object[] indexes, object newValue)
+        {
+            if (indexes.Length != 1)
+                throw new InvalidOperationException("Exposed indexing expression must only have one index");
+
+            var memberName = indexes[0] as string;
+            if (string.IsNullOrWhiteSpace(memberName))
+                throw new InvalidOperationException("Exposed indexing expression must be a non-null string");
+
+            var member = GetMemberInfo(memberName);
+            SetMemberValue(member, this.value, newValue);
+            return true;
+        }
+
+        private MemberInfo GetMemberInfo(string memberName)
+        {
+            var declaringType = SubjectType;
+            var flags = BindingFlags.Public | BindingFlags.NonPublic | (value == null ? BindingFlags.Static : BindingFlags.Instance);
+            MemberInfo member = null;
+
+            do
+            {
+                var property = declaringType.GetProperty(memberName, flags);
+                if (property != null)
+                {
+                    member = property;
+                }
+                else
+                {
+                    var field = declaringType.GetField(memberName, flags);
+                    if (field != null)
+                    {
+                        member = field;
+                    }
+                }
+            }
+            while (member == null && (declaringType = declaringType.BaseType) != null);
+
+            if (member == null)
+                throw new MissingMemberException(SubjectType.Name, memberName);
+
+            return member;
+        }
+
+        public static object GetMemberValue(MemberInfo memberInfo, object forObject)
+        {
+            switch (memberInfo.MemberType)
+            {
+                case MemberTypes.Field:
+                    return ((FieldInfo)memberInfo).GetValue(forObject);
+                case MemberTypes.Property:
+                    return ((PropertyInfo)memberInfo).GetValue(forObject);
+                default:
+                    throw new NotImplementedException();
+            }
+        }
+
+        public static void SetMemberValue(MemberInfo memberInfo, object forObject, object newValue)
+        {
+            switch (memberInfo.MemberType)
+            {
+                case MemberTypes.Field:
+                    ((FieldInfo)memberInfo).SetValue(forObject, newValue);
+                    return;
+                case MemberTypes.Property:
+                    ((PropertyInfo)memberInfo).SetValue(forObject, newValue);
+                    return;
+                default:
+                    throw new NotImplementedException();
+            }
+        }
+
         /// <summary>
         /// Represents the dynamic binding and a binding logic of an object participating in the dynamic binding.
         /// </summary>
-        private sealed class MetaObject : DynamicMetaObject
+        private sealed class MetaObject : ProxyMetaObject
         {
             /// <summary>
             /// Should this <see cref="MetaObject"/> bind to <see langword="static"/> or instance methods and fields.
@@ -154,64 +242,65 @@ namespace Clowd
             /// <param name="staticBind">
             /// Should this MetaObject bind to <see langword="static"/> or instance methods and fields.
             /// </param>
-            public MetaObject(Expression expression, object value, bool staticBind) :
-                base(expression, BindingRestrictions.Empty, value)
+            public MetaObject(Expression expression, object value, bool staticBind) : base(expression, BindingRestrictions.Empty, value)
             {
                 isStatic = staticBind;
             }
 
-            public override DynamicMetaObject BindGetIndex(GetIndexBinder binder, DynamicMetaObject[] indexes)
-            {
-                if (indexes.Length > 1)
-                    throw new InvalidOperationException("Exposed indexing expression with more than one index is not supported");
+            //public override DynamicMetaObject BindGetIndex(GetIndexBinder binder, DynamicMetaObject[] indexes)
+            //{
+            //    if (indexes.Length > 1)
+            //        throw new InvalidOperationException("Exposed indexing expression with more than one index is not supported");
 
-                var memberName = indexes[0].Value as string;
+            //    var memberName = indexes[0].Value as string;
 
-                if (String.IsNullOrWhiteSpace(memberName))
-                    throw new InvalidOperationException("Exposed indexing expression must be a non-null string");
+            //    if (String.IsNullOrWhiteSpace(memberName))
+            //        throw new InvalidOperationException("Exposed indexing expression must be a non-null string");
 
-                var self = Expression;
-                var exposed = (Exposed)Value;
+            //    var self = Expression;
+            //    var exposed = (Exposed)Value;
 
-                var memberExpression = GetMemberExpression(self, memberName);
+            //    var memberExpression = GetMemberExpression(self, memberName);
 
-                var @this = isStatic
-                    ? null
-                    : Expression.Field(Expression.Convert(self, typeof(Exposed)), "value");
+            //    var @this = isStatic
+            //        ? null
+            //        : Expression.Field(Expression.Convert(self, typeof(Exposed)), "value");
 
-                var target = Expression.Convert(memberExpression, binder.ReturnType);
-                var restrictions = BindingRestrictions.GetTypeRestriction(self, typeof(Exposed)).Merge(BindingRestrictions.GetInstanceRestriction(@this, exposed.value));
+            //    var target = Expression.Convert(memberExpression, binder.ReturnType);
+            //    var restrictions = BindingRestrictions.GetTypeRestriction(self, typeof(Exposed))
+            //        .Merge(BindingRestrictions.GetInstanceRestriction(@this, exposed.value));
 
-                return new DynamicMetaObject(target, restrictions);
-            }
+            //    return new DynamicMetaObject(target, restrictions);
+            //}
 
-            public override DynamicMetaObject BindSetIndex(SetIndexBinder binder, DynamicMetaObject[] indexes, DynamicMetaObject value)
-            {
-                if (indexes.Length > 1)
-                    throw new InvalidOperationException("Exposed indexing expression with more than one index is not supported");
+            //public override DynamicMetaObject BindSetIndex(SetIndexBinder binder, DynamicMetaObject[] indexes, DynamicMetaObject value)
+            //{
+            //    if (indexes.Length > 1)
+            //        throw new InvalidOperationException("Exposed indexing expression with more than one index is not supported");
 
-                var memberName = indexes[0].Value as string;
+            //    var memberName = indexes[0].Value as string;
 
-                if (String.IsNullOrWhiteSpace(memberName))
-                    throw new InvalidOperationException("Exposed indexing expression must be a non-null string");
+            //    if (String.IsNullOrWhiteSpace(memberName))
+            //        throw new InvalidOperationException("Exposed indexing expression must be a non-null string");
 
-                var self = Expression;
-                var exposed = (Exposed)Value;
+            //    var self = Expression;
+            //    var exposed = (Exposed)Value;
 
-                var memberExpression = GetMemberExpression(self, memberName);
+            //    var memberExpression = GetMemberExpression(self, memberName);
 
-                var @this = isStatic
-                   ? null
-                   : Expression.Field(Expression.Convert(self, typeof(Exposed)), "value");
+            //    var @this = isStatic
+            //       ? null
+            //       : Expression.Field(Expression.Convert(self, typeof(Exposed)), "value");
 
-                var target =
-                    Expression.Convert(
-                        Expression.Assign(memberExpression, Expression.Convert(value.Expression, memberExpression.Type)),
-                        binder.ReturnType);
-                var restrictions = BindingRestrictions.GetTypeRestriction(self, typeof(Exposed)).Merge(BindingRestrictions.GetInstanceRestriction(@this, exposed.value));
+            //    var target =
+            //        Expression.Convert(
+            //            Expression.Assign(memberExpression, Expression.Convert(value.Expression, memberExpression.Type)),
+            //            binder.ReturnType);
+            //    var restrictions = BindingRestrictions.GetTypeRestriction(self, typeof(Exposed))
+            //        .Merge(BindingRestrictions.GetInstanceRestriction(@this, exposed.value));
 
-                return new DynamicMetaObject(target, restrictions);
-            }
+            //    return new DynamicMetaObject(target, restrictions);
+            //}
 
             /// <summary>
             /// Performs the binding of the dynamic invoke member operation.
