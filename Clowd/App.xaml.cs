@@ -59,7 +59,7 @@ namespace Clowd
         private Mutex _mutex;
         private ServiceHost _host;
         private string[] _args;
-        private DispatcherTimer _cmdBatchTimer;
+        private System.Timers.Timer _cmdNotifyTimer;
         private List<string> _cmdCache;
 
         protected override async void OnStartup(StartupEventArgs e)
@@ -548,9 +548,9 @@ namespace Clowd
             SetupTrayContextMenu();
             Settings.Save();
             _cmdCache = new List<string>();
-            _cmdBatchTimer = new DispatcherTimer();
-            _cmdBatchTimer.Interval = TimeSpan.FromSeconds(1);
-            _cmdBatchTimer.Tick += OnCommandLineBatchTimerTick;
+            _cmdNotifyTimer = new System.Timers.Timer();
+            _cmdNotifyTimer.Interval = 500;
+            _cmdNotifyTimer.Elapsed += OnCommandLineBatchTimerTick;
             if (_args != null)
             {
                 OnCommandLineArgsReceived(this, new CommandLineEventArgs(_args));
@@ -708,26 +708,35 @@ namespace Clowd
         private void OnCommandLineArgsReceived(object sender, CommandLineEventArgs e)
         {
             Console.WriteLine("command line args recieved:" + String.Join(",", e.Args));
-            if (_cmdBatchTimer.IsEnabled)
-            {
-                //restart timer.
-                _cmdBatchTimer.IsEnabled = false;
-            }
+
+            //restart timer if it's currently running.
+            _cmdNotifyTimer.Enabled = false;
+
             foreach (var f in e.Args)
             {
                 if (File.Exists(f) || Directory.Exists(f))
                     _cmdCache.Add(f);
             }
-            _cmdBatchTimer.IsEnabled = true;
+
+            _cmdNotifyTimer.Enabled = true;
         }
         private void OnCommandLineBatchTimerTick(object sender, EventArgs e)
         {
-            _cmdBatchTimer.IsEnabled = false;
+            Console.WriteLine("TICK");
+            // we can turn this off now and process any collected files. timer will be started again if we recieve additional cli args
+            _cmdNotifyTimer.Enabled = false;
+
             if (_cmdCache.Count > 0)
             {
                 Console.WriteLine("command line args being processed");
-                OnFilesReceived(_cmdCache.ToArray());
+                var files = _cmdCache.ToArray();
                 _cmdCache.Clear();
+
+                // pass to dispatcher so UI can be displayed
+                this.Dispatcher.Invoke(() =>
+                {
+                    OnFilesReceived(files);
+                });
             }
         }
         private void OnWndProcMessageReceived(uint obj)
