@@ -759,39 +759,42 @@ namespace Clowd
                 (filePaths.Length == 1 && Directory.Exists(filePaths[0]))
                 )
             {
-                MemoryStream ms = new MemoryStream();
                 string archiveName = null;
-                await Clowd.Shared.Extensions.ToTask(() =>
+                long totalSize = 0;
+
+                using (ZipFile zip = new ZipFile())
                 {
-                    using (ZipFile zip = new ZipFile())
+                    if (filePaths.Length == 1)
                     {
-                        if (filePaths.Length == 1)
-                        {
-                            archiveName = Path.GetFileNameWithoutExtension(filePaths[0]);
-                        }
-                        foreach (var path in filePaths)
-                        {
-                            if (Directory.Exists(path))
-                                zip.AddDirectory(path, Path.GetFileName(path));
-                            else if (File.Exists(path))
-                                zip.AddFile(path, "");
-                        }
-                        zip.Save(ms);
+                        archiveName = Path.GetFileNameWithoutExtension(filePaths[0]);
                     }
-                });
+                    foreach (var path in filePaths)
+                    {
+                        if (Directory.Exists(path))
+                        {
+                            zip.AddDirectory(path, Path.GetFileName(path));
+                        }
+                        else if (File.Exists(path))
+                        {
+                            zip.AddFile(path, "");
+                            totalSize += new FileInfo(path).Length;
+                        }
+                    }
 
-                string viewName = null;
-                if (archiveName != null)
-                    viewName = archiveName + ".zip";
-                else
-                    viewName = $"zip ({filePaths.Length} files)";
+                    string viewName = null;
+                    if (archiveName != null)
+                        viewName = archiveName + ".zip";
+                    else
+                        viewName = $"zip ({filePaths.Length} files)";
 
-                url = await UploadManager.Upload(ms, "zip", viewName, archiveName);
+                    url = await UploadManager.Upload(zip, totalSize, "zip", viewName, null);
+                }
             }
             else
             {
                 var path = filePaths[0];
-                url = await UploadManager.Upload(File.OpenRead(path), Path.GetExtension(path), Path.GetFileName(path), Path.GetFileNameWithoutExtension(path));
+                using (var fs = File.OpenRead(path))
+                    url = await UploadManager.Upload(fs, Path.GetExtension(path), Path.GetFileName(path), Path.GetFileNameWithoutExtension(path));
             }
         }
         private void OnTaskbarIconDrop(object sender, DragEventArgs e)

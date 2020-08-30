@@ -11,5 +11,7 @@ namespace FileUploadLib
     public interface IUploadProvider
     {
         Task<UploadResult> Upload(Stream fileStream, string fileName, ProgressHandler progress);
+        Stream BeginLargeUpload(string fileName, bool isContentGzipped);
+        Task<UploadResult> EndLargeUpload(Stream genStream);
     }
 }
