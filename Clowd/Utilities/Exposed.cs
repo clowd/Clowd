@@ -247,61 +247,6 @@ namespace Clowd
                 isStatic = staticBind;
             }
 
-            //public override DynamicMetaObject BindGetIndex(GetIndexBinder binder, DynamicMetaObject[] indexes)
-            //{
-            //    if (indexes.Length > 1)
-            //        throw new InvalidOperationException("Exposed indexing expression with more than one index is not supported");
-
-            //    var memberName = indexes[0].Value as string;
-
-            //    if (String.IsNullOrWhiteSpace(memberName))
-            //        throw new InvalidOperationException("Exposed indexing expression must be a non-null string");
-
-            //    var self = Expression;
-            //    var exposed = (Exposed)Value;
-
-            //    var memberExpression = GetMemberExpression(self, memberName);
-
-            //    var @this = isStatic
-            //        ? null
-            //        : Expression.Field(Expression.Convert(self, typeof(Exposed)), "value");
-
-            //    var target = Expression.Convert(memberExpression, binder.ReturnType);
-            //    var restrictions = BindingRestrictions.GetTypeRestriction(self, typeof(Exposed))
-            //        .Merge(BindingRestrictions.GetInstanceRestriction(@this, exposed.value));
-
-            //    return new DynamicMetaObject(target, restrictions);
-            //}
-
-            //public override DynamicMetaObject BindSetIndex(SetIndexBinder binder, DynamicMetaObject[] indexes, DynamicMetaObject value)
-            //{
-            //    if (indexes.Length > 1)
-            //        throw new InvalidOperationException("Exposed indexing expression with more than one index is not supported");
-
-            //    var memberName = indexes[0].Value as string;
-
-            //    if (String.IsNullOrWhiteSpace(memberName))
-            //        throw new InvalidOperationException("Exposed indexing expression must be a non-null string");
-
-            //    var self = Expression;
-            //    var exposed = (Exposed)Value;
-
-            //    var memberExpression = GetMemberExpression(self, memberName);
-
-            //    var @this = isStatic
-            //       ? null
-            //       : Expression.Field(Expression.Convert(self, typeof(Exposed)), "value");
-
-            //    var target =
-            //        Expression.Convert(
-            //            Expression.Assign(memberExpression, Expression.Convert(value.Expression, memberExpression.Type)),
-            //            binder.ReturnType);
-            //    var restrictions = BindingRestrictions.GetTypeRestriction(self, typeof(Exposed))
-            //        .Merge(BindingRestrictions.GetInstanceRestriction(@this, exposed.value));
-
-            //    return new DynamicMetaObject(target, restrictions);
-            //}
-
             /// <summary>
             /// Performs the binding of the dynamic invoke member operation.
             /// </summary>
