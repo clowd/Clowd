@@ -52,6 +52,15 @@ namespace FileUploadLib
             EnsureMimeCache();
             return _database["application/octet-stream"];
         }
+
+        private class MimeDbMimeEntry : IMimeEntry
+        {
+            public string ContentType { get; set; }
+            public string Source { get; set; }
+            public string[] Extensions { get; set; }
+            public bool? Compressible { get; set; }
+            public string Charset { get; set; }
+        }
     }
 
     public interface IMimeProvider
@@ -60,21 +69,12 @@ namespace FileUploadLib
         IMimeEntry GetDefaultDownloadMime();
     }
 
-    public class MimeDbMimeEntry : IMimeEntry
-    {
-        public string ContentType { get; set; }
-        public string Source { get; set; }
-        public string[] Extensions { get; set; }
-        public bool? Compressible { get; set; }
-        public string Charset { get; set; }
-    }
-
     public interface IMimeEntry
     {
-        string ContentType { get; set; }
-        string Source { get; set; }
-        string[] Extensions { get; set; }
-        bool? Compressible { get; set; }
-        string Charset { get; set; }
+        string ContentType { get; }
+        string Source { get; }
+        string[] Extensions { get; }
+        bool? Compressible { get; }
+        string Charset { get; }
     }
 }
