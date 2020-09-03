@@ -2,24 +2,24 @@
 
 namespace Cyotek.Windows.Forms
 {
-  // Cyotek Color Picker controls library
-  // Copyright © 2013-2017 Cyotek Ltd.
-  // http://cyotek.com/blog/tag/colorpicker
+    // Cyotek Color Picker controls library
+    // Copyright © 2013-2017 Cyotek Ltd.
+    // http://cyotek.com/blog/tag/colorpicker
 
-  // Licensed under the MIT License. See license.txt for the full text.
+    // Licensed under the MIT License. See license.txt for the full text.
 
-  // If you use this code in your applications, donations or attribution are welcome
+    // If you use this code in your applications, donations or attribution are welcome
 
-  public class ColorHitTestInfo
-  {
-    #region Properties
+    public class ColorHitTestInfo
+    {
+        #region Properties
 
-    public Color Color { get; set; }
+        public Color Color { get; set; }
 
-    public int Index { get; set; }
+        public int Index { get; set; }
 
-    public ColorSource Source { get; set; }
+        public ColorSource Source { get; set; }
 
-    #endregion
-  }
+        #endregion
+    }
 }

@@ -3,27 +3,27 @@ using System.Drawing;
 
 namespace Cyotek.Windows.Forms
 {
-  public class EditColorCancelEventArgs : CancelEventArgs
-  {
-    #region Constructors
-
-    public EditColorCancelEventArgs(Color color, int colorIndex)
+    public class EditColorCancelEventArgs : CancelEventArgs
     {
-      this.Color = color;
-      this.ColorIndex = colorIndex;
+        #region Constructors
+
+        public EditColorCancelEventArgs(Color color, int colorIndex)
+        {
+            this.Color = color;
+            this.ColorIndex = colorIndex;
+        }
+
+        protected EditColorCancelEventArgs()
+        { }
+
+        #endregion
+
+        #region Properties
+
+        public Color Color { get; protected set; }
+
+        public int ColorIndex { get; protected set; }
+
+        #endregion
     }
-
-    protected EditColorCancelEventArgs()
-    { }
-
-    #endregion
-
-    #region Properties
-
-    public Color Color { get; protected set; }
-
-    public int ColorIndex { get; protected set; }
-
-    #endregion
-  }
 }
