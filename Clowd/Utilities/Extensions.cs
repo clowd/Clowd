@@ -50,6 +50,11 @@ namespace Clowd
             USER32.SetForegroundWindow(handle);
         }
 
+        public static string ToHexString(this IntPtr ptr)
+        {
+            return string.Format("0x{0:X8}", ptr.ToInt32());
+        }
+
         private static Action EmptyDelegate = delegate () { };
         public static void DoRender(this UIElement element)
         {

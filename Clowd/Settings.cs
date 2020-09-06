@@ -70,6 +70,12 @@ namespace Clowd
     public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable
     {
         [Browsable(false), ClassifyIgnore]
+        public string SettingsDirectory => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+        [Browsable(false), ClassifyIgnore]
+        public string LogsDirectory => System.IO.Path.Combine(SettingsDirectory, "logs");
+
+        [Browsable(false), ClassifyIgnore]
         public new object Attribute { get; } = null;
 
         [Browsable(false)]

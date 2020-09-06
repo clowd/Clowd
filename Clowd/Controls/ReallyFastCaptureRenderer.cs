@@ -65,8 +65,8 @@ namespace Clowd
 
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
 
-        WindowFinder2.CachedWindow _selectedWindow;
-        WindowFinder2 _windowFinder;
+        WindowFinder3.CachedWindow _selectedWindow;
+        WindowFinder3 _windowFinder;
         BitmapSource _image;
         BitmapSource _imageGray;
 
@@ -85,8 +85,9 @@ namespace Clowd
         Color _accentColor;
         Brush _accentBrush;
         double _sharpLineWidth;
-
         double _globalZoom = 1;
+
+        private static ScreenUtil _screen = new ScreenUtil();
 
         public ReallyFastCaptureRenderer()
         {
@@ -125,64 +126,29 @@ namespace Clowd
 
         public async Task StartFastCapture(Stopwatch sw)
         {
-            var tsk1 = Task.Run(() =>
+            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - FastRender start");
+
+            _windowFinder = new WindowFinder3();
+            var tsk1 = _windowFinder.StartCaptureAsync(300).ContinueWith(s =>
             {
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#1) Wnd Enum Start");
-                _windowFinder = WindowFinder2.NewCapture();
-                _windowFinder.PropertyChanged += (s, e) =>
-                {
-                    this.Dispatcher.Invoke(Draw, System.Windows.Threading.DispatcherPriority.Render);
-                };
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#1) Wnd Enum End");
+                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - WndEnum done");
             });
 
             var tsk2 = Task.Run(() =>
             {
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Capture Start");
-                _image = ScreenUtil.CaptureScreenWpf(captureCursor: App.Current.Settings.CaptureSettings.ScreenshotWithCursor);
-                _image.Freeze();
+                _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, sw);
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Image End");
             });
 
+            // wait for the gdi capture, and also try to wait for wnd enum, but if it takes longer than 300ms we will continue without it to maintain performance
             await Task.WhenAll(tsk1, tsk2);
+            //await tsk2;
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render Start");
             _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
             Reset();
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render End");
-        }
-
-        public async void FinishFastCapture(DateTime? animationStart = null)
-        {
-            // http://gizma.com/easing/#cub3
-            //double cubicEaseInOut(double t, double b, double c, double d)
-            //{
-            //    t /= d / 2;
-            //    if (t < 1) return c / 2 * t * t * t + b;
-            //    t -= 2;
-            //    return c / 2 * (t * t * t + 2) + b;
-            //};
-
-            //_onTimer.Interval = TimeSpan.FromMilliseconds(10); // 60 fps
-            //_onTimer.Tick += (s, e) =>
-            //{
-            //    if (!animationStart.HasValue)
-            //        animationStart = DateTime.Now;
-
-            //    var curTime = DateTime.Now - animationStart.Value;
-            //    _onFade = cubicEaseInOut(curTime.TotalMilliseconds, 0, 1, 300);
-            //    Console.WriteLine($"time {curTime.TotalMilliseconds}, opacity {_onFade}");
-            //    if (_onFade >= 1)
-            //    {
-            //        _onTimer.Stop();
-            //        _onFade = 1;
-            //    }
-            //    DrawBackgroundImage();
-            //};
-            //_onTimer.Start();
-
-            await Task.Delay(100);
-            await _windowFinder.PopulateWindowBitmapsAsync();
         }
 
         public void Reset()
@@ -243,17 +209,18 @@ namespace Clowd
         {
             var rect = SelectionRectangle.ToScreenRect();
 
-            if (_selectedWindow != null && _selectedWindow.WindowBitmapWpf != null)
+            if (_selectedWindow != null)
             {
-                var pwinrect = _selectedWindow.WindowRect;
-                rect = new ScreenRect(rect.Left - pwinrect.Left, rect.Top - pwinrect.Top, rect.Width, rect.Height);
+                var bmp = _selectedWindow.GetBitmap();
+                if (bmp != null)
+                {
+                    var pwinrect = _selectedWindow.WindowRect;
+                    rect = new ScreenRect(rect.Left - pwinrect.Left, rect.Top - pwinrect.Top, rect.Width, rect.Height);
+                    return new CroppedBitmap(bmp, rect);
+                }
+            }
 
-                return new CroppedBitmap(_selectedWindow.WindowBitmapWpf, rect);
-            }
-            else
-            {
-                return new CroppedBitmap(_image, rect);
-            }
+            return new CroppedBitmap(_image, rect);
         }
 
         public Color GetHoveredColor()
@@ -267,7 +234,7 @@ namespace Clowd
 
         public void SetSelectedWindowForeground()
         {
-            if (_selectedWindow != null && _selectedWindow.WindowBitmapWpf != null)
+            if (_selectedWindow != null)
                 Interop.USER32.SetForegroundWindow(_selectedWindow.Handle);
         }
 
@@ -331,10 +298,10 @@ namespace Clowd
             }
             else if (App.Current.Settings.CaptureSettings.DetectWindows)
             {
-                var window = _windowFinder?.GetWindowThatContainsPoint(_virtualPoint.Value.ToScreenPoint());
+                var window = _windowFinder?.HitTest(_virtualPoint.Value.ToScreenPoint());
                 if (window != null)
                 {
-                    SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
+                    SelectionRectangle = window.WindowRect.ToWpfRect();
                 }
                 else
                 {
@@ -366,25 +333,25 @@ namespace Clowd
             // if the mouse hasn't moved far, let's treat it like a click event and find out what window they clicked on
             if (!dragging && DistancePointToPoint(origin.X, origin.Y, current.X, current.Y) < _clickDistance)
             {
-                var window = _windowFinder.GetWindowThatContainsPoint(current.ToScreenPoint());
+                var window = _windowFinder?.HitTest(current.ToScreenPoint());
                 if (window != null)
                 {
                     // show debug info if control key is being held while clicking
-                    if (Keyboard.IsKeyDown(Key.LeftCtrl))
-                        window.ShowDebug();
+                    //if (Keyboard.IsKeyDown(Key.LeftCtrl))
+                    //    window.ShowDebug();
 
-                    if (window.ImageBoundsRect == ScreenRect.Empty)
+                    if (window.WindowRect == ScreenRect.Empty)
                     {
                         SelectionRectangle = default(WpfRect);
                         return;
                     }
 
-                    SelectionRectangle = window.ImageBoundsRect.ToWpfRect();
+                    SelectionRectangle = window.WindowRect.ToWpfRect();
 
                     // bring bitmap of window to front if we can
                     if (window.IsPartiallyCovered)
                     {
-                        _selectedWindow = _windowFinder.GetTopLevelWindow(window);
+                        _selectedWindow = window;
                     }
                 }
             }
@@ -442,10 +409,11 @@ namespace Clowd
                     var clipRect = new Rect(clip.Left, clip.Top, clip.Width, clip.Height);
                     context.PushClip(new RectangleGeometry(clipRect));
 
-                    if (_selectedWindow != null && _selectedWindow.WindowBitmapWpf != null)
+                    var selBmp = _selectedWindow?.GetBitmap();
+                    if (selBmp != null)
                     {
                         var proBounds = _selectedWindow.WindowRect.ToWpfRect();
-                        context.DrawImage(_selectedWindow.WindowBitmapWpf, new Rect(proBounds.Left, proBounds.Top, proBounds.Width, proBounds.Height));
+                        context.DrawImage(selBmp, new Rect(proBounds.Left, proBounds.Top, proBounds.Width, proBounds.Height));
                     }
                     else
                     {
@@ -605,9 +573,7 @@ namespace Clowd
 
                 var screenMouse = mousePoint.ToScreenPoint();
 
-                var hoveredWindow = _windowFinder.GetWindowThatContainsPoint(screenMouse);
-                if (hoveredWindow != null)
-                    hoveredWindow = _windowFinder.GetTopLevelWindow(hoveredWindow);
+                var hoveredWindow = _windowFinder.HitTest(screenMouse)?.GetTopLevel();
                 addLine("W", hoveredWindow?.Caption ?? " - ");
 
                 var zoomedColor = this.GetHoveredColor();
