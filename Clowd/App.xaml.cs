@@ -35,7 +35,6 @@ namespace Clowd
     {
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
         public static bool CanUpload => IsDesignMode ? false : Current.Settings.UploadSettings.UploadProvider != UploadsProvider.None;
-
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
 
         public GeneralSettings Settings { get; private set; }

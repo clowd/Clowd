@@ -106,7 +106,6 @@ namespace Clowd
             Current.ContentRendered += (s, e) =>
             {
                 Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
-                Current.fastCapturer.FinishFastCapture();
                 Current.Activate();
             };
             Current.ShowActivated = true;
