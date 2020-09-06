@@ -32,7 +32,18 @@ namespace Clowd.Utilities
             }
         }
 
+        public bool WindowsReady
+        {
+            get => _windowsReady;
+            set
+            {
+                _windowsReady = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WindowsReady)));
+            }
+        }
+
         private bool _bitmapsReady = false;
+        private bool _windowsReady = false;
 
         private const int MaxWindowDepthToSearch = 4;
         private const int MinWinCaptureBounds = 200;
@@ -44,6 +55,7 @@ namespace Clowd.Utilities
         private readonly IVirtualDesktopManager _virtualDesktop = VirtualDesktopManager.CreateNew();
         private WINDOWINFO _winInfo = new WINDOWINFO(true);
         private Region _excludedArea = new Region(ScreenTools.VirtualScreen.Bounds.ToSystem());
+        private Stopwatch _sw;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -56,24 +68,26 @@ namespace Clowd.Utilities
         {
         }
 
-        public static WindowFinder2 NewCapture()
+        public static WindowFinder2 NewCapture(Stopwatch sw = null)
         {
             var ths = new WindowFinder2();
-
+            ths._sw = sw;
             ths._cachedWindows.Clear();
             USER32.EnumWindowProc enumWindowsProc = new USER32.EnumWindowProc(ths.EvalWindow);
             USER32.EnumWindows(enumWindowsProc, IntPtr.Zero);
+            ths.WindowsReady = true;
 
             return ths;
         }
 
-        public static Task<WindowFinder2> NewCaptureAsync()
-        {
-            return Task.Run(NewCapture);
-        }
+        //public static Task<WindowFinder2> NewCaptureAsync(Stopwatch sw)
+        //{
+        //    return Task.Run(() => NewCapture);
+        //}
 
         public void PopulateWindowBitmaps()
         {
+            log("bitmap capture start");
             // this code feels terrible, but we are blocking on the WndProc of other processes, and if one of those processes is locked or acting poorly
             // we don't want it to break Clowd.
             var windows = _cachedWindows.Where(w => w.Depth == 0 && w.IsPartiallyCovered);
@@ -103,6 +117,7 @@ namespace Clowd.Utilities
             });
 
             BitmapsReady = true;
+            log("bitmap capture end");
         }
 
         public Task PopulateWindowBitmapsAsync()
@@ -121,7 +136,7 @@ namespace Clowd.Utilities
 
         public CachedWindow GetTopLevelWindow(CachedWindow child)
         {
-            if (child?.Parent != null) 
+            if (child?.Parent != null)
                 return GetTopLevelWindow(child.Parent);
             return child;
         }
@@ -131,8 +146,22 @@ namespace Clowd.Utilities
             _cachedWindows.ForEach(c => c.Dispose());
         }
 
+        private void log(string msg, long? start = null)
+        {
+            if (_sw != null)
+            {
+                var end = _sw.ElapsedMilliseconds;
+                msg = $"+{end}ms - WindowFinder2: " + msg;
+                if (start != null)
+                    msg += $" (took {end - start.Value}ms)";
+                Console.WriteLine(msg);
+            }
+        }
+
         private bool EvalWindow(IntPtr hWnd, IntPtr depthPtr)
         {
+            var caption = USER32EX.GetWindowCaption(hWnd);
+            long? startTime = _sw?.ElapsedMilliseconds;
             var depthInt = depthPtr.ToInt32();
             var parent = depthInt > 0 ? _parentStack.Peek() : null;
 
@@ -149,6 +178,9 @@ namespace Clowd.Utilities
             // ignore: 0 size windows
             if (_winInfo.rcWindow.left == _winInfo.rcWindow.right || _winInfo.rcWindow.top == _winInfo.rcWindow.bottom)
                 return true;
+
+            log($"enum (depth {depthInt}) (size {_winInfo.rcWindow.right - _winInfo.rcWindow.left}x{_winInfo.rcWindow.bottom - _winInfo.rcWindow.top}) {hWnd.ToHexString()} - {caption}");
+
 
             // ignore: full screen windows created by this process
             if (hWnd == CaptureWindow2.Current?.Handle)
@@ -203,7 +235,7 @@ namespace Clowd.Utilities
             if (!this.BoundsAreLargeEnoughForCapture(clippedBounds, depthInt))
                 return true;
 
-            var caption = USER32EX.GetWindowCaption(hWnd);
+            //var caption = USER32EX.GetWindowCaption(hWnd);
             var cwin = new CachedWindow(hWnd, depthInt, className, caption, windowRect, clippedBounds, parent);
 
             // enumerate windows on top of this one in the z-order to find out of any of them intersect
