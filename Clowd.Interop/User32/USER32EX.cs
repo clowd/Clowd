@@ -272,6 +272,5 @@ namespace Clowd.Interop
                 return true;
             return false;
         }
-
     }
 }
