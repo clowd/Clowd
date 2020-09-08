@@ -22,6 +22,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -67,6 +68,7 @@
     <Compile Include="User32\MonitorHelper.cs" />
     <Compile Include="SIZE.cs" />
     <Compile Include="User32\MouseOperations.cs" />
+    <Compile Include="User32\NativeIcon.cs" />
     <Compile Include="User32\ShowWindowCmd.cs" />
     <Compile Include="User32\SystemMetric.cs" />
     <Compile Include="User32\USER32.cs" />

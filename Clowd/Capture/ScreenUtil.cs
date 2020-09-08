@@ -207,7 +207,6 @@ namespace Clowd.Utilities
 
         public void Dispose()
         {
-            Console.WriteLine("NONO THIS IS VERY BAD");
             lock (_lock)
             {
                 if (_isDisposed)
@@ -305,34 +304,13 @@ namespace Clowd.Utilities
 
             if (USER32.GetCursorInfo(out cursorInfo) && cursorInfo.flags == 0x00000001 /*CURSOR_SHOWING*/)
             {
-                var hicon = USER32.CopyIcon(cursorInfo.hCursor);
-                ICONINFO iconInfo = default(ICONINFO);
-                try
+                using (var nIcon = NativeIcon.FromHandle(cursorInfo.hCursor))
                 {
-                    if (USER32.GetIconInfo(hicon, out iconInfo))
-                    {
-                        int iconX = cursorInfo.ptScreenPos.x - ((int)iconInfo.xHotspot) - captureArea.X;
-                        int iconY = cursorInfo.ptScreenPos.y - ((int)iconInfo.yHotspot) - captureArea.Y;
+                    var cursorPos = new Point(cursorInfo.ptScreenPos.x, cursorInfo.ptScreenPos.y);
+                    var iconRect = new Rectangle(cursorInfo.ptScreenPos.x - nIcon.Hotspot.X, cursorInfo.ptScreenPos.y - nIcon.Hotspot.Y, nIcon.Icon.Width, nIcon.Icon.Height);
 
-                        if (iconX > captureArea.Width || iconY > captureArea.Height)
-                        {
-                            // mouse is out of bounds
-                            return;
-                        }
-
-                        // draw icon. if drawing to a hdc and not an hbitmap, DrawIconEx seems to apply the icon mask properly for monochrome cursors
-                        USER32.DrawIconEx(hdc, iconX, iconY, hicon, 0, 0, 0, IntPtr.Zero, DrawIconExFlags.DI_NORMAL | DrawIconExFlags.DI_DEFAULTSIZE);
-                    }
-                }
-                finally
-                {
-                    USER32.DestroyIcon(hicon);
-
-                    if (iconInfo.hbmColor != IntPtr.Zero)
-                        GDI32.DeleteObject(iconInfo.hbmColor);
-
-                    if (iconInfo.hbmMask != IntPtr.Zero)
-                        GDI32.DeleteObject(iconInfo.hbmColor);
+                    if (captureArea.IntersectsWith(iconRect))
+                        nIcon.DrawToHdc(hdc, cursorPos);
                 }
             }
         }
