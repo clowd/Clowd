@@ -6,6 +6,7 @@ using ScreenVersusWpf;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -21,8 +22,8 @@ namespace Clowd.Utilities
 {
     public sealed class ScreenUtil : IDisposable
     {
-        private IntPtr _screenDC = IntPtr.Zero;
-        private IntPtr _targetDC = IntPtr.Zero;
+        //private IntPtr _screenDC = IntPtr.Zero;
+        //private IntPtr _targetDC = IntPtr.Zero;
         private readonly object _lock = new object();
         private bool _isDisposed = false;
         private const ushort BITS_PER_PIXEL = 24;
@@ -30,37 +31,48 @@ namespace Clowd.Utilities
         public ScreenUtil()
         {
             // allocate unmanaged resources
-            _screenDC = USER32.GetWindowDC(IntPtr.Zero);
-            if (_screenDC == IntPtr.Zero)
-                throw new Exception("Unable to retrieve reference to screen hDC");
+            //_screenDC = USER32.GetWindowDC(IntPtr.Zero);
+            //if (_screenDC == IntPtr.Zero)
+            //    throw new Exception("Unable to retrieve reference to screen hDC");
 
-            _targetDC = GDI32.CreateCompatibleDC(_screenDC);
-            if (_screenDC == IntPtr.Zero)
-                throw new Exception("Unable to create new screen-compatible in-memory hDC");
+            //_targetDC = GDI32.CreateCompatibleDC(_screenDC);
+            //if (_screenDC == IntPtr.Zero)
+            //    throw new Exception("Unable to create new screen-compatible in-memory hDC");
         }
 
-        public Bitmap CaptureScreenGdiPlus(ScreenRect? bounds = null, bool captureCursor = true)
-        {
-            Rectangle captureArea = (bounds ?? ScreenTools.VirtualScreen.Bounds).ToSystem();
-            IntPtr destBitmap = IntPtr.Zero;
-            lock (_lock)
-            {
-                EnsureNotDisposed();
-                try
-                {
-                    destBitmap = CopyScreenToNewHBitmap(_screenDC, _targetDC, captureArea, captureCursor);
-                    return Bitmap.FromHbitmap(destBitmap);
-                }
-                finally
-                {
-                    if (destBitmap != IntPtr.Zero)
-                        GDI32.DeleteObject(destBitmap);
-                }
-            }
-        }
+        //public Bitmap CaptureScreenGdiPlus(ScreenRect? bounds = null, bool captureCursor = true)
+        //{
+        //    Rectangle captureArea = (bounds ?? ScreenTools.VirtualScreen.Bounds).ToSystem();
+        //    IntPtr destBitmap = IntPtr.Zero;
+        //    lock (_lock)
+        //    {
+        //        EnsureNotDisposed();
+        //        try
+        //        {
+        //            destBitmap = CopyScreenToNewHBitmap(_screenDC, _targetDC, captureArea, captureCursor);
+        //            return Bitmap.FromHbitmap(destBitmap);
+        //        }
+        //        finally
+        //        {
+        //            if (destBitmap != IntPtr.Zero)
+        //                GDI32.DeleteObject(destBitmap);
+        //        }
+        //    }
+        //}
 
         public BitmapSource CaptureScreenWpf(ScreenRect? bounds = null, bool captureCursor = true, System.Diagnostics.Stopwatch sw = null)
         {
+            Console.WriteLine($"+{sw?.ElapsedMilliseconds}ms - GDI start");
+            // allocate unmanaged resources
+            var _screenDC = USER32.GetWindowDC(IntPtr.Zero);
+            if (_screenDC == IntPtr.Zero)
+                throw new Exception("Unable to retrieve reference to screen hDC");
+
+            var _targetDC = GDI32.CreateCompatibleDC(_screenDC);
+            if (_screenDC == IntPtr.Zero)
+                throw new Exception("Unable to create new screen-compatible in-memory hDC");
+            Console.WriteLine($"+{sw?.ElapsedMilliseconds}ms - GDI hdc allocated");
+
             Rectangle captureArea = (bounds ?? ScreenTools.VirtualScreen.Bounds).ToSystem();
             IntPtr destBitmap = IntPtr.Zero;
             var bitmapSize = GetBitmapSize(captureArea);
@@ -84,7 +96,7 @@ namespace Clowd.Utilities
                     writable.Lock();
                     Console.WriteLine($"+{sw?.ElapsedMilliseconds}ms - GDI WritableBitmap created");
 
-                    CopyBitmapDIBitsToBuffer(destBitmap, writable.BackBuffer, captureArea.Width, captureArea.Height, bitmapSize.stride);
+                    CopyBitmapDIBitsToBuffer(destBitmap, _targetDC, writable.BackBuffer, captureArea.Width, captureArea.Height, bitmapSize.stride);
                     Console.WriteLine($"+{sw?.ElapsedMilliseconds}ms - GDI copied to buffer");
 
                     writable.AddDirtyRect(new System.Windows.Int32Rect(0, 0, captureArea.Width, captureArea.Height));
@@ -98,55 +110,70 @@ namespace Clowd.Utilities
                 {
                     if (destBitmap != IntPtr.Zero)
                         GDI32.DeleteObject(destBitmap);
+
+                    if (_targetDC != IntPtr.Zero)
+                        GDI32.DeleteDC(_targetDC);
+
+                    if (_screenDC != IntPtr.Zero)
+                        USER32.ReleaseDC(IntPtr.Zero, _screenDC);
                 }
             }
         }
 
-        public Bitmap PrintWindowGdiPlus(IntPtr hWnd)
-        {
-            if (!USER32.GetWindowRect(hWnd, out RECT normalWindowBoundsNative))
-                throw new Win32Exception();
+        //public Bitmap PrintWindowGdiPlus(IntPtr hWnd)
+        //{
+        //    if (!USER32.GetWindowRect(hWnd, out RECT normalWindowBoundsNative))
+        //        throw new Win32Exception();
 
-            Rectangle windowBoundsNormal = normalWindowBoundsNative;
-            Rectangle windowBoundsTrue = USER32EX.GetTrueWindowBounds(hWnd);
-            var xCropOffset = windowBoundsTrue.Left - windowBoundsNormal.Left;
-            var yCropOffset = windowBoundsTrue.Top - windowBoundsNormal.Top;
+        //    Rectangle windowBoundsNormal = normalWindowBoundsNative;
+        //    Rectangle windowBoundsTrue = USER32EX.GetTrueWindowBounds(hWnd);
+        //    var xCropOffset = windowBoundsTrue.Left - windowBoundsNormal.Left;
+        //    var yCropOffset = windowBoundsTrue.Top - windowBoundsNormal.Top;
 
-            IntPtr destBitmap = IntPtr.Zero;
+        //    IntPtr destBitmap = IntPtr.Zero;
 
-            lock (_lock)
-            {
-                EnsureNotDisposed();
-                try
-                {
-                    destBitmap = CopyWindowToNewHBitmap(hWnd, _screenDC, _targetDC, windowBoundsNormal);
-                    var gdip = Bitmap.FromHbitmap(destBitmap);
+        //    lock (_lock)
+        //    {
+        //        EnsureNotDisposed();
+        //        try
+        //        {
+        //            destBitmap = CopyWindowToNewHBitmap(hWnd, _screenDC, _targetDC, windowBoundsNormal);
+        //            var gdip = Bitmap.FromHbitmap(destBitmap);
 
-                    if (xCropOffset == 0 && yCropOffset == 0)
-                    {
-                        return gdip;
-                    }
-                    else
-                    {
-                        using (gdip)
-                        {
-                            var croppingRectangle = new Rectangle(xCropOffset, yCropOffset, windowBoundsTrue.Width, windowBoundsTrue.Height);
-                            return gdip.Crop(croppingRectangle);
-                        }
-                    }
-                }
-                finally
-                {
-                    if (destBitmap != IntPtr.Zero)
-                        GDI32.DeleteObject(destBitmap);
-                }
-            }
-        }
+        //            if (xCropOffset == 0 && yCropOffset == 0)
+        //            {
+        //                return gdip;
+        //            }
+        //            else
+        //            {
+        //                using (gdip)
+        //                {
+        //                    var croppingRectangle = new Rectangle(xCropOffset, yCropOffset, windowBoundsTrue.Width, windowBoundsTrue.Height);
+        //                    return gdip.Crop(croppingRectangle);
+        //                }
+        //            }
+        //        }
+        //        finally
+        //        {
+        //            if (destBitmap != IntPtr.Zero)
+        //                GDI32.DeleteObject(destBitmap);
+        //        }
+        //    }
+        //}
 
         public BitmapSource PrintWindowWpf(IntPtr hWnd)
         {
             if (!USER32.GetWindowRect(hWnd, out RECT normalWindowBoundsNative))
                 throw new Win32Exception();
+
+            // allocate unmanaged resources
+            var _screenDC = USER32.GetWindowDC(IntPtr.Zero);
+            if (_screenDC == IntPtr.Zero)
+                throw new Exception("Unable to retrieve reference to screen hDC");
+
+            var _targetDC = GDI32.CreateCompatibleDC(_screenDC);
+            if (_screenDC == IntPtr.Zero)
+                throw new Exception("Unable to create new screen-compatible in-memory hDC");
 
             Rectangle windowBoundsNormal = normalWindowBoundsNative;
             Rectangle windowBoundsTrue = USER32EX.GetTrueWindowBounds(hWnd);
@@ -173,7 +200,7 @@ namespace Clowd.Utilities
 
                     writable.Lock();
 
-                    CopyBitmapDIBitsToBuffer(destBitmap, writable.BackBuffer, windowBoundsNormal.Width, windowBoundsNormal.Height, bitmapSize.stride);
+                    CopyBitmapDIBitsToBuffer(destBitmap, _targetDC, writable.BackBuffer, windowBoundsNormal.Width, windowBoundsNormal.Height, bitmapSize.stride);
 
                     writable.AddDirtyRect(new System.Windows.Int32Rect(0, 0, windowBoundsNormal.Width, windowBoundsNormal.Height));
                     writable.Unlock();
@@ -193,6 +220,12 @@ namespace Clowd.Utilities
                 }
                 finally
                 {
+                    if (_targetDC != IntPtr.Zero)
+                        GDI32.DeleteDC(_targetDC);
+
+                    if (_screenDC != IntPtr.Zero)
+                        USER32.ReleaseDC(IntPtr.Zero, _screenDC);
+
                     if (destBitmap != IntPtr.Zero)
                         GDI32.DeleteObject(destBitmap);
                 }
@@ -215,11 +248,11 @@ namespace Clowd.Utilities
                 _isDisposed = true;
             }
 
-            if (_targetDC != IntPtr.Zero)
-                GDI32.DeleteDC(_targetDC);
+            //if (_targetDC != IntPtr.Zero)
+            //    GDI32.DeleteDC(_targetDC);
 
-            if (_screenDC != IntPtr.Zero)
-                USER32.ReleaseDC(IntPtr.Zero, _screenDC);
+            //if (_screenDC != IntPtr.Zero)
+            //    USER32.ReleaseDC(IntPtr.Zero, _screenDC);
         }
 
         private (int stride, int size) GetBitmapSize(Rectangle captureArea)
@@ -230,7 +263,7 @@ namespace Clowd.Utilities
             return (stride, bmpSize);
         }
 
-        private void CopyBitmapDIBitsToBuffer(IntPtr hBitmap, IntPtr destBuffer, int width, int height, int stride)
+        private void CopyBitmapDIBitsToBuffer(IntPtr hBitmap, IntPtr hMemDC, IntPtr destBuffer, int width, int height, int stride)
         {
             var bmi = new BitmapInfo();
             bmi.bmiHeader = new BITMAPINFOHEADER();
@@ -245,7 +278,7 @@ namespace Clowd.Utilities
             bmi.bmiHeader.biSizeImage = (uint)(stride * height);
 
             // copy bitmap bits to buffer while also converting to device independent bits of the specified format
-            var getdiresult = GDI32.GetDIBits(_targetDC, hBitmap, 0, (uint)height, destBuffer, ref bmi, DIBColorMode.DIB_RGB_COLORS);
+            var getdiresult = GDI32.GetDIBits(hMemDC, hBitmap, 0, (uint)height, destBuffer, ref bmi, DIBColorMode.DIB_RGB_COLORS);
             if (getdiresult == 0) // If the function fails, the return value is zero.
                 throw new Exception("Unable to copy device independent bits to bitmap buffer");
         }
