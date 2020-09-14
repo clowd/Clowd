@@ -14,7 +14,7 @@ namespace AntFu7.LiveDraw
         Arrow,
         Rectangle,
         Circle,
-        Ray,
+        //Ray,
         Erase
     }
 }

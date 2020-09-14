@@ -226,9 +226,9 @@ namespace AntFu7.LiveDraw
                 case DrawMode.Circle:
                     editingMode = InkCanvasEditingMode.None;
                     break;
-                case DrawMode.Ray:
-                    editingMode = InkCanvasEditingMode.None;
-                    break;
+                //case DrawMode.Ray:
+                //    editingMode = InkCanvasEditingMode.None;
+                //    break;
                 case DrawMode.Erase:
                     bUseCustomCursor = false;
                     editingMode = InkCanvasEditingMode.EraseByStroke;
@@ -238,14 +238,14 @@ namespace AntFu7.LiveDraw
                     break;
             }
 
-            if (_mode == DrawMode.Ray)
-            {
-                MainInkCanvas.Cursor = new Cursor(new MemoryStream(AntFu7.LiveDraw.Properties.Resources.raycursor));
-            }
-            else
-            {
-                MainInkCanvas.Cursor = Cursors.Cross;
-            }
+            //if (_mode == DrawMode.Ray)
+            //{
+            //    MainInkCanvas.Cursor = new Cursor(new MemoryStream(AntFu7.LiveDraw.Properties.Resources.raycursor));
+            //}
+            //else
+            //{
+            MainInkCanvas.Cursor = Cursors.Cross;
+            //}
 
             if (_mode == DrawMode.Text)
             {
@@ -471,14 +471,14 @@ namespace AntFu7.LiveDraw
             {
                 Point endP = e.GetPosition(MainInkCanvas);
 
-                if (_drawerLastStroke != null && _mode != DrawMode.Ray && _mode != DrawMode.Text)
+                if (_drawerLastStroke != null /*&& _mode != DrawMode.Ray*/ && _mode != DrawMode.Text)
                 {
                     StrokeCollection collection = new StrokeCollection();
                     collection.Add(_drawerLastStroke);
                     Push(_history, new StrokesHistoryNode(collection, StrokesHistoryNodeType.Added));
                 }
 
-                if (_drawerLastStroke != null && (_mode == DrawMode.Ray || _mode == DrawMode.Text))
+                if (_drawerLastStroke != null && (/*_mode == DrawMode.Ray ||*/ _mode == DrawMode.Text))
                 {
                     //us animation?
                     /*
@@ -547,23 +547,23 @@ namespace AntFu7.LiveDraw
                     DrawingAttributes = drawingAttributes,
                 };
             }
-            else if (_mode == DrawMode.Ray)
-            {
-                //high lighter is ray line
-                drawingAttributes.IsHighlighter = true;
+            //else if (_mode == DrawMode.Ray)
+            //{
+            //    //high lighter is ray line
+            //    drawingAttributes.IsHighlighter = true;
 
-                List<Point> pointList = new List<Point>
-                {
-                    new Point(_drawerIntPos.X, _drawerIntPos.Y),
-                    new Point(endP.X, endP.Y),
-                };
+            //    List<Point> pointList = new List<Point>
+            //    {
+            //        new Point(_drawerIntPos.X, _drawerIntPos.Y),
+            //        new Point(endP.X, endP.Y),
+            //    };
 
-                StylusPointCollection point = new StylusPointCollection(pointList);
-                stroke = new Stroke(point)
-                {
-                    DrawingAttributes = drawingAttributes,
-                };
-            }
+            //    StylusPointCollection point = new StylusPointCollection(pointList);
+            //    stroke = new Stroke(point)
+            //    {
+            //        DrawingAttributes = drawingAttributes,
+            //    };
+            //}
             else if (_mode == DrawMode.Line)
             {
                 List<Point> pointList = new List<Point>
@@ -929,10 +929,10 @@ namespace AntFu7.LiveDraw
             SetEnable(true, DrawMode.Circle);
         }
 
-        private void RayButton_Click(object sender, RoutedEventArgs e)
-        {
-            SetEnable(true, DrawMode.Ray);
-        }
+        //private void RayButton_Click(object sender, RoutedEventArgs e)
+        //{
+        //    SetEnable(true, DrawMode.Ray);
+        //}
 
         private void UndoButton_Click(object sender, RoutedEventArgs e)
         {
