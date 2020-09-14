@@ -21,7 +21,7 @@ using Point = System.Windows.Point;
 
 namespace AntFu7.LiveDraw
 {
-    public partial class MainWindow : Window
+    public partial class LiveDrawWindow : Window
     {
         private static readonly Duration Duration1 = (Duration)Application.Current.Resources["Duration1"];
         private static readonly Duration Duration2 = (Duration)Application.Current.Resources["Duration2"];
@@ -58,7 +58,7 @@ namespace AntFu7.LiveDraw
         #endregion*/
 
         #region /---------Lifetime---------/
-        public MainWindow()
+        public LiveDrawWindow()
         {
             if (mutex.WaitOne(TimeSpan.Zero, true))
             {
