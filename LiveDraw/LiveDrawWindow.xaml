@@ -1,13 +1,13 @@
 ﻿<Window
-    x:Class="AntFu7.LiveDraw.MainWindow"
+    x:Class="AntFu7.LiveDraw.LiveDrawWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:AntFu7.LiveDraw"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="傲梦画笔"
+    Title="LiveDraw"
     AllowsTransparency="True"
-    Background="{StaticResource FakeTransparent}"
+    Background="#01000000"
     Icon="Rescoures/icon.ico"
     ResizeMode="NoResize"
     UseLayoutRounding="True"
@@ -16,27 +16,33 @@
     WindowStyle="None"
     mc:Ignorable="d">
     <Window.Resources>
-        <SolidColorBrush x:Key="PaintingColor1" Color="#FF86E238" />
-        <SolidColorBrush x:Key="PaintingColor2" Color="#FF38E2A8" />
-        <SolidColorBrush x:Key="PaintingColor3" Color="#FF359EC9" />
-        <SolidColorBrush x:Key="PaintingColor4" Color="#FF7E7E7E" />
-        <SolidColorBrush x:Key="PaintingColor5" Color="#FFE2CF38" />
-        <SolidColorBrush x:Key="PaintingColor6" Color="#FF7855D4" />
-        <SolidColorBrush x:Key="PaintingColor7" Color="#FFD570C2" />
-        <SolidColorBrush x:Key="PaintingColor8" Color="#FFD6D6D6" />
-        <SolidColorBrush x:Key="PaintingColor9" Color="#FFE27F38" />
-        <SolidColorBrush x:Key="PaintingColor10" Color="#FFDF2828" />
-        <SolidColorBrush x:Key="PaintingColor11" Color="#FFE2386D" />
-        <SolidColorBrush x:Key="PaintingColor12" Color="#FF1E1E1E" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="LiveDrawAppDictionary.xaml" />
+            </ResourceDictionary.MergedDictionaries>
 
-        <Style TargetType="Path">
-            <Setter Property="Fill" Value="White" />
-            <Setter Property="Stretch" Value="Uniform" />
-            <Setter Property="Width" Value="15" />
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-        </Style>
+            <SolidColorBrush x:Key="PaintingColor1" Color="#FF86E238" />
+            <SolidColorBrush x:Key="PaintingColor2" Color="#FF38E2A8" />
+            <SolidColorBrush x:Key="PaintingColor3" Color="#FF359EC9" />
+            <SolidColorBrush x:Key="PaintingColor4" Color="#FF7E7E7E" />
+            <SolidColorBrush x:Key="PaintingColor5" Color="#FFE2CF38" />
+            <SolidColorBrush x:Key="PaintingColor6" Color="#FF7855D4" />
+            <SolidColorBrush x:Key="PaintingColor7" Color="#FFD570C2" />
+            <SolidColorBrush x:Key="PaintingColor8" Color="#FFD6D6D6" />
+            <SolidColorBrush x:Key="PaintingColor9" Color="#FFE27F38" />
+            <SolidColorBrush x:Key="PaintingColor10" Color="#FFDF2828" />
+            <SolidColorBrush x:Key="PaintingColor11" Color="#FFE2386D" />
+            <SolidColorBrush x:Key="PaintingColor12" Color="#FF1E1E1E" />
+
+            <Style TargetType="Path">
+                <Setter Property="Fill" Value="White" />
+                <Setter Property="Stretch" Value="Uniform" />
+                <Setter Property="Width" Value="15" />
+                <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
     <Grid>
         <InkCanvas
