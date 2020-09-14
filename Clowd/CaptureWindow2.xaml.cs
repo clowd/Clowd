@@ -89,7 +89,7 @@ namespace Clowd
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Start");
             Current = new CaptureWindow2();
             Current.Closed += (s, e) => Current = null;
-            var fstCap = Current.fastCapturer.StartFastCapture(sw);
+            //var fstCap = Current.fastCapturer.StartFastCapture(sw);
             var hWnd = new WindowInteropHelper(Current).EnsureHandle();
             Current.Handle = hWnd;
             var primary = ScreenTools.Screens.First().Bounds;
@@ -97,7 +97,9 @@ namespace Clowd
             USER32.SetWindowPos(hWnd, SWP_HWND.HWND_TOP, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Complete");
 
-            await fstCap;
+            Current.fastCapturer.StartFastCaptureSync(sw);
+
+            //await fstCap;
 
             Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Preparations Complete");
 
