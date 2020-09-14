@@ -61,14 +61,26 @@ namespace Clowd.Utilities
         {
         }
 
-        public async Task StartCaptureAsync(int timeoutMs)
+        public void CapturePart1()
         {
-            var capture = Task.Run(CaptureTopLevelWindows);
-            capture.ContinueWith((t) => Task.Run(FinishCaptureBackground));
-            await Task.WhenAny(Task.Delay(timeoutMs), capture);
-            if (!capture.IsCompleted)
-                Logger.Warn($"Window enumeration wait timed out (> {timeoutMs}ms)");
+            CaptureTopLevelWindows();
+            DepthReady = 0;
         }
+
+        public void CapturePart2()
+        {
+            Parallel.ForEach(_cachedWindows, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, (w) => w.PopulateChildren());
+            DepthReady = MaxWindowDepthToSearch;
+        }
+
+        //public async Task StartCaptureAsync(int timeoutMs)
+        //{
+        //    var capture = Task.Run(CaptureTopLevelWindows);
+        //    capture.ContinueWith((t) => Task.Run(FinishCaptureBackground));
+        //    await Task.WhenAny(Task.Delay(timeoutMs), capture);
+        //    if (!capture.IsCompleted)
+        //        Logger.Warn($"Window enumeration wait timed out (> {timeoutMs}ms)");
+        //}
 
         public CachedWindow HitTest(ScreenPoint point)
         {
@@ -82,11 +94,11 @@ namespace Clowd.Utilities
             return null;
         }
 
-        private void FinishCaptureBackground()
+        public void CapturePart3()
         {
-            DepthReady = 0;
-            Parallel.ForEach(_cachedWindows, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, (w) => w.PopulateChildren());
-            DepthReady = MaxWindowDepthToSearch;
+            //DepthReady = 0;
+            //Parallel.ForEach(_cachedWindows, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, (w) => w.PopulateChildren());
+            //DepthReady = MaxWindowDepthToSearch;
 
             // this code feels terrible, but we are blocking on the WndProc of other processes, and if one of those processes is locked or acting poorly
             // we don't want it to break Clowd.
