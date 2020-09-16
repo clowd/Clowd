@@ -227,6 +227,20 @@ namespace Clowd
             encoder.Save(stream);
         }
 
+        public static MemoryStream ToStream(this BitmapSource source, ImageFormat format)
+        {
+            var ms = new MemoryStream();
+            source.Save(ms, format);
+            ms.Position = 0;
+            return ms;
+        }
+
+        public static string ToDataUri(this BitmapSource source, ImageFormat format)
+        {
+            var bytes = source.ToStream(format).ToArray();
+            return $"data:image/{format.ToString().ToLower()};base64,{Convert.ToBase64String(bytes)}";
+        }
+
         public static bool IsOpen(this Window window)
         {
             return Application.Current.Windows.Cast<Window>().Any(x => x == window);

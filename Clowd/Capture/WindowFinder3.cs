@@ -61,15 +61,19 @@ namespace Clowd.Utilities
         {
         }
 
-        public void CapturePart1()
+        public void CapturePart1(TimedConsoleLogger timer)
         {
+            timer.Log("FinderDepth0", "Start");
             CaptureTopLevelWindows();
+            timer.Log("FinderDepth0", "Complete");
             DepthReady = 0;
         }
 
-        public void CapturePart2()
+        public void CapturePart2(TimedConsoleLogger timer)
         {
+            timer.Log("FinderDepthAll", "Start");
             Parallel.ForEach(_cachedWindows, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, (w) => w.PopulateChildren());
+            timer.Log("FinderDepthAll", "Complete");
             DepthReady = MaxWindowDepthToSearch;
         }
 
@@ -94,7 +98,7 @@ namespace Clowd.Utilities
             return null;
         }
 
-        public void CapturePart3()
+        public void CapturePart3(TimedConsoleLogger timer)
         {
             //DepthReady = 0;
             //Parallel.ForEach(_cachedWindows, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, (w) => w.PopulateChildren());
@@ -102,12 +106,18 @@ namespace Clowd.Utilities
 
             // this code feels terrible, but we are blocking on the WndProc of other processes, and if one of those processes is locked or acting poorly
             // we don't want it to break Clowd.
+            timer.Log("FinderHiddenBitmaps", "Start");
             var windows = _cachedWindows.Where(w => w.Depth == 0 && w.IsPartiallyCovered);
             Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (c) =>
             {
                 try
                 {
-                    Thread t = new Thread(new ThreadStart(() => { c.PopulateBitmap(); }));
+                    Thread t = new Thread(new ThreadStart(() =>
+                    {
+                        c.PopulateBitmap();
+                        timer.Log("FinderHiddenBitmaps", $"Captured: {c.Caption} / {c.ClassName}");
+                    }));
+
                     t.Start();
                     t.Join(1000);
                     if (!t.IsAlive)

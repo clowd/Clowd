@@ -203,6 +203,7 @@
     <Compile Include="Utilities\RelayCommand.cs" />
     <Compile Include="Capture\ScrollingCapture.cs" />
     <Compile Include="Capture\ScrollingCapture2.cs" />
+    <Compile Include="Utilities\TimedConsoleLogger.cs" />
     <Compile Include="Utilities\TrulyObservableCollection.cs" />
     <Compile Include="Utilities\UnsafeBitmap.cs" />
     <Compile Include="Capture\WindowFinder.cs" />

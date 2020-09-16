@@ -124,51 +124,33 @@ namespace Clowd
             _sharpAccentLineWide = new Pen(_accentBrush, _sharpLineWidth * 5);
         }
 
-        public void StartFastCaptureSync(Stopwatch sw)
+        public void StartFastCapture(TimedConsoleLogger timer)
         {
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - FastRender start");
+            timer.Log("FastCapStage1", "Start");
 
             _windowFinder = new WindowFinder3();
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - WndEnum start");
-            _windowFinder.CapturePart1();
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - WndEnum done");
+            _windowFinder.CapturePart1(timer);
+            _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, timer);
 
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Capture Start");
-            _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, sw);
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Image End");
-
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render Start");
+            timer.Log("FastCapStage1", "Creating grayscale image");
             _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
+
+            timer.Log("FastCapStage1", "Rendering visuals");
             Reset();
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render End");
+
+            timer.Log("FastCapStage1", "Complete");
         }
 
-        //public async Task StartFastCapture(Stopwatch sw)
-        //{
-        //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - FastRender start");
-
-        //    _windowFinder = new WindowFinder3();
-        //    var tsk1 = _windowFinder.StartCaptureAsync(300).ContinueWith(s =>
-        //    {
-        //        Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - WndEnum done");
-        //    });
-
-        //    var tsk2 = Task.Run(() =>
-        //    {
-        //        Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Capture Start");
-        //        _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, sw);
-        //        Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#2) GDI Image End");
-        //    });
-
-        //    // wait for the gdi capture, and also try to wait for wnd enum, but if it takes longer than 300ms we will continue without it to maintain performance
-        //    await Task.WhenAll(tsk1, tsk2);
-        //    //await tsk2;
-
-        //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render Start");
-        //    _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
-        //    Reset();
-        //    Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - (#3) Render End");
-        //}
+        public Task FinishUpFastCapture(TimedConsoleLogger timer)
+        {
+            return Task.Run(() =>
+            {
+                timer.Log("FastCapStage2", "Start");
+                _windowFinder.CapturePart2(timer);
+                _windowFinder.CapturePart3(timer);
+                timer.Log("FastCapStage2", "Complete");
+            });
+        }
 
         public void Reset()
         {
