@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -26,6 +26,8 @@ using Microsoft.Win32;
 using PropertyChanged;
 using ScreenVersusWpf;
 using RT.Util.ExtensionMethods;
+using System.Net.Http;
+using System.Globalization;
 
 namespace Clowd
 {
@@ -71,49 +73,45 @@ namespace Clowd
         private bool _adornerRegistered = false;
         private bool _initialized = false;
 
-        public static async void ShowNewCapture()
+        public static void ShowNewCapture()
         {
             if (Current != null)
             {
                 // if Handle == IntPtr.Zero, the window is still opening, so will be activated when that is finished
-                if (Current.Handle != IntPtr.Zero)
+                if (Current.Handle != IntPtr.Zero && Current._initialized)
                     Current.Activate();
                 return;
             }
 
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
+            var timer = new TimedConsoleLogger("Capture", DateTime.Now);
 
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - START");
-
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Start");
+            timer.Log("Window", "Start");
+            timer.Log("WinCreate", "Create Handle Start");
             Current = new CaptureWindow2();
             Current.Closed += (s, e) => Current = null;
-            //var fstCap = Current.fastCapturer.StartFastCapture(sw);
             var hWnd = new WindowInteropHelper(Current).EnsureHandle();
             Current.Handle = hWnd;
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
             USER32.SetWindowPos(hWnd, SWP_HWND.HWND_TOP, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Create Window/Handle Complete");
+            timer.Log("WinCreate", "Create Handle Complete");
 
-            Current.fastCapturer.StartFastCaptureSync(sw);
+            Current.fastCapturer.StartFastCapture(timer);
 
-            //await fstCap;
-
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Preparations Complete");
-
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Showing Window");
+            timer.Log("WinShow", "Showing Window");
             if (!Debugger.IsAttached) Current.Topmost = true;
-            Current.ContentRendered += (s, e) =>
+            Current.ContentRendered += async (s, e) =>
             {
-                Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Render Complete");
+                timer.Log("WinShow", "Content Rendered");
                 Current.Activate();
+                timer.Log("Window", "Activated");
+                await Current.fastCapturer.FinishUpFastCapture(timer);
+                timer.PrintSummary();
             };
             Current.ShowActivated = true;
             Current.Show();
             Current._initialized = true;
-            Console.WriteLine($"+{sw.ElapsedMilliseconds}ms - Show Complete");
+            timer.Log("WinShow", "Showing Complete");
         }
 
         private void ManageSelectionResizeHandlers(bool register)
