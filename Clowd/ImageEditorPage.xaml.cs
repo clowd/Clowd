@@ -50,7 +50,13 @@ namespace Clowd
             toolNotifier.ValueChanged += drawingCanvas_ToolChanged;
 
             this.Loaded += ImageEditorPage2_Loaded;
+            this.KeyDown += ImageEditorPage_KeyDown;
             SyncToolState();
+        }
+
+        private void ImageEditorPage_KeyDown(object sender, KeyEventArgs e)
+        {
+            Console.WriteLine(e.Key + " - " + e.Handled);
         }
 
         private void ImageEditorPage2_Loaded(object sender, RoutedEventArgs e)
@@ -385,38 +391,6 @@ namespace Clowd
 
         private void rootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (Keyboard.FocusedElement is TextBox textBox)
-            {
-                if (e.Key == Key.Return && Keyboard.Modifiers == ModifierKeys.None)
-                {
-                    e.Handled = true;
-                    Keyboard.Focus(buttonFocus);
-                    SyncToolState();
-                }
-
-                // Handle A-Z here, so that keybindings to those keys will be handled here
-                if ((int)e.Key >= 44 && (int)e.Key <= 69 && Keyboard.Modifiers == ModifierKeys.None)
-                {
-                    e.Handled = true;
-                    var key = (char)KeyInterop.VirtualKeyFromKey(e.Key);
-                    string str = key.ToString().ToLower();
-                    if (Console.CapsLock)
-                        str = str.ToUpper();
-
-                    if (!String.IsNullOrWhiteSpace(str))
-                    {
-                        var comp = new TextComposition(InputManager.Current, textBox, str);
-                        textBox.RaiseEvent(new TextCompositionEventArgs(InputManager.Current.PrimaryKeyboardDevice, comp)
-                        {
-                            RoutedEvent = TextCompositionManager.TextInputEvent
-                        });
-                        e.Handled = true;
-                        return;
-                    }
-                }
-                return;
-            }
-
             if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool == null && Mouse.LeftButton != MouseButtonState.Pressed)
             {
                 _shiftPanPreviousTool = drawingCanvas.Tool;
