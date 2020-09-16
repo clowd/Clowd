@@ -252,7 +252,8 @@
                     Background="#373737"
                     Click="settings_Click"
                     IsEnabled="{Binding IsNotStarted}"
-                    Style="{StaticResource CaptureToolButtonStyle}">
+                    Style="{StaticResource CaptureToolButtonStyle}"
+                    Visibility="{Binding IsNotStarted, Converter={StaticResource Bool2Vis}}">
                     <StackPanel Margin="5" Orientation="Vertical">
                         <Viewbox Width="26" Height="26">
                             <Path
@@ -267,6 +268,29 @@
                             FontWeight="DemiBold"
                             Foreground="White">
                             TUNE
+                        </TextBlock>
+                    </StackPanel>
+                </Button>
+                <Button
+                    Background="#373737"
+                    Click="draw_Click"
+                    IsEnabled="{Binding IsStarted}"
+                    Style="{StaticResource CaptureToolButtonStyle}"
+                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}">
+                    <StackPanel Margin="5" Orientation="Vertical">
+                        <Viewbox Width="26" Height="26">
+                            <Path
+                                Width="24"
+                                Height="24"
+                                Data="M 16.857422 1.9804688 C 16.472672 1.9545 16.091344 2.152625 15.902344 2.515625 L 12.373047 9.0253906 C 10.738883 9.1509261 9.5055015 9.7663279 8.703125 10.683594 C 7.8007284 11.715201 7.4368421 12.985049 7.15625 14.181641 C 6.8756579 15.378232 6.673055 16.534955 6.3164062 17.388672 C 5.9776401 18.199583 5.5852959 18.698753 4.796875 19 L 3 19 A 1.0001 1.0001 0 1 0 3 21 L 4.9882812 21 L 5 21 C 8.4745 21 11.573211 21.05951 14.03125 19.90625 C 15.260269 19.329618 16.309211 18.400148 16.990234 17.083984 C 17.63752 15.833023 17.957269 14.256354 17.988281 12.296875 L 21.851562 5.5546875 C 22.126562 5.0576875 21.931828 4.4317344 21.423828 4.1777344 L 17.236328 2.0820312 C 17.114328 2.0210313 16.985672 1.989125 16.857422 1.9804688 z M 12.792969 11.015625 L 15.974609 12.605469 C 15.914639 14.171188 15.64256 15.339399 15.214844 16.166016 C 14.731648 17.099852 14.083996 17.670382 13.181641 18.09375 C 11.888076 18.700665 9.8996471 18.858096 7.671875 18.923828 C 7.8306773 18.664577 8.048868 18.431224 8.1621094 18.160156 C 8.6503669 16.991405 8.8439827 15.745456 9.1035156 14.638672 C 9.3630485 13.531888 9.6842719 12.597612 10.207031 12 C 10.703142 11.432853 11.401202 11.054048 12.792969 11.015625 z"
+                                Fill="White" />
+                        </Viewbox>
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="10"
+                            FontWeight="DemiBold"
+                            Foreground="White">
+                            DRAW
                         </TextBlock>
                     </StackPanel>
                 </Button>

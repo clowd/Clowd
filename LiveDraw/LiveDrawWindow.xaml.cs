@@ -23,15 +23,15 @@ namespace AntFu7.LiveDraw
 {
     public partial class LiveDrawWindow : Window
     {
-        private static readonly Duration Duration1 = (Duration)Application.Current.Resources["Duration1"];
-        private static readonly Duration Duration2 = (Duration)Application.Current.Resources["Duration2"];
-        private static readonly Duration Duration3 = (Duration)Application.Current.Resources["Duration3"];
-        private static readonly Duration Duration4 = (Duration)Application.Current.Resources["Duration4"];
-        private static readonly Duration Duration5 = (Duration)Application.Current.Resources["Duration5"];
-        private static readonly Duration Duration7 = (Duration)Application.Current.Resources["Duration7"];
-        private static readonly Duration Duration10 = (Duration)Application.Current.Resources["Duration10"];
+        //    private static readonly Duration Duration1 = (Duration)Application.Current.Resources["Duration1"];
+        //    private static readonly Duration Duration2 = (Duration)Application.Current.Resources["Duration2"];
+        private static readonly Duration Duration3 = new Duration(TimeSpan.FromMilliseconds(300)); // (Duration)Application.Current.Resources["Duration3"];
+        private static readonly Duration Duration4 = new Duration(TimeSpan.FromMilliseconds(400)); // (Duration)Application.Current.Resources["Duration4"];
+        //private static readonly Duration Duration5 = new Duration(TimeSpan.FromMilliseconds(500)); // (Duration)Application.Current.Resources["Duration5"];
+        //private static readonly Duration Duration7 = new Duration(TimeSpan.FromMilliseconds(700)); // (Duration)Application.Current.Resources["Duration7"];
+        //private static readonly Duration Duration10 = (Duration)Application.Current.Resources["Duration10"];
 
-        private static Mutex mutex = new Mutex(true, "alldream-livedraw");
+        //private static Mutex mutex = new Mutex(true, "alldream-livedraw");
 
         /*#region Mouse Throught
 
@@ -60,47 +60,69 @@ namespace AntFu7.LiveDraw
         #region /---------Lifetime---------/
         public LiveDrawWindow()
         {
-            if (mutex.WaitOne(TimeSpan.Zero, true))
+            //if (mutex.WaitOne(TimeSpan.Zero, true))
+            //{
+
+            _history = new Stack<StrokesHistoryNode>();
+            _redoHistory = new Stack<StrokesHistoryNode>();
+
+            //if (!Directory.Exists("Save"))
+            //    Directory.CreateDirectory("Save");
+
+            InitializeComponent();
+
+            SetColor(DefaultColorPicker);
+
+            SetEnable(false, _mode);
+
+            SetTopMost(true);
+
+
+            SetBrushSize(_brushSizes[_brushIndex]);
+
+            ExtraToolPanel.Opacity = 0;
+            FontReduceButton.Opacity = 0;
+            FontIncreaseButton.Opacity = 0;
+
+            MainInkCanvas.Strokes.StrokesChanged += StrokesChanged;
+
+            MainInkCanvas.MouseLeftButtonDown += MainInkCanvas_MouseLeftButtonDown;
+            MainInkCanvas.MouseLeftButtonUp += MainInkCanvas_MouseLeftButtonUp;
+            MainInkCanvas.MouseRightButtonUp += MainInkCanvas_MouseRightButtonUp;
+            MainInkCanvas.MouseMove += MainInkCanvas_MouseMove;
+
+            _drawerTextBox.FontSize = 24.0;
+            _drawerTextBox.Background = this.Resources["TrueTransparent"] as Brush;
+            _drawerTextBox.AcceptsReturn = true;
+            _drawerTextBox.TextWrapping = TextWrapping.Wrap;
+            _drawerTextBox.LostFocus += _drawerTextBox_LostFocus;
+
+            this.Closed += LiveDrawWindow_Closed;
+
+            //}
+            //else
+            //{
+            //    Application.Current.Shutdown(0);
+            //}
+        }
+
+        private static LiveDrawWindow _instance;
+
+        private void LiveDrawWindow_Closed(object sender, EventArgs e)
+        {
+            _instance = null;
+        }
+
+        public static void ShowNewOrExisting()
+        {
+            if (_instance != null)
             {
-
-                _history = new Stack<StrokesHistoryNode>();
-                _redoHistory = new Stack<StrokesHistoryNode>();
-
-                if (!Directory.Exists("Save"))
-                    Directory.CreateDirectory("Save");
-
-                InitializeComponent();
-
-                SetColor(DefaultColorPicker);
-
-                SetEnable(false, _mode);
-
-                SetTopMost(true);
-
-
-                SetBrushSize(_brushSizes[_brushIndex]);
-
-                ExtraToolPanel.Opacity = 0;
-                FontReduceButton.Opacity = 0;
-                FontIncreaseButton.Opacity = 0;
-
-                MainInkCanvas.Strokes.StrokesChanged += StrokesChanged;
-
-                MainInkCanvas.MouseLeftButtonDown += MainInkCanvas_MouseLeftButtonDown;
-                MainInkCanvas.MouseLeftButtonUp += MainInkCanvas_MouseLeftButtonUp;
-                MainInkCanvas.MouseRightButtonUp += MainInkCanvas_MouseRightButtonUp;
-                MainInkCanvas.MouseMove += MainInkCanvas_MouseMove;
-
-                _drawerTextBox.FontSize = 24.0;
-                _drawerTextBox.Background = Application.Current.Resources["TrueTransparent"] as Brush;
-                _drawerTextBox.AcceptsReturn = true;
-                _drawerTextBox.TextWrapping = TextWrapping.Wrap;
-                _drawerTextBox.LostFocus += _drawerTextBox_LostFocus;
-
+                _instance.Activate();
             }
             else
             {
-                Application.Current.Shutdown(0);
+                _instance = new LiveDrawWindow();
+                _instance.Show();
             }
         }
 
@@ -109,13 +131,13 @@ namespace AntFu7.LiveDraw
             SetEnable(false, _mode);
         }
 
-        private void Exit(object sender, EventArgs e)
-        {
-            //if (IsUnsaved())
-            //    QuickSave("ExitingAutoSave_");
+        //private void Exit(object sender, EventArgs e)
+        //{
+        //    //if (IsUnsaved())
+        //    //    QuickSave("ExitingAutoSave_");
 
-            Application.Current.Shutdown(0);
-        }
+        //    Application.Current.Shutdown(0);
+        //}
 
         #endregion
 
@@ -268,7 +290,7 @@ namespace AntFu7.LiveDraw
             MainInkCanvas.EditingMode = editingMode;
 
             EnableButton.IsActived = !enable;
-            Background = Application.Current.Resources[enable ? "FakeTransparent" : "TrueTransparent"] as Brush;
+            Background = this.Resources[enable ? "FakeTransparent" : "TrueTransparent"] as Brush;
 
             SelectButton.IsActived = _enable == true && _mode == DrawMode.Select;
             PenButton.IsActived = _enable == true && _mode == DrawMode.Pen;
@@ -308,7 +330,7 @@ namespace AntFu7.LiveDraw
         private void SetOrientation(bool v)
         {
             PaletteRotate.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(v ? -90 : 0, Duration4));
-            Palette.BeginAnimation(MinWidthProperty, new DoubleAnimation(v ? 90 : 0, Duration7));
+            Palette.BeginAnimation(MinWidthProperty, new DoubleAnimation(v ? 90 : 0, Duration4));
             //PaletteGrip.BeginAnimation(WidthProperty, new DoubleAnimation((double)Application.Current.Resources[v ? "VerticalModeGrip" : "HorizontalModeGrip"], Duration3));
             //BasicButtonPanel.BeginAnimation(WidthProperty, new DoubleAnimation((double)Application.Current.Resources[v ? "VerticalModeFlowPanel" : "HorizontalModeFlowPanel"], Duration3));
             //PaletteFlowPanel.BeginAnimation(WidthProperty, new DoubleAnimation((double)Application.Current.Resources[v ? "VerticalModeFlowPanel" : "HorizontalModeFlowPanel"], Duration3));
@@ -960,10 +982,11 @@ namespace AntFu7.LiveDraw
         //}
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
-            Topmost = false;
-            var anim = new DoubleAnimation(0, Duration3);
-            anim.Completed += Exit;
-            BeginAnimation(OpacityProperty, anim);
+            //Topmost = false;
+            //var anim = new DoubleAnimation(0, Duration3);
+            //anim.Completed += Exit;
+            //BeginAnimation(OpacityProperty, anim);
+            this.Close();
         }
 
         private void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -989,67 +1012,67 @@ namespace AntFu7.LiveDraw
 
         #region  /---------Docking---------/
 
-        enum DockingDirection
-        {
-            None,
-            Top,
-            Left,
-            Right
-        }
-        private int _dockingEdgeThreshold = 30;
-        private int _dockingAwaitTime = 10000;
-        private int _dockingSideIndent = 290;
-        private void AnimatedCanvasMoving(UIElement ctr, Point to, Duration dur)
-        {
-            ctr.BeginAnimation(Canvas.TopProperty, new DoubleAnimation(Canvas.GetTop(ctr), to.Y, dur));
-            ctr.BeginAnimation(Canvas.LeftProperty, new DoubleAnimation(Canvas.GetLeft(ctr), to.X, dur));
-        }
+        //enum DockingDirection
+        //{
+        //    None,
+        //    Top,
+        //    Left,
+        //    Right
+        //}
+        //private int _dockingEdgeThreshold = 30;
+        //private int _dockingAwaitTime = 10000;
+        //private int _dockingSideIndent = 290;
+        //private void AnimatedCanvasMoving(UIElement ctr, Point to, Duration dur)
+        //{
+        //    ctr.BeginAnimation(Canvas.TopProperty, new DoubleAnimation(Canvas.GetTop(ctr), to.Y, dur));
+        //    ctr.BeginAnimation(Canvas.LeftProperty, new DoubleAnimation(Canvas.GetLeft(ctr), to.X, dur));
+        //}
 
-        private DockingDirection CheckDocking()
-        {
-            var left = Canvas.GetLeft(Palette);
-            var right = Canvas.GetRight(Palette);
-            var top = Canvas.GetTop(Palette);
+        //private DockingDirection CheckDocking()
+        //{
+        //    var left = Canvas.GetLeft(Palette);
+        //    var right = Canvas.GetRight(Palette);
+        //    var top = Canvas.GetTop(Palette);
 
-            if (left > 0 && left < _dockingEdgeThreshold)
-                return DockingDirection.Left;
-            if (right > 0 && right < _dockingEdgeThreshold)
-                return DockingDirection.Right;
-            if (top > 0 && top < _dockingEdgeThreshold)
-                return DockingDirection.Top;
-            return DockingDirection.None;
-        }
+        //    if (left > 0 && left < _dockingEdgeThreshold)
+        //        return DockingDirection.Left;
+        //    if (right > 0 && right < _dockingEdgeThreshold)
+        //        return DockingDirection.Right;
+        //    if (top > 0 && top < _dockingEdgeThreshold)
+        //        return DockingDirection.Top;
+        //    return DockingDirection.None;
+        //}
 
-        private void RightDocking()
-        {
-            AnimatedCanvasMoving(Palette, new Point(ActualWidth + _dockingSideIndent, Canvas.GetTop(Palette)), Duration5);
-        }
-        private void LeftDocking()
-        {
-            AnimatedCanvasMoving(Palette, new Point(0 - _dockingSideIndent, Canvas.GetTop(Palette)), Duration5);
-        }
-        private void TopDocking()
-        {
+        //private void RightDocking()
+        //{
+        //    AnimatedCanvasMoving(Palette, new Point(ActualWidth + _dockingSideIndent, Canvas.GetTop(Palette)), Duration5);
+        //}
+        //private void LeftDocking()
+        //{
+        //    AnimatedCanvasMoving(Palette, new Point(0 - _dockingSideIndent, Canvas.GetTop(Palette)), Duration5);
+        //}
+        //private void TopDocking()
+        //{
 
-        }
+        //}
 
-        private async void AwaitDocking()
-        {
+        //private async void AwaitDocking()
+        //{
 
-            await Docking();
-        }
+        //    await Docking();
+        //}
 
-        private Task Docking()
-        {
-            return Task.Run(() =>
-            {
-                Thread.Sleep(_dockingAwaitTime);
-                var direction = CheckDocking();
-                if (direction == DockingDirection.Left) LeftDocking();
-                if (direction == DockingDirection.Right) RightDocking();
-                if (direction == DockingDirection.Top) TopDocking();
-            });
-        }
+        //private Task Docking()
+        //{
+        //    return Task.Run(() =>
+        //    {
+        //        Thread.Sleep(_dockingAwaitTime);
+        //        var direction = CheckDocking();
+        //        if (direction == DockingDirection.Left) LeftDocking();
+        //        if (direction == DockingDirection.Right) RightDocking();
+        //        if (direction == DockingDirection.Top) TopDocking();
+        //    });
+        //}
         #endregion
 
 
