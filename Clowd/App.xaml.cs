@@ -410,26 +410,27 @@ namespace Clowd
             if (App.CanUpload)
             {
                 var paste = new MenuItem() { Header = "_Paste" };
-                paste.Click += (s, e) =>
-                {
-                    Paste();
-                };
+                paste.Click += (s, e) => Paste();
                 context.Items.Add(paste);
 
                 var uploadFile = new MenuItem() { Header = "Upload _Files" };
-                uploadFile.Click += (s, e) =>
-                {
-                    UploadFile();
-                };
+                uploadFile.Click += (s, e) => UploadFile();
                 context.Items.Add(uploadFile);
 
                 var uploads = new MenuItem() { Header = "Show _Uploads" };
-                uploads.Click += (s, e) =>
-                {
-                    UploadManager.ShowWindow();
-                };
+                uploads.Click += (s, e) => UploadManager.ShowWindow();
                 context.Items.Add(uploads);
             }
+
+            context.Items.Add(new Separator());
+
+            var colorp = new MenuItem() { Header = "Color Pic_ker" };
+            colorp.Click += (s, e) => NiceDialog.ShowColorDialogAsync(null, Colors.Transparent);
+            context.Items.Add(colorp);
+
+            var screend = new MenuItem() { Header = "_Draw on Screen" };
+            screend.Click += (s, e) => AntFu7.LiveDraw.LiveDrawWindow.ShowNewOrExisting();
+            context.Items.Add(screend);
 
             context.Items.Add(new Separator());
 

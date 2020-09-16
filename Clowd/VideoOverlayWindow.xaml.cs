@@ -325,5 +325,10 @@ namespace Clowd
         {
             App.Current.ShowSettings(SettingsCategory.Video);
         }
+
+        private void draw_Click(object sender, RoutedEventArgs e)
+        {
+            AntFu7.LiveDraw.LiveDrawWindow.ShowNewOrExisting();
+        }
     }
 }
