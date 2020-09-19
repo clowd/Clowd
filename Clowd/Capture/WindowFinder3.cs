@@ -114,8 +114,15 @@ namespace Clowd.Utilities
                 {
                     Thread t = new Thread(new ThreadStart(() =>
                     {
-                        c.PopulateBitmap();
-                        timer.Log("FinderHiddenBitmaps", $"Captured: {c.Caption} / {c.ClassName}");
+                        try
+                        {
+                            c.PopulateBitmap();
+                            timer.Log("FinderHiddenBitmaps", $"Captured: {c.Caption} / {c.ClassName}");
+                        }
+                        catch (Exception e)
+                        {
+                            timer.Log("FinderHiddenBitmaps", $"FAILED TO CAPTURE: {c.Caption} / {c.ClassName}");
+                        }
                     }));
 
                     t.Start();
