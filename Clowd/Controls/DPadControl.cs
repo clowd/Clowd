@@ -12,6 +12,8 @@ namespace Clowd.Controls
 {
     public class DPadControl : Border
     {
+        public event EventHandler<DPadButtonClickEventArgs> Click;
+
         public Brush Foreground
         {
             get { return (Brush)GetValue(ForegroundProperty); }
@@ -27,6 +29,8 @@ namespace Clowd.Controls
         }
 
         public static readonly DependencyProperty HoverBrushProperty = DependencyProperty.Register(nameof(HoverBrush), typeof(Brush), typeof(DPadControl), new PropertyMetadata(Brushes.White));
+
+        private DPadButton? _hovered;
 
         public DPadControl()
         {
@@ -54,19 +58,18 @@ namespace Clowd.Controls
             var centerX = buttonRect.X + buttonRect.Width / 2;
             var centerY = buttonRect.Y + buttonRect.Height / 2;
 
+            _hovered = null;
+
             DrawTriangle(ctx, BorderBrush, buttonRect.X, buttonRect.Y + 1, buttonRect.X, buttonRect.Bottom - 1, centerX - 1, centerY, DPadButton.Left); // D-LEFT
             DrawTriangle(ctx, BorderBrush, buttonRect.X + 1, buttonRect.Y, buttonRect.Right - 1, buttonRect.Y, centerX, centerY - 1, DPadButton.Top); // D-TOP
             DrawTriangle(ctx, BorderBrush, buttonRect.Right, buttonRect.Y + 1, buttonRect.Right, buttonRect.Bottom - 1, centerX + 1, centerY, DPadButton.Right); // D-RIGHT
             DrawTriangle(ctx, BorderBrush, buttonRect.X + 1, buttonRect.Bottom, buttonRect.Right - 1, buttonRect.Bottom, centerX, centerY + 1, DPadButton.Bottom); // D-BOTTOM
 
             const double sizecst = 1.5d;
-
             DrawTriangle(ctx, Foreground, buttonRect.X + 1, centerY, centerX / sizecst - 1, centerY / sizecst + 1, centerX / sizecst - 1, centerY / sizecst * 2 - 1, null);
             DrawTriangle(ctx, Foreground, buttonRect.X + 1, centerY, centerX / sizecst - 1, centerY / sizecst + 1, centerX / sizecst - 1, centerY / sizecst * 2 - 1, null, new RotateTransform(90, centerX, centerY));
             DrawTriangle(ctx, Foreground, buttonRect.X + 1, centerY, centerX / sizecst - 1, centerY / sizecst + 1, centerX / sizecst - 1, centerY / sizecst * 2 - 1, null, new RotateTransform(180, centerX, centerY));
             DrawTriangle(ctx, Foreground, buttonRect.X + 1, centerY, centerX / sizecst - 1, centerY / sizecst + 1, centerX / sizecst - 1, centerY / sizecst * 2 - 1, null, new RotateTransform(270, centerX, centerY));
-
-            Console.WriteLine();
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -81,6 +84,15 @@ namespace Clowd.Controls
             this.InvalidateVisual();
         }
 
+
+        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            if (_hovered.HasValue)
+            {
+                Click?.Invoke(this, new DPadButtonClickEventArgs(_hovered.Value));
+            }
+        }
+
         private void DrawTriangle(DrawingContext ctx, Brush brush, double p1x, double p1y, double p2x, double p2y, double p3x, double p3y, DPadButton? btn, RotateTransform transform = null)
         {
             if (transform != null)
@@ -92,7 +104,10 @@ namespace Clowd.Controls
             ctx.DrawGeometry(brush, null, geometry);
 
             if (mouseOver)
+            {
                 ctx.DrawGeometry(HoverBrush, null, geometry);
+                _hovered = btn;
+            }
 
             if (transform != null)
                 ctx.Pop();
@@ -105,5 +120,15 @@ namespace Clowd.Controls
         Top,
         Right,
         Bottom,
+    }
+
+    public class DPadButtonClickEventArgs : EventArgs
+    {
+        public DPadButton Button { get; }
+
+        public DPadButtonClickEventArgs(DPadButton button)
+        {
+            Button = button;
+        }
     }
 }
