@@ -519,6 +519,14 @@
                     Margin="4,0,0,0"
                     DefaultValue="0" />
             </StackPanel>
+            <controls:DPadControl
+                Width="22"
+                Height="22"
+                Background="#454545"
+                BorderBrush="#666666"
+                BorderThickness="1"
+                Foreground="White"
+                HoverBrush="#66FFFFFF" />
             <Button
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{StaticResource Commands.Upload}"
