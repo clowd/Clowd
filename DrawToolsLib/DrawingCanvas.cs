@@ -851,6 +851,9 @@ namespace DrawToolsLib
             g.IsSelected = true;
             this.GraphicsList.Add(g);
             AddCommandToHistory(new CommandAdd(g));
+            UpdateState();
+            InvalidateVisual();
+            RefreshBounds();
         }
 
         public ToolActionType GetToolActionType(ToolType type)
