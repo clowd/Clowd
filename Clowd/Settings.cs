@@ -235,7 +235,7 @@ namespace Clowd
     {
         public Color CanvasBackground { get; set; } = Colors.White;
 
-        public RememberPromptChoice OpenCaptureInExistingEditor { get; set; } = RememberPromptChoice.Ask;
+        //public RememberPromptChoice OpenCaptureInExistingEditor { get; set; } = RememberPromptChoice.Ask;
 
         [DisplayName("Capture padding (px)"), PData.Spinnable(5, 10, 0, 100)]
         [Description("Controls how much space (in pixels) there is between an opened capture and the editors window edge.")]

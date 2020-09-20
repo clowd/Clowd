@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -72,8 +72,29 @@ namespace Clowd
 
         private bool _adornerRegistered = false;
         private bool _initialized = false;
+        private Action<BitmapSource> _completeStitch;
 
         public static void ShowNewCapture()
+        {
+            StartCapture(null, null);
+        }
+
+        public static void NewStitchCapture(Rect? captureBounds, Action<BitmapSource> completeStitch)
+        {
+            StartCapture((w) =>
+            {
+                w._completeStitch = completeStitch;
+            }, (w) =>
+            {
+                if (captureBounds.HasValue)
+                {
+                    w.fastCapturer.StopCapture();
+                    w.SelectionRectangle = new WpfRect(captureBounds.Value);
+                }
+            });
+        }
+
+        private static void StartCapture(Action<CaptureWindow2> initialized, Action<CaptureWindow2> rendered)
         {
             if (Current != null)
             {
@@ -91,6 +112,7 @@ namespace Clowd
             Current.Closed += (s, e) => Current = null;
             var hWnd = new WindowInteropHelper(Current).EnsureHandle();
             Current.Handle = hWnd;
+            initialized?.Invoke(Current);
             var primary = ScreenTools.Screens.First().Bounds;
             var virt = ScreenTools.VirtualScreen.Bounds;
             USER32.SetWindowPos(hWnd, SWP_HWND.HWND_TOP, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
@@ -107,6 +129,7 @@ namespace Clowd
                 timer.Log("Window", "Activated");
                 await Current.fastCapturer.FinishUpFastCapture(timer);
                 timer.PrintSummary();
+                rendered?.Invoke(Current);
             };
             Current.ShowActivated = true;
             Current.Show();
@@ -281,7 +304,14 @@ namespace Clowd
             var cropped = CropBitmap();
             Close();
 
-            ImageEditorPage.ShowNewEditor(cropped, SelectionRectangle);
+            if (_completeStitch != null)
+            {
+                _completeStitch(cropped);
+            }
+            else
+            {
+                ImageEditorPage.ShowNewEditor(cropped, SelectionRectangle);
+            }
         }
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
