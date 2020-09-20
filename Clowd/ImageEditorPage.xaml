@@ -394,6 +394,17 @@
                     <Run FontWeight="Bold" Text="{Binding Capabilities.Name, Mode=OneWay}" />
                 </TextBlock>
             </StackPanel>
+            <controls:DPadControl
+                Width="22"
+                Height="22"
+                Background="#454545"
+                BorderBrush="#666666"
+                BorderThickness="1"
+                Click="ImageStitch_Click"
+                Foreground="White"
+                HoverBrush="#66FFFFFF"
+                ToolTip="Capture another screenshot and attach it to the selected side of this image"
+                Visibility="{Binding Capabilities.CanStitch, Converter={StaticResource Bool2Vis}}" />
             <StackPanel Visibility="{Binding Capabilities.CanCanvasZoom, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Zoom:</Run>
@@ -519,16 +530,6 @@
                     Margin="4,0,0,0"
                     DefaultValue="0" />
             </StackPanel>
-            <controls:DPadControl
-                Width="22"
-                Height="22"
-                Background="#454545"
-                BorderBrush="#666666"
-                BorderThickness="1"
-                Click="ImageStitch_Click"
-                Foreground="White"
-                HoverBrush="#66FFFFFF"
-                Visibility="{Binding Capabilities.CanStitch, Converter={StaticResource Bool2Vis}}" />
             <Button
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{StaticResource Commands.Upload}"
