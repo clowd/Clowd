@@ -525,9 +525,9 @@
                 Background="#454545"
                 BorderBrush="#666666"
                 BorderThickness="1"
+                Click="ImageStitch_Click"
                 Foreground="White"
                 HoverBrush="#66FFFFFF"
-                Click="ImageStitch_Click"
                 Visibility="{Binding Capabilities.CanStitch, Converter={StaticResource Bool2Vis}}" />
             <Button
                 controls:DockAndWrapPanel.DockToEnd="True"
