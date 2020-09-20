@@ -155,6 +155,7 @@
     <Compile Include="Capture\WindowFinder3.cs" />
     <Compile Include="Controls\CornerClippingBorder.cs" />
     <Compile Include="Controls\DockAndWrapPanel.cs" />
+    <Compile Include="Controls\DPadControl.cs" />
     <Compile Include="Controls\FeatureInstallerControl.cs" />
     <Compile Include="Controls\FFMpegCodecSettingsEditor3.xaml.cs">
       <DependentUpon>FFMpegCodecSettingsEditor3.xaml</DependentUpon>

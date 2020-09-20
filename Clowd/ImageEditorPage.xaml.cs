@@ -64,38 +64,38 @@ namespace Clowd
             Keyboard.Focus(buttonFocus);
         }
 
-        public static async void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null, bool allowPrompt = true)
+        public static void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null, bool allowPrompt = true)
         {
-            ImageEditorPage page = null;
-            Window window = TemplatedWindow.GetWindow(typeof(ImageEditorPage));
+            //ImageEditorPage page = null;
+            //Window window = TemplatedWindow.GetWindow(typeof(ImageEditorPage));
 
-            if (window != null && image != null && allowPrompt)
-            {
-                if ((page = TemplatedWindow.GetContent<ImageEditorPage>(window)) != null)
-                {
-                    var result = await NiceDialog.ShowPromptAsync(
-                        window,
-                        NiceDialogIcon.Information,
-                        "There is already an editor open, would you like to insert the captured image here or open a new window?",
-                        "Open new window?",
-                        "Insert",
-                        "Open new window",
-                        App.Current.Settings.EditorSettings,
-                        s => s.OpenCaptureInExistingEditor);
+            //if (window != null && image != null && allowPrompt)
+            //{
+            //    if ((page = TemplatedWindow.GetContent<ImageEditorPage>(window)) != null)
+            //    {
+            //        var result = await NiceDialog.ShowPromptAsync(
+            //            window,
+            //            NiceDialogIcon.Information,
+            //            "There is already an editor open, would you like to insert the captured image here or open a new window?",
+            //            "Open new window?",
+            //            "Insert",
+            //            "Open new window",
+            //            App.Current.Settings.EditorSettings,
+            //            s => s.OpenCaptureInExistingEditor);
 
-                    if (result)
-                    {
-                        page.AddImage(image);
-                        window.Activate();
-                        return;
-                    }
-                }
-            }
+            //        if (result)
+            //        {
+            //            page.AddImage(image);
+            //            window.Activate();
+            //            return;
+            //        }
+            //    }
+            //}
 
-            page = new ImageEditorPage();
+            var page = new ImageEditorPage();
             page._initialImage = image;
             page._initialBounds = screenBounds;
-            window = TemplatedWindow.CreateWindow("Edit Capture", page);
+            var window = TemplatedWindow.CreateWindow("Edit Capture", page);
             page.DoWindowFit(window);
             window.Show();
         }
@@ -518,6 +518,7 @@ namespace Clowd
             public abstract bool HasAngle { get; }
             public virtual bool CanCanvasZoom { get; } = true;
             public virtual bool CanChangeCanvasBackground { get; } = true;
+            public virtual bool CanStitch { get; } = false;
 
             public event PropertyChangedEventHandler PropertyChanged;
 
@@ -709,6 +710,8 @@ namespace Clowd
             public override bool HasFont => IsOneOf(typeof(GraphicText));
 
             public override bool HasAngle => typeof(TGraphic).GetProperty(ANGLE_NAME) != null;
+
+            public override bool CanStitch => IsOneOf(typeof(GraphicImage));
 
             public override bool CanChangeCanvasBackground => false;
 
