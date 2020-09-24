@@ -520,6 +520,12 @@ namespace Clowd
             });
         }
 
+        private void toggleTopMost_Click(object sender, RoutedEventArgs e)
+        {
+            var wnd = TemplatedWindow.GetWindow(this);
+            wnd.Topmost = toggleTopMost.IsChecked == true;
+        }
+
         #endregion
 
         public class ToolStateManager
