@@ -472,7 +472,7 @@ namespace Clowd
             }
         }
 
-        private static Window ShowNewFakeOwnerWindow()
+        public static Window ShowNewFakeOwnerWindow(bool showInTaskbar = true)
         {
             var ownerWindow = new Window()
             {
@@ -481,8 +481,9 @@ namespace Clowd
                 WindowStyle = System.Windows.WindowStyle.None,
                 ResizeMode = ResizeMode.NoResize,
                 AllowsTransparency = true,
+                ShowInTaskbar = showInTaskbar,
                 Width = 1,
-                Height = 1
+                Height = 1,
             };
             ownerWindow.Show();
             return ownerWindow;

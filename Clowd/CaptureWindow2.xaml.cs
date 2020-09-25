@@ -105,35 +105,63 @@ namespace Clowd
             }
 
             var timer = new TimedConsoleLogger("Capture", DateTime.Now);
-
+            timer.Log("Total", "Start");
             timer.Log("Window", "Start");
-            timer.Log("WinCreate", "Create Handle Start");
-            Current = new CaptureWindow2();
-            Current.Closed += (s, e) => Current = null;
-            var hWnd = new WindowInteropHelper(Current).EnsureHandle();
-            Current.Handle = hWnd;
-            initialized?.Invoke(Current);
-            var primary = ScreenTools.Screens.First().Bounds;
-            var virt = ScreenTools.VirtualScreen.Bounds;
-            USER32.SetWindowPos(hWnd, SWP_HWND.HWND_TOP, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE | SWP.ASYNCWINDOWPOS);
-            timer.Log("WinCreate", "Create Handle Complete");
 
-            Current.fastCapturer.StartFastCapture(timer);
+            Current = new CaptureWindow2();
+            timer.Log("Window", "Init");
+            Current.Closed += (s, e) => Current = null;
+            Current.StartCapture(timer, initialized, rendered);
+        }
+
+        private void StartCapture(TimedConsoleLogger timer, Action<CaptureWindow2> initialized, Action<CaptureWindow2> rendered)
+        {
+            var interop = new WindowInteropHelper(this);
+
+            // position the window a soon as the source handle has been created (either Show() or EnsureHandle())
+            SourceInitialized += (s, e) =>
+            {
+                timer.Log("WinSource", "Source Init Begin");
+                Handle = interop.Handle;
+                var primary = ScreenTools.Screens.First().Bounds;
+                var virt = ScreenTools.VirtualScreen.Bounds;
+                var swp = Debugger.IsAttached ? SWP_HWND.HWND_TOP : SWP_HWND.HWND_TOPMOST;
+                USER32.SetWindowPos(Handle, swp, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE);
+                timer.Log("WinSource", "Source Init Complete");
+                initialized?.Invoke(this);
+            };
+
+            // close capture window if we lose focus, but skip it if we are already closing
+            EventHandler deactivated = (s, e) => this.Close();
+            Activated += (s, e) => { Deactivated += deactivated; };
+            Closing += (s, e) => { Deactivated -= deactivated; };
+
+            // once our first render has finished, we can fire up low priorty tasks to capture window bitmaps
+            ContentRendered += async (s, e) =>
+            {
+                timer.Log("WinShow", "Rendered");
+                Activate();
+                _initialized = true;
+                timer.Log("Window", "Activated");
+
+                await Task.Delay(200); // add a delay so that these expensive background operations dont interfere with initial window interactions / calculations
+                await fastCapturer.FinishUpFastCapture(timer);
+
+                timer.Log("Total", "End");
+
+                timer.PrintSummary();
+                rendered?.Invoke(this);
+            };
+
+            // if we create the handle before the window is shown, this drastically speeds up the total time it takes to show the window. 
+            // SetWindowPos (in SourceInitialized event) is 1-10ms now, but after Show can take > 100ms
+            interop.EnsureHandle();
+
+            // this will create the bitmap and do the initial render ahead of time
+            fastCapturer.StartFastCapture(timer);
 
             timer.Log("WinShow", "Showing Window");
-            if (!Debugger.IsAttached) Current.Topmost = true;
-            Current.ContentRendered += async (s, e) =>
-            {
-                timer.Log("WinShow", "Content Rendered");
-                Current.Activate();
-                timer.Log("Window", "Activated");
-                await Current.fastCapturer.FinishUpFastCapture(timer);
-                timer.PrintSummary();
-                rendered?.Invoke(Current);
-            };
-            Current.ShowActivated = true;
-            Current.Show();
-            Current._initialized = true;
+            Show();
             timer.Log("WinShow", "Showing Complete");
         }
 
