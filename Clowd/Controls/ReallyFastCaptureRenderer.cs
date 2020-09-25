@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -250,6 +250,9 @@ namespace Clowd
         {
             if (_globalZoom > 1 && _virtualPoint.HasValue && _lastScreenPoint.HasValue)
             {
+                // Update the mouse position. If the user is zoomed in, we actually want to slow down the mouse to make it easier to select a pixel
+                // To do this, we calculate the delta between the previous and current position, and divide it by the current zoom ratio.
+
                 var currentPoint = ScreenTools.GetMousePosition();
                 var xDelta = ScreenTools.ScreenToWpf((currentPoint.X - _lastScreenPoint.Value.X) / _globalZoom);
                 var yDelta = ScreenTools.ScreenToWpf((currentPoint.Y - _lastScreenPoint.Value.Y) / _globalZoom);
@@ -258,46 +261,53 @@ namespace Clowd
 
                 currentPoint = _virtualPoint.Value.ToScreenPoint();
                 _lastScreenPoint = currentPoint;
+
+                // then, we update the real windows cursor position with our "zoom adjusted" delta. 
                 System.Windows.Forms.Cursor.Position = currentPoint.ToSystem();
             }
             else
             {
+                // the user is not zoomed in, so we don't need to do any fancy calculations
                 var currentPoint = ScreenTools.GetMousePosition();
                 _lastScreenPoint = currentPoint;
                 _virtualPoint = currentPoint.ToWpfPoint();
             }
 
+            // if we know the mouse location, the left mouse button is pressed, and we think this is a drag operation
             if (_virtualPoint.HasValue && _virtualDragBegin.HasValue
                 && (_dragging || DistancePointToPoint(_virtualPoint.Value.X, _virtualPoint.Value.Y, _virtualDragBegin.Value.X, _virtualDragBegin.Value.Y) > _clickDistance / _globalZoom))
             {
                 _dragging = true;
 
-                double left, right;
-                if (_virtualDragBegin.Value.X < _virtualPoint.Value.X)
+                // our mouse position is virtual, this means that when the user is zoomed and dragging the cursor could be in the middle of pixel
+                // we need to snap the edges of the selection to real bitmap pixels. We "prefer" to include all the touched pixels
+                // but there is a forgiveness constant so if you are trying to intuitively position the mouse between two pixels this is possible
+                double roundPixel(double val, bool preferDown)
                 {
-                    left = ScreenTools.WpfSnapToPixelsFloor(_virtualDragBegin.Value.X);
-                    right = ScreenTools.WpfSnapToPixelsCeil(_virtualPoint.Value.X);
-                }
-                else
-                {
-                    left = ScreenTools.WpfSnapToPixelsFloor(_virtualPoint.Value.X);
-                    right = ScreenTools.WpfSnapToPixelsCeil(_virtualDragBegin.Value.X);
+                    var floor = ScreenTools.WpfSnapToPixelsFloor(val);
+                    var ceil = ScreenTools.WpfSnapToPixelsCeil(val);
+
+                    var position = val - floor;
+
+                    const double forgiveness = 0.2d;
+                    double cutRatio = preferDown ? (1 - forgiveness) : forgiveness;
+                    return 1 * cutRatio > position ? floor : ceil;
                 }
 
-                double top, bottom;
-                if (_virtualDragBegin.Value.Y < _virtualPoint.Value.Y)
+                (double low, double high) roundPixelPair(double v1, double v2)
                 {
-                    top = ScreenTools.WpfSnapToPixelsFloor(_virtualDragBegin.Value.Y);
-                    bottom = ScreenTools.WpfSnapToPixelsCeil(_virtualPoint.Value.Y);
-                }
-                else
-                {
-                    top = ScreenTools.WpfSnapToPixelsFloor(_virtualPoint.Value.Y);
-                    bottom = ScreenTools.WpfSnapToPixelsCeil(_virtualDragBegin.Value.Y);
+                    var min = Math.Min(v1, v2);
+                    var max = Math.Max(v1, v2);
+                    return (roundPixel(min, true), roundPixel(max, false));
                 }
 
-                SelectionRectangle = new WpfRect(left, top, right - left, bottom - top).ToScreenRect().ToWpfRect();
+                (double left, double right) = roundPixelPair(_virtualDragBegin.Value.X, _virtualPoint.Value.X);
+                (double top, double bottom) = roundPixelPair(_virtualDragBegin.Value.Y, _virtualPoint.Value.Y);
+
+                SelectionRectangle = new WpfRect(left, top, right - left, bottom - top);
             }
+
+            // we're not in a drag operation, so just highlight any window under the cursor
             else if (App.Current.Settings.CaptureSettings.DetectWindows)
             {
                 var window = _windowFinder?.HitTest(_virtualPoint.Value.ToScreenPoint());
@@ -310,6 +320,8 @@ namespace Clowd
                     SelectionRectangle = default(WpfRect);
                 }
             }
+
+            // we don't have window selection enabled and the user is not currently dragging
             else
             {
                 SelectionRectangle = default(WpfRect);
