@@ -556,6 +556,11 @@ namespace Clowd
             {
                 OnCommandLineArgsReceived(this, new CommandLineEventArgs(_args));
             }
+
+            // this is stupid, but if we have not shown at least one window, the call to IsWindowOnCurrentVirtualDesktop() is super slow.
+            // if we've created a window, this becomes fast. Don't ask me why, but this fixes it.
+            var wnd = NiceDialog.ShowNewFakeOwnerWindow(false);
+            wnd.Close();
         }
         public void StartCapture(ScreenRect? region = null)
         {

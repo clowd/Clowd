@@ -45,12 +45,13 @@ namespace Clowd.Utilities
 
         private const int MaxWindowDepthToSearch = 4;
         private const int MinWinCaptureBounds = 200;
-        private readonly IVirtualDesktopManager _virtualDesktop = VirtualDesktopManager.CreateNew();
+
+        private static readonly IVirtualDesktopManager _virtualDesktop = VirtualDesktopManager.CreateNew();
         private WINDOWINFO _winInfo = new WINDOWINFO(true);
         private Region _excludedArea = new Region(ScreenTools.VirtualScreen.Bounds.ToSystem());
         private List<CachedWindow> _cachedWindows = new List<CachedWindow>();
 
-        private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
+        //private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
         private int _depthReady = -1;
         private bool _bitmapsReady = false;
@@ -147,12 +148,21 @@ namespace Clowd.Utilities
             BitmapsReady = true;
         }
 
-        private void CaptureTopLevelWindows()
+        private void CaptureTopLevelWindows(TimedConsoleLogger timer = null)
         {
-            foreach (var hWnd in USER32EX.GetChildWindows(IntPtr.Zero))
+            var toplv = USER32EX.GetChildWindows(IntPtr.Zero);
+            timer?.Log("FinderDepth0", $"Got list of windows (count {toplv.Count})");
+
+            for (int i = 0; i < toplv.Count; i++)
+            //foreach (var hWnd in toplv)
             {
+                var hWnd = toplv[i];
+
                 if (!USER32.GetWindowInfo(hWnd, ref _winInfo))
                     throw new Win32Exception();
+
+                timer?.Log("FinderDepth0", $"{hWnd} window info");
+
 
                 var winVisible = _winInfo.dwStyle.HasFlag(WindowStyles.WS_VISIBLE);
                 var winMinimized = _winInfo.dwStyle.HasFlag(WindowStyles.WS_MINIMIZE);
@@ -165,13 +175,21 @@ namespace Clowd.Utilities
                 if (_winInfo.rcWindow.left == _winInfo.rcWindow.right || _winInfo.rcWindow.top == _winInfo.rcWindow.bottom)
                     continue;
 
+                timer?.Log("FinderDepth0", $"{hWnd} style stuff");
+
+
                 // ignore: top level windows which are not visible to the user
                 ScreenRect windowRect = ScreenRect.FromSystem(USER32EX.GetTrueWindowBounds(hWnd));
+                timer?.Log("FinderDepth0", $"{hWnd} BOUNDS");
                 if (!_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
                 {
                     // if the window is not on the current virtual desktop we want to ignore it and it's children
                     continue;
                 }
+
+
+                timer?.Log("FinderDepth0", $"{hWnd} virutal desktop");
+
 
                 //var winIsTool = _winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOOLWINDOW);
                 //var winIsLayered = _winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_LAYERED);
@@ -187,6 +205,9 @@ namespace Clowd.Utilities
                     continue;
 
                 _excludedArea.Exclude(checkRect);
+
+                timer?.Log("FinderDepth0", $"region stuff");
+
 
                 // ignore: window classes we know are garbage
                 string className;
@@ -207,8 +228,14 @@ namespace Clowd.Utilities
                 if (!this.BoundsAreLargeEnoughForCapture(clippedBounds, 0))
                     continue;
 
+                timer?.Log("FinderDepth0", $"clipping");
+
+
                 var caption = USER32EX.GetWindowCaption(hWnd);
                 var cwin = new CachedWindow(hWnd, 0, className, caption, windowRect, null);
+
+                timer?.Log("FinderDepth0", $"caption");
+
 
                 // enumerate windows on top of this one in the z-order to find out of any of them intersect
                 for (int z = _cachedWindows.Count - 1; z >= 0; z--)
@@ -221,6 +248,8 @@ namespace Clowd.Utilities
                     }
                 }
 
+
+                timer?.Log("FinderDepth0", $"Captured: {cwin.Caption} / {cwin.ClassName}");
                 _cachedWindows.Add(cwin);
             }
         }

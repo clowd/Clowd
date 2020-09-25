@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -127,12 +128,12 @@ namespace Clowd
         public void StartFastCapture(TimedConsoleLogger timer)
         {
             timer.Log("FastCapStage1", "Start");
-
             _windowFinder = new WindowFinder3();
             _windowFinder.CapturePart1(timer);
+
             _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, timer);
 
-            timer.Log("FastCapStage1", "Creating grayscale image");
+            timer.Log("FastCapStage1", "Grayscale bitmap");
             _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
 
             timer.Log("FastCapStage1", "Rendering visuals");
