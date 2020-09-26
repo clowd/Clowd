@@ -158,9 +158,10 @@ namespace Clowd.Interop.Shell32
         {
             if (path == null) throw new ArgumentNullException("path");
 
-            var pidl = PathToAbsolutePIDL(path);
+            IntPtr pidl = IntPtr.Zero;
             try
             {
+                pidl = PathToAbsolutePIDL(path);
                 SHOpenFolderAndSelectItems(pidl, null, edit);
             }
             catch
@@ -169,7 +170,8 @@ namespace Clowd.Interop.Shell32
             }
             finally
             {
-                NativeMethods.ILFree(pidl);
+                if (pidl != IntPtr.Zero)
+                    NativeMethods.ILFree(pidl);
             }
         }
 
