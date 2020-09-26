@@ -198,6 +198,10 @@ namespace Clowd
         [Description("If this is enabled, the cursor will be shown in screenshots")]
         public bool ScreenshotWithCursor { get; set; } = false;
 
+        [DisplayName("Compatibility Mode")]
+        [Description("If this is enabled, the capture window will use the windows native cursor and will make some visual sacrifices in favor of high performance and responsiveness")]
+        public bool CompatibilityMode { get; set; } = false;
+
         [Description("This controls the default state of the pixel magnifier in the capture window")]
         public bool MagnifierEnabled { get; set; } = true;
 

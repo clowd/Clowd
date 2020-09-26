@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -72,10 +72,12 @@ namespace Clowd
         BitmapSource _imageGray;
 
         VisualCollection _visuals;
+
         DrawingVisual _backgroundImage;
-        DrawingVisual _crosshair;
         DrawingVisual _foregroundImage;
         DrawingVisual _sizeIndicator;
+        DrawingVisual _crosshair;
+        DrawingVisual _selectionRectangle;
         DrawingVisual _tipsPanel;
 
         Pen _sharpBlackLineDashed;
@@ -88,16 +90,23 @@ namespace Clowd
         double _sharpLineWidth;
         double _globalZoom = 1;
 
+        bool _highPerformance = false;
+        double _lastDrawZoom = 0;
+        WpfRect _lastSelRect = default(WpfRect);
+        WindowFinder3.CachedWindow _lastSelWindow = null;
+        bool _lastCapturing = false;
+
         private static ScreenUtil _screen = new ScreenUtil();
 
         public ReallyFastCaptureRenderer()
         {
-            this.Cursor = Cursors.None;
+            this.Cursor = GetCaptureCursor();
 
             _backgroundImage = new MyDrawingVisual();
             _foregroundImage = new MyDrawingVisual();
             _sizeIndicator = new DrawingVisual();
             _crosshair = new DrawingVisual();
+            _selectionRectangle = new DrawingVisual();
             _tipsPanel = new DrawingVisual();
 
             _visuals = new VisualCollection(this);
@@ -105,12 +114,15 @@ namespace Clowd
             _visuals.Add(_foregroundImage);
             _visuals.Add(_sizeIndicator);
             _visuals.Add(_crosshair);
+            _visuals.Add(_selectionRectangle);
             _visuals.Add(_tipsPanel);
 
             // here to apease the WPF designer
             if (App.IsDesignMode)
                 return;
 
+            _highPerformance = App.Current.Settings.CaptureSettings.CompatibilityMode;
+            //_highPerformance = true;
             _accentColor = App.Current.AccentColor;
             _accentBrush = new SolidColorBrush(_accentColor);
 
@@ -163,7 +175,7 @@ namespace Clowd
             _virtualDragBegin = null;
             _lastScreenPoint = null;
             IsCapturing = true;
-            this.Cursor = Cursors.None;
+            this.Cursor = GetCaptureCursor();
 
             this.MouseMove += CaptureWindow2_MouseMove;
             this.MouseDown += CaptureWindow2_MouseDown;
@@ -248,7 +260,7 @@ namespace Clowd
 
         private void CaptureWindow2_MouseMove(object sender, MouseEventArgs e)
         {
-            if (_globalZoom > 1 && _virtualPoint.HasValue && _lastScreenPoint.HasValue)
+            if (!_highPerformance && _globalZoom > 1 && _virtualPoint.HasValue && _lastScreenPoint.HasValue)
             {
                 // Update the mouse position. If the user is zoomed in, we actually want to slow down the mouse to make it easier to select a pixel
                 // To do this, we calculate the delta between the previous and current position, and divide it by the current zoom ratio.
@@ -402,11 +414,31 @@ namespace Clowd
         private void Draw()
         {
             var mouse = (_virtualPoint.HasValue && _globalZoom > 1) ? _virtualPoint.Value : ScreenTools.GetMousePosition().ToWpfPoint();
-            DrawBackgroundImage(mouse);
-            DrawForegroundImage(mouse);
-            DrawCrosshair(mouse);
-            DrawAreaIndicator(mouse);
+
+            var invalidated = _lastDrawZoom != _globalZoom || _lastCapturing != IsCapturing || _globalZoom > 1;
+            var selectionChanged = _lastSelRect != SelectionRectangle || _lastSelWindow != _selectedWindow;
+
+            if (invalidated)
+                DrawBackgroundImage(mouse);
+
+            if (invalidated || selectionChanged)
+                DrawForegroundImage(mouse);
+
+            if (invalidated || selectionChanged)
+                DrawAreaIndicator(mouse);
+
+            if (!_highPerformance)
+                DrawCrosshair(mouse);
+
+            if (invalidated || selectionChanged)
+                DrawSelectionRectangle(mouse);
+
             DrawTips(mouse);
+
+            _lastDrawZoom = _globalZoom;
+            _lastSelRect = SelectionRectangle;
+            _lastSelWindow = _selectedWindow;
+            _lastCapturing = IsCapturing;
         }
 
         private void DrawForegroundImage(WpfPoint mousePoint)
@@ -458,7 +490,7 @@ namespace Clowd
         {
             using (DrawingContext g = _sizeIndicator.RenderOpen())
             {
-                if (_image == null || !IsCapturing || SelectionRectangle == WpfRect.Empty)
+                if (_image == null || SelectionRectangle == WpfRect.Empty || (_dragging && _highPerformance))
                     return;
 
                 var screen = SelectionRectangle.ToScreenRect();
@@ -476,7 +508,11 @@ namespace Clowd
                 double indicatorWidth = txt.WidthIncludingTrailingWhitespace + (padding * 2);
                 double indicatorHeight = txt.Height + padding;
 
-                var pt = new WpfPoint(SelectionRectangle.Left + SelectionRectangle.Width / 2, SelectionRectangle.Bottom);
+                var fitInside = SelectionRectangle.Width * _globalZoom > indicatorWidth && SelectionRectangle.Height * _globalZoom > indicatorHeight;
+                if (!fitInside)
+                    return;
+
+                var pt = new WpfPoint(SelectionRectangle.Left + SelectionRectangle.Width / 2, SelectionRectangle.Top + SelectionRectangle.Height / 2);
 
                 if (_globalZoom > 1)
                 {
@@ -485,9 +521,9 @@ namespace Clowd
                     pt = new WpfPoint(newpt.X, newpt.Y);
                 }
 
-                var positionTransform = PositionWithinAScreen(new WpfSize(indicatorWidth, indicatorHeight), pt, HorizontalAlignment.Center, VerticalAlignment.Bottom, padding);
+                var positionTransform = PositionWithinAScreen(new WpfSize(indicatorWidth, indicatorHeight), pt, HorizontalAlignment.Center, VerticalAlignment.Center, padding);
                 g.PushTransform(new TranslateTransform(positionTransform.X, positionTransform.Y));
-                g.PushOpacity(0.8d);
+                //g.PushOpacity(0.8d);
 
                 var border = new Pen(_accentBrush, 2);
                 g.DrawRoundedRectangle(Brushes.White, border, new Rect(0, 0, indicatorWidth, indicatorHeight), indicatorHeight / 2, indicatorHeight / 2);
@@ -531,59 +567,45 @@ namespace Clowd
 
                 context.DrawLine(_sharpAccentLine, new Point(x - halfCrossRadius, y), new Point(x + halfCrossRadius, y));
                 context.DrawLine(_sharpAccentLine, new Point(x, y - halfCrossRadius), new Point(x, y + halfCrossRadius));
-
-                if (SelectionRectangle != WpfRect.Empty)
-                {
-                    if (_globalZoom > 1)
-                        context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y));
-
-                    var selRec = new WpfRect(
-                        SelectionRectangle.Left + (offsetHalfPixel / _globalZoom),
-                        SelectionRectangle.Top + (offsetHalfPixel / _globalZoom),
-                        SelectionRectangle.Width,
-                        SelectionRectangle.Height);
-
-                    context.DrawRectangle(null, new Pen(_accentBrush, _sharpLineWidth / _globalZoom), selRec);
-                }
             }
         }
 
         private void DrawTips(WpfPoint mousePoint)
         {
-            List<(FormattedText shortcut, FormattedText text)> lines = new List<(FormattedText shortcut, FormattedText text)>();
-
-            FormattedText getText(string text, int fontSize = 12, FontWeight? weight = null, bool recurse = true)
-            {
-                FormattedText txt = new FormattedText(
-                    recurse ? text : (text + "..."),
-                    CultureInfo.CurrentUICulture,
-                    this.FlowDirection,
-                    new Typeface(new FontFamily("Microsoft Sans Serif"), FontStyles.Normal, weight ?? FontWeights.Normal, FontStretches.Normal),
-                    fontSize,
-                    new SolidColorBrush(Color.FromRgb(51, 51, 51)),
-                    VisualTreeHelper.GetDpi(this).PixelsPerDip);
-
-                if (recurse && txt.WidthIncludingTrailingWhitespace > 300)
-                {
-                    text = text.Substring(0, text.Length - 3);
-                    while (txt.WidthIncludingTrailingWhitespace > 300)
-                    {
-                        text = text.Substring(0, text.Length - 1);
-                        txt = getText(text, fontSize, weight, false);
-                    }
-                }
-                return txt;
-            }
-
-            void addLine(string shortcut, string text)
-            {
-                lines.Add((getText(shortcut, weight: FontWeights.ExtraBold), getText(text)));
-            }
-
             using (DrawingContext g = _tipsPanel.RenderOpen())
             {
-                if (!IsCapturing)
+                if (!IsCapturing || (_highPerformance && _dragging))
                     return;
+
+                List<(FormattedText shortcut, FormattedText text)> lines = new List<(FormattedText shortcut, FormattedText text)>();
+
+                FormattedText getText(string text, int fontSize = 12, FontWeight? weight = null, bool recurse = true)
+                {
+                    FormattedText txt = new FormattedText(
+                        recurse ? text : (text + "..."),
+                        CultureInfo.CurrentUICulture,
+                        this.FlowDirection,
+                        new Typeface(new FontFamily("Microsoft Sans Serif"), FontStyles.Normal, weight ?? FontWeights.Normal, FontStretches.Normal),
+                        fontSize,
+                        new SolidColorBrush(Color.FromRgb(51, 51, 51)),
+                        VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+                    if (recurse && txt.WidthIncludingTrailingWhitespace > 300)
+                    {
+                        text = text.Substring(0, text.Length - 3);
+                        while (txt.WidthIncludingTrailingWhitespace > 300)
+                        {
+                            text = text.Substring(0, text.Length - 1);
+                            txt = getText(text, fontSize, weight, false);
+                        }
+                    }
+                    return txt;
+                }
+
+                void addLine(string shortcut, string text)
+                {
+                    lines.Add((getText(shortcut, weight: FontWeights.ExtraBold), getText(text)));
+                }
 
                 var screenMouse = mousePoint.ToScreenPoint();
 
@@ -671,6 +693,33 @@ namespace Clowd
                     textYPadding += textHeight + margin;
                 }
             }
+        }
+
+        private void DrawSelectionRectangle(WpfPoint mousePoint)
+        {
+            using (var context = _selectionRectangle.RenderOpen())
+            {
+                if (IsCapturing && SelectionRectangle != WpfRect.Empty)
+                {
+                    var offsetHalfPixel = ScreenTools.ScreenToWpf(0.5);
+
+                    if (_globalZoom > 1)
+                        context.PushTransform(new ScaleTransform(_globalZoom, _globalZoom, mousePoint.X, mousePoint.Y));
+
+                    var selRec = new WpfRect(
+                        SelectionRectangle.Left + (offsetHalfPixel / _globalZoom),
+                        SelectionRectangle.Top + (offsetHalfPixel / _globalZoom),
+                        SelectionRectangle.Width,
+                        SelectionRectangle.Height);
+
+                    context.DrawRectangle(null, new Pen(_accentBrush, _sharpLineWidth / _globalZoom), selRec);
+                }
+            }
+        }
+
+        private Cursor GetCaptureCursor()
+        {
+            return _highPerformance ? Cursors.Cross : Cursors.None;
         }
 
         private static Color GetPixelColor(BitmapSource bitmap, int x, int y)
