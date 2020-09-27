@@ -40,6 +40,7 @@
         <RoutedCommand x:Key="Command.SelectScreen" />
         <RoutedCommand x:Key="Command.SelectAll" />
         <RoutedCommand x:Key="Command.SelectColor" />
+        <RoutedCommand x:Key="Command.Profiler" />
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="U" Command="{StaticResource Command.Upload}" />
@@ -54,6 +55,7 @@
         <KeyBinding Key="Escape" Command="ApplicationCommands.Close" />
         <KeyBinding Key="H" Command="{StaticResource Command.SelectColor}" />
         <KeyBinding Key="A" Command="{StaticResource Command.SelectAll}" />
+        <KeyBinding Key="T" Command="{StaticResource Command.Profiler}" />
     </Window.InputBindings>
     <Window.CommandBindings>
         <CommandBinding
@@ -70,6 +72,7 @@
         <CommandBinding Command="{StaticResource Command.SelectScreen}" Executed="SelectScreenExecuted" />
         <CommandBinding Command="{StaticResource Command.SelectColor}" Executed="SelectColorExecuted" />
         <CommandBinding Command="{StaticResource Command.SelectAll}" Executed="SelectAllExecuted" />
+        <CommandBinding Command="{StaticResource Command.Profiler}" Executed="ProfilerExecuted" />
     </Window.CommandBindings>
     <Canvas x:Name="rootGrid">
         <local:ReallyFastCaptureRenderer
