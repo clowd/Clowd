@@ -147,8 +147,6 @@ namespace Clowd
                 await Task.Delay(200); // add a delay so that these expensive background operations dont interfere with initial window interactions / calculations
                 await fastCapturer.FinishUpFastCapture(timer);
 
-                timer.Log("Total", "End");
-
                 timer.PrintSummary();
                 rendered?.Invoke(this);
             };
@@ -444,6 +442,11 @@ namespace Clowd
                 return;
 
             Process.Start("https://images.google.com/searchbyimage?image_url=" + task.UrlEscape());
+        }
+
+        private void ProfilerExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            fastCapturer.ShowProfiler();
         }
     }
 }

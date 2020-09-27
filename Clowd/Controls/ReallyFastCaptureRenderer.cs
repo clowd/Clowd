@@ -66,6 +66,7 @@ namespace Clowd
 
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
 
+        TimedConsoleLogger _timer;
         WindowFinder3.CachedWindow _selectedWindow;
         WindowFinder3 _windowFinder;
         BitmapSource _image;
@@ -95,6 +96,7 @@ namespace Clowd
         WpfRect _lastSelRect = default(WpfRect);
         WindowFinder3.CachedWindow _lastSelWindow = null;
         bool _lastCapturing = false;
+        volatile bool _finishedUp = false;
 
         private static ScreenUtil _screen = new ScreenUtil();
 
@@ -139,6 +141,7 @@ namespace Clowd
 
         public void StartFastCapture(TimedConsoleLogger timer)
         {
+            _timer = timer;
             timer.Log("FastCapStage1", "Start");
             _windowFinder = new WindowFinder3();
             _windowFinder.CapturePart1(timer);
@@ -162,6 +165,9 @@ namespace Clowd
                 _windowFinder.CapturePart2(timer);
                 _windowFinder.CapturePart3(timer);
                 timer.Log("FastCapStage2", "Complete");
+                timer.Log("Total", "End");
+                _finishedUp = true;
+                Dispatcher.Invoke(Draw);
             });
         }
 
@@ -217,6 +223,11 @@ namespace Clowd
             this.MouseDown -= CaptureWindow2_MouseDown;
             this.MouseUp -= CaptureWindow2_MouseUp;
             this.MouseWheel -= CaptureWindow2_MouseWheel;
+        }
+
+        public async void ShowProfiler()
+        {
+            await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information, _timer.GetSummary());
         }
 
         public BitmapSource GetSelectedBitmap()
@@ -618,6 +629,7 @@ namespace Clowd
                 addLine("-", "Scroll to zoom!");
                 addLine("F", "Select current screen");
                 addLine("A", "Select all screens");
+                addLine("T", $"Time to render {_timer.GetMetricTime("Window")}ms, total time {(_finishedUp ? _timer.GetMetricTime("Total").ToString() + "ms" : "...")}");
 
                 const int shortcutWidth = 30;
                 const int colorWidth = 30;

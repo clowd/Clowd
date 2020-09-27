@@ -11,14 +11,16 @@ namespace Clowd.Utilities
         private readonly string name;
         private readonly DateTime timeStart;
         private readonly Dictionary<string, (DateTime start, DateTime end)> timeLog;
+        private readonly StringBuilder history;
 
         public TimedConsoleLogger(string name, DateTime timeStart)
         {
             this.name = name;
             this.timeStart = timeStart;
             this.timeLog = new Dictionary<string, (DateTime start, DateTime end)>();
-            Console.WriteLine();
-            Console.WriteLine(name + " Profile Started");
+            this.history = new StringBuilder();
+            printMsg();
+            printMsg(name + " Profile Started");
         }
 
         public void Log(string component, string message)
@@ -34,17 +36,36 @@ namespace Clowd.Utilities
                 timeLog.Add(component, (DateTime.Now, DateTime.Now));
             }
 
+            printMsg($"+{ms}ms - [{component}] {message}");
+        }
 
-            Console.WriteLine($"+{ms}ms - [{component}] {message}");
+        public int GetMetricTime(string metricName)
+        {
+            if (!timeLog.ContainsKey(metricName))
+                return 0;
+
+            var kvp = timeLog[metricName];
+            return (int)(kvp.end - kvp.start).TotalMilliseconds;
         }
 
         public void PrintSummary()
         {
-            Console.WriteLine();
-            Console.WriteLine(name + " Summary:");
-            foreach (var kvp in timeLog)
-                Console.WriteLine($"  {kvp.Key} - {(int)(kvp.Value.end - kvp.Value.start).TotalMilliseconds}ms");
-            Console.WriteLine();
+            printMsg();
+            printMsg(name + " Summary:");
+            foreach (var key in timeLog.Keys)
+                printMsg($"  {key} - {GetMetricTime(key)}ms");
+            printMsg();
+        }
+
+        public string GetSummary()
+        {
+            return history.ToString();
+        }
+
+        private void printMsg(string message = "")
+        {
+            Console.WriteLine(message);
+            history.AppendLine(message);
         }
     }
 }
