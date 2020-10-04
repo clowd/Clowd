@@ -134,7 +134,12 @@ namespace Clowd
             // close capture window if we lose focus, but skip it if we are already closing
             EventHandler deactivated = (s, e) => this.Close();
             Activated += (s, e) => { Deactivated += deactivated; };
-            Closing += (s, e) => { Deactivated -= deactivated; };
+            Closing += (s, e) =>
+            {
+                Deactivated -= deactivated;
+                if (fastCapturer.IsCapturing)
+                    fastCapturer.StopCapture();
+            };
 
             // once our first render has finished, we can fire up low priorty tasks to capture window bitmaps
             ContentRendered += async (s, e) =>
