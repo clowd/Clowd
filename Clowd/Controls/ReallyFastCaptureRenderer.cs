@@ -595,10 +595,6 @@ namespace Clowd
 
                 context.DrawLine(_sharpAccentLine, new Point(x - halfCrossRadius, y), new Point(x + halfCrossRadius, y));
                 context.DrawLine(_sharpAccentLine, new Point(x, y - halfCrossRadius), new Point(x, y + halfCrossRadius));
-
-                //var coordTxt = GetText($"({Math.Round(mousePoint.X, 2)}, {Math.Round(mousePoint.Y, 2)})", Brushes.White, 14, true);
-                //var coordPt = PositionWithinAScreen(new WpfSize(coordTxt.WidthIncludingTrailingWhitespace, coordTxt.Height), mousePoint, HorizontalAlignment.Right, VerticalAlignment.Bottom, 20);
-                //context.DrawText(coordTxt, new Point(coordPt.X, coordPt.Y));
             }
         }
 
