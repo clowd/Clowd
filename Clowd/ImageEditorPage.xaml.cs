@@ -136,8 +136,8 @@ namespace Clowd
             var width = ScreenTools.ScreenToWpf(img.PixelWidth);
             var height = ScreenTools.ScreenToWpf(img.PixelHeight);
             var graphic = new GraphicImage(drawingCanvas, new Rect(
-                drawingCanvas.WorldOffset.X - (width / 2),
-                drawingCanvas.WorldOffset.Y - (height / 2),
+                ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.X - (width / 2)),
+                ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.Y - (height / 2)),
                 width, height), img);
 
             drawingCanvas.AddGraphic(graphic);
