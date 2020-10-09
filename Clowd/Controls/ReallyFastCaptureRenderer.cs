@@ -37,13 +37,9 @@ namespace Clowd
         private static void SelectionRectangleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var obj = (ReallyFastCaptureRenderer)d;
-
-            // if we're no longer capturing, the only thing we ever need to re-render is the foreground image. 
-            // mouse position does not matter since we will always be at zoom=1.
             if (!obj.IsCapturing)
-                obj.DrawForegroundImage(default(WpfPoint));
+                obj.Draw();
         }
-
         public bool IsCapturing
         {
             get { return (bool)GetValue(IsCapturingProperty); }
