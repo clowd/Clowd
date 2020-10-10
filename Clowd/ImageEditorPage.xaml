@@ -404,7 +404,24 @@
                 Foreground="White"
                 HoverBrush="#66FFFFFF"
                 ToolTip="Capture another screenshot and attach it to the selected side of this image"
-                Visibility="{Binding Capabilities.CanStitch, Converter={StaticResource Bool2Vis}}" />
+                Visibility="{Binding Capabilities.CanStitchAndCrop, Converter={StaticResource Bool2Vis}}" />
+            <ToggleButton
+                x:Name="btnCropImage"
+                Width="22"
+                Height="22"
+                Margin="4,0"
+                Padding="0"
+                Style="{StaticResource ToggleToolButtonStyle}"
+                ToolTip="Crop"
+                Visibility="{Binding Capabilities.CanStitchAndCrop, Converter={StaticResource Bool2Vis}}">
+                <Viewbox Width="16" Height="16">
+                    <Path
+                        Width="172"
+                        Height="172"
+                        Data="M28.66667,0v143.33333h143.33333v-21.5h-111.53125l61.36458,-61.36458v54.19792h21.5v-75.69792l26.65104,-26.65104l-10.30208,-10.30208l-26.65104,26.65104h-75.69792v21.5h54.19792l-61.36458,61.36458v-111.53125zM0,28.66667v21.5h21.5v-21.5zM121.83333,150.5v21.5h21.5v-21.5z"
+                        Fill="White" />
+                </Viewbox>
+            </ToggleButton>
             <StackPanel Visibility="{Binding Capabilities.CanCanvasZoom, Converter={StaticResource Bool2Vis}}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Zoom:</Run>

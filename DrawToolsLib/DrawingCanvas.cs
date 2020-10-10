@@ -1082,6 +1082,15 @@ namespace DrawToolsLib
             UpdateState();
         }
 
+        public void UnselectAllExcept(params GraphicBase[] excluded)
+        {
+            foreach (var ob in this.Selection.Except(excluded.Where(ex => ex != null)))
+            {
+                ob.IsSelected = false;
+            }
+            UpdateState();
+        }
+
         /// <summary>
         /// Delete selection
         /// </summary>

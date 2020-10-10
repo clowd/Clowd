@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
@@ -50,7 +50,7 @@ namespace DrawToolsLib.Graphics
                 OnPropertyChanged(nameof(LineWidth));
             }
         }
-        public bool IsSelected
+        public virtual bool IsSelected
         {
             get { return _isSelected; }
             set
@@ -72,8 +72,10 @@ namespace DrawToolsLib.Graphics
 
         [XmlIgnore]
         protected double LineHitTestWidth => Math.Max(8.0, LineWidth);
+
         [XmlIgnore]
         protected const double HitTestWidth = 12.0;
+
         [XmlIgnore]
         internal static double HandleSize { get; set; } = 12.0;
         [XmlIgnore]
@@ -127,9 +129,7 @@ namespace DrawToolsLib.Graphics
 
         internal virtual void DrawDashedBorder(DrawingContext drawingContext, Rect where)
         {
-            drawingContext.DrawRectangle(null,
-                    new Pen(new SolidColorBrush(Color.FromArgb(127, 255, 255, 255)), LineWidth),
-                    where);
+            drawingContext.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromArgb(127, 255, 255, 255)), LineWidth), where);
             DashStyle dashStyle = new DashStyle();
             dashStyle.Dashes.Add(4);
             Pen dashedPen = new Pen(new SolidColorBrush(Color.FromArgb(127, 0, 0, 0)), LineWidth);

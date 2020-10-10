@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
@@ -576,7 +577,7 @@ namespace Clowd
             public abstract bool HasAngle { get; }
             public virtual bool CanCanvasZoom { get; } = true;
             public virtual bool CanChangeCanvasBackground { get; } = true;
-            public virtual bool CanStitch { get; } = false;
+            public virtual bool CanStitchAndCrop { get; } = false;
 
             public event PropertyChangedEventHandler PropertyChanged;
 
@@ -769,7 +770,7 @@ namespace Clowd
 
             public override bool HasAngle => typeof(TGraphic).GetProperty(ANGLE_NAME) != null;
 
-            public override bool CanStitch => IsOneOf(typeof(GraphicImage));
+            public override bool CanStitchAndCrop => IsOneOf(typeof(GraphicImage));
 
             public override bool CanChangeCanvasBackground => false;
 
@@ -815,6 +816,14 @@ namespace Clowd
                         angleResetBinding.Source = obj;
                         angleResetBinding.Mode = BindingMode.TwoWay;
                         page.resetObjectAngle.SetBinding(ResetDefaultButton.CurrentValueProperty, angleResetBinding);
+                    }
+
+                    if (CanStitchAndCrop)
+                    {
+                        var croppingBinding = new Binding(nameof(GraphicImage.IsCropping));
+                        croppingBinding.Source = obj;
+                        croppingBinding.Mode = BindingMode.TwoWay;
+                        page.btnCropImage.SetBinding(ToggleButton.IsCheckedProperty, croppingBinding);
                     }
                 }
             }
