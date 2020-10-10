@@ -86,7 +86,7 @@ namespace DrawToolsLib.Tools
                     // ... and the user didn’t press Ctrl or Shift.
                     Keyboard.Modifiers != ModifierKeys.Control && Keyboard.Modifiers != ModifierKeys.Shift))
             {
-                drawingCanvas.UnselectAll();
+                drawingCanvas.UnselectAllExcept(graphic);
             }
 
             // If we create a selection rectangle, this shouldn’t be considered an edit for the undo history.
