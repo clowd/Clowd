@@ -283,20 +283,6 @@ namespace DrawToolsLib.Graphics
             }
         }
 
-        public override Rect Bounds
-        {
-            get
-            {
-                var points = new[] { new Point(Left, Top), new Point(Right, Top), new Point(Left, Bottom), new Point(Right, Bottom) };
-                var rotated = points.Select(ApplyRotation).ToArray();
-                var l = rotated.Min(p => p.X);
-                var t = rotated.Min(p => p.Y);
-                var r = rotated.Max(p => p.X);
-                var b = rotated.Max(p => p.Y);
-                return new Rect(l, t, r - l, b - t);
-            }
-        }
-
         internal bool Flatten()
         {
             BitmapSource = GetFlattenedBitmap();
