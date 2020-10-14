@@ -49,18 +49,7 @@ namespace DrawToolsLib.Graphics
             _lineEnd = end;
         }
 
-        public override Rect Bounds
-        {
-            get
-            {
-                var start = _lineStart;
-                var end = _lineEnd;
-                return new Rect(Math.Min(start.X, end.X),
-                                Math.Min(start.Y, end.Y),
-                                Math.Abs(start.X - end.X),
-                                Math.Abs(start.Y - end.Y));
-            }
-        }
+        public override Rect Bounds => GetLineGeometry().Bounds;
 
         internal override int HandleCount => 2;
 
@@ -109,13 +98,14 @@ namespace DrawToolsLib.Graphics
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
-            drawingContext.DrawLine(new Pen(new SolidColorBrush(ObjectColor), LineWidth),
-                LineStart,
-                LineEnd);
-
+            drawingContext.DrawGeometry(new SolidColorBrush(ObjectColor), null, GetLineGeometry());
             base.Draw(drawingContext);
         }
-
+        protected virtual Geometry GetLineGeometry()
+        {
+            var line = new LineGeometry(_lineStart, _lineEnd);
+            return line.GetWidenedPathGeometry(new Pen(null, LineWidth));
+        }
         public override GraphicBase Clone()
         {
             return new GraphicLine(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
