@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Media;
 
@@ -20,24 +20,21 @@ namespace DrawToolsLib.Graphics
         {
         }
 
-        internal override void Draw(DrawingContext drawingContext)
+        protected override Geometry GetLineGeometry()
         {
-            if (drawingContext == null)
-                throw new ArgumentNullException(nameof(drawingContext));
-
             var tipLength = LineWidth * 8;
             var lineVector = LineEnd - LineStart;
             var lineLength = lineVector.Length;
             lineVector.Normalize();
 
+            PathGeometry line = null;
+
             tipLength = Math.Min(lineLength / 3, tipLength);
             lineLength -= tipLength / 2;
             if (lineLength > 0)
             {
-                drawingContext.DrawLine(
-                    new Pen(new SolidColorBrush(ObjectColor), LineWidth),
-                    LineStart,
-                    LineStart + lineLength * lineVector);
+                var tmpLine = new LineGeometry(LineStart, LineStart + lineLength * lineVector);
+                line = tmpLine.GetWidenedPathGeometry(new Pen(null, LineWidth));
             }
 
             const int tipAngle = 165;
@@ -47,11 +44,10 @@ namespace DrawToolsLib.Graphics
             var pt1 = LineEnd + rotate.Transform(lineVector * tipLength);
             rotate.Rotate(-tipAngle * 2);
             var pt2 = LineEnd + rotate.Transform(lineVector * tipLength);
-            drawingContext.DrawGeometry(new SolidColorBrush(ObjectColor), new Pen(new SolidColorBrush(ObjectColor), 1),
-                new PathGeometry(new[] { new PathFigure(LineEnd, new[] { new LineSegment(pt2, true), new LineSegment(pt1, true) }, true) }));
 
-            if (IsSelected)
-                DrawTrackers(drawingContext);
+            var arrow = new PathGeometry(new[] { new PathFigure(LineEnd, new[] { new LineSegment(pt2, true), new LineSegment(pt1, true) }, true) });
+
+            return line == null ? (Geometry)arrow : new CombinedGeometry(GeometryCombineMode.Union, line, arrow);
         }
 
         public override GraphicBase Clone()
