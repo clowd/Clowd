@@ -40,6 +40,7 @@ namespace Cyotek.Windows.Forms
             this.ShowAlphaChannel = true;
 
             this.Font = SystemFonts.DialogFont;
+            this.KeyPreview = true;
         }
 
         #endregion
@@ -92,6 +93,22 @@ namespace Cyotek.Windows.Forms
             }
 
             base.Dispose(disposing);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Tab)
+            {
+                if (e.Modifiers == Keys.Shift)
+                    this.ProcessTabKey(false);
+                else
+                    this.ProcessTabKey(true);
+                e.SuppressKeyPress = true;
+            }
+            else
+            {
+                base.OnKeyDown(e);
+            }
         }
 
         /// <summary>
