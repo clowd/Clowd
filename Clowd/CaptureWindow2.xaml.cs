@@ -423,8 +423,8 @@ namespace Clowd
             if (!IsCapturing)
                 return;
 
-            NiceDialog.ShowColorDialogAsync(null, fastCapturer.GetHoveredColor());
             this.Close();
+            NiceDialog.ShowColorDialogAsync(null, fastCapturer.GetHoveredColor());
         }
 
         private void SelectAllExecuted(object sender, ExecutedRoutedEventArgs e)
