@@ -30,11 +30,11 @@ namespace NAppUpdate.Framework
 			UpdateFeedReader = new NauXmlFeedReader();
 			Logger = new Logger();
 			Config = new NauConfigurations
-						{
-							TempFolder = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()),
-							UpdateProcessName = "NAppUpdateProcess",
-							UpdateExecutableName = "foo.exe", // Naming it updater.exe seem to trigger the UAC, and we don't want that
-						};
+			{
+				TempFolder = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()),
+				UpdateProcessName = "NAppUpdateProcess",
+				UpdateExecutableName = "foo.exe", // Naming it updater.exe seem to trigger the UAC, and we don't want that
+			};
 
 			// Need to do this manually here because the BackupFolder property is protected using the static instance, which we are
 			// in the middle of creating
@@ -53,9 +53,9 @@ namespace NAppUpdate.Framework
 			get { return instance; }
 		}
 		private static readonly UpdateManager instance = new UpdateManager();
-// ReSharper disable NotAccessedField.Local
+		// ReSharper disable NotAccessedField.Local
 		private static Mutex _shutdownMutex;
-// ReSharper restore NotAccessedField.Local
+		// ReSharper restore NotAccessedField.Local
 
 		#endregion
 
@@ -82,7 +82,7 @@ namespace NAppUpdate.Framework
 		public int UpdatesAvailable { get { return UpdatesToApply == null ? 0 : UpdatesToApply.Count; } }
 		public UpdateProcessState State { get; private set; }
 
-		public IUpdateSource UpdateSource { get; set; }
+		//public IUpdateSource UpdateSource { get; set; }
 		public IUpdateFeedReader UpdateFeedReader { get; set; }
 
 		public Logger Logger { get; private set; }
@@ -116,14 +116,6 @@ namespace NAppUpdate.Framework
 		#region Step 1 - Check for updates
 
 		/// <summary>
-		/// Check for update synchronously, using the default update source
-		/// </summary>
-		public void CheckForUpdates()
-		{
-			CheckForUpdates(UpdateSource);
-		}
-
-		/// <summary>
 		/// Check for updates synchronouly
 		/// </summary>
 		/// <param name="source">Updates source to use</param>
@@ -131,7 +123,7 @@ namespace NAppUpdate.Framework
 		{
 			if (IsWorking)
 				throw new InvalidOperationException("Another update process is already in progress");
-			
+
 			using (WorkScope.New(isWorking => IsWorking = isWorking))
 			{
 				if (UpdateFeedReader == null)
@@ -168,7 +160,7 @@ namespace NAppUpdate.Framework
 		/// <summary>
 		/// Prepare updates synchronously
 		/// </summary>
-		public void PrepareUpdates()
+		public void PrepareUpdates(IUpdateSource source)
 		{
 			if (IsWorking)
 				throw new InvalidOperationException("Another update process is already in progress");
@@ -203,7 +195,7 @@ namespace NAppUpdate.Framework
 
 						try
 						{
-							task.Prepare(UpdateSource);
+							task.Prepare(source);
 						}
 						catch (Exception ex)
 						{
@@ -264,9 +256,9 @@ namespace NAppUpdate.Framework
 					// Set current directory the the application directory
 					// this prevents the updater from writing to e.g. c:\windows\system32
 					// if the process is started by autorun on windows logon.
-// ReSharper disable AssignNullToNotNullAttribute
+					// ReSharper disable AssignNullToNotNullAttribute
 					Environment.CurrentDirectory = Path.GetDirectoryName(ApplicationPath);
-// ReSharper restore AssignNullToNotNullAttribute
+					// ReSharper restore AssignNullToNotNullAttribute
 
 					// Make sure the current backup folder is accessible for writing from this process
 					string backupParentPath = Path.GetDirectoryName(Config.BackupFolder) ?? string.Empty;
@@ -336,7 +328,7 @@ namespace NAppUpdate.Framework
 						}
 
 						if (task.ExecutionStatus == TaskExecutionStatus.RequiresAppRestart
-						    || task.ExecutionStatus == TaskExecutionStatus.RequiresPrivilegedAppRestart)
+							|| task.ExecutionStatus == TaskExecutionStatus.RequiresPrivilegedAppRestart)
 						{
 							// Record that we have cold updates to run, and if required to run any of them privileged
 							runPrivileged = runPrivileged || task.ExecutionStatus == TaskExecutionStatus.RequiresPrivilegedAppRestart;
@@ -354,27 +346,27 @@ namespace NAppUpdate.Framework
 					if (hasColdUpdates)
 					{
 						var dto = new NauIpc.NauDto
-						          	{
-						          		Configs = Instance.Config,
-						          		Tasks = Instance.UpdatesToApply,
-						          		AppPath = ApplicationPath,
-						          		WorkingDirectory = Environment.CurrentDirectory,
-						          		RelaunchApplication = relaunchApplication,
-						          		LogItems = Logger.LogItems,
-						          	};
+						{
+							Configs = Instance.Config,
+							Tasks = Instance.UpdatesToApply,
+							AppPath = ApplicationPath,
+							WorkingDirectory = Environment.CurrentDirectory,
+							RelaunchApplication = relaunchApplication,
+							LogItems = Logger.LogItems,
+						};
 
 						NauIpc.ExtractUpdaterFromResource(Config.TempFolder, Instance.Config.UpdateExecutableName);
 
 						var info = new ProcessStartInfo
-						           	{
-						           		UseShellExecute = true,
-						           		WorkingDirectory = Environment.CurrentDirectory,
-						           		FileName = Path.Combine(Config.TempFolder, Instance.Config.UpdateExecutableName),
-						           		Arguments =
-						           			string.Format(@"""{0}"" {1} {2}", Config.UpdateProcessName,
-						           			              updaterShowConsole ? "-showConsole" : string.Empty,
-						           			              updaterDoLogging ? "-log" : string.Empty),
-						           	};
+						{
+							UseShellExecute = true,
+							WorkingDirectory = Environment.CurrentDirectory,
+							FileName = Path.Combine(Config.TempFolder, Instance.Config.UpdateExecutableName),
+							Arguments =
+											   string.Format(@"""{0}"" {1} {2}", Config.UpdateProcessName,
+															 updaterShowConsole ? "-showConsole" : string.Empty,
+															 updaterDoLogging ? "-log" : string.Empty),
+						};
 
 						if (!updaterShowConsole)
 						{
