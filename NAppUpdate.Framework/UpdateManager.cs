@@ -161,58 +161,6 @@ namespace NAppUpdate.Framework
 			}
 		}
 
-		/// <summary>
-		/// Check for updates asynchronously
-		/// </summary>
-		/// <param name="source">Update source to use</param>
-		/// <param name="callback">Callback function to call when done; can be null</param>
-		/// <param name="state">Allows the caller to preserve state; can be null</param>
-		public IAsyncResult BeginCheckForUpdates(IUpdateSource source, AsyncCallback callback, Object state)
-		{
-			// Create IAsyncResult object identifying the 
-			// asynchronous operation
-			var ar = new UpdateProcessAsyncResult(callback, state);
-
-			// Use a thread pool thread to perform the operation
-			ThreadPool.QueueUserWorkItem(o =>
-			                             	{
-			                             		try
-			                             		{
-			                             			// Perform the operation; if sucessful set the result
-			                             			CheckForUpdates(source ?? UpdateSource);
-			                             			ar.SetAsCompleted(null, false);
-			                             		}
-			                             		catch (Exception e)
-			                             		{
-			                             			// If operation fails, set the exception
-			                             			ar.SetAsCompleted(e, false);
-			                             		}
-			                             	}, ar);
-
-			return ar;  // Return the IAsyncResult to the caller
-		}
-
-		/// <summary>
-		/// Check for updates asynchronously
-		/// </summary>
-		/// <param name="callback">Callback function to call when done; can be null</param>
-		/// <param name="state">Allows the caller to preserve state; can be null</param>
-		public IAsyncResult BeginCheckForUpdates(AsyncCallback callback, Object state)
-		{
-			return BeginCheckForUpdates(UpdateSource, callback, state);
-		}
-
-		/// <summary>
-		/// Block until previously-called CheckForUpdates complete
-		/// </summary>
-		/// <param name="asyncResult"></param>
-		public void EndCheckForUpdates(IAsyncResult asyncResult)
-		{
-			// Wait for operation to complete, then return or throw exception
-			var ar = (UpdateProcessAsyncResult)asyncResult;
-			ar.EndInvoke();
-		}
-
 		#endregion
 
 		#region Step 2 - Prepare to execute update tasks
@@ -270,47 +218,6 @@ namespace NAppUpdate.Framework
 					State = UpdateProcessState.Prepared;
 				}
 			}
-		}
-
-		/// <summary>
-		/// Prepare updates asynchronously
-		/// </summary>
-		/// <param name="callback">Callback function to call when done; can be null</param>
-		/// <param name="state">Allows the caller to preserve state; can be null</param>
-		public IAsyncResult BeginPrepareUpdates(AsyncCallback callback, Object state)
-		{
-			// Create IAsyncResult object identifying the 
-			// asynchronous operation
-			var ar = new UpdateProcessAsyncResult(callback, state);
-
-			// Use a thread pool thread to perform the operation
-			ThreadPool.QueueUserWorkItem(o =>
-			{
-				try
-				{
-					// Perform the operation; if sucessful set the result
-					PrepareUpdates();
-					ar.SetAsCompleted(null, false);
-				}
-				catch (Exception e)
-				{
-					// If operation fails, set the exception
-					ar.SetAsCompleted(e, false);
-				}
-			}, ar);
-
-			return ar;  // Return the IAsyncResult to the caller
-		}
-
-		/// <summary>
-		/// Block until previously-called PrepareUpdates complete
-		/// </summary>
-		/// <param name="asyncResult"></param>
-		public void EndPrepareUpdates(IAsyncResult asyncResult)
-		{
-			// Wait for operation to complete, then return or throw exception
-			var ar = (UpdateProcessAsyncResult)asyncResult;
-			ar.EndInvoke();
 		}
 
 		#endregion
