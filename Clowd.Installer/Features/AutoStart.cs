@@ -13,7 +13,7 @@ namespace Clowd.Installer.Features
             bool found = false;
             foreach (var root in RegistryEx.OpenKeysFromRootPath(Constants.RunRegistryPath, RegistryQuery.CurrentUser))
             {
-                var applocation = root.GetValue(Constants.AppName) as string;
+                var applocation = root.GetValue(Constants.ClowdAppName) as string;
                 if (applocation != null && SystemEx.AreFileSystemObjectsEqual(applocation, assetPath))
                     found = true;
 
@@ -26,7 +26,7 @@ namespace Clowd.Installer.Features
         {
             using (var root = RegistryEx.CreateKeyFromRootPath(Constants.RunRegistryPath, InstallMode.CurrentUser))
             {
-                root.SetValue(Constants.AppName, assetPath);
+                root.SetValue(Constants.ClowdAppName, assetPath);
             }
         }
 
@@ -39,7 +39,7 @@ namespace Clowd.Installer.Features
         {
             foreach (var root in RegistryEx.OpenKeysFromRootPath(Constants.RunRegistryPath, RegistryQuery.CurrentUser))
             {
-                root.DeleteValue(Constants.AppName);
+                root.DeleteValue(Constants.ClowdAppName);
                 root.Dispose();
             }
         }

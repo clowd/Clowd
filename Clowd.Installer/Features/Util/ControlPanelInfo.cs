@@ -93,7 +93,7 @@ namespace Clowd.Installer.Features
             {
                 using (root)
                 {
-                    var appkey = root.OpenSubKey(Constants.AppName);
+                    var appkey = root.OpenSubKey(Constants.ClowdAppName);
                     if (appkey != null)
                     {
                         var info = new ControlPanelInfo()

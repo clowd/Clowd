@@ -11,14 +11,14 @@ namespace Clowd.Installer.Features
     {
         public bool CheckInstalled(string assetPath)
         {
-            var info = ControlPanelInfo.GetInfo(Constants.AppName, RegistryQuery.CurrentUser);
+            var info = ControlPanelInfo.GetInfo(Constants.ClowdAppName, RegistryQuery.CurrentUser);
             return info != null;
         }
 
         public void Install(string assetPath)
         {
             var info = GetInfo(assetPath);
-            ControlPanelInfo.Install(Constants.AppName, info, InstallMode.CurrentUser);
+            ControlPanelInfo.Install(Constants.ClowdAppName, info, InstallMode.CurrentUser);
         }
 
         public bool NeedsPrivileges()
@@ -28,14 +28,14 @@ namespace Clowd.Installer.Features
 
         public void Uninstall(string assetPath)
         {
-            ControlPanelInfo.Uninstall(Constants.AppName, RegistryQuery.CurrentUser);
+            ControlPanelInfo.Uninstall(Constants.ClowdAppName, RegistryQuery.CurrentUser);
         }
 
         private ControlPanelInfo GetInfo(string assetPath)
         {
             return new ControlPanelInfo()
             {
-                DisplayName = Constants.AppName,
+                DisplayName = Constants.ClowdAppName,
                 DisplayIconPath = assetPath,
                 InstallDirectory = Path.GetDirectoryName(assetPath),
                 Publisher = Constants.PublishingCompany,

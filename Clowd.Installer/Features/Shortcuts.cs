@@ -46,7 +46,7 @@ namespace Clowd.Installer.Features
             {
                 var directory = Environment.GetFolderPath(d);
                 IShellLink link = (IShellLink)new ShellLink();
-                link.SetDescription(Constants.AppName);
+                link.SetDescription(Constants.ClowdAppName);
                 link.SetPath(assetPath);
                 link.SetWorkingDirectory(Path.GetDirectoryName(assetPath));
                 link.SetIconLocation(assetPath, 0);
