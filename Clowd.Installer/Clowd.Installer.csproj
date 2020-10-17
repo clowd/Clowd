@@ -69,6 +69,7 @@
     <Compile Include="RegistryEx.cs" />
     <Compile Include="ResourcesEx.cs" />
     <Compile Include="SystemEx.cs" />
+    <Compile Include="UpdateHelper.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
@@ -81,6 +82,12 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Embedded\default.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
+      <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
+      <Name>NAppUpdate.Framework</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
