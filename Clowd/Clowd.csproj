@@ -363,10 +363,6 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\clowd-shared\Clowd.Shared.csproj">
-      <Project>{cee54535-42ab-4a2f-ba30-25e576736ac0}</Project>
-      <Name>Clowd.Shared</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj">
       <Project>{ad6fd9e3-3c83-432e-9f19-74c71e881fe4}</Project>
       <Name>Clowd.Installer</Name>
