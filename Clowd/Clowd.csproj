@@ -167,6 +167,9 @@
     <Compile Include="Controls\SpinnerTextBox.xaml.cs">
       <DependentUpon>SpinnerTextBox.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Controls\UpdaterControl.xaml.cs">
+      <DependentUpon>UpdaterControl.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
     <Compile Include="Converters\OnOffBrushConverter.cs" />
     <Compile Include="Converters\SnapToPixelConverter.cs" />
@@ -282,6 +285,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Controls\UpdaterControl.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="HomePage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -383,6 +390,10 @@
     <ProjectReference Include="..\LiveDraw\LiveDraw.csproj">
       <Project>{110f39d7-349d-4e27-88c1-02af6513015e}</Project>
       <Name>LiveDraw</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
+      <Project>{5C07EBDF-D43F-4BE9-B560-D7A443C0EDCE}</Project>
+      <Name>NAppUpdate.Framework</Name>
     </ProjectReference>
     <ProjectReference Include="..\NotifyIconLib\NotifyIconLib.csproj">
       <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>

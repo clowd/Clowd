@@ -8,6 +8,7 @@ using NAppUpdate.Framework.FeedReaders;
 using NAppUpdate.Framework.Sources;
 using NAppUpdate.Framework.Tasks;
 using NAppUpdate.Framework.Utils;
+using System.Threading.Tasks;
 
 namespace NAppUpdate.Framework
 {
@@ -153,6 +154,11 @@ namespace NAppUpdate.Framework
 			}
 		}
 
+		public Task CheckForUpdatesAsync(IUpdateSource source)
+		{
+			return Task.Run(() => CheckForUpdates(source));
+		}
+
 		#endregion
 
 		#region Step 2 - Prepare to execute update tasks
@@ -210,6 +216,11 @@ namespace NAppUpdate.Framework
 					State = UpdateProcessState.Prepared;
 				}
 			}
+		}
+
+		public Task PrepareUpdatesAsync(IUpdateSource source)
+		{
+			return Task.Run(() => PrepareUpdates(source));
 		}
 
 		#endregion

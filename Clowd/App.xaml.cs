@@ -39,12 +39,12 @@ namespace Clowd
 
         public GeneralSettings Settings { get; private set; }
         public Color AccentColor { get; private set; }
-        public string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
+        //public string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
 
-        // static instead of const for debugging purposes.
-        public const string ClowdAppName = "Clowd";
-        public const string ClowdNamedPipe = "ClowdRunningPipe";
-        public const string ClowdMutex = "ClowdMutex000";
+        //// static instead of const for debugging purposes.
+        //public const string ClowdAppName = "Clowd";
+        //public const string ClowdNamedPipe = "ClowdRunningPipe";
+        //public const string ClowdMutex = "ClowdMutex000";
 
         private TaskbarIcon _taskbarIcon;
         private bool _prtscrWindowOpen = false;
@@ -68,17 +68,17 @@ namespace Clowd
 
             try
             {
-                _mutex = Mutex.OpenExisting(ClowdMutex);
+                _mutex = Mutex.OpenExisting(Constants.ClowdMutex);
                 // if we're here, clowd is running already, so pass our command line args and check heartbeat.
                 try
                 {
                     ChannelFactory<ICommandLineProxy> pipeFactory = new ChannelFactory<ICommandLineProxy>(
                         new NetNamedPipeBinding(),
-                        new EndpointAddress("net.pipe://localhost/" + ClowdNamedPipe));
+                        new EndpointAddress("net.pipe://localhost/" + Constants.ClowdNamedPipe));
 
                     ICommandLineProxy pipeProxy = pipeFactory.CreateChannel();
                     if (!pipeProxy.Heartbeat())
-                        throw new Exception($"{ClowdAppName} unresponsive. This exception shouldnt happen.");
+                        throw new Exception($"{Constants.ClowdAppName} unresponsive. This exception shouldnt happen.");
 
                     if (e.Args.Length > 0)
                     {
@@ -95,7 +95,7 @@ namespace Clowd
                     if (!processes.Any())
                     {
                         var ex = new InvalidOperationException("The mutex was opened successfully, " +
-                                                              $"but there are no {ClowdAppName} processes running. Uninstaller?");
+                                                              $"but there are no {Constants.ClowdAppName} processes running. Uninstaller?");
                         ex.Data.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
                         ex.ToSentry();
                         Environment.Exit(1);
@@ -104,8 +104,8 @@ namespace Clowd
                     var isYes = NiceDialog.ShowPromptBlocking(
                         null,
                         NiceDialogIcon.Warning,
-                        $"{ClowdAppName} is already running but seems to be unresponsive. Would you like to restart {ClowdAppName}?",
-                        $"{ClowdAppName} is unresponsive",
+                        $"{Constants.ClowdAppName} is already running but seems to be unresponsive. Would you like to restart {Constants.ClowdAppName}?",
+                        $"{Constants.ClowdAppName} is unresponsive",
                         "Restart",
                         "Close",
                         NiceDialogIcon.Information,
@@ -119,7 +119,7 @@ namespace Clowd
                             p.WaitForExit();
 
                         Thread.Sleep(1000);
-                        _mutex = Mutex.OpenExisting(ClowdMutex);
+                        _mutex = Mutex.OpenExisting(Constants.ClowdMutex);
                     }
                     else
                     {
@@ -131,7 +131,7 @@ namespace Clowd
             {
                 // the mutex could not be opened, means it does not exist and there is no other clowd
                 // instances running. Open a new mutex.
-                _mutex = new Mutex(true, ClowdMutex);
+                _mutex = new Mutex(true, Constants.ClowdMutex);
                 if (e.Args.Length > 0)
                 {
                     _args = e.Args;
@@ -261,7 +261,7 @@ namespace Clowd
             var behaviour = _host.Description.Behaviors.Find<ServiceBehaviorAttribute>();
             behaviour.InstanceContextMode = InstanceContextMode.Single;
 
-            _host.AddServiceEndpoint(typeof(ICommandLineProxy), new NetNamedPipeBinding(), ClowdNamedPipe);
+            _host.AddServiceEndpoint(typeof(ICommandLineProxy), new NetNamedPipeBinding(), Constants.ClowdNamedPipe);
             _host.Open();
         }
         private void SetupSettings()
