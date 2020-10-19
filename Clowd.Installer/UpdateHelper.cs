@@ -12,15 +12,21 @@ namespace Clowd.Installer
 {
     public static class UpdateHelper
     {
+        static UpdateManager _updateManager;
+
         public static UpdateManager GetUpdaterInstance()
         {
-            // NAppUpdater uses relative paths, so the current directory must be set accordingly.
-            Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-            var _updateManager = UpdateManager.Instance;
-            _updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
-            _updateManager.Config.TempFolder = Path.Combine(Constants.AppDataDirectory, "update");
-            _updateManager.Config.BackupFolder = Path.Combine(Constants.AppDataDirectory, "backup");
-            _updateManager.Config.UpdateProcessName = "ClowdUpdate";
+            if (_updateManager == null)
+            {
+                // NAppUpdater uses relative paths, so the current directory must be set accordingly.
+                Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                _updateManager = UpdateManager.Instance;
+                _updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
+                _updateManager.Config.TempFolder = Path.Combine(Constants.AppDataDirectory, "update");
+                _updateManager.Config.BackupFolder = Path.Combine(Constants.AppDataDirectory, "backup");
+                _updateManager.Config.UpdateProcessName = "ClowdUpdate";
+
+            }
 
             return _updateManager;
         }
@@ -53,6 +59,14 @@ namespace Clowd.Installer
                 .FirstOrDefault();
 
             return rel;
+        }
+
+        public static string GetCurrentVersion()
+        {
+            if (File.Exists("version"))
+                return File.ReadAllText("version");
+
+            return "dev-build";
         }
 
         public static async Task<AvailablePackagesResult> GetAvailablePackagesAsync()

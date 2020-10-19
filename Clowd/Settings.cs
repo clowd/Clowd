@@ -111,9 +111,15 @@ namespace Clowd
                      "Otherwise, Clowd will choose a color based on the system color")]
         public AccentScheme AccentScheme { get; set; } = AccentScheme.User;
 
+        public bool CheckForUpdatesAutomatically { get; set; } = true;
+
         [DataType(DataType.Duration)]
         [Description("This is how often clowd checks for updates.")]
-        public TimeSpan UpdateCheckInterval { get; set; } = TimeSpan.FromHours(6);
+        [PData.VisibleBy(nameof(CheckForUpdatesAutomatically))]
+        public TimeSpan UpdateCheckInterval { get; set; } = TimeSpan.FromHours(2);
+
+        [ClassifyIgnore]
+        public UpdaterControl Updates { get; set; } = new UpdaterControl();
 
         [DisplayName("Settings Display Mode")]
         [Description("This controls whether the settings window is separated into tabbed content" +
