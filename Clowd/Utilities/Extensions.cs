@@ -44,6 +44,27 @@ namespace Clowd
             foreach (var routedEventHandler in routedEventHandlers)
                 element.RemoveHandler(routedEvent, routedEventHandler.Handler);
         }
+
+        public static void DisconnectFromLogicalParent(this FrameworkElement child)
+        {
+            var parent = child.Parent;
+            var parentAsPanel = parent as Panel;
+            if (parentAsPanel != null)
+            {
+                parentAsPanel.Children.Remove(child);
+            }
+            var parentAsContentControl = parent as ContentControl;
+            if (parentAsContentControl != null)
+            {
+                parentAsContentControl.Content = null;
+            }
+            var parentAsDecorator = parent as Decorator;
+            if (parentAsDecorator != null)
+            {
+                parentAsDecorator.Child = null;
+            }
+        }
+
         public static void MakeForeground(this Window wnd)
         {
             var handle = new System.Windows.Interop.WindowInteropHelper(wnd).Handle;

@@ -162,6 +162,7 @@ namespace Clowd
             {
                 var pinfo = property.GetDescriptor(property.PropertyName);
                 var val = pinfo.GetValue(property.TargetObject) as FrameworkElement;
+                val.DisconnectFromLogicalParent();
                 return val;
             }
 
