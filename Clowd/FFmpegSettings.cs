@@ -293,7 +293,7 @@ namespace Clowd
                 NiceDialog.ShowSettingsPromptAsync(
                     TemplatedWindow.GetWindow(typeof(SettingsPage)),
                     SettingsCategory.Windows,
-                    $"You must install 'Windows/DirectShow Add-ons' before {App.ClowdAppName} is able to capture loopback audio");
+                    $"You must install 'Windows/DirectShow Add-ons' before {Constants.ClowdAppName} is able to capture loopback audio");
 
                 field.SetValue(this, false);
             }

@@ -171,7 +171,7 @@ namespace Clowd
 
             using (var dialog = new TaskDialog())
             {
-                dialog.WindowTitle = App.ClowdAppName;
+                dialog.WindowTitle = Constants.ClowdAppName;
                 dialog.MainInstruction = mainInstruction;
                 dialog.Content = content;
                 dialog.MainIcon = (TaskDialogIcon)(int)icon;
@@ -208,7 +208,7 @@ namespace Clowd
         public static async Task<Color> ShowColorDialogAsync(FrameworkElement parent, Color initial)
         {
             ColorPickerDialog dialog = new ColorPickerDialog();
-            dialog.Text = App.ClowdAppName + " - Color Picker";
+            dialog.Text = Constants.ClowdAppName + " - Color Picker";
             dialog.ShowAlphaChannel = true;
             dialog.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
 

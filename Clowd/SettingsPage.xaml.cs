@@ -158,6 +158,13 @@ namespace Clowd
                 return new FeatureInstallerControl(val);
             }
 
+            if (typeof(FrameworkElement).IsAssignableFrom(property.ActualPropertyType))
+            {
+                var pinfo = property.GetDescriptor(property.PropertyName);
+                var val = pinfo.GetValue(property.TargetObject) as FrameworkElement;
+                return val;
+            }
+
             if (property.ActualPropertyType.IsGenericType && property.ActualPropertyType.GetGenericTypeDefinition() == typeof(AutoDictionary<,>))
             {
                 var btn = new Button();
