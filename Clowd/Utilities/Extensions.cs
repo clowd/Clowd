@@ -45,6 +45,14 @@ namespace Clowd
                 element.RemoveHandler(routedEvent, routedEventHandler.Handler);
         }
 
+        public static string ToPrettySizeString(this long bytes, int decimalPlaces = 2)
+        {
+            if (bytes < 1000) return bytes + " B";
+            if (bytes < 1000000) return Math.Round(bytes / (double)1000, decimalPlaces) + " KB";
+            if (bytes < 1000000000) return Math.Round(bytes / (double)1000000, decimalPlaces) + " MB";
+            return Math.Round(bytes / (double)1000000000, decimalPlaces) + " GB";
+        }
+
         public static void DisconnectFromLogicalParent(this FrameworkElement child)
         {
             var parent = child.Parent;
