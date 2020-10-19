@@ -396,15 +396,25 @@ namespace Clowd
             if (IsCapturing)
                 return;
 
-            if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
+            var rawRect = SelectionRectangle.ToScreenRect();
+
+            const int minWidth = 160;
+            const int minHeight = 160;
+
+            this.Close();
+
+            if (rawRect.Width < minWidth || rawRect.Height < minHeight)
+            {
+                NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning, $"The minimum frame size for video is {minWidth}x{minHeight}. Increase the capture area and try again.");
+            }
+            else if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
             {
                 NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "You must set a video save directory in the video capture settings before recording a video");
             }
             else
             {
                 fastCapturer.SetSelectedWindowForeground();
-                new VideoOverlayWindow(SelectionRectangle.ToScreenRect()).Show();
-                this.Close();
+                new VideoOverlayWindow(rawRect).Show();
             }
         }
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)

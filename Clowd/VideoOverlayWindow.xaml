@@ -321,6 +321,8 @@
                 Height="{Binding CroppingRectangleWpf.Height}">
                 <controls:OutlinedTextBlock
                     x:Name="labelCountdown"
+                    MinWidth="20"
+                    MinHeight="20"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Fill="Red"
