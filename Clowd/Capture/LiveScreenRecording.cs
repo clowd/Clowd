@@ -7,9 +7,9 @@ using System.Linq;
 using System.Management;
 using System.Text;
 using System.Threading.Tasks;
+using Clowd.FFmpeg;
 using Clowd.Installer.Features;
 using Microsoft.VisualBasic.FileIO;
-using NReco.VideoConverter;
 using PropertyChanged;
 
 namespace Clowd.Utilities
