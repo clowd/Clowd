@@ -1,6 +1,5 @@
 ﻿using Clowd.Interop;
 using Clowd.Interop.Gdi32;
-using NReco.VideoConverter;
 using PropertyChanged;
 using ScreenVersusWpf;
 using System;

@@ -363,6 +363,10 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Clowd.FFmpeg\Clowd.FFmpeg.csproj">
+      <Project>{fa6fd7ee-a2d6-4c1a-99d6-a7f5354d0b65}</Project>
+      <Name>Clowd.FFmpeg</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj">
       <Project>{ad6fd9e3-3c83-432e-9f19-74c71e881fe4}</Project>
       <Name>Clowd.Installer</Name>
@@ -394,10 +398,6 @@
     <ProjectReference Include="..\NotifyIconLib\NotifyIconLib.csproj">
       <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>
       <Name>NotifyIconLib</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\NReco.VideoConverter\NReco.VideoConverter.csproj">
-      <Project>{2b2ebe52-3253-4a47-b787-2164732a2ca4}</Project>
-      <Name>NReco.VideoConverter</Name>
     </ProjectReference>
     <ProjectReference Include="..\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj">
       <Project>{d01b1d20-8f5b-4834-8e5c-c7ec6dd587d4}</Project>
