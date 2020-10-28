@@ -262,7 +262,14 @@ namespace Clowd
 
         public static Window GetWindow(FrameworkElement content)
         {
-            return Window.GetWindow(content);
+            var openWindows = Application.Current.Windows.Cast<Window>().ToArray();
+
+            var parent = Window.GetWindow(content);
+
+            if (parent != null && openWindows.Contains(parent))
+                return parent;
+
+            return null;
         }
         public static Window GetWindow(Type contentType)
         {
