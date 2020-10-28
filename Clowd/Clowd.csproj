@@ -170,9 +170,15 @@
     <Compile Include="Controls\UpdaterControl.xaml.cs">
       <DependentUpon>UpdaterControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Controls\UploadProviderSettingsEditor.xaml.cs">
+      <DependentUpon>UploadProviderSettingsEditor.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
+    <Compile Include="Converters\EnumMatchToBooleanConverter.cs" />
+    <Compile Include="Converters\EnumOptionsConverter.cs" />
     <Compile Include="Converters\OnOffBrushConverter.cs" />
     <Compile Include="Converters\SnapToPixelConverter.cs" />
+    <Compile Include="Converters\StreamToBitmapSourceConverter.cs" />
     <Compile Include="Converters\TaskStatusToVisibilityConverter.cs" />
     <Compile Include="Converters\DrawingCanvasEditConverter.cs" />
     <Compile Include="FFmpegSettings.cs" />
@@ -289,6 +295,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Controls\UploadProviderSettingsEditor.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="HomePage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -363,6 +373,10 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Clowd.Extensibility\Clowd.Extensibility.csproj">
+      <Project>{a6ccafe6-26d8-4b2c-9b2d-1895788da246}</Project>
+      <Name>Clowd.Extensibility</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Clowd.FFmpeg\Clowd.FFmpeg.csproj">
       <Project>{fa6fd7ee-a2d6-4c1a-99d6-a7f5354d0b65}</Project>
       <Name>Clowd.FFmpeg</Name>
@@ -375,6 +389,10 @@
       <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
       <Name>Clowd.Interop</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj">
+      <Project>{1b456368-42b0-412b-b31d-dfe369f2bee3}</Project>
+      <Name>Clowd.Upload</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj">
       <Project>{fb2a5786-cd2e-42ce-bc5d-0fce90034221}</Project>
       <Name>Cyotek.Windows.Forms.ColorPicker</Name>
@@ -382,10 +400,6 @@
     <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj">
       <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>
       <Name>DrawToolsLib</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\FileUploadLib\FileUploadLib.csproj">
-      <Project>{41d2687f-03b5-4d2e-8992-633ccc0290f8}</Project>
-      <Name>FileUploadLib</Name>
     </ProjectReference>
     <ProjectReference Include="..\LiveDraw\LiveDraw.csproj">
       <Project>{110f39d7-349d-4e27-88c1-02af6513015e}</Project>
@@ -457,6 +471,8 @@
   <ItemGroup>
     <Resource Include="Images\default-white.ico" />
     <Resource Include="Images\default.ico" />
+    <Resource Include="Images\cancel_24px.png" />
+    <Resource Include="Images\ok_48px.png" />
     <Content Include="Properties\AssemblyInfo.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
       <LastGenOutput>AssemblyInfo.cs</LastGenOutput>
