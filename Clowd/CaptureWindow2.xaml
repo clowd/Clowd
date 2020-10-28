@@ -53,6 +53,7 @@
         <KeyBinding Key="C" Command="ApplicationCommands.Copy" />
         <KeyBinding Key="S" Command="ApplicationCommands.SaveAs" />
         <KeyBinding Key="Escape" Command="ApplicationCommands.Close" />
+        <KeyBinding Key="X" Command="ApplicationCommands.Close" />
         <KeyBinding Key="H" Command="{StaticResource Command.SelectColor}" />
         <KeyBinding Key="A" Command="{StaticResource Command.SelectAll}" />
         <KeyBinding Key="T" Command="{StaticResource Command.Profiler}" />
@@ -246,7 +247,7 @@
                         FontSize="10"
                         FontWeight="DemiBold"
                         Foreground="White">
-                        <Run TextDecorations="Underline">C</Run><Run>LOSE</Run>
+                        <Run>E</Run><Run TextDecorations="Underline">X</Run><Run>IT</Run>
                     </TextBlock>
                 </StackPanel>
             </Button>
