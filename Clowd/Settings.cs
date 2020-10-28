@@ -1,23 +1,19 @@
-﻿using RT.Util;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Reflection;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using PropertyChanged;
-using System.ComponentModel.DataAnnotations;
-using System.Windows;
 using Clowd.Controls;
+using Clowd.Upload;
 using Clowd.Utilities;
-using PropertyTools.Wpf;
+using PropertyChanged;
 using RT.Serialization;
+using RT.Util;
 using PData = PropertyTools.DataAnnotations;
-using System.Reflection;
-using FileUploadLib.Providers;
-//using Screeney;
 
 namespace Clowd
 {
@@ -69,11 +65,14 @@ namespace Clowd
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
     public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable
     {
-        [Browsable(false), ClassifyIgnore]
-        public string SettingsDirectory => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        //[Browsable(false), ClassifyIgnore]
+        //public string AppDataDirectory => Constants.AppDataDirectory;
 
-        [Browsable(false), ClassifyIgnore]
-        public string LogsDirectory => System.IO.Path.Combine(SettingsDirectory, "logs");
+        //[Browsable(false), ClassifyIgnore]
+        //public string SettingsDirectory => AppDataDirectory;
+
+        //[Browsable(false), ClassifyIgnore]
+        //public string LogsDirectory => System.IO.Path.Combine(SettingsDirectory, "logs");
 
         [Browsable(false), ClassifyIgnore]
         public new object Attribute { get; } = null;
@@ -94,13 +93,12 @@ namespace Clowd
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose { get; set; } = true;
 
-        [Description("Specifies whether to use the system default window chrome, or a metro design.")]
+        [Description("Specifies whether to use the system default window chrome, or a modern metro design.")]
         public bool UseCustomWindowChrome { get; set; } = false;
 
-        [Browsable(false)]
-        [DisplayName("Tray-drop enabled")]
-        [Description("If true, allows dropping files directly on to the windows tray icon to start an upload.")]
-        public bool TrayDropEnabled => false;
+        //[DisplayName("Tray-drop enabled")]
+        //[Description("If true, allows dropping files directly on to the windows tray icon to start an upload.")]
+        //public bool TrayDropEnabled => false;
 
         [DisplayName("Accent color"), PData.EnableBy(nameof(AccentScheme), AccentScheme.User)]
         [Description("Allows you to set a custom accent color when the appropriate accent mode is also set.")]
@@ -149,8 +147,8 @@ namespace Clowd
         [ExpandAsCategory(nameof(SettingsCategory.Video))]
         public VideoSettings VideoSettings { get; set; } = new VideoSettings();
 
-        [Browsable(false), ClassifyNotNull]
-        public int[] CustomColors { get; set; } = new int[0];
+        //[Browsable(false), ClassifyNotNull]
+        //public int[] CustomColors { get; set; } = new int[0];
 
         private IEnumerable<T> GetAllAssignableToT<T>(T root)
         {
@@ -179,20 +177,41 @@ namespace Clowd
 
         public override void SaveQuiet(string filename = null, SettingsSerializer? serializer = null)
         {
-            base.SaveQuiet(filename, serializer);
-            Console.WriteLine("Saved!!!!!!!");
+            Save(filename, serializer, SettingsOnFailure.DoNothing);
+        }
+
+        public override void SaveLoud(string filename = null, SettingsSerializer? serializer = null)
+        {
+            Save(filename, serializer, SettingsOnFailure.Throw);
+        }
+
+        public override void Save(string filename = null, SettingsSerializer? serializer = null, SettingsOnFailure onFailure = SettingsOnFailure.Throw)
+        {
+            SaveDebounced(filename, serializer, onFailure);
+        }
+
+        [Browsable(false), ClassifyIgnore]
+        private static Debouncer _deboucer = new Debouncer(1000);
+        private void SaveDebounced(string filename = null, SettingsSerializer? serializer = null, SettingsOnFailure onFailure = SettingsOnFailure.Throw)
+        {
+            _deboucer.Debounce(() => SaveInternal(filename, serializer, onFailure));
+        }
+
+        private void SaveInternal(string filename = null, SettingsSerializer? serializer = null, SettingsOnFailure onFailure = SettingsOnFailure.Throw)
+        {
+            Console.WriteLine("SAVED!!!");
+            base.Save(filename, serializer, onFailure);
         }
     }
 
     public static class PropertyChangedNotificationInterceptor
     {
-        private static Debouncer _deboucer = new Debouncer();
         public static void Intercept(object target, Action onPropertyChangedAction, string propertyName)
         {
             if (App.Current != null && App.Current.Settings != null)
             {
                 onPropertyChangedAction();
-                _deboucer.Debounce(() => App.Current.Settings.SaveQuiet());
+                App.Current.Settings.SaveQuiet();
             }
         }
     }
@@ -208,17 +227,17 @@ namespace Clowd
         [Description("If this is enabled, the capture window will use the windows native cursor and will make some visual sacrifices in favor of high performance and responsiveness")]
         public bool CompatibilityMode { get; set; } = false;
 
-        [Description("This controls the default state of the pixel magnifier in the capture window")]
-        public bool MagnifierEnabled { get; set; } = true;
+        //[Description("This controls the default state of the pixel magnifier in the capture window")]
+        //public bool MagnifierEnabled { get; set; } = true;
 
-        [Description("This controls whether the tips menu is displayed when capturing a screenshot.")]
-        public bool TipsEnabled { get; set; } = true;
+        //[Description("This controls whether the tips menu is displayed when capturing a screenshot.")]
+        //public bool TipsEnabled { get; set; } = true;
 
         [Description("If this is true, the Capture window will try to detect and highlight different windows as you hover over them.")]
         public bool DetectWindows { get; set; } = true;
 
-        [DisplayName("Bring selected window to the foreground")]
-        public SelectedWindowForegroundPromotion SelectedWindowPromotion { get; set; } = SelectedWindowForegroundPromotion.WhenClicked;
+        //[DisplayName("Bring selected window to the foreground")]
+        //public SelectedWindowForegroundPromotion SelectedWindowPromotion { get; set; } = SelectedWindowForegroundPromotion.WhenClicked;
 
         [Category(nameof(SettingsCategory.Hotkeys)), DisplayName("Capture - Region"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureRegionShortcut { get; set; }
@@ -267,35 +286,35 @@ namespace Clowd
         public FontStretch FontStretch { get; set; } = FontStretches.Normal;
     }
 
-    [ImplementPropertyChanged]
-    public class UploadSettings : IDisposable, IAzureOptions
-    {
-        [Category(nameof(SettingsCategory.Hotkeys)), DisplayName("Uploads - Activate Next"), ClassifyIgnoreIfDefault]
-        [Description("This hotkey activates the next item in the task window. " +
-                     "For instance, if the next item is an upload it will be copied to the clipboard.")]
-        public GlobalTrigger ActivateNextShortcut { get; set; }
-           = new GlobalTrigger(() => TaskWindow.Current?.ActivateNext());
+    //[ImplementPropertyChanged]
+    //public class UploadSettings : IDisposable, IAzureOptions
+    //{
+    //    [Category(nameof(SettingsCategory.Hotkeys)), DisplayName("Uploads - Activate Next"), ClassifyIgnoreIfDefault]
+    //    [Description("This hotkey activates the next item in the task window. " +
+    //                 "For instance, if the next item is an upload it will be copied to the clipboard.")]
+    //    public GlobalTrigger ActivateNextShortcut { get; set; }
+    //       = new GlobalTrigger(() => TaskWindow.Current?.ActivateNext());
 
-        [Category(nameof(SettingsCategory.Uploads)), DisplayName("Upload Storage Provider")]
-        public UploadsProvider UploadProvider { get; set; } = UploadsProvider.None;
+    //    [Category(nameof(SettingsCategory.Uploads)), DisplayName("Upload Storage Provider")]
+    //    public UploadsProvider UploadProvider { get; set; } = UploadsProvider.None;
 
-        [PData.VisibleBy(nameof(UploadProvider), UploadsProvider.Azure)]
-        public string AzureConnectionString { get; set; }
+    //    [PData.VisibleBy(nameof(UploadProvider), UploadsProvider.Azure)]
+    //    public string AzureConnectionString { get; set; }
 
-        [PData.VisibleBy(nameof(UploadProvider), UploadsProvider.Azure)]
-        public string AzureContainerName { get; set; }
+    //    [PData.VisibleBy(nameof(UploadProvider), UploadsProvider.Azure)]
+    //    public string AzureContainerName { get; set; }
 
-        [Description("If true, the original filename will be ignored and a random one will be chosen for the upload.")]
-        public bool UseUniqueUploadKey { get; set; } = true;
+    //    [Description("If true, the original filename will be ignored and a random one will be chosen for the upload.")]
+    //    public bool UseUniqueUploadKey { get; set; } = true;
 
-        [Description("Use if you would like to override the default URL generated by Clowd. Use the following substitution variables: \n#{uk} - Upload Key\n#{mt} - Mime Type (calculated from file name)")]
-        public string CustomUrlPattern { get; set; }
+    //    [Description("Use if you would like to override the default URL generated by Clowd. Use the following substitution variables: \n#{uk} - Upload Key\n#{mt} - Mime Type (calculated from file name)")]
+    //    public string CustomUrlPattern { get; set; }
 
-        public void Dispose()
-        {
-            ActivateNextShortcut?.Dispose();
-        }
-    }
+    //    public void Dispose()
+    //    {
+    //        ActivateNextShortcut?.Dispose();
+    //    }
+    //}
 
     [ImplementPropertyChanged]
     public class FeatureSettings
@@ -313,12 +332,12 @@ namespace Clowd
         public Installer.Features.IFeature Shortcuts { get; } = new Installer.Features.Shortcuts();
     }
 
-    public enum BitrateMultiplier : int
-    {
-        Low = 75,
-        Medium = 100,
-        High = 150,
-    }
+    //public enum BitrateMultiplier : int
+    //{
+    //    Low = 75,
+    //    Medium = 100,
+    //    High = 150,
+    //}
 
     public enum MaxResolution : int
     {
@@ -344,7 +363,7 @@ namespace Clowd
 
         public bool ShowCursor { get; set; } = true;
 
-        [PropertyTools.DataAnnotations.Slidable(Minimum = 5, Maximum = 60, SnapToTicks = true, TickFrequency = 5, SmallChange = 5, LargeChange = 5)]
+        [PData.Slidable(Minimum = 5, Maximum = 60, SnapToTicks = true, TickFrequency = 5, SmallChange = 5, LargeChange = 5)]
         public int FPS { get; set; } = 15;
 
         [DisplayName("Encoder Settings")]
