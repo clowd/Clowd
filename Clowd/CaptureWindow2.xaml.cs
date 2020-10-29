@@ -389,7 +389,7 @@ namespace Clowd
 
             this.Close();
 
-            await UploadManager.Upload(GetCompressedImageStream(), "png", "Screenshot", null);
+            await UploadManager.UploadImage(GetCompressedImageStream(), "png", viewName: "Screenshot");
         }
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
@@ -452,11 +452,13 @@ namespace Clowd
 
             this.Close();
 
-            var task = await UploadManager.Upload(GetCompressedImageStream(), "png", "Search", null);
-            if (task == null)
-                return;
+            throw new NotImplementedException();
 
-            Process.Start("https://images.google.com/searchbyimage?image_url=" + task.UrlEscape());
+            //var task = await UploadManager.Upload(GetCompressedImageStream(), "png", "Search", null);
+            //if (task == null)
+            //    return;
+
+            //Process.Start("https://images.google.com/searchbyimage?image_url=" + task.UrlEscape());
         }
 
         private void ProfilerExecuted(object sender, ExecutedRoutedEventArgs e)

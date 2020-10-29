@@ -10,13 +10,13 @@ using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using RT.Util.ExtensionMethods;
 using Clowd.Shared;
-using FileUploadLib;
-using FileUploadLib.Providers;
 using System.Windows;
 using Ookii.Dialogs.Wpf;
 using Clowd.Utilities;
 using Ionic.Zip;
 using System.IO.Compression;
+using Clowd;
+using Clowd.Upload;
 
 namespace Clowd
 {
@@ -36,98 +36,106 @@ namespace Clowd
         }
         private static TaskWindow _windowBacking;
 
-        public static async Task<string> Upload(ZipFile zip, long estimatedSize, string extension, string viewName, string fileName, bool autoExecute = false)
+        public class UploadViewState
         {
-            var uploader = await GetProvider();
-            InternalUploadDelegate func = async (name, updateProgress) =>
+            public UploadViewState(UploadTaskViewItem taskView, Task<UploadResult> uploadResult)
             {
-                using (var uploadStream = await uploader.BeginLargeUpload(name, false))
+                TaskView = taskView;
+                UploadResult = uploadResult;
+            }
+
+            public UploadTaskViewItem TaskView { get; }
+            public Task<UploadResult> UploadResult { get; }
+        }
+
+        public static Task<UploadViewState> UploadImage(Stream fileStream, string extension, string name = null, string viewName = null)
+        {
+            return UploadInternal(SupportedUploadType.Image, fileStream, extension, name, viewName);
+        }
+
+        public static Task<UploadViewState> UploadVideo(Stream fileStream, string extension, string name = null, string viewName = null)
+        {
+            return UploadInternal(SupportedUploadType.Video, fileStream, extension, name, viewName);
+        }
+
+        public static Task<UploadViewState> UploadText(Stream fileStream, string extension, string name = null, string viewName = null)
+        {
+            return UploadInternal(SupportedUploadType.Text, fileStream, extension, name, viewName);
+        }
+
+        public static Task<UploadViewState> UploadFiles(params string[] filePaths)
+        {
+            IMimeProvider mimedb = new MimeDbMimeProvider();
+
+            if (filePaths.Length == 1 && File.Exists(filePaths[0]))
+            {
+                var path = Path.GetFullPath(filePaths[0]);
+                var info = new FileInfo(path);
+                var ext = Path.GetExtension(path);
+                var mime = mimedb.GetMimeFromExtension(ext);
+                var category = mimedb.GetCategoryFromExtension(ext);
+
+                SupportedUploadType supported = SupportedUploadType.Binary;
+                switch (category)
                 {
-                    Dictionary<string, long> byteCounter = new Dictionary<string, long>();
-                    zip.SaveProgress += (s, e) =>
-                    {
-                        if (e.CurrentEntry != null)
-                        {
-                            if (!byteCounter.ContainsKey(e.CurrentEntry.FileName))
-                                byteCounter[e.CurrentEntry.FileName] = 0;
-
-                            byteCounter[e.CurrentEntry.FileName] = Math.Max(byteCounter[e.CurrentEntry.FileName], e.BytesTransferred);
-                        }
-
-                        var totalBytesWritten = Math.Min(byteCounter.Values.Sum(), estimatedSize - 1);
-                        updateProgress(totalBytesWritten);
-                    };
-
-                    await Task.Run(() =>
-                    {
-                        zip.Save(uploadStream);
-                    });
-
-                    return await uploader.EndLargeUpload(uploadStream);
+                    case ContentCategory.Image:
+                        supported = SupportedUploadType.Image;
+                        break;
+                    case ContentCategory.Text:
+                        supported = SupportedUploadType.Text;
+                        break;
+                    case ContentCategory.Video:
+                        supported = SupportedUploadType.Video;
+                        break;
                 }
-            };
 
-            return await UploadInternal(func, estimatedSize, extension, viewName, fileName, autoExecute);
-        }
+                // zip the single file if:
+                // - the file type is unknown / is not a special type like image (can not be rendered nicely in browser)
+                // - we think the mime type might be compressible
+                // - the file size is > 5mb
+                var compress = supported == SupportedUploadType.Binary && mime.Compressible != false && info.Length > 1024 * 1024 * 5;
 
-        public static async Task<string> Upload(Stream data, string extension, string viewName, string fileName, bool autoExecute = false)
-        {
-            var uploader = await GetProvider();
-            var data_size = data.Length;
-            InternalUploadDelegate func;
-
-            if (data_size > (1024 * 1024 * 4)) // > 4MB 
-            {
-                func = async (name, updateProgress) =>
+                if (!compress)
                 {
-                    using (var uploadStream = await uploader.BeginLargeUpload(name, true))
-                    {
-                        using (var progressStream = new ProgressStream(data))
-                        using (GZipStream compress = new GZipStream(uploadStream, CompressionMode.Compress, true))
-                        {
-                            progressStream.BytesReadEvent += (s, e) => updateProgress(e.BytesRead);
-                            await progressStream.CopyToAsync(compress);
-                        }
-
-                        return await uploader.EndLargeUpload(uploadStream);
-                    }
-                };
-            }
-            else
-            {
-                func = (name, updateProgress) => uploader.Upload(data, name, (bytes) => updateProgress(bytes));
+                    return UploadInternal(supported, File.OpenRead(path), ext, Path.GetFileNameWithoutExtension(path), Path.GetFileName(path));
+                }
             }
 
-            return await UploadInternal(func, data_size, extension, viewName, fileName, autoExecute);
+            return DoZipUpload(filePaths, mimedb);
         }
 
-        private delegate Task<UploadResult> InternalUploadDelegate(string fileName, ProgressHandler updateProgress);
-
-        private static async Task<string> UploadInternal(InternalUploadDelegate start, long estimatedSize, string extension, string viewName, string fileName, bool autoExecute)
+        private static async Task<UploadViewState> DoZipUpload(string[] filePaths, IMimeProvider mimedb)
         {
-            if (String.IsNullOrWhiteSpace(extension))
-                throw new ArgumentNullException(nameof(extension));
+            throw new NotImplementedException();
+        }
 
-            extension = extension.Trim('.').Trim();
+        private static async Task<UploadViewState> UploadInternal(SupportedUploadType type, Stream fileStream, string extension, string name = null, string viewName = null)
+        {
+            if (viewName == null)
+                viewName = type.ToString() + " File";
 
-            if (String.IsNullOrWhiteSpace(viewName))
-                viewName = "Upload";
+            if (name == null)
+                name = CS.Util.RandomEx.GetString(8).ToLower();
 
-            if (String.IsNullOrWhiteSpace(fileName))
-                fileName = CS.Util.RandomEx.GetString(8).ToLower();
+            extension = extension.Trim('.');
+            var fileName = $"{name}.{extension}";
 
-            var canceler = new ManualResetEventSlim(false);
-            var view = new UploadTaskViewItem(viewName, "Connecting...", canceler);
+            var tcs = new CancellationTokenSource();
+            var view = new UploadTaskViewItem(viewName, "Starting...", tcs);
             _window.AddTask(view);
 
             try
             {
-                var data_size = estimatedSize;
+                var provider = await GetUploadProvider(type);
+                if (provider == null)
+                    throw new Exception("No available provider");
+
+                var data_size = fileStream.Length;
 
                 view.SecondaryText = "Uploading...";
-                view.ProgressTargetText = ((long)data_size).ToPrettySizeString(0);
+                view.ProgressTargetText = data_size.ToPrettySizeString(0);
 
-                var result = await start($"{fileName}.{extension}", (bytesUploaded) =>
+                UploadProgressHandler handler = (bytesUploaded) =>
                 {
                     var progress = (bytesUploaded / (double)data_size) * 100;
                     _window.Dispatcher.Invoke(() =>
@@ -135,60 +143,112 @@ namespace Clowd
                         view.ProgressCurrentText = ((long)Math.Min(bytesUploaded, data_size)).ToPrettySizeString(0);
                         view.Progress = progress > 98 ? 98 : progress;
                     });
+                };
+
+                var uploadTask = provider.UploadAsync(fileStream, handler, fileName, tcs.Token).ContinueWith<UploadResult>(task =>
+                {
+                    if (task.IsFaulted)
+                    {
+                        view.Status = TaskViewItem.TaskStatus.Error;
+                        view.Progress = 99;
+                        view.SecondaryText = task.Exception.Message;
+                        return null;
+                    }
+                    else
+                    {
+                        var result = task.Result;
+                        view.UploadURL = result.PublicUrl;
+                        view.SecondaryText = "Complete";
+                        view.Progress = 100;
+                        view.ProgressCurrentText = data_size.ToPrettySizeString(0);
+                        return result;
+                    }
                 });
 
-                view.UploadURL = result.PublicUrl;
-                view.SecondaryText = "Complete";
-                view.Progress = 100;
-                view.ProgressCurrentText = ((long)data_size).ToPrettySizeString(0);
-
-                if (autoExecute)
-                {
-                    view.SetExecuted();
-                }
-                else
-                {
-                    _window.Notify();
-                }
-
-                return result.PublicUrl;
+                return new UploadViewState(view, uploadTask);
             }
             catch (Exception e)
             {
                 view.Status = TaskViewItem.TaskStatus.Error;
                 view.Progress = 99;
                 view.SecondaryText = e.Message;
-                return null;
+
+                return new UploadViewState(view, Task.FromResult<UploadResult>(null));
             }
         }
 
-        private static async Task<IUploadProvider> GetProvider()
+        private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
         {
-            IUploadProvider uploader;
-            var providerSelection = App.Current.Settings.UploadSettings.UploadProvider;
-            if (providerSelection == UploadsProvider.None)
+            var settings = App.Current.Settings.UploadSettings;
+            IUploadProvider provider;
+
+            switch (type)
             {
-                await NiceDialog.ShowSettingsPromptAsync(null, SettingsCategory.Uploads, "There is no uploads provider configured. Please open settings and configure before uploading files.");
-                return null;
+                case SupportedUploadType.Image:
+                    provider = settings.Image;
+                    break;
+                case SupportedUploadType.Video:
+                    provider = settings.Video;
+                    break;
+                case SupportedUploadType.Text:
+                    provider = settings.Text;
+                    break;
+                case SupportedUploadType.Binary:
+                    provider = settings.Binary;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(type));
             }
-            else if (providerSelection == UploadsProvider.Azure)
+
+            if (provider != null && provider.IsEnabled)
+                return provider;
+
+            var enabled = settings.GetEnabledProviders(type).ToArray();
+
+            if (enabled.Length > 0)
             {
-                uploader = new AzureProvider(App.Current.Settings.UploadSettings);
+                using (TaskDialog dialog = new TaskDialog())
+                {
+                    dialog.WindowTitle = type.ToString() + " Upload";
+                    dialog.MainInstruction = $"Select an upload destination:";
+                    dialog.Content = $"You have not selected a default upload provider for '{type}', where would you like to send your file?";
+                    dialog.ButtonStyle = TaskDialogButtonStyle.CommandLinks;
+
+                    Dictionary<TaskDialogButton, IUploadProvider> providerLookup = new Dictionary<TaskDialogButton, IUploadProvider>();
+
+                    foreach (var p in enabled)
+                    {
+                        TaskDialogButton btn = new TaskDialogButton(p.Name);
+                        btn.CommandLinkNote = p.Description;
+                        dialog.Buttons.Add(btn);
+                        providerLookup[btn] = p;
+                    }
+
+                    dialog.AllowDialogCancellation = true;
+                    dialog.VerificationText = "Set choice as default";
+
+                    var dialogResult = await dialog.ShowAsNiceDialogAsync(null);
+
+                    if (dialogResult != null && providerLookup.ContainsKey(dialogResult))
+                    {
+                        var lookup = providerLookup[dialogResult];
+                        return lookup;
+                    }
+
+                    return null;
+                }
             }
             else
             {
-                throw new NotImplementedException();
+                await NiceDialog.ShowSettingsPromptAsync(null, SettingsCategory.Uploads,
+                    $"There is no upload provider configured/enabled for '{type}'. Please visit settings to configure before uploading.");
+
+                return null;
             }
-            return uploader;
         }
 
         public static void ShowWindow()
         {
-            var providerSelection = App.Current.Settings.UploadSettings.UploadProvider;
-            if (providerSelection == UploadsProvider.None)
-            {
-                return;
-            }
             _window.Show();
         }
     }
