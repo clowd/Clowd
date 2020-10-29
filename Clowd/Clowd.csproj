@@ -69,13 +69,12 @@
     <Reference Include="NAudio, Version=1.10.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\NAudio.1.10.0\lib\net35\NAudio.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.6.0.8\lib\net45\Newtonsoft.Json.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="MahApps.Metro, Version=1.1.2.0, Culture=neutral, PublicKeyToken=f4fb5a3c4d1e5b4f, processorArchitecture=MSIL">
       <HintPath>..\packages\MahApps.Metro.1.1.2.0\lib\net45\MahApps.Metro.dll</HintPath>
       <Private>True</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="NLog, Version=4.0.0.0, Culture=neutral, PublicKeyToken=5120e14c03d0593c, processorArchitecture=MSIL">
       <HintPath>..\packages\NLog.4.7.4\lib\net45\NLog.dll</HintPath>
@@ -83,11 +82,11 @@
     <Reference Include="RT.Json, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\RT.Json.2.0.1654\lib\netstandard2.0\RT.Json.dll</HintPath>
     </Reference>
-    <Reference Include="RT.PostBuild, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.PostBuild.2.0.1654\lib\netstandard2.0\RT.PostBuild.dll</HintPath>
+    <Reference Include="RT.PostBuild, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\RT.PostBuild.2.0.1668\lib\netstandard2.0\RT.PostBuild.dll</HintPath>
     </Reference>
-    <Reference Include="RT.Serialization, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Serialization.2.0.1654\lib\netstandard2.0\RT.Serialization.dll</HintPath>
+    <Reference Include="RT.Serialization, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\RT.Serialization.2.0.1668\lib\netstandard2.0\RT.Serialization.dll</HintPath>
     </Reference>
     <Reference Include="RT.Serialization.Binary, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\RT.Serialization.Binary.2.0.1654\lib\netstandard2.0\RT.Serialization.Binary.dll</HintPath>
@@ -95,14 +94,14 @@
     <Reference Include="RT.Serialization.Json, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\RT.Serialization.Json.2.0.1654\lib\netstandard2.0\RT.Serialization.Json.dll</HintPath>
     </Reference>
-    <Reference Include="RT.Serialization.Xml, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Serialization.Xml.2.0.1654\lib\netstandard2.0\RT.Serialization.Xml.dll</HintPath>
+    <Reference Include="RT.Serialization.Xml, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\RT.Serialization.Xml.2.0.1668\lib\netstandard2.0\RT.Serialization.Xml.dll</HintPath>
     </Reference>
     <Reference Include="RT.Util, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\RT.Util.2.0.1654\lib\net472\RT.Util.dll</HintPath>
     </Reference>
-    <Reference Include="RT.Util.Core, Version=2.0.1654.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Util.Core.2.0.1654\lib\netstandard2.0\RT.Util.Core.dll</HintPath>
+    <Reference Include="RT.Util.Core, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\RT.Util.Core.2.0.1668\lib\netstandard2.0\RT.Util.Core.dll</HintPath>
     </Reference>
     <Reference Include="ScreenVersusWpf, Version=1.0.9.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\ScreenVersusWpf.1.0.9.0\lib\net451\ScreenVersusWpf.dll</HintPath>
