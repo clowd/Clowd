@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -48,14 +48,6 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CS.Util, Version=1.0.6.53, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\CS.Util.1.0.6.53\lib\net45\CS.Util.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="CS.Wpf, Version=1.0.6.53, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\CS.Wpf.1.0.6.53\lib\net45\CS.Wpf.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="DirectShowLib, Version=2.1.0.1599, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\DirectShowLib.1.0.0\lib\DirectShowLib.dll</HintPath>
     </Reference>
@@ -199,9 +191,11 @@
     <Compile Include="Utilities\GlobalTrigger.cs" />
     <Compile Include="Capture\LiveScreenRecording.cs" />
     <Compile Include="Utilities\ProgressStream.cs" />
+    <Compile Include="Utilities\PropertyChanged.Fody.cs" />
     <Compile Include="Utilities\ProxyMetaObject.cs" />
     <Compile Include="Utilities\NiceDialog.cs" />
     <Compile Include="Utilities\PropertyChangeNotifier.cs" />
+    <Compile Include="Utilities\RandomEx.cs" />
     <Compile Include="Utilities\RelayCommand.cs" />
     <Compile Include="Capture\ScrollingCapture.cs" />
     <Compile Include="Capture\ScrollingCapture2.cs" />

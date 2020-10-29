@@ -9,7 +9,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using CS.Wpf;
 using ScreenVersusWpf;
 using RT.Util.ExtensionMethods;
 
