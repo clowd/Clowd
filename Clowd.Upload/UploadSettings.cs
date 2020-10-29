@@ -78,6 +78,13 @@ namespace Clowd.Upload
         private IUploadProvider _binary;
         private IUploadProvider _text;
 
+        public IEnumerable<IUploadProvider> GetEnabledProviders(SupportedUploadType type)
+        {
+            return Providers
+                .Where(p => p.IsEnabled)
+                .Where(p => p.SupportedUpload == SupportedUploadType.All || p.SupportedUpload.HasFlag(type));
+        }
+
         protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
