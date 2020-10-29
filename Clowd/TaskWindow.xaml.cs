@@ -426,7 +426,7 @@ namespace Clowd
     {
         public long FileSize { get; set; }
         public string UploadURL { get; set; }
-        private ManualResetEventSlim _canceler;
+        private CancellationTokenSource _canceler;
 
         public override bool HeroAvailable
         {
@@ -439,7 +439,7 @@ namespace Clowd
 
         private static DataTemplate _copyTemplate;
 
-        public UploadTaskViewItem(string primary, string secondary, ManualResetEventSlim canceler)
+        public UploadTaskViewItem(string primary, string secondary, CancellationTokenSource canceler)
         {
             PrimaryText = primary;
             SecondaryText = secondary;
@@ -502,7 +502,7 @@ namespace Clowd
         }
         private void CancelExecuted(object param)
         {
-            _canceler.Set();
+            _canceler.Cancel();
             SecondaryText = "Canceled.";
             Status = TaskStatus.Canceled;
         }
