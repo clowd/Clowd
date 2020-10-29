@@ -123,7 +123,7 @@ namespace Clowd.Upload
 
         private async Task<UploadResult> SetPropertiesAndGetResult(CloudBlockBlob blob, string fileName, bool gzip)
         {
-            var mimeType = (await _mimeDb.GetMimeFromExtension(Path.GetExtension(fileName))).ContentType;
+            var mimeType = _mimeDb.GetMimeFromExtension(Path.GetExtension(fileName)).ContentType;
 
             // we want to give the browser a filename hint, and also tell it to render it inline (if it can).
             // if it can't be rendered inline, the browser will just download it anyway.
