@@ -63,6 +63,19 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+            //RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+            //https://web.archive.org/web/20100817183900/http://blogs.msdn.com/b/jgoldb/archive/2010/04/12/what-s-new-for-performance-in-wpf-in-net-4.aspx
+            //https://stackoverflow.com/questions/3060329/system-windows-media-rendercapability-tier-returns-not-the-render-mode
+            //https://stackoverflow.com/questions/149763/how-do-you-determine-if-wpf-is-using-hardware-or-software-rendering
+            //https://stackoverflow.com/questions/149763/how-do-you-determine-if-wpf-is-using-hardware-or-software-rendering
+
+            //HwndSource hwndSource = PresentationSource.FromVisual(this) as System.Windows.Interop.HwndSource;
+            //HwndTarget hwndTarget = hwndSource.CompositionTarget;
+            //var mode = hwndTarget.RenderMode;
+            //var m2 = RenderOptions.ProcessRenderMode
+            //var teir = RenderCapability.Tier >> 16;
+
+
             base.OnStartup(e);
             SetupExceptionHandling();
 
