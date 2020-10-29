@@ -246,15 +246,7 @@ namespace Clowd
             {
                 var propertyName = property.Descriptor.Name;
                 var parsedEnum = (SupportedUploadType)Enum.Parse(typeof(SupportedUploadType), propertyName, true);
-
-                IEnumerable<IUploadProvider> getUploadProviders()
-                {
-                    return App.Current.Settings.UploadSettings.Providers
-                        .Where(p => p.IsEnabled)
-                        .Where(p => p.SupportedUpload == SupportedUploadType.All || p.SupportedUpload.HasFlag(parsedEnum));
-                }
-
-                return ComboSelectBinding(getUploadProviders, nameof(IUploadProvider.Name));
+                return ComboSelectBinding(() => App.Current.Settings.UploadSettings.GetEnabledProviders(parsedEnum), nameof(IUploadProvider.Name));
             }
 
             if (property.Is(typeof(List<IUploadProvider>)))
