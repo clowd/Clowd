@@ -100,16 +100,24 @@ namespace Clowd.Utilities
                 return;
             }
 
-            var success = _hotKey.Register();
-            if (success)
+            try
             {
-                IsRegistered = true;
-                Error = "";
+                var success = _hotKey.Register();
+                if (success)
+                {
+                    IsRegistered = true;
+                    Error = "";
+                }
+                else
+                {
+                    IsRegistered = false;
+                    Error = "Selected gesture is in use by a different process.";
+                }
             }
-            else
+            catch (Exception e)
             {
                 IsRegistered = false;
-                Error = "Selected gesture is in use by a different process.";
+                Error = "Internal Error: " + e.Message;
             }
         }
         private void RefreshHotkey()
