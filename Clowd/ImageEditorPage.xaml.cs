@@ -343,7 +343,7 @@ namespace Clowd
             GetRenderedPng().Save(ms);
             ms.Position = 0;
 
-            await UploadManager.Upload(ms, "png", "Image", null);
+            await UploadManager.UploadImage(ms, "png", viewName: "Image");
         }
 
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)

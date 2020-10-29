@@ -26,7 +26,6 @@ using Point = System.Windows.Point;
 using Ionic.Zlib;
 using SharpRaven;
 using SharpRaven.Data;
-using FileUploadLib;
 using Ookii.Dialogs.Wpf;
 
 namespace Clowd
@@ -34,7 +33,7 @@ namespace Clowd
     public partial class App : Application
     {
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
-        public static bool CanUpload => IsDesignMode ? false : Current.Settings.UploadSettings.UploadProvider != UploadsProvider.None;
+        public static bool CanUpload => !IsDesignMode;
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
 
         public GeneralSettings Settings { get; private set; }
@@ -396,7 +395,7 @@ namespace Clowd
         private void SetupTrayIcon()
         {
             _taskbarIcon = new TaskbarIcon();
-            _taskbarIcon.TrayDrop += OnTaskbarIconDrop;
+            //_taskbarIcon.TrayDrop += OnTaskbarIconDrop;
             _taskbarIcon.WndProcMessageReceived += OnWndProcMessageReceived;
 
             //force the correct icon size
@@ -556,8 +555,8 @@ namespace Clowd
 
             // because of the mouse hook in the tray drop mechanism, hitting a breakpoint will cause clowd to stop 
             // responding to message events, which will lock up the mouse cursor - so we disable it if debugging.
-            if (!System.Diagnostics.Debugger.IsAttached)
-                _taskbarIcon.TrayDropEnabled = Settings.TrayDropEnabled;
+            //if (!System.Diagnostics.Debugger.IsAttached)
+            //    _taskbarIcon.TrayDropEnabled = Settings.TrayDropEnabled;
 
             SetupTrayContextMenu();
             Settings.Save();
@@ -616,12 +615,12 @@ namespace Clowd
                 var ms = new MemoryStream();
                 img.Save(ms, ImageFormat.Png);
                 ms.Position = 0;
-                UploadManager.Upload(ms, "png", "Pasted Image", null);
+                UploadManager.UploadImage(ms, "png", viewName: "Pasted Image");
             }
             else if (Clipboard.ContainsText())
             {
                 var ms = new MemoryStream(Clipboard.GetText().ToUtf8());
-                UploadManager.Upload(ms, "txt", "Pasted Text", null);
+                UploadManager.UploadText(ms, "txt", viewName: "Pasted Text");
             }
             else if (Clipboard.ContainsFileDropList())
             {
@@ -766,71 +765,9 @@ namespace Clowd
                 SetupAccentColors();
             }
         }
-        private async Task OnFilesReceived(string[] filePaths)
+        private async void OnFilesReceived(string[] filePaths)
         {
-            string url;
-
-            // ZIP the files into an archive if:
-            if (
-                // • there is more than one file;
-                filePaths.Length > 1 ||
-                // • we are processing a directory rather than a file
-                (filePaths.Length == 1 && Directory.Exists(filePaths[0]))
-                )
-            {
-                string archiveName = null;
-                long totalSize = 0;
-
-                using (ZipFile zip = new ZipFile())
-                {
-                    if (filePaths.Length == 1)
-                    {
-                        archiveName = Path.GetFileNameWithoutExtension(filePaths[0]);
-                    }
-                    foreach (var path in filePaths)
-                    {
-                        if (Directory.Exists(path))
-                        {
-                            zip.AddDirectory(path, Path.GetFileName(path));
-                        }
-                        else if (File.Exists(path))
-                        {
-                            zip.AddFile(path, "");
-                            totalSize += new FileInfo(path).Length;
-                        }
-                    }
-
-                    string viewName = null;
-                    if (archiveName != null)
-                        viewName = archiveName + ".zip";
-                    else
-                        viewName = $"zip ({filePaths.Length} files)";
-
-                    url = await UploadManager.Upload(zip, totalSize, "zip", viewName, null);
-                }
-            }
-            else
-            {
-                var path = filePaths[0];
-                using (var fs = File.OpenRead(path))
-                    url = await UploadManager.Upload(fs, Path.GetExtension(path), Path.GetFileName(path), Path.GetFileNameWithoutExtension(path));
-            }
-        }
-        private void OnTaskbarIconDrop(object sender, DragEventArgs e)
-        {
-            var formats = e.Data.GetFormats();
-            if (formats.Contains(DataFormats.FileDrop))
-            {
-                var data = (string[])e.Data.GetData(DataFormats.FileDrop);
-                OnFilesReceived(data);
-            }
-            else if (formats.Contains(DataFormats.Text))
-            {
-                var data = (string)e.Data.GetData(DataFormats.Text);
-
-                var ms = new MemoryStream(data.ToUtf8());
-                UploadManager.Upload(ms, "txt", "Text", null);
-            }
+            await UploadManager.UploadFiles(filePaths);
         }
     }
 }
