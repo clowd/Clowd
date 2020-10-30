@@ -16,50 +16,34 @@ using Ionic.Zip;
 using System.IO.Compression;
 using Clowd;
 using Clowd.Upload;
+using CS.Util;
 
 namespace Clowd
 {
     public static class UploadManager
     {
-        private static TaskWindow _window
-        {
-            get
-            {
-                if (_windowBacking == null)
-                {
-                    _windowBacking = new TaskWindow();
-                    //_windowBacking.Show();
-                }
-                return _windowBacking;
-            }
-        }
-        private static TaskWindow _windowBacking;
+        private delegate Task<UploadResult> DoUploadDelegate(IUploadProvider provider, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
+        private static readonly TaskWindow _window = new TaskWindow();
+        private static string TempDataDirectory => Path.Combine(Constants.AppDataDirectory, "uploads");
 
-        public class UploadViewState
+        public static void ShowWindow()
         {
-            public UploadViewState(UploadTaskViewItem taskView, Task<UploadResult> uploadResult)
-            {
-                TaskView = taskView;
-                UploadResult = uploadResult;
-            }
-
-            public UploadTaskViewItem TaskView { get; }
-            public Task<UploadResult> UploadResult { get; }
+            _window.Show();
         }
 
         public static Task<UploadViewState> UploadImage(Stream fileStream, string extension, string name = null, string viewName = null)
         {
-            return UploadInternal(SupportedUploadType.Image, fileStream, extension, name, viewName);
+            return UploadStream(SupportedUploadType.Image, fileStream, extension, name, viewName);
         }
 
         public static Task<UploadViewState> UploadVideo(Stream fileStream, string extension, string name = null, string viewName = null)
         {
-            return UploadInternal(SupportedUploadType.Video, fileStream, extension, name, viewName);
+            return UploadStream(SupportedUploadType.Video, fileStream, extension, name, viewName);
         }
 
         public static Task<UploadViewState> UploadText(Stream fileStream, string extension, string name = null, string viewName = null)
         {
-            return UploadInternal(SupportedUploadType.Text, fileStream, extension, name, viewName);
+            return UploadStream(SupportedUploadType.Text, fileStream, extension, name, viewName);
         }
 
         public static Task<UploadViewState> UploadFiles(params string[] filePaths)
@@ -96,19 +80,104 @@ namespace Clowd
 
                 if (!compress)
                 {
-                    return UploadInternal(supported, File.OpenRead(path), ext, Path.GetFileNameWithoutExtension(path), Path.GetFileName(path));
+                    DoUploadDelegate upload = (provider, progress, uploadName, cancelToken) => provider.UploadAsync(path, progress, uploadName, cancelToken);
+                    return UploadInternal(supported, upload, info.Length, ext, Path.GetFileNameWithoutExtension(path), Path.GetFileName(path));
                 }
             }
 
             return DoZipUpload(filePaths, mimedb);
         }
 
-        private static async Task<UploadViewState> DoZipUpload(string[] filePaths, IMimeProvider mimedb)
+        private static Task<UploadViewState> UploadStream(SupportedUploadType type, Stream fileStream, string extension, string name, string viewName)
         {
-            throw new NotImplementedException();
+            DoUploadDelegate upload = (provider, progress, uploadName, cancelToken) => provider.UploadAsync(fileStream, progress, uploadName, cancelToken);
+            return UploadInternal(SupportedUploadType.Image, upload, fileStream.Length, extension, name, viewName);
         }
 
-        private static async Task<UploadViewState> UploadInternal(SupportedUploadType type, Stream fileStream, string extension, string name = null, string viewName = null)
+        private static async Task<UploadViewState> DoZipUpload(string[] filePaths, IMimeProvider mimedb)
+        {
+            var provider = await GetUploadProvider(SupportedUploadType.Binary);
+            if (provider == null)
+                return null;
+
+            using (ZipFile zip = new ZipFile())
+            {
+                List<string> fullPaths = new List<string>();
+                foreach (var path in filePaths)
+                {
+                    if (Directory.Exists(path))
+                    {
+                        zip.AddDirectory(path, Path.GetFileName(path));
+                        fullPaths.Add(Path.GetFullPath(path));
+                    }
+                    else if (File.Exists(path))
+                    {
+                        zip.AddFile(path, "");
+                        fullPaths.Add(Path.GetFullPath(path));
+                    }
+                }
+
+                // no files were added to the archive; there is nothing to upload
+                if (fullPaths.Count == 0)
+                    return null;
+
+                var tcs = new CancellationTokenSource();
+                var view = new UploadTaskViewItem("Archive Upload", "Compressing...", tcs);
+                _window.AddTask(view);
+
+                using (var folder = PathEx.GetTempFolder())
+                {
+                    var zipPath = folder.GetTempFilePath(".zip");
+
+                    zip.SaveProgress += (s, e) =>
+                    {
+                        if (tcs.IsCancellationRequested)
+                        {
+                            e.Cancel = true;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"zip - saved {e.EntriesSaved}/{e.EntriesTotal}, bytes {e.BytesTransferred}/{e.TotalBytesToTransfer},");
+                            if (e.EventType == ZipProgressEventType.Saving_BeforeWriteEntry)
+                            {
+                                _window.Dispatcher.Invoke(() =>
+                                {
+                                    var progress = (e.EntriesSaved / (double)e.EntriesTotal) * 30;
+                                    Console.WriteLine($"zip progress {progress}%");
+                                    view.Progress = progress;
+                                });
+                            }
+                        }
+                    };
+
+                    await Task.Run(() => zip.Save(zipPath), tcs.Token);
+
+                    if (tcs.IsCancellationRequested)
+                        return null;
+
+                    var info = new FileInfo(zipPath);
+                    var size = info.Length;
+                    view.ProgressTargetText = size.ToPrettySizeString(0);
+                    view.SecondaryText = "Uploading...";
+
+                    UploadProgressHandler handler = (bytesUploaded) =>
+                    {
+                        var progress = (bytesUploaded / (double)size) * 70 + 30;
+                        _window.Dispatcher.Invoke(() =>
+                        {
+                            view.ProgressCurrentText = ((long)Math.Min(bytesUploaded, size)).ToPrettySizeString(0);
+                            view.Progress = progress > 98 ? 98 : progress;
+                        });
+                    };
+
+                    var archiveName = RandomEx.GetString(8) + ".zip";
+                    var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, tcs.Token);
+                    return UploadWrapper(view, uploadTask);
+                }
+            }
+        }
+
+        private static async Task<UploadViewState> UploadInternal(SupportedUploadType type, DoUploadDelegate doUpload, long size, string extension, string name = null, string viewName = null)
         {
             if (viewName == null)
                 viewName = type.ToString() + " File";
@@ -119,61 +188,57 @@ namespace Clowd
             extension = extension.Trim('.');
             var fileName = $"{name}.{extension}";
 
+            var provider = await GetUploadProvider(type);
+            if (provider == null)
+                return null;
+
             var tcs = new CancellationTokenSource();
-            var view = new UploadTaskViewItem(viewName, "Starting...", tcs);
+            var view = new UploadTaskViewItem(viewName, "Uploading...", tcs);
+            view.ProgressTargetText = size.ToPrettySizeString(0);
             _window.AddTask(view);
 
-            try
+            UploadProgressHandler handler = (bytesUploaded) =>
             {
-                var provider = await GetUploadProvider(type);
-                if (provider == null)
-                    throw new Exception("No available provider");
-
-                var data_size = fileStream.Length;
-
-                view.SecondaryText = "Uploading...";
-                view.ProgressTargetText = data_size.ToPrettySizeString(0);
-
-                UploadProgressHandler handler = (bytesUploaded) =>
+                var progress = (bytesUploaded / (double)size) * 100;
+                _window.Dispatcher.Invoke(() =>
                 {
-                    var progress = (bytesUploaded / (double)data_size) * 100;
-                    _window.Dispatcher.Invoke(() =>
-                    {
-                        view.ProgressCurrentText = ((long)Math.Min(bytesUploaded, data_size)).ToPrettySizeString(0);
-                        view.Progress = progress > 98 ? 98 : progress;
-                    });
-                };
-
-                var uploadTask = provider.UploadAsync(fileStream, handler, fileName, tcs.Token).ContinueWith<UploadResult>(task =>
-                {
-                    if (task.IsFaulted)
-                    {
-                        view.Status = TaskViewItem.TaskStatus.Error;
-                        view.Progress = 99;
-                        view.SecondaryText = task.Exception.Message;
-                        return null;
-                    }
-                    else
-                    {
-                        var result = task.Result;
-                        view.UploadURL = result.PublicUrl;
-                        view.SecondaryText = "Complete";
-                        view.Progress = 100;
-                        view.ProgressCurrentText = data_size.ToPrettySizeString(0);
-                        return result;
-                    }
+                    view.ProgressCurrentText = ((long)Math.Min(bytesUploaded, size)).ToPrettySizeString(0);
+                    view.Progress = progress > 98 ? 98 : progress;
                 });
+            };
 
-                return new UploadViewState(view, uploadTask);
-            }
-            catch (Exception e)
+            var uploadTask = doUpload(provider, handler, fileName, tcs.Token);
+            return UploadWrapper(view, uploadTask);
+        }
+
+        private static UploadViewState UploadWrapper(UploadTaskViewItem view, Task<UploadResult> uploadTask)
+        {
+            var finalTask = uploadTask.ContinueWith<UploadResult>(task =>
             {
-                view.Status = TaskViewItem.TaskStatus.Error;
-                view.Progress = 99;
-                view.SecondaryText = e.Message;
+                if (task.IsCanceled)
+                {
+                    return null;
+                }
+                else if (task.IsFaulted)
+                {
+                    view.Status = TaskViewItem.TaskStatus.Error;
+                    view.Progress = 99;
+                    view.SecondaryText = task.Exception.Message;
+                    return null;
+                }
+                else
+                {
+                    var result = task.Result;
+                    view.UploadURL = result.PublicUrl;
+                    view.SecondaryText = "Complete";
+                    view.Progress = 100;
+                    view.ProgressCurrentText = view.ProgressTargetText;
+                    _window.Notify();
+                    return result;
+                }
+            });
 
-                return new UploadViewState(view, Task.FromResult<UploadResult>(null));
-            }
+            return new UploadViewState(view, finalTask);
         }
 
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
@@ -224,13 +289,31 @@ namespace Clowd
                     }
 
                     dialog.AllowDialogCancellation = true;
-                    dialog.VerificationText = "Set choice as default";
+                    dialog.VerificationText = "Set choice as default for " + type;
 
                     var dialogResult = await dialog.ShowAsNiceDialogAsync(null);
 
                     if (dialogResult != null && providerLookup.ContainsKey(dialogResult))
                     {
                         var lookup = providerLookup[dialogResult];
+                        if (dialog.IsVerificationChecked)
+                        {
+                            switch (type)
+                            {
+                                case SupportedUploadType.Image:
+                                    settings.Image = lookup;
+                                    break;
+                                case SupportedUploadType.Video:
+                                    settings.Video = lookup;
+                                    break;
+                                case SupportedUploadType.Text:
+                                    settings.Text = lookup;
+                                    break;
+                                case SupportedUploadType.Binary:
+                                    settings.Binary = lookup;
+                                    break;
+                            }
+                        }
                         return lookup;
                     }
 
@@ -245,10 +328,17 @@ namespace Clowd
                 return null;
             }
         }
+    }
 
-        public static void ShowWindow()
+    public class UploadViewState
+    {
+        public UploadViewState(UploadTaskViewItem taskView, Task<UploadResult> uploadResult)
         {
-            _window.Show();
+            TaskView = taskView;
+            UploadResult = uploadResult;
         }
+
+        public UploadTaskViewItem TaskView { get; }
+        public Task<UploadResult> UploadResult { get; }
     }
 }
