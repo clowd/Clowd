@@ -20,6 +20,6 @@ namespace Clowd
         public const string UninstallRegistryPath = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
         public const string ServiceDomain = "caesay.com";
         public const string ReleaseFeedUrl = "https://caesay.com/clowd-updates";
-        public static string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
+        public static string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
     }
 }
