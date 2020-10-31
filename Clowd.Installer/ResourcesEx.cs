@@ -16,7 +16,7 @@ namespace Clowd.Installer
             Assembly executingAssembly = Assembly.GetExecutingAssembly();
             string[] manifestResourceNames = executingAssembly.GetManifestResourceNames();
 
-            var prefix = "Clowd.Installer.Embedded.";
+            var prefix = "Clowd.Installer.Embed.";
 
             var name = manifestResourceNames.Single(n => n.StartsWith(prefix + resourceName));
 
