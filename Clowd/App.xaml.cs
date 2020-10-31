@@ -444,6 +444,10 @@ namespace Clowd
             screend.Click += (s, e) => AntFu7.LiveDraw.LiveDrawWindow.ShowNewOrExisting();
             context.Items.Add(screend);
 
+            var editor = new MenuItem() { Header = "Image _Editor" };
+            editor.Click += (s, e) => ImageEditorPage.ShowNewEditor();
+            context.Items.Add(editor);
+
             context.Items.Add(new Separator());
 
             //var home = new MenuItem() { Header = "Open _Clowd" };
