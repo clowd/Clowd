@@ -34,7 +34,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>Embedded\default.ico</ApplicationIcon>
+    <ApplicationIcon>Embed\default.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -73,15 +73,15 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
-    <EmbeddedResource Include="Embedded\UScreenCapture-x64.ax" />
-    <EmbeddedResource Include="Embedded\UScreenCapture-x86.ax" />
+    <EmbeddedResource Include="Embed\UScreenCapture-x64.ax" />
+    <EmbeddedResource Include="Embed\UScreenCapture-x86.ax" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Embedded\loopback-audio-x64.dll" />
-    <EmbeddedResource Include="Embedded\loopback-audio-x86.dll" />
+    <EmbeddedResource Include="Embed\loopback-audio-x64.dll" />
+    <EmbeddedResource Include="Embed\loopback-audio-x86.dll" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Embedded\default.ico" />
+    <EmbeddedResource Include="Embed\default.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
