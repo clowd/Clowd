@@ -132,41 +132,41 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="CaptureWindow2.xaml.cs">
+    <Compile Include="UI\CaptureWindow2.xaml.cs">
       <DependentUpon>CaptureWindow2.xaml</DependentUpon>
     </Compile>
     <Compile Include="Capture\NAudioItem.cs" />
-    <Compile Include="Capture\WindowFinder3.cs" />
-    <Compile Include="Controls\CornerClippingBorder.cs" />
-    <Compile Include="Controls\DockAndWrapPanel.cs" />
-    <Compile Include="Controls\DPadControl.cs" />
-    <Compile Include="Controls\FeatureInstallerControl.cs" />
-    <Compile Include="Controls\FFMpegCodecSettingsEditor3.xaml.cs">
+    <Compile Include="Capture\WindowWalker.cs" />
+    <Compile Include="UI\Controls\CornerClippingBorder.cs" />
+    <Compile Include="UI\Controls\DockAndWrapPanel.cs" />
+    <Compile Include="UI\Controls\DPadControl.cs" />
+    <Compile Include="UI\Config\FeatureInstallerControl.cs" />
+    <Compile Include="UI\Config\FFMpegCodecSettingsEditor3.xaml.cs">
       <DependentUpon>FFMpegCodecSettingsEditor3.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Controls\GlobalTriggerEditor.cs" />
-    <Compile Include="Controls\NonTogglableToggleButton.cs" />
-    <Compile Include="Controls\ReallyFastCaptureRenderer.cs" />
-    <Compile Include="Controls\ResetDefaultButton.cs" />
-    <Compile Include="Controls\SpinnerTextBox.xaml.cs">
+    <Compile Include="UI\Config\GlobalTriggerEditor.cs" />
+    <Compile Include="UI\Controls\NonTogglableToggleButton.cs" />
+    <Compile Include="Capture\ReallyFastCaptureRenderer.cs" />
+    <Compile Include="UI\Controls\ResetDefaultButton.cs" />
+    <Compile Include="UI\Controls\SpinnerTextBox.xaml.cs">
       <DependentUpon>SpinnerTextBox.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Controls\UpdaterControl.xaml.cs">
+    <Compile Include="UI\Config\UpdaterControl.xaml.cs">
       <DependentUpon>UpdaterControl.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Controls\UploadProviderSettingsEditor.xaml.cs">
+    <Compile Include="UI\Config\UploadProviderSettingsEditor.xaml.cs">
       <DependentUpon>UploadProviderSettingsEditor.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Converters\BoolToInverseVisibilityConverter.cs" />
-    <Compile Include="Converters\EnumMatchToBooleanConverter.cs" />
-    <Compile Include="Converters\EnumOptionsConverter.cs" />
-    <Compile Include="Converters\OnOffBrushConverter.cs" />
-    <Compile Include="Converters\SnapToPixelConverter.cs" />
-    <Compile Include="Converters\StreamToBitmapSourceConverter.cs" />
-    <Compile Include="Converters\TaskStatusToVisibilityConverter.cs" />
-    <Compile Include="Converters\DrawingCanvasEditConverter.cs" />
-    <Compile Include="FFmpegSettings.cs" />
-    <Compile Include="ImageEditorPage.xaml.cs">
+    <Compile Include="UI\Converters\BoolToInverseVisibilityConverter.cs" />
+    <Compile Include="UI\Converters\EnumMatchToBooleanConverter.cs" />
+    <Compile Include="UI\Converters\EnumOptionsConverter.cs" />
+    <Compile Include="UI\Converters\OnOffBrushConverter.cs" />
+    <Compile Include="UI\Converters\SnapToPixelConverter.cs" />
+    <Compile Include="UI\Converters\StreamToBitmapSourceConverter.cs" />
+    <Compile Include="UI\Converters\TaskStatusToVisibilityConverter.cs" />
+    <Compile Include="UI\Converters\DrawingCanvasEditConverter.cs" />
+    <Compile Include="Config\FFmpegSettings.cs" />
+    <Compile Include="UI\ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs">
@@ -174,72 +174,68 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>AssemblyInfo.tt</DependentUpon>
     </Compile>
-    <Compile Include="SettingsPage.xaml.cs">
+    <Compile Include="UI\SettingsPage.xaml.cs">
       <DependentUpon>SettingsPage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="TaskWindow.xaml.cs">
+    <Compile Include="UI\TaskWindow.xaml.cs">
       <DependentUpon>TaskWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Utilities\AutoDictionary.cs" />
-    <Compile Include="Utilities\ButtonClickContextBehavior.cs" />
-    <Compile Include="Utilities\ClassifyOptions.cs" />
+    <Compile Include="Config\AutoDictionary.cs" />
+    <Compile Include="UI\Helpers\ButtonClickContextBehavior.cs" />
+    <Compile Include="Config\ClassifyOptions.cs" />
     <Compile Include="Utilities\ClipboardEx.cs" />
     <Compile Include="Utilities\Debouncer.cs" />
     <Compile Include="Utilities\Exposed.cs" />
     <Compile Include="Utilities\Expr.cs" />
     <Compile Include="Utilities\ICommandLineProxy.cs" />
-    <Compile Include="Utilities\GlobalTrigger.cs" />
+    <Compile Include="Config\GlobalTrigger.cs" />
     <Compile Include="Capture\LiveScreenRecording.cs" />
     <Compile Include="Utilities\PathEx.cs" />
     <Compile Include="Utilities\ProgressStream.cs" />
-    <Compile Include="Utilities\PropertyChanged.Fody.cs" />
     <Compile Include="Utilities\ProxyMetaObject.cs" />
-    <Compile Include="Utilities\NiceDialog.cs" />
-    <Compile Include="Utilities\PropertyChangeNotifier.cs" />
+    <Compile Include="UI\Helpers\NiceDialog.cs" />
+    <Compile Include="UI\Helpers\PropertyChangeNotifier.cs" />
     <Compile Include="Utilities\RandomEx.cs" />
-    <Compile Include="Utilities\RelayCommand.cs" />
+    <Compile Include="UI\Helpers\RelayCommand.cs" />
     <Compile Include="Capture\ScrollingCapture.cs" />
     <Compile Include="Capture\ScrollingCapture2.cs" />
     <Compile Include="Utilities\TimedConsoleLogger.cs" />
-    <Compile Include="Utilities\TrulyObservableCollection.cs" />
-    <Compile Include="Utilities\UnsafeBitmap.cs" />
-    <Compile Include="Capture\WindowFinder.cs" />
-    <Compile Include="Controls\FadingScrollViewer.cs" />
-    <Compile Include="Controls\OutlinedText.cs" />
-    <Compile Include="Controls\OutlinedTextBlock.cs" />
-    <Compile Include="Controls\ProgressRing.cs" />
-    <Compile Include="Controls\ResizingAdorner.cs" />
-    <Compile Include="Controls\SizeAwareProgressBar.cs" />
-    <Compile Include="Controls\TransitioningContentControl.cs" />
-    <Compile Include="Controls\UploadProgressBar.cs" />
-    <Compile Include="Converters\BoolToInverseConverter.cs" />
-    <Compile Include="Converters\BoolToVisibilityConverter2.cs" />
-    <Compile Include="Converters\BorderThicknessToStrokeThicknessConverter.cs" />
-    <Compile Include="Converters\ColorToBrushConverter.cs" />
-    <Compile Include="Converters\DoubleToDecimalConverter.cs" />
-    <Compile Include="Converters\DoubleToIntegerConverter.cs" />
-    <Compile Include="Converters\FontSizeConverter.cs" />
-    <Compile Include="Converters\MathConverter.cs" />
-    <Compile Include="Converters\MethodToValueConverter.cs" />
-    <Compile Include="Converters\RaduisConverter.cs" />
-    <Compile Include="Converters\RectConverter.cs" />
-    <Compile Include="Converters\StringNullOrEmptyToVisibilityConverter.cs" />
-    <Compile Include="Converters\ValueConverterGroup.cs" />
-    <Compile Include="TemplatedWindow.cs" />
-    <Compile Include="Utilities\Hotkey.cs" />
+    <Compile Include="UI\Helpers\TrulyObservableCollection.cs" />
+    <Compile Include="UI\Controls\FadingScrollViewer.cs" />
+    <Compile Include="UI\Controls\OutlinedText.cs" />
+    <Compile Include="UI\Controls\OutlinedTextBlock.cs" />
+    <Compile Include="UI\Controls\ProgressRing.cs" />
+    <Compile Include="UI\Helpers\ResizingAdorner.cs" />
+    <Compile Include="UI\Controls\SizeAwareProgressBar.cs" />
+    <Compile Include="UI\Controls\TransitioningContentControl.cs" />
+    <Compile Include="UI\Controls\UploadProgressBar.cs" />
+    <Compile Include="UI\Converters\BoolToInverseConverter.cs" />
+    <Compile Include="UI\Converters\BoolToVisibilityConverter2.cs" />
+    <Compile Include="UI\Converters\BorderThicknessToStrokeThicknessConverter.cs" />
+    <Compile Include="UI\Converters\ColorToBrushConverter.cs" />
+    <Compile Include="UI\Converters\DoubleToDecimalConverter.cs" />
+    <Compile Include="UI\Converters\DoubleToIntegerConverter.cs" />
+    <Compile Include="UI\Converters\FontSizeConverter.cs" />
+    <Compile Include="UI\Converters\MathConverter.cs" />
+    <Compile Include="UI\Converters\MethodToValueConverter.cs" />
+    <Compile Include="UI\Converters\RaduisConverter.cs" />
+    <Compile Include="UI\Converters\RectConverter.cs" />
+    <Compile Include="UI\Converters\StringNullOrEmptyToVisibilityConverter.cs" />
+    <Compile Include="UI\Converters\ValueConverterGroup.cs" />
+    <Compile Include="UI\Helpers\TemplatedWindow.cs" />
+    <Compile Include="Config\Hotkey.cs" />
     <Compile Include="Capture\ScreenUtil.cs" />
-    <Compile Include="Utilities\RegistryOptions.cs" />
     <Compile Include="Utilities\SysInfo.cs" />
-    <Compile Include="Utilities\VisualTreeHelperEx.cs" />
-    <Compile Include="HomePage.xaml.cs">
+    <Compile Include="UI\Helpers\VisualTreeHelperEx.cs" />
+    <Compile Include="UI\HomePage.xaml.cs">
       <DependentUpon>HomePage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UploadManager.cs" />
-    <Compile Include="Settings.cs" />
+    <Compile Include="Capture\UploadManager.cs" />
+    <Compile Include="Config\Settings.cs" />
     <Compile Include="Utilities\AreoColor.cs" />
     <Compile Include="Utilities\Extensions.cs" />
     <Compile Include="Utilities\HSLColor.cs" />
-    <Compile Include="VideoOverlayWindow.xaml.cs">
+    <Compile Include="UI\VideoOverlayWindow.xaml.cs">
       <DependentUpon>VideoOverlayWindow.xaml</DependentUpon>
     </Compile>
     <Page Include="Assets\CustomWindowStyle.xaml">
@@ -266,43 +262,43 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Page Include="CaptureWindow2.xaml">
+    <Page Include="UI\CaptureWindow2.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Controls\FFMpegCodecSettingsEditor3.xaml">
+    <Page Include="UI\Config\FFMpegCodecSettingsEditor3.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Controls\SpinnerTextBox.xaml">
+    <Page Include="UI\Controls\SpinnerTextBox.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Controls\UpdaterControl.xaml">
+    <Page Include="UI\Config\UpdaterControl.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Controls\UploadProviderSettingsEditor.xaml">
+    <Page Include="UI\Config\UploadProviderSettingsEditor.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="HomePage.xaml">
+    <Page Include="UI\HomePage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="ImageEditorPage.xaml">
+    <Page Include="UI\ImageEditorPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="SettingsPage.xaml">
+    <Page Include="UI\SettingsPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="TaskWindow.xaml">
+    <Page Include="UI\TaskWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="VideoOverlayWindow.xaml">
+    <Page Include="UI\VideoOverlayWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
