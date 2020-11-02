@@ -42,6 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="EmbeddedResource.cs" />
+    <Compile Include="PropertyChanged.Fody.cs" />
     <Compile Include="Upload.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
