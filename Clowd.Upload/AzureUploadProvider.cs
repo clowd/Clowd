@@ -1,6 +1,7 @@
 ﻿using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Core.Util;
+using RT.Serialization;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -27,6 +28,11 @@ namespace Clowd.Upload
 
     public class AzureUploadProvider : UploadProviderBase
     {
+        public override string Name => "Azure Storage";
+        public override string Description => "Uploads any file as a block blob for viewing online";
+        public override SupportedUploadType SupportedUpload => SupportedUploadType.All;
+        public override Stream Icon => new Resource().AzureIcon;
+
         public string ConnectionString
         {
             get => _connectionString;
@@ -66,15 +72,13 @@ namespace Clowd.Upload
             }
         }
 
-        public override Stream Icon => new Resource().AzureIcon;
-
         const string AZURE_SERVICE_VERSION = "2019-12-12";
         private readonly IMimeProvider _mimeDb;
         private string _connectionString;
         private string _containerName;
         private string _customDomain;
 
-        public AzureUploadProvider() : base("Azure Storage", "Uploads any file as a block blob for viewing online", SupportedUploadType.All)
+        public AzureUploadProvider() : base()
         {
             _mimeDb = new MimeDbMimeProvider();
         }

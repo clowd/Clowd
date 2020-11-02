@@ -15,6 +15,7 @@ namespace Clowd
     {
         public UploadProviderBase Provider { get; set; }
         public string UploadKey { get; set; }
+        public string DeleteKey { get; set; }
         public DateTimeOffset UploadTime { get; set; }
         public string ContentType { get; set; }
         public string FileName { get; set; }
@@ -68,13 +69,13 @@ namespace Clowd
         }
 
         [Browsable(false)]
-        public virtual SupportedUploadType SupportedUpload { get; }
+        public abstract SupportedUploadType SupportedUpload { get; }
 
         [Browsable(false)]
-        public virtual string Name { get; }
+        public abstract string Name { get; }
 
         [Browsable(false)]
-        public virtual string Description { get; }
+        public abstract string Description { get; }
 
         [Browsable(false)]
         public virtual Stream Icon => EmbeddedResource.GetStream("Clowd", "default-provider-icon.png");
@@ -83,17 +84,9 @@ namespace Clowd
 
         private bool _enabled;
 
-        protected UploadProviderBase(string name, string description, SupportedUploadType supported)
+        protected UploadProviderBase()
         {
-            Name = name;
-            Description = description;
-            SupportedUpload = supported;
         }
-
-        //public virtual Task<UploadResult> UploadAsync(string filePath, UploadProgressHandler progress, string uploadName)
-        //{
-        //    return UploadAsync(filePath, progress, uploadName, CancellationToken.None);
-        //}
 
         public virtual async Task<UploadResult> UploadAsync(string filePath, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken)
         {
@@ -102,11 +95,6 @@ namespace Clowd
                 return await UploadAsync(fs, progress, uploadName, cancelToken);
             }
         }
-
-        //public virtual Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName)
-        //{
-        //    return UploadAsync(fileStream, progress, uploadName, CancellationToken.None);
-        //}
 
         public abstract Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
 
