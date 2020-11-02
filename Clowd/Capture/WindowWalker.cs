@@ -20,7 +20,7 @@ using System.Windows.Media.Imaging;
 
 namespace Clowd.Utilities
 {
-    class WindowFinder3 : INotifyPropertyChanged
+    class WindowWalker : INotifyPropertyChanged
     {
         public int DepthReady
         {
@@ -57,7 +57,7 @@ namespace Clowd.Utilities
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        public WindowFinder3()
+        public WindowWalker()
         {
         }
 

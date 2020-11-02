@@ -68,8 +68,8 @@ namespace Clowd
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
 
         TimedConsoleLogger _timer;
-        WindowFinder3.CachedWindow _selectedWindow;
-        WindowFinder3 _windowFinder;
+        WindowWalker.CachedWindow _selectedWindow;
+        WindowWalker _windowFinder;
         BitmapSource _image;
         BitmapSource _imageGray;
 
@@ -95,7 +95,7 @@ namespace Clowd
         bool _highPerformance = false;
         double _lastDrawZoom = 0;
         WpfRect _lastSelRect = default(WpfRect);
-        WindowFinder3.CachedWindow _lastSelWindow = null;
+        WindowWalker.CachedWindow _lastSelWindow = null;
         bool _lastCapturing = false;
         volatile bool _finishedUp = false;
 
@@ -146,7 +146,7 @@ namespace Clowd
         {
             _timer = timer;
             timer.Log("FastCapStage1", "Start");
-            _windowFinder = new WindowFinder3();
+            _windowFinder = new WindowWalker();
             _windowFinder.CapturePart1(timer);
 
             _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, timer);
