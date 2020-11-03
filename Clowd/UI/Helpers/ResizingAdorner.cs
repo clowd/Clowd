@@ -1,13 +1,13 @@
-﻿using ScreenVersusWpf;
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using ScreenVersusWpf;
 
-namespace Clowd.Controls
+namespace Clowd.UI.Helpers
 {
     public class ResizingAdorner : Adorner
     {

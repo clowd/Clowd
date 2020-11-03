@@ -26,15 +26,13 @@
  */
 
 using System;
-using System.Linq;
-using System.Linq.Expressions;
-using System.Dynamic;
-using System.Reflection;
-using System.Collections.Generic;
 using System.Diagnostics;
+using System.Dynamic;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace System.Dynamic
+namespace Clowd.Util
 {
 
     /// <summary>MetaObject gives your own classes the ability to easily implement IDynamicMetaObjectProvider without inheriting from DynamicObject</summary>

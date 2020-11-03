@@ -1,11 +1,9 @@
-﻿using Clowd.Interop;
-using Clowd.Interop.DwmApi;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Drawing;
-using System.Text;
+using Clowd.Interop;
+using Clowd.Interop.DwmApi;
 
-namespace Clowd.Utilities
+namespace Clowd.Util
 {
     internal static class SysInfo
     {

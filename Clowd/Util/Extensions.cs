@@ -1,24 +1,22 @@
-﻿using Clowd.Interop;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Clowd.Interop;
+using ScreenVersusWpf;
 using SharpRaven;
 using SharpRaven.Data;
 using SharpRaven.Logging;
-using ScreenVersusWpf;
-using System.Windows.Controls;
 
-namespace Clowd
+namespace Clowd.Util
 {
     public static class Extensions
     {

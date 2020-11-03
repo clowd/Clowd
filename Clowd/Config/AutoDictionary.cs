@@ -2,10 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Clowd.Utilities
+namespace Clowd.Config
 {
     public class AutoDictionary<TKey, TValue> : IDictionary<TKey, TValue>
     {

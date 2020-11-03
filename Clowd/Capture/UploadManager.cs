@@ -1,24 +1,18 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using RT.Util.ExtensionMethods;
-using Clowd.Shared;
-using System.Windows;
-using Ookii.Dialogs.Wpf;
-using Clowd.Utilities;
-using Ionic.Zip;
-using System.IO.Compression;
-using Clowd;
+using Clowd.Config;
+using Clowd.UI;
+using Clowd.UI.Helpers;
 using Clowd.Upload;
-using CS.Util;
+using Clowd.Util;
+using Ionic.Zip;
+using Ookii.Dialogs.Wpf;
 
-namespace Clowd
+namespace Clowd.Capture
 {
     public static class UploadManager
     {
@@ -183,7 +177,7 @@ namespace Clowd
                 viewName = type.ToString() + " File";
 
             if (name == null)
-                name = CS.Util.RandomEx.GetString(8).ToLower();
+                name = RandomEx.GetString(8).ToLower();
 
             extension = extension.Trim('.');
             var fileName = $"{name}.{extension}";

@@ -1,24 +1,19 @@
 ﻿using System;
-using System.Linq;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Windows;
-using System.Windows.Forms;
-using Clowd.Interop;
-using Clowd.Utilities;
-using Clowd.Interop.DwmApi;
-using Clowd.Interop.Shcore;
-using ScreenVersusWpf;
-using System.Drawing;
 using System.ComponentModel;
-using System.Threading.Tasks;
-using Clowd.Interop.Com;
+using System.Drawing;
+using System.Linq;
+using System.Text;
 using System.Threading;
-using System.Diagnostics;
+using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media.Imaging;
+using Clowd.Interop;
+using Clowd.Interop.Com;
+using Clowd.Util;
+using ScreenVersusWpf;
 
-namespace Clowd.Utilities
+namespace Clowd.Capture
 {
     class WindowWalker : INotifyPropertyChanged
     {

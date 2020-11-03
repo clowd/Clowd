@@ -1,10 +1,10 @@
 <Window
-    x:Class="Clowd.CaptureWindow2"
+    x:Class="Clowd.UI.CaptureWindow2"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:conv="clr-namespace:Clowd.Converters"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="clr-namespace:Clowd"
+    xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="Clowd Capture"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"

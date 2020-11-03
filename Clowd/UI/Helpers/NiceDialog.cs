@@ -1,22 +1,20 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Clowd.Config;
 using Clowd.Interop;
+using Clowd.Util;
 using Cyotek.Windows.Forms;
 using Ookii.Dialogs.Wpf;
-using ScreenVersusWpf;
 
-namespace Clowd
+namespace Clowd.UI.Helpers
 {
     public enum NiceDialogIcon
     {

@@ -11,7 +11,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Markup;
 
-namespace IKriv.Wpf
+namespace Clowd.UI.Converters
 {
     /// <summary>
     /// Value converter that performs arithmetic calculations over its argument(s)
@@ -24,7 +24,7 @@ namespace IKriv.Wpf
     /// Arguments of multi value converter may be referred as x,y,z,t (first-fourth argument), or a,b,c,d, or {0}, {1}, {2}, {3}, {4}, ...
     /// The converter supports arithmetic expressions of arbitrary complexity, including nested subexpressions
     /// </remarks>
-    public class MathConverter :  
+    public class MathConverter :
 #if !SILVERLIGHT
         MarkupExtension,
         IMultiValueConverter,
@@ -71,10 +71,10 @@ namespace IKriv.Wpf
 #if !SILVERLIGHT
         public override object ProvideValue(IServiceProvider serviceProvider)
         {
- 	        return this;
+            return this;
         }
 #endif
-        protected virtual void ProcessException( Exception ex )
+        protected virtual void ProcessException(Exception ex)
         {
             Console.WriteLine(ex.Message);
         }
@@ -108,7 +108,7 @@ namespace IKriv.Wpf
                 }
             }
 
-            public decimal  Eval(object[] args)
+            public decimal Eval(object[] args)
             {
                 return _value;
             }
@@ -120,7 +120,7 @@ namespace IKriv.Wpf
 
             public Variable(string text)
             {
-                if (!int.TryParse(text, out _index) || _index<0)
+                if (!int.TryParse(text, out _index) || _index < 0)
                 {
                     throw new ArgumentException(String.Format("'{0}' is not a valid parameter index", text));
                 }
@@ -319,7 +319,7 @@ namespace IKriv.Wpf
                 SkipWhiteSpace();
                 return new Variable(n);
             }
-            
+
             private void SkipWhiteSpace()
             {
                 while (pos < text.Length && Char.IsWhiteSpace((text[pos]))) ++pos;
