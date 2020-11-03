@@ -1,18 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Management;
 using System.Text;
 using System.Threading.Tasks;
+using Clowd.Config;
 using Clowd.FFmpeg;
 using Clowd.Installer.Features;
-using Microsoft.VisualBasic.FileIO;
-using PropertyChanged;
 
-namespace Clowd.Utilities
+namespace Clowd.Capture
 {
     public class LiveScreenRecording
     {

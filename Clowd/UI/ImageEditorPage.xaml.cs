@@ -3,28 +3,25 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using Clowd.Controls;
-using Clowd.Utilities;
-using Cyotek.Windows.Forms;
+using Clowd.Capture;
+using Clowd.Config;
+using Clowd.UI.Controls;
+using Clowd.UI.Helpers;
+using Clowd.Util;
 using DrawToolsLib;
 using DrawToolsLib.Graphics;
 using PropertyChanged;
-using RT.Util;
 using ScreenVersusWpf;
 
-namespace Clowd
+namespace Clowd.UI
 {
     [ImplementPropertyChanged]
     public partial class ImageEditorPage : TemplatedControl

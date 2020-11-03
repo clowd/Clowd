@@ -6,7 +6,7 @@ using System.Windows.Documents;
 using System.Windows.Markup;
 using System.Windows.Media;
 
-namespace Clowd.Controls
+namespace Clowd.UI.Controls
 {
     [ContentProperty("Text")]
     public class OutlinedTextBlock : FrameworkElement

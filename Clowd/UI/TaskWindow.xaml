@@ -1,16 +1,15 @@
 ﻿<Window
-    x:Class="Clowd.TaskWindow"
+    x:Class="Clowd.UI.TaskWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:Clowd.Controls"
-    xmlns:conv="clr-namespace:Clowd.Converters"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:eim="clr-namespace:Microsoft.Expression.Interactivity.Media;assembly=Microsoft.Expression.Interactions"
+    xmlns:helpers="clr-namespace:Clowd.UI.Helpers"
     xmlns:i="clr-namespace:System.Windows.Interactivity;assembly=System.Windows.Interactivity"
-    xmlns:local="clr-namespace:Clowd"
-    xmlns:math="clr-namespace:IKriv.Wpf"
+    xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:util="clr-namespace:Clowd.Utilities"
     Title="ClTaskWindow"
     Width="240"
     Height="30"
@@ -410,7 +409,7 @@
                                 ContextMenu="{StaticResource itemMenu}"
                                 Style="{StaticResource ToolButtonStyle}">
                                 <i:Interaction.Behaviors>
-                                    <util:ButtonClickContextBehavior />
+                                    <helpers:ButtonClickContextBehavior />
                                 </i:Interaction.Behaviors>
                                 <Viewbox Margin="2">
                                     <Path

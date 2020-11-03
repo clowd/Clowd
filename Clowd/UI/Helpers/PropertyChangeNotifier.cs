@@ -1,13 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 
-namespace Clowd.Utilities
+namespace Clowd.UI.Helpers
 {
     public sealed class PropertyChangeNotifier : DependencyObject, IDisposable
     {

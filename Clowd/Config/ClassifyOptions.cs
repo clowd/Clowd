@@ -1,9 +1,9 @@
-﻿using RT.Serialization;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows.Media;
 using System.Xml.Linq;
+using RT.Serialization;
 
-namespace Clowd.Utilities
+namespace Clowd.Config
 {
     /// <summary>
     /// Enables <see cref="Classify"/> to save color properties as strings of a human-editable form.

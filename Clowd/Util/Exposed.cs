@@ -25,14 +25,11 @@
 //
 
 using System;
-using System.Collections.Generic;
 using System.Dynamic;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using Microsoft.CSharp.RuntimeBinder;
 
-namespace Clowd
+namespace Clowd.Util
 {
     public class Exposed : DynamicObject
     {

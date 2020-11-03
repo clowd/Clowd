@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 
-namespace Clowd.Utilities
+namespace Clowd.UI.Helpers
 {
     public sealed class TrulyObservableCollection<T> : ObservableCollection<T>, INotifyPropertyChanged
         where T : INotifyPropertyChanged

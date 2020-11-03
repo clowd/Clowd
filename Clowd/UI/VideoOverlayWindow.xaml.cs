@@ -1,26 +1,17 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 using Clowd.Capture;
+using Clowd.Config;
 using Clowd.FFmpeg;
-using Clowd.Utilities;
-using Ookii.Dialogs.Wpf;
+using Clowd.UI.Helpers;
+using Clowd.Util;
 using ScreenVersusWpf;
 
-namespace Clowd
+namespace Clowd.UI
 {
     [PropertyChanged.ImplementPropertyChanged]
     public partial class VideoOverlayWindow : Window

@@ -1,14 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Data;
 using System.Windows.Media.Imaging;
 
-namespace Clowd.Converters
+namespace Clowd.UI.Converters
 {
     [ValueConversion(typeof(Stream), typeof(BitmapSource))]
     public class StreamToBitmapSourceConverter : IValueConverter

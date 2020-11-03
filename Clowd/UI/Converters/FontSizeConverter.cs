@@ -1,9 +1,8 @@
 using System;
 using System.Globalization;
-using System.Windows;
 using System.Windows.Data;
 
-namespace Utilities
+namespace Clowd.UI.Converters
 {
     /// <summary>
     /// Convert font size to string making the same conversion

@@ -3,17 +3,15 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
 using Clowd.Installer.Features;
-using Clowd.Utilities;
+using Clowd.UI;
+using Clowd.UI.Helpers;
+using Clowd.Util;
 using DirectShowLib;
-using Ookii.Dialogs.Wpf;
 using PropertyChanged;
 using RT.Serialization;
 
-namespace Clowd
+namespace Clowd.Config
 {
     [ImplementPropertyChanged]
     public class FFmpegSettings : INotifyPropertyChanged, RT.Serialization.IClassifyObjectProcessor

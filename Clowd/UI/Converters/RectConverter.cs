@@ -1,12 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Data;
-using System.Windows.Shapes;
 
-namespace Clowd.Converters
+namespace Clowd.UI.Converters
 {
     public class RectConverter : IMultiValueConverter
     {

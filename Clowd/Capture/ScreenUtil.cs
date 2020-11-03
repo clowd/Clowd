@@ -1,23 +1,14 @@
-﻿using Clowd.Interop;
-using Clowd.Interop.Gdi32;
-using PropertyChanged;
-using ScreenVersusWpf;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
-using System.Linq;
-using System.Management;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
+using Clowd.Interop;
+using Clowd.Interop.Gdi32;
+using Clowd.Util;
+using ScreenVersusWpf;
 
-namespace Clowd.Utilities
+namespace Clowd.Capture
 {
     public sealed class ScreenUtil : IDisposable
     {

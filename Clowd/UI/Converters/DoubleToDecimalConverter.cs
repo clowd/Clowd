@@ -3,10 +3,9 @@
 //---------------------------------------------------------
 using System;
 using System.Globalization;
-using System.Windows;
 using System.Windows.Data;
 
-namespace Clowd.Converters
+namespace Clowd.UI.Converters
 {
     /// <summary>
     /// Converts double to decimal value with given number of decimal digits

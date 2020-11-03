@@ -1,16 +1,11 @@
 ﻿//http://stackoverflow.com/a/9330358/184746
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Net.Mime;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 
-namespace Clowd.Utilities
+namespace Clowd.Config
 {
     public class HotKey : IDisposable
     {
@@ -36,7 +31,7 @@ namespace Clowd.Utilities
         {
             if (_dictHotKeyToCalBackProc != null)
             {
-                var id = KeyInterop.VirtualKeyFromKey(Key) + ((int) KeyModifiers*0x10000);
+                var id = KeyInterop.VirtualKeyFromKey(Key) + ((int)KeyModifiers * 0x10000);
                 if (_dictHotKeyToCalBackProc.ContainsKey(id))
                     throw new InvalidOperationException("This key combination is already registered.");
             }

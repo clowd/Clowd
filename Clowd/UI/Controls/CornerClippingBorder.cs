@@ -1,13 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
-namespace Clowd.Controls
+namespace Clowd.UI.Controls
 {
     /// <Remarks>
     ///     As a side effect ClippingBorder will surpress any databinding or animation of 

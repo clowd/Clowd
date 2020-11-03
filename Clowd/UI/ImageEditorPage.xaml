@@ -1,12 +1,13 @@
-﻿<local:TemplatedControl
-    x:Class="Clowd.ImageEditorPage"
+﻿<helpers:TemplatedControl
+    x:Class="Clowd.UI.ImageEditorPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:Clowd.Controls"
-    xmlns:conv="clr-namespace:Clowd.Converters"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:lib="clr-namespace:DrawToolsLib;assembly=DrawToolsLib"
-    xmlns:local="clr-namespace:Clowd"
+    xmlns:draw="clr-namespace:DrawToolsLib;assembly=DrawToolsLib"
+    xmlns:helpers="clr-namespace:Clowd.UI.Helpers"
+    xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     d:DesignHeight="450"
     d:DesignWidth="800"
@@ -22,7 +23,7 @@
             <RoutedUICommand x:Key="Commands.SelectTool" />
             <RoutedUICommand x:Key="Commands.ZoomFit" />
             <RoutedUICommand x:Key="Commands.ZoomActual" />
-            <lib:ToolTypeConverter x:Key="convToolType" />
+            <draw:ToolTypeConverter x:Key="convToolType" />
             <conv:ZoomScaleConverter x:Key="convZoomScale" />
             <conv:StringPixelConverter x:Key="convPixel2String" />
             <conv:ColorToBrushConverter x:Key="convColorToBrush" />
@@ -620,7 +621,7 @@
                 Width="{Binding ActualWidth, ElementName=objectCanvas}"
                 Height="{Binding ActualHeight, ElementName=objectCanvas}"
                 Fill="#1e1e1e" />
-            <lib:DrawingCanvas
+            <draw:DrawingCanvas
                 x:Name="drawingCanvas"
                 Width="{Binding ActualWidth, ElementName=objectCanvas}"
                 Height="{Binding ActualHeight, ElementName=objectCanvas}"
@@ -634,4 +635,4 @@
             Height="1"
             Opacity="0.01" />
     </Grid>
-</local:TemplatedControl>
+</helpers:TemplatedControl>

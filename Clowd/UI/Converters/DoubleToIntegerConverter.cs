@@ -1,10 +1,9 @@
 using System;
 using System.Globalization;
-using System.Windows;
 using System.Windows.Data;
 
 
-namespace Utilities
+namespace Clowd.UI.Converters
 {
     /// <summary>
     /// Double to integer converter.
@@ -39,12 +38,12 @@ namespace Utilities
         {
             int result = (int)((double)value + 0.5);
 
-            if ( result < min )
+            if (result < min)
             {
                 result = min;
             }
 
-            if ( result > max )
+            if (result > max)
             {
                 result = max;
             }

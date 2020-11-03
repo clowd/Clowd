@@ -4,17 +4,15 @@
 // All other rights reserved.
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Windows;
-using System.Windows.Media.Animation;
-using System.Windows.Controls;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using Clowd.Utilities;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Animation;
+using Clowd.UI.Helpers;
 
-namespace Clowd.Controls
+namespace Clowd.UI.Controls
 {
     /// <summary>
     /// Represents a control with a single piece of content and when that content 

@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Media;
 
-namespace Clowd.Utilities
+namespace Clowd.UI.Helpers
 {
     /// <summary>
     /// Provides addition visual tree helper methods.

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Windows.Data;
 
-namespace Clowd.Converters
+namespace Clowd.UI.Converters
 {
     public class RadiusConverter : IValueConverter
     {

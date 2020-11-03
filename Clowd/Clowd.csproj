@@ -146,7 +146,7 @@
     </Compile>
     <Compile Include="UI\Config\GlobalTriggerEditor.cs" />
     <Compile Include="UI\Controls\NonTogglableToggleButton.cs" />
-    <Compile Include="Capture\ReallyFastCaptureRenderer.cs" />
+    <Compile Include="UI\ReallyFastCaptureRenderer.cs" />
     <Compile Include="UI\Controls\ResetDefaultButton.cs" />
     <Compile Include="UI\Controls\SpinnerTextBox.xaml.cs">
       <DependentUpon>SpinnerTextBox.xaml</DependentUpon>
@@ -183,23 +183,23 @@
     <Compile Include="Config\AutoDictionary.cs" />
     <Compile Include="UI\Helpers\ButtonClickContextBehavior.cs" />
     <Compile Include="Config\ClassifyOptions.cs" />
-    <Compile Include="Utilities\ClipboardEx.cs" />
-    <Compile Include="Utilities\Debouncer.cs" />
-    <Compile Include="Utilities\Exposed.cs" />
-    <Compile Include="Utilities\Expr.cs" />
-    <Compile Include="Utilities\ICommandLineProxy.cs" />
+    <Compile Include="Util\ClipboardEx.cs" />
+    <Compile Include="Util\Debouncer.cs" />
+    <Compile Include="Util\Exposed.cs" />
+    <Compile Include="Util\Expr.cs" />
+    <Compile Include="Util\ICommandLineProxy.cs" />
     <Compile Include="Config\GlobalTrigger.cs" />
     <Compile Include="Capture\LiveScreenRecording.cs" />
-    <Compile Include="Utilities\PathEx.cs" />
-    <Compile Include="Utilities\ProgressStream.cs" />
-    <Compile Include="Utilities\ProxyMetaObject.cs" />
+    <Compile Include="Util\PathEx.cs" />
+    <Compile Include="Util\ProgressStream.cs" />
+    <Compile Include="Util\ProxyMetaObject.cs" />
     <Compile Include="UI\Helpers\NiceDialog.cs" />
     <Compile Include="UI\Helpers\PropertyChangeNotifier.cs" />
-    <Compile Include="Utilities\RandomEx.cs" />
+    <Compile Include="Util\RandomEx.cs" />
     <Compile Include="UI\Helpers\RelayCommand.cs" />
     <Compile Include="Capture\ScrollingCapture.cs" />
     <Compile Include="Capture\ScrollingCapture2.cs" />
-    <Compile Include="Utilities\TimedConsoleLogger.cs" />
+    <Compile Include="Util\TimedConsoleLogger.cs" />
     <Compile Include="UI\Helpers\TrulyObservableCollection.cs" />
     <Compile Include="UI\Controls\FadingScrollViewer.cs" />
     <Compile Include="UI\Controls\OutlinedText.cs" />
@@ -225,16 +225,16 @@
     <Compile Include="UI\Helpers\TemplatedWindow.cs" />
     <Compile Include="Config\Hotkey.cs" />
     <Compile Include="Capture\ScreenUtil.cs" />
-    <Compile Include="Utilities\SysInfo.cs" />
+    <Compile Include="Util\SysInfo.cs" />
     <Compile Include="UI\Helpers\VisualTreeHelperEx.cs" />
     <Compile Include="UI\HomePage.xaml.cs">
       <DependentUpon>HomePage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Capture\UploadManager.cs" />
     <Compile Include="Config\Settings.cs" />
-    <Compile Include="Utilities\AreoColor.cs" />
-    <Compile Include="Utilities\Extensions.cs" />
-    <Compile Include="Utilities\HSLColor.cs" />
+    <Compile Include="Util\AreoColor.cs" />
+    <Compile Include="Util\Extensions.cs" />
+    <Compile Include="Util\HSLColor.cs" />
     <Compile Include="UI\VideoOverlayWindow.xaml.cs">
       <DependentUpon>VideoOverlayWindow.xaml</DependentUpon>
     </Compile>

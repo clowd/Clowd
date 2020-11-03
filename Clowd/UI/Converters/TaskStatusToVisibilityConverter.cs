@@ -1,10 +1,10 @@
 ﻿using System;
-using System.Linq;
 using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Data;
 
-namespace Clowd.Converters
+namespace Clowd.UI.Converters
 {
     [ValueConversion(typeof(TaskViewItem.TaskStatus), typeof(Visibility))]
     public class TaskStatusToVisibilityConverter : IValueConverter
