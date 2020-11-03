@@ -1,19 +1,10 @@
-﻿using Clowd.Interop;
-using Clowd.Utilities;
-using Ionic.Zip;
-using NotifyIconLib;
-using RT.Util;
-using RT.Util.ExtensionMethods;
-using RT.Serialization;
-using ScreenVersusWpf;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,12 +12,21 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Clowd.Capture;
+using Clowd.Config;
+using Clowd.Interop;
+using Clowd.UI;
+using Clowd.UI.Helpers;
+using Clowd.Util;
+using NotifyIconLib;
+using Ookii.Dialogs.Wpf;
+using RT.Serialization;
+using RT.Util;
+using RT.Util.ExtensionMethods;
+using ScreenVersusWpf;
+using SharpRaven.Data;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
-using Ionic.Zlib;
-using SharpRaven;
-using SharpRaven.Data;
-using Ookii.Dialogs.Wpf;
 
 namespace Clowd
 {

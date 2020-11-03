@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.ServiceModel;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace Clowd.Utilities
+namespace Clowd.Util
 {
     [ServiceContract]
     public interface ICommandLineProxy
@@ -29,7 +25,7 @@ namespace Clowd.Utilities
             return true;
         }
     }
-    public class CommandLineEventArgs  :EventArgs
+    public class CommandLineEventArgs : EventArgs
     {
         public string[] Args { get; private set; }
         public CommandLineEventArgs(string[] args)

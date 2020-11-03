@@ -1,13 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Data;
 using System.Windows.Media;
 
-namespace Clowd.Converters
+namespace Clowd.UI.Converters
 {
     [ValueConversion(typeof(bool), typeof(Brush))]
     class OnOffBrushConverter : IValueConverter

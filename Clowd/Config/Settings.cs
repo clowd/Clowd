@@ -7,15 +7,17 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using Clowd.Controls;
+using Clowd.UI;
+using Clowd.UI.Config;
+using Clowd.UI.Helpers;
 using Clowd.Upload;
-using Clowd.Utilities;
+using Clowd.Util;
 using PropertyChanged;
 using RT.Serialization;
 using RT.Util;
 using PData = PropertyTools.DataAnnotations;
 
-namespace Clowd
+namespace Clowd.Config
 {
     public enum SettingsCategory
     {

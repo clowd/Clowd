@@ -1,35 +1,26 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
-using System.Windows.Threading;
-using Clowd.Controls;
+using Clowd.Capture;
+using Clowd.Config;
 using Clowd.Interop;
-using Clowd.Utilities;
-using Microsoft.Win32;
-using PropertyChanged;
-using ScreenVersusWpf;
+using Clowd.UI.Helpers;
+using Clowd.Util;
 using RT.Util.ExtensionMethods;
-using System.Net.Http;
-using System.Globalization;
+using ScreenVersusWpf;
 
-namespace Clowd
+namespace Clowd.UI
 {
     public partial class CaptureWindow2 : Window
     {

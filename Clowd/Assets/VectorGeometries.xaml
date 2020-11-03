@@ -1,7 +1,4 @@
-﻿<ResourceDictionary
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="clr-namespace:Clowd">
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <StreamGeometry x:Key="sgblank" />
 
     <StreamGeometry x:Key="IconHome26">M 20 2.03125 C 19.448 2.03125 19 2.48025 19 3.03125 L 19 7.8125 L 13.71875 2.53125 C 13.32775 2.14025 12.67225 2.14025 12.28125 2.53125 L 0.5625 14.28125 C 0.1715 14.67225 0.1715 15.2965 0.5625 15.6875 C 0.9535 16.0785 1.57775 16.0785 1.96875 15.6875 L 13 4.65625 L 24.0625 15.71875 C 24.2575 15.91375 24.52525 16.03125 24.78125 16.03125 C 25.03725 16.03125 25.27375 15.91375 25.46875 15.71875 C 25.85975 15.32875 25.85975 14.7035 25.46875 14.3125 L 22 10.84375 L 22 3.03125 C 22 2.48025 21.551 2.03125 21 2.03125 L 20 2.03125 z M 13 6.5 L 2 17.5 L 2 23 C 2 24.656 3.344 26 5 26 L 21 26 C 22.656 26 24 24.656 24 23 L 24 17.5 L 13 6.5 z M 11 16 L 15 16 C 15.551 16 16 16.449 16 17 L 16 23 C 16 23.551 15.551 24 15 24 L 11 24 C 10.449 24 10 23.551 10 23 L 10 17 C 10 16.449 10.449 16 11 16 z</StreamGeometry>

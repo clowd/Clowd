@@ -1,13 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Media;
 
-namespace Clowd.Utilities
+namespace Clowd.Util
 {
     public class AreoColor
     {
@@ -19,7 +14,7 @@ namespace Clowd.Utilities
         {
             if (SysInfo.IsDWMEnabled)
             {
-                if (SysInfo.IsWindows8OrLater) 
+                if (SysInfo.IsWindows8OrLater)
                 {
                     var selected = GetImmersiveColor("ImmersiveSaturatedHoverBackground");
                     var hsl = HSLColor.FromRGB(selected);
@@ -29,7 +24,7 @@ namespace Clowd.Utilities
                     }
                     return hsl.ToRGB();
                 }
-                else 
+                else
                 {
                     DWM_COLORIZATION_PARAMS parameters;
                     DwmGetColorizationParameters(out parameters);

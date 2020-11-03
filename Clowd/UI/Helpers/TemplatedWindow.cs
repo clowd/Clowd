@@ -1,18 +1,13 @@
-﻿using Clowd.Utilities;
-using MahApps.Metro.Controls;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using ScreenVersusWpf;
+using MahApps.Metro.Controls;
 using RT.Util.ExtensionMethods;
+using ScreenVersusWpf;
 
-namespace Clowd
+namespace Clowd.UI.Helpers
 {
     public abstract class TemplatedControl : UserControl
     {
