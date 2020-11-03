@@ -58,12 +58,12 @@
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="../Images/cancel_24px.png"
+                                        Source="/Images/cancel_24px.png"
                                         Visibility="{Binding SupportedUpload, Converter={StaticResource supportedVisRed}, ConverterParameter=Image}" />
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="../Images/ok_48px.png"
+                                        Source="/Images/ok_48px.png"
                                         Visibility="{Binding SupportedUpload, Converter={StaticResource supportedVisGreen}, ConverterParameter=Image}" />
                                 </StackPanel>
                                 <StackPanel Margin="5" Orientation="Horizontal">
@@ -74,12 +74,12 @@
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="../Images/cancel_24px.png"
+                                        Source="/Images/cancel_24px.png"
                                         Visibility="{Binding SupportedUpload, Converter={StaticResource supportedVisRed}, ConverterParameter=Video}" />
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="../Images/ok_48px.png"
+                                        Source="/Images/ok_48px.png"
                                         Visibility="{Binding SupportedUpload, Converter={StaticResource supportedVisGreen}, ConverterParameter=Video}" />
                                 </StackPanel>
                                 <StackPanel Margin="5" Orientation="Horizontal">
@@ -90,12 +90,12 @@
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="../Images/cancel_24px.png"
+                                        Source="/Images/cancel_24px.png"
                                         Visibility="{Binding SupportedUpload, Converter={StaticResource supportedVisRed}, ConverterParameter=Text}" />
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="../Images/ok_48px.png"
+                                        Source="/Images/ok_48px.png"
                                         Visibility="{Binding SupportedUpload, Converter={StaticResource supportedVisGreen}, ConverterParameter=Text}" />
                                 </StackPanel>
                                 <StackPanel Margin="5" Orientation="Horizontal">
@@ -106,12 +106,12 @@
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="../Images/cancel_24px.png"
+                                        Source="/Images/cancel_24px.png"
                                         Visibility="{Binding SupportedUpload, Converter={StaticResource supportedVisRed}, ConverterParameter=Binary}" />
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="../Images/ok_48px.png"
+                                        Source="/Images/ok_48px.png"
                                         Visibility="{Binding SupportedUpload, Converter={StaticResource supportedVisGreen}, ConverterParameter=Binary}" />
                                 </StackPanel>
                             </StackPanel>
@@ -122,7 +122,7 @@
                             <ptools:PropertyGrid
                                 x:Name="PropertyGrid1"
                                 CategoryControlType="Template"
-                                DescriptionIcon="../Images/Help-25.png"
+                                DescriptionIcon="/Images/Help-25.png"
                                 DescriptionIconAlignment="Right"
                                 PropertyControlFactory="{StaticResource controlFactory}"
                                 PropertyItemFactory="{StaticResource itemFactory}"

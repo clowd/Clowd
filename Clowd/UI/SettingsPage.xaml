@@ -89,7 +89,7 @@
             x:Name="PropertyGrid1"
             Grid.Row="1"
             Margin="5"
-            DescriptionIcon="Images/Help-25.png"
+            DescriptionIcon="/Images/Help-25.png"
             DescriptionIconAlignment="Right"
             PropertyControlFactory="{StaticResource controlFactory}"
             PropertyItemFactory="{StaticResource itemFactory}"

@@ -194,12 +194,12 @@
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="Images/Checkmark-26.png"
+                                        Source="/Images/Checkmark-26.png"
                                         Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=Complete;Executed}" />
                                     <Image
                                         Width="20"
                                         Height="20"
-                                        Source="Images/Cross-26.png"
+                                        Source="/Images/Cross-26.png"
                                         Visibility="{Binding Status, Converter={StaticResource statusToVis}, ConverterParameter=Canceled;Error}" />
                                 </Canvas>
                             </Border>
