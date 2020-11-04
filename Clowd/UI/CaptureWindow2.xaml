@@ -90,11 +90,7 @@
                 IconPath="{StaticResource IconClowd}"
                 Text="_Upload" />
 
-            <Rectangle
-                MinWidth="3"
-                MinHeight="3"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch" />
+            <Rectangle Width="3" Height="3" />
 
             <controls:CaptureToolButton
                 Command="{StaticResource Command.Photo}"

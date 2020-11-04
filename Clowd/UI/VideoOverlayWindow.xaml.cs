@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using Clowd.Capture;
 using Clowd.Config;
 using Clowd.FFmpeg;
@@ -33,6 +34,8 @@ namespace Clowd.UI
         private NAudioItem speaker;
         private NAudioItem mic;
         private System.Timers.Timer audioTimer;
+        private Point? _moveMouseDown;
+        private Point? _moveInitial;
 
         public VideoOverlayWindow(ScreenRect captureArea)
         {
@@ -68,6 +71,44 @@ namespace Clowd.UI
             audioTimer.AutoReset = true;
             audioTimer.Enabled = true;
             audioTimer.Start();
+
+            recordingLabelButton.PreviewMouseDown += RecordingLabelButton_MouseDown;
+            recordingLabelButton.PreviewMouseMove += RecordingLabelButton_MouseMove;
+            recordingLabelButton.PreviewMouseUp += RecordingLabelButton_MouseUp;
+        }
+
+        private void RecordingLabelButton_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            recordingLabelButton.ReleaseMouseCapture();
+            _moveMouseDown = null;
+            _moveInitial = null;
+        }
+
+        private void RecordingLabelButton_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            e.Handled = true;
+            if (!_moveMouseDown.HasValue)
+                return;
+
+            var mouse = e.GetPosition(this);
+
+            var xdelta = mouse.X - _moveMouseDown.Value.X;
+            var ydelta = mouse.Y - _moveMouseDown.Value.Y;
+
+            Canvas.SetLeft(toolActionBarStackPanel, _moveInitial.Value.X + xdelta);
+            Canvas.SetTop(toolActionBarStackPanel, _moveInitial.Value.Y + ydelta);
+        }
+
+        private void RecordingLabelButton_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            recordingLabelButton.CaptureMouse();
+            _moveMouseDown = e.GetPosition(this);
+
+            var top = Canvas.GetTop(toolActionBarStackPanel);
+            var left = Canvas.GetLeft(toolActionBarStackPanel);
+            _moveInitial = new Point(left, top);
         }
 
         private void AudioTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
