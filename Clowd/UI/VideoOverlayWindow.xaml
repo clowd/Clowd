@@ -29,7 +29,7 @@
         <Style x:Key="AudioLevelProgressBarStyle" TargetType="ProgressBar">
             <Setter Property="HorizontalAlignment" Value="Left" />
             <Setter Property="Height" Value="2" />
-            <Setter Property="Margin" Value="3,5" />
+            <Setter Property="Margin" Value="3,6" />
             <Setter Property="LayoutTransform">
                 <Setter.Value>
                     <RotateTransform Angle="-90" />
@@ -92,10 +92,18 @@
                 <controls:CaptureToolButton
                     Background="#373737"
                     Click="buttonStop_Click"
-                    IconPath="{StaticResource IconPlay}"
                     IsEnabled="{Binding IsRecording}"
                     Text="Finish"
-                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}" />
+                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}">
+                    <controls:CaptureToolButton.IconPath>
+                        <Border
+                            Width="18"
+                            Height="18"
+                            Margin="4"
+                            Background="White"
+                            CornerRadius="4" />
+                    </controls:CaptureToolButton.IconPath>
+                </controls:CaptureToolButton>
 
                 <controls:CaptureToolButton
                     Background="#373737"
@@ -166,7 +174,7 @@
                     Click="settings_Click"
                     IconPath="{StaticResource IconSettings}"
                     IsEnabled="{Binding IsNotStarted}"
-                    Text="TUNE"
+                    Text="Tune"
                     Visibility="{Binding IsNotStarted, Converter={StaticResource Bool2Vis}}" />
 
                 <controls:CaptureToolButton
@@ -174,14 +182,14 @@
                     Click="draw_Click"
                     IconPath="{StaticResource IconDrawing}"
                     IsEnabled="{Binding IsStarted}"
-                    Text="DRAW"
+                    Text="Draw"
                     Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}" />
 
                 <controls:CaptureToolButton
                     Background="#373737"
                     Click="buttonCancel_Click"
                     IconPath="{StaticResource IconClose}"
-                    Text="CANCEL" />
+                    Text="Cancel" />
 
             </StackPanel>
             <Grid
