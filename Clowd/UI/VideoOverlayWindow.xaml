@@ -60,89 +60,49 @@
             Name="dynamicCanvas"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch">
-            <Grid
+
+            <controls:SelectionBorderControl
                 Canvas.Left="{Binding CroppingRectangleWpf.Left}"
                 Canvas.Top="{Binding CroppingRectangleWpf.Top}"
                 Width="{Binding CroppingRectangleWpf.Width}"
-                Height="{Binding CroppingRectangleWpf.Height}">
-                <Rectangle
-                    x:Name="selectionBorder"
-                    IsHitTestVisible="False"
-                    Stroke="Red" />
-            </Grid>
-            <StackPanel Name="toolActionBarStackPanel" Orientation="Horizontal">
-                <Grid
-                    Width="50"
-                    Height="50"
-                    Background="{StaticResource HighlightBrush}">
-                    <StackPanel Margin="5" Orientation="Vertical">
-                        <Viewbox Width="26" Height="26">
-                            <Path
-                                Width="16"
-                                Height="16"
-                                Data="{StaticResource PathLogoSmall16}"
-                                Fill="White" />
-                        </Viewbox>
-                        <TextBlock
-                            x:Name="recordingFpsLabel"
-                            HorizontalAlignment="Center"
-                            FontSize="10"
-                            FontWeight="DemiBold"
-                            Foreground="White">
-                            CLOWD
-                        </TextBlock>
-                    </StackPanel>
-                </Grid>
+                Height="{Binding CroppingRectangleWpf.Height}"
+                BorderBrush="Red"
+                IsEnabled="False"
+                SelectionRectangle="{Binding CroppingRectangleWpf}" />
+
+            <StackPanel
+                Name="toolActionBarStackPanel"
+                Background="#373737"
+                Orientation="Horizontal">
+
+                <controls:CaptureToolButton
+                    x:Name="recordingLabelButton"
+                    IconPath="{StaticResource IconClowd}"
+                    IsEnabled="False"
+                    Text="CLOWD" />
+
                 <Rectangle
                     MinWidth="3"
                     MinHeight="3"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch"
                     Fill="#373737" />
-                <Button
+
+                <controls:CaptureToolButton
                     Background="#373737"
                     Click="buttonStart_Click"
-                    Style="{StaticResource CaptureToolButtonStyle}"
-                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2InverseVis}}">
-                    <StackPanel Margin="5" Orientation="Vertical">
-                        <Viewbox Width="26" Height="26">
-                            <Path
-                                Width="172"
-                                Height="172"
-                                Data="M133.67728,78.42849l-88.01562,-43.62019c-2.66166,-1.34375 -5.84015,-1.21454 -8.39844,0.33594c-2.55829,1.52464 -4.08294,4.26382 -4.08294,7.20974v87.31791c0,2.92007 1.52464,5.65925 4.08294,7.18389c1.39543,0.85276 2.94591,1.26622 4.52223,1.26622c1.34375,0 2.66166,-0.3101 3.87621,-0.90444l88.04147,-43.67188c2.89423,-1.42128 4.72896,-4.34135 4.72896,-7.54567c0,-3.20433 -1.86058,-6.1244 -4.75481,-7.57151z"
-                                Fill="White" />
-                        </Viewbox>
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="10"
-                            FontWeight="DemiBold"
-                            Foreground="White">
-                            START
-                        </TextBlock>
-                    </StackPanel>
-                </Button>
-                <Button
+                    IconPath="{StaticResource IconPlay}"
+                    Text="Start"
+                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2InverseVis}}" />
+
+                <controls:CaptureToolButton
                     Background="#373737"
                     Click="buttonStop_Click"
+                    IconPath="{StaticResource IconPlay}"
                     IsEnabled="{Binding IsRecording}"
-                    Style="{StaticResource CaptureToolButtonStyle}"
-                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}">
-                    <StackPanel Margin="5" Orientation="Vertical">
-                        <Border
-                            Width="18"
-                            Height="18"
-                            Margin="4"
-                            Background="White"
-                            CornerRadius="4" />
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="10"
-                            FontWeight="DemiBold"
-                            Foreground="White">
-                            FINISH
-                        </TextBlock>
-                    </StackPanel>
-                </Button>
+                    Text="Finish"
+                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}" />
+
                 <Button
                     Background="#373737"
                     Click="toggleMicrophone_Click"
@@ -248,71 +208,29 @@
                         </StackPanel>
                     </Grid>
                 </Button>
-                <Button
+
+                <controls:CaptureToolButton
                     Background="#373737"
                     Click="settings_Click"
+                    IconPath="{StaticResource IconSettings}"
                     IsEnabled="{Binding IsNotStarted}"
-                    Style="{StaticResource CaptureToolButtonStyle}"
-                    Visibility="{Binding IsNotStarted, Converter={StaticResource Bool2Vis}}">
-                    <StackPanel Margin="5" Orientation="Vertical">
-                        <Viewbox Width="26" Height="26">
-                            <Path
-                                Width="172"
-                                Height="172"
-                                Data="M75.25,14.33333c-5.934,0 -10.75,4.816 -10.75,10.75v3.58333h-43c-2.58456,-0.03655 -4.98858,1.32136 -6.29153,3.55376c-1.30295,2.2324 -1.30295,4.99342 0,7.22582c1.30295,2.2324 3.70697,3.59031 6.29153,3.55376h43v3.58333c0,5.934 4.816,10.75 10.75,10.75c5.934,0 10.75,-4.816 10.75,-10.75v-21.5c0,-5.934 -4.816,-10.75 -10.75,-10.75zM100.33333,28.66667v14.33333h50.16667c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM111.08333,64.5c-5.934,0 -10.75,4.816 -10.75,10.75v3.58333h-78.83333c-2.58456,-0.03655 -4.98858,1.32136 -6.29153,3.55376c-1.30295,2.2324 -1.30295,4.99342 0,7.22582c1.30295,2.2324 3.70697,3.59031 6.29153,3.55376h78.83333v3.58333c0,5.934 4.816,10.75 10.75,10.75c5.934,0 10.75,-4.816 10.75,-10.75v-21.5c0,-5.934 -4.816,-10.75 -10.75,-10.75zM136.16667,78.83333v14.33333h14.33333c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667zM39.41667,114.66667c-5.934,0 -10.75,4.816 -10.75,10.75v3.58333h-7.16667c-2.58456,-0.03655 -4.98858,1.32136 -6.29153,3.55376c-1.30295,2.2324 -1.30295,4.99342 0,7.22582c1.30295,2.2324 3.70697,3.59031 6.29153,3.55376h7.16667v3.58333c0,5.934 4.816,10.75 10.75,10.75c5.934,0 10.75,-4.816 10.75,-10.75v-21.5c0,-5.934 -4.816,-10.75 -10.75,-10.75zM64.5,129v14.33333h86c3.95804,0 7.16667,-3.20863 7.16667,-7.16667c0,-3.95804 -3.20863,-7.16667 -7.16667,-7.16667z"
-                                Fill="White" />
-                        </Viewbox>
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="10"
-                            FontWeight="DemiBold"
-                            Foreground="White">
-                            TUNE
-                        </TextBlock>
-                    </StackPanel>
-                </Button>
-                <Button
+                    Text="TUNE"
+                    Visibility="{Binding IsNotStarted, Converter={StaticResource Bool2Vis}}" />
+
+                <controls:CaptureToolButton
                     Background="#373737"
                     Click="draw_Click"
+                    IconPath="{StaticResource IconDrawing}"
                     IsEnabled="{Binding IsStarted}"
-                    Style="{StaticResource CaptureToolButtonStyle}"
-                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}">
-                    <StackPanel Margin="5" Orientation="Vertical">
-                        <Viewbox Width="26" Height="26">
-                            <Path
-                                Width="24"
-                                Height="24"
-                                Data="M 16.857422 1.9804688 C 16.472672 1.9545 16.091344 2.152625 15.902344 2.515625 L 12.373047 9.0253906 C 10.738883 9.1509261 9.5055015 9.7663279 8.703125 10.683594 C 7.8007284 11.715201 7.4368421 12.985049 7.15625 14.181641 C 6.8756579 15.378232 6.673055 16.534955 6.3164062 17.388672 C 5.9776401 18.199583 5.5852959 18.698753 4.796875 19 L 3 19 A 1.0001 1.0001 0 1 0 3 21 L 4.9882812 21 L 5 21 C 8.4745 21 11.573211 21.05951 14.03125 19.90625 C 15.260269 19.329618 16.309211 18.400148 16.990234 17.083984 C 17.63752 15.833023 17.957269 14.256354 17.988281 12.296875 L 21.851562 5.5546875 C 22.126562 5.0576875 21.931828 4.4317344 21.423828 4.1777344 L 17.236328 2.0820312 C 17.114328 2.0210313 16.985672 1.989125 16.857422 1.9804688 z M 12.792969 11.015625 L 15.974609 12.605469 C 15.914639 14.171188 15.64256 15.339399 15.214844 16.166016 C 14.731648 17.099852 14.083996 17.670382 13.181641 18.09375 C 11.888076 18.700665 9.8996471 18.858096 7.671875 18.923828 C 7.8306773 18.664577 8.048868 18.431224 8.1621094 18.160156 C 8.6503669 16.991405 8.8439827 15.745456 9.1035156 14.638672 C 9.3630485 13.531888 9.6842719 12.597612 10.207031 12 C 10.703142 11.432853 11.401202 11.054048 12.792969 11.015625 z"
-                                Fill="White" />
-                        </Viewbox>
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="10"
-                            FontWeight="DemiBold"
-                            Foreground="White">
-                            DRAW
-                        </TextBlock>
-                    </StackPanel>
-                </Button>
-                <Button
+                    Text="DRAW"
+                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}" />
+
+                <controls:CaptureToolButton
                     Background="#373737"
                     Click="buttonCancel_Click"
-                    Style="{StaticResource CaptureToolButtonStyle}">
-                    <StackPanel Margin="5" Orientation="Vertical">
-                        <Path
-                            Width="26"
-                            Height="26"
-                            Data="M 6.65625 4 C 6.36875 4 6.10625 4.1125 5.90625 4.3125 L 4.3125 5.90625 C 3.9125 6.30625 3.9125 7 4.3125 7.5 L 9.8125 13 L 4.3125 18.5 C 3.9125 19 3.9125 19.69375 4.3125 20.09375 L 5.90625 21.6875 C 6.40625 22.0875 7.1 22.0875 7.5 21.6875 L 13 16.1875 L 18.5 21.6875 C 19 22.0875 19.69375 22.0875 20.09375 21.6875 L 21.6875 20.09375 C 22.0875 19.59375 22.0875 18.9 21.6875 18.5 L 16.1875 13 L 21.6875 7.5 C 22.0875 7 22.0875 6.30625 21.6875 5.90625 L 20.09375 4.3125 C 19.59375 3.9125 18.9 3.9125 18.5 4.3125 L 13 9.8125 L 7.5 4.3125 C 7.25 4.1125 6.94375 4 6.65625 4 z"
-                            Fill="White" />
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="10"
-                            FontWeight="DemiBold"
-                            Foreground="White">
-                            CANCEL
-                        </TextBlock>
-                    </StackPanel>
-                </Button>
+                    IconPath="{StaticResource IconClose}"
+                    Text="CANCEL" />
+
             </StackPanel>
             <Grid
                 Canvas.Left="{Binding CroppingRectangleWpf.Left}"
