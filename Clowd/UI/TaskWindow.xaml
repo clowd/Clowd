@@ -75,7 +75,7 @@
                         Grid.Column="1"
                         VerticalAlignment="Center"
                         FontFamily="pack://application:,,,/Assets/#Raleway"
-                        Foreground="{DynamicResource IdealForegroundColorBrush}"
+                        Foreground="{DynamicResource IdealForegroundBrush}"
                         Text="CLOWD" />
                     <Button
                         Grid.Column="2"

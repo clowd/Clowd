@@ -20,10 +20,15 @@
 
             <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
             <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />
+            <conv:BoolToInverseConverter x:Key="Bool2Inverse" />
 
             <SolidColorBrush x:Key="AccentColorBrush" Color="#3b96d2" />
+
+            <Color x:Key="IdealBackgroundColor">#373737</Color>
+            <SolidColorBrush x:Key="IdealBackgroundBrush" Color="{StaticResource IdealBackgroundColor}" />
+
             <Color x:Key="IdealForegroundColor">White</Color>
-            <SolidColorBrush x:Key="IdealForegroundColorBrush" Color="{StaticResource IdealForegroundColor}" />
+            <SolidColorBrush x:Key="IdealForegroundBrush" Color="{StaticResource IdealForegroundColor}" />
 
             <DropShadowEffect
                 x:Key="z-depth1"
@@ -79,7 +84,7 @@
                             Width="16"
                             Height="16"
                             Data="{StaticResource PathLogoSmall16}"
-                            Fill="{DynamicResource IdealForegroundColorBrush}" />
+                            Fill="{DynamicResource IdealForegroundBrush}" />
                     </Viewbox>
                 </Grid>
             </DataTemplate>
@@ -179,7 +184,7 @@
             </Style>
 
             <Style TargetType="{x:Type controls:CaptureToolButton}">
-                <Setter Property="Background" Value="{StaticResource HighlightBrush}" />
+                <Setter Property="Background" Value="Transparent" />
                 <Setter Property="Height" Value="50" />
                 <Setter Property="Width" Value="50" />
                 <Setter Property="Cursor" Value="Hand" />
@@ -187,16 +192,24 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="{x:Type controls:CaptureToolButton}">
+                            <ControlTemplate.Resources>
+                                <Storyboard
+                                    x:Key="PulseAnimation"
+                                    x:Name="PulseAnimation"
+                                    RepeatBehavior="Forever">
+                                    <DoubleAnimationUsingKeyFrames
+                                        BeginTime="00:00:00"
+                                        Storyboard.TargetName="_bg"
+                                        Storyboard.TargetProperty="Opacity">
+                                        <SplineDoubleKeyFrame KeyTime="00:00:00" Value="0.2" />
+                                        <SplineDoubleKeyFrame KeyTime="00:00:02.5" Value="0.8" />
+                                        <SplineDoubleKeyFrame KeyTime="00:00:05" Value="0.2" />
+                                    </DoubleAnimationUsingKeyFrames>
+                                </Storyboard>
+                            </ControlTemplate.Resources>
                             <Grid>
-                                <Rectangle
-                                    Name="_bg"
-                                    HorizontalAlignment="Stretch"
-                                    VerticalAlignment="Stretch"
-                                    Fill="{TemplateBinding Background}" />
-                                <Grid
-                                    x:Name="contentGrid"
-                                    HorizontalAlignment="Stretch"
-                                    VerticalAlignment="Stretch">
+                                <Rectangle Name="_bg" Fill="{TemplateBinding Background}" />
+                                <Grid x:Name="contentGrid">
                                     <StackPanel
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center"
@@ -224,8 +237,6 @@
                                 </Grid>
                                 <Rectangle
                                     Name="_hover"
-                                    HorizontalAlignment="Stretch"
-                                    VerticalAlignment="Stretch"
                                     Fill="#33ffffff"
                                     Opacity="0" />
                             </Grid>
@@ -257,10 +268,17 @@
                                             </Storyboard>
                                         </BeginStoryboard>
                                     </MultiTrigger.ExitActions>
-                                    <!--<Setter TargetName="_hover" Property="Visibility" Value="Visible" />-->
                                 </MultiTrigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter TargetName="contentGrid" Property="Opacity" Value="0.5" />
+                                </Trigger>
+                                <Trigger Property="PulseBackground" Value="True">
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard x:Name="AnimationBeginStoryboard" Storyboard="{StaticResource PulseAnimation}" />
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <RemoveStoryboard BeginStoryboardName="AnimationBeginStoryboard" />
+                                    </Trigger.ExitActions>
                                 </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
