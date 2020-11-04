@@ -41,9 +41,6 @@ namespace Clowd.UI
             this.SourceInitialized += VideoOverlayWindow_SourceInitialized;
             this.Loaded += VideoOverlayWindow_Loaded;
 
-            selectionBorder.StrokeThickness = ScreenTools.WpfSnapToPixelsFloor(2);
-            selectionBorder.Margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(2));
-
             _recording = new LiveScreenRecording(captureArea.ToSystem());
             _recording.LogReceived += Recording_LogRecieved;
 
@@ -140,11 +137,11 @@ namespace Clowd.UI
             {
                 if (fps != null && (ts == default(TimeSpan) || DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0))
                 {
-                    recordingFpsLabel.Text = fps + " FPS";
+                    recordingLabelButton.Text = fps + " FPS";
                 }
                 else if (ts != default(TimeSpan))
                 {
-                    recordingFpsLabel.Text = $"{((int)ts.TotalMinutes):D2}:{((int)ts.Seconds):D2}";
+                    recordingLabelButton.Text = $"{((int)ts.TotalMinutes):D2}:{((int)ts.Seconds):D2}";
                 }
             });
         }
@@ -175,14 +172,14 @@ namespace Clowd.UI
             {
                 labelCountdown.Text = i.ToString();
                 labelCountdown.FontSize = 120;
-                recordingFpsLabel.Text = "REC in " + i.ToString();
+                recordingLabelButton.Text = "REC in " + i.ToString();
                 await Task.Delay(1000);
                 if (_isCancelled)
                     return;
             }
 
             labelCountdown.Visibility = Visibility.Collapsed;
-            recordingFpsLabel.Text = "Starting";
+            recordingLabelButton.Text = "Starting";
 
             IsRecording = true;
 

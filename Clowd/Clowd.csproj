@@ -137,6 +137,7 @@
     </Compile>
     <Compile Include="Capture\NAudioItem.cs" />
     <Compile Include="Capture\WindowWalker.cs" />
+    <Compile Include="UI\Controls\CaptureToolButton.cs" />
     <Compile Include="UI\Controls\CornerClippingBorder.cs" />
     <Compile Include="UI\Controls\DockAndWrapPanel.cs" />
     <Compile Include="UI\Controls\DPadControl.cs" />
@@ -146,6 +147,9 @@
     </Compile>
     <Compile Include="UI\Config\GlobalTriggerEditor.cs" />
     <Compile Include="UI\Controls\NonTogglableToggleButton.cs" />
+    <Compile Include="UI\Controls\SelectionBorderControl.xaml.cs">
+      <DependentUpon>SelectionBorderControl.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\ReallyFastCaptureRenderer.cs" />
     <Compile Include="UI\Controls\ResetDefaultButton.cs" />
     <Compile Include="UI\Controls\SpinnerTextBox.xaml.cs">
@@ -262,11 +266,19 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="Assets\VectorIcons.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="UI\CaptureWindow2.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\Config\FFMpegCodecSettingsEditor3.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\Controls\SelectionBorderControl.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

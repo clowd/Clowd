@@ -43,13 +43,13 @@ namespace Clowd.UI
         private static void SelectionRectangleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (CaptureWindow2)d;
-            ths.Dep_SelectionRectangleChanged(d, e);
+            ths.UpdateButtonBarPosition();
         }
 
         private static void IsCapturingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var ths = (CaptureWindow2)d;
-            ths.Dep_IsCaptureChanged(d, e);
+            ths.UpdateButtonBarPosition();
         }
 
         public static CaptureWindow2 Current { get; private set; }
@@ -61,7 +61,6 @@ namespace Clowd.UI
             InitializeComponent();
         }
 
-        private bool _adornerRegistered = false;
         private bool _initialized = false;
         private Action<BitmapSource> _completeStitch;
 
@@ -159,82 +158,6 @@ namespace Clowd.UI
             timer.Log("WinShow", "Showing Complete");
         }
 
-        private void ManageSelectionResizeHandlers(bool register)
-        {
-            if (register && !_adornerRegistered)
-            {
-                _adornerRegistered = true;
-                const string template =
-    "<ControlTemplate TargetType=\"Thumb\" xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\">" +
-        "<Grid>" +
-            "<Ellipse Fill = \"{TemplateBinding Background}\" />" +
-            "<Ellipse Margin = \"1\" Fill = \"White\" />" +
-            "<Ellipse Margin = \"2\" Fill = \"{TemplateBinding Background}\" />" +
-        "</Grid>" +
-    "</ControlTemplate>";
-                Style style = new Style(typeof(Thumb));
-                style.Setters.Add(new Setter(Thumb.BackgroundProperty, App.Current.Resources["HighlightBrush"]));
-                style.Setters.Add(new Setter(Thumb.TemplateProperty, (ControlTemplate)System.Windows.Markup.XamlReader.Parse(template)));
-
-                AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
-                ResizingAdorner myAdorner = new ResizingAdorner(selectionBorder, style);
-                myAdorner.SetupCustomResizeHandling((r) => SelectionRectangle = r.ToWpfRect());
-                adornerLayer.Add(myAdorner);
-
-                ScreenPoint mouseDownPos = default(ScreenPoint);
-                ScreenRect originRect = default(ScreenRect);
-                bool mouseDown = false;
-                MouseButtonEventHandler mouseDownHandler = (sender, e) =>
-                {
-                    selectionBorder.CaptureMouse();
-                    originRect = SelectionRectangle.ToScreenRect();
-                    mouseDownPos = ScreenTools.GetMousePosition();
-                    mouseDown = true;
-                };
-                MouseEventHandler mouseMoveHandler = (sender, e) =>
-                {
-                    if (!mouseDown)
-                        return;
-                    var cur = ScreenTools.GetMousePosition();
-                    var delta = mouseDownPos - cur;
-                    var result = new ScreenRect(originRect.Left - delta.X, originRect.Top - delta.Y, originRect.Width, originRect.Height);
-                    result = result.Intersect(ScreenTools.VirtualScreen.Bounds);
-                    SelectionRectangle = result.ToWpfRect();
-                };
-                MouseButtonEventHandler mouseUpHandler = (sender, e) =>
-                {
-                    selectionBorder.ReleaseMouseCapture();
-                    mouseDown = false;
-                };
-
-                selectionBorder.MouseDown += mouseDownHandler;
-                selectionBorder.MouseMove += mouseMoveHandler;
-                selectionBorder.MouseUp += mouseUpHandler;
-                selectionBorder.Cursor = Cursors.SizeAll;
-                selectionBorder.IsHitTestVisible = true;
-            }
-
-            if (!register && _adornerRegistered)
-            {
-                _adornerRegistered = false;
-                AdornerLayer adornerLayer = AdornerLayer.GetAdornerLayer(rootGrid);
-                Console.WriteLine(adornerLayer);
-                Console.WriteLine(selectionBorder);
-                if (adornerLayer != null)
-                {
-                    var resize = adornerLayer.GetAdorners(selectionBorder).FirstOrDefault(a => a is ResizingAdorner);
-                    if (resize != null)
-                        adornerLayer.Remove(resize);
-
-                    selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseDownEvent);
-                    selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseMoveEvent);
-                    selectionBorder.RemoveRoutedEventHandlers(UserControl.MouseUpEvent);
-                    selectionBorder.Cursor = Cursors.Cross;
-                    selectionBorder.IsHitTestVisible = false;
-                }
-            }
-        }
-
         private void UpdateButtonBarPosition()
         {
             var numberOfActiveButtons = toolActionBarStackPanel.Children
@@ -261,56 +184,6 @@ namespace Clowd.UI
             encoder.Save(ms);
             ms.Position = 0;
             return ms;
-        }
-
-        private void Dep_IsCaptureChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            var currently = (bool)e.NewValue;
-            ManageSelectionResizeHandlers(!currently);
-            if (!currently)
-                UpdateButtonBarPosition();
-
-            Storyboard sb = FindResource("BorderDashAnimation") as Storyboard;
-            if (_initialized && !currently)
-            {
-                toolActionBarStackPanel.Visibility = Visibility.Visible;
-                selectionBorder.Visibility = Visibility.Visible;
-                sb.Begin();
-            }
-            else
-            {
-                toolActionBarStackPanel.Visibility = Visibility.Collapsed;
-                selectionBorder.Visibility = Visibility.Collapsed;
-                sb.Stop();
-            }
-
-            var lineW = ScreenTools.WpfSnapToPixelsFloor(currently ? 1 : 2);
-            var margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(currently ? 0 : 2));
-            crectBottom.StrokeThickness = crectTop.StrokeThickness = lineW;
-            crectBottom.Margin = crectTop.Margin = margin;
-        }
-
-        private void Dep_SelectionRectangleChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            if (!IsCapturing)
-            {
-                var newv = (WpfRect)e.NewValue;
-
-                Storyboard sb = FindResource("BorderDashAnimation") as Storyboard;
-
-                if (newv == default(WpfRect) && selectionBorder.Visibility == Visibility.Visible)
-                {
-                    sb.Stop();
-                    selectionBorder.Visibility = Visibility.Collapsed;
-                }
-                else if (selectionBorder.Visibility == Visibility.Collapsed)
-                {
-                    selectionBorder.Visibility = Visibility.Visible;
-                    sb.Begin();
-                }
-
-                UpdateButtonBarPosition();
-            }
         }
 
         private void UploadCanExecute(object sender, CanExecuteRoutedEventArgs e)
