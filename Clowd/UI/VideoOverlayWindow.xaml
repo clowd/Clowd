@@ -75,6 +75,7 @@
 
                 <controls:CaptureToolButton
                     x:Name="recordingLabelButton"
+                    Background="{StaticResource HighlightBrush}"
                     Cursor="SizeAll"
                     IconPath="{StaticResource IconClowd}"
                     ShowHover="False"
@@ -83,14 +84,14 @@
                 <Rectangle Width="3" Height="3" />
 
                 <controls:CaptureToolButton
-                    Background="#373737"
+                    Background="{StaticResource HighlightBrush}"
                     Click="buttonStart_Click"
                     IconPath="{StaticResource IconPlay}"
+                    PulseBackground="True"
                     Text="Start"
                     Visibility="{Binding IsStarted, Converter={StaticResource Bool2InverseVis}}" />
 
                 <controls:CaptureToolButton
-                    Background="#373737"
                     Click="buttonStop_Click"
                     IsEnabled="{Binding IsRecording}"
                     Text="Finish"
@@ -106,7 +107,6 @@
                 </controls:CaptureToolButton>
 
                 <controls:CaptureToolButton
-                    Background="#373737"
                     Click="toggleMicrophone_Click"
                     IconPath="{StaticResource IconMicrophoneDisabled}"
                     IconPathAlternate="{StaticResource IconMicrophoneEnabled}"
@@ -138,7 +138,6 @@
                 </controls:CaptureToolButton>
 
                 <controls:CaptureToolButton
-                    Background="#373737"
                     Click="toggleSpeaker_Click"
                     IconPath="{StaticResource IconSpeakerDisabled}"
                     IconPathAlternate="{StaticResource IconSpeakerEnabled}"
@@ -170,7 +169,6 @@
                 </controls:CaptureToolButton>
 
                 <controls:CaptureToolButton
-                    Background="#373737"
                     Click="settings_Click"
                     IconPath="{StaticResource IconSettings}"
                     IsEnabled="{Binding IsNotStarted}"
@@ -178,7 +176,6 @@
                     Visibility="{Binding IsNotStarted, Converter={StaticResource Bool2Vis}}" />
 
                 <controls:CaptureToolButton
-                    Background="#373737"
                     Click="draw_Click"
                     IconPath="{StaticResource IconDrawing}"
                     IsEnabled="{Binding IsStarted}"
@@ -186,7 +183,6 @@
                     Visibility="{Binding IsStarted, Converter={StaticResource Bool2Vis}}" />
 
                 <controls:CaptureToolButton
-                    Background="#373737"
                     Click="buttonCancel_Click"
                     IconPath="{StaticResource IconClose}"
                     Text="Cancel" />

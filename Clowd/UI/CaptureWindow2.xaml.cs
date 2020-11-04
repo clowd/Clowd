@@ -186,11 +186,6 @@ namespace Clowd.UI
             return ms;
         }
 
-        private void UploadCanExecute(object sender, CanExecuteRoutedEventArgs e)
-        {
-            e.CanExecute = App.CanUpload;
-            e.Handled = true;
-        }
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             if (IsCapturing)

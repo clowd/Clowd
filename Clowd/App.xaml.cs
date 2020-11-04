@@ -381,8 +381,8 @@ namespace Clowd
             ((Freezable)this.Resources["CheckmarkFill"]).Freeze();
             this.Resources["RightArrowFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
             ((Freezable)this.Resources["RightArrowFill"]).Freeze();
-            this.Resources["IdealForegroundColorBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
-            ((Freezable)this.Resources["IdealForegroundColorBrush"]).Freeze();
+            this.Resources["IdealForegroundBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
+            ((Freezable)this.Resources["IdealForegroundBrush"]).Freeze();
             this.Resources["IdealForegroundDisabledBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]) { Opacity = 0.4 };
             ((Freezable)this.Resources["IdealForegroundDisabledBrush"]).Freeze();
             this.Resources["AccentSelectedColorBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
