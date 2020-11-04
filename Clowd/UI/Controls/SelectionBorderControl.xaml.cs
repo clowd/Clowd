@@ -22,14 +22,6 @@ namespace Clowd.UI.Controls
 {
     public partial class SelectionBorderControl : Decorator
     {
-        //public double BorderWidth
-        //{
-        //    get { return (double)GetValue(BorderWidthProperty); }
-        //    set { SetValue(BorderWidthProperty, value); }
-        //}
-
-        //public static readonly DependencyProperty BorderWidthProperty = DependencyProperty.Register("BorderWidth", typeof(double), typeof(SelectionBorder), new PropertyMetadata(2d));
-
         public Brush BorderBrush
         {
             get { return (Brush)GetValue(BorderBrushProperty); }
@@ -58,17 +50,6 @@ namespace Clowd.UI.Controls
         }
         public static readonly DependencyProperty SelectionRectangleProperty = DependencyProperty.Register(nameof(SelectionRectangle), typeof(WpfRect), typeof(SelectionBorderControl), new PropertyMetadata(new WpfRect()));
 
-
-        //public bool IsEnabled
-        //{
-        //    get { return (bool)GetValue(IsEnabledProperty); }
-        //    set { SetValue(IsEnabledProperty, value); }
-        //}
-
-        //public static readonly DependencyProperty IsEnabledProperty
-        //    = DependencyProperty.Register("IsEnabled", typeof(bool), typeof(SelectionBorderControl), new PropertyMetadata(false, (s, e) => { (s as SelectionBorderControl).EnabledChanged(s, e); }));
-
-
         private bool _adornerRegistered = false;
 
         public SelectionBorderControl()
@@ -79,13 +60,7 @@ namespace Clowd.UI.Controls
 
             if (!App.IsDesignMode)
             {
-                const double stroke = 2d;
-                const double margin = 1d;
-                crectBottom.StrokeThickness = ScreenTools.WpfSnapToPixelsFloor(stroke);
-                crectBottom.Margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(margin));
-                crectTop.StrokeThickness = ScreenTools.WpfSnapToPixelsFloor(stroke);
-                crectTop.Margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(margin));
-
+                UpdateLinePosition(2, 2);
                 selectionBorder2.DataContext = this;
             }
         }
@@ -108,8 +83,16 @@ namespace Clowd.UI.Controls
         private void OnResizableChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             ManageSelectionResizeHandlers(Resizable);
+            UpdateLinePosition(2, Resizable ? 1 : 2);
         }
 
+        private void UpdateLinePosition(int stroke, int margin)
+        {
+            crectBottom.StrokeThickness = ScreenTools.WpfSnapToPixelsFloor(stroke);
+            crectBottom.Margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(margin));
+            crectTop.StrokeThickness = ScreenTools.WpfSnapToPixelsFloor(stroke);
+            crectTop.Margin = new Thickness(-ScreenTools.WpfSnapToPixelsFloor(margin));
+        }
 
         private void ManageSelectionResizeHandlers(bool register)
         {
