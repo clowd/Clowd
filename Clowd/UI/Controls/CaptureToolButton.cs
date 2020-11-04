@@ -36,6 +36,14 @@ namespace Clowd.UI.Controls
 
         public static readonly DependencyProperty OverlayProperty = DependencyProperty.Register("Overlay", typeof(UIElement), typeof(CaptureToolButton), new PropertyMetadata(null));
 
+        public bool PulseBackground
+        {
+            get { return (bool)GetValue(PulseBackgroundProperty); }
+            set { SetValue(PulseBackgroundProperty, value); }
+        }
+
+        public static readonly DependencyProperty PulseBackgroundProperty = DependencyProperty.Register("PulseBackground", typeof(bool), typeof(CaptureToolButton), new PropertyMetadata(false));
+
         public bool ShowAlternateIcon
         {
             get { return (bool)GetValue(ShowAlternateIconProperty); }
