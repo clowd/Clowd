@@ -35,8 +35,8 @@ namespace Clowd.UI
             this._timer = timer;
             this._callback = callback;
             this.ContentRendered += CaptureWindow2_ContentRendered;
-            this.SelectionRectangleChanged += (s, e) => UpdateButtonBarPosition();
-            this.IsCapturingChanged += (s, e) => UpdateButtonBarPosition();
+            this.SelectionRectangleChanged += (s, e) => UpdateButtonPanelPosition(toolActionBarStackPanel);
+            this.IsCapturingChanged += (s, e) => UpdateButtonPanelPosition(toolActionBarStackPanel);
         }
 
         public static void ShowNewCapture(WpfRect? selection = null, Action<BitmapSource> callback = null)
@@ -59,14 +59,18 @@ namespace Clowd.UI
 
             Current.Closed += (s, e) => Current = null;
 
-            timer.Log("Window", "Source created");
             Current.StartCaptureInstance();
         }
 
         private void StartCaptureInstance()
         {
+            // creating this first is significantly faster for some reason
+            this.EnsureHandle();
+            _timer.Log("Window", "Source created");
+
             // this will create the bitmap and do the initial render ahead of time
             fastCapturer.StartFastCapture(_timer);
+
             _timer.Log("WinShow", "Showing Window");
             Show();
             _timer.Log("WinShow", "Showing Complete");
@@ -83,17 +87,6 @@ namespace Clowd.UI
             _timer.Log("Total", "End");
 
             _timer.PrintSummary();
-        }
-
-        private void UpdateButtonBarPosition()
-        {
-            var numberOfActiveButtons = toolActionBarStackPanel.Children
-                .Cast<FrameworkElement>()
-                .Where(f => f is Button)
-                .Cast<Button>()
-                .Count();
-
-            toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(SelectionRectangle, 2, 10, 50, numberOfActiveButtons * 50 + 3);
         }
 
         private BitmapSource CropBitmap()
@@ -196,7 +189,7 @@ namespace Clowd.UI
             else
             {
                 fastCapturer.SetSelectedWindowForeground();
-                new VideoOverlayWindow(rawRect).Show();
+                new VideoOverlayWindow(SelectionRectangle).Show();
             }
         }
 

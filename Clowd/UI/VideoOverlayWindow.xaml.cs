@@ -15,15 +15,10 @@ using ScreenVersusWpf;
 namespace Clowd.UI
 {
     [PropertyChanged.ImplementPropertyChanged]
-    public partial class VideoOverlayWindow : Window
+    public partial class VideoOverlayWindow : OverlayWindow
     {
-        public ScreenRect CroppingRectangle { get; private set; } = new ScreenRect(0, 0, 0, 0);
-        public Rect CroppingRectangleWpf { get { return CroppingRectangle.ToWpfRect(); } private set { CroppingRectangle = new WpfRect(value).ToScreenRect(); } }
-        public IntPtr Handle { get; private set; }
-
         public bool IsRecording { get; set; }
         public bool IsStarted { get; set; }
-        public bool IsNotStarted => !IsStarted;
         public bool IsAudioSupported { get; set; }
 
         public bool IsMicrophoneEnabled { get; set; }
@@ -37,14 +32,12 @@ namespace Clowd.UI
         private Point? _moveMouseDown;
         private Point? _moveInitial;
 
-        public VideoOverlayWindow(ScreenRect captureArea)
+        public VideoOverlayWindow(WpfRect captureArea)
         {
-            CroppingRectangle = captureArea;
+            SelectionRectangle = captureArea;
             InitializeComponent();
-            this.SourceInitialized += VideoOverlayWindow_SourceInitialized;
-            this.Loaded += VideoOverlayWindow_Loaded;
 
-            _recording = new LiveScreenRecording(captureArea.ToSystem());
+            _recording = new LiveScreenRecording(captureArea.ToScreenRect().ToSystem());
             _recording.LogReceived += Recording_LogRecieved;
 
             var settings = App.Current.Settings.VideoSettings;
@@ -63,11 +56,16 @@ namespace Clowd.UI
                 audioTimer.Dispose();
             };
 
+            this.Loaded += (s, e) =>
+            {
+                UpdateButtonPanelPosition(toolActionBarStackPanel);
+            };
+
             UpdateAudioState();
 
             // start audio update timer
             audioTimer = new System.Timers.Timer(20);
-            audioTimer.Elapsed += AudioTimer_Elapsed; ;
+            audioTimer.Elapsed += AudioTimer_Elapsed;
             audioTimer.AutoReset = true;
             audioTimer.Enabled = true;
             audioTimer.Start();
@@ -187,22 +185,6 @@ namespace Clowd.UI
             });
         }
 
-        private void VideoOverlayWindow_SourceInitialized(object sender, EventArgs e)
-        {
-            this.Handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        }
-
-        private void VideoOverlayWindow_Loaded(object sender, RoutedEventArgs e)
-        {
-            var primary = ScreenTools.Screens.First().Bounds;
-            var virt = ScreenTools.VirtualScreen.Bounds;
-            // WPF makes some fairly inconvenient DPI conversions to Left and Top which have also changed between NET 4.5 and 4.8; just use WinAPI instead of de-converting them
-            Interop.USER32.SetWindowPos(this.Handle, 0, -primary.Left, -primary.Top, virt.Width, virt.Height, Interop.SWP.SHOWWINDOW);
-            Interop.USER32.SetForegroundWindow(this.Handle);
-            toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(CroppingRectangle.ToWpfRect(), 2, 10, 50, 303);
-            //StartRecording();
-        }
-
         private async void StartRecording()
         {
             IsStarted = true;
@@ -255,7 +237,7 @@ namespace Clowd.UI
 
             if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
             {
-                IsAudioSupported = true;
+                IsAudioSupported = !IsStarted;
                 IsMicrophoneEnabled = audio.CaptureMicrophone;
                 IsLoopbackEnabled = audio.CaptureLoopbackAudio;
 
@@ -276,9 +258,6 @@ namespace Clowd.UI
             {
                 IsMicrophoneEnabled = IsLoopbackEnabled = IsAudioSupported = false;
             }
-
-            if (IsStarted)
-                IsAudioSupported = false;
         }
 
         private void buttonStart_Click(object sender, RoutedEventArgs e)
