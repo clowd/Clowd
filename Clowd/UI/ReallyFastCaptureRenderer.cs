@@ -160,7 +160,6 @@ namespace Clowd.UI
                 _windowFinder.CapturePart2(timer);
                 _windowFinder.CapturePart3(timer);
                 timer.Log("FastCapStage2", "Complete");
-                timer.Log("Total", "End");
                 _finishedUp = true;
                 Dispatcher.Invoke(Draw);
             });

@@ -1,20 +1,19 @@
-<Window
+<local:OverlayWindow
     x:Class="Clowd.UI.CaptureWindow2"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="clr-namespace:Clowd.UI.Helpers"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="Clowd Capture"
+    CloseOnLostFocus="True"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     Icon="/Images/default.ico"
-    ResizeMode="NoResize"
-    ShowInTaskbar="False"
-    Topmost="False"
-    WindowStyle="None"
+    Topmost="True"
     mc:Ignorable="d">
-    <Window.Resources>
+    <local:OverlayWindow.Resources>
         <RoutedCommand x:Key="Command.Upload" />
         <RoutedCommand x:Key="Command.Photo" />
         <RoutedCommand x:Key="Command.Video" />
@@ -24,8 +23,8 @@
         <RoutedCommand x:Key="Command.SelectAll" />
         <RoutedCommand x:Key="Command.SelectColor" />
         <RoutedCommand x:Key="Command.Profiler" />
-    </Window.Resources>
-    <Window.InputBindings>
+    </local:OverlayWindow.Resources>
+    <local:OverlayWindow.InputBindings>
         <KeyBinding Key="U" Command="{StaticResource Command.Upload}" />
         <KeyBinding Key="P" Command="{StaticResource Command.Photo}" />
         <KeyBinding Key="Enter" Command="{StaticResource Command.Photo}" />
@@ -40,21 +39,59 @@
         <KeyBinding Key="H" Command="{StaticResource Command.SelectColor}" />
         <KeyBinding Key="A" Command="{StaticResource Command.SelectAll}" />
         <KeyBinding Key="T" Command="{StaticResource Command.Profiler}" />
-    </Window.InputBindings>
-    <Window.CommandBindings>
-        <CommandBinding Command="{StaticResource Command.Upload}" Executed="UploadExecuted" />
-        <CommandBinding Command="{StaticResource Command.Photo}" Executed="PhotoExecuted" />
-        <CommandBinding Command="{StaticResource Command.Video}" Executed="VideoExecuted" />
-        <CommandBinding Command="{StaticResource Command.Reset}" Executed="ResetExecuted" />
-        <CommandBinding Command="{StaticResource Command.Search}" Executed="SearchExecuted" />
-        <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyExecuted" />
-        <CommandBinding Command="ApplicationCommands.SaveAs" Executed="SaveAsExecuted" />
-        <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
-        <CommandBinding Command="{StaticResource Command.SelectScreen}" Executed="SelectScreenExecuted" />
-        <CommandBinding Command="{StaticResource Command.SelectColor}" Executed="SelectColorExecuted" />
-        <CommandBinding Command="{StaticResource Command.SelectAll}" Executed="SelectAllExecuted" />
-        <CommandBinding Command="{StaticResource Command.Profiler}" Executed="ProfilerExecuted" />
-    </Window.CommandBindings>
+    </local:OverlayWindow.InputBindings>
+    <local:OverlayWindow.CommandBindings>
+        <!--  Commands in use after capture  -->
+        <CommandBinding
+            CanExecute="Command_IsNotCapturing"
+            Command="{StaticResource Command.Upload}"
+            Executed="UploadExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsNotCapturing"
+            Command="{StaticResource Command.Photo}"
+            Executed="PhotoExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsNotCapturing"
+            Command="{StaticResource Command.Video}"
+            Executed="VideoExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsNotCapturing"
+            Command="{StaticResource Command.Reset}"
+            Executed="ResetExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsNotCapturing"
+            Command="{StaticResource Command.Search}"
+            Executed="SearchExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsNotCapturing"
+            Command="ApplicationCommands.Copy"
+            Executed="CopyExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsNotCapturing"
+            Command="ApplicationCommands.SaveAs"
+            Executed="SaveAsExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsNotCapturing"
+            Command="ApplicationCommands.Close"
+            Executed="CloseExecuted" />
+        <!--  Commands in use during capture  -->
+        <CommandBinding
+            CanExecute="Command_IsCapturing"
+            Command="{StaticResource Command.SelectScreen}"
+            Executed="SelectScreenExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsCapturing"
+            Command="{StaticResource Command.SelectColor}"
+            Executed="SelectColorExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsCapturing"
+            Command="{StaticResource Command.SelectAll}"
+            Executed="SelectAllExecuted" />
+        <CommandBinding
+            CanExecute="Command_IsCapturing"
+            Command="{StaticResource Command.Profiler}"
+            Executed="ProfilerExecuted" />
+    </local:OverlayWindow.CommandBindings>
     <Canvas x:Name="rootGrid">
         <local:ReallyFastCaptureRenderer
             x:Name="fastCapturer"
@@ -131,4 +168,4 @@
 
         </StackPanel>
     </Canvas>
-</Window>
+</local:OverlayWindow>
