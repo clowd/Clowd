@@ -146,10 +146,10 @@
       <DependentUpon>FFMpegCodecSettingsEditor3.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Config\GlobalTriggerEditor.cs" />
-    <Compile Include="UI\Controls\NonTogglableToggleButton.cs" />
     <Compile Include="UI\Controls\SelectionBorderControl.xaml.cs">
       <DependentUpon>SelectionBorderControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\Controls\ToolButton.cs" />
     <Compile Include="UI\InteropWindow.cs" />
     <Compile Include="UI\OverlayWindow.cs" />
     <Compile Include="UI\ReallyFastCaptureRenderer.cs" />
