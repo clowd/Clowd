@@ -22,140 +22,67 @@ using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
-    public partial class CaptureWindow2 : Window
+    public partial class CaptureWindow2 : OverlayWindow
     {
-        public WpfRect SelectionRectangle
-        {
-            get { return (WpfRect)GetValue(SelectionRectangleProperty); }
-            set { SetValue(SelectionRectangleProperty, value); }
-        }
-        public static readonly DependencyProperty SelectionRectangleProperty =
-            DependencyProperty.Register(nameof(SelectionRectangle), typeof(WpfRect), typeof(CaptureWindow2), new PropertyMetadata(new WpfRect(), SelectionRectangleChanged));
-
-        public bool IsCapturing
-        {
-            get { return (bool)GetValue(IsCapturingProperty); }
-            set { SetValue(IsCapturingProperty, value); }
-        }
-        public static readonly DependencyProperty IsCapturingProperty =
-            DependencyProperty.Register(nameof(IsCapturing), typeof(bool), typeof(CaptureWindow2), new PropertyMetadata(false, IsCapturingChanged));
-
-        private static void SelectionRectangleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            var ths = (CaptureWindow2)d;
-            ths.UpdateButtonBarPosition();
-        }
-
-        private static void IsCapturingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            var ths = (CaptureWindow2)d;
-            ths.UpdateButtonBarPosition();
-        }
-
         public static CaptureWindow2 Current { get; private set; }
 
-        public IntPtr Handle { get; private set; }
+        private readonly TimedConsoleLogger _timer;
+        private readonly Action<BitmapSource> _callback;
 
-        private CaptureWindow2()
+        private CaptureWindow2(TimedConsoleLogger timer, Action<BitmapSource> callback)
         {
             InitializeComponent();
+            this._timer = timer;
+            this._callback = callback;
+            this.ContentRendered += CaptureWindow2_ContentRendered;
+            this.SelectionRectangleChanged += (s, e) => UpdateButtonBarPosition();
+            this.IsCapturingChanged += (s, e) => UpdateButtonBarPosition();
         }
 
-        private bool _initialized = false;
-        private Action<BitmapSource> _completeStitch;
-
-        public static void ShowNewCapture()
-        {
-            StartCapture(null, null);
-        }
-
-        public static void NewStitchCapture(Rect? captureBounds, Action<BitmapSource> completeStitch)
-        {
-            StartCapture((w) =>
-            {
-                w._completeStitch = completeStitch;
-            }, (w) =>
-            {
-                if (captureBounds.HasValue)
-                {
-                    w.fastCapturer.StopCapture();
-                    w.SelectionRectangle = new WpfRect(captureBounds.Value);
-                }
-            });
-        }
-
-        private static void StartCapture(Action<CaptureWindow2> initialized, Action<CaptureWindow2> rendered)
+        public static void ShowNewCapture(WpfRect? selection = null, Action<BitmapSource> callback = null)
         {
             if (Current != null)
             {
-                // if Handle == IntPtr.Zero, the window is still opening, so will be activated when that is finished
-                if (Current.Handle != IntPtr.Zero && Current._initialized)
+                if (Current.SourceCreated)
                     Current.Activate();
                 return;
             }
 
             var timer = new TimedConsoleLogger("Capture", DateTime.Now);
+
             timer.Log("Total", "Start");
             timer.Log("Window", "Start");
+            Current = new CaptureWindow2(timer, callback);
 
-            Current = new CaptureWindow2();
-            timer.Log("Window", "Init");
+            if (selection.HasValue)
+                Current.SelectionRectangle = selection.Value;
+
             Current.Closed += (s, e) => Current = null;
-            Current.StartCapture(timer, initialized, rendered);
+
+            timer.Log("Window", "Source created");
+            Current.StartCaptureInstance();
         }
 
-        private void StartCapture(TimedConsoleLogger timer, Action<CaptureWindow2> initialized, Action<CaptureWindow2> rendered)
+        private void StartCaptureInstance()
         {
-            var interop = new WindowInteropHelper(this);
-
-            // position the window a soon as the source handle has been created (either Show() or EnsureHandle())
-            SourceInitialized += (s, e) =>
-            {
-                timer.Log("WinSource", "Source Init Begin");
-                Handle = interop.Handle;
-                var primary = ScreenTools.Screens.First().Bounds;
-                var virt = ScreenTools.VirtualScreen.Bounds;
-                var swp = Debugger.IsAttached ? SWP_HWND.HWND_TOP : SWP_HWND.HWND_TOPMOST;
-                USER32.SetWindowPos(Handle, swp, -primary.Left, -primary.Top, virt.Width, virt.Height, SWP.NOACTIVATE);
-                timer.Log("WinSource", "Source Init Complete");
-                initialized?.Invoke(this);
-            };
-
-            // close capture window if we lose focus, but skip it if we are already closing
-            EventHandler deactivated = (s, e) => this.Close();
-            Activated += (s, e) => { Deactivated += deactivated; };
-            Closing += (s, e) =>
-            {
-                Deactivated -= deactivated;
-                if (fastCapturer.IsCapturing)
-                    fastCapturer.StopCapture();
-            };
-
-            // once our first render has finished, we can fire up low priorty tasks to capture window bitmaps
-            ContentRendered += async (s, e) =>
-            {
-                timer.Log("WinShow", "Rendered");
-                Activate();
-                _initialized = true;
-                timer.Log("Window", "Activated");
-
-                await Task.Delay(200); // add a delay so that these expensive background operations dont interfere with initial window interactions / calculations
-                await fastCapturer.FinishUpFastCapture(timer);
-
-                timer.PrintSummary();
-                rendered?.Invoke(this);
-            };
-
-            // if we create the handle before the window is shown, this drastically speeds up the total time it takes to show the window. 
-            // SetWindowPos (in SourceInitialized event) is 1-10ms now, but after Show can take > 100ms
-            interop.EnsureHandle();
-
             // this will create the bitmap and do the initial render ahead of time
-            fastCapturer.StartFastCapture(timer);
-
-            timer.Log("WinShow", "Showing Window");
+            fastCapturer.StartFastCapture(_timer);
+            _timer.Log("WinShow", "Showing Window");
             Show();
-            timer.Log("WinShow", "Showing Complete");
+            _timer.Log("WinShow", "Showing Complete");
+        }
+
+        private async void CaptureWindow2_ContentRendered(object sender, EventArgs e)
+        {
+            // once our first render has finished, we can fire up low priorty tasks to capture window bitmaps
+            _timer.Log("Window", "Rendered");
+
+            await Task.Delay(200); // add a delay so that these expensive background operations dont interfere with initial window interactions / calculations
+            await fastCapturer.FinishUpFastCapture(_timer);
+
+            _timer.Log("Total", "End");
+
+            _timer.PrintSummary();
         }
 
         private void UpdateButtonBarPosition()
@@ -164,10 +91,9 @@ namespace Clowd.UI
                 .Cast<FrameworkElement>()
                 .Where(f => f is Button)
                 .Cast<Button>()
-                .Where(b => b.Command.CanExecute(null))
                 .Count();
 
-            toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(SelectionRectangle, 2, 10, 50, numberOfActiveButtons * 50);
+            toolActionBarStackPanel.SetPanelCanvasPositionRelativeToSelection(SelectionRectangle, 2, 10, 50, numberOfActiveButtons * 50 + 3);
         }
 
         private BitmapSource CropBitmap()
@@ -186,39 +112,42 @@ namespace Clowd.UI
             return ms;
         }
 
+        private void Command_IsCapturing(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = IsCapturing;
+        }
+
+        private void Command_IsNotCapturing(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = !IsCapturing;
+        }
+
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (IsCapturing)
-                return;
-
             var cropped = CropBitmap();
             Close();
 
-            if (_completeStitch != null)
+            if (_callback != null)
             {
-                _completeStitch(cropped);
+                _callback(cropped);
             }
             else
             {
                 ImageEditorPage.ShowNewEditor(cropped, SelectionRectangle);
             }
         }
+
         private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (IsCapturing)
-                return;
-
             var cropped = CropBitmap();
             if (ClipboardEx.SetImage(cropped))
                 Close();
             else
                 NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "Unable to set clipboard data; try again later.");
         }
+
         private async void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (IsCapturing)
-                return;
-
             var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Screenshot", App.Current.Settings.LastSavePath, "screenshot", "png");
 
             if (String.IsNullOrWhiteSpace(filename))
@@ -234,27 +163,21 @@ namespace Clowd.UI
                 App.Current.Settings.LastSavePath = System.IO.Path.GetDirectoryName(filename);
             }
         }
+
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (IsCapturing)
-                return;
-
             fastCapturer.Reset();
         }
+
         private async void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (IsCapturing)
-                return;
-
             this.Close();
 
             await UploadManager.UploadImage(GetCompressedImageStream(), "png", viewName: "Screenshot");
         }
+
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (IsCapturing)
-                return;
-
             var rawRect = SelectionRectangle.ToScreenRect();
 
             const int minWidth = 160;
@@ -276,48 +199,42 @@ namespace Clowd.UI
                 new VideoOverlayWindow(rawRect).Show();
             }
         }
+
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (!IsCapturing)
-                return;
-
             fastCapturer.SelectScreen();
         }
+
         private void CloseExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
         }
+
         private void SelectColorExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (!IsCapturing)
-                return;
-
             this.Close();
             NiceDialog.ShowColorDialogAsync(null, fastCapturer.GetHoveredColor());
         }
 
         private void SelectAllExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (!IsCapturing)
-                return;
-
             fastCapturer.SelectAll();
         }
 
         private async void SearchExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (IsCapturing)
-                return;
-
             this.Close();
 
-            throw new NotImplementedException();
+            var task = await UploadManager.UploadImage(GetCompressedImageStream(), "png", viewName: "Image Search");
+            if (task == null)
+                return;
 
-            //var task = await UploadManager.Upload(GetCompressedImageStream(), "png", "Search", null);
-            //if (task == null)
-            //    return;
+            var upload = await task.UploadResult;
+            if (upload == null)
+                return;
 
-            //Process.Start("https://images.google.com/searchbyimage?image_url=" + task.UrlEscape());
+            Process.Start("https://images.google.com/searchbyimage?image_url=" + upload.PublicUrl.UrlEscape());
+            task.TaskView.SetExecuted();
         }
 
         private void ProfilerExecuted(object sender, ExecutedRoutedEventArgs e)
