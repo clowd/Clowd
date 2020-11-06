@@ -150,6 +150,8 @@
     <Compile Include="UI\Controls\SelectionBorderControl.xaml.cs">
       <DependentUpon>SelectionBorderControl.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\InteropWindow.cs" />
+    <Compile Include="UI\OverlayWindow.cs" />
     <Compile Include="UI\ReallyFastCaptureRenderer.cs" />
     <Compile Include="UI\Controls\ResetDefaultButton.cs" />
     <Compile Include="UI\Controls\SpinnerTextBox.xaml.cs">

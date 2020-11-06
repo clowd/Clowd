@@ -481,7 +481,7 @@ namespace Clowd.UI
             if (image == null)
                 return;
 
-            CaptureWindow2.NewStitchCapture(_initialBounds, (img) =>
+            CaptureWindow2.ShowNewCapture(_initialBounds, (img) =>
             {
                 var xReferenceCenter = (image.Right + image.Left) / 2;
                 var yRefereceCenter = (image.Bottom + image.Top) / 2;
