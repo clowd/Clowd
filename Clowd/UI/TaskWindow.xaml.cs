@@ -445,7 +445,7 @@ namespace Clowd.UI
 @"<DataTemplate xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation"">
     <Grid>
         <Viewbox Margin=""5"">
-            <Path Fill=""Black"" Opacity=""0.8"" Width=""26"" Height=""26""  Data=""{StaticResource IconCopy26}"" />
+            <Path Fill=""Black"" Opacity=""0.8"" Width=""26"" Height=""26""  Data=""{StaticResource PathCopy26}"" />
         </Viewbox>
     </Grid>
 </DataTemplate>";

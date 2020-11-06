@@ -2,22 +2,23 @@
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interactivity;
+using Clowd.UI.Controls;
 
 namespace Clowd.UI.Helpers
 {
-    public class ButtonClickContextBehavior : Behavior<Button>
+    class ButtonClickContextBehavior : Behavior<ToolButton>
     {
         private bool isContextMenuOpen;
 
         protected override void OnAttached()
         {
             base.OnAttached();
-            AssociatedObject.AddHandler(Button.ClickEvent, new RoutedEventHandler(AssociatedObject_Click), true);
+            AssociatedObject.AddHandler(ToolButton.ClickEvent, new RoutedEventHandler(AssociatedObject_Click), true);
         }
 
         void AssociatedObject_Click(object sender, System.Windows.RoutedEventArgs e)
         {
-            Button source = sender as Button;
+            ToolButton source = sender as ToolButton;
             if (source != null && source.ContextMenu != null)
             {
                 if (!isContextMenuOpen)
@@ -36,7 +37,7 @@ namespace Clowd.UI.Helpers
         protected override void OnDetaching()
         {
             base.OnDetaching();
-            AssociatedObject.RemoveHandler(Button.ClickEvent, new RoutedEventHandler(AssociatedObject_Click));
+            AssociatedObject.RemoveHandler(ToolButton.ClickEvent, new RoutedEventHandler(AssociatedObject_Click));
         }
 
         void ContextMenu_Closed(object sender, RoutedEventArgs e)

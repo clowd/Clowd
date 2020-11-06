@@ -105,7 +105,7 @@
                                     Name="_bg"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Stretch"
-                                    Fill="Transparent" />
+                                    Fill="{TemplateBinding Background}" />
                                 <Border x:Name="content" Padding="{TemplateBinding Padding}">
                                     <Viewbox>
                                         <ContentPresenter Content="{TemplateBinding IconPath}" />
