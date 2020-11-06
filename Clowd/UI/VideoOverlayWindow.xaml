@@ -1,4 +1,4 @@
-﻿<Window
+﻿<local:OverlayWindow
     x:Class="Clowd.UI.VideoOverlayWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -7,23 +7,15 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="Clowd Capture"
-    Width="1"
-    Height="1"
+    Title="Clowd Video Capture"
     AllowsTransparency="True"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     Icon="/Images/default.ico"
-    Left="0"
-    ResizeMode="NoResize"
-    ShowInTaskbar="False"
-    SnapsToDevicePixels="True"
-    Top="0"
     Topmost="True"
-    WindowStyle="None"
     mc:Ignorable="d">
-    <Window.Background>
+    <local:OverlayWindow.Background>
         <SolidColorBrush Opacity="0.00" Color="#FFFFFF" />
-    </Window.Background>
+    </local:OverlayWindow.Background>
     <Window.Resources>
         <conv:OnOffBrushConverter x:Key="OnOffBrush" />
         <Style x:Key="AudioLevelProgressBarStyle" TargetType="ProgressBar">
@@ -60,13 +52,13 @@
             VerticalAlignment="Stretch">
 
             <controls:SelectionBorderControl
-                Canvas.Left="{Binding CroppingRectangleWpf.Left}"
-                Canvas.Top="{Binding CroppingRectangleWpf.Top}"
-                Width="{Binding CroppingRectangleWpf.Width}"
-                Height="{Binding CroppingRectangleWpf.Height}"
+                Canvas.Left="{Binding SelectionRectangle.Left}"
+                Canvas.Top="{Binding SelectionRectangle.Top}"
+                Width="{Binding SelectionRectangle.Width}"
+                Height="{Binding SelectionRectangle.Height}"
                 BorderBrush="Red"
                 IsEnabled="False"
-                SelectionRectangle="{Binding CroppingRectangleWpf}" />
+                SelectionRectangle="{Binding SelectionRectangle}" />
 
             <StackPanel
                 Name="toolActionBarStackPanel"
@@ -171,9 +163,9 @@
                 <controls:CaptureToolButton
                     Click="settings_Click"
                     IconPath="{StaticResource IconSettings}"
-                    IsEnabled="{Binding IsNotStarted}"
+                    IsEnabled="{Binding IsStarted, Converter={StaticResource Bool2Inverse}}"
                     Text="Tune"
-                    Visibility="{Binding IsNotStarted, Converter={StaticResource Bool2Vis}}" />
+                    Visibility="{Binding IsStarted, Converter={StaticResource Bool2InverseVis}}" />
 
                 <controls:CaptureToolButton
                     Click="draw_Click"
@@ -189,10 +181,10 @@
 
             </StackPanel>
             <Grid
-                Canvas.Left="{Binding CroppingRectangleWpf.Left}"
-                Canvas.Top="{Binding CroppingRectangleWpf.Top}"
-                Width="{Binding CroppingRectangleWpf.Width}"
-                Height="{Binding CroppingRectangleWpf.Height}">
+                Canvas.Left="{Binding SelectionRectangle.Left}"
+                Canvas.Top="{Binding SelectionRectangle.Top}"
+                Width="{Binding SelectionRectangle.Width}"
+                Height="{Binding SelectionRectangle.Height}">
                 <controls:OutlinedTextBlock
                     x:Name="labelCountdown"
                     MinWidth="20"
@@ -208,4 +200,4 @@
             </Grid>
         </Canvas>
     </Grid>
-</Window>
+</local:OverlayWindow>

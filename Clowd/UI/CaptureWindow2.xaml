@@ -7,7 +7,7 @@
     xmlns:helpers="clr-namespace:Clowd.UI.Helpers"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="Clowd Capture"
+    Title="Clowd Screen Capture"
     CloseOnLostFocus="True"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     Icon="/Images/default.ico"
