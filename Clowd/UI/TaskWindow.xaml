@@ -77,20 +77,12 @@
                         FontFamily="pack://application:,,,/Assets/#Raleway"
                         Foreground="{DynamicResource IdealForegroundBrush}"
                         Text="CLOWD" />
-                    <Button
+                    <controls:ToolButton
                         Grid.Column="2"
                         Padding="3"
                         Command="{StaticResource Commands.Minimize}"
-                        Style="{StaticResource ToolButtonStyle}"
-                        ToolTip="Hide">
-                        <Viewbox>
-                            <Path
-                                Width="32"
-                                Height="32"
-                                Data="{StaticResource IconExpandDown32}"
-                                Fill="White" />
-                        </Viewbox>
-                    </Button>
+                        IconPath="{StaticResource IconChevronDown}"
+                        ToolTip="Hide" />
                 </Grid>
             </controls:CornerClippingBorder>
             <Rectangle Grid.Row="1" Fill="White" />
@@ -402,23 +394,21 @@
                                     Opacity="0.8"
                                     Text="Copied" />
                             </Border>
-                            <Button
+                            <controls:ToolButton
                                 Grid.Column="3"
                                 HorizontalAlignment="Right"
-                                Background="#32400000"
-                                ContextMenu="{StaticResource itemMenu}"
-                                Style="{StaticResource ToolButtonStyle}">
-                                <i:Interaction.Behaviors>
-                                    <helpers:ButtonClickContextBehavior />
-                                </i:Interaction.Behaviors>
-                                <Viewbox Margin="2">
+                                ContextMenu="{StaticResource itemMenu}">
+                                <controls:ToolButton.IconPath>
                                     <Path
                                         Width="26"
                                         Height="26"
-                                        Data="{StaticResource IconMore26}"
-                                        Fill="#CC000000" />
-                                </Viewbox>
-                            </Button>
+                                        Data="{StaticResource PathMore26}"
+                                        Fill="Black" />
+                                </controls:ToolButton.IconPath>
+                                <i:Interaction.Behaviors>
+                                    <helpers:ButtonClickContextBehavior />
+                                </i:Interaction.Behaviors>
+                            </controls:ToolButton>
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
