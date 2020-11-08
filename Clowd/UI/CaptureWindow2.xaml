@@ -41,6 +41,7 @@
         <KeyBinding Key="T" Command="{StaticResource Command.Profiler}" />
     </local:OverlayWindow.InputBindings>
     <local:OverlayWindow.CommandBindings>
+        <CommandBinding Command="ApplicationCommands.Close" Executed="CloseExecuted" />
         <!--  Commands in use after capture  -->
         <CommandBinding
             CanExecute="Command_IsNotCapturing"
@@ -70,10 +71,6 @@
             CanExecute="Command_IsNotCapturing"
             Command="ApplicationCommands.SaveAs"
             Executed="SaveAsExecuted" />
-        <CommandBinding
-            CanExecute="Command_IsNotCapturing"
-            Command="ApplicationCommands.Close"
-            Executed="CloseExecuted" />
         <!--  Commands in use during capture  -->
         <CommandBinding
             CanExecute="Command_IsCapturing"
