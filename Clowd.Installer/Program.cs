@@ -28,7 +28,7 @@ namespace Clowd.Installer
             p.WaitForExit();
 
             if (p.ExitCode != 0)
-                throw new Exception("clowd_install.exe exited with non zero exit code: " + p.ExitCode);
+                throw new Exception($"{Constants.ClowdInstallerExeName} exited with non zero exit code: " + p.ExitCode);
         }
         internal static int Main(string[] args)
         {
@@ -43,13 +43,13 @@ namespace Clowd.Installer
                 typeof(Shortcuts),
             };
 
-            Console.WriteLine("Usage: clowd_install.exe [i|u] feature_name asset_path");
+            Console.WriteLine($"Usage: {Constants.ClowdInstallerExeName} [i|u] feature_name asset_path");
             Console.WriteLine("Valid feature_name:");
             Console.WriteLine("  - all");
             foreach (var t in types)
                 Console.WriteLine("  - " + t.Name);
 
-            Console.WriteLine("Example: clowd_install.exe i shortcuts \"C:\\Clowd\\Clowd.exe\"");
+            Console.WriteLine($"Example: {Constants.ClowdInstallerExeName} i shortcuts \"C:\\Clowd\\Clowd.exe\"");
 
             try
             {
