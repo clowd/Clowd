@@ -21,7 +21,7 @@ namespace Clowd.Installer
                 // NAppUpdater uses relative paths, so the current directory must be set accordingly.
                 Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
                 _updateManager = UpdateManager.Instance;
-                _updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
+                //_updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
                 _updateManager.Config.TempFolder = Path.Combine(Constants.AppDataDirectory, "update");
                 _updateManager.Config.BackupFolder = Path.Combine(Constants.AppDataDirectory, "backup");
                 _updateManager.Config.UpdateProcessName = "ClowdUpdate";
