@@ -1,17 +1,20 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\packages\Costura.Fody.4.1.0\build\Costura.Fody.props" Condition="Exists('..\packages\Costura.Fody.4.1.0\build\Costura.Fody.props')" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{AD6FD9E3-3C83-432E-9F19-74C71E881FE4}</ProjectGuid>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <RootNamespace>Clowd.Installer</RootNamespace>
     <AssemblyName>ClowdCLI</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>x64</PlatformTarget>
@@ -36,7 +39,16 @@
   <PropertyGroup>
     <ApplicationIcon>Embed\default.ico</ApplicationIcon>
   </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject />
+  </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Costura, Version=4.1.0.0, Culture=neutral, PublicKeyToken=9919ef960d84173d, processorArchitecture=MSIL">
+      <HintPath>..\packages\Costura.Fody.4.1.0\lib\net40\Costura.dll</HintPath>
+    </Reference>
+    <Reference Include="PowerArgs, Version=3.6.0.0, Culture=neutral, PublicKeyToken=26a276264bbd55b8, processorArchitecture=MSIL">
+      <HintPath>..\packages\PowerArgs.3.6.0\lib\netstandard2.0\PowerArgs.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
@@ -50,6 +62,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Args.cs" />
     <Compile Include="ClowdInstallManager.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Features\AutoStart.cs" />
@@ -70,11 +83,63 @@
     <Compile Include="ResourcesEx.cs" />
     <Compile Include="SystemEx.cs" />
     <Compile Include="UpdateHelper.cs" />
+    <Compile Include="Update\Common\Exceptions.cs" />
+    <Compile Include="Update\Common\INauFieldsHolder.cs" />
+    <Compile Include="Update\Common\Logger.cs" />
+    <Compile Include="Update\Common\NauConfigurations.cs" />
+    <Compile Include="Update\Common\NauFieldAttribute.cs" />
+    <Compile Include="Update\Common\UpdateProgressInfo.cs" />
+    <Compile Include="Update\Common\WorkScope.cs" />
+    <Compile Include="Update\Conditions\BooleanCondition.cs" />
+    <Compile Include="Update\Conditions\FileChecksumCondition.cs" />
+    <Compile Include="Update\Conditions\FileDateCondition.cs" />
+    <Compile Include="Update\Conditions\FileExistsCondition.cs" />
+    <Compile Include="Update\Conditions\FileSizeCondition.cs" />
+    <Compile Include="Update\Conditions\FileVersionCondition.cs" />
+    <Compile Include="Update\Conditions\IUpdateCondition.cs" />
+    <Compile Include="Update\Conditions\OSCondition.cs" />
+    <Compile Include="Update\Conditions\UpdateConditionAliasAttribute.cs" />
+    <Compile Include="Update\FeedReaders\AppcastReader.cs" />
+    <Compile Include="Update\FeedReaders\IUpdateFeedReader.cs" />
+    <Compile Include="Update\FeedReaders\NauXmlFeedReader.cs" />
+    <Compile Include="Update\Runner\Application.cs" />
+    <Compile Include="Update\Runner\RunnerAppStart.cs" />
+    <Compile Include="Update\Runner\ArgumentsParser.cs" />
+    <Compile Include="Update\Runner\ConsoleForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Update\Runner\ConsoleForm.Designer.cs">
+      <DependentUpon>ConsoleForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Update\Sources\IUpdateSource.cs" />
+    <Compile Include="Update\Sources\MemorySource.cs" />
+    <Compile Include="Update\Sources\SimpleWebSource.cs" />
+    <Compile Include="Update\Sources\UncSource.cs" />
+    <Compile Include="Update\Tasks\FileDeleteTask.cs" />
+    <Compile Include="Update\Tasks\FileUpdateTask.cs" />
+    <Compile Include="Update\Tasks\IUpdateTask.cs" />
+    <Compile Include="Update\Tasks\RegistryTask.cs" />
+    <Compile Include="Update\Tasks\UpdateTaskAliasAttribute.cs" />
+    <Compile Include="Update\Tasks\UpdateTaskBase.cs" />
+    <Compile Include="Update\UpdateManager.cs" />
+    <Compile Include="Update\Utils\FileChecksum.cs" />
+    <Compile Include="Update\Utils\FileDownloader.cs" />
+    <Compile Include="Update\Utils\FileSystem.cs" />
+    <Compile Include="Update\Utils\NauIpc.cs" />
+    <Compile Include="Update\Utils\PermissionsCheck.cs" />
+    <Compile Include="Update\Utils\Reflection.cs" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Update\Runner\ConsoleForm.resx">
+      <DependentUpon>ConsoleForm.cs</DependentUpon>
+    </EmbeddedResource>
     <None Include="App.config" />
     <EmbeddedResource Include="Embed\UScreenCapture-x64.ax" />
     <EmbeddedResource Include="Embed\UScreenCapture-x86.ax" />
+    <None Include="FodyWeavers.xsd">
+      <SubType>Designer</SubType>
+    </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Embed\loopback-audio-x64.dll" />
@@ -84,10 +149,15 @@
     <EmbeddedResource Include="Embed\default.ico" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NAppUpdate.Framework\NAppUpdate.Framework.csproj">
-      <Project>{5c07ebdf-d43f-4be9-b560-d7a443c0edce}</Project>
-      <Name>NAppUpdate.Framework</Name>
-    </ProjectReference>
+    <Content Include="FodyWeavers.xml" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Costura.Fody.4.1.0\build\Costura.Fody.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Costura.Fody.4.1.0\build\Costura.Fody.props'))" />
+    <Error Condition="!Exists('..\packages\Fody.6.3.0\build\Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Fody.6.3.0\build\Fody.targets'))" />
+  </Target>
+  <Import Project="..\packages\Fody.6.3.0\build\Fody.targets" Condition="Exists('..\packages\Fody.6.3.0\build\Fody.targets')" />
 </Project>
