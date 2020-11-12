@@ -1,14 +1,11 @@
 ﻿using System;
-using System.IO;
-using System.Windows;
-using System.Diagnostics;
-using NAppUpdate.Updater.Zip;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
-namespace NAppUpdate.Updater
+namespace Clowd.Installer.Update.Runner
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
     public partial class App : Application
     {
         public App()
