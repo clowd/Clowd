@@ -60,9 +60,6 @@ namespace DrawToolsLib
 
         private UndoManager undoManager;
 
-        private const string clipboardFormat = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
-
-
         #endregion Class Members
 
         #region Constructors
@@ -842,20 +839,6 @@ namespace DrawToolsLib
             }
         }
 
-        /// <summary>
-        /// Add a graphic object to the canvas from its serialized companion class.
-        /// </summary>
-        public void AddGraphic(GraphicBase g)
-        {
-            this.UnselectAll();
-            g.IsSelected = true;
-            this.GraphicsList.Add(g);
-            AddCommandToHistory(new CommandAdd(g));
-            UpdateState();
-            InvalidateVisual();
-            RefreshBounds();
-        }
-
         public ToolActionType GetToolActionType(ToolType type)
         {
             try
@@ -911,151 +894,59 @@ namespace DrawToolsLib
         }
 
         /// <summary>
-        /// Save graphics to XML file.
-        /// Throws: DrawingCanvasException.
+        /// Add a graphic object to the canvas from its serialized companion class.
         /// </summary>
-        public void Save(string fileName)
+        public void AddGraphic(GraphicBase g)
         {
-            try
-            {
-                var helper = new SerializationHelper(graphicsList.OfType<GraphicBase>().Select(g => g), GetArtworkBounds());
-                XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
-
-                using (Stream stream = new FileStream(fileName,
-                    FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    xml.Serialize(stream, helper);
-                    ClearHistory();
-                    UpdateState();
-                }
-            }
-            catch (IOException e)
-            {
-                throw new DrawingCanvasException(e.Message, e);
-            }
-            catch (InvalidOperationException e)
-            {
-                throw new DrawingCanvasException(e.Message, e);
-            }
-        }
-
-        /// <summary>
-        /// Load graphics from XML file.
-        /// Throws: DrawingCanvasException.
-        /// </summary>
-        public void Load(string fileName)
-        {
-            try
-            {
-                SerializationHelper helper;
-
-                XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
-
-                using (Stream stream = new FileStream(fileName,
-                    FileMode.Open, FileAccess.Read, FileShare.Read))
-                {
-                    helper = (SerializationHelper)xml.Deserialize(stream);
-                }
-
-                if (helper.Graphics == null)
-                {
-                    throw new DrawingCanvasException(Properties.Settings.Default.NoInfoInXMLFile);
-                }
-
-                graphicsList.Clear();
-
-                foreach (var g in helper.Graphics)
-                {
-                    graphicsList.Add(g);
-                }
-
-                ClearHistory();
-                UpdateState();
-            }
-            catch (IOException e)
-            {
-                throw new DrawingCanvasException(e.Message, e);
-            }
-            catch (InvalidOperationException e)
-            {
-                throw new DrawingCanvasException(e.Message, e);
-            }
-            catch (ArgumentNullException e)
-            {
-                throw new DrawingCanvasException(e.Message, e);
-            }
-        }
-
-        /// <summary>
-        /// Copies the current selected graphic objects to the clipboard
-        /// </summary>
-        public void Copy()
-        {
-            Clipboard.SetDataObject(GetClipboardObject(), false);
+            this.UnselectAll();
+            g.IsSelected = true;
+            this.GraphicsList.Add(g);
+            AddCommandToHistory(new CommandAdd(g));
             UpdateState();
+            InvalidateVisual();
+            RefreshBounds();
         }
 
         /// <summary>
-        /// Generates a clipboard DataObject that can be added to before pushing to the clipboard.
+        /// Reads the provided stream, deserializes the data into Graphic objects and adds them to the canvas
         /// </summary>
-        /// <returns></returns>
-        public DataObject GetClipboardObject()
+        /// <param name="stream"></param>
+        public void AddGraphicsFromStream(Stream stream)
         {
-            Clipboard.Clear();
+            SerializationHelper helper;
+            XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
+
+            helper = (SerializationHelper)xml.Deserialize(stream);
+
+            var transformX = (-helper.Left - helper.Width / 2) + ((ActualWidth / 2 - ContentOffset.X) / ContentScale);
+            var transformY = (-helper.Top - helper.Height / 2) + ((ActualHeight / 2 - ContentOffset.Y) / ContentScale);
+
+            this.UnselectAll();
+            foreach (var g in helper.Graphics)
+            {
+                g.Move(transformX, transformY);
+                g.IsSelected = true;
+                graphicsList.Add(g);
+            }
+            AddCommandToHistory(new CommandAdd(helper.Graphics));
+            UpdateState();
+            InvalidateVisual();
+            RefreshBounds();
+        }
+
+        /// <summary>
+        /// Serializes all graphics and writes them to the specified stream
+        /// </summary>
+        public void WriteGraphicsToStream(Stream stream)
+        {
             GraphicBase[] graphics = graphicsList.OfType<GraphicBase>().Where(g => g.IsSelected).ToArray();
             if (!graphics.Any())
                 graphics = graphicsList.OfType<GraphicBase>().ToArray();
+
             var helper = new SerializationHelper(graphics.Select(g => g), GetArtworkBounds(true));
 
             XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
-            using (MemoryStream stream = new MemoryStream())
-            {
-                xml.Serialize(stream, helper);
-                var format = DataFormats.GetDataFormat(clipboardFormat);
-                DataObject dataObj = new DataObject();
-                dataObj.SetData(format.Name, Convert.ToBase64String(stream.ToArray()), true);
-                return dataObj;
-            }
-        }
-
-        /// <summary>
-        /// Paste any graphics objects in the clipboard to the drawing canvas
-        /// </summary>
-        /// <returns>True if there were graphics to paste, or False otherwise</returns>
-        public bool Paste()
-        {
-            var dataObj = Clipboard.GetDataObject();
-            if (dataObj?.GetDataPresent(clipboardFormat) == true)
-            {
-                var base64 = dataObj.GetData(clipboardFormat) as string;
-                if (String.IsNullOrEmpty(base64))
-                    return false;
-
-                SerializationHelper helper;
-                XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
-
-                using (var stream = new MemoryStream(Convert.FromBase64String(base64)))
-                {
-                    helper = (SerializationHelper)xml.Deserialize(stream);
-                }
-
-                var transformX = (-helper.Left - helper.Width / 2) + ((ActualWidth / 2 - ContentOffset.X) / ContentScale);
-                var transformY = (-helper.Top - helper.Height / 2) + ((ActualHeight / 2 - ContentOffset.Y) / ContentScale);
-
-                this.UnselectAll();
-                foreach (var g in helper.Graphics)
-                {
-                    g.Move(transformX, transformY);
-                    g.IsSelected = true;
-                    graphicsList.Add(g);
-                }
-                AddCommandToHistory(new CommandAdd(helper.Graphics));
-                UpdateState();
-                InvalidateVisual();
-                RefreshBounds();
-                return true;
-            }
-            return false;
+            xml.Serialize(stream, helper);
         }
 
         /// <summary>
