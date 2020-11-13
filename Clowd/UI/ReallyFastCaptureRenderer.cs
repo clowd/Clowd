@@ -537,7 +537,7 @@ namespace Clowd.UI
                 if (!fitInside)
                     return;
 
-                var pt = new WpfPoint(SelectionRectangle.Left + SelectionRectangle.Width / 2, SelectionRectangle.Top + SelectionRectangle.Height / 2);
+                var pt = new WpfPoint(SelectionRectangle.Left + SelectionRectangle.Width / 2, SelectionRectangle.Bottom);
 
                 if (_globalZoom > 1)
                 {
@@ -546,7 +546,7 @@ namespace Clowd.UI
                     pt = new WpfPoint(newpt.X, newpt.Y);
                 }
 
-                var positionTransform = PositionWithinAScreen(new WpfSize(indicatorWidth, indicatorHeight), pt, HorizontalAlignment.Center, VerticalAlignment.Center, padding);
+                var positionTransform = PositionWithinAScreen(new WpfSize(indicatorWidth, indicatorHeight), pt, HorizontalAlignment.Center, VerticalAlignment.Top, padding);
                 g.PushTransform(new TranslateTransform(positionTransform.X, positionTransform.Y));
                 //g.PushOpacity(0.8d);
 
