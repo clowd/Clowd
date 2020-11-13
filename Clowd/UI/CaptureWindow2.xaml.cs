@@ -24,6 +24,23 @@ namespace Clowd.UI
 {
     public partial class CaptureWindow2 : OverlayWindow
     {
+        public bool IsPromptCapture
+        {
+            get { return (bool)GetValue(IsPromptCaptureProperty); }
+            set { SetValue(IsPromptCaptureProperty, value); }
+        }
+
+        public static readonly bool IsPromptCaptureDefaultValue = false;
+
+        public static readonly DependencyProperty IsPromptCaptureProperty =
+            DependencyProperty.Register(nameof(IsPromptCapture), typeof(bool), typeof(CaptureWindow2),
+                new PropertyMetadata(IsPromptCaptureDefaultValue, (s, e) => (s as CaptureWindow2)?.OnIsPromptCaptureChanged(s, e)));
+
+        public event DependencyPropertyChangedEventHandler IsPromptCaptureChanged;
+
+        protected virtual void OnIsPromptCaptureChanged(object sender, DependencyPropertyChangedEventArgs e)
+            => this.IsPromptCaptureChanged?.Invoke(sender, e);
+
         public static CaptureWindow2 Current { get; private set; }
 
         private readonly TimedConsoleLogger _timer;
@@ -54,15 +71,12 @@ namespace Clowd.UI
             timer.Log("Window", "Start");
             Current = new CaptureWindow2(timer, callback);
 
-            if (selection.HasValue)
-                Current.SelectionRectangle = selection.Value;
-
             Current.Closed += (s, e) => Current = null;
 
-            Current.StartCaptureInstance();
+            Current.StartCaptureInstance(selection);
         }
 
-        private void StartCaptureInstance()
+        private void StartCaptureInstance(WpfRect? selection)
         {
             // creating this first is significantly faster for some reason
             this.EnsureHandle();
@@ -70,6 +84,13 @@ namespace Clowd.UI
 
             // this will create the bitmap and do the initial render ahead of time
             fastCapturer.StartFastCapture(_timer);
+
+            if (selection.HasValue)
+            {
+                IsPromptCapture = true;
+                SelectionRectangle = selection.Value;
+                fastCapturer.StopCapture();
+            }
 
             _timer.Log("WinShow", "Showing Window");
             Show();
@@ -117,8 +138,8 @@ namespace Clowd.UI
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            var cropped = CropBitmap();
             Close();
+            var cropped = CropBitmap();
 
             if (_callback != null)
             {
@@ -130,26 +151,22 @@ namespace Clowd.UI
             }
         }
 
-        private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
+        private async void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            this.Close();
             var cropped = CropBitmap();
-            if (ClipboardEx.SetImage(cropped))
-                Close();
-            else
-                NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "Unable to set clipboard data; try again later.");
+            var data = new ClipboardDataObject();
+            data.SetImage(cropped);
+            await data.SetClipboardData();
         }
 
         private async void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            this.Close();
             var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Screenshot", App.Current.Settings.LastSavePath, "screenshot", "png");
 
-            if (String.IsNullOrWhiteSpace(filename))
+            if (!String.IsNullOrWhiteSpace(filename))
             {
-                return;
-            }
-            else
-            {
-                this.Close();
                 var cropped = CropBitmap();
                 cropped.Save(filename, ImageFormat.Png);
                 Interop.Shell32.WindowsExplorer.ShowFileOrFolder(filename);
@@ -165,18 +182,17 @@ namespace Clowd.UI
         private async void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
-
             await UploadManager.UploadImage(GetCompressedImageStream(), "png", viewName: "Screenshot");
         }
 
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            this.Close();
+
             var rawRect = SelectionRectangle.ToScreenRect();
 
             const int minWidth = 160;
             const int minHeight = 160;
-
-            this.Close();
 
             if (rawRect.Width < minWidth || rawRect.Height < minHeight)
             {
@@ -200,12 +216,19 @@ namespace Clowd.UI
 
         private void CloseExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                fastCapturer.StopCapture();
+
             this.Close();
         }
 
         private void SelectColorExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                fastCapturer.StopCapture();
+
             this.Close();
+
             NiceDialog.ShowColorDialogAsync(null, fastCapturer.GetHoveredColor());
         }
 
@@ -232,6 +255,11 @@ namespace Clowd.UI
 
         private void ProfilerExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                fastCapturer.StopCapture();
+
+            this.Close();
+
             fastCapturer.ShowProfiler();
         }
     }
