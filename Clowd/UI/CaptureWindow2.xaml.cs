@@ -138,8 +138,8 @@ namespace Clowd.UI
 
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            var cropped = CropBitmap();
             Close();
+            var cropped = CropBitmap();
 
             if (_callback != null)
             {
@@ -157,21 +157,16 @@ namespace Clowd.UI
             var cropped = CropBitmap();
             var data = new ClipboardDataObject();
             data.SetImage(cropped);
-
             await data.SetClipboardData();
         }
 
         private async void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            this.Close();
             var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Screenshot", App.Current.Settings.LastSavePath, "screenshot", "png");
 
-            if (String.IsNullOrWhiteSpace(filename))
+            if (!String.IsNullOrWhiteSpace(filename))
             {
-                return;
-            }
-            else
-            {
-                this.Close();
                 var cropped = CropBitmap();
                 cropped.Save(filename, ImageFormat.Png);
                 Interop.Shell32.WindowsExplorer.ShowFileOrFolder(filename);
@@ -187,18 +182,17 @@ namespace Clowd.UI
         private async void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
-
             await UploadManager.UploadImage(GetCompressedImageStream(), "png", viewName: "Screenshot");
         }
 
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            this.Close();
+
             var rawRect = SelectionRectangle.ToScreenRect();
 
             const int minWidth = 160;
             const int minHeight = 160;
-
-            this.Close();
 
             if (rawRect.Width < minWidth || rawRect.Height < minHeight)
             {
@@ -222,12 +216,19 @@ namespace Clowd.UI
 
         private void CloseExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                fastCapturer.StopCapture();
+
             this.Close();
         }
 
         private void SelectColorExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                fastCapturer.StopCapture();
+
             this.Close();
+
             NiceDialog.ShowColorDialogAsync(null, fastCapturer.GetHoveredColor());
         }
 
@@ -254,6 +255,11 @@ namespace Clowd.UI
 
         private void ProfilerExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            if (IsCapturing)
+                fastCapturer.StopCapture();
+
+            this.Close();
+
             fastCapturer.ShowProfiler();
         }
     }
