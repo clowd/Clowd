@@ -36,6 +36,8 @@ namespace Clowd.UI
         private WpfRect? _initialBounds;
         private PropertyChangeNotifier toolNotifier;
 
+        private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
+
         private ImageEditorPage()
         {
             InitializeComponent();
@@ -309,14 +311,21 @@ namespace Clowd.UI
             SyncToolState();
         }
 
-        private void CopyCommand(object sender, ExecutedRoutedEventArgs e)
+        private async void CopyCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
                 return;
 
-            var data = drawingCanvas.GetClipboardObject();
-            ClipboardEx.AddImageToData(data, GetRenderedBitmap());
-            Clipboard.SetDataObject(data, true);
+            var bitmap = GetRenderedBitmap();
+
+            var ms = new MemoryStream();
+            drawingCanvas.WriteGraphicsToStream(ms);
+
+            var data = new ClipboardDataObject();
+            data.SetImage(bitmap);
+            data.SetDataFormat(CANVAS_CLIPBOARD_FORMAT, ms);
+
+            await data.SetClipboardData(this);
         }
 
         private void CutCommand(object sender, ExecutedRoutedEventArgs e)
@@ -357,14 +366,31 @@ namespace Clowd.UI
             SyncToolState();
         }
 
-        private void PasteCommand(object sender, ExecutedRoutedEventArgs e)
+        private async void PasteCommand(object sender, ExecutedRoutedEventArgs e)
         {
-            if (drawingCanvas.Paste())
-                return;
+            var data = await ClipboardDataObject.GetClipboardData(this);
+            if (data.ContainsDataFormat(CANVAS_CLIPBOARD_FORMAT))
+            {
+                var ms = data.GetDataFormat<MemoryStream>(CANVAS_CLIPBOARD_FORMAT);
+                if (ms != null)
+                {
+                    drawingCanvas.AddGraphicsFromStream(ms);
+                    SyncToolState();
+                    return;
+                }
+            }
+            else if (data.ContainsImage())
+            {
+                var img = data.GetImage();
+                if (img != null)
+                {
+                    AddImage(img);
+                    SyncToolState();
+                    return;
+                }
+            }
 
-            var img = ClipboardEx.GetImage();
-            AddImage(img);
-            SyncToolState();
+            await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "There is no image on the clipboard right now.");
         }
 
         private void SelectAllCommand(object sender, ExecutedRoutedEventArgs e)
