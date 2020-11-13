@@ -66,32 +66,6 @@ namespace Clowd.UI
 
         public static void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null, bool allowPrompt = true)
         {
-            //ImageEditorPage page = null;
-            //Window window = TemplatedWindow.GetWindow(typeof(ImageEditorPage));
-
-            //if (window != null && image != null && allowPrompt)
-            //{
-            //    if ((page = TemplatedWindow.GetContent<ImageEditorPage>(window)) != null)
-            //    {
-            //        var result = await NiceDialog.ShowPromptAsync(
-            //            window,
-            //            NiceDialogIcon.Information,
-            //            "There is already an editor open, would you like to insert the captured image here or open a new window?",
-            //            "Open new window?",
-            //            "Insert",
-            //            "Open new window",
-            //            App.Current.Settings.EditorSettings,
-            //            s => s.OpenCaptureInExistingEditor);
-
-            //        if (result)
-            //        {
-            //            page.AddImage(image);
-            //            window.Activate();
-            //            return;
-            //        }
-            //    }
-            //}
-
             var page = new ImageEditorPage();
             page._initialImage = image;
             page._initialBounds = screenBounds;
@@ -157,13 +131,6 @@ namespace Clowd.UI
 
             if (_initialBounds != null)
             {
-                //var w = TemplatedWindow.CreateWindow("Edit Capture", new ImageEditorPage(cropped));
-                //var rectPos = SelectionRectangle;
-                //var primaryScreen = ScreenTools.Screens.First().Bounds.ToWpfRect();
-                //w.Left = rectPos.Left - primaryScreen.Left - App.Current.Settings.EditorSettings.CapturePadding - 7;
-                //w.Top = rectPos.Top - primaryScreen.Top - App.Current.Settings.EditorSettings.CapturePadding - 60;
-                //w.Show();
-
                 return TemplatedWindow.SizeToContent(wnd, contentSize, _initialBounds.Value.Left - contentOffsetX, _initialBounds.Value.Top - contentOffsetY);
             }
             else
@@ -177,7 +144,7 @@ namespace Clowd.UI
             var b = drawingCanvas.GetArtworkBounds();
             if (b.Height < 10 || b.Width < 10)
             {
-                //TODO: Show an error saying that there is nothing on the canvas.
+                NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "This operation could not be completed because there are no objects on the canvas.", "Canvas Empty");
                 return false;
             }
             return true;
@@ -390,7 +357,7 @@ namespace Clowd.UI
                 }
             }
 
-            await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "There is no image on the clipboard right now.");
+            await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "The clipboard does not contain an image.", "Failed to paste");
         }
 
         private void SelectAllCommand(object sender, ExecutedRoutedEventArgs e)
