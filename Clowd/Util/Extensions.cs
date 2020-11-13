@@ -110,6 +110,8 @@ namespace Clowd.Util
         }
         public static BitmapSource ConvertToBitmapSourceFast(this System.Drawing.Bitmap bitmap)
         {
+            throw new NotImplementedException(); // this method is buggy, the Pixel Format is hard coded in the BitmapSource.Create call..
+
             var bitmapData = bitmap.LockBits(
                 new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadOnly, bitmap.PixelFormat);
