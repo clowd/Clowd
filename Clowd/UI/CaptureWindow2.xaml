@@ -118,9 +118,13 @@
                 Background="{StaticResource HighlightBrush}"
                 Command="{StaticResource Command.Upload}"
                 IconPath="{StaticResource IconClowd}"
-                Text="_Upload" />
+                Text="_Upload"
+                Visibility="{Binding IsPromptCapture, Converter={StaticResource Bool2InverseVis}}" />
 
-            <Rectangle Width="3" Height="3" />
+            <Rectangle
+                Width="3"
+                Height="3"
+                Visibility="{Binding IsPromptCapture, Converter={StaticResource Bool2InverseVis}}" />
 
             <controls:CaptureToolButton
                 Background="{StaticResource HighlightBrush}"
@@ -132,24 +136,28 @@
                 Background="{StaticResource HighlightBrush}"
                 Command="{StaticResource Command.Video}"
                 IconPath="{StaticResource IconVideo}"
-                Text="_Video" />
+                Text="_Video"
+                Visibility="{Binding IsPromptCapture, Converter={StaticResource Bool2InverseVis}}" />
 
             <controls:CaptureToolButton
                 Background="{StaticResource HighlightBrush}"
                 Command="ApplicationCommands.Copy"
                 IconPath="{StaticResource IconCopy}"
-                Text="_Copy" />
+                Text="_Copy"
+                Visibility="{Binding IsPromptCapture, Converter={StaticResource Bool2InverseVis}}" />
 
             <controls:CaptureToolButton
                 Background="{StaticResource HighlightBrush}"
                 Command="ApplicationCommands.SaveAs"
                 IconPath="{StaticResource IconSave}"
-                Text="_Save" />
+                Text="_Save"
+                Visibility="{Binding IsPromptCapture, Converter={StaticResource Bool2InverseVis}}" />
 
             <controls:CaptureToolButton
                 Command="{StaticResource Command.Search}"
                 IconPath="{StaticResource IconSearch}"
-                Text="Search" />
+                Text="Search"
+                Visibility="{Binding IsPromptCapture, Converter={StaticResource Bool2InverseVis}}" />
 
             <controls:CaptureToolButton
                 Background="#373737"
