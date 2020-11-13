@@ -608,30 +608,30 @@ namespace Clowd
             if (result != null)
                 OnFilesReceived(result);
         }
-        public void Paste()
+        public async void Paste()
         {
             if (!_initialized)
                 return;
 
-            if (Clipboard.ContainsImage())
+            var data = await ClipboardDataObject.GetClipboardData();
+
+            if (data.ContainsImage())
             {
-                var img = System.Windows.Forms.Clipboard.GetImage();
+                var img = data.GetImage();
                 var ms = new MemoryStream();
                 img.Save(ms, ImageFormat.Png);
                 ms.Position = 0;
                 UploadManager.UploadImage(ms, "png", viewName: "Pasted Image");
             }
-            else if (Clipboard.ContainsText())
+            else if (data.ContainsText())
             {
-                var ms = new MemoryStream(Clipboard.GetText().ToUtf8());
+                var ms = new MemoryStream(data.GetText().ToUtf8());
                 UploadManager.UploadText(ms, "txt", viewName: "Pasted Text");
             }
-            else if (Clipboard.ContainsFileDropList())
+            else if (data.ContainsFileDropList())
             {
-                var collection = Clipboard.GetFileDropList();
-                string[] fileArray = new string[collection.Count];
-                collection.CopyTo(fileArray, 0);
-                OnFilesReceived(fileArray);
+                var collection = data.GetFileDropList();
+                OnFilesReceived(collection);
             }
         }
 

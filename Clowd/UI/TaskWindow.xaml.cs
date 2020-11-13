@@ -489,11 +489,15 @@ namespace Clowd.UI
         {
             //throw new NotImplementedException();
         }
-        private void CopyExecuted(object param)
+        private async void CopyExecuted(object param)
         {
-            Clipboard.SetText(UploadURL);
-            OnCopied();
-            SetExecuted();
+            var data = new ClipboardDataObject();
+            data.SetText(UploadURL);
+            if (await data.SetClipboardData())
+            {
+                OnCopied();
+                SetExecuted();
+            }
         }
         private void CancelExecuted(object param)
         {

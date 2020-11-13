@@ -130,13 +130,14 @@ namespace Clowd.UI
             }
         }
 
-        private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
+        private async void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            this.Close();
             var cropped = CropBitmap();
-            if (ClipboardEx.SetImage(cropped))
-                Close();
-            else
-                NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "Unable to set clipboard data; try again later.");
+            var data = new ClipboardDataObject();
+            data.SetImage(cropped);
+
+            await data.SetClipboardData();
         }
 
         private async void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
