@@ -9,6 +9,10 @@ namespace NAppUpdate.Framework.Common
     {
         public string TempFolder { get; set; }
 
+        public string DirectoryToUpdate { get; set; }
+
+        public string ApplicationPath { get; set; }
+
         /// <summary>
         /// Path to the backup folder used by the update process
         /// </summary>
@@ -32,7 +36,7 @@ namespace NAppUpdate.Framework.Common
         }
         internal string _backupFolder;
 
-        public string UpdateProcessName { get; set; }
+        //public string UpdateProcessName { get; set; }
 
         /// <summary>
         /// The name for the executable file to extract and run cold updates with. Default is foo.exe. You can change

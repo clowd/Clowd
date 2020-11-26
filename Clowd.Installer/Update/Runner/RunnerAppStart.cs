@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
+using Clowd.Installer;
 using NAppUpdate.Framework;
 using NAppUpdate.Framework.Common;
 using NAppUpdate.Framework.Tasks;
@@ -13,39 +14,39 @@ namespace NAppUpdate.Updater
 {
     internal static class RunnerAppStart
     {
-        private static ArgumentsParser _args;
+        private static InstallerArgs _args;
         private static Logger _logger;
-        private static ConsoleForm _console;
+        //private static ConsoleForm _console;
 
-        private static void Run()
+        public static void Run(InstallerArgs args)
         {
             //Debugger.Launch();
+            _args = args;
             string tempFolder = string.Empty;
             string logFile = string.Empty;
-            _args = ArgumentsParser.Get();
 
             _logger = UpdateManager.Instance.Logger;
-            _args.ParseCommandLineArgs();
-            if (_args.ShowConsole)
-            {
-                _console = new ConsoleForm();
-                _console.Show();
-            }
+
+            //if (_args.ShowConsole)
+            //{
+            //    _console = new ConsoleForm();
+            //    _console.Show();
+            //}
 
             Log("Starting to process cold updates...");
 
             var workingDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
-            if (_args.Log)
-            {
-                // Setup a temporary location for the log file, until we can get the DTO
-                logFile = Path.Combine(workingDir, @"NauUpdate.log");
-            }
+            //if (_args.LogTo)
+            //{
+            //    // Setup a temporary location for the log file, until we can get the DTO
+            //    logFile = Path.Combine(workingDir, @"NauUpdate.log");
+            //}
 
             try
             {
                 // Get the update process name, to be used to create a named pipe and to wait on the application
                 // to quit
-                string syncProcessName = _args.ProcessName;
+                string syncProcessName = Clowd.Constants.UpdateProcessName;
                 if (string.IsNullOrEmpty(syncProcessName)) //Application.Exit();
                     throw new ArgumentException("The command line needs to specify the mutex of the program to update.", "ar" + "gs");
 
@@ -120,16 +121,19 @@ namespace NAppUpdate.Updater
 
                 //This can be handy if you're trying to debug the updater.exe!
                 //#if (DEBUG)
-                {
-                    if (_args.ShowConsole)
-                    {
-                        _console.WriteLine();
-                        _console.WriteLine("Pausing to attach debugger.  Press any key to continue.");
-                        _console.ReadKey();
-                    }
+                //{
+                //    if (_args.ShowConsole)
+                //    {
+                //        _console.WriteLine();
+                //        _console.WriteLine("Pausing to attach debugger.  Press any key to continue.");
+                //        _console.ReadKey();
+                //    }
 
-                }
+                //}
                 //#endif
+
+                _args.AppDirectory = appDir;
+                _args.Startup();
 
                 // Perform the actual off-line update process
                 foreach (var t in dto.Tasks)
@@ -179,24 +183,24 @@ namespace NAppUpdate.Updater
                 {
                     Log("Re-launching process {0} with working dir {1}", appPath, appDir);
                     ProcessStartInfo info;
-                    if (_args.ShowConsole)
+                    //if (_args.ShowConsole)
+                    //{
+                    //    info = new ProcessStartInfo
+                    //    {
+                    //        UseShellExecute = false,
+                    //        WorkingDirectory = appDir,
+                    //        FileName = appPath,
+                    //    };
+                    //}
+                    //else
+                    //{
+                    info = new ProcessStartInfo
                     {
-                        info = new ProcessStartInfo
-                        {
-                            UseShellExecute = false,
-                            WorkingDirectory = appDir,
-                            FileName = appPath,
-                        };
-                    }
-                    else
-                    {
-                        info = new ProcessStartInfo
-                        {
-                            UseShellExecute = true,
-                            WorkingDirectory = appDir,
-                            FileName = appPath,
-                        };
-                    }
+                        UseShellExecute = true,
+                        WorkingDirectory = appDir,
+                        FileName = appPath,
+                    };
+                    //}
 
                     try
                     {
@@ -218,25 +222,25 @@ namespace NAppUpdate.Updater
             }
             finally
             {
-                if (_args.Log)
-                {
-                    // at this stage we can't make any assumptions on correctness of the path
-                    FileSystem.CreateDirectoryStructure(logFile, true);
-                    _logger.Dump(logFile);
-                }
+                //if (_args.LogTo)
+                //{
+                //    // at this stage we can't make any assumptions on correctness of the path
+                //    FileSystem.CreateDirectoryStructure(logFile, true);
+                //    _logger.Dump(logFile);
+                //}
 
-                if (_args.ShowConsole)
-                {
-                    if (_args.Log)
-                    {
-                        _console.WriteLine();
-                        _console.WriteLine("Log file was saved to {0}", logFile);
-                        _console.WriteLine();
-                    }
-                    _console.WriteLine();
-                    _console.WriteLine("Press any key or close this window to exit.");
-                    _console.ReadKey();
-                }
+                //if (_args.ShowConsole)
+                //{
+                //    if (_args.LogTo)
+                //    {
+                //        _console.WriteLine();
+                //        _console.WriteLine("Log file was saved to {0}", logFile);
+                //        _console.WriteLine();
+                //    }
+                //    _console.WriteLine();
+                //    _console.WriteLine("Press any key or close this window to exit.");
+                //    _console.ReadKey();
+                //}
                 if (!string.IsNullOrEmpty(tempFolder)) SelfCleanUp(tempFolder);
                 Application.Exit();
             }
@@ -266,35 +270,28 @@ namespace NAppUpdate.Updater
 
         private static void Log(string message, params object[] args)
         {
-            Log(Logger.SeverityLevel.Debug, message, args);
+            Clowd.Installer.Log.White(String.Format(message, args));
         }
 
         private static void Log(Logger.SeverityLevel severity, string message, params object[] args)
         {
-            message = string.Format(message, args);
-
-            _logger.Log(severity, message);
-            if (_args.ShowConsole) _console.WriteLine(message);
-
-            Application.DoEvents();
+            switch (severity)
+            {
+                case Logger.SeverityLevel.Debug:
+                    Clowd.Installer.Log.White(String.Format(message, args));
+                    break;
+                case Logger.SeverityLevel.Warning:
+                    Clowd.Installer.Log.Yellow(String.Format(message, args));
+                    break;
+                case Logger.SeverityLevel.Error:
+                    Clowd.Installer.Log.Red(String.Format(message, args));
+                    break;
+            }
         }
 
         private static void Log(Exception ex)
         {
-            _logger.Log(ex);
-
-            if (_args.ShowConsole)
-            {
-                _console.WriteLine("*********************************");
-                _console.WriteLine("   An error has occurred:");
-                _console.WriteLine("   " + ex);
-                _console.WriteLine("*********************************");
-
-                _console.WriteLine();
-                _console.WriteLine("The updater will close when you close this window.");
-            }
-
-            Application.DoEvents();
+            Clowd.Installer.Log.Red(ex.ToString());
         }
     }
 }

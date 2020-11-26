@@ -31,11 +31,12 @@ namespace Clowd.Installer.Features
 
         public void Install(string assetPath)
         {
-            if (!SystemEx.IsProcessElevated)
-            {
-                Program.Elevate(true, this.GetType(), assetPath);
-                return;
-            }
+            throw new InvalidOperationException();
+            //if (!SystemEx.IsProcessElevated)
+            //{
+            //    Program.Elevate(true, this.GetType(), assetPath);
+            //    return;
+            //}
 
             if (!Directory.Exists(InstallDirectory))
                 Directory.CreateDirectory(InstallDirectory);
@@ -125,11 +126,12 @@ start /b """" cmd /c rd /s /q ""%~dp0"" & msg * /self /w ""Uninstallation of {Co
             if (!CheckInstalled(assetPath))
                 return;
 
-            if (!SystemEx.IsProcessElevated)
-            {
-                Program.Elevate(false, this.GetType(), assetPath);
-                return;
-            }
+            //if (!SystemEx.IsProcessElevated)
+            //{
+            //    Program.Elevate(false, this.GetType(), assetPath);
+            //    return;
+            //}
+            throw new InvalidOperationException();
 
             string[] getBinaries() => Directory.GetFiles(InstallDirectory).Where(f => f.EndsWith("dll") || f.EndsWith("ax")).ToArray();
 

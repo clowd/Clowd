@@ -14,18 +14,18 @@ namespace Clowd.Installer
     {
         static UpdateManager _updateManager;
 
-        public static UpdateManager GetUpdaterInstance()
+        public static UpdateManager GetUpdaterInstance(string applicationDirectory, string applicationExePath)
         {
             if (_updateManager == null)
             {
                 // NAppUpdater uses relative paths, so the current directory must be set accordingly.
-                Environment.CurrentDirectory = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+                //Environment.CurrentDirectory = applicationDirectory;// Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
                 _updateManager = UpdateManager.Instance;
+                _updateManager.Config.DirectoryToUpdate = applicationDirectory;
+                _updateManager.Config.ApplicationPath = applicationExePath;
+                _updateManager.Config.TempFolder = PathConstants.UpdateData;
+                _updateManager.Config.BackupFolder = PathConstants.BackupData;
                 //_updateManager.Config.UpdateExecutableName = "clowd-upd.exe";
-                _updateManager.Config.TempFolder = Path.Combine(Constants.AppDataDirectory, "update");
-                _updateManager.Config.BackupFolder = Path.Combine(Constants.AppDataDirectory, "backup");
-                _updateManager.Config.UpdateProcessName = "ClowdUpdate";
-
             }
 
             return _updateManager;

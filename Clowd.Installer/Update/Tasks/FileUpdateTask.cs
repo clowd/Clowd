@@ -63,7 +63,7 @@ namespace NAppUpdate.Framework.Tasks
 					throw new UpdateProcessFailedException(string.Format("FileUpdateTask: Checksums do not match; expected {0} but got {1}", Sha256Checksum, checksum));
 			}
 
-			_destinationFile = Path.Combine(Path.GetDirectoryName(UpdateManager.Instance.ApplicationPath), LocalPath);
+			_destinationFile = Path.Combine(UpdateManager.Instance.Config.DirectoryToUpdate, LocalPath);
 			UpdateManager.Instance.Logger.Log("FileUpdateTask: Prepared successfully; destination file: {0}", _destinationFile);
 		}
 

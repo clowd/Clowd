@@ -1,7 +1,9 @@
 ﻿using Clowd.Installer.Features;
+using PowerArgs;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -11,94 +13,49 @@ namespace Clowd.Installer
 {
     internal class Program
     {
-        //internal static bool CanElevate { get; private set; } = true;
-        //internal static void Elevate(bool install, Type feature, string asset)
-        //{
-        //    if (!CanElevate)
-        //        throw new Exception("Elevation is required, please restart the process as Administrator");
-
-        //    ProcessStartInfo psi = new ProcessStartInfo();
-        //    psi.FileName = Assembly.GetExecutingAssembly().Location;
-        //    var inst = install ? "install" : "uninstall";
-        //    psi.Arguments = $"{inst} {feature.Name} \"{asset}\"";
-        //    psi.UseShellExecute = true;
-        //    psi.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
-        //    psi.Verb = "runas";
-        //    var p = Process.Start(psi);
-        //    p.WaitForExit();
-
-        //    if (p.ExitCode != 0)
-        //        throw new Exception($"{Constants.ClowdInstallerExeName} exited with non zero exit code: " + p.ExitCode);
-        //}
-        internal static void Main(string[] args)
+        internal static void Elevate(string appDirectory, bool install, Type feature)
         {
-            PowerArgs.Args.InvokeAction<Args>(args);
+            var logFile = PathConstants.GetDatedFileName("cli_elevated_log", PathConstants.LogData);
 
-            //// we should only auto-elevate if running inside clowd and not from command line
-            //CanElevate = false;
+            Log.White($"Starting elevated process, logging to: \"{logFile}\"");
 
-            //var types = new Type[] {
-            //    typeof(AutoStart),
-            //    typeof(ContextMenu),
-            //    typeof(ControlPanel),
-            //    typeof(DShowFilter),
-            //    typeof(Shortcuts),
-            //};
+            ProcessStartInfo psi = new ProcessStartInfo();
+            psi.FileName = Assembly.GetExecutingAssembly().Location;
+            var action = install ? nameof(InstallerArgs.AddFeature) : nameof(InstallerArgs.RemoveFeature);
+            psi.Arguments = $"{action} {feature.Name} -dir \"{appDirectory}\" -log \"{logFile}\"";
+            psi.UseShellExecute = true;
+            psi.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            psi.Verb = "runas";
+            var p = Process.Start(psi);
+            p.WaitForExit();
 
-            //Console.WriteLine($"Usage: {Constants.ClowdInstallerExeName} [i|u] feature_name asset_path");
-            //Console.WriteLine("Valid feature_name:");
-            //Console.WriteLine("  - all");
-            //foreach (var t in types)
-            //    Console.WriteLine("  - " + t.Name);
+            if (p.ExitCode != 0)
+                throw new OutOfProcessException(Constants.InstallerExeName, p.ExitCode, logFile);
+        }
 
-            //Console.WriteLine($"Example: {Constants.ClowdInstallerExeName} i shortcuts \"C:\\Clowd\\Clowd.exe\"");
-
-            //try
-            //{
-            //    var cmode = args[0];
-            //    var cfeat = args[1];
-            //    var asset = args.Length > 2 ? args[2] : null;
-
-            //    Type[] features;
-            //    if (cfeat.Equals("all", StringComparison.OrdinalIgnoreCase))
-            //    {
-            //        features = types;
-            //        if (cmode.Equals("i", StringComparison.OrdinalIgnoreCase) || cmode.Equals("install", StringComparison.OrdinalIgnoreCase))
-            //            throw new Exception("uninstall is the only supported operation for the [all] feature");
-            //    }
-            //    else
-            //    {
-            //        features = new[] { types.Single(s => s.Name.Equals(cfeat, StringComparison.OrdinalIgnoreCase)) };
-            //    }
-
-            //    foreach (var f in features)
-            //    {
-            //        var inst = (IFeature)Activator.CreateInstance(f);
-
-            //        if (cmode.Equals("i", StringComparison.OrdinalIgnoreCase) || cmode.Equals("install", StringComparison.OrdinalIgnoreCase))
-            //        {
-            //            inst.Install(asset);
-            //            Console.WriteLine("Success - Installed " + f.Name);
-            //        }
-            //        else if (cmode.Equals("u", StringComparison.OrdinalIgnoreCase) || cmode.Equals("uninstall", StringComparison.OrdinalIgnoreCase))
-            //        {
-            //            inst.Uninstall(asset);
-            //            Console.WriteLine("Success - Uninstalled " + f.Name);
-            //        }
-            //        else
-            //        {
-            //            throw new Exception("Unknown mode: " + cmode);
-            //        }
-            //    }
-
-            //    return 0;
-            //}
-            //catch (Exception e)
-            //{
-            //    Console.WriteLine("An error has occurred:");
-            //    Console.WriteLine(e.ToString());
-            //    return 1;
-            //}
+        internal static int Main(string[] args)
+        {
+            try
+            {
+                Log.IsConsoleMode = true;
+                var t = Args.InvokeAction<InstallerArgs>(args);
+                if (t.Args.Debug)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("[DEBUG] Press any key to exit.");
+                    Console.ReadKey();
+                }
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine();
+                Log.Red(ex.Message);
+                Console.WriteLine();
+                $"To see help, run '{Path.GetFileName(Assembly.GetExecutingAssembly().Location)} -h'".ToYellow().WriteLine();
+                //ArgUsage.GenerateUsageFromTemplate<InstallerArgs>().WriteLine();
+                return 1;
+            }
         }
     }
 }
