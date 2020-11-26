@@ -41,7 +41,6 @@ namespace Clowd.FFmpeg
         /// </summary>
         public ProcessPriorityClass FFMpegProcessPriority { get; set; }
 
-
         /// <summary>
         /// Gets or sets ffmpeg loglevel option (by default is "info").
         /// </summary>

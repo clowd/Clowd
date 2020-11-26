@@ -10,6 +10,8 @@ using NAppUpdate.Framework.Tasks;
 using NAppUpdate.Framework.Utils;
 using System.Threading.Tasks;
 using System.Reflection;
+using Clowd.Installer;
+using Clowd;
 
 namespace NAppUpdate.Framework
 {
@@ -28,20 +30,20 @@ namespace NAppUpdate.Framework
             IsWorking = false;
             State = UpdateProcessState.NotChecked;
             UpdatesToApply = new List<IUpdateTask>();
-            ApplicationPath = Process.GetCurrentProcess().MainModule.FileName;
+            //ApplicationPath = Process.GetCurrentProcess().MainModule.FileName;
             UpdateFeedReader = new NauXmlFeedReader();
             Logger = new Logger();
             Config = new NauConfigurations
             {
                 TempFolder = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()),
-                UpdateProcessName = "NAppUpdateProcess",
+                //UpdateProcessName = "NAppUpdateProcess",
             };
 
             // Need to do this manually here because the BackupFolder property is protected using the static instance, which we are
             // in the middle of creating
-            string backupPath = Path.Combine(Path.GetDirectoryName(ApplicationPath) ?? string.Empty, "Backup" + DateTime.Now.Ticks);
-            backupPath = backupPath.TrimEnd(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            Config._backupFolder = Path.IsPathRooted(backupPath) ? backupPath : Path.Combine(Config.TempFolder, backupPath);
+            //string backupPath = Path.Combine(Path.GetDirectoryName(ApplicationPath) ?? string.Empty, "Backup" + DateTime.Now.Ticks);
+            //backupPath = backupPath.TrimEnd(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            //Config._backupFolder = Path.IsPathRooted(backupPath) ? backupPath : Path.Combine(Config.TempFolder, backupPath);
         }
 
         static UpdateManager() { }
@@ -74,7 +76,7 @@ namespace NAppUpdate.Framework
             RollbackRequired,
         }
 
-        internal readonly string ApplicationPath;
+        //internal readonly string ApplicationPath;
 
         public NauConfigurations Config { get; set; }
 
@@ -228,32 +230,9 @@ namespace NAppUpdate.Framework
         #region Step 3 - Apply updates
 
         /// <summary>
-        /// Starts the updater executable and sends update data to it, and relaunch the caller application as soon as its done
-        /// </summary>
-        /// <returns>True if successful (unless a restart was required</returns>
-        public void ApplyUpdates()
-        {
-            ApplyUpdates(true);
-        }
-
-        /// <summary>
         /// Starts the updater executable and sends update data to it
         /// </summary>
-        /// <param name="relaunchApplication">true if relaunching the caller application is required; false otherwise</param>
-        /// <returns>True if successful (unless a restart was required</returns>
-        public void ApplyUpdates(bool relaunchApplication)
-        {
-            ApplyUpdates(relaunchApplication, false, false);
-        }
-
-        /// <summary>
-        /// Starts the updater executable and sends update data to it
-        /// </summary>
-        /// <param name="relaunchApplication">true if relaunching the caller application is required; false otherwise</param>
-        /// <param name="updaterDoLogging">true if the updater writes to a log file; false otherwise</param>
-        /// <param name="updaterShowConsole">true if the updater shows the console window; false otherwise</param>
-        /// <returns>True if successful (unless a restart was required</returns>
-        public void ApplyUpdates(bool relaunchApplication, bool updaterDoLogging, bool updaterShowConsole)
+        public void ApplyUpdate(bool relaunchApplication, bool debug, string logFile)
         {
             if (IsWorking)
                 throw new InvalidOperationException("Another update process is already in progress");
@@ -268,7 +247,7 @@ namespace NAppUpdate.Framework
                     // this prevents the updater from writing to e.g. c:\windows\system32
                     // if the process is started by autorun on windows logon.
                     // ReSharper disable AssignNullToNotNullAttribute
-                    Environment.CurrentDirectory = Path.GetDirectoryName(ApplicationPath);
+                    //Environment.CurrentDirectory = Path.GetDirectoryName(ApplicationPath);
                     // ReSharper restore AssignNullToNotNullAttribute
 
                     // Make sure the current backup folder is accessible for writing from this process
@@ -307,7 +286,7 @@ namespace NAppUpdate.Framework
                     {
                         Config._backupFolder = Path.Combine(
                             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                            Config.UpdateProcessName + "UpdateBackups" + DateTime.UtcNow.Ticks);
+                            Constants.UpdateProcessName + "UpdateBackups" + DateTime.UtcNow.Ticks);
 
                         try
                         {
@@ -360,8 +339,8 @@ namespace NAppUpdate.Framework
                         {
                             Configs = Instance.Config,
                             Tasks = Instance.UpdatesToApply,
-                            AppPath = ApplicationPath,
-                            WorkingDirectory = Environment.CurrentDirectory,
+                            AppPath = Path.GetFullPath(Instance.Config.ApplicationPath),
+                            WorkingDirectory = Path.GetFullPath(Instance.Config.DirectoryToUpdate),
                             RelaunchApplication = relaunchApplication,
                             LogItems = Logger.LogItems,
                         };
@@ -371,32 +350,29 @@ namespace NAppUpdate.Framework
                         var info = new ProcessStartInfo
                         {
                             UseShellExecute = true,
-                            WorkingDirectory = Environment.CurrentDirectory,
+                            WorkingDirectory = Instance.Config.DirectoryToUpdate,
                             FileName = updaterPath,
-                            Arguments =
-                                               string.Format(@"""{0}"" {1} {2}", Config.UpdateProcessName,
-                                                             updaterShowConsole ? "-showConsole" : string.Empty,
-                                                             updaterDoLogging ? "-log" : string.Empty),
+                            Arguments = $"{nameof(InstallerArgs.ProcessIPC)} {(debug ? "-debug " : "")}-dir \"{Instance.Config.DirectoryToUpdate}\" -log \"{logFile}\"",
                         };
 
-                        if (!updaterShowConsole)
-                        {
-                            info.WindowStyle = ProcessWindowStyle.Hidden;
-                            info.CreateNoWindow = true;
-                        }
+                        //if (!updaterShowConsole)
+                        //{
+                        //    info.WindowStyle = ProcessWindowStyle.Hidden;
+                        //    info.CreateNoWindow = true;
+                        //}
 
                         // If we can't write to the destination folder, then lets try elevating priviledges.
-                        if (runPrivileged || !PermissionsCheck.HaveWritePermissionsForFolder(Environment.CurrentDirectory))
+                        if (runPrivileged || !PermissionsCheck.HaveWritePermissionsForFolder(Instance.Config.DirectoryToUpdate))
                         {
                             info.Verb = "runas";
                         }
 
                         bool createdNew;
-                        _shutdownMutex = new Mutex(true, Config.UpdateProcessName + "Mutex", out createdNew);
+                        _shutdownMutex = new Mutex(true, Constants.UpdateProcessName + "Mutex", out createdNew);
 
                         try
                         {
-                            NauIpc.LaunchProcessAndSendDto(dto, info, Config.UpdateProcessName);
+                            NauIpc.LaunchProcessAndSendDto(dto, info, Constants.UpdateProcessName);
                         }
                         catch (Exception ex)
                         {
@@ -418,7 +394,7 @@ namespace NAppUpdate.Framework
         {
             lock (UpdatesToApply)
             {
-                var dto = NauIpc.ReadDto(Config.UpdateProcessName) as NauIpc.NauDto;
+                var dto = NauIpc.ReadDto(Constants.UpdateProcessName) as NauIpc.NauDto;
                 if (dto == null) return;
                 Config = dto.Configs;
                 UpdatesToApply = dto.Tasks;

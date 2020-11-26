@@ -32,7 +32,7 @@ namespace NAppUpdate.Framework.Tasks
             if (!Directory.Exists(Path.GetDirectoryName(Path.Combine(UpdateManager.Instance.Config.BackupFolder, LocalPath))))
                 Utils.FileSystem.CreateDirectoryStructure(Path.GetDirectoryName(Path.Combine(UpdateManager.Instance.Config.BackupFolder, LocalPath)), false);
 
-            _localFile = Path.Combine(Path.GetDirectoryName(UpdateManager.Instance.ApplicationPath), LocalPath);
+            _localFile = Path.Combine(UpdateManager.Instance.Config.DirectoryToUpdate, LocalPath);
             _backupFile = Path.Combine(UpdateManager.Instance.Config.BackupFolder, LocalPath);
             File.Copy(_localFile, _backupFile, true);
 

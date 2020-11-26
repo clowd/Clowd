@@ -18,7 +18,6 @@ namespace Clowd.Capture
     {
         private delegate Task<UploadResult> DoUploadDelegate(IUploadProvider provider, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
         private static readonly TaskWindow _window = new TaskWindow();
-        private static string TempDataDirectory => Path.Combine(Constants.AppDataDirectory, "uploads");
 
         public static void ShowWindow()
         {

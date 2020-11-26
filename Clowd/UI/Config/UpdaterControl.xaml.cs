@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using Clowd.Installer;
@@ -24,7 +25,8 @@ namespace Clowd.UI.Config
         {
             CurrentVersion = UpdateHelper.GetCurrentVersion();
             CanDoAction = true;
-            _manager = UpdateHelper.GetUpdaterInstance();
+            var myDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            _manager = UpdateHelper.GetUpdaterInstance(myDir);
             _manager.ReportProgress += _manager_ReportProgress;
 
             UpdateState();

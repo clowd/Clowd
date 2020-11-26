@@ -40,6 +40,10 @@ namespace Clowd.Installer
             }
         }
 
+        public static bool IsEnvironmentUserInteractive => Environment.UserInteractive;
+
+        public static bool IsConsoleAttached => GetConsoleWindow() != IntPtr.Zero;
+
         public static bool CheckClowdConnection()
         {
             int desc;
@@ -57,6 +61,9 @@ namespace Clowd.Installer
 
             return CheckPingHost("google.com");
         }
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetConsoleWindow();
 
         [StructLayout(LayoutKind.Sequential)]
         private struct BY_HANDLE_FILE_INFORMATION
