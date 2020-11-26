@@ -6,7 +6,7 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{AD6FD9E3-3C83-432E-9F19-74C71E881FE4}</ProjectGuid>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
     <RootNamespace>Clowd.Installer</RootNamespace>
     <AssemblyName>ClowdCLI</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
@@ -46,6 +46,9 @@
     <Reference Include="Costura, Version=4.1.0.0, Culture=neutral, PublicKeyToken=9919ef960d84173d, processorArchitecture=MSIL">
       <HintPath>..\packages\Costura.Fody.4.1.0\lib\net40\Costura.dll</HintPath>
     </Reference>
+    <Reference Include="Kurukuru, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Kurukuru.1.1.0\lib\net45\Kurukuru.dll</HintPath>
+    </Reference>
     <Reference Include="PowerArgs, Version=3.6.0.0, Culture=neutral, PublicKeyToken=26a276264bbd55b8, processorArchitecture=MSIL">
       <HintPath>..\packages\PowerArgs.3.6.0\lib\netstandard2.0\PowerArgs.dll</HintPath>
     </Reference>
@@ -62,7 +65,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Args.cs" />
+    <Compile Include="InstallerArgs.cs" />
     <Compile Include="ClowdInstallManager.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Features\AutoStart.cs" />
@@ -77,6 +80,8 @@
     <Compile Include="Features\IFeature.cs" />
     <Compile Include="Features\Shortcuts.cs" />
     <Compile Include="Features\Util\UScreen.cs" />
+    <Compile Include="Log.cs" />
+    <Compile Include="OutOfProcessException.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RegistryEx.cs" />
@@ -102,9 +107,7 @@
     <Compile Include="Update\FeedReaders\AppcastReader.cs" />
     <Compile Include="Update\FeedReaders\IUpdateFeedReader.cs" />
     <Compile Include="Update\FeedReaders\NauXmlFeedReader.cs" />
-    <Compile Include="Update\Runner\Application.cs" />
     <Compile Include="Update\Runner\RunnerAppStart.cs" />
-    <Compile Include="Update\Runner\ArgumentsParser.cs" />
     <Compile Include="Update\Runner\ConsoleForm.cs">
       <SubType>Form</SubType>
     </Compile>
