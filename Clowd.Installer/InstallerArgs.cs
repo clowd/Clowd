@@ -123,51 +123,6 @@ namespace Clowd.Installer
             Log.YesOrThrow("Would you like to install updates now? This program will terminate.", "Update cancelled by user");
 
             manager.ApplyUpdate(args.Launch, Debug, LogFile);
-
-
-            //var p = Process.GetProcessesByName("Clowd");
-
-            //bool wasRunning = p.Length > 0;
-
-            //if (wasRunning)
-            //{
-            //    if (!Log.IsUserSure($"{Constants.ClowdAppName} is currently running (pid.{p.FirstOrDefault().Id}) will be killed"))
-            //    {
-            //        throw new Exception("Update was cancelled by user.");
-            //    }
-            //    else
-            //    {
-            //        foreach (var f in p)
-            //        {
-            //            Log.Yellow($"Killing pid {f.Id} ({f.ProcessName})");
-            //            f.Kill();
-            //            f.WaitForExit(2000);
-            //        }
-            //    }
-            //}
-
-            //if (IsInstallerInUse)
-            //{
-            //    if (!Log.IsUserSure($"This application will exit and version {package.Version} will be installed"))
-            //    {
-            //        throw new Exception("Update was cancelled by user.");
-            //    }
-
-            //    Log.Yellow("Exiting and installing updates");
-
-            //    var fromClowd = Assembly.GetEntryAssembly() != Assembly.GetExecutingAssembly();
-
-            //    manager.ApplyUpdate(fromClowd, false);
-            //}
-            //else
-            //{
-            //    if (!Log.IsUserSure($"Version {package.Version} will be installed"))
-            //    {
-            //        throw new Exception("Update was cancelled by user.");
-            //    }
-
-            //    manager.ApplyUpdate(false, true);
-            //}
         }
 
         [ArgActionMethod]
