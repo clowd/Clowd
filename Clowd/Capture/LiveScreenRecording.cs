@@ -99,8 +99,7 @@ namespace Clowd.Capture
             var codec = settings.VideoCodec.GetSelectedPreset();
             string extension = codec.Extension;
 
-            var filename = "capture_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "." + extension;
-            filename = Path.Combine(Path.GetFullPath(settings.OutputDirectory), filename);
+            var filename = PathConstants.GetDatedFilePath("capture", extension, settings.OutputDirectory);
             this.FileName = filename;
 
             //ulong bitrate = (ulong)Math.Round(((decimal)bounds.Width * bounds.Height * settings.TargetFramesPerSecond) * ((decimal)settings.OutputQuality / 1000m), 0);
