@@ -15,7 +15,7 @@ namespace Clowd.Installer
     {
         internal static void Elevate(string appDirectory, bool install, Type feature)
         {
-            var logFile = PathConstants.GetDatedFileName("cli_elevated_log", PathConstants.LogData);
+            var logFile = PathConstants.GetDatedFilePath("cli_elevated_log", "txt", PathConstants.LogData);
 
             Log.White($"Starting elevated process, logging to: \"{logFile}\"");
 

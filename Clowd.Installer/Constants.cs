@@ -33,9 +33,10 @@ namespace Clowd
         public static string UpdateData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Updates");
         public static string BackupData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Backup");
         public static string LogData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Logs");
+        public static string SessionData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Session");
 
-        public static string GetDatedFileName(string name, string path) => Path.Combine(path, GetDatedFileName(name));
-        public static string GetDatedFileName(string name) => name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".txt";
+        public static string GetDatedFilePath(string name, string extension, string directory) => Path.Combine(Path.GetFullPath(directory), GetDatedFileName(name, extension));
+        public static string GetDatedFileName(string name, string extension) => name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "." + extension;
 
         private static string GetClowdFolder(Environment.SpecialFolder dataDirectory, string dataName) => GetClowdFolder(Environment.GetFolderPath(dataDirectory), dataName);
 
