@@ -39,7 +39,7 @@ namespace Clowd.Installer
             {
                 Log.IsConsoleMode = true;
                 var t = Args.InvokeAction<InstallerArgs>(args);
-                if (t.Args.Debug)
+                if (t?.Args?.Debug == true)
                 {
                     Console.WriteLine();
                     Console.WriteLine("[DEBUG] Press any key to exit.");
@@ -50,7 +50,8 @@ namespace Clowd.Installer
             catch (Exception ex)
             {
                 Console.WriteLine();
-                Log.Red(ex.Message);
+                Log.Red(ex.ToString());
+                Log.Red(ex.Message); // log the message as the last thing before we exit, just makes reading easier.
                 Console.WriteLine();
                 $"To see help, run '{Path.GetFileName(Assembly.GetExecutingAssembly().Location)} -h'".ToYellow().WriteLine();
                 //ArgUsage.GenerateUsageFromTemplate<InstallerArgs>().WriteLine();
