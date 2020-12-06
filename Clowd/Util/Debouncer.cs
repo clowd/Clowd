@@ -8,6 +8,7 @@ namespace Clowd.Util
     {
         private CancellationTokenSource lastCToken;
         private int milliseconds;
+        private bool disposed;
 
         public Debouncer(int milliseconds = 300)
         {
@@ -16,6 +17,9 @@ namespace Clowd.Util
 
         public void Debounce(Action action)
         {
+            if (disposed)
+                return;
+
             Cancel(lastCToken);
 
             var tokenSrc = lastCToken = new CancellationTokenSource();
@@ -37,6 +41,7 @@ namespace Clowd.Util
 
         public void Dispose()
         {
+            disposed = true;
             Cancel(lastCToken);
         }
 
