@@ -95,7 +95,11 @@ namespace Clowd.UI
 
         protected void SetPanelCanvasPositionRelativeToSelection(StackPanel panel, WpfRect selection, int minDistance, int maxDistance, int shortEdgePx, int longEdgePx)
         {
-            var selectionScreen = ScreenTools.GetScreenContaining(selection.ToScreenRect()).Bounds.ToWpfRect();
+            var scr = ScreenTools.GetScreenContaining(selection.ToScreenRect());
+            if (scr == null)
+                return;
+
+            var selectionScreen = scr.Bounds.ToWpfRect();
             // subtract 2 as that's the selection border width
             var bottomSpace = Math.Max(selectionScreen.Bottom - selection.Bottom, 0) - minDistance;
             var rightSpace = Math.Max(selectionScreen.Right - selection.Right, 0) - minDistance;

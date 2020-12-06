@@ -18,6 +18,7 @@ namespace Clowd.Interop.Shcore
         [DllImport("shcore.dll")]
         public static extern bool GetProcessDpiAwareness(IntPtr hProcess, ref PROCESS_DPI_AWARENESS value);
     }
+
     public enum MONITOR_DPI_TYPE
     {
         MDT_EFFECTIVE_DPI = 0,

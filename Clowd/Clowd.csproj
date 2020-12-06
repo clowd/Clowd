@@ -150,6 +150,7 @@
       <DependentUpon>SelectionBorderControl.xaml</DependentUpon>
     </Compile>
     <Compile Include="UI\Controls\ToolButton.cs" />
+    <Compile Include="UI\Helpers\ToolStateManager.cs" />
     <Compile Include="UI\InteropWindow.cs" />
     <Compile Include="UI\OverlayWindow.cs" />
     <Compile Include="UI\ReallyFastCaptureRenderer.cs" />

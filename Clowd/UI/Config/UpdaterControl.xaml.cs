@@ -26,7 +26,7 @@ namespace Clowd.UI.Config
             CurrentVersion = UpdateHelper.GetCurrentVersion();
             CanDoAction = true;
             var myDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-            _manager = UpdateHelper.GetUpdaterInstance(myDir);
+            _manager = UpdateHelper.GetUpdaterInstance(myDir, System.Reflection.Assembly.GetExecutingAssembly().Location);
             _manager.ReportProgress += _manager_ReportProgress;
 
             UpdateState();
@@ -76,21 +76,21 @@ namespace Clowd.UI.Config
                     break;
 
                 case UpdateManager.UpdateProcessState.Prepared:
-                    if (Debugger.IsAttached)
-                    {
-                        var result = await NiceDialog.ShowPromptAsync(this, NiceDialogIcon.Information,
-                            "You are recieving this notification because the debugger is currently attached and Clowd is about to be restarted to install updates. " +
-                            $"This will detach the debugger and replace the current binaries with versions downloaded from {pkg.FeedUrl}.", "Proceed?");
+                    //if (Debugger.IsAttached)
+                    //{
+                    //    var result = await NiceDialog.ShowPromptAsync(this, NiceDialogIcon.Information,
+                    //        "You are recieving this notification because the debugger is currently attached and Clowd is about to be restarted to install updates. " +
+                    //        $"This will detach the debugger and replace the current binaries with versions downloaded from {pkg.FeedUrl}.", "Proceed?");
 
-                        if (result)
-                        {
-                            _manager.ApplyUpdates(true, true, true);
-                        }
-                    }
-                    else
-                    {
-                        _manager.ApplyUpdates(true, true, false);
-                    }
+                    //    if (result)
+                    //    {
+                    //        _manager.ApplyUpdates(true, true, true);
+                    //    }
+                    //}
+                    //else
+                    //{
+                    //    _manager.ApplyUpdates(true, true, false);
+                    //}
                     break;
 
                     //case UpdateManager.UpdateProcessState.RollbackRequired:
