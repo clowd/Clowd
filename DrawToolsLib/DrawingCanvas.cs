@@ -928,6 +928,7 @@ namespace DrawToolsLib
                 g.IsSelected = true;
                 graphicsList.Add(g);
             }
+
             AddCommandToHistory(new CommandAdd(helper.Graphics));
             UpdateState();
             InvalidateVisual();
@@ -937,9 +938,9 @@ namespace DrawToolsLib
         /// <summary>
         /// Serializes all graphics and writes them to the specified stream
         /// </summary>
-        public void WriteGraphicsToStream(Stream stream)
+        public void WriteGraphicsToStream(Stream stream, bool selectedOnly)
         {
-            GraphicBase[] graphics = graphicsList.OfType<GraphicBase>().Where(g => g.IsSelected).ToArray();
+            GraphicBase[] graphics = graphicsList.OfType<GraphicBase>().Where(g => g.IsSelected || !selectedOnly).ToArray();
             if (!graphics.Any())
                 graphics = graphicsList.OfType<GraphicBase>().ToArray();
 
