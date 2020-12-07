@@ -118,9 +118,12 @@ namespace Clowd.FFmpeg
                 startInfo.RedirectStandardInput = true;
                 startInfo.RedirectStandardOutput = false;
                 startInfo.RedirectStandardError = true;
+
                 if (this.FFMpegProcess != null)
                     throw new InvalidOperationException("FFMpeg process is already started");
                 this.FFMpegProcess = Process.Start(startInfo);
+
+                // redirect / handle FFMPEG logs
                 if (this.FFMpegProcessPriority != ProcessPriorityClass.Normal)
                     this.FFMpegProcess.PriorityClass = this.FFMpegProcessPriority;
                 string lastErrorLine = string.Empty;
@@ -132,7 +135,19 @@ namespace Clowd.FFmpeg
                     this.FFMpegLogHandler(args.Data);
                 });
                 this.FFMpegProcess.BeginErrorReadLine();
+
+                // start watcher process.. will kill ffmpeg if this process exists without closing it first
+                var watcherProcess = Program.StartWatching(this.FFMpegProcess);
+                watcherProcess.OutputDataReceived += (s, e) =>
+                {
+                    if (e != null && e.Data != null)
+                        this.FFMpegLogHandler(e.Data);
+                };
+                watcherProcess.BeginOutputReadLine();
+
+                // wait for ffmpeg to exit and process exit code
                 this.WaitFFMpegProcessForExit();
+
                 if (this.FFMpegProcess.ExitCode != 0)
                     throw new FFMpegException(this.FFMpegProcess.ExitCode, lastErrorLine);
                 this.FFMpegProcess.Close();
