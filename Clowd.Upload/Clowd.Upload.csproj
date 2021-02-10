@@ -78,9 +78,9 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Extensibility\Clowd.Extensibility.csproj">
+    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
       <Project>{a6ccafe6-26d8-4b2c-9b2d-1895788da246}</Project>
-      <Name>Clowd.Extensibility</Name>
+      <Name>Clowd.Shared</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

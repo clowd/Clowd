@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Web;
 
-namespace Clowd.FFmpeg
+namespace Clowd.Video
 {
     /// <summary>Video converter component (wrapper to FFMpeg process)</summary>
     public class FFMpegConverter
@@ -137,7 +137,7 @@ namespace Clowd.FFmpeg
                 this.FFMpegProcess.BeginErrorReadLine();
 
                 // start watcher process.. will kill ffmpeg if this process exists without closing it first
-                var watcherProcess = Program.StartWatching(this.FFMpegProcess);
+                var watcherProcess = WatchProcess.Watch(this.FFMpegProcess.Id);
                 watcherProcess.OutputDataReceived += (s, e) =>
                 {
                     if (e != null && e.Data != null)
@@ -186,7 +186,7 @@ namespace Clowd.FFmpeg
                     var bitness = Environment.Is64BitOperatingSystem ? "x64" : "x86";
                     Assembly executingAssembly = Assembly.GetExecutingAssembly();
                     string[] manifestResourceNames = executingAssembly.GetManifestResourceNames();
-                    string str = "Clowd.FFmpeg.Embed.";
+                    string str = "Clowd.Video.Embed.";
                     foreach (string name in manifestResourceNames)
                     {
                         if (name.StartsWith(str) && name.Contains(bitness))
