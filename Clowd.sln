@@ -29,8 +29,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Upload", "Clowd.Uploa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Shared", "Clowd.Shared\Clowd.Shared.csproj", "{A6CCAFE6-26D8-4B2C-9B2D-1895788DA246}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Obs", "Clowd.Obs\Clowd.Obs.csproj", "{00A55168-CE0F-4EF0-9CA1-E0AEF6117AF5}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Watch", "Clowd.Watch\Clowd.Watch.csproj", "{B52CF0A5-330F-44E5-953E-9483D54D8F66}"
 EndProject
 Global
@@ -87,10 +85,6 @@ Global
 		{A6CCAFE6-26D8-4B2C-9B2D-1895788DA246}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A6CCAFE6-26D8-4B2C-9B2D-1895788DA246}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A6CCAFE6-26D8-4B2C-9B2D-1895788DA246}.Release|Any CPU.Build.0 = Release|Any CPU
-		{00A55168-CE0F-4EF0-9CA1-E0AEF6117AF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{00A55168-CE0F-4EF0-9CA1-E0AEF6117AF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{00A55168-CE0F-4EF0-9CA1-E0AEF6117AF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{00A55168-CE0F-4EF0-9CA1-E0AEF6117AF5}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B52CF0A5-330F-44E5-953E-9483D54D8F66}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B52CF0A5-330F-44E5-953E-9483D54D8F66}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B52CF0A5-330F-44E5-953E-9483D54D8F66}.Release|Any CPU.ActiveCfg = Release|Any CPU

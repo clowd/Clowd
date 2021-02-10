@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Clowd.Video
+namespace Clowd.Video.FFmpeg
 {
     /// <summary>Provides data for log received event</summary>
     public class FFMpegLogEventArgs : EventArgs

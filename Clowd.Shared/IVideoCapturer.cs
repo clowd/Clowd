@@ -11,7 +11,7 @@ namespace Clowd
     public class VideoCapturerSettings
     {
         public string OutputDirectory { get; set; }
-        public bool CaptureCursor { get; set; } = true;
+        //public bool CaptureCursor { get; set; } = true;
         public int FPS { get; set; } = 30;
         public int MaxResolutionWidth { get; set; } = 0;
         public int MaxResolutionHeight { get; set; } = 0;
@@ -56,7 +56,7 @@ namespace Clowd
 
     public abstract class VideoCapturerBase : IVideoCapturer
     {
-        public string BusyStatus
+        public virtual string BusyStatus
         {
             get => _busy;
             protected set
@@ -68,7 +68,7 @@ namespace Clowd
                 }
             }
         }
-        public bool IsRecording
+        public virtual bool IsRecording
         {
             get => _isRecording;
             protected set

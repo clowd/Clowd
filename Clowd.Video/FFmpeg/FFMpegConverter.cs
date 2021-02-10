@@ -8,7 +8,7 @@ using System.Reflection;
 using System.Text;
 using System.Web;
 
-namespace Clowd.Video
+namespace Clowd.Video.FFmpeg
 {
     /// <summary>Video converter component (wrapper to FFMpeg process)</summary>
     public class FFMpegConverter

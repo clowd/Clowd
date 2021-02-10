@@ -341,38 +341,38 @@ namespace Clowd.Config
     //    High = 150,
     //}
 
-    public enum MaxResolution : int
-    {
-        [Description("Uncapped")]
-        Uncapped = 0,
-        [Description("SD - 480p")]
-        _480p = 480,
-        [Description("HD - 720p")]
-        _720p = 720,
-        [Description("HD - 1080p")]
-        _1080p = 1080,
-        [Description("HD - 1440p")]
-        _1440p = 1440,
-        [Description("4K - 2160p")]
-        _2160p = 2160,
-    }
+    //public enum MaxResolution : int
+    //{
+    //    [Description("Uncapped")]
+    //    Uncapped = 0,
+    //    [Description("SD - 480p")]
+    //    _480p = 480,
+    //    [Description("HD - 720p")]
+    //    _720p = 720,
+    //    [Description("HD - 1080p")]
+    //    _1080p = 1080,
+    //    [Description("HD - 1440p")]
+    //    _1440p = 1440,
+    //    [Description("4K - 2160p")]
+    //    _2160p = 2160,
+    //}
 
-    [ImplementPropertyChanged]
-    public class VideoSettings : IDisposable
-    {
-        [PData.DirectoryPath]
-        public string OutputDirectory { get; set; }
+    //[ImplementPropertyChanged]
+    //public class VideoSettings : IDisposable
+    //{
+    //    [PData.DirectoryPath]
+    //    public string OutputDirectory { get; set; }
 
-        public bool ShowCursor { get; set; } = true;
+    //    public bool ShowCursor { get; set; } = true;
 
-        [PData.Slidable(Minimum = 5, Maximum = 60, SnapToTicks = true, TickFrequency = 5, SmallChange = 5, LargeChange = 5)]
-        public int FPS { get; set; } = 15;
+    //    [PData.Slidable(Minimum = 5, Maximum = 60, SnapToTicks = true, TickFrequency = 5, SmallChange = 5, LargeChange = 5)]
+    //    public int FPS { get; set; } = 15;
 
-        [DisplayName("Encoder Settings")]
-        public FFmpegSettings VideoCodec { get; set; } = new FFmpegSettings();
+    //    [DisplayName("Encoder Settings")]
+    //    public FFmpegSettings VideoCodec { get; set; } = new FFmpegSettings();
 
-        public void Dispose()
-        {
-        }
-    }
+    //    public void Dispose()
+    //    {
+    //    }
+    //}
 }

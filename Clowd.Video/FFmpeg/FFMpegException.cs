@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Clowd.Video
+namespace Clowd.Video.FFmpeg
 {
     /// <summary>
     /// The exception that is thrown when FFMpeg process retruns non-zero error exit code

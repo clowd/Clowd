@@ -173,7 +173,6 @@
     <Compile Include="UI\Converters\StreamToBitmapSourceConverter.cs" />
     <Compile Include="UI\Converters\TaskStatusToVisibilityConverter.cs" />
     <Compile Include="UI\Converters\DrawingCanvasEditConverter.cs" />
-    <Compile Include="Config\FFmpegSettings.cs" />
     <Compile Include="UI\ImageEditorPage.xaml.cs">
       <DependentUpon>ImageEditorPage.xaml</DependentUpon>
     </Compile>
@@ -197,7 +196,6 @@
     <Compile Include="Util\Expr.cs" />
     <Compile Include="Util\ICommandLineProxy.cs" />
     <Compile Include="Config\GlobalTrigger.cs" />
-    <Compile Include="Capture\LiveScreenRecording.cs" />
     <Compile Include="Util\PathEx.cs" />
     <Compile Include="Util\ProgressStream.cs" />
     <Compile Include="Util\ProxyMetaObject.cs" />
