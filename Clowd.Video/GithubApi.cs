@@ -8,7 +8,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Clowd.Obs
+namespace Clowd.Video
 {
     internal static class GithubApi
     {
@@ -56,7 +56,7 @@ namespace Clowd.Obs
         }
     }
 
-    public class GithubAuthor
+    internal class GithubAuthor
     {
         [JsonProperty("login")]
         public string Login { get; set; }
@@ -113,7 +113,7 @@ namespace Clowd.Obs
         public bool SiteAdmin { get; set; }
     }
 
-    public class GithubUploader
+    internal class GithubUploader
     {
         [JsonProperty("login")]
         public string Login { get; set; }
@@ -170,7 +170,7 @@ namespace Clowd.Obs
         public bool SiteAdmin { get; set; }
     }
 
-    public class GithubAsset
+    internal class GithubAsset
     {
         [JsonProperty("url")]
         public string Url { get; set; }
@@ -212,7 +212,7 @@ namespace Clowd.Obs
         public string BrowserDownloadUrl { get; set; }
     }
 
-    public class GithubRelease
+    internal class GithubRelease
     {
         [JsonProperty("url")]
         public string Url { get; set; }

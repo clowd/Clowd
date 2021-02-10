@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Clowd.Obs
+namespace Clowd.Video
 {
     public class ObsCapturer : VideoCapturerBase
     {
@@ -229,13 +229,13 @@ namespace Clowd.Obs
                     },
                 };
 
-                if (settings.CaptureMicrophone && settings.CaptureMicrophoneDeviceId != null)
-                    req.microphones = new string[] { settings.CaptureMicrophoneDeviceId.DeviceId };
+                if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice != null)
+                    req.microphones = new string[] { settings.CaptureMicrophoneDevice.DeviceId };
                 else
                     req.microphones = new string[0];
 
-                if (settings.CaptureSpeaker && settings.CaptureSpeakerDeviceId != null)
-                    req.speakers = new string[] { settings.CaptureSpeakerDeviceId.DeviceId };
+                if (settings.CaptureSpeaker && settings.CaptureSpeakerDevice != null)
+                    req.speakers = new string[] { settings.CaptureSpeakerDevice.DeviceId };
                 else
                     req.speakers = new string[0];
 
@@ -297,15 +297,14 @@ namespace Clowd.Obs
 
         public override void Dispose()
         {
-            using (var client = new ClowdHttpClient())
+            lock (_lock)
             {
-                _source.Cancel();
-                try
+                using (var client = new ClowdHttpClient())
                 {
-                    client.PostNothingAsync<ObsResponse>(ObsUri("/shutdown")).ConfigureAwait(false).GetAwaiter().GetResult();
+                    _source.Cancel();
+                    _watch.ForceExit();
+                    _instance = null;
                 }
-                catch { }
-                _watch.WaitTimeoutThenForceExit(4000);
             }
         }
 

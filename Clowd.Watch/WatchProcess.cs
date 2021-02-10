@@ -32,14 +32,22 @@ namespace Clowd
 
         public bool IsRunning => !_watcher.HasExited;
 
-        public void WaitTimeoutThenForceExit(int timeoutMs)
+        public void ForceExit()
         {
-            _watcher.WaitForExit(timeoutMs);
             if (!_watcher.HasExited)
             {
                 foreach (var p in _other)
                     KillPid(p);
                 KillPid(_watcher);
+            }
+        }
+
+        public void WaitTimeoutThenForceExit(int timeoutMs)
+        {
+            if (!_watcher.HasExited)
+            {
+                _watcher.WaitForExit(timeoutMs);
+                ForceExit();
             }
         }
 
@@ -58,6 +66,11 @@ namespace Clowd
                 p.ErrorDataReceived += (s, e) =>
                 {
                     OutputReceived?.Invoke(this, new WatchLogEventArgs(p, e.Data, true));
+                };
+
+                p.Exited += (s, e) =>
+                {
+                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, $"Process exited - code: {p.ExitCode}", true));
                 };
 
                 p.BeginOutputReadLine();

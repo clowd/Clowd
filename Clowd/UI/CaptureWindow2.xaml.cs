@@ -198,14 +198,14 @@ namespace Clowd.UI
             {
                 NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning, $"The minimum frame size for video is {minWidth}x{minHeight}. Increase the capture area and try again.");
             }
-            else if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
-            {
-                NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "You must set a video save directory in the video capture settings before recording a video");
-            }
+            //else if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
+            //{
+            //    NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "You must set a video save directory in the video capture settings before recording a video");
+            //}
             else
             {
                 fastCapturer.SetSelectedWindowForeground();
-                new VideoOverlayWindow(SelectionRectangle).Show();
+                new VideoOverlayWindow(SelectionRectangle, App.Current.Settings.VideoSettings).Show();
             }
         }
 

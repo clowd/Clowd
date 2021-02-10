@@ -25,35 +25,45 @@ namespace Clowd.UI
         public bool IsLoopbackEnabled { get; set; }
 
         private bool _isCancelled = false;
-        private NAudioItem speaker;
-        private NAudioItem mic;
+        private IAudioLevelListener speaker;
+        private IAudioLevelListener mic;
         private System.Timers.Timer audioTimer;
         private Point? _moveMouseDown;
         private Point? _moveInitial;
         private IVideoCapturer _capturer;
+        private System.Drawing.Rectangle _captureRegion;
+        private VideoCapturerSettings _settings;
+        private string _fileName;
 
-        public VideoOverlayWindow(WpfRect captureArea)
+        public VideoOverlayWindow(WpfRect captureArea, VideoCapturerSettings settings)
         {
             SelectionRectangle = captureArea;
             InitializeComponent();
 
-            _recording = new LiveScreenRecording(captureArea.ToScreenRect().ToSystem());
-            _recording.LogReceived += Recording_LogRecieved;
+            _captureRegion = captureArea.ToScreenRect().ToSystem();
 
-            var settings = App.Current.Settings.VideoSettings;
-            settings.VideoCodec.PropertyChanged += SavedPresets_PropertyChanged;
-            settings.VideoCodec.SavedPresets.PropertyChanged += SavedPresets_PropertyChanged;
+            _settings = settings;
+            if (_settings.CaptureMicrophoneDevice == null) _settings.CaptureMicrophoneDevice = AudioDeviceManager.GetDefaultMicrophone();
+            if (_settings.CaptureSpeakerDevice == null) _settings.CaptureSpeakerDevice = AudioDeviceManager.GetDefaultSpeaker();
+            if (!Directory.Exists(_settings.OutputDirectory)) _settings.OutputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+            _settings.PropertyChanged += settings_PropertyChanged;
+
+            _capturer = new ObsCapturer();
+            _capturer.StatusReceived += capturer_StatusReceived;
+            _capturer.CriticalError += capturer_CriticalError;
 
             this.Closed += (s, e) =>
             {
-                App.Current.Settings.VideoSettings.VideoCodec.PropertyChanged -= SavedPresets_PropertyChanged;
-                App.Current.Settings.VideoSettings.VideoCodec.SavedPresets.PropertyChanged -= SavedPresets_PropertyChanged;
+                _settings.PropertyChanged -= settings_PropertyChanged;
+                _capturer.StatusReceived -= capturer_StatusReceived;
+                _capturer.CriticalError -= capturer_CriticalError;
 
                 mic?.Dispose();
                 speaker?.Dispose();
                 mic = speaker = null;
                 audioTimer.Enabled = false;
                 audioTimer.Dispose();
+                _capturer.Dispose();
             };
 
             this.Loaded += (s, e) =>
@@ -73,6 +83,42 @@ namespace Clowd.UI
             recordingLabelButton.PreviewMouseDown += RecordingLabelButton_MouseDown;
             recordingLabelButton.PreviewMouseMove += RecordingLabelButton_MouseMove;
             recordingLabelButton.PreviewMouseUp += RecordingLabelButton_MouseUp;
+        }
+
+        private async void capturer_CriticalError(object sender, VideoCriticalErrorEventArgs e)
+        {
+            this.Close();
+
+            var filename = "capture_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
+            filename = System.IO.Path.Combine(System.IO.Path.GetFullPath(_settings.OutputDirectory), filename);
+
+            _capturer.WriteLogToFile(filename);
+            File.AppendAllText(filename, Environment.NewLine + Environment.NewLine + e.Error);
+
+            if (await NiceDialog.ShowPromptAsync(this, NiceDialogIcon.Error, "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.", "Open Error Log"))
+            {
+                Process.Start("notepad.exe", filename);
+            }
+        }
+
+        private void settings_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            UpdateAudioState();
+        }
+
+        private void capturer_StatusReceived(object sender, VideoStatusEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (e.AvgFps != 0 && (e.TotalTime == default(TimeSpan) || DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0))
+                {
+                    recordingLabelButton.Text = e.AvgFps + " FPS";
+                }
+                else if (e.TotalTime != default(TimeSpan))
+                {
+                    recordingLabelButton.Text = $"{((int)e.TotalTime.TotalMinutes):D2}:{((int)e.TotalTime.Seconds):D2}";
+                }
+            });
         }
 
         private void RecordingLabelButton_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -122,68 +168,18 @@ namespace Clowd.UI
             });
         }
 
-        private double ConvertLevelToDb(NAudioItem item)
+        private double ConvertLevelToDb(IAudioLevelListener item)
         {
             if (item == null)
                 return 0;
 
-            double level = item.PeakLevel;
+            double level = item.GetPeakLevel();
 
             if (level > 0 && level <= 1)
                 return (20 * Math.Log10(level)) / 60 * 100 + 100;
 
             return 0;
         }
-
-        private void SavedPresets_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            UpdateAudioState();
-        }
-
-        //private void Recording_LogRecieved(object sender, FFMpegLogEventArgs e)
-        //{
-        //    //frame=  219 fps= 31 q=10.0 size=       0kB time=00:00:05.80 bitrate=   0.1kbits/s dup=5 drop=0 speed=0.82x
-
-        //    string getData(string label)
-        //    {
-        //        var msg = e.Data;
-        //        var start = msg.IndexOf(label);
-        //        if (start < 0)
-        //            return null;
-        //        msg = msg.Substring(start + label.Length).TrimStart();
-        //        msg = msg.Substring(0, msg.IndexOf(" "));
-        //        if (msg == "0.0" || msg == "00:00:00.00")
-        //            return null;
-
-        //        return msg;
-        //    }
-
-        //    var fps = getData("fps=");
-        //    var time = getData("time=");
-        //    TimeSpan ts = default(TimeSpan);
-
-        //    if (time != null)
-        //    {
-        //        try
-        //        {
-        //            // sometimes ffmpeg gives us garbage timecodes, it depends on the input stream timestamp on the frames & the settings we use.
-        //            ts = TimeSpan.Parse(time);
-        //        }
-        //        catch { }
-        //    }
-
-        //    Dispatcher.Invoke(() =>
-        //    {
-        //        if (fps != null && (ts == default(TimeSpan) || DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0))
-        //        {
-        //            recordingLabelButton.Text = fps + " FPS";
-        //        }
-        //        else if (ts != default(TimeSpan))
-        //        {
-        //            recordingLabelButton.Text = $"{((int)ts.TotalMinutes):D2}:{((int)ts.Seconds):D2}";
-        //        }
-        //    });
-        //}
 
         private async void StartRecording()
         {
@@ -208,56 +204,38 @@ namespace Clowd.UI
 
             try
             {
-                await _recording.Start();
+                _fileName = await _capturer.StartAsync(_captureRegion, _settings);
             }
             catch (Exception ex)
             {
-                this.Close();
-
-                var filename = "ffmpeg_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
-                filename = System.IO.Path.Combine(System.IO.Path.GetFullPath(_recording.OutputDirectory), filename);
-
-                File.WriteAllText(filename, _recording.ConsoleLog);
-                File.AppendAllText(filename, Environment.NewLine + Environment.NewLine + ex.ToString());
-
-                if (await NiceDialog.ShowPromptAsync(this, NiceDialogIcon.Error, "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.", "Open Error Log"))
-                {
-                    Process.Start("notepad.exe", filename);
-                }
+                capturer_CriticalError(this, new VideoCriticalErrorEventArgs(ex.Message));
             }
         }
 
         public void UpdateAudioState()
         {
             // dispose of all sounds stuff and re-create it. this doesn't happen too often (when settings change) so it's okay
-            mic?.Dispose();
-            speaker?.Dispose();
-            mic = speaker = null;
+
+            IAudioLevelListener tmp;
+            tmp = mic;
+            mic = null;
+            tmp?.Dispose();
+
+            tmp = speaker;
+            speaker = null;
+            tmp?.Dispose();
+
             levelSpeaker.Value = levelMic.Value = 0;
 
-            if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
-            {
-                IsAudioSupported = !IsStarted;
-                IsMicrophoneEnabled = audio.CaptureMicrophone;
-                IsLoopbackEnabled = audio.CaptureLoopbackAudio;
+            IsAudioSupported = !IsStarted;
+            IsMicrophoneEnabled = _settings.CaptureMicrophone && _settings.CaptureMicrophoneDevice != null;
+            IsLoopbackEnabled = _settings.CaptureSpeaker && _settings.CaptureSpeakerDevice != null;
 
-                if (IsMicrophoneEnabled && (audio.SelectedMicrophone != null || audio.SelectedMicrophone.FriendlyName != mic?.Name))
-                {
-                    mic?.Dispose();
-                    mic = NAudioItem.Microphones.FirstOrDefault(m => m.Name == audio.SelectedMicrophone.FriendlyName);
-                    mic?.StartListeningForPeakLevel();
-                }
+            if (IsMicrophoneEnabled)
+                mic = _settings.CaptureMicrophoneDevice.GetLevelListener();
 
-                if (IsLoopbackEnabled && speaker == null)
-                {
-                    speaker = NAudioItem.DefaultSpeaker;
-                    speaker?.StartListeningForPeakLevel();
-                }
-            }
-            else
-            {
-                IsMicrophoneEnabled = IsLoopbackEnabled = IsAudioSupported = false;
-            }
+            if (IsLoopbackEnabled)
+                speaker = _settings.CaptureSpeakerDevice.GetLevelListener();
         }
 
         private void buttonStart_Click(object sender, RoutedEventArgs e)
@@ -272,7 +250,7 @@ namespace Clowd.UI
             if (IsRecording)
             {
                 IsRecording = false;
-                await _recording.Stop();
+                await _capturer.StopAsync();
             }
             this.Close();
 
@@ -280,7 +258,10 @@ namespace Clowd.UI
             {
                 await Task.Delay(1000);
                 // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
-                Interop.Shell32.WindowsExplorer.ShowFileOrFolder(_recording.FileName);
+                if (File.Exists(_fileName))
+                    Interop.Shell32.WindowsExplorer.ShowFileOrFolder(_fileName);
+                else
+                    Interop.Shell32.WindowsExplorer.ShowFileOrFolder(_settings.OutputDirectory);
             }
         }
 
@@ -290,43 +271,37 @@ namespace Clowd.UI
             if (IsRecording)
             {
                 IsRecording = false;
-                await _recording.Stop();
+                await _capturer.StopAsync();
             }
             this.Close();
 
             await Task.Delay(10 * 1000);
-            if (File.Exists(_recording.FileName))
-                File.Delete(_recording.FileName);
+            if (File.Exists(_fileName))
+                File.Delete(_fileName);
         }
 
         private void toggleMicrophone_Click(object sender, RoutedEventArgs e)
         {
-            if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
+            if (!_settings.CaptureMicrophone && _settings.CaptureMicrophoneDevice == null)
             {
-                if (!audio.CaptureMicrophone && audio.SelectedMicrophone == null)
-                {
-                    NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "Please select a microphone to record audio from before enabling this feature.");
-                    return;
-                }
-
-                audio.CaptureMicrophone = !audio.CaptureMicrophone;
-                IsMicrophoneEnabled = audio.CaptureMicrophone;
+                NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "Please select a recording device in the settings.");
+                return;
             }
+
+            _settings.CaptureMicrophone = !_settings.CaptureMicrophone;
+            IsMicrophoneEnabled = _settings.CaptureMicrophone;
         }
 
         private void toggleSpeaker_Click(object sender, RoutedEventArgs e)
         {
-            if (App.Current.Settings.VideoSettings.VideoCodec.GetSelectedPreset() is FFmpegCodecPreset_AudioBase audio)
+            if (!_settings.CaptureSpeaker && _settings.CaptureSpeakerDevice == null)
             {
-                if (!audio.CaptureLoopbackAudio && !audio.IsDirectShowInstalled)
-                {
-                    NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Windows, "You must install the 'DirectShow Add-ons' from the settings page before enabling this feature.");
-                    return;
-                }
-
-                audio.CaptureLoopbackAudio = !audio.CaptureLoopbackAudio;
-                IsLoopbackEnabled = audio.CaptureLoopbackAudio;
+                NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "Please select a recording device in the settings.");
+                return;
             }
+
+            _settings.CaptureSpeaker = !_settings.CaptureSpeaker;
+            IsLoopbackEnabled = _settings.CaptureSpeaker;
         }
 
         private void settings_Click(object sender, RoutedEventArgs e)
