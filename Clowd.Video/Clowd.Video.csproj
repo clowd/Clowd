@@ -7,8 +7,8 @@
     <ProjectGuid>{FA6FD7EE-A2D6-4C1A-99D6-A7F5354D0B65}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Clowd.FFmpeg</RootNamespace>
-    <AssemblyName>Clowd.FFmpeg</AssemblyName>
+    <RootNamespace>Clowd.Video</RootNamespace>
+    <AssemblyName>Clowd.Video</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -30,9 +30,10 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup>
-    <StartupObject>Clowd.FFmpeg.Program</StartupObject>
+    <StartupObject>Clowd.Video.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -52,10 +53,16 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Embed\ffmpeg-x86.exe.gz" />
+    <EmbeddedResource Include="Embed\ffmpeg-x64.exe.gz" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Embed\ffmpeg-x64.exe.gz" />
+    <ProjectReference Include="..\Clowd.Watch\Clowd.Watch.csproj">
+      <Project>{b52cf0a5-330f-44e5-953e-9483d54d8f66}</Project>
+      <Name>Clowd.Watch</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Embed\ffmpeg-x86.exe.gz" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

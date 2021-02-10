@@ -7,7 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Clowd.Capture;
 using Clowd.Config;
-using Clowd.FFmpeg;
+using Clowd.Video;
 using Clowd.UI.Helpers;
 using Clowd.Util;
 using ScreenVersusWpf;

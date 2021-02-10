@@ -372,13 +372,13 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Extensibility\Clowd.Extensibility.csproj">
+    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
       <Project>{a6ccafe6-26d8-4b2c-9b2d-1895788da246}</Project>
-      <Name>Clowd.Extensibility</Name>
+      <Name>Clowd.Shared</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Clowd.FFmpeg\Clowd.FFmpeg.csproj">
+    <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj">
       <Project>{fa6fd7ee-a2d6-4c1a-99d6-a7f5354d0b65}</Project>
-      <Name>Clowd.FFmpeg</Name>
+      <Name>Clowd.Video</Name>
     </ProjectReference>
     <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj">
       <Project>{ad6fd9e3-3c83-432e-9f19-74c71e881fe4}</Project>
