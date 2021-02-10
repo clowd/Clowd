@@ -215,7 +215,7 @@ namespace Clowd.Obs
             {
                 var req = new ObsStartRequest
                 {
-                    fps = settings.FPS,
+                    fps = settings.Fps,
                     captureRegion = captureRect,
                     cq = (int)settings.Quality,
                     hardwareAccelerated = settings.HardwareAccelerated,

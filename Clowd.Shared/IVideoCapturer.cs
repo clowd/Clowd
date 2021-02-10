@@ -8,20 +8,196 @@ using System.Threading.Tasks;
 
 namespace Clowd
 {
-    public class VideoCapturerSettings
+    public class VideoCapturerSettings : INotifyPropertyChanged
     {
-        public string OutputDirectory { get; set; }
-        public int FPS { get; set; } = 30;
-        public int MaxResolutionWidth { get; set; } = 0;
-        public int MaxResolutionHeight { get; set; } = 0;
-        public VideoQuality Quality { get; set; } = VideoQuality.Medium;
-        public VideoPerformance Performance { get; set; } = VideoPerformance.Medium;
-        public VideoSubsamplingMode SubsamplingMode { get; set; } = VideoSubsamplingMode.yuv420;
-        public bool CaptureSpeaker { get; set; } = false;
-        public IAudioSpeakerDevice CaptureSpeakerDeviceId { get; set; }
-        public bool CaptureMicrophone { get; set; } = false;
-        public IAudioMicrophoneDevice CaptureMicrophoneDeviceId { get; set; }
-        public bool HardwareAccelerated { get; set; } = true;
+        private string _outputDirectory;
+        private int _fps = 30;
+        private int _maxResolutionWidth = 0;
+        private int _maxResolutionHeight = 0;
+        private VideoQuality _quality = VideoQuality.Medium;
+        private VideoPerformance _performance = VideoPerformance.Medium;
+        private VideoSubsamplingMode _subsamplingMode = VideoSubsamplingMode.yuv420;
+        private bool _captureSpeaker = false;
+        private IAudioSpeakerDevice _captureSpeakerDeviceId;
+        private bool _captureMicrophone = false;
+        private IAudioMicrophoneDevice _captureMicrophoneDeviceId;
+        private bool _hardwareAccelerated = true;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public string OutputDirectory
+        {
+            get => _outputDirectory;
+            set
+            {
+                if (value == _outputDirectory)
+                {
+                    return;
+                }
+
+                _outputDirectory = value;
+                OnPropertyChanged();
+            }
+        }
+        public int Fps
+        {
+            get => _fps;
+            set
+            {
+                if (value == _fps)
+                {
+                    return;
+                }
+
+                _fps = value;
+                OnPropertyChanged();
+            }
+        }
+        public int MaxResolutionWidth
+        {
+            get => _maxResolutionWidth;
+            set
+            {
+                if (value == _maxResolutionWidth)
+                {
+                    return;
+                }
+
+                _maxResolutionWidth = value;
+                OnPropertyChanged();
+            }
+        }
+        public int MaxResolutionHeight
+        {
+            get => _maxResolutionHeight;
+            set
+            {
+                if (value == _maxResolutionHeight)
+                {
+                    return;
+                }
+
+                _maxResolutionHeight = value;
+                OnPropertyChanged();
+            }
+        }
+        public VideoQuality Quality
+        {
+            get => _quality;
+            set
+            {
+                if (value == _quality)
+                {
+                    return;
+                }
+
+                _quality = value;
+                OnPropertyChanged();
+            }
+        }
+        public VideoPerformance Performance
+        {
+            get => _performance;
+            set
+            {
+                if (value == _performance)
+                {
+                    return;
+                }
+
+                _performance = value;
+                OnPropertyChanged();
+            }
+        }
+        public VideoSubsamplingMode SubsamplingMode
+        {
+            get => _subsamplingMode;
+            set
+            {
+                if (value == _subsamplingMode)
+                {
+                    return;
+                }
+
+                _subsamplingMode = value;
+                OnPropertyChanged();
+            }
+        }
+        public bool CaptureSpeaker
+        {
+            get => _captureSpeaker;
+            set
+            {
+                if (value == _captureSpeaker)
+                {
+                    return;
+                }
+
+                _captureSpeaker = value;
+                OnPropertyChanged();
+            }
+        }
+        public IAudioSpeakerDevice CaptureSpeakerDeviceId
+        {
+            get => _captureSpeakerDeviceId;
+            set
+            {
+                if (ReferenceEquals(value, _captureSpeakerDeviceId))
+                {
+                    return;
+                }
+
+                _captureSpeakerDeviceId = value;
+                OnPropertyChanged();
+            }
+        }
+        public bool CaptureMicrophone
+        {
+            get => _captureMicrophone;
+            set
+            {
+                if (value == _captureMicrophone)
+                {
+                    return;
+                }
+
+                _captureMicrophone = value;
+                OnPropertyChanged();
+            }
+        }
+        public IAudioMicrophoneDevice CaptureMicrophoneDeviceId
+        {
+            get => _captureMicrophoneDeviceId;
+            set
+            {
+                if (ReferenceEquals(value, _captureMicrophoneDeviceId))
+                {
+                    return;
+                }
+
+                _captureMicrophoneDeviceId = value;
+                OnPropertyChanged();
+            }
+        }
+        public bool HardwareAccelerated
+        {
+            get => _hardwareAccelerated;
+            set
+            {
+                if (value == _hardwareAccelerated)
+                {
+                    return;
+                }
+
+                _hardwareAccelerated = value;
+                OnPropertyChanged();
+            }
+        }
+
+        protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     public enum VideoQuality
@@ -57,13 +233,13 @@ namespace Clowd
     {
         public virtual string BusyStatus
         {
-            get => _busy;
+            get => _busyStatus;
             protected set
             {
-                if (value != _busy)
+                if (value != _busyStatus)
                 {
-                    _busy = value;
-                    OnPropertyChanged(nameof(BusyStatus));
+                    _busyStatus = value;
+                    OnPropertyChanged();
                 }
             }
         }
@@ -75,12 +251,12 @@ namespace Clowd
                 if (value != _isRecording)
                 {
                     _isRecording = value;
-                    OnPropertyChanged(nameof(IsRecording));
+                    OnPropertyChanged();
                 }
             }
         }
 
-        private string _busy = "Initializing...";
+        private string _busyStatus = "Initializing...";
         private bool _isRecording = false;
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -92,7 +268,7 @@ namespace Clowd
             CriticalError?.Invoke(this, new VideoCriticalErrorEventArgs(error));
         }
 
-        protected void OnPropertyChanged(string propertyName)
+        protected void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }

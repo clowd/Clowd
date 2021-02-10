@@ -176,7 +176,7 @@ namespace Clowd.Video.FFmpeg
             if (gdigrabIndex < 0 /*&& uscreenIndex < 0*/)
                 throw new Exception("Error in video codec settings: Unknown screen capture mechanism. Can not supply desired screen coordinates to FFmpeg.");
 
-            var fps = Math.Min(settings.FPS, 60);
+            var fps = Math.Min(settings.Fps, 60);
 
             if (gdigrabIndex >= 0)
             {
