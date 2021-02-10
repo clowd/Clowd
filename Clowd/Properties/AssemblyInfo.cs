@@ -17,14 +17,14 @@ using System.Windows;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Caesa Consulting Ltd.")]
 [assembly: AssemblyProduct("Clowd")]
-[assembly: AssemblyCopyright("Copyright © Caesa Consulting Ltd. 2014-2020")]
+[assembly: AssemblyCopyright("Copyright © Caesa Consulting Ltd. 2014-2021")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
 // Version Information
 // Revision and build numbers are auto-incrimented.
-[assembly: AssemblyVersion("2.4.47.1965")]
-[assembly: AssemblyFileVersion("2.4.47.1965")]
+[assembly: AssemblyVersion("2.4.47.1971")]
+[assembly: AssemblyFileVersion("2.4.47.1971")]
 [assembly: NeutralResourcesLanguageAttribute("en-US")]
 
 // Assembly Information
