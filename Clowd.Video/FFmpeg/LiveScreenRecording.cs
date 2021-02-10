@@ -5,11 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Clowd.Config;
-using Clowd.Video;
-using Clowd.Installer.Features;
 
-namespace Clowd.Capture
+namespace Clowd.Video.FFmpeg
 {
     public class LiveScreenRecording
     {
@@ -18,17 +15,17 @@ namespace Clowd.Capture
         public string OutputDirectory => settings.OutputDirectory;
 
         private readonly Rectangle bounds;
-        private readonly VideoSettings settings;
+        private readonly VideoCapturerSettings settings;
         private readonly FFMpegConverter ffmpeg;
         private Task runner;
         private StringBuilder log = new StringBuilder();
 
         public event EventHandler<FFMpegLogEventArgs> LogReceived;
 
-        public LiveScreenRecording(Rectangle bounds)
+        public LiveScreenRecording(Rectangle bounds, VideoCapturerSettings settings)
         {
             this.bounds = bounds;
-            settings = App.Current.Settings.VideoSettings;
+            this.settings = settings;
             ffmpeg = new FFMpegConverter();
             ffmpeg.LogReceived += (s, e) =>
             {
@@ -96,7 +93,69 @@ namespace Clowd.Capture
 
         private string cli_VideoCodecAndOutput()
         {
-            var codec = settings.VideoCodec.GetSelectedPreset();
+            FFmpegCodecPreset_AudioBase codec;
+
+            int cq = settings.Quality switch
+            {
+                VideoQuality.Low => 29,
+                VideoQuality.Medium => 24,
+                VideoQuality.High => 19,
+                _ => throw new ArgumentOutOfRangeException(nameof(settings.Quality)),
+            };
+
+            if (settings.HardwareAccelerated)
+            {
+
+                FFmpegCodecPreset_h264_nvenc.FFmpegNVENCPerformanceMode perf = settings.Performance switch
+                {
+                    VideoPerformance.Fast => FFmpegCodecPreset_h264_nvenc.FFmpegNVENCPerformanceMode.Fast,
+                    VideoPerformance.Medium => FFmpegCodecPreset_h264_nvenc.FFmpegNVENCPerformanceMode.Medium,
+                    VideoPerformance.Slow => FFmpegCodecPreset_h264_nvenc.FFmpegNVENCPerformanceMode.Slow,
+                    _ => throw new ArgumentOutOfRangeException(nameof(settings.Performance)),
+                };
+
+                FFmpegCodecPreset_h264_nvenc.FFmpegNVENCChromaSubsamplingMode2 subs = settings.SubsamplingMode switch
+                {
+                    VideoSubsamplingMode.yuv420 => FFmpegCodecPreset_h264_nvenc.FFmpegNVENCChromaSubsamplingMode2.yuv420,
+                    VideoSubsamplingMode.yuv444 => FFmpegCodecPreset_h264_nvenc.FFmpegNVENCChromaSubsamplingMode2.yuv444,
+                    _ => throw new ArgumentOutOfRangeException(nameof(settings.SubsamplingMode)),
+                };
+
+                codec = new FFmpegCodecPreset_h264_nvenc()
+                {
+                    PerformanceMode = perf,
+                    SubsamplingMode = subs,
+                };
+            }
+            else
+            {
+                FFmpegCodecPreset_libx264.FFmpegLib264PerformanceMode perf = settings.Performance switch
+                {
+                    VideoPerformance.Fast => FFmpegCodecPreset_libx264.FFmpegLib264PerformanceMode.Fast,
+                    VideoPerformance.Medium => FFmpegCodecPreset_libx264.FFmpegLib264PerformanceMode.Fast,
+                    VideoPerformance.Slow => FFmpegCodecPreset_libx264.FFmpegLib264PerformanceMode.Slow,
+                    _ => throw new ArgumentOutOfRangeException(nameof(settings.Performance)),
+                };
+
+                FFmpegCodecPreset_libx264.FFmpegLib264ChromaSubsamplingMode2 subs = settings.SubsamplingMode switch
+                {
+                    VideoSubsamplingMode.yuv420 => FFmpegCodecPreset_libx264.FFmpegLib264ChromaSubsamplingMode2.yuv420,
+                    VideoSubsamplingMode.yuv444 => FFmpegCodecPreset_libx264.FFmpegLib264ChromaSubsamplingMode2.yuv444,
+                    _ => throw new ArgumentOutOfRangeException(nameof(settings.SubsamplingMode)),
+                };
+
+                codec = new FFmpegCodecPreset_libx264()
+                {
+                    PerformanceMode = perf,
+                    SubsamplingMode = subs,
+                };
+            }
+
+            codec.CQ = cq;
+            codec.Extension = "mp4";
+            codec.MaxWidth = settings.MaxResolutionWidth;
+
+            //var codec = settings.VideoCodec.GetSelectedPreset();
             string extension = codec.Extension;
 
             var filename = PathConstants.GetDatedFilePath("capture", extension, settings.OutputDirectory);
@@ -112,9 +171,9 @@ namespace Clowd.Capture
             var options = codec.GetOptions();
 
             var gdigrabIndex = options.FindIndex(k => k.param_value.Equals("gdigrab", StringComparison.OrdinalIgnoreCase));
-            var uscreenIndex = options.FindIndex(k => k.param_value.Contains("UScreenCapture"));
+            //var uscreenIndex = options.FindIndex(k => k.param_value.Contains("UScreenCapture"));
 
-            if (gdigrabIndex < 0 && uscreenIndex < 0)
+            if (gdigrabIndex < 0 /*&& uscreenIndex < 0*/)
                 throw new Exception("Error in video codec settings: Unknown screen capture mechanism. Can not supply desired screen coordinates to FFmpeg.");
 
             var fps = Math.Min(settings.FPS, 60);
@@ -127,15 +186,15 @@ namespace Clowd.Capture
                     new FFmpegCliOption("offset_x", bounds.Left),
                     new FFmpegCliOption("offset_y", bounds.Top),
                     new FFmpegCliOption("video_size", $"{bounds.Width}x{bounds.Height}"),
-                    new FFmpegCliOption("draw_mouse", settings.ShowCursor ? "1" : "0"),
+                    new FFmpegCliOption("draw_mouse", /*settings.CaptureCursor*/true ? "1" : "0"),
                 };
                 options.InsertRange(gdigrabIndex + 1, gdiOptions);
             }
 
-            if (uscreenIndex >= 0)
-            {
-                UScreen.SetProperties(bounds, fps, settings.ShowCursor, true);
-            }
+            //if (uscreenIndex >= 0)
+            //{
+            //    UScreen.SetProperties(bounds, fps, settings.ShowCursor, true);
+            //}
 
             var args = String.Join(" ", options.Select(o => $"-{o.param_name} {o.param_value}"));
             return $"{args} -n \"{filename}\"";
