@@ -1,4 +1,5 @@
 ﻿using NAudio.CoreAudioApi;
+using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,6 +18,16 @@ namespace Clowd.Video
         public IEnumerable<IAudioMicrophoneDevice> GetMicrophones()
         {
             return GetDevices(DataFlow.Capture).Select(m => new NAudioMicrophoneDevice(m));
+        }
+
+        public IAudioMicrophoneDevice GetDefaultMicrophone()
+        {
+            return new NAudioMicrophoneDevice(WasapiCapture.GetDefaultCaptureDevice());
+        }
+
+        public IAudioSpeakerDevice GetDefaultSpeaker()
+        {
+            return new NAudioSpeakerDevice(WasapiLoopbackCapture.GetDefaultLoopbackCaptureDevice());
         }
 
         protected static IEnumerable<MMDevice> GetDevices(DataFlow flow)
@@ -77,7 +88,8 @@ namespace Clowd.Video
 
         public LevelListener(MMDevice device)
         {
-            _audioClient = device.AudioClient;
+            _device = device;
+            _audioClient = device.AudioClient; // this property creates a new audio client that must be disposed
             _audioClient.Initialize(AudioClientShareMode.Shared,
                AudioClientStreamFlags.None,
                100,
@@ -85,7 +97,6 @@ namespace Clowd.Video
                _audioClient.MixFormat,
                Guid.Empty);
             _audioClient.Start();
-            this._device = device;
         }
 
         public double GetPeakLevel()
