@@ -24,13 +24,13 @@ namespace Clowd.UI
         public bool IsMicrophoneEnabled { get; set; }
         public bool IsLoopbackEnabled { get; set; }
 
-        private LiveScreenRecording _recording;
         private bool _isCancelled = false;
         private NAudioItem speaker;
         private NAudioItem mic;
         private System.Timers.Timer audioTimer;
         private Point? _moveMouseDown;
         private Point? _moveInitial;
+        private IVideoCapturer _capturer;
 
         public VideoOverlayWindow(WpfRect captureArea)
         {
@@ -140,50 +140,50 @@ namespace Clowd.UI
             UpdateAudioState();
         }
 
-        private void Recording_LogRecieved(object sender, FFMpegLogEventArgs e)
-        {
-            //frame=  219 fps= 31 q=10.0 size=       0kB time=00:00:05.80 bitrate=   0.1kbits/s dup=5 drop=0 speed=0.82x
+        //private void Recording_LogRecieved(object sender, FFMpegLogEventArgs e)
+        //{
+        //    //frame=  219 fps= 31 q=10.0 size=       0kB time=00:00:05.80 bitrate=   0.1kbits/s dup=5 drop=0 speed=0.82x
 
-            string getData(string label)
-            {
-                var msg = e.Data;
-                var start = msg.IndexOf(label);
-                if (start < 0)
-                    return null;
-                msg = msg.Substring(start + label.Length).TrimStart();
-                msg = msg.Substring(0, msg.IndexOf(" "));
-                if (msg == "0.0" || msg == "00:00:00.00")
-                    return null;
+        //    string getData(string label)
+        //    {
+        //        var msg = e.Data;
+        //        var start = msg.IndexOf(label);
+        //        if (start < 0)
+        //            return null;
+        //        msg = msg.Substring(start + label.Length).TrimStart();
+        //        msg = msg.Substring(0, msg.IndexOf(" "));
+        //        if (msg == "0.0" || msg == "00:00:00.00")
+        //            return null;
 
-                return msg;
-            }
+        //        return msg;
+        //    }
 
-            var fps = getData("fps=");
-            var time = getData("time=");
-            TimeSpan ts = default(TimeSpan);
+        //    var fps = getData("fps=");
+        //    var time = getData("time=");
+        //    TimeSpan ts = default(TimeSpan);
 
-            if (time != null)
-            {
-                try
-                {
-                    // sometimes ffmpeg gives us garbage timecodes, it depends on the input stream timestamp on the frames & the settings we use.
-                    ts = TimeSpan.Parse(time);
-                }
-                catch { }
-            }
+        //    if (time != null)
+        //    {
+        //        try
+        //        {
+        //            // sometimes ffmpeg gives us garbage timecodes, it depends on the input stream timestamp on the frames & the settings we use.
+        //            ts = TimeSpan.Parse(time);
+        //        }
+        //        catch { }
+        //    }
 
-            Dispatcher.Invoke(() =>
-            {
-                if (fps != null && (ts == default(TimeSpan) || DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0))
-                {
-                    recordingLabelButton.Text = fps + " FPS";
-                }
-                else if (ts != default(TimeSpan))
-                {
-                    recordingLabelButton.Text = $"{((int)ts.TotalMinutes):D2}:{((int)ts.Seconds):D2}";
-                }
-            });
-        }
+        //    Dispatcher.Invoke(() =>
+        //    {
+        //        if (fps != null && (ts == default(TimeSpan) || DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0))
+        //        {
+        //            recordingLabelButton.Text = fps + " FPS";
+        //        }
+        //        else if (ts != default(TimeSpan))
+        //        {
+        //            recordingLabelButton.Text = $"{((int)ts.TotalMinutes):D2}:{((int)ts.Seconds):D2}";
+        //        }
+        //    });
+        //}
 
         private async void StartRecording()
         {
