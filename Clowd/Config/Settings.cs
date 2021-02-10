@@ -147,7 +147,7 @@ namespace Clowd.Config
         public FeatureSettings FeatureSettings { get; set; } = new FeatureSettings();
 
         [ExpandAsCategory(nameof(SettingsCategory.Video))]
-        public VideoSettings VideoSettings { get; set; } = new VideoSettings();
+        public VideoCapturerSettings VideoSettings { get; set; } = new VideoCapturerSettings();
 
         //[Browsable(false), ClassifyNotNull]
         //public int[] CustomColors { get; set; } = new int[0];

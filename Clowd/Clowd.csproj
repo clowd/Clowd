@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -139,9 +139,6 @@
     <Compile Include="UI\Controls\DockAndWrapPanel.cs" />
     <Compile Include="UI\Controls\DPadControl.cs" />
     <Compile Include="UI\Config\FeatureInstallerControl.cs" />
-    <Compile Include="UI\Config\FFMpegCodecSettingsEditor3.xaml.cs">
-      <DependentUpon>FFMpegCodecSettingsEditor3.xaml</DependentUpon>
-    </Compile>
     <Compile Include="UI\Config\GlobalTriggerEditor.cs" />
     <Compile Include="UI\Controls\SelectionBorderControl.xaml.cs">
       <DependentUpon>SelectionBorderControl.xaml</DependentUpon>
@@ -269,10 +266,6 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\CaptureWindow2.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\Config\FFMpegCodecSettingsEditor3.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -467,7 +460,6 @@
       <LastGenOutput>AssemblyInfo.cs</LastGenOutput>
     </Content>
   </ItemGroup>
-  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>

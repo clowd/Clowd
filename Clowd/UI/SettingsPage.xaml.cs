@@ -219,12 +219,12 @@ namespace Clowd.UI
                 return SimpleControlBinding(new GlobalTriggerEditor(), GlobalTriggerEditor.TriggerProperty);
             }
 
-            if (property.Is(typeof(FFmpegSettings)))
-            {
-                return SimpleControlBinding(new FFMpegCodecSettingsEditor3(), FFMpegCodecSettingsEditor3.CodecSettingsProperty);
-            }
+            //if (property.Is(typeof(FFmpegSettings)))
+            //{
+            //    return SimpleControlBinding(new FFMpegCodecSettingsEditor3(), FFMpegCodecSettingsEditor3.CodecSettingsProperty);
+            //}
 
-            if (property.Is(typeof(FFmpegDirectShowAudioDevice)))
+            if (property.Is(typeof(IAudioDevice)))
             {
                 return ComboSelectBinding(() => FFmpegDirectShowAudioDevice.GetDevices(), nameof(FFmpegDirectShowAudioDevice.FriendlyName));
             }
