@@ -61,8 +61,5 @@
       <Name>Clowd.Watch</Name>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Embed\ffmpeg-x86.exe.gz" />
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
