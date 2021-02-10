@@ -460,6 +460,10 @@
       <LastGenOutput>AssemblyInfo.cs</LastGenOutput>
     </Content>
   </ItemGroup>
+  <ItemGroup>
+    <Analyzer Include="..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\Gu.Roslyn.Extensions.dll" />
+    <Analyzer Include="..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\PropertyChangedAnalyzers.dll" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>
