@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -11,7 +11,6 @@ namespace Clowd
     public class VideoCapturerSettings
     {
         public string OutputDirectory { get; set; }
-        //public bool CaptureCursor { get; set; } = true;
         public int FPS { get; set; } = 30;
         public int MaxResolutionWidth { get; set; } = 0;
         public int MaxResolutionHeight { get; set; } = 0;
