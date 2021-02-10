@@ -18,9 +18,9 @@ namespace Clowd
         private VideoPerformance _performance = VideoPerformance.Medium;
         private VideoSubsamplingMode _subsamplingMode = VideoSubsamplingMode.yuv420;
         private bool _captureSpeaker = false;
-        private IAudioSpeakerDevice _captureSpeakerDeviceId;
+        private IAudioSpeakerDevice _captureSpeakerDevice;
         private bool _captureMicrophone = false;
-        private IAudioMicrophoneDevice _captureMicrophoneDeviceId;
+        private IAudioMicrophoneDevice _captureMicrophoneDevice;
         private bool _hardwareAccelerated = true;
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -137,17 +137,17 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
-        public IAudioSpeakerDevice CaptureSpeakerDeviceId
+        public IAudioSpeakerDevice CaptureSpeakerDevice
         {
-            get => _captureSpeakerDeviceId;
+            get => _captureSpeakerDevice;
             set
             {
-                if (ReferenceEquals(value, _captureSpeakerDeviceId))
+                if (ReferenceEquals(value, _captureSpeakerDevice))
                 {
                     return;
                 }
 
-                _captureSpeakerDeviceId = value;
+                _captureSpeakerDevice = value;
                 OnPropertyChanged();
             }
         }
@@ -165,17 +165,17 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
-        public IAudioMicrophoneDevice CaptureMicrophoneDeviceId
+        public IAudioMicrophoneDevice CaptureMicrophoneDevice
         {
-            get => _captureMicrophoneDeviceId;
+            get => _captureMicrophoneDevice;
             set
             {
-                if (ReferenceEquals(value, _captureMicrophoneDeviceId))
+                if (ReferenceEquals(value, _captureMicrophoneDevice))
                 {
                     return;
                 }
 
-                _captureMicrophoneDeviceId = value;
+                _captureMicrophoneDevice = value;
                 OnPropertyChanged();
             }
         }
@@ -222,6 +222,8 @@ namespace Clowd
 
     public interface IVideoCapturer : IDisposable, INotifyPropertyChanged
     {
+        event EventHandler<VideoCriticalErrorEventArgs> CriticalError;
+        event EventHandler<VideoStatusEventArgs> StatusReceived;
         string BusyStatus { get; }
         bool IsRecording { get; }
         Task<string> StartAsync(Rectangle captureRect, VideoCapturerSettings settings);

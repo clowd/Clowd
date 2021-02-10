@@ -10,24 +10,28 @@ namespace Clowd.Video
 {
     public class AudioDeviceManager
     {
-        public IEnumerable<IAudioSpeakerDevice> GetSpeakers()
+        public static IEnumerable<IAudioSpeakerDevice> GetSpeakers()
         {
-            return GetDevices(DataFlow.Render).Select(m => new NAudioSpeakerDevice(m));
+            yield return GetDefaultSpeaker();
+            foreach (var d in GetDevices(DataFlow.Render).Select(m => new NAudioDevice(m.ID)))
+                yield return d;
         }
 
-        public IEnumerable<IAudioMicrophoneDevice> GetMicrophones()
+        public static IEnumerable<IAudioMicrophoneDevice> GetMicrophones()
         {
-            return GetDevices(DataFlow.Capture).Select(m => new NAudioMicrophoneDevice(m));
+            yield return GetDefaultMicrophone();
+            foreach (var d in GetDevices(DataFlow.Capture).Select(m => new NAudioDevice(m.ID)))
+                yield return d;
         }
 
-        public IAudioMicrophoneDevice GetDefaultMicrophone()
+        public static IAudioMicrophoneDevice GetDefaultMicrophone()
         {
-            return new NAudioMicrophoneDevice(WasapiCapture.GetDefaultCaptureDevice());
+            return new NAudioDevice(DataFlow.Capture);
         }
 
-        public IAudioSpeakerDevice GetDefaultSpeaker()
+        public static IAudioSpeakerDevice GetDefaultSpeaker()
         {
-            return new NAudioSpeakerDevice(WasapiLoopbackCapture.GetDefaultLoopbackCaptureDevice());
+            return new NAudioDevice(DataFlow.Render);
         }
 
         protected static IEnumerable<MMDevice> GetDevices(DataFlow flow)
@@ -42,37 +46,65 @@ namespace Clowd.Video
         }
     }
 
-    internal class NAudioMicrophoneDevice : NAudioDevice, IAudioMicrophoneDevice
+    internal class NAudioDevice : IAudioMicrophoneDevice, IAudioSpeakerDevice, IEquatable<NAudioDevice>
     {
-        public NAudioMicrophoneDevice(MMDevice device) : base(device)
+        public string DeviceId
         {
-        }
-    }
-
-    internal class NAudioSpeakerDevice : NAudioDevice, IAudioSpeakerDevice
-    {
-        public NAudioSpeakerDevice(MMDevice device) : base(device)
-        {
-        }
-    }
-
-    internal class NAudioDevice : IAudioDevice
-    {
-        public string DeviceId => _device.ID;
-
-        public string FriendlyName => _device.FriendlyName;
-
-        private MMDevice _device;
-
-        public NAudioDevice(MMDevice device)
-        {
-            _device = device;
+            get
+            {
+                var mm = GetMM();
+                return mm.isDefault ? "default" : mm.device.ID;
+            }
         }
 
-        public IAudioLevelListener GetLevelListener()
+        public string FriendlyName
         {
-            return new LevelListener(_device);
+            get
+            {
+                var mm = GetMM();
+                return mm.isDefault ? "Default - " + mm.device.FriendlyName : mm.device.FriendlyName;
+            }
         }
+
+        const string DEFAULT_CAPTURE = "default-capture";
+        const string DEFAULT_RENDER = "default-render";
+
+        private string _deviceId;
+
+        private NAudioDevice() { } // serialization
+
+        public NAudioDevice(DataFlow flow)
+        {
+            _deviceId = flow == DataFlow.Capture ? DEFAULT_CAPTURE : DEFAULT_RENDER;
+        }
+
+        public NAudioDevice(string deviceId)
+        {
+            _deviceId = deviceId;
+        }
+
+        private (bool isDefault, MMDevice device) GetMM()
+        {
+            if (_deviceId == DEFAULT_CAPTURE)
+                return (true, WasapiCapture.GetDefaultCaptureDevice());
+
+            if (_deviceId == DEFAULT_RENDER)
+                return (true, WasapiLoopbackCapture.GetDefaultLoopbackCaptureDevice());
+
+            using (var enumerator = new MMDeviceEnumerator())
+                return (false, enumerator.GetDevice(_deviceId));
+        }
+
+        public IAudioLevelListener GetLevelListener() => new LevelListener(GetMM().device);
+
+        public override bool Equals(object obj)
+        {
+            if (obj is NAudioDevice dev) return Equals(dev);
+            return false;
+        }
+
+        public bool Equals(NAudioDevice other) => _deviceId == other._deviceId;
+        public override int GetHashCode() => _deviceId?.GetHashCode() ?? 0;
     }
 
     internal class LevelListener : IAudioLevelListener
