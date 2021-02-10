@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -34,7 +35,13 @@ namespace Clowd
         public static string BackupData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Backup");
         public static string LogData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Logs");
         public static string SessionData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Session");
+        public static string Plugins => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Plugins");
 
+        public static string GetFolderPath(string name, string parentDirectory)
+        {
+            var d = Path.Combine(Path.GetFullPath(parentDirectory), name);
+            return d;
+        }
         public static string GetFilePath(string name, string extension, string directory) => Path.Combine(Path.GetFullPath(directory), name + "." + extension);
         public static string GetDatedFilePath(string name, string extension, string directory) => Path.Combine(Path.GetFullPath(directory), GetDatedFileName(name, extension));
         public static string GetDatedFileName(string name, string extension) => name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "." + extension;
@@ -60,6 +67,23 @@ namespace Clowd
                 Directory.CreateDirectory(dataPath);
 
             return Path.GetFullPath(dataPath);
+        }
+
+        public static bool IsDirectoryWritable(string dirPath, bool throwIfFails = false)
+        {
+            try
+            {
+                using (FileStream fs = File.Create(Path.Combine(dirPath, Path.GetRandomFileName()), 1, FileOptions.DeleteOnClose))
+                { }
+                return true;
+            }
+            catch
+            {
+                if (throwIfFails)
+                    throw;
+                else
+                    return false;
+            }
         }
     }
 }
