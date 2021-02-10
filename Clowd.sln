@@ -23,11 +23,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ookii.Dialogs.Wpf", "Ookii.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LiveDraw", "LiveDraw\LiveDraw.csproj", "{110F39D7-349D-4E27-88C1-02AF6513015E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.FFmpeg", "Clowd.FFmpeg\Clowd.FFmpeg.csproj", "{FA6FD7EE-A2D6-4C1A-99D6-A7F5354D0B65}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Video", "Clowd.Video\Clowd.Video.csproj", "{FA6FD7EE-A2D6-4C1A-99D6-A7F5354D0B65}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Upload", "Clowd.Upload\Clowd.Upload.csproj", "{1B456368-42B0-412B-B31D-DFE369F2BEE3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Extensibility", "Clowd.Extensibility\Clowd.Extensibility.csproj", "{A6CCAFE6-26D8-4B2C-9B2D-1895788DA246}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Shared", "Clowd.Shared\Clowd.Shared.csproj", "{A6CCAFE6-26D8-4B2C-9B2D-1895788DA246}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Obs", "Clowd.Obs\Clowd.Obs.csproj", "{00A55168-CE0F-4EF0-9CA1-E0AEF6117AF5}"
 EndProject

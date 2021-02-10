@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Clowd.Config;
-using Clowd.FFmpeg;
+using Clowd.Video;
 using Clowd.Installer.Features;
 
 namespace Clowd.Capture
