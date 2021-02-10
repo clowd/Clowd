@@ -9,11 +9,13 @@ namespace Clowd.UI.Helpers
     public sealed class TrulyObservableCollection<T> : ObservableCollection<T>, INotifyPropertyChanged
         where T : INotifyPropertyChanged
     {
+#pragma warning disable INPC011 // Don't shadow PropertyChanged event.
         public new event PropertyChangedEventHandler PropertyChanged
         {
             add { base.PropertyChanged += value; }
             remove { base.PropertyChanged -= value; }
         }
+#pragma warning restore INPC011 // Don't shadow PropertyChanged event.
 
         public TrulyObservableCollection()
             : base()
