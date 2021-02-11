@@ -50,9 +50,9 @@ namespace Clowd.Capture
         //    }
         //}
 
-        public BitmapSource CaptureScreenWpf(ScreenRect? bounds = null, bool captureCursor = true, TimedConsoleLogger timer = null)
+        public BitmapSource CaptureScreenWpf(ScreenRect? bounds = null, bool captureCursor = true, ILog log = null)
         {
-            timer?.Log("GDI", "Start");
+            log?.Info("Screen capture started");
 
             // allocate unmanaged resources
             var _screenDC = USER32.GetWindowDC(IntPtr.Zero);
@@ -63,7 +63,7 @@ namespace Clowd.Capture
             if (_screenDC == IntPtr.Zero)
                 throw new Exception("Unable to create new screen-compatible in-memory hDC");
 
-            timer?.Log("GDI", "HDC Allocated");
+            log?.Info("HDC allocated");
 
             Rectangle captureArea = (bounds ?? ScreenTools.VirtualScreen.Bounds).ToSystem();
             IntPtr destBitmap = IntPtr.Zero;
@@ -76,7 +76,7 @@ namespace Clowd.Capture
                 {
                     destBitmap = CopyScreenToNewHBitmap(_screenDC, _targetDC, captureArea, captureCursor);
 
-                    timer?.Log("GDI", "Screen copied to HBitmap");
+                    log?.Info("Screen copied to HBitmap");
 
                     var writable = new WriteableBitmap(
                         captureArea.Width,
@@ -88,19 +88,18 @@ namespace Clowd.Capture
 
                     writable.Lock();
 
-                    timer?.Log("GDI", "WritableBitmap Created");
+                    log?.Info("WritableBitmap Created");
 
                     CopyBitmapDIBitsToBuffer(destBitmap, _targetDC, writable.BackBuffer, captureArea.Width, captureArea.Height, bitmapSize.stride);
 
-                    timer?.Log("GDI", "DI bits copied to buffer");
-
+                    log?.Info("DI bits copied to buffer");
 
                     writable.AddDirtyRect(new System.Windows.Int32Rect(0, 0, captureArea.Width, captureArea.Height));
 
                     writable.Unlock();
                     writable.Freeze();
 
-                    timer?.Log("GDI", "Bitmap Frozen / Complete");
+                    log?.Info("Bitmap Frozen / Complete");
 
                     return writable;
                 }

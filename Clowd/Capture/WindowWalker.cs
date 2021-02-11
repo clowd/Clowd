@@ -56,19 +56,19 @@ namespace Clowd.Capture
         {
         }
 
-        public void CapturePart1(TimedConsoleLogger timer)
+        public void CapturePart1(ILog log)
         {
-            timer.Log("FinderDepth0", "Start");
-            CaptureTopLevelWindows();
-            timer.Log("FinderDepth0", "Complete");
+            log.Info("FinderDepth0 Start");
+            CaptureTopLevelWindows(log);
+            log.Info("FinderDepth0 Complete");
             DepthReady = 0;
         }
 
-        public void CapturePart2(TimedConsoleLogger timer)
+        public void CapturePart2(ILog log)
         {
-            timer.Log("FinderDepthAll", "Start");
+            log.Info("FinderDepthAll Start");
             Parallel.ForEach(_cachedWindows, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, (w) => w.PopulateChildren());
-            timer.Log("FinderDepthAll", "Complete");
+            log.Info("FinderDepthAll Complete");
             DepthReady = MaxWindowDepthToSearch;
         }
 
@@ -93,7 +93,7 @@ namespace Clowd.Capture
             return null;
         }
 
-        public void CapturePart3(TimedConsoleLogger timer)
+        public void CapturePart3(ILog log)
         {
             //DepthReady = 0;
             //Parallel.ForEach(_cachedWindows, new ParallelOptions() { MaxDegreeOfParallelism = 4 }, (w) => w.PopulateChildren());
@@ -101,7 +101,6 @@ namespace Clowd.Capture
 
             // this code feels terrible, but we are blocking on the WndProc of other processes, and if one of those processes is locked or acting poorly
             // we don't want it to break Clowd.
-            timer.Log("FinderHiddenBitmaps", "Start");
             var windows = _cachedWindows.Where(w => w.Depth == 0 && w.IsPartiallyCovered);
             Parallel.ForEach(windows, new ParallelOptions { MaxDegreeOfParallelism = 4 }, (c) =>
             {
@@ -112,11 +111,11 @@ namespace Clowd.Capture
                         try
                         {
                             c.PopulateBitmap();
-                            timer.Log("FinderHiddenBitmaps", $"Captured: {c.Caption} / {c.ClassName}");
+                            log.Info("FinderHiddenBitmaps Captured: {c.Caption} / {c.ClassName}");
                         }
                         catch (Exception e)
                         {
-                            timer.Log("FinderHiddenBitmaps", $"FAILED TO CAPTURE: {c.Caption} / {c.ClassName}");
+                            log.Error("FinderHiddenBitmaps FAILED TO CAPTURE: {c.Caption} / {c.ClassName}", e);
                         }
                     }));
 
@@ -142,10 +141,10 @@ namespace Clowd.Capture
             BitmapsReady = true;
         }
 
-        private void CaptureTopLevelWindows(TimedConsoleLogger timer = null)
+        private void CaptureTopLevelWindows(ILog timer)
         {
             var toplv = USER32EX.GetChildWindows(IntPtr.Zero);
-            timer?.Log("FinderDepth0", $"Got list of windows (count {toplv.Count})");
+            timer?.Info($"Got list of windows (count {toplv.Count})");
 
             for (int i = 0; i < toplv.Count; i++)
             //foreach (var hWnd in toplv)
@@ -155,7 +154,7 @@ namespace Clowd.Capture
                 if (!USER32.GetWindowInfo(hWnd, ref _winInfo))
                     throw new Win32Exception();
 
-                timer?.Log("FinderDepth0", $"{hWnd} window info");
+                timer?.Debug($"{hWnd} window info");
 
 
                 var winVisible = _winInfo.dwStyle.HasFlag(WindowStyles.WS_VISIBLE);
@@ -169,12 +168,12 @@ namespace Clowd.Capture
                 if (_winInfo.rcWindow.left == _winInfo.rcWindow.right || _winInfo.rcWindow.top == _winInfo.rcWindow.bottom)
                     continue;
 
-                timer?.Log("FinderDepth0", $"{hWnd} style stuff");
+                timer?.Debug($"{hWnd} style stuff");
 
 
                 // ignore: top level windows which are not visible to the user
                 ScreenRect windowRect = ScreenRect.FromSystem(USER32EX.GetTrueWindowBounds(hWnd));
-                timer?.Log("FinderDepth0", $"{hWnd} BOUNDS");
+                timer?.Debug($"{hWnd} BOUNDS");
                 if (!_virtualDesktop.IsWindowOnCurrentVirtualDesktop(hWnd))
                 {
                     // if the window is not on the current virtual desktop we want to ignore it and it's children
@@ -182,7 +181,7 @@ namespace Clowd.Capture
                 }
 
 
-                timer?.Log("FinderDepth0", $"{hWnd} virutal desktop");
+                timer?.Debug($"{hWnd} virutal desktop");
 
 
                 //var winIsTool = _winInfo.dwExStyle.HasFlag(WindowStylesEx.WS_EX_TOOLWINDOW);
@@ -200,7 +199,7 @@ namespace Clowd.Capture
 
                 _excludedArea.Exclude(checkRect);
 
-                timer?.Log("FinderDepth0", $"region stuff");
+                timer?.Debug($"region stuff");
 
 
                 // ignore: window classes we know are garbage
@@ -222,13 +221,12 @@ namespace Clowd.Capture
                 if (!this.BoundsAreLargeEnoughForCapture(clippedBounds, 0))
                     continue;
 
-                timer?.Log("FinderDepth0", $"clipping");
-
+                timer?.Debug($"clipping");
 
                 var caption = USER32EX.GetWindowCaption(hWnd);
                 var cwin = new CachedWindow(hWnd, 0, className, caption, windowRect, null);
 
-                timer?.Log("FinderDepth0", $"caption");
+                timer?.Debug($"caption");
 
 
                 // enumerate windows on top of this one in the z-order to find out of any of them intersect
@@ -243,7 +241,7 @@ namespace Clowd.Capture
                 }
 
 
-                timer?.Log("FinderDepth0", $"Captured: {cwin.Caption} / {cwin.ClassName}");
+                timer?.Info($"Captured: {cwin.Caption} / {cwin.ClassName}");
                 _cachedWindows.Add(cwin);
             }
         }

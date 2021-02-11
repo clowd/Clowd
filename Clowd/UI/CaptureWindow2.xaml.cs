@@ -43,10 +43,10 @@ namespace Clowd.UI
 
         public static CaptureWindow2 Current { get; private set; }
 
-        private readonly TimedConsoleLogger _timer;
+        private readonly IScopedLog _timer;
         private readonly Action<BitmapSource> _callback;
 
-        private CaptureWindow2(TimedConsoleLogger timer, Action<BitmapSource> callback)
+        private CaptureWindow2(IScopedLog timer, Action<BitmapSource> callback)
         {
             InitializeComponent();
             this._timer = timer;
@@ -65,14 +65,11 @@ namespace Clowd.UI
                 return;
             }
 
-            var timer = new TimedConsoleLogger("Capture", DateTime.Now);
-
-            timer.Log("Total", "Start");
-            timer.Log("Window", "Start");
+            var timerbase = new ConsoleScopedLog("Capture");
+            var timer = timerbase.CreateProfiledScope("Window");
+            timer.Info("Start");
             Current = new CaptureWindow2(timer, callback);
-
             Current.Closed += (s, e) => Current = null;
-
             Current.StartCaptureInstance(selection);
         }
 
@@ -80,10 +77,13 @@ namespace Clowd.UI
         {
             // creating this first is significantly faster for some reason
             this.EnsureHandle();
-            _timer.Log("Window", "Source created");
+            _timer.Info("Source created");
 
             // this will create the bitmap and do the initial render ahead of time
-            fastCapturer.StartFastCapture(_timer);
+            using (var scoped = _timer.CreateProfiledScope("FastCap"))
+            {
+                fastCapturer.StartFastCapture(scoped);
+            }
 
             if (selection.HasValue)
             {
@@ -92,22 +92,29 @@ namespace Clowd.UI
                 fastCapturer.StopCapture();
             }
 
-            _timer.Log("WinShow", "Showing Window");
-            Show();
-            _timer.Log("WinShow", "Showing Complete");
+            using (var scoped = _timer.CreateProfiledScope("WinShow"))
+            {
+                scoped.Info("Showing Window");
+                Show();
+                scoped.Info("Showing Complete");
+            }
         }
 
         private async void CaptureWindow2_ContentRendered(object sender, EventArgs e)
         {
             // once our first render has finished, we can fire up low priorty tasks to capture window bitmaps
-            _timer.Log("Window", "Rendered");
+            _timer.Info("Rendered");
 
-            await Task.Delay(200); // add a delay so that these expensive background operations dont interfere with initial window interactions / calculations
-            await fastCapturer.FinishUpFastCapture(_timer);
+            using (var scoped = _timer.CreateProfiledScope("FinishUp"))
+            {
+                scoped.Info("Waiting 200ms...");
+                await Task.Delay(200); // add a delay so that these expensive background operations dont interfere with initial window interactions / calculations
+                await fastCapturer.FinishUpFastCapture(scoped);
+            }
 
-            _timer.Log("Total", "End");
+            _timer.Info("End");
 
-            _timer.PrintSummary();
+            _timer.Dispose();
         }
 
         private BitmapSource CropBitmap()
