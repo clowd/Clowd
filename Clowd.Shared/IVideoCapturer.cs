@@ -288,7 +288,7 @@ namespace Clowd
         public abstract Task StopAsync();
 
         public abstract void WriteLogToFile(string fileName);
-        public abstract Task Initialize();
+        public virtual Task Initialize() { return Task.CompletedTask; }
     }
 
     public class VideoCriticalErrorEventArgs : EventArgs
