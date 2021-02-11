@@ -220,12 +220,13 @@ namespace Clowd
         yuv444,
     }
 
-    public interface IVideoCapturer : IDisposable, INotifyPropertyChanged
+    public interface IVideoCapturer : IDisposable, INotifyPropertyChanged, IModule
     {
         event EventHandler<VideoCriticalErrorEventArgs> CriticalError;
         event EventHandler<VideoStatusEventArgs> StatusReceived;
         string BusyStatus { get; }
         bool IsRecording { get; }
+        Task Initialize();
         Task<string> StartAsync(Rectangle captureRect, VideoCapturerSettings settings);
         Task StopAsync();
         void WriteLogToFile(string fileName);
@@ -287,6 +288,7 @@ namespace Clowd
         public abstract Task StopAsync();
 
         public abstract void WriteLogToFile(string fileName);
+        public abstract Task Initialize();
     }
 
     public class VideoCriticalErrorEventArgs : EventArgs

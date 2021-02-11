@@ -8,7 +8,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Clowd.Video
+namespace Clowd
 {
     internal static class GithubApi
     {
@@ -32,14 +32,14 @@ namespace Clowd.Video
             }
         }
 
-        public static async Task<GithubRelease[]> GetReleasesAsync()
+        public static async Task<GithubRelease[]> GetReleasesAsync(string repo)
         {
             try
             {
                 using (var client = new HttpClient())
                 {
                     client.DefaultRequestHeaders.Add("User-Agent", UserAgent);
-                    const string url = "https://api.github.com/repos/clowd/obs-express/releases";
+                    string url = $"https://api.github.com/repos/{repo}/releases";
                     HttpResponseMessage response = await client.GetAsync(url);
                     string content = await response.Content.ReadAsStringAsync();
 
