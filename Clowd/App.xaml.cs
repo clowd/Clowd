@@ -35,6 +35,7 @@ namespace Clowd
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
         public static bool CanUpload => !IsDesignMode;
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
+        public static IScopedLog DefaultLog { get; private set; }
 
         public GeneralSettings Settings { get; private set; }
         public Color AccentColor { get; private set; }
@@ -74,6 +75,10 @@ namespace Clowd
             //var m2 = RenderOptions.ProcessRenderMode
             //var teir = RenderCapability.Tier >> 16;
 
+            // only want to report and potentially swallow errors if we're not debugging
+            DefaultLog = new DefaultScopedLog("Clowd");
+            if (!Debugger.IsAttached)
+                DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
 
             base.OnStartup(e);
             SetupExceptionHandling();
@@ -108,8 +113,8 @@ namespace Clowd
                     {
                         var ex = new InvalidOperationException("The mutex was opened successfully, " +
                                                               $"but there are no {Constants.ClowdAppName} processes running. Uninstaller?");
-                        ex.Data.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
-                        ex.ToSentry();
+                        //ex.Data.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
+                        DefaultLog.Error(ex);
                         Environment.Exit(1);
                     }
 
@@ -153,7 +158,7 @@ namespace Clowd
             {
                 // we still want to report this, beacuse it was unexpected, but because we successfully opened the mutex
                 // we know there is another Clowd instance running (or uninstaller) and we should close.
-                ex.ToSentry();
+                DefaultLog.Error(ex);
                 Environment.Exit(1);
             }
 
@@ -182,7 +187,6 @@ namespace Clowd
 
         private void SetupExceptionHandling()
         {
-            Sentry.Init("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
 
 #if false && DEBUG
             if (Debugger.IsAttached)
@@ -202,12 +206,7 @@ namespace Clowd
 #else
 
 
-            // only want to report and potentially swallow errors if we're not debugging
-            if (Debugger.IsAttached)
-            {
-                Sentry.Default.Enabled = false;
-                return;
-            }
+
 
             // create event handlers for unhandled exceptions
             //Sentry.Default.BeforeSend = (req) =>
@@ -231,18 +230,12 @@ namespace Clowd
 
             ThreadExceptionEventHandler OnApplicationThreadException = (sender, args) =>
             {
-                var evt = new SentryEvent(args.Exception);
-                evt.Message = "ApplicationThreadException";
-                evt.Level = ErrorLevel.Fatal;
-                evt.Submit();
+                DefaultLog.Error("ApplicationThreadException", args.Exception);
             };
 
             DispatcherUnhandledExceptionEventHandler OnApplicationDispatcherUnhandledException = (sender, args) =>
             {
-                var evt = new SentryEvent(args.Exception);
-                evt.Message = "DispatcherUnhandledException";
-                evt.Level = ErrorLevel.Fatal;
-                evt.Submit();
+                DefaultLog.Error("DispatcherUnhandledException", args.Exception);
             };
 
             try
@@ -251,7 +244,7 @@ namespace Clowd
             }
             catch (Exception ex)
             {
-                ex.ToSentry();
+                DefaultLog.Error(ex);
             }
 
             try
@@ -260,7 +253,7 @@ namespace Clowd
             }
             catch (Exception ex)
             {
-                ex.ToSentry();
+                DefaultLog.Error(ex);
             }
 #endif
         }
@@ -551,7 +544,7 @@ namespace Clowd
         {
             if (_initialized)
             {
-                Sentry.Default.SubmitLog("FinishInit() called more than once.", ErrorLevel.Warning);
+                DefaultLog.Info("FinishInit() called more than once.");
                 return;
             }
             _initialized = true;

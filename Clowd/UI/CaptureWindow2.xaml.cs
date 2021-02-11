@@ -65,8 +65,7 @@ namespace Clowd.UI
                 return;
             }
 
-            var timerbase = new ConsoleScopedLog("Capture");
-            var timer = timerbase.CreateProfiledScope("Window");
+            var timer = App.DefaultLog.CreateProfiledScope("Capture");
             timer.Info("Start");
             Current = new CaptureWindow2(timer, callback);
             Current.Closed += (s, e) => Current = null;
@@ -80,10 +79,7 @@ namespace Clowd.UI
             _timer.Info("Source created");
 
             // this will create the bitmap and do the initial render ahead of time
-            using (var scoped = _timer.CreateProfiledScope("FastCap"))
-            {
-                fastCapturer.StartFastCapture(scoped);
-            }
+            _timer.RunProfiled("FastCap", fastCapturer.StartFastCapture);
 
             if (selection.HasValue)
             {
@@ -92,12 +88,11 @@ namespace Clowd.UI
                 fastCapturer.StopCapture();
             }
 
-            using (var scoped = _timer.CreateProfiledScope("WinShow"))
+            _timer.RunProfiled("WinShow", (l) =>
             {
-                scoped.Info("Showing Window");
                 Show();
-                scoped.Info("Showing Complete");
-            }
+                //throw new InvalidOperationException("AHHH");
+            });
         }
 
         private async void CaptureWindow2_ContentRendered(object sender, EventArgs e)

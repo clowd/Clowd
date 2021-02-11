@@ -189,6 +189,7 @@
     <Compile Include="Util\Expr.cs" />
     <Compile Include="Util\ICommandLineProxy.cs" />
     <Compile Include="Config\GlobalTrigger.cs" />
+    <Compile Include="Util\LogImpl.cs" />
     <Compile Include="Util\PathEx.cs" />
     <Compile Include="Util\ProgressStream.cs" />
     <Compile Include="Util\ProxyMetaObject.cs" />
@@ -198,7 +199,6 @@
     <Compile Include="UI\Helpers\RelayCommand.cs" />
     <Compile Include="Capture\ScrollingCapture.cs" />
     <Compile Include="Capture\ScrollingCapture2.cs" />
-    <Compile Include="Util\TimedConsoleLogger.cs" />
     <Compile Include="UI\Helpers\TrulyObservableCollection.cs" />
     <Compile Include="UI\Controls\FadingScrollViewer.cs" />
     <Compile Include="UI\Controls\OutlinedText.cs" />
