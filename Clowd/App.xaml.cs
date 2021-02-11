@@ -18,6 +18,7 @@ using Clowd.Interop;
 using Clowd.UI;
 using Clowd.UI.Helpers;
 using Clowd.Util;
+using LightInject;
 using NotifyIconLib;
 using Ookii.Dialogs.Wpf;
 using RT.Serialization;
@@ -36,7 +37,7 @@ namespace Clowd
         public static bool CanUpload => !IsDesignMode;
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
         public static IScopedLog DefaultLog { get; private set; }
-
+        public static ServiceContainer Container { get; private set; }
         public GeneralSettings Settings { get; private set; }
         public Color AccentColor { get; private set; }
         //public string AppDataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ClowdAppName);
@@ -76,11 +77,13 @@ namespace Clowd
             //var teir = RenderCapability.Tier >> 16;
 
             // only want to report and potentially swallow errors if we're not debugging
+
+            base.OnStartup(e);
+
             DefaultLog = new DefaultScopedLog("Clowd");
             if (!Debugger.IsAttached)
                 DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
 
-            base.OnStartup(e);
             SetupExceptionHandling();
 
             try
@@ -165,6 +168,7 @@ namespace Clowd
             SetupServiceHost();
             SetupDpiScaling();
             SetupSettings();
+            SetupDependencyInjection();
             SetupTrayIcon();
             SetupAccentColors();
 
@@ -176,7 +180,49 @@ namespace Clowd
             }
 
             FinishInit();
+
+            //var obs = Container.GetInstance<IModuleInfo<IVideoCapturer>>();
+            //await obs.CheckForUpdates(false);
+            //Console.WriteLine();
+            //await obs.Install(obs.UpdateAvailable);
+            //Console.WriteLine();
+
+            //var scope = Container.BeginScope();
+            //try
+            //{
+            //    var page = Container.GetInstance<IVideoCapturePage>();
+            //    page.Closed += (s, e) => scope.Dispose();
+            //    page.Open(new System.Drawing.Rectangle(100, 100, 500, 500));
+            //}
+            //catch
+            //{
+            //    scope.Dispose();
+            //}
         }
+
+        private void SetupDependencyInjection()
+        {
+            var container = new ServiceContainer();
+            container.Register<IScopedLog>((f) => new DefaultScopedLog(Constants.ClowdAppName), new PerContainerLifetime());
+
+            // settings
+            container.Register<GeneralSettings>((f) => Settings);
+            container.Register<VideoCapturerSettings>((f) => f.GetInstance<GeneralSettings>().VideoSettings);
+
+            // video
+            container.Register<IModuleInfo<IVideoCapturer>, Video.ObsModule>(nameof(Video.ObsModule), new PerContainerLifetime());
+            container.Register<IVideoCapturer>(f =>
+            {
+                var module = f.GetInstance<IModuleInfo<IVideoCapturer>>();
+                if (module.InstalledVersion == null)
+                    return null;
+                return module.GetNewInstance();
+            }, new PerScopeLifetime());
+            container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
+
+            Container = container;
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
             base.OnExit(e);

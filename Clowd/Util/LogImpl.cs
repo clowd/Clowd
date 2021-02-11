@@ -259,7 +259,7 @@ namespace Clowd.Util
 
         protected override void LogBase(string message, LogSeverity level, Exception ex = null)
         {
-            if (level == LogSeverity.Error && ProfilerRoot == null)
+            if (level == LogSeverity.Error && ProfilerRoot == null && Sentry != null)
             {
                 SentryEvent evt = ex == null ? new SentryEvent(new SentryMessage(message)) : new SentryEvent(ex);
                 Sentry.Capture(evt);
