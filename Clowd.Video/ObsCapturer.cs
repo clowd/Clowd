@@ -234,12 +234,9 @@ namespace Clowd.Video
         {
             lock (_lock)
             {
-                using (var client = new ClowdHttpClient())
-                {
-                    _source.Cancel();
-                    _watch.ForceExit();
-                    _instance = null;
-                }
+                _source.Cancel();
+                _watch.ForceExit();
+                _instance = null;
             }
         }
 

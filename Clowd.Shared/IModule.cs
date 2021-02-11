@@ -42,6 +42,33 @@ namespace Clowd
         }
     }
 
+    //public class ModuleSettings : INotifyPropertyChanged
+    //{
+    //    private bool isEnabled;
+
+    //    public bool IsEnabled
+    //    {
+    //        get => isEnabled;
+    //        set
+    //        {
+    //            if (value == isEnabled)
+    //            {
+    //                return;
+    //            }
+
+    //            isEnabled = value;
+    //            OnPropertyChanged();
+    //        }
+    //    }
+
+    //    public event PropertyChangedEventHandler PropertyChanged;
+
+    //    protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
+    //    {
+    //        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    //    }
+    //}
+
     public interface IModule : IDisposable
     {
     }
@@ -167,7 +194,7 @@ namespace Clowd
                 RemotePackage release = null;
                 if (!includePrereleases) release = query.FirstOrDefault(r => r.IsPrerelease == false);
                 if (includePrereleases || release == null) release = query.FirstOrDefault();
-                UpdateAvailable = InstalledVersion.Version != release.Version ? release : null;
+                UpdateAvailable = InstalledVersion?.Version != release.Version ? release : null;
             }
             finally
             {
@@ -188,9 +215,8 @@ namespace Clowd
                 var cut = dir.Substring(pluginsDir.Length).Trim(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 if (cut.StartsWith(AssetName))
                 {
-                    var cut2 = cut.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).First().Split('-');
-                    if (cut2.First() == AssetName)
-                        yield return new LocalPackage(cut2.Last(), dir);
+                    var cut2 = cut.Substring(AssetName.Length).Trim('-');
+                    yield return new LocalPackage(cut2, dir);
                 }
             }
         }
@@ -210,11 +236,20 @@ namespace Clowd
             {
                 var pluginsDir = PathConstants.Plugins;
                 var dlpath = PathConstants.GetDatedFilePath(AssetName, "zip", pluginsDir);
-                await GithubApi.DownloadBrowserAsset(pkg.DownloadUrl, dlpath);
                 var extractPath = Path.Combine(pluginsDir, $"{AssetName}-{pkg.Version}");
-                await Task.Run(() => ZipFile.ExtractToDirectory(dlpath, extractPath));
-                InstalledVersion = new LocalPackage(pkg.Version, extractPath);
-                await DeleteOldVersions();
+
+                try
+                {
+                    await GithubApi.DownloadBrowserAsset(pkg.DownloadUrl, dlpath);
+                    await Task.Run(() => ZipFile.ExtractToDirectory(dlpath, extractPath));
+                    InstalledVersion = new LocalPackage(pkg.Version, extractPath);
+                    await DeleteOldVersions();
+                }
+                finally
+                {
+                    if (File.Exists(dlpath))
+                        File.Delete(dlpath);
+                }
             }
             finally
             {

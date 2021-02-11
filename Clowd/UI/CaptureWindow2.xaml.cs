@@ -207,7 +207,7 @@ namespace Clowd.UI
             else
             {
                 fastCapturer.SetSelectedWindowForeground();
-                new VideoOverlayWindow(SelectionRectangle, App.Current.Settings.VideoSettings).Show();
+                //new VideoOverlayWindow(SelectionRectangle, App.Current.Settings.VideoSettings).Show();
             }
         }
 
