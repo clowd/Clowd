@@ -59,7 +59,6 @@ namespace Clowd.UI
 
         Brush _overlayBrush = new SolidColorBrush(Color.FromArgb(127, 0, 0, 0));
 
-        TimedConsoleLogger _timer;
         WindowWalker.CachedWindow _selectedWindow;
         WindowWalker _windowFinder;
         BitmapSource _image;
@@ -134,32 +133,40 @@ namespace Clowd.UI
             _sharpAccentLineWide = new Pen(_accentBrush, _sharpLineWidth * 5);
         }
 
-        public void StartFastCapture(TimedConsoleLogger timer)
+        public void StartFastCapture(IScopedLog log)
         {
-            _timer = timer;
-            timer.Log("FastCapStage1", "Start");
-            _windowFinder = new WindowWalker();
-            _windowFinder.CapturePart1(timer);
+            log.Info("Start fast capture");
 
-            _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, timer);
+            using (var sublog = log.CreateProfiledScope("WalkerS1"))
+            {
+                _windowFinder = new WindowWalker();
+                _windowFinder.CapturePart1(sublog);
+            }
 
-            timer.Log("FastCapStage1", "Grayscale bitmap");
+            using (var sublog = log.CreateProfiledScope("GDI"))
+            {
+                _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, sublog);
+            }
+
+            log.Info("Grayscale bitmap");
             _imageGray = new FormatConvertedBitmap(_image, PixelFormats.Gray8, BitmapPalettes.Gray256, 1);
 
-            timer.Log("FastCapStage1", "Rendering visuals");
+            log.Info("Rendering visuals");
             Reset();
 
-            timer.Log("FastCapStage1", "Complete");
+            log.Info("Complete");
         }
 
-        public Task FinishUpFastCapture(TimedConsoleLogger timer)
+        public Task FinishUpFastCapture(IScopedLog log)
         {
+            log.Info("Starting background task");
             return Task.Run(() =>
             {
-                timer.Log("FastCapStage2", "Start");
-                _windowFinder.CapturePart2(timer);
-                _windowFinder.CapturePart3(timer);
-                timer.Log("FastCapStage2", "Complete");
+                using (var sublog = log.CreateProfiledScope("WalkerS2"))
+                    _windowFinder.CapturePart2(sublog);
+                using (var sublog = log.CreateProfiledScope("WalkerS3"))
+                    _windowFinder.CapturePart3(sublog);
+                log.Info("Complete");
                 _finishedUp = true;
                 Dispatcher.Invoke(Draw);
             });
@@ -246,7 +253,7 @@ namespace Clowd.UI
 
         public async void ShowProfiler()
         {
-            await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information, _timer.GetSummary());
+            //await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information, _timer.GetSummary());
         }
 
         public BitmapSource GetSelectedBitmap()
@@ -625,7 +632,7 @@ namespace Clowd.UI
                 addLine("-", "Scroll to zoom!");
                 addLine("F", "Select current screen");
                 addLine("A", "Select all screens");
-                addLine("T", $"Time to render {_timer.GetMetricTime("Window")}ms, total time {(_finishedUp ? _timer.GetMetricTime("Total").ToString() + "ms" : "...")}");
+                //addLine("T", $"Time to render {_timer.GetMetricTime("Window")}ms, total time {(_finishedUp ? _timer.GetMetricTime("Total").ToString() + "ms" : "...")}");
 
                 const int shortcutWidth = 30;
                 const int colorWidth = 30;

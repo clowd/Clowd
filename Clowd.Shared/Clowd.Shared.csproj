@@ -48,6 +48,7 @@
     <Compile Include="ClowdHttpClient.cs" />
     <Compile Include="EmbeddedResource.cs" />
     <Compile Include="IAudioDevice.cs" />
+    <Compile Include="ILog.cs" />
     <Compile Include="IModule.cs" />
     <Compile Include="PropertyChanged.Fody.cs" />
     <Compile Include="Upload.cs" />
