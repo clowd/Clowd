@@ -67,7 +67,6 @@
   <ItemGroup>
     <Compile Include="InstallerArgs.cs" />
     <Compile Include="ClowdInstallManager.cs" />
-    <Compile Include="Constants.cs" />
     <Compile Include="Features\AutoStart.cs" />
     <Compile Include="Features\ContextMenu.cs" />
     <Compile Include="Features\ControlPanel.cs" />
@@ -153,6 +152,12 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="FodyWeavers.xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
+      <Project>{a6ccafe6-26d8-4b2c-9b2d-1895788da246}</Project>
+      <Name>Clowd.Shared</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

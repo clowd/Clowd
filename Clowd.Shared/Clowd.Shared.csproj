@@ -37,6 +37,8 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -46,11 +48,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ClowdHttpClient.cs" />
+    <Compile Include="Constants.cs" />
     <Compile Include="EmbeddedResource.cs" />
+    <Compile Include="GithubApi.cs" />
     <Compile Include="IAudioDevice.cs" />
     <Compile Include="ILog.cs" />
     <Compile Include="IModule.cs" />
     <Compile Include="PropertyChanged.Fody.cs" />
+    <Compile Include="SharedExtensions.cs" />
     <Compile Include="Upload.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="IVideoCapturer.cs" />

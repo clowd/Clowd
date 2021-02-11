@@ -26,8 +26,9 @@ namespace Clowd.Video
         private static ObsCapturer _instance;
         private readonly static object _lock = new object();
         private readonly IScopedLog _log;
+        private readonly string _libraryPath;
 
-        public ObsCapturer(IScopedLog log)
+        internal ObsCapturer(IScopedLog log, string libraryPath)
         {
             lock (_lock)
             {
@@ -39,37 +40,19 @@ namespace Clowd.Video
             _source = new CancellationTokenSource();
             _token = _source.Token;
             _log = log;
+            _libraryPath = libraryPath;
             _setup = Task.Run(Initialize);
         }
 
-        private async Task Initialize()
+        public async override Task Initialize()
         {
             using (var scoped = _log.CreateProfiledScope("InitOBS"))
             {
-                var path = GetInstallPath();
-                var version = GetCurrentVersion();
-                var releases = await GithubApi.GetReleasesAsync();
-
-                if (version == null)
-                {
-                    var query = releases
-                        .OrderByDescending(r => r.TagName)
-                        .SelectMany(r => r.Assets, (r, a) => new { Version = r.TagName, r.Prerelease, Asset = a })
-                        .Where(u => u.Asset.Name.StartsWith("obs-express") && u.Asset.Name.EndsWith(".zip"))
-                        .ToArray();
-
-                    var release = query.FirstOrDefault(r => r.Prerelease == false);
-                    if (release == null) release = query.FirstOrDefault();
-                    if (release == null) throw new Exception("No local or remote obs-express release could be found.");
-
-                    await Install(release.Asset.BrowserDownloadUrl);
-                }
-
                 var obs64 = new ProcessStartInfo()
                 {
-                    FileName = Path.Combine(path, "lib", "obs64.exe"),
+                    FileName = Path.Combine(_libraryPath, "lib", "obs64.exe"),
                     UseShellExecute = false,
-                    WorkingDirectory = Path.Combine(path, "lib"),
+                    WorkingDirectory = Path.Combine(_libraryPath, "lib"),
                     WindowStyle = ProcessWindowStyle.Hidden,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -78,37 +61,49 @@ namespace Clowd.Video
 
                 var obsexpress = new ProcessStartInfo()
                 {
-                    FileName = Path.Combine(path, "obs-express.exe"),
+                    FileName = Path.Combine(_libraryPath, "obs-express.exe"),
                     UseShellExecute = false,
-                    WorkingDirectory = Path.Combine(path, "lib"),
+                    WorkingDirectory = Path.Combine(_libraryPath, "lib"),
                     WindowStyle = ProcessWindowStyle.Hidden,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     CreateNoWindow = true,
                 };
 
-                // watch for new log file to be created and capture it
-                //var logPathTask = WatchForNewFile(GetObsLogPath(), "txt");
+                scoped.Info("Starting obs child processes");
+
                 _watch = WatchProcess.StartAndWatch(obs64, obsexpress);
                 _watch.OutputReceived += (s, e) =>
                 {
                     using (var obsWatch = _log.CreateScope("OBSWatch"))
                         obsWatch.Info($"{e.Process.ProcessName}: " + e.Data);
                 };
-                //await Task.WhenAll(logPathTask);
-                //logPath = await logPathTask;
 
+                scoped.Info("Running background tasks");
+
+                string logDir = Path.Combine(_libraryPath, "obs-data", "node-obs", "logs");
                 TaskCompletionSource<bool> tsc = new TaskCompletionSource<bool>();
-
                 _status = Task.Run(async () =>
                 {
                     using (var client = new ClowdHttpClient())
                     {
+                        int errorCount = 0;
                         while (true)
                         {
                             if (_token.IsCancellationRequested) return;
                             await Task.Delay(1000);
                             if (_token.IsCancellationRequested) return;
+
+                            // watch for new log file to be created and capture it
+                            if ((logPath == null || !File.Exists(logPath)) && Directory.Exists(logDir))
+                            {
+                                logPath = Directory.EnumerateFiles(logDir).OrderByDescending(l => l).FirstOrDefault();
+                                if (File.Exists(logPath))
+                                {
+                                    _log.Info("OBS log file captured: " + logPath);
+                                }
+                            }
+
                             try
                             {
                                 var status = await client.GetJsonAsync<ObsStatusResponse>(ObsUri("/status"));
@@ -118,99 +113,26 @@ namespace Clowd.Video
 
                                 if (status.recording)
                                     OnStatusRecieved((int)status.statistics.frameRate, (int)status.statistics.numberDroppedFrames, TimeSpan.Zero);
+
+                                errorCount = 0;
                             }
                             catch (Exception ex)
                             {
-                                scoped.Error("STATUS CHECK FAILED", ex);
+                                errorCount++;
+                                if (errorCount % 10 == 0)
+                                    _log.Error("STATUS CHECK FAILING - Count: " + errorCount, ex);
                             }
                         }
                     }
                 });
 
-                await tsc.Task;
+                scoped.Info("Waiting for initialized http response");
+
+                await tsc.Task.WithTimeout(10000);
 
                 BusyStatus = null;
                 scoped.Info("Done/Ready");
             }
-        }
-
-        private async Task Install(string remoteAssetPath)
-        {
-            using (var scoped = _log.CreateProfiledScope("OBSInstall"))
-            {
-                bool hasBackup = false;
-                var dlfile = PathConstants.GetDatedFilePath("obs-express", "zip", PathConstants.Plugins);
-                var loc = PathConstants.GetFolderPath("OBS", PathConstants.Plugins);
-                var locbak = loc + ".bak";
-                var locnew = loc + ".new";
-
-                if (Process.GetProcessesByName("obs-express").Any())
-                    throw new Exception("Can't update obs-express while currently running. Please cancel any existing recording jobs");
-
-                try
-                {
-                    scoped.Info("Downloading obs");
-                    await GithubApi.DownloadBrowserAsset(remoteAssetPath, dlfile);
-
-                    // delete/create locnew and unzip obs into it
-                    if (Directory.Exists(locnew)) Directory.Delete(locnew, true);
-                    Directory.CreateDirectory(locnew);
-                    using (var zip = Ionic.Zip.ZipFile.Read(dlfile))
-                        zip.ExtractAll(locnew, Ionic.Zip.ExtractExistingFileAction.OverwriteSilently);
-
-                    // clear any old backup and copy existing OBS into it (if exists)
-                    if (Directory.Exists(locbak)) Directory.Delete(locbak, true);
-                    if (Directory.Exists(loc))
-                    {
-                        scoped.Info("OBS has existing backup");
-                        Directory.Move(loc, locbak);
-                        hasBackup = true;
-                    }
-
-                    Directory.Move(locnew, loc);
-
-                    // TODO LAUNCH AND CHECK OBS STATUS
-
-                    if (hasBackup) Directory.Delete(locbak, true);
-                }
-                catch (Exception ex)
-                {
-                    scoped.Error(ex);
-                    if (hasBackup)
-                    {
-                        //if (Directory.Exists(loc)) Directory.Delete(loc, true);
-                        // TODO BACKUP RESTORE
-                    }
-                    throw;
-                }
-                finally
-                {
-                    if (Directory.Exists(locnew)) Directory.Delete(locnew, true);
-                    if (File.Exists(dlfile)) File.Delete(dlfile);
-                }
-            }
-        }
-
-        private static void Uninstall()
-        {
-            var loc = PathConstants.GetFolderPath("OBS", PathConstants.Plugins);
-            var locbak = loc + ".bak";
-            var locnew = loc + ".new";
-            if (Directory.Exists(loc)) Directory.Delete(loc, true);
-            if (Directory.Exists(locbak)) Directory.Delete(locbak, true);
-            if (Directory.Exists(locnew)) Directory.Delete(locnew, true);
-        }
-
-        private string GetInstallPath() => PathConstants.GetFolderPath("OBS", PathConstants.Plugins);
-        private string GetObsExePath() => Path.Combine(GetInstallPath(), "obs-express.exe");
-        private string GetObsLogPath() => Path.Combine(GetInstallPath(), "obs-data", "node-obs", "logs");
-
-        private string GetCurrentVersion()
-        {
-            if (File.Exists(GetObsExePath()))
-                return "dev";
-
-            return null;
         }
 
         public override async Task<string> StartAsync(Rectangle captureRect, VideoCapturerSettings settings)

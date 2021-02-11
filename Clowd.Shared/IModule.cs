@@ -2,47 +2,97 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Clowd
 {
-    public class Version
+    public class Package
     {
-        public string Ver { get; set; }
-        public bool IsPrerelease { get; set; }
+        public string Version { get; }
+
+        public Package(string version)
+        {
+            Version = version;
+        }
+    }
+    public class LocalPackage : Package
+    {
+        public string Path { get; }
+
+        public LocalPackage(string ver, string path) : base(ver)
+        {
+            Path = path;
+        }
     }
 
-    public interface IModule
+    public class RemotePackage : Package
+    {
+        public bool IsPrerelease { get; }
+
+        public string DownloadUrl { get; }
+
+        public RemotePackage(string ver, bool pre, string downloadUrl) : base(ver)
+        {
+            IsPrerelease = pre;
+            DownloadUrl = downloadUrl;
+        }
+    }
+
+    public interface IModule : IDisposable
     {
     }
 
-    public interface IModuleInfo : INotifyPropertyChanged
+    public interface IModuleInfo<out T> : INotifyPropertyChanged where T : IModule
     {
         string Name { get; }
         string Description { get; }
         Stream Icon { get; }
-        string InstalledVersion { get; }
-        string UpdateAvailable { get; }
-        bool Prerelease { get; }
-    }
-
-    public interface IModuleInfo<T> : IModuleInfo where T : IModule
-    {
-        Task CheckForUpdates(bool includePrereleases);
-        Task Install(string version);
-        Task Uninstall();
         T GetNewInstance();
+        LocalPackage InstalledVersion { get; }
+        RemotePackage UpdateAvailable { get; }
+        Task CheckForUpdates(bool includePrereleases);
+        Task Install(RemotePackage pkg);
+        Task Uninstall();
     }
 
-    public abstract class GithubReleaseModule<T> : IModuleInfo<T> where T : IModule
+    public abstract class ModuleIntegratedBase<T> : IModuleInfo<T> where T : IModule
     {
-        private string installedVersion;
-        private string updateAvailable;
-        private bool prerelease;
+        public abstract string Name { get; }
+        public abstract string Description { get; }
+        public abstract Stream Icon { get; }
+        public LocalPackage InstalledVersion => new LocalPackage("integrated", "");
+        public RemotePackage UpdateAvailable => null;
 
-        public string InstalledVersion
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public abstract T GetNewInstance();
+
+        public virtual Task CheckForUpdates(bool includePrereleases) => Task.CompletedTask;
+        public virtual Task Install(RemotePackage pkg) => throw new NotSupportedException();
+        public virtual Task Uninstall() => throw new NotSupportedException();
+
+        protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public abstract class ModuleBase<T> : IModuleInfo<T> where T : IModule
+    {
+        public abstract string Name { get; }
+        public abstract string Description { get; }
+        public virtual Stream Icon => EmbeddedResource.GetStream("Clowd", "default-provider-icon.png");
+
+        private LocalPackage installedVersion;
+        private RemotePackage updateAvailable;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public LocalPackage InstalledVersion
         {
             get => installedVersion;
             protected set
@@ -57,7 +107,7 @@ namespace Clowd
             }
         }
 
-        public string UpdateAvailable
+        public RemotePackage UpdateAvailable
         {
             get => updateAvailable;
             protected set
@@ -72,55 +122,121 @@ namespace Clowd
             }
         }
 
-        public bool Prerelease
-        {
-            get => prerelease;
-            protected set
-            {
-                if (value == prerelease)
-                {
-                    return;
-                }
-
-                prerelease = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public abstract string Name { get; }
-        public abstract string Description { get; }
-        public abstract Stream Icon { get; }
-        public string RepoName { get; }
-
-        public GithubReleaseModule(string repoName)
-        {
-            RepoName = repoName;
-        }
-
-        public event PropertyChangedEventHandler PropertyChanged;
+        public abstract Task CheckForUpdates(bool includePrereleases);
         public abstract T GetNewInstance();
-
-        public virtual async Task CheckForUpdates(bool includePrereleases)
-        {
-            var releases = await GithubApi.GetReleasesAsync(RepoName);
-
-
-            throw new NotImplementedException();
-        }
-
-        public virtual Task Install(string version)
-        {
-            throw new NotImplementedException();
-        }
-
-        public virtual Task Uninstall()
-        {
-            throw new NotImplementedException();
-        }
+        public abstract Task Install(RemotePackage pkg);
+        public abstract Task Uninstall();
 
         protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public abstract class GithubReleaseModule<T> : ModuleBase<T> where T : IModule
+    {
+        private static SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
+
+        public string RepoName { get; }
+        public string AssetName { get; }
+        public IScopedLog Log { get; }
+
+        public GithubReleaseModule(string repoName, string assetName, IScopedLog log)
+        {
+            RepoName = repoName;
+            AssetName = assetName;
+            Log = log;
+            CheckInstalledVersion();
+        }
+
+        public override async Task CheckForUpdates(bool includePrereleases)
+        {
+            await _lock.WaitAsync();
+            try
+            {
+                CheckInstalledVersion();
+                var releases = await GithubApi.GetReleasesAsync(RepoName);
+
+                var query = releases
+                    .OrderByDescending(r => r.TagName)
+                    .SelectMany(r => r.Assets, (r, a) => new { Version = r.TagName, r.Prerelease, Asset = a })
+                    .Where(u => u.Asset.Name.StartsWith(AssetName) && u.Asset.Name.EndsWith(".zip"))
+                    .Select(r => new RemotePackage(r.Version, r.Prerelease, r.Asset.BrowserDownloadUrl))
+                    .ToArray();
+
+                RemotePackage release = null;
+                if (!includePrereleases) release = query.FirstOrDefault(r => r.IsPrerelease == false);
+                if (includePrereleases || release == null) release = query.FirstOrDefault();
+                UpdateAvailable = InstalledVersion.Version != release.Version ? release : null;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        public virtual void CheckInstalledVersion()
+        {
+            InstalledVersion = GetInstalledVersions().OrderByDescending(d => d.Version).FirstOrDefault();
+        }
+
+        public IEnumerable<LocalPackage> GetInstalledVersions()
+        {
+            var pluginsDir = PathConstants.Plugins;
+            foreach (var dir in Directory.EnumerateDirectories(pluginsDir))
+            {
+                var cut = dir.Substring(pluginsDir.Length).Trim(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (cut.StartsWith(AssetName))
+                {
+                    var cut2 = cut.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).First().Split('-');
+                    if (cut2.First() == AssetName)
+                        yield return new LocalPackage(cut2.Last(), dir);
+                }
+            }
+        }
+
+        public virtual async Task DeleteOldVersions()
+        {
+            foreach (var s in GetInstalledVersions().OrderByDescending(d => d.Version).Skip(1))
+            {
+                await Task.Factory.StartNew(path => Directory.Delete((string)path, true), s.Path);
+            }
+        }
+
+        public override async Task Install(RemotePackage pkg)
+        {
+            await _lock.WaitAsync();
+            try
+            {
+                var pluginsDir = PathConstants.Plugins;
+                var dlpath = PathConstants.GetDatedFilePath(AssetName, "zip", pluginsDir);
+                await GithubApi.DownloadBrowserAsset(pkg.DownloadUrl, dlpath);
+                var extractPath = Path.Combine(pluginsDir, $"{AssetName}-{pkg.Version}");
+                await Task.Run(() => ZipFile.ExtractToDirectory(dlpath, extractPath));
+                InstalledVersion = new LocalPackage(pkg.Version, extractPath);
+                await DeleteOldVersions();
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
+
+        public override async Task Uninstall()
+        {
+            await _lock.WaitAsync();
+            try
+            {
+                foreach (var s in GetInstalledVersions().OrderByDescending(d => d.Version))
+                {
+                    await Task.Factory.StartNew(path => Directory.Delete((string)path, true), s.Path);
+                }
+                CheckInstalledVersion();
+            }
+            finally
+            {
+                _lock.Release();
+            }
         }
     }
 }
