@@ -48,7 +48,12 @@ namespace Clowd.UI
             if (!Directory.Exists(_settings.OutputDirectory)) _settings.OutputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
             _settings.PropertyChanged += settings_PropertyChanged;
 
-            _capturer = new ObsCapturer(App.DefaultLog);
+            ObsModule cap3 = null;
+
+            IModuleInfo<IVideoCapturer> cap = cap3;
+
+
+            //_capturer = new ObsCapturer(App.DefaultLog);
             _capturer.StatusReceived += capturer_StatusReceived;
             _capturer.CriticalError += capturer_CriticalError;
 

@@ -8,82 +8,25 @@ using System.Threading.Tasks;
 
 namespace Clowd.Video
 {
-    public abstract class GithubReleaseModule<T> : IModuleInfo<T>
+    public class ObsModule : GithubReleaseModule<ObsCapturer>
     {
-        private string installedVersion;
-        private string updateAvailable;
-        private bool prerelease;
-
-        public string InstalledVersion
+        public ObsModule(IScopedLog log) : base("clowd/obs-express", "obs-express", log)
         {
-            get => installedVersion;
-            protected set
-            {
-                if (value == installedVersion)
-                {
-                    return;
-                }
-
-                installedVersion = value;
-                OnPropertyChanged();
-            }
         }
 
-        public string UpdateAvailable
+        public override string Name => "obs-express";
+
+        public override string Description => "Capture your screen using libobs. This is the fastest and most reliable method.";
+
+        public override ObsCapturer GetNewInstance()
         {
-            get => updateAvailable;
-            protected set
-            {
-                if (value == updateAvailable)
-                {
-                    return;
-                }
+            if (InstalledVersion == null)
+                throw new InvalidOperationException("Can not get instance if module is not installed.");
 
-                updateAvailable = value;
-                OnPropertyChanged();
-            }
-        }
+            if (!Directory.Exists(InstalledVersion.Path))
+                throw new InvalidOperationException("Module installation has been corrupted, recommend re-installing.");
 
-        public bool Prerelease
-        {
-            get => prerelease;
-            protected set
-            {
-                if (value == prerelease)
-                {
-                    return;
-                }
-
-                prerelease = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public abstract string Name { get; }
-        public abstract string Description { get; }
-        public abstract Stream Icon { get; }
-
-        public event PropertyChangedEventHandler PropertyChanged;
-        public abstract T GetNewInstance();
-
-        public virtual Task CheckForUpdates(bool includePrereleases)
-        {
-            throw new NotImplementedException();
-        }
-
-        public virtual Task Install(string version)
-        {
-            throw new NotImplementedException();
-        }
-
-        public virtual Task Uninstall()
-        {
-            throw new NotImplementedException();
-        }
-
-        protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            return new ObsCapturer(Log, InstalledVersion.Path);
         }
     }
 }
