@@ -15,7 +15,7 @@ using ScreenVersusWpf;
 namespace Clowd.UI
 {
     [PropertyChanged.ImplementPropertyChanged]
-    public partial class VideoOverlayWindow : OverlayWindow
+    public partial class VideoOverlayWindow : OverlayWindow, IVideoCapturePage
     {
         public bool IsRecording { get; set; }
         public bool IsStarted { get; set; }
@@ -35,23 +35,27 @@ namespace Clowd.UI
         private VideoCapturerSettings _settings;
         private string _fileName;
 
-        public VideoOverlayWindow(WpfRect captureArea, VideoCapturerSettings settings)
+        public VideoOverlayWindow(VideoCapturerSettings settings, IVideoCapturer capturer)
         {
-            SelectionRectangle = captureArea;
             InitializeComponent();
-
-            _captureRegion = captureArea.ToScreenRect().ToSystem();
-
+            _capturer = capturer;
             _settings = settings;
+        }
+
+        public void Dispose()
+        {
+            this.Close();
+        }
+
+        public void Open(System.Drawing.Rectangle captureArea)
+        {
+            SelectionRectangle = ScreenRect.FromSystem(captureArea).ToWpfRect();
+            _captureRegion = captureArea;
+
             if (_settings.CaptureMicrophoneDevice == null) _settings.CaptureMicrophoneDevice = AudioDeviceManager.GetDefaultMicrophone();
             if (_settings.CaptureSpeakerDevice == null) _settings.CaptureSpeakerDevice = AudioDeviceManager.GetDefaultSpeaker();
             if (!Directory.Exists(_settings.OutputDirectory)) _settings.OutputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
             _settings.PropertyChanged += settings_PropertyChanged;
-
-            ObsModule cap3 = null;
-
-            IModuleInfo<IVideoCapturer> cap = cap3;
-
 
             //_capturer = new ObsCapturer(App.DefaultLog);
             _capturer.StatusReceived += capturer_StatusReceived;
@@ -68,7 +72,7 @@ namespace Clowd.UI
                 mic = speaker = null;
                 audioTimer.Enabled = false;
                 audioTimer.Dispose();
-                _capturer.Dispose();
+                //_capturer.Dispose();
             };
 
             this.Loaded += (s, e) =>
@@ -88,6 +92,7 @@ namespace Clowd.UI
             recordingLabelButton.PreviewMouseDown += RecordingLabelButton_MouseDown;
             recordingLabelButton.PreviewMouseMove += RecordingLabelButton_MouseMove;
             recordingLabelButton.PreviewMouseUp += RecordingLabelButton_MouseUp;
+            Show();
         }
 
         private async void capturer_CriticalError(object sender, VideoCriticalErrorEventArgs e)

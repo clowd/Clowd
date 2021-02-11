@@ -54,6 +54,7 @@
     <Compile Include="IAudioDevice.cs" />
     <Compile Include="ILog.cs" />
     <Compile Include="IModule.cs" />
+    <Compile Include="IPage.cs" />
     <Compile Include="PropertyChanged.Fody.cs" />
     <Compile Include="SharedExtensions.cs" />
     <Compile Include="Upload.cs" />
