@@ -65,8 +65,8 @@
     <Compile Include="FFmpeg\FFMpegLogEventArgs.cs" />
     <Compile Include="FFmpeg\FFmpegSettings.cs" />
     <Compile Include="FFmpeg\LiveScreenRecording.cs" />
-    <Compile Include="GithubApi.cs" />
     <Compile Include="ObsCapturer.cs" />
+    <Compile Include="ObsModule.cs" />
     <Compile Include="Test.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
