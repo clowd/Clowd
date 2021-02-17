@@ -1,3 +1,4 @@
+using ScreenVersusWpf;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -227,7 +228,7 @@ namespace Clowd
         string BusyStatus { get; }
         bool IsRecording { get; }
         Task Initialize();
-        Task<string> StartAsync(Rectangle captureRect, VideoCapturerSettings settings);
+        Task<string> StartAsync(ScreenRect captureRect, VideoCapturerSettings settings);
         Task StopAsync();
         void WriteLogToFile(string fileName);
     }
@@ -283,7 +284,7 @@ namespace Clowd
 
         public abstract void Dispose();
 
-        public abstract Task<string> StartAsync(Rectangle captureRect, VideoCapturerSettings settings);
+        public abstract Task<string> StartAsync(ScreenRect captureRect, VideoCapturerSettings settings);
 
         public abstract Task StopAsync();
 

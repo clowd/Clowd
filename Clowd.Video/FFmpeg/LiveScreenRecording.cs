@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ScreenVersusWpf;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -14,7 +15,7 @@ namespace Clowd.Video.FFmpeg
         public string ConsoleLog => log.ToString();
         public string OutputDirectory => settings.OutputDirectory;
 
-        private readonly Rectangle bounds;
+        private readonly ScreenRect bounds;
         private readonly VideoCapturerSettings settings;
         private readonly FFMpegConverter ffmpeg;
         private Task runner;
@@ -22,7 +23,7 @@ namespace Clowd.Video.FFmpeg
 
         public event EventHandler<FFMpegLogEventArgs> LogReceived;
 
-        public LiveScreenRecording(Rectangle bounds, VideoCapturerSettings settings)
+        public LiveScreenRecording(ScreenRect bounds, VideoCapturerSettings settings)
         {
             this.bounds = bounds;
             this.settings = settings;

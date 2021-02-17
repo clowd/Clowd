@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -474,41 +474,41 @@ namespace Clowd.UI
             if (image == null)
                 return;
 
-            CaptureWindow2.ShowNewCapture(_initialBounds, (img) =>
-            {
-                var xReferenceCenter = (image.Right + image.Left) / 2;
-                var yRefereceCenter = (image.Bottom + image.Top) / 2;
-                var width = ScreenTools.ScreenToWpf(img.PixelWidth);
-                var height = ScreenTools.ScreenToWpf(img.PixelHeight);
-                double x, y;
+            //CaptureWindow2.ShowNewCapture(_initialBounds, (img) =>
+            //{
+            //    var xReferenceCenter = (image.Right + image.Left) / 2;
+            //    var yRefereceCenter = (image.Bottom + image.Top) / 2;
+            //    var width = ScreenTools.ScreenToWpf(img.PixelWidth);
+            //    var height = ScreenTools.ScreenToWpf(img.PixelHeight);
+            //    double x, y;
 
-                switch (e.Button)
-                {
-                    case DPadButton.Left:
-                        x = image.Left - width;
-                        y = yRefereceCenter - (height / 2);
-                        break;
-                    case DPadButton.Top:
-                        x = xReferenceCenter - (width / 2);
-                        y = image.Top - height;
-                        break;
-                    case DPadButton.Right:
-                        x = image.Right;
-                        y = yRefereceCenter - (height / 2);
-                        break;
-                    case DPadButton.Bottom:
-                        x = xReferenceCenter - (width / 2);
-                        y = image.Bottom;
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
+            //    switch (e.Button)
+            //    {
+            //        case DPadButton.Left:
+            //            x = image.Left - width;
+            //            y = yRefereceCenter - (height / 2);
+            //            break;
+            //        case DPadButton.Top:
+            //            x = xReferenceCenter - (width / 2);
+            //            y = image.Top - height;
+            //            break;
+            //        case DPadButton.Right:
+            //            x = image.Right;
+            //            y = yRefereceCenter - (height / 2);
+            //            break;
+            //        case DPadButton.Bottom:
+            //            x = xReferenceCenter - (width / 2);
+            //            y = image.Bottom;
+            //            break;
+            //        default:
+            //            throw new ArgumentOutOfRangeException();
+            //    }
 
-                var graphic = new GraphicImage(drawingCanvas, new Rect(x, y, width, height), img, 0);
-                drawingCanvas.AddGraphic(graphic);
-                drawingCanvas.ZoomPanFit();
-                wnd.WindowState = state;
-            });
+            //    var graphic = new GraphicImage(drawingCanvas, new Rect(x, y, width, height), img, 0);
+            //    drawingCanvas.AddGraphic(graphic);
+            //    drawingCanvas.ZoomPanFit();
+            //    wnd.WindowState = state;
+            //});
         }
 
         private void toggleTopMost_Click(object sender, RoutedEventArgs e)
