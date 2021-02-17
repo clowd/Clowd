@@ -80,6 +80,17 @@ namespace Clowd.UI
             StartCaptureInstance(null);
         }
 
+        public void Open(ScreenRect area)
+        {
+            StartCaptureInstance(area.ToWpfRect());
+        }
+
+        public void Open(IntPtr hWnd)
+        {
+            var area = ScreenRect.FromSystem(Interop.USER32EX.GetTrueWindowBounds(hWnd));
+            Open(area);
+        }
+
         public void Dispose()
         {
             Close();
@@ -96,7 +107,7 @@ namespace Clowd.UI
 
             if (selection.HasValue)
             {
-                IsPromptCapture = true;
+                //IsPromptCapture = true;
                 SelectionRectangle = selection.Value;
                 fastCapturer.StopCapture();
             }

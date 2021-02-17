@@ -190,11 +190,11 @@
     <Compile Include="Config\AutoDictionary.cs" />
     <Compile Include="UI\Helpers\ButtonClickContextBehavior.cs" />
     <Compile Include="Config\ClassifyOptions.cs" />
+    <Compile Include="Util\BatchCliArgsProcessor.cs" />
     <Compile Include="Util\ClipboardDataObject.cs" />
     <Compile Include="Util\Debouncer.cs" />
     <Compile Include="Util\Exposed.cs" />
     <Compile Include="Util\Expr.cs" />
-    <Compile Include="Util\ICommandLineProxy.cs" />
     <Compile Include="Config\GlobalTrigger.cs" />
     <Compile Include="Util\LogImpl.cs" />
     <Compile Include="Util\PageManager.cs" />

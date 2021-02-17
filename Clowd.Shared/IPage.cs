@@ -22,8 +22,8 @@ namespace Clowd
     public interface IScreenCapturePage : IPage
     {
         void Open();
-
-        //void Open(Rectangle captureArea);
+        void Open(ScreenRect captureArea);
+        void Open(IntPtr captureWindow);
     }
 
     public interface IPageManager
