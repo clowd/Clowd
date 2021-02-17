@@ -182,6 +182,10 @@ namespace Clowd
             FinishInit();
 
             //var obs = Container.GetInstance<IModuleInfo<IVideoCapturer>>();
+            //await obs.CheckForUpdates(true);
+            //await obs.Install(obs.UpdateAvailable);
+
+            //var obs = Container.GetInstance<IModuleInfo<IVideoCapturer>>();
             //await obs.CheckForUpdates(false);
             //Console.WriteLine();
             //await obs.Install(obs.UpdateAvailable);
@@ -204,10 +208,16 @@ namespace Clowd
         {
             var container = new ServiceContainer();
             container.Register<IScopedLog>((f) => new DefaultScopedLog(Constants.ClowdAppName), new PerContainerLifetime());
+            container.Register<IServiceFactory>(f => container);
 
             // settings
             container.Register<GeneralSettings>((f) => Settings);
             container.Register<VideoCapturerSettings>((f) => f.GetInstance<GeneralSettings>().VideoSettings);
+
+            // pages
+            container.Register<IPageManager, PageManager>();
+            container.Register<IScreenCapturePage, CaptureWindow2>(new PerScopeLifetime());
+            container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
 
             // video
             container.Register<IModuleInfo<IVideoCapturer>, Video.ObsModule>(nameof(Video.ObsModule), new PerContainerLifetime());
@@ -218,7 +228,6 @@ namespace Clowd
                     return null;
                 return module.GetNewInstance();
             }, new PerScopeLifetime());
-            container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
 
             Container = container;
         }
@@ -622,7 +631,9 @@ namespace Clowd
             if (!_initialized)
                 return;
 
-            CaptureWindow2.ShowNewCapture();
+            var pages = Container.GetInstance<IPageManager>();
+            var capture = pages.CreateScreenCapturePage();
+            capture.Open();
         }
         public void QuickCaptureFullScreen()
         {

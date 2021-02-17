@@ -31,7 +31,6 @@ namespace Clowd.UI
         private Point? _moveMouseDown;
         private Point? _moveInitial;
         private IVideoCapturer _capturer;
-        private System.Drawing.Rectangle _captureRegion;
         private VideoCapturerSettings _settings;
         private string _fileName;
 
@@ -47,10 +46,9 @@ namespace Clowd.UI
             this.Close();
         }
 
-        public void Open(System.Drawing.Rectangle captureArea)
+        public void Open(ScreenRect captureArea)
         {
-            SelectionRectangle = ScreenRect.FromSystem(captureArea).ToWpfRect();
-            _captureRegion = captureArea;
+            SelectionRectangle = captureArea.ToWpfRect();
 
             if (_settings.CaptureMicrophoneDevice == null) _settings.CaptureMicrophoneDevice = AudioDeviceManager.GetDefaultMicrophone();
             if (_settings.CaptureSpeakerDevice == null) _settings.CaptureSpeakerDevice = AudioDeviceManager.GetDefaultSpeaker();
@@ -214,7 +212,7 @@ namespace Clowd.UI
 
             try
             {
-                _fileName = await _capturer.StartAsync(_captureRegion, _settings);
+                _fileName = await _capturer.StartAsync(SelectionRectangle.ToScreenRect(), _settings);
             }
             catch (Exception ex)
             {

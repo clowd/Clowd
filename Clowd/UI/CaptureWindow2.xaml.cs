@@ -22,7 +22,7 @@ using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
-    public partial class CaptureWindow2 : OverlayWindow
+    public partial class CaptureWindow2 : OverlayWindow, IScreenCapturePage
     {
         public bool IsPromptCapture
         {
@@ -41,35 +41,48 @@ namespace Clowd.UI
         protected virtual void OnIsPromptCaptureChanged(object sender, DependencyPropertyChangedEventArgs e)
             => this.IsPromptCaptureChanged?.Invoke(sender, e);
 
-        public static CaptureWindow2 Current { get; private set; }
+        //public static CaptureWindow2 Current { get; private set; }
 
         private readonly IScopedLog _timer;
-        private readonly Action<BitmapSource> _callback;
+        private readonly IPageManager _manager;
 
-        private CaptureWindow2(IScopedLog timer, Action<BitmapSource> callback)
+        //private readonly Action<BitmapSource> _callback;
+
+        public CaptureWindow2(IScopedLog timer, IPageManager manager)
         {
             InitializeComponent();
             this._timer = timer;
-            this._callback = callback;
+            this._manager = manager;
+            //this._callback = callback;
             this.ContentRendered += CaptureWindow2_ContentRendered;
             this.SelectionRectangleChanged += (s, e) => UpdateButtonPanelPosition(toolActionBarStackPanel);
             this.IsCapturingChanged += (s, e) => UpdateButtonPanelPosition(toolActionBarStackPanel);
         }
 
-        public static void ShowNewCapture(WpfRect? selection = null, Action<BitmapSource> callback = null)
-        {
-            if (Current != null)
-            {
-                if (Current.SourceCreated)
-                    Current.Activate();
-                return;
-            }
+        //public static void ShowNewCapture(WpfRect? selection = null, Action<BitmapSource> callback = null)
+        //{
+        //    if (Current != null)
+        //    {
+        //        if (Current.SourceCreated)
+        //            Current.Activate();
+        //        return;
+        //    }
 
-            var timer = App.DefaultLog.CreateProfiledScope("Capture");
-            timer.Info("Start");
-            Current = new CaptureWindow2(timer, callback);
-            Current.Closed += (s, e) => Current = null;
-            Current.StartCaptureInstance(selection);
+        //    var timer = App.DefaultLog.CreateProfiledScope("Capture");
+        //    timer.Info("Start");
+        //    Current = new CaptureWindow2(timer, callback);
+        //    Current.Closed += (s, e) => Current = null;
+        //    Current.StartCaptureInstance(selection);
+        //}
+
+        public void Open()
+        {
+            StartCaptureInstance(null);
+        }
+
+        public void Dispose()
+        {
+            Close();
         }
 
         private void StartCaptureInstance(WpfRect? selection)
@@ -143,14 +156,14 @@ namespace Clowd.UI
             Close();
             var cropped = CropBitmap();
 
-            if (_callback != null)
-            {
-                _callback(cropped);
-            }
-            else
-            {
-                ImageEditorPage.ShowNewEditor(cropped, SelectionRectangle);
-            }
+            //if (_callback != null)
+            //{
+            //    _callback(cropped);
+            //}
+            //else
+            //{
+            ImageEditorPage.ShowNewEditor(cropped, SelectionRectangle);
+            //}
         }
 
         private async void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -207,7 +220,8 @@ namespace Clowd.UI
             else
             {
                 fastCapturer.SetSelectedWindowForeground();
-                //new VideoOverlayWindow(SelectionRectangle, App.Current.Settings.VideoSettings).Show();
+                var video = _manager.CreateVideoCapturePage();
+                video.Open(rawRect);
             }
         }
 

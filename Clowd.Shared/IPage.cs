@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ScreenVersusWpf;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -15,11 +16,19 @@ namespace Clowd
 
     public interface IVideoCapturePage : IPage
     {
-        void Open(Rectangle captureArea);
+        void Open(ScreenRect captureArea);
     }
 
     public interface IScreenCapturePage : IPage
     {
-        void Open(Rectangle captureArea);
+        void Open();
+
+        //void Open(Rectangle captureArea);
+    }
+
+    public interface IPageManager
+    {
+        IVideoCapturePage CreateVideoCapturePage();
+        IScreenCapturePage CreateScreenCapturePage();
     }
 }

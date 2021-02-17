@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ScreenVersusWpf;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -135,7 +136,7 @@ namespace Clowd.Video
             }
         }
 
-        public override async Task<string> StartAsync(Rectangle captureRect, VideoCapturerSettings settings)
+        public override async Task<string> StartAsync(ScreenRect captureRect, VideoCapturerSettings settings)
         {
             if (!Directory.Exists(settings.OutputDirectory))
                 throw new ArgumentNullException($"{nameof(VideoCapturerSettings)}.{nameof(VideoCapturerSettings.OutputDirectory)} must be non null and point to an existing directory.");
@@ -150,7 +151,7 @@ namespace Clowd.Video
                     var req = new ObsStartRequest
                     {
                         fps = settings.Fps,
-                        captureRegion = captureRect,
+                        captureRegion = captureRect.ToSystem(),
                         cq = (int)settings.Quality,
                         hardwareAccelerated = settings.HardwareAccelerated,
                         performanceMode = settings.Performance.ToString(),
@@ -276,6 +277,7 @@ namespace Clowd.Video
         {
             public int x;
             public int y;
+            //public static implicit operator ObsRect(ScreenRect rect) => new ObsRect { x = rect.Left, y = rect.Top, width = rect.Width, height = rect.Height };
             public static implicit operator ObsRect(Rectangle rect) => new ObsRect { x = rect.X, y = rect.Y, width = rect.Width, height = rect.Height };
         }
 
