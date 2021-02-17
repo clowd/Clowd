@@ -1,4 +1,5 @@
 ﻿using Clowd.Video.FFmpeg;
+using ScreenVersusWpf;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -14,7 +15,7 @@ namespace Clowd.Video
         private LiveScreenRecording _recorder;
         private Task _process;
 
-        public override Task<string> StartAsync(Rectangle captureRect, VideoCapturerSettings settings)
+        public override Task<string> StartAsync(ScreenRect captureRect, VideoCapturerSettings settings)
         {
             BusyStatus = "Starting...";
             _recorder = new LiveScreenRecording(captureRect, settings);

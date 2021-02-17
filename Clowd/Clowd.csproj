@@ -197,6 +197,7 @@
     <Compile Include="Util\ICommandLineProxy.cs" />
     <Compile Include="Config\GlobalTrigger.cs" />
     <Compile Include="Util\LogImpl.cs" />
+    <Compile Include="Util\PageManager.cs" />
     <Compile Include="Util\PathEx.cs" />
     <Compile Include="Util\ProgressStream.cs" />
     <Compile Include="Util\ProxyMetaObject.cs" />
