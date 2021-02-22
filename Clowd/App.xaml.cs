@@ -232,7 +232,42 @@ namespace Clowd
             // pages
             container.Register<IPageManager, PageManager>();
             container.Register<IScreenCapturePage, CaptureWindow2>(new PerScopeLifetime());
+            container.Register<ILiveDrawPage, AntFu7.LiveDraw.LiveDrawWindow>(new PerScopeLifetime());
             container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
+            container.Register<ISettingsPage>((f) => TemplatedWindow.SingletonWindowFactory<SettingsPage>(), new PerScopeLifetime());
+
+
+
+
+
+
+
+            //Window wnd;
+            //if ((wnd = TemplatedWindow.GetWindow(typeof(SettingsPage))) != null)
+            //{
+            //    wnd.MakeForeground();
+            //}
+            //else if ((wnd = TemplatedWindow.GetWindow(typeof(HomePage))) != null)
+            //{
+            //    TemplatedWindow.SetContent(wnd, new SettingsPage());
+            //    wnd.MakeForeground();
+            //}
+            //else
+            //{
+            //    wnd = TemplatedWindow.CreateWindow("Clowd", new SettingsPage());
+            //    wnd.Show();
+            //    wnd.MakeForeground();
+            //}
+
+            //if (category != null)
+            //    TemplatedWindow.GetContent<SettingsPage>(wnd).SetCurrentTab(category.Value);
+
+
+
+
+
+
+
 
             // video
             container.Register<IModuleInfo<IVideoCapturer>, Video.ObsModule>(nameof(Video.ObsModule), new PerContainerLifetime());
@@ -401,7 +436,10 @@ namespace Clowd
             context.Items.Add(colorp);
 
             var screend = new MenuItem() { Header = "_Draw on Screen" };
-            screend.Click += (s, e) => AntFu7.LiveDraw.LiveDrawWindow.ShowNewOrExisting();
+            screend.Click += (s, e) =>
+            {
+                Container.GetInstance<IPageManager>().CreateLiveDrawPage().Open();
+            };
             context.Items.Add(screend);
 
             var editor = new MenuItem() { Header = "Image _Editor" };
@@ -420,7 +458,7 @@ namespace Clowd
             var settings = new MenuItem() { Header = "_Settings" };
             settings.Click += (s, e) =>
             {
-                ShowSettings();
+                Container.GetInstance<IPageManager>().CreateSettingsPage().Open();
             };
             context.Items.Add(settings);
 
@@ -517,29 +555,6 @@ namespace Clowd
                 var collection = data.GetFileDropList();
                 OnFilesReceived(collection);
             }
-        }
-
-        public void ShowSettings(SettingsCategory? category = null)
-        {
-            Window wnd;
-            if ((wnd = TemplatedWindow.GetWindow(typeof(SettingsPage))) != null)
-            {
-                wnd.MakeForeground();
-            }
-            else if ((wnd = TemplatedWindow.GetWindow(typeof(HomePage))) != null)
-            {
-                TemplatedWindow.SetContent(wnd, new SettingsPage());
-                wnd.MakeForeground();
-            }
-            else
-            {
-                wnd = TemplatedWindow.CreateWindow("Clowd", new SettingsPage());
-                wnd.Show();
-                wnd.MakeForeground();
-            }
-
-            if (category != null)
-                TemplatedWindow.GetContent<SettingsPage>(wnd).SetCurrentTab(category.Value);
         }
 
         private void OnWndProcMessageReceived(uint obj)

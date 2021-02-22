@@ -31,13 +31,15 @@ namespace Clowd.UI
         private Point? _moveMouseDown;
         private Point? _moveInitial;
         private IVideoCapturer _capturer;
+        private readonly IPageManager _pages;
         private VideoCapturerSettings _settings;
         private string _fileName;
 
-        public VideoOverlayWindow(VideoCapturerSettings settings, IVideoCapturer capturer)
+        public VideoOverlayWindow(VideoCapturerSettings settings, IVideoCapturer capturer, IPageManager pages)
         {
             InitializeComponent();
             _capturer = capturer;
+            _pages = pages;
             _settings = settings;
         }
 
@@ -314,12 +316,12 @@ namespace Clowd.UI
 
         private void settings_Click(object sender, RoutedEventArgs e)
         {
-            App.Current.ShowSettings(SettingsCategory.Video);
+            _pages.CreateSettingsPage().Open(SettingsCategory.Video);
         }
 
         private void draw_Click(object sender, RoutedEventArgs e)
         {
-            AntFu7.LiveDraw.LiveDrawWindow.ShowNewOrExisting();
+            _pages.CreateLiveDrawPage().Open();
         }
     }
 }

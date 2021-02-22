@@ -62,7 +62,7 @@ namespace Clowd.UI.Helpers
         {
             if (await ShowPromptAsync(parent, NiceDialogIcon.Warning, content, category.ToString() + " configuration required", "Open Settings", "Close"))
             {
-                App.Current.ShowSettings(category);
+                //pages.CreateSettingsPage().Open(category);
             }
         }
 

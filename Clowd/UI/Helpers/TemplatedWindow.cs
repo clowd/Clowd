@@ -146,6 +146,32 @@ namespace Clowd.UI.Helpers
 
     public sealed class TemplatedWindow
     {
+        public static T SingletonWindowFactory<T>() where T : UserControl, IPage, new()
+        {
+            Window wnd;
+            if ((wnd = GetWindow(typeof(T))) != null)
+            {
+                //wnd.MakeForeground();
+            }
+            //else if ((wnd = TemplatedWindow.GetWindow(typeof(HomePage))) != null)
+            //{
+            //    TemplatedWindow.SetContent(wnd, new SettingsPage());
+            //    wnd.MakeForeground();
+            //}
+            else
+            {
+                wnd = CreateWindow("Clowd", new T());
+
+                //wnd.Show();
+                //wnd.MakeForeground();
+            }
+
+            return TemplatedWindow.GetContent<T>(wnd);
+
+            //if (category != null)
+            //    TemplatedWindow.GetContent<SettingsPage>(wnd).SetCurrentTab(category.Value);
+        }
+
         public static Window CreateWindow(string title, FrameworkElement content)
         {
             var template = TemplatedControl.CreateTemplatedWindow();
