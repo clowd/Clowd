@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Clowd;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -21,7 +22,7 @@ using Point = System.Windows.Point;
 
 namespace AntFu7.LiveDraw
 {
-    public partial class LiveDrawWindow : Window
+    public partial class LiveDrawWindow : Window, ILiveDrawPage
     {
         //    private static readonly Duration Duration1 = (Duration)Application.Current.Resources["Duration1"];
         //    private static readonly Duration Duration2 = (Duration)Application.Current.Resources["Duration2"];
@@ -97,7 +98,7 @@ namespace AntFu7.LiveDraw
             _drawerTextBox.TextWrapping = TextWrapping.Wrap;
             _drawerTextBox.LostFocus += _drawerTextBox_LostFocus;
 
-            this.Closed += LiveDrawWindow_Closed;
+            //this.Closed += LiveDrawWindow_Closed;
 
             //}
             //else
@@ -106,24 +107,34 @@ namespace AntFu7.LiveDraw
             //}
         }
 
-        private static LiveDrawWindow _instance;
+        //private static LiveDrawWindow _instance;
 
-        private void LiveDrawWindow_Closed(object sender, EventArgs e)
+        //private void LiveDrawWindow_Closed(object sender, EventArgs e)
+        //{
+        //    _instance = null;
+        //}
+
+        //public static void ShowNewOrExisting()
+        //{
+        //    if (_instance != null)
+        //    {
+        //        _instance.Activate();
+        //    }
+        //    else
+        //    {
+        //        _instance = new LiveDrawWindow();
+        //        _instance.Show();
+        //    }
+        //}
+
+        public void Dispose()
         {
-            _instance = null;
+            this.Close();
         }
 
-        public static void ShowNewOrExisting()
+        public void Open()
         {
-            if (_instance != null)
-            {
-                _instance.Activate();
-            }
-            else
-            {
-                _instance = new LiveDrawWindow();
-                _instance.Show();
-            }
+            this.Show();
         }
 
         private void MainInkCanvas_MouseRightButtonUp(object sender, MouseButtonEventArgs e)

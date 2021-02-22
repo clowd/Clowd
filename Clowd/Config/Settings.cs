@@ -19,16 +19,16 @@ using PData = PropertyTools.DataAnnotations;
 
 namespace Clowd.Config
 {
-    public enum SettingsCategory
-    {
-        General,
-        Hotkeys,
-        Capture,
-        Editor,
-        Uploads,
-        Windows,
-        Video,
-    }
+    //public enum SettingsCategory
+    //{
+    //    General,
+    //    Hotkeys,
+    //    Capture,
+    //    Editor,
+    //    Uploads,
+    //    Windows,
+    //    Video,
+    //}
     public enum AccentScheme
     {
         [Description("User defined")]

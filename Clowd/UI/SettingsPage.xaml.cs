@@ -19,15 +19,19 @@ using PropertyTools.Wpf;
 namespace Clowd.UI
 {
     [ImplementPropertyChanged]
-    public partial class SettingsPage : UserControl
+    public partial class SettingsPage : UserControl, ISettingsPage
     {
         public GeneralSettings SelectedItem { get; set; }
+
+        private Window Window => TemplatedWindow.GetWindow(this);
 
         public SettingsPage()
         {
             InitializeComponent();
             this.SelectedItem = App.Current.Settings;
         }
+
+        public event EventHandler Closed;
 
         private void Home_Clicked(object sender, RoutedEventArgs e)
         {
@@ -41,9 +45,31 @@ namespace Clowd.UI
             SelectedItem.SaveQuiet();
         }
 
-        public void SetCurrentTab(SettingsCategory category)
+        public void Close()
         {
-            this.PropertyGrid1.SelectedTabId = category.ToString();
+            Window?.Close();
+        }
+
+        public void Dispose()
+        {
+            Window?.Close();
+        }
+
+        public void Open()
+        {
+            Window.Show();
+            Window.MakeForeground();
+        }
+
+        public void Open(SettingsCategory category)
+        {
+            Open(category.ToString());
+        }
+
+        public void Open(string category)
+        {
+            this.PropertyGrid1.SelectedTabId = category;
+            Open();
         }
     }
 
