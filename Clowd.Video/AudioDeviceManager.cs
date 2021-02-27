@@ -53,7 +53,14 @@ namespace Clowd.Video
             get
             {
                 var mm = GetMM();
-                return mm.isDefault ? "default" : mm.device.ID;
+                try
+                {
+                    return mm.isDefault ? "default" : mm.device.ID;
+                }
+                finally
+                {
+                    mm.device.Dispose();
+                }
             }
         }
 
@@ -62,7 +69,14 @@ namespace Clowd.Video
             get
             {
                 var mm = GetMM();
-                return mm.isDefault ? "Default - " + mm.device.FriendlyName : mm.device.FriendlyName;
+                try
+                {
+                    return mm.isDefault ? "Default - " + mm.device.FriendlyName : mm.device.FriendlyName;
+                }
+                finally
+                {
+                    mm.device.Dispose();
+                }
             }
         }
 
@@ -144,6 +158,7 @@ namespace Clowd.Video
             {
                 _audioClient.Stop();
                 _audioClient.Dispose();
+                _device.Dispose();
                 _disposed = true;
             }
             GC.SuppressFinalize(this);
