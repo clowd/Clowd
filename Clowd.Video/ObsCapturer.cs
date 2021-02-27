@@ -1,4 +1,5 @@
-﻿using ScreenVersusWpf;
+﻿using Newtonsoft.Json;
+using ScreenVersusWpf;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -18,11 +19,11 @@ namespace Clowd.Video
         Task _status;
         WatchProcess _watch;
 
-        string logPath;
-        string obsUrl = "http://127.0.0.1:21889";
+        private readonly string obsUrl = "http://127.0.0.1:21889";
 
         private CancellationTokenSource _source;
         private CancellationToken _token;
+        private StringBuilder _output = new StringBuilder();
 
         private static ObsCapturer _instance;
         private readonly static object _lock = new object();
@@ -49,35 +50,68 @@ namespace Clowd.Video
         {
             using (var scoped = _log.CreateProfiledScope("InitOBS"))
             {
-                var obs64 = new ProcessStartInfo()
+                List<ProcessStartInfo> psis = new List<ProcessStartInfo>();
+                try
                 {
-                    FileName = Path.Combine(_libraryPath, "lib", "obs64.exe"),
-                    UseShellExecute = false,
-                    WorkingDirectory = Path.Combine(_libraryPath, "lib"),
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                };
+                    var pjsonPath = Path.Combine(_libraryPath, "package.json");
+                    var pjson = JsonConvert.DeserializeObject<PJsonVersion>(File.ReadAllText(pjsonPath));
 
-                var obsexpress = new ProcessStartInfo()
+                    if (String.IsNullOrWhiteSpace(pjson.osnVersion))
+                        throw new Exception("osnVersion null or empty");
+
+                    string pipeName = $"clowd-{Guid.NewGuid().ToString()}";
+
+                    var obs64 = new ProcessStartInfo()
+                    {
+                        FileName = Path.Combine(_libraryPath, "lib", "obs64.exe"),
+                        Arguments = $"{pipeName} {pjson.osnVersion}",
+                        UseShellExecute = false,
+                        WorkingDirectory = Path.Combine(_libraryPath, "lib"),
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true,
+                    };
+
+                    var obsexpress = new ProcessStartInfo()
+                    {
+                        FileName = Path.Combine(_libraryPath, "obs-express.exe"),
+                        Arguments = $"-c {pipeName}",
+                        UseShellExecute = false,
+                        WorkingDirectory = Path.Combine(_libraryPath, "lib"),
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true,
+                    };
+
+                    psis.Add(obs64);
+                    psis.Add(obsexpress);
+                }
+                catch (Exception ex)
                 {
-                    FileName = Path.Combine(_libraryPath, "obs-express.exe"),
-                    UseShellExecute = false,
-                    WorkingDirectory = Path.Combine(_libraryPath, "lib"),
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                };
+                    scoped.Error("Unable to parse osn version from package.json. Falling back to legacy OBS hosting", ex);
+                    var obsexpress = new ProcessStartInfo()
+                    {
+                        FileName = Path.Combine(_libraryPath, "obs-express.exe"),
+                        UseShellExecute = false,
+                        WorkingDirectory = Path.Combine(_libraryPath, "lib"),
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true,
+                    };
+                    psis.Add(obsexpress);
+                }
 
                 scoped.Info("Starting obs child processes");
 
-                _watch = WatchProcess.StartAndWatch(obs64, obsexpress);
+                _watch = WatchProcess.StartAndWatch(psis.ToArray());
                 _watch.OutputReceived += (s, e) =>
                 {
-                    using (var obsWatch = _log.CreateScope("OBSWatch"))
-                        obsWatch.Info($"{e.Process.ProcessName}: " + e.Data);
+                    string msg = $"{e.ProcessName}: " + e.Data;
+                    _log.Debug(msg);
+                    _output.AppendLine($"[{DateTime.Now.ToShortTimeString()}]" + msg);
                 };
 
                 scoped.Info("Running background tasks");
@@ -94,16 +128,6 @@ namespace Clowd.Video
                             if (_token.IsCancellationRequested) return;
                             await Task.Delay(1000);
                             if (_token.IsCancellationRequested) return;
-
-                            // watch for new log file to be created and capture it
-                            if ((logPath == null || !File.Exists(logPath)) && Directory.Exists(logDir))
-                            {
-                                logPath = Directory.EnumerateFiles(logDir).OrderByDescending(l => l).FirstOrDefault();
-                                if (File.Exists(logPath))
-                                {
-                                    _log.Info("OBS log file captured: " + logPath);
-                                }
-                            }
 
                             try
                             {
@@ -157,11 +181,8 @@ namespace Clowd.Video
                         performanceMode = settings.Performance.ToString(),
                         subsamplingMode = settings.SubsamplingMode.ToString(),
                         outputDirectory = dir,
-                        maxOutputSize = new ObsSize
-                        {
-                            height = settings.MaxResolutionHeight,
-                            width = settings.MaxResolutionWidth,
-                        },
+                        maxOutputHeight = settings.MaxResolutionWidth,
+                        maxOutputWidth = settings.MaxResolutionWidth,
                     };
 
                     if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice != null)
@@ -235,6 +256,7 @@ namespace Clowd.Video
         {
             lock (_lock)
             {
+                _log.Info("Disposing ObsCapturer Instance");
                 _source.Cancel();
                 _watch.ForceExit();
                 _instance = null;
@@ -243,8 +265,13 @@ namespace Clowd.Video
 
         public override void WriteLogToFile(string fileName)
         {
-            if (File.Exists(logPath))
-                File.Copy(logPath, fileName);
+            File.WriteAllText(fileName, _output.ToString());
+        }
+
+        private class PJsonVersion
+        {
+            public string version;
+            public string osnVersion;
         }
 
         private class ObsResponse
@@ -256,7 +283,8 @@ namespace Clowd.Video
         private class ObsStartRequest
         {
             public ObsRect captureRegion;
-            public ObsSize maxOutputSize;
+            public int maxOutputWidth;
+            public int maxOutputHeight;
             public string[] speakers;
             public string[] microphones;
             public int fps;
