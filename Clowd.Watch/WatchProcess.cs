@@ -11,14 +11,16 @@ namespace Clowd
 {
     public class WatchLogEventArgs
     {
-        internal WatchLogEventArgs(Process process, string data, bool error)
+        internal WatchLogEventArgs(Process process, string name, string data, bool error)
         {
             Process = process;
+            ProcessName = name;
             Data = data;
             IsError = error;
         }
 
         public Process Process { get; }
+        public string ProcessName { get; }
         public string Data { get; }
         public bool IsError { get; }
     }
@@ -27,6 +29,7 @@ namespace Clowd
     {
         private readonly Process _watcher;
         private readonly Process[] _other;
+        private Dictionary<int, string> _namecache = new Dictionary<int, string>();
 
         public EventHandler<WatchLogEventArgs> OutputReceived;
 
@@ -58,19 +61,24 @@ namespace Clowd
 
             void startlog(Process p)
             {
+                _namecache[p.Id] = p.ProcessName;
+
                 p.OutputDataReceived += (s, e) =>
                 {
-                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, e.Data, false));
+                    var useName = _namecache.TryGetValue(p.Id, out var pname) ? pname : ("pid." + p.Id.ToString());
+                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, useName, e.Data, false));
                 };
 
                 p.ErrorDataReceived += (s, e) =>
                 {
-                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, e.Data, true));
+                    var useName = _namecache.TryGetValue(p.Id, out var pname) ? pname : ("pid." + p.Id.ToString());
+                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, useName, e.Data, true));
                 };
 
                 p.Exited += (s, e) =>
                 {
-                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, $"Process exited - code: {p.ExitCode}", true));
+                    var useName = _namecache.TryGetValue(p.Id, out var pname) ? pname : ("pid." + p.Id.ToString());
+                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, useName, $"Process exited - code: {p.ExitCode}", true));
                 };
 
                 p.BeginOutputReadLine();
