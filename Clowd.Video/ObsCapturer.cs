@@ -137,7 +137,7 @@ namespace Clowd.Video
                                     tsc.SetResult(true);
 
                                 if (status.recording)
-                                    OnStatusRecieved((int)status.statistics.frameRate, (int)status.statistics.numberDroppedFrames, TimeSpan.Zero);
+                                    OnStatusRecieved((int)status.statistics.frameRate, (int)status.statistics.numberDroppedFrames, TimeSpan.FromMilliseconds(status.recordingTime));
 
                                 errorCount = 0;
                             }
@@ -328,6 +328,7 @@ namespace Clowd.Video
         {
             public bool initialized;
             public bool recording;
+            public uint recordingTime;
             public Statistics statistics;
         }
     }
