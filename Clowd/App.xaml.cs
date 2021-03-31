@@ -33,6 +33,8 @@ namespace Clowd
 {
     public partial class App : Application
     {
+        public static T GetService<T>() => Container.GetInstance<T>();
+
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
         public static bool CanUpload => !IsDesignMode;
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
@@ -57,7 +59,13 @@ namespace Clowd
             SetupExceptionHandling();
 
             _processor = new BatchCliArgsProcessor(Constants.ClowdMutex);
-            _processor.ArgsReceived += (s, pev) => OnFilesReceived(pev.Args);
+            _processor.ArgsReceived += (s, pev) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    OnFilesReceived(pev.Args);
+                });
+            };
 
             try
             {
@@ -222,20 +230,23 @@ namespace Clowd
         private void SetupDependencyInjection()
         {
             var container = new ServiceContainer();
-            container.Register<IScopedLog>((f) => new DefaultScopedLog(Constants.ClowdAppName), new PerContainerLifetime());
-            container.Register<IServiceFactory>(f => container);
+            container.Register<IScopedLog>(_ => new DefaultScopedLog(Constants.ClowdAppName), new PerContainerLifetime());
+            container.Register<IServiceFactory>(_ => container);
 
             // settings
-            container.Register<GeneralSettings>((f) => Settings);
-            container.Register<VideoCapturerSettings>((f) => f.GetInstance<GeneralSettings>().VideoSettings);
+            container.Register<GeneralSettings>(_ => Settings);
+            container.Register<VideoCapturerSettings>(f => f.GetInstance<GeneralSettings>().VideoSettings);
 
-            // pages
+            // ui
             container.Register<IPageManager, PageManager>();
             container.Register<IScreenCapturePage, CaptureWindow2>(new PerScopeLifetime());
             container.Register<ILiveDrawPage, AntFu7.LiveDraw.LiveDrawWindow>(new PerScopeLifetime());
             container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
-            container.Register<ISettingsPage>((f) => TemplatedWindow.SingletonWindowFactory<SettingsPage>(), new PerScopeLifetime());
+            container.Register<ISettingsPage>(_ => TemplatedWindow.SingletonWindowFactory<SettingsPage>(), new PerScopeLifetime());
 
+            // we create this TasksView here in main thread so there won't be issues with MTA threads requesting this object in the future
+            var tasksView = new TasksView();
+            container.Register<ITasksView>(_ => tasksView);
 
 
 
@@ -425,7 +436,7 @@ namespace Clowd
                 context.Items.Add(uploadFile);
 
                 var uploads = new MenuItem() { Header = "Show _Uploads" };
-                uploads.Click += (s, e) => UploadManager.ShowWindow();
+                uploads.Click += (s, e) => GetService<ITasksView>().Show();
                 context.Items.Add(uploads);
             }
 
