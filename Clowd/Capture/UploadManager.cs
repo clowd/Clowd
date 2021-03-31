@@ -17,12 +17,8 @@ namespace Clowd.Capture
     public static class UploadManager
     {
         private delegate Task<UploadResult> DoUploadDelegate(IUploadProvider provider, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
-        private static readonly TaskWindow _window = new TaskWindow();
 
-        public static void ShowWindow()
-        {
-            _window.Show();
-        }
+        private static readonly ITasksView _view = App.GetService<ITasksView>();
 
         public static Task<UploadViewState> UploadImage(Stream fileStream, string extension, string name = null, string viewName = null)
         {
@@ -114,9 +110,9 @@ namespace Clowd.Capture
                 if (fullPaths.Count == 0)
                     return null;
 
-                var tcs = new CancellationTokenSource();
-                var view = new UploadTaskViewItem("Archive Upload", "Compressing...", tcs);
-                _window.AddTask(view);
+                var view = _view.CreateTask("Archive Upload");
+                view.SetStatus("Compressing...");
+                view.Show();
 
                 using (var folder = PathEx.GetTempFolder())
                 {
@@ -124,7 +120,7 @@ namespace Clowd.Capture
 
                     zip.SaveProgress += (s, e) =>
                     {
-                        if (tcs.IsCancellationRequested)
+                        if (view.CancelToken.IsCancellationRequested)
                         {
                             e.Cancel = true;
                         }
@@ -133,38 +129,28 @@ namespace Clowd.Capture
                             Console.WriteLine($"zip - saved {e.EntriesSaved}/{e.EntriesTotal}, bytes {e.BytesTransferred}/{e.TotalBytesToTransfer},");
                             if (e.EventType == ZipProgressEventType.Saving_BeforeWriteEntry)
                             {
-                                _window.Dispatcher.Invoke(() =>
-                                {
-                                    var progress = (e.EntriesSaved / (double)e.EntriesTotal) * 30;
-                                    Console.WriteLine($"zip progress {progress}%");
-                                    view.Progress = progress;
-                                });
+                                var progress = e.EntriesSaved / (double)e.EntriesTotal;
+                                view.SetProgress(progress);
+                                Console.WriteLine($"zip progress {progress}%");
                             }
                         }
                     };
 
-                    await Task.Run(() => zip.Save(zipPath), tcs.Token);
+                    await Task.Run(() => zip.Save(zipPath), view.CancelToken);
 
-                    if (tcs.IsCancellationRequested)
+                    if (view.CancelToken.IsCancellationRequested)
                         return null;
 
                     var info = new FileInfo(zipPath);
                     var size = info.Length;
-                    view.ProgressTargetText = size.ToPrettySizeString(0);
-                    view.SecondaryText = "Uploading...";
 
-                    UploadProgressHandler handler = (bytesUploaded) =>
-                    {
-                        var progress = (bytesUploaded / (double)size) * 70 + 30;
-                        _window.Dispatcher.Invoke(() =>
-                        {
-                            view.ProgressCurrentText = ((long)Math.Min(bytesUploaded, size)).ToPrettySizeString(0);
-                            view.Progress = progress > 98 ? 98 : progress;
-                        });
-                    };
+                    view.SetStatus("Uploading...");
+                    view.SetProgress(0, size);
+
+                    UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, size);
 
                     var archiveName = RandomEx.GetString(8) + ".zip";
-                    var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, tcs.Token);
+                    var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, view.CancelToken);
                     return UploadWrapper(view, uploadTask);
                 }
             }
@@ -185,48 +171,38 @@ namespace Clowd.Capture
             if (provider == null)
                 return null;
 
-            var tcs = new CancellationTokenSource();
-            var view = new UploadTaskViewItem(viewName, "Uploading...", tcs);
-            view.ProgressTargetText = size.ToPrettySizeString(0);
-            _window.AddTask(view);
+            var view = _view.CreateTask(viewName);
+            view.SetStatus("Uploading...");
+            view.SetProgress(0, size);
+            view.Show();
 
             UploadProgressHandler handler = (bytesUploaded) =>
             {
-                var progress = (bytesUploaded / (double)size) * 100;
-                _window.Dispatcher.Invoke(() =>
-                {
-                    view.ProgressCurrentText = ((long)Math.Min(bytesUploaded, size)).ToPrettySizeString(0);
-                    view.Progress = progress > 98 ? 98 : progress;
-                });
+                view.SetProgress(bytesUploaded, size);
             };
 
-            var uploadTask = doUpload(provider, handler, fileName, tcs.Token);
+            var uploadTask = doUpload(provider, handler, fileName, view.CancelToken);
             return UploadWrapper(view, uploadTask);
         }
 
-        private static UploadViewState UploadWrapper(UploadTaskViewItem view, Task<UploadResult> uploadTask)
+        private static UploadViewState UploadWrapper(ITasksViewItem view, Task<UploadResult> uploadTask)
         {
             var finalTask = uploadTask.ContinueWith<UploadResult>(task =>
             {
                 if (task.IsCanceled)
                 {
+                    view.Hide();
                     return null;
                 }
                 else if (task.IsFaulted)
                 {
-                    view.Status = TaskViewItem.TaskStatus.Error;
-                    view.Progress = 99;
-                    view.SecondaryText = task.Exception.Message;
+                    view.SetError(task.Exception);
                     return null;
                 }
                 else
                 {
                     var result = task.Result;
-                    view.UploadURL = result.PublicUrl;
-                    view.SecondaryText = "Complete";
-                    view.Progress = 100;
-                    view.ProgressCurrentText = view.ProgressTargetText;
-                    _window.Notify();
+                    view.SetCompleted(result.PublicUrl);
                     return result;
                 }
             });
@@ -325,13 +301,13 @@ namespace Clowd.Capture
 
     public class UploadViewState
     {
-        public UploadViewState(UploadTaskViewItem taskView, Task<UploadResult> uploadResult)
+        public UploadViewState(ITasksViewItem taskView, Task<UploadResult> uploadResult)
         {
             TaskView = taskView;
             UploadResult = uploadResult;
         }
 
-        public UploadTaskViewItem TaskView { get; }
+        public ITasksViewItem TaskView { get; }
         public Task<UploadResult> UploadResult { get; }
     }
 }

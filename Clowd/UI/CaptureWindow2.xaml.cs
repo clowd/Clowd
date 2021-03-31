@@ -277,7 +277,7 @@ namespace Clowd.UI
                 return;
 
             Process.Start("https://images.google.com/searchbyimage?image_url=" + upload.PublicUrl.UrlEscape());
-            task.TaskView.SetExecuted();
+            task.TaskView.Hide();
         }
 
         private void ProfilerExecuted(object sender, ExecutedRoutedEventArgs e)
