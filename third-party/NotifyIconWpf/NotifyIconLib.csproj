@@ -42,7 +42,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="ScreenVersusWpf, Version=1.0.9.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ScreenVersusWpf.1.0.9.0\lib\net451\ScreenVersusWpf.dll</HintPath>
+      <HintPath>..\..\packages\ScreenVersusWpf.1.0.9.0\lib\net451\ScreenVersusWpf.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -87,7 +87,7 @@
     <AppDesigner Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj">
+    <ProjectReference Include="..\..\src\Clowd.Interop\Clowd.Interop.csproj">
       <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
       <Name>Clowd.Interop</Name>
     </ProjectReference>

@@ -50,55 +50,55 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="DirectShowLib, Version=2.1.0.1599, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\DirectShowLib.1.0.0\lib\DirectShowLib.dll</HintPath>
+      <HintPath>..\..\packages\DirectShowLib.1.0.0\lib\DirectShowLib.dll</HintPath>
     </Reference>
     <Reference Include="DotNetZip, Version=1.14.0.0, Culture=neutral, PublicKeyToken=6583c7c814667745, processorArchitecture=MSIL">
-      <HintPath>..\packages\DotNetZip.1.14.0\lib\net40\DotNetZip.dll</HintPath>
+      <HintPath>..\..\packages\DotNetZip.1.14.0\lib\net40\DotNetZip.dll</HintPath>
     </Reference>
     <Reference Include="LightInject, Version=6.4.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\LightInject.6.4.0\lib\net46\LightInject.dll</HintPath>
+      <HintPath>..\..\packages\LightInject.6.4.0\lib\net46\LightInject.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Expression.Interactions, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Expression.Blend.Sdk.WPF.1.0.1\lib\net45\Microsoft.Expression.Interactions.dll</HintPath>
+      <HintPath>..\..\packages\Expression.Blend.Sdk.WPF.1.0.1\lib\net45\Microsoft.Expression.Interactions.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="MahApps.Metro, Version=1.1.2.0, Culture=neutral, PublicKeyToken=f4fb5a3c4d1e5b4f, processorArchitecture=MSIL">
-      <HintPath>..\packages\MahApps.Metro.1.1.2.0\lib\net45\MahApps.Metro.dll</HintPath>
+      <HintPath>..\..\packages\MahApps.Metro.1.1.2.0\lib\net45\MahApps.Metro.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\..\packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="RT.Json, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Json.2.0.1668\lib\netstandard2.0\RT.Json.dll</HintPath>
+      <HintPath>..\..\packages\RT.Json.2.0.1668\lib\netstandard2.0\RT.Json.dll</HintPath>
     </Reference>
     <Reference Include="RT.PostBuild, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.PostBuild.2.0.1668\lib\netstandard2.0\RT.PostBuild.dll</HintPath>
+      <HintPath>..\..\packages\RT.PostBuild.2.0.1668\lib\netstandard2.0\RT.PostBuild.dll</HintPath>
     </Reference>
     <Reference Include="RT.Serialization, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Serialization.2.0.1668\lib\netstandard2.0\RT.Serialization.dll</HintPath>
+      <HintPath>..\..\packages\RT.Serialization.2.0.1668\lib\netstandard2.0\RT.Serialization.dll</HintPath>
     </Reference>
     <Reference Include="RT.Serialization.Binary, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Serialization.Binary.2.0.1668\lib\netstandard2.0\RT.Serialization.Binary.dll</HintPath>
+      <HintPath>..\..\packages\RT.Serialization.Binary.2.0.1668\lib\netstandard2.0\RT.Serialization.Binary.dll</HintPath>
     </Reference>
     <Reference Include="RT.Serialization.Json, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Serialization.Json.2.0.1668\lib\netstandard2.0\RT.Serialization.Json.dll</HintPath>
+      <HintPath>..\..\packages\RT.Serialization.Json.2.0.1668\lib\netstandard2.0\RT.Serialization.Json.dll</HintPath>
     </Reference>
     <Reference Include="RT.Serialization.Xml, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Serialization.Xml.2.0.1668\lib\netstandard2.0\RT.Serialization.Xml.dll</HintPath>
+      <HintPath>..\..\packages\RT.Serialization.Xml.2.0.1668\lib\netstandard2.0\RT.Serialization.Xml.dll</HintPath>
     </Reference>
     <Reference Include="RT.Util, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Util.2.0.1668\lib\net472\RT.Util.dll</HintPath>
+      <HintPath>..\..\packages\RT.Util.2.0.1668\lib\net472\RT.Util.dll</HintPath>
     </Reference>
     <Reference Include="RT.Util.Core, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\RT.Util.Core.2.0.1668\lib\netstandard2.0\RT.Util.Core.dll</HintPath>
+      <HintPath>..\..\packages\RT.Util.Core.2.0.1668\lib\netstandard2.0\RT.Util.Core.dll</HintPath>
     </Reference>
     <Reference Include="ScreenVersusWpf, Version=1.0.9.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ScreenVersusWpf.1.0.9.0\lib\net451\ScreenVersusWpf.dll</HintPath>
+      <HintPath>..\..\packages\ScreenVersusWpf.1.0.9.0\lib\net451\ScreenVersusWpf.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="SharpRaven, Version=2.2.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\SharpRaven.2.2.0\lib\net45\SharpRaven.dll</HintPath>
+      <HintPath>..\..\packages\SharpRaven.2.2.0\lib\net45\SharpRaven.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -118,7 +118,7 @@
     <Reference Include="System.Transactions" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Windows.Interactivity, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\packages\Expression.Blend.Sdk.WPF.1.0.1\lib\net45\System.Windows.Interactivity.dll</HintPath>
+      <HintPath>..\..\packages\Expression.Blend.Sdk.WPF.1.0.1\lib\net45\System.Windows.Interactivity.dll</HintPath>
     </Reference>
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
@@ -388,7 +388,7 @@
       <Project>{1b456368-42b0-412b-b31d-dfe369f2bee3}</Project>
       <Name>Clowd.Upload</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj">
+    <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj">
       <Project>{fb2a5786-cd2e-42ce-bc5d-0fce90034221}</Project>
       <Name>Cyotek.Windows.Forms.ColorPicker</Name>
     </ProjectReference>
@@ -400,15 +400,15 @@
       <Project>{110f39d7-349d-4e27-88c1-02af6513015e}</Project>
       <Name>LiveDraw</Name>
     </ProjectReference>
-    <ProjectReference Include="..\NotifyIconLib\NotifyIconLib.csproj">
+    <ProjectReference Include="..\..\third-party\NotifyIconWpf\NotifyIconLib.csproj">
       <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>
       <Name>NotifyIconLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj">
+    <ProjectReference Include="..\..\third-party\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj">
       <Project>{d01b1d20-8f5b-4834-8e5c-c7ec6dd587d4}</Project>
       <Name>Ookii.Dialogs.Wpf</Name>
     </ProjectReference>
-    <ProjectReference Include="..\PropertyTools.Wpf\PropertyTools.Wpf.csproj">
+    <ProjectReference Include="..\..\third-party\PropertyTools.Wpf\PropertyTools.Wpf.csproj">
       <Project>{7168f82f-288a-42c4-9eb1-fbbe5112f211}</Project>
       <Name>PropertyTools.Wpf</Name>
     </ProjectReference>
@@ -470,20 +470,20 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <Analyzer Include="..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\Gu.Roslyn.Extensions.dll" />
-    <Analyzer Include="..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\PropertyChangedAnalyzers.dll" />
+    <Analyzer Include="..\..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\Gu.Roslyn.Extensions.dll" />
+    <Analyzer Include="..\..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\PropertyChangedAnalyzers.dll" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>
     </PostBuildEvent>
   </PropertyGroup>
-  <Import Project="..\packages\Fody.1.29.4\build\dotnet\Fody.targets" Condition="Exists('..\packages\Fody.1.29.4\build\dotnet\Fody.targets')" />
+  <Import Project="..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets" Condition="Exists('..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
-    <Error Condition="!Exists('..\packages\Fody.1.29.4\build\dotnet\Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Fody.1.29.4\build\dotnet\Fody.targets'))" />
+    <Error Condition="!Exists('..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets'))" />
   </Target>
   <PropertyGroup>
     <PreBuildEvent>if $(ConfigurationName) == Debug (
