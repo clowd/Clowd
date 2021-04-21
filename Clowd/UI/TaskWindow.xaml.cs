@@ -408,13 +408,13 @@ namespace Clowd.UI
             }
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HeroAvailable)));
         }
-        private void OnProgressChanged()
-        {
-            if (Progress > 99.9)
-            {
-                Status = TaskStatus.Complete;
-            }
-        }
+        //private void OnProgressChanged()
+        //{
+        //    if (Progress > 99.9)
+        //    {
+        //        Status = TaskStatus.Complete;
+        //    }
+        //}
     }
     [ImplementPropertyChanged]
     public class UploadTaskViewItem : TaskViewItem
