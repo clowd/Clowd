@@ -21,6 +21,9 @@ namespace Clowd.Interop.DwmApi
         [DllImport("dwmapi.dll", SetLastError = true)]
         public static extern int DwmGetWindowAttribute(IntPtr hwnd, DWMWINDOWATTRIBUTE dwAttribute, out RECT pvAttribute, int cbAttribute);
 
+        [DllImport("dwmapi.dll", SetLastError = true)]
+        public static unsafe extern int DwmSetWindowAttribute(IntPtr hwnd, DWMWINDOWATTRIBUTE dwAttribute, int* pvAttribute, int cbAttribute);
+
         /// <summary>
         /// Obtains a value that indicates whether Desktop Window Manager (DWM) composition is enabled. Applications can listen for composition state changes by handling the WM_DWMCOMPOSITIONCHANGED notification.
         /// </summary>

@@ -22,7 +22,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>..\..\bin\x64\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -137,6 +137,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="UI\FloatingButtonWindow.cs" />
     <Compile Include="UI\CaptureWindow2.xaml.cs">
       <DependentUpon>CaptureWindow2.xaml</DependentUpon>
     </Compile>
@@ -181,6 +182,11 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>AssemblyInfo.tt</DependentUpon>
     </Compile>
+    <Compile Include="UI\ScreenshotButtonWindow.xaml.cs">
+      <DependentUpon>ScreenshotButtonWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="UI\ScreenshotWindow.cs" />
+    <Compile Include="UI\ScreenshotWindow2.cs" />
     <Compile Include="UI\SettingsPage.xaml.cs">
       <DependentUpon>SettingsPage.xaml</DependentUpon>
     </Compile>
@@ -302,6 +308,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="UI\ScreenshotButtonWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="UI\SettingsPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -368,6 +378,10 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\modules\Clowd.Win64\Clowd.Win64.vcxproj">
+      <Project>{847efafa-f061-4350-81a8-a1d211aac62b}</Project>
+      <Name>Clowd.Win64</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
       <Project>{a6ccafe6-26d8-4b2c-9b2d-1895788da246}</Project>
       <Name>Clowd.Shared</Name>
