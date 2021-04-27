@@ -26,7 +26,8 @@ namespace Clowd.UI.Helpers
             _capabilities = new List<StateCapabilities>();
 
             foreach (ToolType e in Enum.GetValues(typeof(ToolType)))
-                _capabilities.Add(new ToolStateCapabilities(e));
+                if (e < ToolType.Max)
+                    _capabilities.Add(new ToolStateCapabilities(e));
 
             _capabilities.Add(new ObjectStateCapabilities<GraphicArrow>());
             _capabilities.Add(new ObjectStateCapabilities<GraphicEllipse>());

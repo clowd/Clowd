@@ -169,5 +169,21 @@ namespace Clowd.Config
     {
         public Key Key { get; set; }
         public ModifierKeys Modifiers { get; set; }
+
+        public StorableKeyGesture()
+        {
+
+        }
+
+        public StorableKeyGesture(Key key)
+        {
+            Key = key;
+        }
+
+        public StorableKeyGesture(Key key, ModifierKeys modifiers)
+        {
+            Key = key;
+            Modifiers = modifiers;
+        }
     }
 }
