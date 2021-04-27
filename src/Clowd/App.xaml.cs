@@ -122,6 +122,9 @@ namespace Clowd
             // start receiving command line arguments
             _processor.Ready();
 
+            // init screenshot buttons
+            ScreenshotWindow2.PrepareFloatingWindow();
+
             // until proper module updater is built... we do it manually.
             var obs = Container.GetInstance<IModuleInfo<IVideoCapturer>>();
             await obs.CheckForUpdates(false);
@@ -526,16 +529,28 @@ namespace Clowd
 
         public void StartCapture(ScreenRect? region = null)
         {
-            var pages = Container.GetInstance<IPageManager>();
-            var capture = pages.CreateScreenCapturePage();
-            capture.Open();
+            var sw = new ScreenshotWindow2();
+            sw.Open();
+
+            //return;
+            //var pages = Container.GetInstance<IPageManager>();
+            //var capture = pages.CreateScreenCapturePage();
+            //capture.Open();
         }
         public void QuickCaptureFullScreen()
         {
+            return;
+            var clr = System.Drawing.Color.FromArgb(AccentColor.A, AccentColor.R, AccentColor.G, AccentColor.B);
+            var dx = new ClowdWin64.DXCaptureWindow(clr, true);
+            dx.Show();
             Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
         }
         public void QuickCaptureCurrentWindow()
         {
+            return;
+            var clr = System.Drawing.Color.FromArgb(AccentColor.A, AccentColor.R, AccentColor.G, AccentColor.B);
+            var dx = new ClowdWin64.DXCaptureWindow(clr, true);
+            dx.Show();
             Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open(USER32.GetForegroundWindow());
         }
         public async void UploadFile(Window owner = null)
