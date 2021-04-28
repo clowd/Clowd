@@ -123,7 +123,7 @@ namespace Clowd
             _processor.Ready();
 
             // init screenshot buttons
-            ScreenshotWindow2.PrepareFloatingWindow();
+            SelectRegionWindow.PrepareFloatingWindow();
 
             // until proper module updater is built... we do it manually.
             var obs = Container.GetInstance<IModuleInfo<IVideoCapturer>>();
@@ -242,7 +242,7 @@ namespace Clowd
 
             // ui
             container.Register<IPageManager, PageManager>();
-            container.Register<IScreenCapturePage, CaptureWindow2>(new PerScopeLifetime());
+            //container.Register<IScreenCapturePage, CaptureWindow2>(new PerScopeLifetime());
             container.Register<ILiveDrawPage, AntFu7.LiveDraw.LiveDrawWindow>(new PerScopeLifetime());
             container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
             container.Register<ISettingsPage>(_ => TemplatedWindow.SingletonWindowFactory<SettingsPage>(), new PerScopeLifetime());
@@ -529,7 +529,11 @@ namespace Clowd
 
         public void StartCapture(ScreenRect? region = null)
         {
-            var sw = new ScreenshotWindow2();
+            var s2 = Container.Create<Clowd.WinLegacy.CaptureWindow2>();// new Clowd.WinLegacy.CaptureWindow2(log)
+            s2.Open();
+            return;
+
+            var sw = new SelectRegionWindow();
             sw.Open();
 
             //return;

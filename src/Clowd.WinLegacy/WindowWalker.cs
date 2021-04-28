@@ -10,10 +10,9 @@ using System.Windows;
 using System.Windows.Media.Imaging;
 using Clowd.Interop;
 using Clowd.Interop.Com;
-using Clowd.Util;
 using ScreenVersusWpf;
 
-namespace Clowd.Capture
+namespace Clowd.WinLegacy
 {
     class WindowWalker : INotifyPropertyChanged
     {
