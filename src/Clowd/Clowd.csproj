@@ -138,10 +138,6 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="UI\FloatingButtonWindow.cs" />
-    <Compile Include="UI\CaptureWindow2.xaml.cs">
-      <DependentUpon>CaptureWindow2.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Capture\WindowWalker.cs" />
     <Compile Include="UI\Controls\CaptureToolButton.cs" />
     <Compile Include="UI\Controls\CornerClippingBorder.cs" />
     <Compile Include="UI\Controls\DockAndWrapPanel.cs" />
@@ -155,7 +151,6 @@
     <Compile Include="UI\Helpers\ToolStateManager.cs" />
     <Compile Include="UI\InteropWindow.cs" />
     <Compile Include="UI\OverlayWindow.cs" />
-    <Compile Include="UI\ReallyFastCaptureRenderer.cs" />
     <Compile Include="UI\Controls\ResetDefaultButton.cs" />
     <Compile Include="UI\Controls\SpinnerTextBox.xaml.cs">
       <DependentUpon>SpinnerTextBox.xaml</DependentUpon>
@@ -182,11 +177,7 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>AssemblyInfo.tt</DependentUpon>
     </Compile>
-    <Compile Include="UI\ScreenshotButtonWindow.xaml.cs">
-      <DependentUpon>ScreenshotButtonWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\ScreenshotWindow.cs" />
-    <Compile Include="UI\ScreenshotWindow2.cs" />
+    <Compile Include="UI\SelectRegionWindow.cs" />
     <Compile Include="UI\SettingsPage.xaml.cs">
       <DependentUpon>SettingsPage.xaml</DependentUpon>
     </Compile>
@@ -212,8 +203,6 @@
     <Compile Include="UI\Helpers\PropertyChangeNotifier.cs" />
     <Compile Include="Util\RandomEx.cs" />
     <Compile Include="UI\Helpers\RelayCommand.cs" />
-    <Compile Include="Capture\ScrollingCapture.cs" />
-    <Compile Include="Capture\ScrollingCapture2.cs" />
     <Compile Include="UI\Helpers\TrulyObservableCollection.cs" />
     <Compile Include="UI\Controls\FadingScrollViewer.cs" />
     <Compile Include="UI\Controls\OutlinedText.cs" />
@@ -238,13 +227,12 @@
     <Compile Include="UI\Converters\ValueConverterGroup.cs" />
     <Compile Include="UI\Helpers\TemplatedWindow.cs" />
     <Compile Include="Config\Hotkey.cs" />
-    <Compile Include="Capture\ScreenUtil.cs" />
     <Compile Include="Util\SysInfo.cs" />
     <Compile Include="UI\Helpers\VisualTreeHelperEx.cs" />
     <Compile Include="UI\HomePage.xaml.cs">
       <DependentUpon>HomePage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Capture\UploadManager.cs" />
+    <Compile Include="UploadManager.cs" />
     <Compile Include="Config\Settings.cs" />
     <Compile Include="Util\AreoColor.cs" />
     <Compile Include="Util\Extensions.cs" />
@@ -280,10 +268,6 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="UI\CaptureWindow2.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
     <Page Include="UI\Controls\SelectionBorderControl.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -305,10 +289,6 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\ImageEditorPage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\ScreenshotButtonWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -405,6 +385,10 @@
     <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj">
       <Project>{fb2a5786-cd2e-42ce-bc5d-0fce90034221}</Project>
       <Name>Cyotek.Windows.Forms.ColorPicker</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Clowd.WinLegacy\Clowd.WinLegacy.csproj">
+      <Project>{6896c296-a3b1-455a-86ee-35fec7cd35dc}</Project>
+      <Name>Clowd.WinLegacy</Name>
     </ProjectReference>
     <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj">
       <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>

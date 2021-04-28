@@ -15,7 +15,7 @@
 //using Newtonsoft.Json.Linq;
 //using ScreenVersusWpf;
 
-namespace Clowd.Capture
+namespace Clowd.WinLegacy
 {
     //namespace Clowd.Utilities
     //{

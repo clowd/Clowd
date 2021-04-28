@@ -5,10 +5,9 @@ using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
 using Clowd.Interop;
 using Clowd.Interop.Gdi32;
-using Clowd.Util;
 using ScreenVersusWpf;
 
-namespace Clowd.Capture
+namespace Clowd.WinLegacy
 {
     public sealed class ScreenUtil : IDisposable
     {
