@@ -10,25 +10,63 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
-using Clowd.Capture;
-using Clowd.Config;
 using Clowd.Interop;
-using Clowd.UI.Helpers;
-using Clowd.Util;
-using RT.Util.ExtensionMethods;
 using ScreenVersusWpf;
 
-namespace Clowd.UI
+namespace Clowd.WinLegacy
 {
+    public class CaptureColorEventArgs : EventArgs
+    {
+        public Color SelectedColor { get; }
+
+        public CaptureColorEventArgs(Color selectedColor)
+        {
+            SelectedColor = selectedColor;
+        }
+    }
+
+    public class CaptureSelectionEventArgs : EventArgs
+    {
+        public System.Drawing.Rectangle Selection { get; }
+
+        public CaptureSelectionEventArgs(System.Drawing.Rectangle selection)
+        {
+            Selection = selection;
+        }
+    }
+
+    public class CaptureBitmapEventArgs : CaptureSelectionEventArgs
+    {
+        public BitmapSource Image { get; }
+
+        public CaptureBitmapEventArgs(BitmapSource image, System.Drawing.Rectangle sel) : base(sel)
+        {
+            Image = image;
+        }
+    }
+
     public partial class CaptureWindow2 : OverlayWindow, IScreenCapturePage
     {
+        public EventHandler<CaptureBitmapEventArgs> PhotoCommand;
+        public EventHandler<CaptureBitmapEventArgs> CopyCommand;
+        public EventHandler<CaptureBitmapEventArgs> SaveAsCommand;
+        public EventHandler<CaptureBitmapEventArgs> UploadCommand;
+        public EventHandler<CaptureBitmapEventArgs> SearchCommand;
+        public EventHandler<CaptureSelectionEventArgs> VideoCommand;
+        public EventHandler<CaptureColorEventArgs> ColorCommand;
+
         public bool IsPromptCapture
         {
             get { return (bool)GetValue(IsPromptCaptureProperty); }
             set { SetValue(IsPromptCaptureProperty, value); }
         }
+
+        public bool HasCapturedArea => !IsCapturing;
+
+        public System.Drawing.Rectangle Selection => SelectionRectangle.ToScreenRect().ToSystem();
 
         public static readonly bool IsPromptCaptureDefaultValue = false;
 
@@ -103,7 +141,17 @@ namespace Clowd.UI
             _timer.Info("Source created");
 
             // this will create the bitmap and do the initial render ahead of time
-            _timer.RunProfiled("FastCap", fastCapturer.StartFastCapture);
+
+            var opt = new FastRendererOptions()
+            {
+                IsDesignMode = false,
+                AccentColor = Colors.Red,
+                CaptureCursor = true,
+                CompatibilityMode = false,
+                DetectWindows = true,
+            };
+
+            _timer.RunProfiled("FastCap", (l) => fastCapturer.StartFastCapture(l, opt));
 
             if (selection.HasValue)
             {
@@ -141,16 +189,16 @@ namespace Clowd.UI
             return fastCapturer.GetSelectedBitmap();
         }
 
-        private Stream GetCompressedImageStream()
-        {
-            var cropped = CropBitmap();
-            BitmapEncoder encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(cropped));
-            var ms = new MemoryStream();
-            encoder.Save(ms);
-            ms.Position = 0;
-            return ms;
-        }
+        //private Stream GetCompressedImageStream()
+        //{
+        //    var cropped = CropBitmap();
+        //    BitmapEncoder encoder = new PngBitmapEncoder();
+        //    encoder.Frames.Add(BitmapFrame.Create(cropped));
+        //    var ms = new MemoryStream();
+        //    encoder.Save(ms);
+        //    ms.Position = 0;
+        //    return ms;
+        //}
 
         private void Command_IsCapturing(object sender, CanExecuteRoutedEventArgs e)
         {
@@ -165,39 +213,19 @@ namespace Clowd.UI
         private void PhotoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             Close();
-            var cropped = CropBitmap();
-
-            //if (_callback != null)
-            //{
-            //    _callback(cropped);
-            //}
-            //else
-            //{
-            ImageEditorPage.ShowNewEditor(cropped, SelectionRectangle);
-            //}
+            PhotoCommand?.Invoke(this, new CaptureBitmapEventArgs(CropBitmap(), Selection));
         }
 
-        private async void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
+        private void CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
-            var cropped = CropBitmap();
-            var data = new ClipboardDataObject();
-            data.SetImage(cropped);
-            await data.SetClipboardData();
+            CopyCommand?.Invoke(this, new CaptureBitmapEventArgs(CropBitmap(), Selection));
         }
 
-        private async void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
+        private void SaveAsExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
-            var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Screenshot", App.Current.Settings.LastSavePath, "screenshot", "png");
-
-            if (!String.IsNullOrWhiteSpace(filename))
-            {
-                var cropped = CropBitmap();
-                cropped.Save(filename, ImageFormat.Png);
-                Interop.Shell32.WindowsExplorer.ShowFileOrFolder(filename);
-                App.Current.Settings.LastSavePath = System.IO.Path.GetDirectoryName(filename);
-            }
+            SaveAsCommand?.Invoke(this, new CaptureBitmapEventArgs(CropBitmap(), Selection));
         }
 
         private void ResetExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -205,35 +233,16 @@ namespace Clowd.UI
             fastCapturer.Reset();
         }
 
-        private async void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
+        private void UploadExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
-            await UploadManager.UploadImage(GetCompressedImageStream(), "png", viewName: "Screenshot");
+            UploadCommand?.Invoke(this, new CaptureBitmapEventArgs(CropBitmap(), Selection));
         }
 
         private void VideoExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
-
-            var rawRect = SelectionRectangle.ToScreenRect();
-
-            const int minWidth = 160;
-            const int minHeight = 160;
-
-            if (rawRect.Width < minWidth || rawRect.Height < minHeight)
-            {
-                NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning, $"The minimum frame size for video is {minWidth}x{minHeight}. Increase the capture area and try again.");
-            }
-            //else if (!Directory.Exists(App.Current.Settings.VideoSettings.OutputDirectory))
-            //{
-            //    NiceDialog.ShowSettingsPromptAsync(this, SettingsCategory.Video, "You must set a video save directory in the video capture settings before recording a video");
-            //}
-            else
-            {
-                fastCapturer.SetSelectedWindowForeground();
-                var video = _manager.CreateVideoCapturePage();
-                video.Open(rawRect);
-            }
+            VideoCommand?.Invoke(this, new CaptureSelectionEventArgs(Selection));
         }
 
         private void SelectScreenExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -256,7 +265,7 @@ namespace Clowd.UI
 
             this.Close();
 
-            NiceDialog.ShowColorDialogAsync(null, fastCapturer.GetHoveredColor());
+            ColorCommand?.Invoke(this, new CaptureColorEventArgs(fastCapturer.GetHoveredColor()));
         }
 
         private void SelectAllExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -267,17 +276,7 @@ namespace Clowd.UI
         private async void SearchExecuted(object sender, ExecutedRoutedEventArgs e)
         {
             this.Close();
-
-            var task = await UploadManager.UploadImage(GetCompressedImageStream(), "png", viewName: "Image Search");
-            if (task == null)
-                return;
-
-            var upload = await task.UploadResult;
-            if (upload == null)
-                return;
-
-            Process.Start("https://images.google.com/searchbyimage?image_url=" + upload.PublicUrl.UrlEscape());
-            task.TaskView.Hide();
+            SearchCommand?.Invoke(this, new CaptureBitmapEventArgs(CropBitmap(), Selection));
         }
 
         private void ProfilerExecuted(object sender, ExecutedRoutedEventArgs e)

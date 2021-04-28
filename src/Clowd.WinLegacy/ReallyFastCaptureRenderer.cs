@@ -8,13 +8,19 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using Clowd.Capture;
-using Clowd.UI.Helpers;
-using Clowd.Util;
 using ScreenVersusWpf;
 
-namespace Clowd.UI
+namespace Clowd.WinLegacy
 {
+    public class FastRendererOptions
+    {
+        public bool IsDesignMode;
+        public bool CompatibilityMode;
+        public Color AccentColor;
+        public bool CaptureCursor;
+        public bool DetectWindows;
+    }
+
     [System.ComponentModel.DesignTimeVisible(false)]
     public class ReallyFastCaptureRenderer : FrameworkElement
     {
@@ -90,6 +96,8 @@ namespace Clowd.UI
         bool _lastCapturing = false;
         volatile bool _finishedUp = false;
 
+        FastRendererOptions _options;
+
         private static ScreenUtil _screen = new ScreenUtil();
 
         public ReallyFastCaptureRenderer()
@@ -110,16 +118,17 @@ namespace Clowd.UI
             _visuals.Add(_crosshair);
             _visuals.Add(_selectionRectangle);
             _visuals.Add(_tipsPanel);
+        }
 
-            // here to apease the WPF designer
-            if (App.IsDesignMode)
-                return;
+        public void StartFastCapture(IScopedLog log, FastRendererOptions options)
+        {
+            _options = options;
 
             _virtualScreen = ScreenTools.VirtualScreen.Bounds.ToWpfRect();
 
-            _highPerformance = App.Current.Settings.CaptureSettings.CompatibilityMode;
+            _highPerformance = options.CompatibilityMode;// App.Current.Settings.CaptureSettings.CompatibilityMode;
             //_highPerformance = true;
-            _accentColor = App.Current.AccentColor;
+            _accentColor = options.AccentColor; // App.Current.AccentColor;
             _accentBrush = new SolidColorBrush(_accentColor);
 
             // crosshair constants
@@ -131,10 +140,7 @@ namespace Clowd.UI
             _sharpWhiteLineDashed.DashStyle = new DashStyle(new double[] { dashLength, dashLength }, dashLength);
             _sharpAccentLine = new Pen(_accentBrush, _sharpLineWidth);
             _sharpAccentLineWide = new Pen(_accentBrush, _sharpLineWidth * 5);
-        }
 
-        public void StartFastCapture(IScopedLog log)
-        {
             log.Info("Start fast capture");
 
             using (var sublog = log.CreateProfiledScope("WalkerS1"))
@@ -145,7 +151,7 @@ namespace Clowd.UI
 
             using (var sublog = log.CreateProfiledScope("GDI"))
             {
-                _image = _screen.CaptureScreenWpf(null, App.Current.Settings.CaptureSettings.ScreenshotWithCursor, sublog);
+                _image = _screen.CaptureScreenWpf(null, _options.CaptureCursor, sublog);
             }
 
             log.Info("Grayscale bitmap");
@@ -197,7 +203,7 @@ namespace Clowd.UI
             this.MouseUp += CaptureWindow2_MouseUp;
             this.MouseWheel += CaptureWindow2_MouseWheel;
 
-            if (App.Current.Settings.CaptureSettings.DetectWindows)
+            if (_options.DetectWindows)
             {
                 var window = _windowFinder?.HitTest(_virtualMouse.ToScreenPoint());
                 if (window != null)
@@ -362,7 +368,7 @@ namespace Clowd.UI
             }
 
             // we're not in a drag operation, so just highlight any window under the cursor
-            else if (App.Current.Settings.CaptureSettings.DetectWindows)
+            else if (_options.DetectWindows)
             {
                 var window = _windowFinder?.HitTest(_virtualMouse.ToScreenPoint());
                 if (window != null)
@@ -816,7 +822,7 @@ namespace Clowd.UI
                 ).First();
             var screen = scr.Bounds.ToWpfRect();
 
-            var alignCoordinate = RT.Util.Ut.Lambda((int mode, double anchorXY, double elementSize, double screenMin, double screenMax) =>
+            Func<int, double, double, double, double, double> alignCoordinate = (int mode, double anchorXY, double elementSize, double screenMin, double screenMax) =>
             {
                 for (int repeat = 0; repeat < 2; repeat++) // repeat twice to allow a right-align to flip left and vice versa
                 {
@@ -843,7 +849,7 @@ namespace Clowd.UI
                 }
                 // We're here either because the element is center-aligned or is larger than the screen
                 return anchorXY - elementSize / 2;
-            });
+            };
 
             double x = alignCoordinate(horz == HorizontalAlignment.Left ? -1 : horz == HorizontalAlignment.Right ? 1 : 0, anchor.X, objectRect.Width, screen.Left + marginX, screen.Right - marginX);
             double y = alignCoordinate(vert == VerticalAlignment.Top ? -1 : vert == VerticalAlignment.Bottom ? 1 : 0, anchor.Y, objectRect.Height, screen.Top, screen.Bottom);
