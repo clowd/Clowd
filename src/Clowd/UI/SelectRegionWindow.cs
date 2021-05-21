@@ -17,7 +17,7 @@ namespace Clowd.UI
 {
     sealed class SelectRegionWindow : IScreenCapturePage
     {
-        static ClowdWin64.DXCaptureWindow _wdxc;
+        static ClowdWin64.DxScreenCapture _wdxc;
         static FloatingButtonWindow _floating;
         static List<FloatingButtonDetail> _buttons;
 
@@ -137,62 +137,33 @@ namespace Clowd.UI
             }
         }
 
-        //private static async void _floating_Activated(object sender, EventArgs e)
-        //{
-        //    if (_wdxc != null)
-        //    {
-        //        await Task.Delay(10);
-        //        USER32.SetForegroundWindow(_wdxc.Handle);
-        //    }
-        //}
-
-        static async void OnUpload(object sender, EventArgs e)
+        static void OnUpload(object sender, EventArgs e)
         {
-            if (_wdxc == null) return;
-            var sel = _wdxc.Selection;
-            WriteableBitmap bmp = new WriteableBitmap(sel.Width, sel.Height, 96, 96, System.Windows.Media.PixelFormats.Bgr24, null);
-
-            bmp.Lock();
-            var size = bmp.BackBufferStride * bmp.PixelHeight;
-            _wdxc.WriteToPointer(bmp.BackBuffer, size);
-
-            DisposeInternal();
-
-            bmp.Unlock();
-            bmp.Freeze();
-
-            MemoryStream ms = new MemoryStream();
-            bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-
-            await UploadManager.UploadImage(ms, "png", viewName: "Screenshot");
+            ProcessBitmap(async (s, b) =>
+            {
+                await _floating.ShowConfirmationRipple("Starting upload...");
+                MemoryStream ms = new MemoryStream();
+                b.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                var t = UploadManager.UploadImage(ms, "png", viewName: "Screenshot");
+            });
         }
 
         static void OnPhoto(object sender, EventArgs e)
         {
-            if (_wdxc == null) return;
-            var sel = _wdxc.Selection;
-            WriteableBitmap bmp = new WriteableBitmap(sel.Width, sel.Height, 96, 96, System.Windows.Media.PixelFormats.Bgr24, null);
-
-            bmp.Lock();
-            var size = bmp.BackBufferStride * bmp.PixelHeight;
-            _wdxc.WriteToPointer(bmp.BackBuffer, size);
-
-            DisposeInternal();
-
-            bmp.Unlock();
-            bmp.Freeze();
-
-            ImageEditorPage.ShowNewEditor(bmp, ScreenRect.FromSystem(sel).ToWpfRect());
+            ProcessBitmap(async (s, b) =>
+            {
+                ImageEditorPage.ShowNewEditor(b, ScreenRect.FromSystem(s).ToWpfRect());
+            });
         }
 
         static void OnVideo(object sender, EventArgs e)
         {
-            if (_wdxc == null) return;
-            var rect = _wdxc.Selection;
-            DisposeInternal();
-            var manager = App.GetService<IPageManager>();
-            var video = manager.CreateVideoCapturePage();
-            video.Open(ScreenRect.FromSystem(rect));
+            ProcessBitmap(async (s, b) =>
+            {
+                var manager = App.GetService<IPageManager>();
+                var video = manager.CreateVideoCapturePage();
+                video.Open(ScreenRect.FromSystem(s));
+            });
         }
 
         static void OnReset(object sender, EventArgs e)
@@ -202,30 +173,34 @@ namespace Clowd.UI
 
         static void OnCopy(object sender, EventArgs e)
         {
-            _wdxc?.WriteToClipboard();
-            DisposeInternal();
+            ProcessBitmap(async (s, b) =>
+            {
+                var data = new ClipboardDataObject();
+                data.SetImage(b);
+                await data.SetClipboardData();
+                await _floating.ShowConfirmationRipple("Copied to clipboard.");
+            });
         }
 
         static async void OnSave(object sender, EventArgs e)
         {
-            var filename = await NiceDialog.ShowSelectSaveFileDialog(null, "Save Screenshot", App.Current.Settings.LastSavePath, "screenshot", "png");
-
-            if (_wdxc != null && !String.IsNullOrWhiteSpace(filename) && Directory.Exists(Path.GetDirectoryName(filename)))
+            ProcessBitmap(async (s, b) =>
             {
-                _wdxc.WriteToFile(filename);
-                if (File.Exists(filename))
+                var filename = await NiceDialog.ShowSelectSaveFileDialog(_floating, "Save Screenshot", App.Current.Settings.LastSavePath, "screenshot", "png");
+                if (!String.IsNullOrWhiteSpace(filename) && Directory.Exists(Path.GetDirectoryName(filename)))
                 {
+                    b.Save(filename, System.Drawing.Imaging.ImageFormat.Png);
                     Interop.Shell32.WindowsExplorer.ShowFileOrFolder(filename);
                     App.Current.Settings.LastSavePath = Path.GetDirectoryName(filename);
                 }
-            }
-
-            DisposeInternal();
+                _floating.HidePanel();
+            });
         }
 
         static void OnExit(object sender, EventArgs e)
         {
             DisposeInternal();
+            _floating.HidePanel();
         }
 
         public void Open()
@@ -249,20 +224,27 @@ namespace Clowd.UI
             {
                 if (_floating == null)
                 {
-                    throw new InvalidOperationException("Floating window does not exist. Please create it first.");
+                    PrepareFloatingWindow();
+                    //throw new InvalidOperationException("Floating window does not exist. Please create it first.");
                 }
 
                 var clr = System.Drawing.Color.FromArgb(App.Current.AccentColor.A, App.Current.AccentColor.R, App.Current.AccentColor.G, App.Current.AccentColor.B);
 
                 // create new capture
-                var dx = new ClowdWin64.DXCaptureWindow(clr, true);
+                var options = new ClowdWin64.ScreenCaptureOptions()
+                {
+                    AccentColor = clr,
+                };
+                var dx = new ClowdWin64.DxScreenCapture(options);
                 dx.Disposed += _wdxc_Disposed;
                 dx.LayoutUpdated += _wdxc_LayoutUpdated;
                 dx.KeyDown += _wdxc_KeyDown;
-                dx.Show();
+                dx.ColorCaptured += _wdxc_ColorCaptured;
+                //dx.Show();
 
                 // close old capture (if any)
                 DisposeInternal();
+                _floating.HidePanel();
 
                 // assign new capture
                 _wdxc = dx;
@@ -279,43 +261,84 @@ namespace Clowd.UI
             lock (_lock)
             {
                 DisposeInternal();
+                _floating.HidePanel();
             }
+        }
+
+        private static async void ProcessBitmap(Func<System.Drawing.Rectangle, BitmapSource, Task> action)
+        {
+            if (_wdxc == null) return;
+
+            var sel = _wdxc.Selection;
+            WriteableBitmap bmp = new WriteableBitmap(sel.Width, sel.Height, 96, 96, System.Windows.Media.PixelFormats.Bgr24, null);
+            bmp.Lock();
+
+            var size = bmp.BackBufferStride * bmp.PixelHeight;
+            _wdxc.WriteToPointer(bmp.BackBuffer, size);
+            _wdxc.Close();
+            _wdxc = null;
+
+            bmp.Unlock();
+            bmp.Freeze();
+
+            await action(sel, bmp);
+
+            _floating?.HidePanel();
         }
 
         private static void DisposeInternal()
         {
-            _floating.HidePanel();
+            //_floating.HidePanel();
             if (_wdxc != null)
             {
                 //_wdxc.Disposed -= _wdxc_Disposed;
                 //_wdxc.LayoutUpdated -= _wdxc_LayoutUpdated;
                 //_wdxc.KeyDown -= _wdxc_KeyDown;
-                _wdxc.Dispose();
+                _wdxc.Close();
                 _wdxc = null;
             }
         }
 
-        private void _wdxc_KeyDown(object sender, ClowdWin64.CWKeyDownEventArgs e)
+        private void _wdxc_KeyDown(object sender, ClowdWin64.DxKeyDownEventArgs e)
         {
             _floating?.ProcessKey(KeyInterop.KeyFromVirtualKey(e.KeyCode));
         }
 
-        private void _wdxc_Disposed(object sender, EventArgs e)
+        private void _wdxc_Disposed(object sender, ClowdWin64.DxDisposedEventArgs e)
         {
             DisposeInternal();
             Closed?.Invoke(this, new EventArgs());
+
+            if (e.Error != null)
+            {
+                _floating?.HidePanel();
+                _floating.Dispatcher.Invoke(() =>
+                {
+                    NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Error.ToString(), "An unhandled error occurred while showing screen capture window");
+                });
+            }
         }
 
-        private void _wdxc_LayoutUpdated(object sender, ClowdWin64.CWLayoutUpdatedEventArgs e)
+        private void _wdxc_LayoutUpdated(object sender, ClowdWin64.DxLayoutUpdatedEventArgs e)
         {
-            if (_wdxc?.HasCapturedArea == true)
+            if (e.Captured)
             {
-                _floating.ShowPanel(_wdxc.Selection, _wdxc.Handle);
+                _floating.ShowPanel(e.Selection, IntPtr.Zero);
             }
             else
             {
                 _floating.HidePanel();
             }
+        }
+
+        private void _wdxc_ColorCaptured(object sender, ClowdWin64.DxColorCapturedEventArgs e)
+        {
+            DisposeInternal();
+            _floating?.HidePanel();
+            _floating.Dispatcher.Invoke(() =>
+            {
+                NiceDialog.ShowColorDialogAsync(null, System.Windows.Media.Color.FromRgb(e.Color.R, e.Color.G, e.Color.B));
+            });
         }
     }
 }

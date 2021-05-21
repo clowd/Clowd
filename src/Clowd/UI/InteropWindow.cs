@@ -54,8 +54,19 @@ namespace Clowd.UI
             }
         }
 
+        public bool NeverActivate
+        {
+            get => _neverActivate ?? false;
+            set
+            {
+                _neverActivate = value;
+                SetNeverActivate();
+            }
+        }
+
         public bool SourceCreated { get; private set; }
 
+        private bool? _neverActivate;
         private bool? _transitionsDisabled;
         private ScreenRect? _screenPosition;
         private IntPtr _handle;
@@ -73,6 +84,10 @@ namespace Clowd.UI
             SourceCreated = true;
             SetWindowPosition();
             SetTransitionsDisabled();
+            SetNeverActivate();
+
+            HwndSource source = HwndSource.FromHwnd(_handle);
+            source.AddHook(new HwndSourceHook(WndProc));
         }
 
         public void SetHwndOwner(IntPtr owner)
@@ -105,6 +120,31 @@ namespace Clowd.UI
                 int disabled = _transitionsDisabled == true ? 1 : 0;
                 DWMAPI.DwmSetWindowAttribute(_handle, DWMWINDOWATTRIBUTE.DWMWA_TRANSITIONS_FORCEDISABLED, &disabled, sizeof(int));
             }
+        }
+
+        private void SetNeverActivate()
+        {
+            if (_neverActivate.HasValue && SourceCreated)
+            {
+                var exs = USER32.GetWindowLong(_handle, WindowLongIndex.GWL_EXSTYLE);
+                if (_neverActivate == true)
+                    exs |= (int)WindowStylesEx.WS_EX_NOACTIVATE;
+                else
+                    exs &= ~(int)WindowStylesEx.WS_EX_NOACTIVATE;
+                USER32.SetWindowLong(_handle, WindowLongIndex.GWL_EXSTYLE, exs);
+            }
+        }
+
+        protected virtual IntPtr WndProc(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (NeverActivate && msg == 0x0021) // WM_MOUSEACTIVATE
+            {
+                // Does not activate the window, and does not discard the mouse message.
+                handled = true;
+                return (IntPtr)3; // MA_NOACTIVATE
+            }
+
+            return IntPtr.Zero;
         }
     }
 }

@@ -10,6 +10,8 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Shapes;
 using Clowd.Config;
 using Clowd.Interop;
 using Clowd.Interop.DwmApi;
@@ -23,8 +25,6 @@ namespace Clowd.UI
     public class FloatingButtonDetail
     {
         public bool Primary { get; set; }
-        //public ICommand Command { get; set; }
-        //public ExecutedRoutedEventHandler CommandExecuted { get; set; }
         public EventHandler Executed { get; set; }
         public string IconResourceName { get; set; }
         public string IconResourceNameAlternate { get; set; }
@@ -35,6 +35,7 @@ namespace Clowd.UI
 
     internal sealed class FloatingButtonWindow : InteropWindow
     {
+        public Canvas MainGrid { get; private set; }
         public StackPanel MainPanel { get; private set; }
 
         public ReadOnlyCollection<FloatingButtonDetail> ButtonDetails { get; private set; }
@@ -48,7 +49,9 @@ namespace Clowd.UI
         private FloatingButtonWindow(IList<FloatingButtonDetail> buttons)
         {
             this.Resources = Application.Current.Resources;
+            NameScope.SetNameScope(this, new NameScope());
 
+            NeverActivate = true;
             TransitionsDisabled = true;
             ResizeMode = ResizeMode.NoResize;
             WindowStyle = WindowStyle.None;
@@ -112,16 +115,18 @@ namespace Clowd.UI
             ButtonElements.ForEach(b => sp.Children.Add(b));
             MainPanel = sp;
 
-            this.Content = MainPanel;
+            var grid = new Canvas();
+            grid.Children.Add(sp);
+            MainGrid = grid;
+
+            this.Content = grid;
             CommandManager.InvalidateRequerySuggested();
         }
 
         private void FloatingButtonWindow_LayoutUpdated(object sender, EventArgs e)
         {
-            //if (!_isVisible) return; // don't update layout if hidden
-
             var selection = _lastSelection;
-            var desiredSize = this.DesiredSize;
+            var desiredSize = MainPanel.DesiredSize;
 
             // get bounds and dpi of target display (display which contains the center point of the rect)
             RECT nativeSel = selection;
@@ -181,13 +186,14 @@ namespace Clowd.UI
             }
 
             var horizontalSize = MainPanel.Orientation == Orientation.Horizontal ? longEdgePx : shortEdgePx;
+            var verticalSize = MainPanel.Orientation == Orientation.Horizontal ? shortEdgePx : longEdgePx;
 
             if (indLeft < screenBounds.Left)
                 indLeft = screenBounds.Left;
             else if (indLeft + horizontalSize > screenBounds.Right)
                 indLeft = screenBounds.Right - horizontalSize;
 
-            USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, indLeft, indTop, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE);
+            USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, indLeft, indTop, horizontalSize, verticalSize, SWP.NOACTIVATE);
         }
 
         public static FloatingButtonWindow Create(IList<FloatingButtonDetail> buttons)
@@ -195,7 +201,6 @@ namespace Clowd.UI
             var w = new FloatingButtonWindow(buttons);
             w.Show(); // need to show to kick of wpf/directx rendering pipeline
             w.HidePanel();
-            w.SizeToContent = SizeToContent.WidthAndHeight;
             w.Topmost = true;
             return w;
         }
@@ -236,6 +241,80 @@ namespace Clowd.UI
             }
         }
 
+        public Task ShowConfirmationRipple(string message)
+        {
+            TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
+
+            var sz = MainPanel.DesiredSize;
+
+            // create elements
+            var ell = new EllipseGeometry();
+            ell.Center = new Point(0, 0);
+            ell.RadiusX = 50;
+            ell.RadiusY = 50;
+
+            var path = new Path();
+            path.Data = ell;
+            path.Fill = this.Resources["HighlightBrush"] as Brush;
+            path.Width = sz.Width;
+            path.Height = sz.Height;
+
+            var text = new TextBlock();
+            text.TextWrapping = TextWrapping.Wrap;
+            text.Text = message;
+            text.VerticalAlignment = VerticalAlignment.Center;
+            text.HorizontalAlignment = HorizontalAlignment.Center;
+            text.FontWeight = FontWeights.Bold;
+            text.Foreground = Brushes.White;
+
+            var border = new Border();
+            border.Width = sz.Width;
+            border.Height = sz.Height;
+            border.Clip = ell;
+            border.Child = text;
+
+            // create animation
+            string name = "ell" + DateTime.Now.Ticks;
+            this.RegisterName(name, ell);
+
+            var szMax = Math.Max(sz.Width, sz.Height) + Math.Min(sz.Width, sz.Height);
+            var time = TimeSpan.FromMilliseconds(600);
+            var sb = new Storyboard();
+
+            var ease = new CubicEase();
+
+            DoubleAnimation aniWidth = new DoubleAnimation(1, szMax, time);
+            Storyboard.SetTargetName(aniWidth, name);
+            Storyboard.SetTargetProperty(aniWidth, new PropertyPath(EllipseGeometry.RadiusXProperty));
+            aniWidth.EasingFunction = ease;
+            sb.Children.Add(aniWidth);
+
+            DoubleAnimation aniHeight = new DoubleAnimation(1, szMax, time);
+            Storyboard.SetTargetName(aniHeight, name);
+            Storyboard.SetTargetProperty(aniHeight, new PropertyPath(EllipseGeometry.RadiusYProperty));
+            aniHeight.EasingFunction = ease;
+            sb.Children.Add(aniHeight);
+
+            path.Loaded += (s, e) =>
+            {
+                sb.Begin(path);
+            };
+
+            sb.Completed += async (s, e) =>
+            {
+                await Task.Delay(300);
+                HidePanel();
+                MainGrid.Children.Remove(border);
+                MainGrid.Children.Remove(path);
+                tcs.SetResult(true);
+            };
+
+            MainGrid.Children.Add(path);
+            MainGrid.Children.Add(border);
+
+            return tcs.Task;
+        }
+
         protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
         {
             base.OnDpiChanged(oldDpi, newDpi);
@@ -250,7 +329,9 @@ namespace Clowd.UI
 
         public bool ProcessKey(Key k)
         {
-            Console.WriteLine(k);
+            if (!_isVisible)
+                return false;
+
             var mods = Keyboard.Modifiers;
             for (int i = 0; i < ButtonDetails.Count; i++)
             {
