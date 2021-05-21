@@ -1,4 +1,6 @@
-﻿<local:OverlayWindow
+﻿<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" />
+
+<!--<local:OverlayWindow
     x:Class="Clowd.UI.VideoOverlayWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -200,4 +202,4 @@
             </Grid>
         </Canvas>
     </Grid>
-</local:OverlayWindow>
+</local:OverlayWindow>-->

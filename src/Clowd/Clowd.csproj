@@ -18,7 +18,7 @@
     </NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x64</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -32,10 +32,10 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>x86</PlatformTarget>
+    <PlatformTarget>x64</PlatformTarget>
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
+    <OutputPath>..\..\bin\x64\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -144,13 +144,9 @@
     <Compile Include="UI\Controls\DPadControl.cs" />
     <Compile Include="UI\Config\FeatureInstallerControl.cs" />
     <Compile Include="UI\Config\GlobalTriggerEditor.cs" />
-    <Compile Include="UI\Controls\SelectionBorderControl.xaml.cs">
-      <DependentUpon>SelectionBorderControl.xaml</DependentUpon>
-    </Compile>
     <Compile Include="UI\Controls\ToolButton.cs" />
     <Compile Include="UI\Helpers\ToolStateManager.cs" />
     <Compile Include="UI\InteropWindow.cs" />
-    <Compile Include="UI\OverlayWindow.cs" />
     <Compile Include="UI\Controls\ResetDefaultButton.cs" />
     <Compile Include="UI\Controls\SpinnerTextBox.xaml.cs">
       <DependentUpon>SpinnerTextBox.xaml</DependentUpon>
@@ -188,7 +184,7 @@
     <Compile Include="Config\AutoDictionary.cs" />
     <Compile Include="UI\Helpers\ButtonClickContextBehavior.cs" />
     <Compile Include="Config\ClassifyOptions.cs" />
-    <Compile Include="Util\BatchCliArgsProcessor.cs" />
+    <Compile Include="Util\MutexArgsForwarder.cs" />
     <Compile Include="Util\ClipboardDataObject.cs" />
     <Compile Include="Util\Debouncer.cs" />
     <Compile Include="Util\Exposed.cs" />
@@ -208,7 +204,6 @@
     <Compile Include="UI\Controls\OutlinedText.cs" />
     <Compile Include="UI\Controls\OutlinedTextBlock.cs" />
     <Compile Include="UI\Controls\ProgressRing.cs" />
-    <Compile Include="UI\Helpers\ResizingAdorner.cs" />
     <Compile Include="UI\Controls\SizeAwareProgressBar.cs" />
     <Compile Include="UI\Controls\TransitioningContentControl.cs" />
     <Compile Include="UI\Controls\UploadProgressBar.cs" />
@@ -265,10 +260,6 @@
       <SubType>Code</SubType>
     </Compile>
     <Page Include="Assets\VectorIcons.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\Controls\SelectionBorderControl.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

@@ -30,7 +30,22 @@ namespace Clowd.Util
         }
     }
 
-    internal class BatchCliArgsProcessor : ICommandLineProxy, IDisposable
+    public class HeartbeatFailedException : Exception
+    {
+        public HeartbeatFailedException() : base()
+        {
+        }
+
+        public HeartbeatFailedException(string message) : base(message)
+        {
+        }
+
+        public HeartbeatFailedException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
+    }
+
+    internal class MutexArgsForwarder : ICommandLineProxy, IDisposable
     {
         public event EventHandler<CommandLineEventArgs> ArgsReceived;
 
@@ -42,7 +57,7 @@ namespace Clowd.Util
         private string _mutexName;
         private string _pipeName;
 
-        public BatchCliArgsProcessor(string mutexName)
+        public MutexArgsForwarder(string mutexName)
         {
             _ready = false;
             _batch = new List<string>();
@@ -56,7 +71,7 @@ namespace Clowd.Util
         /// <summary>
         /// If this method returns true, app should continue startup. If false, the args have been forwarded to another already running instance, and you should exit.
         /// </summary>
-        public void Startup(string[] args)
+        public bool Startup(string[] args)
         {
             Dispose();
 
@@ -66,12 +81,18 @@ namespace Clowd.Util
             {
                 if (args != null || args.Length > 0)
                     SendArgsToRemote(args);
-                Environment.Exit(0);
+
+                // Can't call dispose here, we don't own the mutex and Dispose will try to release the mutex
+                _mutex.Dispose();
+                _mutex = null;
+
+                return false;
             }
             else
             {
                 StartServiceHost();
                 (this as ICommandLineProxy).ProcessArgs(Process.GetCurrentProcess().Id, args);
+                return true;
             }
         }
 
@@ -92,7 +113,7 @@ namespace Clowd.Util
 
             ICommandLineProxy pipeProxy = pipeFactory.CreateChannel();
             if (!pipeProxy.Heartbeat())
-                throw new Exception($"Already running application instance is unresponsive.");
+                throw new HeartbeatFailedException($"Already running application instance is unresponsive.");
 
             if (args.Length > 0)
                 pipeProxy.ProcessArgs(Process.GetCurrentProcess().Id, args);
