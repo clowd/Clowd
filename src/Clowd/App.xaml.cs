@@ -25,7 +25,6 @@ using RT.Serialization;
 using RT.Util;
 using RT.Util.ExtensionMethods;
 using ScreenVersusWpf;
-using SharpRaven.Data;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
 
@@ -42,96 +41,57 @@ namespace Clowd
         public static ServiceContainer Container { get; private set; }
         public GeneralSettings Settings { get; private set; }
         public Color AccentColor { get; private set; }
+        public static bool Debugging => Debugger.IsAttached;
 
         private TaskbarIcon _taskbarIcon;
         private ResourceDictionary _lightBase;
         private ResourceDictionary _darkBase;
-        private BatchCliArgsProcessor _processor;
+        private MutexArgsForwarder _processor;
 
         protected override async void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e);
-
-            DefaultLog = new DefaultScopedLog("Clowd");
-            if (!Debugger.IsAttached)
-                DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
-
-            SetupExceptionHandling();
-
-            _processor = new BatchCliArgsProcessor(Constants.ClowdMutex);
-            _processor.ArgsReceived += (s, pev) =>
-            {
-                Dispatcher.Invoke(() =>
-                {
-                    OnFilesReceived(pev.Args);
-                });
-            };
-
             try
             {
-                _processor.Startup(e.Args);
-            }
-            catch
-            {
-                var current = Process.GetCurrentProcess();
-                var processes = Process.GetProcessesByName("Clowd").Where(p => p.Id != current.Id).ToArray();
-                if (!processes.Any())
+                base.OnStartup(e);
+
+                DefaultLog = new DefaultScopedLog("Clowd");
+                if (!Debugging)
+                    DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
+
+                SetupExceptionHandling();
+                ScreenTools.InitializeDpi(ScreenTools.GetSystemDpi());
+                await SetupMutex(e);
+                SetupSettings();
+                SetupDependencyInjection();
+                SetupAccentColors();
+                SetupTrayIcon();
+                SetupTrayContextMenu();
+
+                // start receiving command line arguments
+                _processor.Ready();
+
+                try
                 {
-                    var ex = new InvalidOperationException("The mutex was opened successfully, " +
-                                                          $"but there are no {Constants.ClowdAppName} processes running. Uninstaller?");
-                    //ex.Data.Add("Processes", Process.GetProcesses().Select(p => p.ProcessName).ToArray());
-                    DefaultLog.Error(ex);
-                    Environment.Exit(1);
+                    // until proper module updater is built... we check for OBS updates manually.
+                    var obs = Container.GetInstance<IModuleInfo<IVideoCapturer>>();
+                    await obs.CheckForUpdates(false);
+                    if (obs.UpdateAvailable != null)
+                    {
+                        DefaultLog.Info("Update available for OBS module... Downloading");
+                        await obs.Install(obs.UpdateAvailable);
+                    }
                 }
-
-                var isYes = NiceDialog.ShowPromptBlocking(
-                    null,
-                    NiceDialogIcon.Warning,
-                    $"{Constants.ClowdAppName} is already running but seems to be unresponsive. Would you like to restart {Constants.ClowdAppName}?",
-                    $"{Constants.ClowdAppName} is unresponsive",
-                    "Restart",
-                    "Close",
-                    NiceDialogIcon.Information,
-                    "You may lose anything in-progress work or uploads.");
-
-                if (!isYes)
-                    Environment.Exit(0);
-
-                foreach (var p in processes)
-                    p.Kill();
-                foreach (var p in processes)
-                    p.WaitForExit();
-
-                // lets try re-starting...
-                _processor.Startup(e.Args);
+                catch (Exception ecx)
+                {
+                    DefaultLog.Error(ecx);
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ecx.ToString(), "Error updating OBS, will try again later.");
+                }
             }
-
-            ScreenTools.InitializeDpi(ScreenTools.GetSystemDpi());
-
-            SetupSettings();
-            SetupDependencyInjection();
-            SetupAccentColors();
-            SetupTrayIcon();
-            SetupTrayContextMenu();
-
-            // this is stupid, but if we have not shown at least one window, the call to IsWindowOnCurrentVirtualDesktop() is super slow.
-            // if we've created a window, this becomes fast. Don't ask me why, but this fixes it.
-            var wnd = NiceDialog.ShowNewFakeOwnerWindow(false);
-            wnd.Close();
-
-            // start receiving command line arguments
-            _processor.Ready();
-
-            // init screenshot buttons
-            SelectRegionWindow.PrepareFloatingWindow();
-
-            // until proper module updater is built... we do it manually.
-            var obs = Container.GetInstance<IModuleInfo<IVideoCapturer>>();
-            await obs.CheckForUpdates(false);
-            if (obs.UpdateAvailable != null)
+            catch (Exception ex)
             {
-                DefaultLog.Info("Update available for OBS module... Downloading");
-                await obs.Install(obs.UpdateAvailable);
+                DefaultLog.Error(ex);
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.ToString(), "Error starting Clowd. The program will now exit.");
+                Environment.Exit(1);
             }
         }
 
@@ -211,6 +171,47 @@ namespace Clowd
 #endif
         }
 
+        private async Task SetupMutex(StartupEventArgs e)
+        {
+            _processor = new MutexArgsForwarder(Constants.ClowdMutex);
+            _processor.ArgsReceived += (s, pev) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    OnFilesReceived(pev.Args);
+                });
+            };
+
+            try
+            {
+                bool mutexCreated = _processor.Startup(e.Args);
+                if (!mutexCreated)
+                {
+                    if (Debugging && await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Warning,
+                        "There is already an instance of clowd running. Would you like to kill it before continuing?",
+                        "Debugger attached; Clowd already running",
+                        "Kill Clowd", "Exit"))
+                    {
+                        KillOtherClowdProcess();
+                        if (!_processor.Startup(e.Args))
+                            throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Clowd instance? Uninstaller?");
+                    }
+                    else
+                    {
+                        // clowd is already running, and we've forwarded args successfully
+                        Environment.Exit(0);
+                    }
+                }
+            }
+            catch (HeartbeatFailedException)
+            {
+                // there is an unresponsive clowd process, try to kill it and re-start
+                KillOtherClowdProcess();
+                if (!_processor.Startup(e.Args))
+                    throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Clowd instance? Uninstaller?");
+            }
+        }
+
         private void SetupSettings()
         {
             GeneralSettings tmp;
@@ -242,9 +243,9 @@ namespace Clowd
 
             // ui
             container.Register<IPageManager, PageManager>();
-            //container.Register<IScreenCapturePage, CaptureWindow2>(new PerScopeLifetime());
+            container.Register<IScreenCapturePage, SelectRegionWindow>(new PerScopeLifetime());
             container.Register<ILiveDrawPage, AntFu7.LiveDraw.LiveDrawWindow>(new PerScopeLifetime());
-            container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
+            //container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
             container.Register<ISettingsPage>(_ => TemplatedWindow.SingletonWindowFactory<SettingsPage>(), new PerScopeLifetime());
 
             // we create this TasksView here in main thread so there won't be issues with MTA threads requesting this object in the future
@@ -529,32 +530,14 @@ namespace Clowd
 
         public void StartCapture(ScreenRect? region = null)
         {
-            var s2 = Container.Create<Clowd.WinLegacy.CaptureWindow2>();// new Clowd.WinLegacy.CaptureWindow2(log)
-            s2.Open();
-            return;
-
-            var sw = new SelectRegionWindow();
-            sw.Open();
-
-            //return;
-            //var pages = Container.GetInstance<IPageManager>();
-            //var capture = pages.CreateScreenCapturePage();
-            //capture.Open();
+            Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
         }
         public void QuickCaptureFullScreen()
         {
-            return;
-            var clr = System.Drawing.Color.FromArgb(AccentColor.A, AccentColor.R, AccentColor.G, AccentColor.B);
-            var dx = new ClowdWin64.DXCaptureWindow(clr, true);
-            dx.Show();
             Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
         }
         public void QuickCaptureCurrentWindow()
         {
-            return;
-            var clr = System.Drawing.Color.FromArgb(AccentColor.A, AccentColor.R, AccentColor.G, AccentColor.B);
-            var dx = new ClowdWin64.DXCaptureWindow(clr, true);
-            dx.Show();
             Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open(USER32.GetForegroundWindow());
         }
         public async void UploadFile(Window owner = null)
@@ -599,6 +582,16 @@ namespace Clowd
         private async void OnFilesReceived(string[] filePaths)
         {
             await UploadManager.UploadFiles(filePaths);
+        }
+
+        private void KillOtherClowdProcess()
+        {
+            var current = Process.GetCurrentProcess();
+            var processes = Process.GetProcessesByName("Clowd").Where(p => p.Id != current.Id).ToArray();
+            foreach (var p in processes)
+                p.Kill();
+            foreach (var p in processes)
+                p.WaitForExit();
         }
     }
 }
