@@ -145,6 +145,7 @@
     <Compile Include="UI\Config\FeatureInstallerControl.cs" />
     <Compile Include="UI\Config\GlobalTriggerEditor.cs" />
     <Compile Include="UI\Controls\ToolButton.cs" />
+    <Compile Include="UI\Helpers\UIAudioMonitor.cs" />
     <Compile Include="UI\Helpers\ToolStateManager.cs" />
     <Compile Include="UI\InteropWindow.cs" />
     <Compile Include="UI\Controls\ResetDefaultButton.cs" />
@@ -173,7 +174,7 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>AssemblyInfo.tt</DependentUpon>
     </Compile>
-    <Compile Include="UI\SelectRegionWindow.cs" />
+    <Compile Include="UI\ScreenCaptureWindow.cs" />
     <Compile Include="UI\SettingsPage.xaml.cs">
       <DependentUpon>SettingsPage.xaml</DependentUpon>
     </Compile>
@@ -184,6 +185,7 @@
     <Compile Include="Config\AutoDictionary.cs" />
     <Compile Include="UI\Helpers\ButtonClickContextBehavior.cs" />
     <Compile Include="Config\ClassifyOptions.cs" />
+    <Compile Include="UI\VideoCaptureWindow.cs" />
     <Compile Include="Util\MutexArgsForwarder.cs" />
     <Compile Include="Util\ClipboardDataObject.cs" />
     <Compile Include="Util\Debouncer.cs" />
@@ -191,7 +193,7 @@
     <Compile Include="Util\Expr.cs" />
     <Compile Include="Config\GlobalTrigger.cs" />
     <Compile Include="Util\LogImpl.cs" />
-    <Compile Include="Util\PageManager.cs" />
+    <Compile Include="UI\PageManager.cs" />
     <Compile Include="Util\PathEx.cs" />
     <Compile Include="Util\ProgressStream.cs" />
     <Compile Include="Util\ProxyMetaObject.cs" />

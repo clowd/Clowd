@@ -30,6 +30,7 @@ namespace Clowd.UI
         public string IconResourceNameAlternate { get; set; }
         public string Label { get; set; }
         public bool Enabled { get; set; }
+        public bool PulseBackground { get; set; }
         public StorableKeyGesture[] Gestures { get; set; }
     }
 
@@ -80,6 +81,7 @@ namespace Clowd.UI
 
                 btn.IconPath = icon;
                 btn.IconPathAlternate = iconAlt;
+                btn.PulseBackground = b.PulseBackground;
 
                 if (b.Primary)
                 {
