@@ -15,7 +15,7 @@ using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
-    sealed class SelectRegionWindow : IScreenCapturePage
+    internal sealed class ScreenCaptureWindow : IScreenCapturePage
     {
         static ClowdWin64.DxScreenCapture _wdxc;
         static FloatingButtonWindow _floating;

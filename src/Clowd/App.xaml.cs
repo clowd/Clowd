@@ -243,9 +243,9 @@ namespace Clowd
 
             // ui
             container.Register<IPageManager, PageManager>();
-            container.Register<IScreenCapturePage, SelectRegionWindow>(new PerScopeLifetime());
+            container.Register<IScreenCapturePage, ScreenCaptureWindow>(new PerScopeLifetime());
             container.Register<ILiveDrawPage, AntFu7.LiveDraw.LiveDrawWindow>(new PerScopeLifetime());
-            //container.Register<IVideoCapturePage, VideoOverlayWindow>(new PerScopeLifetime());
+            container.Register<IVideoCapturePage, VideoCaptureWindow>(new PerScopeLifetime());
             container.Register<ISettingsPage>(_ => TemplatedWindow.SingletonWindowFactory<SettingsPage>(), new PerScopeLifetime());
 
             // we create this TasksView here in main thread so there won't be issues with MTA threads requesting this object in the future

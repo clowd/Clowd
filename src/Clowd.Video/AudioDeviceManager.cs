@@ -52,10 +52,13 @@ namespace Clowd.Video
         {
             get
             {
+                if (_deviceId == DEFAULT_CAPTURE || _deviceId == DEFAULT_RENDER)
+                    return "default";
+
                 var mm = GetMM();
                 try
                 {
-                    return mm.isDefault ? "default" : mm.device.ID;
+                    return mm.device.ID;
                 }
                 finally
                 {
@@ -110,6 +113,10 @@ namespace Clowd.Video
         }
 
         public IAudioLevelListener GetLevelListener() => new LevelListener(GetMM().device);
+
+        public static bool operator ==(NAudioDevice d1, NAudioDevice d2) => d1.Equals(d2);
+
+        public static bool operator !=(NAudioDevice d1, NAudioDevice d2) => d1.Equals(d2);
 
         public override bool Equals(object obj)
         {
