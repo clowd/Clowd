@@ -19,6 +19,7 @@ using Clowd.Interop.Shcore;
 using Clowd.UI.Controls;
 using Clowd.UI.Converters;
 using PropertyChanged;
+using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
@@ -32,7 +33,7 @@ namespace Clowd.UI
         private bool _isVisible;
         private readonly object _lock = new object();
 
-        private FloatingButtonWindow(IEnumerable<CaptureToolButton> buttons)
+        public FloatingButtonWindow(IEnumerable<CaptureToolButton> buttons)
         {
             this.Resources = Application.Current.Resources;
             NameScope.SetNameScope(this, new NameScope());
@@ -47,6 +48,11 @@ namespace Clowd.UI
             Height = 0;
             KeyDown += FloatingButtonWindow_KeyDown;
             LayoutUpdated += FloatingButtonWindow_LayoutUpdated;
+
+            Show(); // need to show to kick of wpf/directx rendering pipeline
+            HidePanel(); // re-hide before we add components (which will cause window to be resized)
+
+            Topmost = true;
 
             _buttons = buttons.ToList();
 
@@ -77,16 +83,24 @@ namespace Clowd.UI
 
         private void FloatingButtonWindow_LayoutUpdated(object sender, EventArgs e)
         {
-            var selection = _lastSelection;
+            if (MainGrid == null || MainPanel == null || !_isVisible)
+                return; // on first render, content will not have been created yet.
+
+            //var selection = _lastSelection;
             var desiredSize = MainPanel.DesiredSize;
 
             // get bounds and dpi of target display (display which contains the center point of the rect)
-            RECT nativeSel = selection;
+            RECT nativeSel = _lastSelection;
             var hMon = USER32.MonitorFromRect(ref nativeSel, MonitorOptions.MONITOR_DEFAULTTONEAREST);
             var monInfo = new MONITORINFO();
             monInfo.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
             USER32.GetMonitorInfo(hMon, ref monInfo);
+
+            // TODO translate this for virtual screen so all coordinates are > 0
+            //var screenBounds = ScreenRect.FromSystem(monInfo.rcMonitor);
+            //var selection = ScreenRect.FromSystem(_lastSelection);
             System.Drawing.Rectangle screenBounds = monInfo.rcMonitor;
+            System.Drawing.Rectangle selection = _lastSelection;
 
             uint dpiX = 0, dpiY = 0;
             SHCORE.GetDpiForMonitor(hMon, MONITOR_DPI_TYPE.MDT_EFFECTIVE_DPI, ref dpiX, ref dpiY);
@@ -145,15 +159,13 @@ namespace Clowd.UI
             else if (indLeft + horizontalSize > screenBounds.Right)
                 indLeft = screenBounds.Right - horizontalSize;
 
+
             USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, indLeft, indTop, horizontalSize, verticalSize, SWP.NOACTIVATE);
         }
 
         public static FloatingButtonWindow Create(IEnumerable<CaptureToolButton> buttons)
         {
             var w = new FloatingButtonWindow(buttons);
-            w.Show(); // need to show to kick of wpf/directx rendering pipeline
-            w.HidePanel();
-            w.Topmost = true;
             return w;
         }
 
@@ -161,17 +173,18 @@ namespace Clowd.UI
         {
             lock (_lock)
             {
-                if (_lastSelection == selection && _isVisible)
-                    return;
-
-                _lastSelection = selection;
-
-                this.InvalidateMeasure();
-                this.UpdateLayout();
-
-                if (!_isVisible)
+                if (_isVisible && _lastSelection != selection) // position updated
                 {
+                    _lastSelection = selection;
+                    this.InvalidateMeasure();
+                    this.UpdateLayout();
+                }
+                else if (!_isVisible) // hidden; becoming visible
+                {
+                    _lastSelection = selection;
                     _isVisible = true;
+                    this.InvalidateMeasure();
+                    this.UpdateLayout();
                     USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE | SWP.NOMOVE | SWP.SHOWWINDOW);
                 }
             }
