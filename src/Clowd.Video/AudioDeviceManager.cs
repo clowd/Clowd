@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Clowd.Video
@@ -133,6 +134,7 @@ namespace Clowd.Video
         private readonly MMDevice _device;
         private readonly AudioClient _audioClient;
         private bool _disposed = false;
+        private Thread _thread;
 
         ~LevelListener()
         {
@@ -141,6 +143,7 @@ namespace Clowd.Video
 
         public LevelListener(MMDevice device)
         {
+            _thread = Thread.CurrentThread;
             _device = device;
             _audioClient = device.AudioClient; // this property creates a new audio client that must be disposed
             _audioClient.Initialize(AudioClientShareMode.Shared,
@@ -156,6 +159,8 @@ namespace Clowd.Video
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(LevelListener));
+            if (Thread.CurrentThread != _thread)
+                throw new InvalidOperationException("This object can only be accessed from the thread which created it.");
             return _device.AudioMeterInformation.MasterPeakValue;
         }
 
@@ -163,6 +168,8 @@ namespace Clowd.Video
         {
             if (!_disposed)
             {
+                if (Thread.CurrentThread != _thread)
+                    throw new InvalidOperationException("This object can only be accessed from the thread which created it.");
                 _audioClient.Stop();
                 _audioClient.Dispose();
                 _device.Dispose();

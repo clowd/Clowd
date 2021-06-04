@@ -17,37 +17,22 @@ using Clowd.Interop;
 using Clowd.Interop.DwmApi;
 using Clowd.Interop.Shcore;
 using Clowd.UI.Controls;
+using Clowd.UI.Converters;
 using PropertyChanged;
 
 namespace Clowd.UI
 {
-    [ImplementPropertyChanged]
-    public class FloatingButtonDetail
-    {
-        public bool Primary { get; set; }
-        public EventHandler Executed { get; set; }
-        public string IconResourceName { get; set; }
-        public string IconResourceNameAlternate { get; set; }
-        public string Label { get; set; }
-        public bool Enabled { get; set; }
-        public bool PulseBackground { get; set; }
-        public StorableKeyGesture[] Gestures { get; set; }
-    }
-
     internal sealed class FloatingButtonWindow : InteropWindow
     {
         public Canvas MainGrid { get; private set; }
         public StackPanel MainPanel { get; private set; }
 
-        public ReadOnlyCollection<FloatingButtonDetail> ButtonDetails { get; private set; }
-
-        private List<CaptureToolButton> ButtonElements { get; set; }
-
+        private List<CaptureToolButton> _buttons;
         private System.Drawing.Rectangle _lastSelection;
         private bool _isVisible;
         private readonly object _lock = new object();
 
-        private FloatingButtonWindow(IList<FloatingButtonDetail> buttons)
+        private FloatingButtonWindow(IEnumerable<CaptureToolButton> buttons)
         {
             this.Resources = Application.Current.Resources;
             NameScope.SetNameScope(this, new NameScope());
@@ -63,58 +48,23 @@ namespace Clowd.UI
             KeyDown += FloatingButtonWindow_KeyDown;
             LayoutUpdated += FloatingButtonWindow_LayoutUpdated;
 
-            var ro = buttons.ToList().AsReadOnly();
-
-            var els = ro.Select(b =>
-            {
-                var btn = new CaptureToolButton();
-                btn.Text = b.Label;
-
-                UIElement icon = null;
-                UIElement iconAlt = null;
-
-                if (!String.IsNullOrEmpty(b.IconResourceName))
-                    icon = this.Resources[b.IconResourceName] as UIElement;
-
-                if (!String.IsNullOrEmpty(b.IconResourceNameAlternate))
-                    icon = this.Resources[b.IconResourceNameAlternate] as UIElement;
-
-                btn.IconPath = icon;
-                btn.IconPathAlternate = iconAlt;
-                btn.PulseBackground = b.PulseBackground;
-
-                if (b.Primary)
-                {
-                    btn.Background = this.Resources["HighlightBrush"] as Brush;
-                }
-
-                var enabledBinding = new Binding(nameof(FloatingButtonDetail.Enabled));
-                enabledBinding.Source = b;
-                enabledBinding.Mode = BindingMode.TwoWay;
-                btn.SetBinding(CaptureToolButton.IsEnabledProperty, enabledBinding);
-
-                if (b.Executed != null)
-                {
-                    btn.Click += (s, e) =>
-                    {
-                        b.Executed(this, new EventArgs());
-                    };
-                }
-                else
-                {
-                    btn.IsEnabled = false;
-                }
-
-                return btn;
-            });
-
-            ButtonDetails = ro;
-            ButtonElements = els.ToList();
+            _buttons = buttons.ToList();
 
             var sp = new StackPanel();
             sp.Orientation = Orientation.Horizontal;
             sp.Background = this.Resources["IdealBackgroundBrush"] as Brush;
-            ButtonElements.ForEach(b => sp.Children.Add(b));
+
+            if (!_buttons.Any())
+                throw new ArgumentException("Can not create a FloatingButtonWindow with no buttons.");
+
+            sp.Children.Add(_buttons[0]);
+            if (_buttons.Count > 1)
+            {
+                sp.Children.Add(new Rectangle() { Width = 3, Height = 3 });
+                foreach (var br in _buttons.Skip(1))
+                    sp.Children.Add(br);
+            }
+
             MainPanel = sp;
 
             var grid = new Canvas();
@@ -198,7 +148,7 @@ namespace Clowd.UI
             USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, indLeft, indTop, horizontalSize, verticalSize, SWP.NOACTIVATE);
         }
 
-        public static FloatingButtonWindow Create(IList<FloatingButtonDetail> buttons)
+        public static FloatingButtonWindow Create(IEnumerable<CaptureToolButton> buttons)
         {
             var w = new FloatingButtonWindow(buttons);
             w.Show(); // need to show to kick of wpf/directx rendering pipeline
@@ -207,26 +157,23 @@ namespace Clowd.UI
             return w;
         }
 
-        public void ShowPanel(System.Drawing.Rectangle selection, IntPtr owner)
+        public void ShowPanel(System.Drawing.Rectangle selection)
         {
             lock (_lock)
             {
                 if (_lastSelection == selection && _isVisible)
                     return;
 
-                this.Dispatcher.Invoke(() =>
-                {
-                    _lastSelection = selection;
-                    this.InvalidateMeasure();
-                    this.UpdateLayout();
+                _lastSelection = selection;
 
-                    if (!_isVisible)
-                    {
-                        _isVisible = true;
-                        SetHwndOwner(owner);
-                        USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE | SWP.NOMOVE | SWP.SHOWWINDOW);
-                    }
-                });
+                this.InvalidateMeasure();
+                this.UpdateLayout();
+
+                if (!_isVisible)
+                {
+                    _isVisible = true;
+                    USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE | SWP.NOMOVE | SWP.SHOWWINDOW);
+                }
             }
         }
 
@@ -234,12 +181,11 @@ namespace Clowd.UI
         {
             lock (_lock)
             {
-                this.Dispatcher.Invoke(() =>
-                {
-                    SetHwndOwner(IntPtr.Zero);
-                    USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE | SWP.NOMOVE | SWP.HIDEWINDOW);
-                    _isVisible = false;
-                });
+                if (!_isVisible)
+                    return;
+
+                USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE | SWP.NOMOVE | SWP.HIDEWINDOW);
+                _isVisible = false;
             }
         }
 
@@ -335,24 +281,14 @@ namespace Clowd.UI
                 return false;
 
             var mods = Keyboard.Modifiers;
-            for (int i = 0; i < ButtonDetails.Count; i++)
+            foreach (var b in _buttons)
             {
-                var detail = ButtonDetails[i];
-                foreach (var g in detail.Gestures)
+                if (b.ProcessKeyState(mods, k))
                 {
-                    if (g.Key == k && g.Modifiers == mods)
-                    {
-                        this.Dispatcher.Invoke(() =>
-                        {
-                            if (detail.Executed != null)
-                            {
-                                detail.Executed(this, new EventArgs());
-                            }
-                        });
-                        return true;
-                    }
+                    return true;
                 }
             }
+
             return false;
         }
     }
