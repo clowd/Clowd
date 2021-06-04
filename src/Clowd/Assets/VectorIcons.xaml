@@ -90,6 +90,14 @@
         Fill="{StaticResource IconForeground}" />
 
     <Path
+        x:Key="IconStop"
+        Width="24"
+        Height="24"
+        x:Shared="False"
+        Data="M17,19H7c-1.105,0-2-0.895-2-2V7c0-1.105,0.895-2,2-2h10c1.105,0,2,0.895,2,2v10C19,18.105,18.105,19,17,19z"
+        Fill="{StaticResource IconForeground}" />
+
+    <Path
         x:Key="IconSettings"
         Width="172"
         Height="172"

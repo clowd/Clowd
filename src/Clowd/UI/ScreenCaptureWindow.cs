@@ -9,6 +9,7 @@ using System.Windows.Media.Imaging;
 using Clowd.Capture;
 using Clowd.Config;
 using Clowd.Interop;
+using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
 using ScreenVersusWpf;
@@ -19,7 +20,6 @@ namespace Clowd.UI
     {
         static ClowdWin64.DxScreenCapture _wdxc;
         static FloatingButtonWindow _floating;
-        static List<FloatingButtonDetail> _buttons;
 
         static readonly object _lock = new object();
 
@@ -35,102 +35,95 @@ namespace Clowd.UI
                     _floating = null;
                 }
 
-                _buttons = new List<FloatingButtonDetail>();
+                var _buttons = new List<CaptureToolButton>();
 
-                _buttons.Add(new FloatingButtonDetail
+                _buttons.Add(new CaptureToolButton
                 {
                     Primary = true,
-                    Enabled = true,
-                    Label = "_Upload",
-                    IconResourceName = "IconClowd",
+                    Text = "_Upload",
+                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconClowd),
                     Executed = OnUpload,
                     Gestures = new StorableKeyGesture[]
                     {
                         new StorableKeyGesture(Key.U),
-                    }
+                    }.ToList()
                 });
 
-                _buttons.Add(new FloatingButtonDetail
+                _buttons.Add(new CaptureToolButton
                 {
                     Primary = true,
-                    Enabled = true,
-                    Label = "_Photo",
-                    IconResourceName = "IconPhoto",
+                    Text = "_Photo",
+                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconPhoto),
                     Executed = OnPhoto,
                     Gestures = new StorableKeyGesture[]
                     {
                         new StorableKeyGesture(Key.E),
                         new StorableKeyGesture(Key.P),
                         new StorableKeyGesture(Key.Enter),
-                    }
+                    }.ToList()
                 });
 
-                _buttons.Add(new FloatingButtonDetail
+                _buttons.Add(new CaptureToolButton
                 {
                     Primary = true,
-                    Enabled = true,
-                    Label = "_Video",
-                    IconResourceName = "IconVideo",
+                    Text = "_Video",
+                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconVideo),
                     Executed = OnVideo,
                     Gestures = new StorableKeyGesture[]
                     {
                         new StorableKeyGesture(Key.V),
-                    }
+                    }.ToList()
                 });
 
-                _buttons.Add(new FloatingButtonDetail
+                _buttons.Add(new CaptureToolButton
                 {
                     Primary = true,
-                    Enabled = true,
-                    Label = "_Copy",
-                    IconResourceName = "IconCopy",
+                    Text = "_Copy",
+                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconCopy),
                     Executed = OnCopy,
                     Gestures = new StorableKeyGesture[]
                     {
                         new StorableKeyGesture(Key.C),
                         new StorableKeyGesture(Key.C, ModifierKeys.Control),
                         new StorableKeyGesture(Key.Insert, ModifierKeys.Control),
-                    }
+                    }.ToList()
                 });
 
-                _buttons.Add(new FloatingButtonDetail
+                _buttons.Add(new CaptureToolButton
                 {
                     Primary = true,
-                    Enabled = true,
-                    Label = "_Save",
-                    IconResourceName = "IconSave",
+                    Text = "_Save",
+                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconSave),
                     Executed = OnSave,
                     Gestures = new StorableKeyGesture[]
                     {
                         new StorableKeyGesture(Key.S),
                         new StorableKeyGesture(Key.S, ModifierKeys.Control),
                         new StorableKeyGesture(Key.S, ModifierKeys.Control | ModifierKeys.Shift),
-                    }
+                    }.ToList()
                 });
 
-                _buttons.Add(new FloatingButtonDetail
+                _buttons.Add(new CaptureToolButton
                 {
-                    Enabled = true,
-                    Label = "_Reset",
-                    IconResourceName = "IconReset",
+                    Text = "_Reset",
+                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconReset),
                     Executed = OnReset,
                     Gestures = new StorableKeyGesture[]
                     {
                         new StorableKeyGesture(Key.R),
-                    }
+                    }.ToList()
                 });
 
-                _buttons.Add(new FloatingButtonDetail
+                _buttons.Add(new CaptureToolButton
                 {
-                    Enabled = true,
-                    Label = "E_XIT",
-                    IconResourceName = "IconClose",
+                    Text = "E_XIT",
+                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconClose),
                     Executed = OnExit,
                     Gestures = new StorableKeyGesture[]
                     {
                         new StorableKeyGesture(Key.X),
                         new StorableKeyGesture(Key.Escape),
-                    }
+                    }.ToList()
                 });
 
                 _floating = FloatingButtonWindow.Create(_buttons);
@@ -158,12 +151,12 @@ namespace Clowd.UI
 
         static void OnVideo(object sender, EventArgs e)
         {
-            ProcessBitmap(async (s, b) =>
-            {
-                var manager = App.GetService<IPageManager>();
-                var video = manager.CreateVideoCapturePage();
-                video.Open(ScreenRect.FromSystem(s));
-            });
+            var sel = _wdxc.Selection;
+            OnExit(sender, e);
+
+            var manager = App.GetService<IPageManager>();
+            var video = manager.CreateVideoCapturePage();
+            video.Open(ScreenRect.FromSystem(sel));
         }
 
         static void OnReset(object sender, EventArgs e)
@@ -182,7 +175,7 @@ namespace Clowd.UI
             });
         }
 
-        static async void OnSave(object sender, EventArgs e)
+        static void OnSave(object sender, EventArgs e)
         {
             ProcessBitmap(async (s, b) =>
             {
@@ -236,10 +229,10 @@ namespace Clowd.UI
                     AccentColor = clr,
                 };
                 var dx = new ClowdWin64.DxScreenCapture(options);
-                dx.Disposed += _wdxc_Disposed;
-                dx.LayoutUpdated += _wdxc_LayoutUpdated;
-                dx.KeyDown += _wdxc_KeyDown;
-                dx.ColorCaptured += _wdxc_ColorCaptured;
+                dx.Disposed += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxDisposedEventArgs>(CaptureDisposed);
+                dx.LayoutUpdated += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxLayoutUpdatedEventArgs>(CaptureLayoutUpdated);
+                dx.KeyDown += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxKeyDownEventArgs>(CaptureKeyDown);
+                dx.ColorCaptured += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxColorCapturedEventArgs>(CaptureColorCaptured);
                 //dx.Show();
 
                 // close old capture (if any)
@@ -299,12 +292,12 @@ namespace Clowd.UI
             }
         }
 
-        private void _wdxc_KeyDown(object sender, ClowdWin64.DxKeyDownEventArgs e)
+        private void CaptureKeyDown(object sender, ClowdWin64.DxKeyDownEventArgs e)
         {
             _floating?.ProcessKey(KeyInterop.KeyFromVirtualKey(e.KeyCode));
         }
 
-        private void _wdxc_Disposed(object sender, ClowdWin64.DxDisposedEventArgs e)
+        private void CaptureDisposed(object sender, ClowdWin64.DxDisposedEventArgs e)
         {
             DisposeInternal();
             Closed?.Invoke(this, new EventArgs());
@@ -319,11 +312,11 @@ namespace Clowd.UI
             }
         }
 
-        private void _wdxc_LayoutUpdated(object sender, ClowdWin64.DxLayoutUpdatedEventArgs e)
+        private void CaptureLayoutUpdated(object sender, ClowdWin64.DxLayoutUpdatedEventArgs e)
         {
             if (e.Captured)
             {
-                _floating.ShowPanel(e.Selection, IntPtr.Zero);
+                _floating.ShowPanel(e.Selection);
             }
             else
             {
@@ -331,7 +324,7 @@ namespace Clowd.UI
             }
         }
 
-        private void _wdxc_ColorCaptured(object sender, ClowdWin64.DxColorCapturedEventArgs e)
+        private void CaptureColorCaptured(object sender, ClowdWin64.DxColorCapturedEventArgs e)
         {
             DisposeInternal();
             _floating?.HidePanel();

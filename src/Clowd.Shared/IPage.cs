@@ -22,7 +22,7 @@ namespace Clowd
     public interface IPage : IDisposable
     {
         event EventHandler Closed;
-        void Close();
+        //void Close();
     }
 
     public interface IVideoCapturePage : IPage

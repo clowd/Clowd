@@ -1,12 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
-using System.Timers;
-using System.Windows.Threading;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using Clowd.Util;
 using Clowd.Video;
 
 namespace Clowd.UI.Helpers
@@ -17,12 +16,12 @@ namespace Clowd.UI.Helpers
         {
             get
             {
-                ThrowIfDisposed();
+                ThrowIfStateInvalid();
                 return _microphoneDevice;
             }
             set
             {
-                ThrowIfDisposed();
+                ThrowIfStateInvalid();
 
                 if (value != null && value.Equals(_microphoneDevice))
                     return;
@@ -43,12 +42,12 @@ namespace Clowd.UI.Helpers
         {
             get
             {
-                ThrowIfDisposed();
+                ThrowIfStateInvalid();
                 return _speakerDevice;
             }
             set
             {
-                ThrowIfDisposed();
+                ThrowIfStateInvalid();
 
                 if (value != null && value.Equals(_speakerDevice))
                     return;
@@ -91,6 +90,18 @@ namespace Clowd.UI.Helpers
             }
         }
 
+        public bool MicrophoneEnabled
+        {
+            get => _settings.CaptureMicrophone;
+            set => _settings.CaptureMicrophone = value;
+        }
+
+        public bool SpeakerEnabled
+        {
+            get => _settings.CaptureSpeaker;
+            set => _settings.CaptureSpeaker = value;
+        }
+
         private IAudioMicrophoneDevice _microphoneDevice;
         private IAudioSpeakerDevice _speakerDevice;
         private IAudioLevelListener _lvlSpeaker;
@@ -102,24 +113,22 @@ namespace Clowd.UI.Helpers
 
         private bool _disposed;
         private VideoCapturerSettings _settings;
-        private Dispatcher _dispatcher;
-        private Timer _audioTimer;
+        private IDisposable _timer;
+        private Thread _thread;
 
-        public UIAudioMonitor(VideoCapturerSettings settings, Dispatcher dispatcher, int refreshDelayMs)
+        public UIAudioMonitor(VideoCapturerSettings settings, int refreshDelayMs)
         {
-            _dispatcher = dispatcher;
+            _thread = Thread.CurrentThread;
             _settings = settings;
+
+            ThrowIfStateInvalid();
 
             if (_settings.CaptureMicrophoneDevice == null)
                 _settings.CaptureMicrophoneDevice = AudioDeviceManager.GetDefaultMicrophone();
             if (_settings.CaptureSpeakerDevice == null)
                 _settings.CaptureSpeakerDevice = AudioDeviceManager.GetDefaultSpeaker();
 
-            _audioTimer = new Timer(refreshDelayMs);
-            _audioTimer.Elapsed += AudioTimer_Elapsed;
-            _audioTimer.AutoReset = true;
-            _audioTimer.Enabled = true;
-            _audioTimer.Start();
+            _timer = DisposableTimer.Start(TimeSpan.FromMilliseconds(20), AudioTimer_Elapsed);
 
             _settings.PropertyChanged += settings_PropertyChanged;
             settings_PropertyChanged(null, null);
@@ -139,21 +148,25 @@ namespace Clowd.UI.Helpers
         {
             SpeakerDevice = _settings.CaptureSpeakerDevice;
             MicrophoneDevice = _settings.CaptureMicrophoneDevice;
+            OnPropertyChanged(nameof(MicrophoneEnabled));
+            OnPropertyChanged(nameof(SpeakerEnabled));
         }
 
-        private void AudioTimer_Elapsed(object sender, ElapsedEventArgs e)
+        private void AudioTimer_Elapsed()
         {
-            double spk = ConvertLevelToDb(_lvlSpeaker);
-            double mic = ConvertLevelToDb(_lvlMic);
-
-            if (spk != SpeakerLevel || MicrophoneLevel != MicrophoneLevel)
+            try
             {
-                _dispatcher.Invoke(() =>
+                double spk = ConvertLevelToDb(_lvlSpeaker);
+                double mic = ConvertLevelToDb(_lvlMic);
+
+                if (spk != SpeakerLevel || MicrophoneLevel != MicrophoneLevel)
                 {
                     MicrophoneLevel = mic;
                     SpeakerLevel = spk;
-                });
+                }
             }
+            catch (ObjectDisposedException)
+            { }
         }
 
         private double ConvertLevelToDb(IAudioLevelListener item)
@@ -169,21 +182,63 @@ namespace Clowd.UI.Helpers
             return 0;
         }
 
+        public ProgressBar GetSpeakerVisual()
+        {
+            ThrowIfStateInvalid();
+            var prog = new ProgressBar { Style = (Style)App.Current.Resources["AudioLevelProgressBarStyle"] };
+            var bnd = new Binding(nameof(SpeakerLevel));
+            bnd.Source = this;
+            bnd.Mode = BindingMode.OneWay;
+            prog.SetBinding(ProgressBar.ValueProperty, bnd);
+            return prog;
+        }
+
+        public ProgressBar GetMicrophoneVisual()
+        {
+            ThrowIfStateInvalid();
+            var prog = new ProgressBar { Style = (Style)App.Current.Resources["AudioLevelProgressBarStyle"] };
+            var bnd = new Binding(nameof(MicrophoneLevel));
+            bnd.Source = this;
+            bnd.Mode = BindingMode.OneWay;
+            prog.SetBinding(ProgressBar.ValueProperty, bnd);
+            return prog;
+        }
+
+        public Binding GetMicrophoneEnabledBinding()
+        {
+            ThrowIfStateInvalid();
+            var bnd = new Binding(nameof(MicrophoneEnabled));
+            bnd.Source = this;
+            bnd.Mode = BindingMode.OneWay;
+            return bnd;
+        }
+
+        public Binding GetSpeakerEnabledBinding()
+        {
+            ThrowIfStateInvalid();
+            var bnd = new Binding(nameof(SpeakerEnabled));
+            bnd.Source = this;
+            bnd.Mode = BindingMode.OneWay;
+            return bnd;
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
             _settings.PropertyChanged -= settings_PropertyChanged;
-            _audioTimer.Stop();
-            _audioTimer.Dispose();
+            _timer.Dispose();
             _lvlSpeaker?.Dispose();
             _lvlMic?.Dispose();
         }
 
-        private void ThrowIfDisposed()
+        private void ThrowIfStateInvalid()
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(UIAudioMonitor));
+
+            if (_thread != Thread.CurrentThread)
+                throw new InvalidOperationException("This object must only be accessed from the thread which created it");
         }
     }
 }
