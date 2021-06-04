@@ -116,7 +116,7 @@ namespace Clowd.UI
 
                 _buttons.Add(new CaptureToolButton
                 {
-                    Text = "E_XIT",
+                    Text = "E_xit",
                     IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconClose),
                     Executed = OnExit,
                     Gestures = new StorableKeyGesture[]
