@@ -14,21 +14,14 @@
                 <ResourceDictionary Source="Assets/VectorGeometries.xaml" />
                 <ResourceDictionary Source="Assets/VectorIcons.xaml" />
                 <ResourceDictionary Source="Assets/MetroControls.xaml" />
+                <ResourceDictionary Source="Assets/Colors.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
-                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Colors.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
             <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />
             <conv:BoolToInverseConverter x:Key="Bool2Inverse" />
-
-            <SolidColorBrush x:Key="AccentColorBrush" Color="#3b96d2" />
-
-            <Color x:Key="IdealBackgroundColor">#373737</Color>
-            <SolidColorBrush x:Key="IdealBackgroundBrush" Color="{StaticResource IdealBackgroundColor}" />
-
-            <Color x:Key="IdealForegroundColor">White</Color>
-            <SolidColorBrush x:Key="IdealForegroundBrush" Color="{StaticResource IdealForegroundColor}" />
+            <conv:OnOffBrushConverter x:Key="OnOffBrush" />
 
             <DropShadowEffect
                 x:Key="z-depth1"
@@ -256,6 +249,34 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <Style x:Key="AudioLevelProgressBarStyle" TargetType="ProgressBar">
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="Height" Value="2" />
+                <Setter Property="Margin" Value="3,6" />
+                <Setter Property="LayoutTransform">
+                    <Setter.Value>
+                        <RotateTransform Angle="-90" />
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ProgressBar">
+                            <Grid Name="TemplateRoot" SnapsToDevicePixels="True">
+                                <Rectangle
+                                    Name="PART_Track"
+                                    Fill="White"
+                                    Opacity="0.6" />
+                                <Rectangle
+                                    Name="PART_Indicator"
+                                    HorizontalAlignment="Left"
+                                    Fill="{StaticResource AccentColorBrush}" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -6,7 +6,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
+using Clowd.Config;
 
 namespace Clowd.UI.Controls
 {
@@ -73,6 +75,25 @@ namespace Clowd.UI.Controls
             set => UpdateText(value);
         }
 
+        public bool Primary
+        {
+            set
+            {
+                if (value)
+                {
+                    this.Background = (Brush)this.Resources["HighlightBrush"];
+                }
+                else
+                {
+                    this.Background = (Brush)this.Resources["IdealBackgroundBrush"];
+                }
+            }
+        }
+
+        public List<StorableKeyGesture> Gestures { get; set; } = new List<StorableKeyGesture>();
+
+        public EventHandler Executed { get; set; }
+
         static CaptureToolButton()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(CaptureToolButton), new FrameworkPropertyMetadata(typeof(CaptureToolButton)));
@@ -80,6 +101,26 @@ namespace Clowd.UI.Controls
 
         public CaptureToolButton()
         {
+            this.Resources = Application.Current.Resources;
+            this.Click += CaptureToolButton_Click;
+        }
+
+        private void CaptureToolButton_Click(object sender, RoutedEventArgs e)
+        {
+            Executed?.Invoke(this, e);
+        }
+
+        public bool ProcessKeyState(ModifierKeys modifier, Key key)
+        {
+            foreach (var g in Gestures)
+            {
+                if (g.Key == key && g.Modifiers == modifier)
+                {
+                    Executed?.Invoke(this, new EventArgs());
+                    return true;
+                }
+            }
+            return false;
         }
 
         public void UpdateText(string setTxt)
