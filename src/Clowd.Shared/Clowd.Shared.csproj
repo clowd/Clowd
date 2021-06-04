@@ -61,6 +61,7 @@
     <Compile Include="ITasksView.cs" />
     <Compile Include="PropertyChanged.Fody.cs" />
     <Compile Include="SharedExtensions.cs" />
+    <Compile Include="SimpleNotifyObject.cs" />
     <Compile Include="Upload.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="IVideoCapturer.cs" />
