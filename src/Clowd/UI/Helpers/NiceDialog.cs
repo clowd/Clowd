@@ -437,6 +437,9 @@ namespace Clowd.UI.Helpers
             form.Closed += (s, e) => taskSource.SetResult(form.DialogResult);
             form.Show(new Win32Window(ownerHandle));
 
+            Interop.USER32.SetForegroundWindow(form.Handle);
+            Interop.USER32.SetActiveWindow(form.Handle);
+
             return taskSource.Task;
         }
 

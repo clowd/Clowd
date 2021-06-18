@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clowd.Capture;
@@ -72,6 +73,10 @@ namespace Clowd.UI
             var window = TemplatedWindow.CreateWindow("Edit Capture", page);
             page.DoWindowFit(window);
             window.Show();
+
+            var iop = new WindowInteropHelper(window);
+            Interop.USER32.SetForegroundWindow(iop.Handle);
+            Interop.USER32.SetActiveWindow(iop.Handle);
         }
 
         protected override async void OnActivated(Window wnd)
