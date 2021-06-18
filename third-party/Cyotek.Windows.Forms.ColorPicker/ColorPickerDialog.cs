@@ -97,18 +97,40 @@ namespace Cyotek.Windows.Forms
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.H)
+            void FocusAndSelect(NumericUpDown n)
             {
+                n.Focus();
+                n.Select(0, int.MaxValue);
+            }
+
+            if (e.KeyCode == Keys.R && e.Alt)
+                FocusAndSelect(colorEditor.Controls.OfType<NumericUpDown>().First(c => c.Name == "rNumericUpDown"));
+            else if (e.KeyCode == Keys.G && e.Alt)
+                FocusAndSelect(colorEditor.Controls.OfType<NumericUpDown>().First(c => c.Name == "gNumericUpDown"));
+            else if (e.KeyCode == Keys.B && e.Alt)
+                FocusAndSelect(colorEditor.Controls.OfType<NumericUpDown>().First(c => c.Name == "bNumericUpDown"));
+            else if (e.KeyCode == Keys.A && e.Alt)
+                FocusAndSelect(colorEditor.Controls.OfType<NumericUpDown>().First(c => c.Name == "aNumericUpDown"));
+            else if (e.KeyCode == Keys.H && e.Alt)
+                FocusAndSelect(colorEditor.Controls.OfType<NumericUpDown>().First(c => c.Name == "hNumericUpDown"));
+            else if (e.KeyCode == Keys.S && e.Alt)
+                FocusAndSelect(colorEditor.Controls.OfType<NumericUpDown>().First(c => c.Name == "sNumericUpDown"));
+            else if (e.KeyCode == Keys.L && e.Alt)
+                FocusAndSelect(colorEditor.Controls.OfType<NumericUpDown>().First(c => c.Name == "lNumericUpDown"));
+            else if (e.KeyCode == Keys.X && e.Alt)
+            {
+                var tb = colorEditor.Controls.OfType<ComboBox>().First(c => c.Name == "hexTextBox");
+                tb.Focus();
+                tb.SelectAll();
+            }
+
+            else if (e.KeyCode == Keys.H && e.Control)
                 this.btnCopyHsl_Click(this, e);
-            }
-            else if (e.KeyCode == Keys.X)
-            {
+            else if (e.KeyCode == Keys.X && e.Control)
                 this.btnCopyHex_Click(this, e);
-            }
-            else if (e.KeyCode == Keys.R)
-            {
+            else if (e.KeyCode == Keys.R && e.Control)
                 this.btnCopyRgb_Click(this, e);
-            }
+
             else if (e.KeyCode == Keys.Tab)
             {
                 if (e.Modifiers == Keys.Shift)
@@ -353,9 +375,9 @@ namespace Cyotek.Windows.Forms
         {
             string hsl;
             if (Color.A == 255)
-                hsl = $"hsl({colorEditorManager.HslColor.H}, {colorEditorManager.HslColor.S * 100:0}%, {colorEditorManager.HslColor.L * 100:0}%)";
+                hsl = $"hsl({colorEditorManager.HslColor.H:0}, {colorEditorManager.HslColor.S * 100:0}%, {colorEditorManager.HslColor.L * 100:0}%)";
             else
-                hsl = $"hsla({colorEditorManager.HslColor.H}, {colorEditorManager.HslColor.S}%, {colorEditorManager.HslColor.L}%, {this.Color.A})";
+                hsl = $"hsla({colorEditorManager.HslColor.H:0}, {colorEditorManager.HslColor.S * 100:0}%, {colorEditorManager.HslColor.L * 100:0}%, {this.Color.A})";
             Clipboard.SetText(hsl);
             this.Close();
         }
