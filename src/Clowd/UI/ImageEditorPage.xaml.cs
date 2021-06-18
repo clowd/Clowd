@@ -376,6 +376,16 @@ namespace Clowd.UI
             drawingCanvas.ZoomPanFit();
         }
 
+        private void MoveToFrontCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            drawingCanvas.MoveToFront();
+        }
+
+        private void MoveToBackCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            drawingCanvas.MoveToBack();
+        }
+
         #endregion
 
         #region Events

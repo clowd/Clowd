@@ -23,6 +23,8 @@
             <RoutedUICommand x:Key="Commands.SelectTool" />
             <RoutedUICommand x:Key="Commands.ZoomFit" />
             <RoutedUICommand x:Key="Commands.ZoomActual" />
+            <RoutedUICommand x:Key="Commands.MoveToFront" />
+            <RoutedUICommand x:Key="Commands.MoveToBack" />
             <draw:ToolTypeConverter x:Key="convToolType" />
             <conv:ZoomScaleConverter x:Key="convZoomScale" />
             <conv:StringPixelConverter x:Key="convPixel2String" />
@@ -156,6 +158,12 @@
             Key="NumPad1"
             Command="{StaticResource Commands.ZoomActual}"
             Modifiers="Ctrl" />
+        <KeyBinding
+            Key="Home"
+            Command="{StaticResource Commands.MoveToFront}"/>
+        <KeyBinding
+            Key="End"
+            Command="{StaticResource Commands.MoveToBack}"/>
     </UserControl.InputBindings>
     <UserControl.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Print" Executed="PrintCommand" />
@@ -172,6 +180,8 @@
         <CommandBinding Command="{StaticResource Commands.SelectTool}" Executed="SelectToolCommand" />
         <CommandBinding Command="{StaticResource Commands.ZoomActual}" Executed="ZoomActualCommand" />
         <CommandBinding Command="{StaticResource Commands.ZoomFit}" Executed="ZoomFitCommand" />
+        <CommandBinding Command="{StaticResource Commands.MoveToBack}" Executed="MoveToBackCommand" />
+        <CommandBinding Command="{StaticResource Commands.MoveToFront}" Executed="MoveToFrontCommand" />
     </UserControl.CommandBindings>
     <Grid
         x:Name="rootGrid"
