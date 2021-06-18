@@ -99,12 +99,15 @@ namespace Cyotek.Windows.Forms
         {
             if (e.KeyCode == Keys.H)
             {
+                this.btnCopyHsl_Click(this, e);
+            }
+            else if (e.KeyCode == Keys.X)
+            {
                 this.btnCopyHex_Click(this, e);
             }
             else if (e.KeyCode == Keys.R)
             {
                 this.btnCopyRgb_Click(this, e);
-
             }
             else if (e.KeyCode == Keys.Tab)
             {
@@ -153,7 +156,7 @@ namespace Cyotek.Windows.Forms
         {
             EventHandler handler;
 
-            handler = (EventHandler)this.Events[_eventPreviewColorChanged];
+            handler = (EventHandler) this.Events[_eventPreviewColorChanged];
 
             handler?.Invoke(this, e);
         }
@@ -343,6 +346,17 @@ namespace Cyotek.Windows.Forms
             else
                 rgb = $"rgba({this.Color.R}, {this.Color.G}, {this.Color.B}, {this.Color.A})";
             Clipboard.SetText(rgb);
+            this.Close();
+        }
+
+        private void btnCopyHsl_Click(object sender, EventArgs e)
+        {
+            string hsl;
+            if (Color.A == 255)
+                hsl = $"hsl({colorEditorManager.HslColor.H}, {colorEditorManager.HslColor.S * 100:0}%, {colorEditorManager.HslColor.L * 100:0}%)";
+            else
+                hsl = $"hsla({colorEditorManager.HslColor.H}, {colorEditorManager.HslColor.S}%, {colorEditorManager.HslColor.L}%, {this.Color.A})";
+            Clipboard.SetText(hsl);
             this.Close();
         }
     }
