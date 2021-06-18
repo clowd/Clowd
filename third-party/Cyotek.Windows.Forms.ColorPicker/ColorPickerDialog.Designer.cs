@@ -150,7 +150,7 @@ namespace Cyotek.Windows.Forms
             this.btnCopyHex.Name = "btnCopyHex";
             this.btnCopyHex.Size = new System.Drawing.Size(230, 23);
             this.btnCopyHex.TabIndex = 8;
-            this.btnCopyHex.Text = "Copy hex to clipboard (X)";
+            this.btnCopyHex.Text = "Copy hex to clipboard (Ctrl+X)";
             this.btnCopyHex.UseVisualStyleBackColor = true;
             this.btnCopyHex.Click += new System.EventHandler(this.btnCopyHex_Click);
             // 
@@ -160,7 +160,7 @@ namespace Cyotek.Windows.Forms
             this.btnCopyRgb.Name = "btnCopyRgb";
             this.btnCopyRgb.Size = new System.Drawing.Size(230, 23);
             this.btnCopyRgb.TabIndex = 9;
-            this.btnCopyRgb.Text = "Copy RGB to clipboard (R)";
+            this.btnCopyRgb.Text = "Copy RGB to clipboard (Ctrl+R)";
             this.btnCopyRgb.UseVisualStyleBackColor = true;
             this.btnCopyRgb.Click += new System.EventHandler(this.btnCopyRgb_Click);
             // 
@@ -170,7 +170,7 @@ namespace Cyotek.Windows.Forms
             this.btnCopyHsl.Name = "btnCopyHsl";
             this.btnCopyHsl.Size = new System.Drawing.Size(230, 23);
             this.btnCopyHsl.TabIndex = 10;
-            this.btnCopyHsl.Text = "Copy HSL to clipboard (H)";
+            this.btnCopyHsl.Text = "Copy HSL to clipboard (Ctrl+H)";
             this.btnCopyHsl.UseVisualStyleBackColor = true;
             // 
             // ColorPickerDialog
