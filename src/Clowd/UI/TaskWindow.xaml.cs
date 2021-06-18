@@ -163,7 +163,7 @@ namespace Clowd.UI
                 SetHeightTo(containerGrid.DesiredSize.Height + 35);
             }
             TaskList.Add(item);
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("OverallProgress"));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OverallProgress)));
         }
         public void RemoveTask(TaskViewItem item)
         {
@@ -207,11 +207,11 @@ namespace Clowd.UI
         {
             if (e.PropertyName == "Progress")
             {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("OverallProgress"));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OverallProgress)));
             }
             if (e.PropertyName == "Status" && ((TaskViewItem)sender).Status == TaskViewItem.TaskStatus.Executed)
             {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("OverallProgress"));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OverallProgress)));
                 await Task.Delay(1000);
                 if (TaskList.Any(t => t.Status == TaskViewItem.TaskStatus.Complete ||
                                       t.Status == TaskViewItem.TaskStatus.InProgress))
