@@ -97,7 +97,16 @@ namespace Cyotek.Windows.Forms
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Tab)
+            if (e.KeyCode == Keys.H)
+            {
+                this.btnCopyHex_Click(this, e);
+            }
+            else if (e.KeyCode == Keys.R)
+            {
+                this.btnCopyRgb_Click(this, e);
+
+            }
+            else if (e.KeyCode == Keys.Tab)
             {
                 if (e.Modifiers == Keys.Shift)
                     this.ProcessTabKey(false);
@@ -314,5 +323,27 @@ namespace Cyotek.Windows.Forms
         }
 
         #endregion
+
+        private void btnCopyHex_Click(object sender, EventArgs e)
+        {
+            string hex;
+            if (Color.A == 255)
+                hex = string.Format("#{0:X2}{1:X2}{2:X2}", this.Color.R, this.Color.G, this.Color.B);
+            else
+                hex = string.Format("#{0:X2}{1:X2}{2:X2}{3:X2}", this.Color.R, this.Color.G, this.Color.B, this.Color.A);
+            Clipboard.SetText(hex);
+            this.Close();
+        }
+
+        private void btnCopyRgb_Click(object sender, EventArgs e)
+        {
+            string rgb;
+            if (Color.A == 255)
+                rgb = $"rgb({this.Color.R}, {this.Color.G}, {this.Color.B})";
+            else
+                rgb = $"rgba({this.Color.R}, {this.Color.G}, {this.Color.B}, {this.Color.A})";
+            Clipboard.SetText(rgb);
+            this.Close();
+        }
     }
 }
