@@ -31,6 +31,7 @@ namespace Cyotek.Windows.Forms
             this.colorEditorManager = new Cyotek.Windows.Forms.ColorEditorManager();
             this.btnCopyHex = new System.Windows.Forms.Button();
             this.btnCopyRgb = new System.Windows.Forms.Button();
+            this.btnCopyHsl = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // okButton
@@ -59,7 +60,7 @@ namespace Cyotek.Windows.Forms
             // previewPanel
             // 
             this.previewPanel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.previewPanel.Location = new System.Drawing.Point(453, 265);
+            this.previewPanel.Location = new System.Drawing.Point(453, 289);
             this.previewPanel.Name = "previewPanel";
             this.previewPanel.Size = new System.Drawing.Size(75, 47);
             this.previewPanel.TabIndex = 3;
@@ -116,7 +117,7 @@ namespace Cyotek.Windows.Forms
             this.colorEditor.Color = System.Drawing.Color.FromArgb(((int)(((byte)(0)))), ((int)(((byte)(0)))), ((int)(((byte)(0)))));
             this.colorEditor.Location = new System.Drawing.Point(210, 12);
             this.colorEditor.Name = "colorEditor";
-            this.colorEditor.Size = new System.Drawing.Size(230, 236);
+            this.colorEditor.Size = new System.Drawing.Size(230, 260);
             this.colorEditor.TabIndex = 0;
             // 
             // colorGrid
@@ -149,7 +150,7 @@ namespace Cyotek.Windows.Forms
             this.btnCopyHex.Name = "btnCopyHex";
             this.btnCopyHex.Size = new System.Drawing.Size(230, 23);
             this.btnCopyHex.TabIndex = 8;
-            this.btnCopyHex.Text = "Copy  HEX  to Clipboard (H)";
+            this.btnCopyHex.Text = "Copy hex to clipboard (X)";
             this.btnCopyHex.UseVisualStyleBackColor = true;
             this.btnCopyHex.Click += new System.EventHandler(this.btnCopyHex_Click);
             // 
@@ -159,9 +160,18 @@ namespace Cyotek.Windows.Forms
             this.btnCopyRgb.Name = "btnCopyRgb";
             this.btnCopyRgb.Size = new System.Drawing.Size(230, 23);
             this.btnCopyRgb.TabIndex = 9;
-            this.btnCopyRgb.Text = "Copy  RGB  to Clipboard (R)";
+            this.btnCopyRgb.Text = "Copy RGB to clipboard (R)";
             this.btnCopyRgb.UseVisualStyleBackColor = true;
             this.btnCopyRgb.Click += new System.EventHandler(this.btnCopyRgb_Click);
+            // 
+            // btnCopyHsl
+            // 
+            this.btnCopyHsl.Location = new System.Drawing.Point(210, 313);
+            this.btnCopyHsl.Name = "btnCopyHsl";
+            this.btnCopyHsl.Size = new System.Drawing.Size(230, 23);
+            this.btnCopyHsl.TabIndex = 10;
+            this.btnCopyHsl.Text = "Copy HSL to clipboard (H)";
+            this.btnCopyHsl.UseVisualStyleBackColor = true;
             // 
             // ColorPickerDialog
             // 
@@ -169,7 +179,8 @@ namespace Cyotek.Windows.Forms
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.cancelButton;
-            this.ClientSize = new System.Drawing.Size(540, 324);
+            this.ClientSize = new System.Drawing.Size(540, 348);
+            this.Controls.Add(this.btnCopyHsl);
             this.Controls.Add(this.btnCopyRgb);
             this.Controls.Add(this.btnCopyHex);
             this.Controls.Add(this.savePaletteButton);
@@ -209,5 +220,6 @@ namespace Cyotek.Windows.Forms
     private System.Windows.Forms.ToolTip toolTip;
         private System.Windows.Forms.Button btnCopyHex;
         private System.Windows.Forms.Button btnCopyRgb;
+        private System.Windows.Forms.Button btnCopyHsl;
     }
 }
