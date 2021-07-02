@@ -54,6 +54,9 @@ namespace Clowd
             {
                 base.OnStartup(e);
 
+                // initialize GDI+ (our native lib depends on it, but does not initialize it)
+                new System.Drawing.Region().Dispose();
+
                 DefaultLog = new DefaultScopedLog("Clowd");
                 if (!Debugging)
                     DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");

@@ -243,6 +243,8 @@ namespace Clowd.UI
         private async void OnCancel(object sender, EventArgs e)
         {
             _isCancelled = true;
+            _border.Dispose();
+            _floating.Hide();
             if (IsRecording)
             {
                 IsRecording = false;
