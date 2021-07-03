@@ -23,6 +23,7 @@ namespace Clowd
         private bool _captureMicrophone = false;
         private IAudioMicrophoneDevice _captureMicrophoneDevice;
         private bool _hardwareAccelerated = true;
+        private bool _trackMouseClicks = true;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -40,6 +41,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public int Fps
         {
             get => _fps;
@@ -54,6 +56,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public int MaxResolutionWidth
         {
             get => _maxResolutionWidth;
@@ -68,6 +71,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public int MaxResolutionHeight
         {
             get => _maxResolutionHeight;
@@ -82,6 +86,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public VideoQuality Quality
         {
             get => _quality;
@@ -96,6 +101,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public VideoPerformance Performance
         {
             get => _performance;
@@ -110,6 +116,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public VideoSubsamplingMode SubsamplingMode
         {
             get => _subsamplingMode;
@@ -124,6 +131,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public bool CaptureSpeaker
         {
             get => _captureSpeaker;
@@ -138,6 +146,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public IAudioSpeakerDevice CaptureSpeakerDevice
         {
             get => _captureSpeakerDevice;
@@ -152,6 +161,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public bool CaptureMicrophone
         {
             get => _captureMicrophone;
@@ -166,6 +176,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public IAudioMicrophoneDevice CaptureMicrophoneDevice
         {
             get => _captureMicrophoneDevice;
@@ -180,6 +191,7 @@ namespace Clowd
                 OnPropertyChanged();
             }
         }
+
         public bool HardwareAccelerated
         {
             get => _hardwareAccelerated;
@@ -191,6 +203,21 @@ namespace Clowd
                 }
 
                 _hardwareAccelerated = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool TrackMouseClicks
+        {
+            get => _trackMouseClicks;
+            set
+            {
+                if (value == _trackMouseClicks)
+                {
+                    return;
+                }
+
+                _trackMouseClicks = value;
                 OnPropertyChanged();
             }
         }
