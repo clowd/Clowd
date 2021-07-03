@@ -1,22 +1,7 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="14.0">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.50727</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{04456DDE-AF72-4B83-9132-5AFC5F89CC76}</ProjectGuid>
+    <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DrawToolsLib</RootNamespace>
-    <AssemblyName>DrawToolsLib</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <FileUpgradeFlags>
-    </FileUpgradeFlags>
-    <UpgradeBackupLocation>
-    </UpgradeBackupLocation>
-    <OldToolsVersion>2.0</OldToolsVersion>
-    <TargetFrameworkProfile />
     <PublishUrl>publish\</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Disk</InstallFrom>
@@ -32,141 +17,22 @@
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <UseWPF>true</UseWPF>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>TRACE;DEBUG;SYSTEM_WINDOWS_VECTOR</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-    <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE;SYSTEM_WINDOWS_VECTOR</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="ScreenVersusWpf, Version=1.0.9.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\ScreenVersusWpf.1.0.9.0\lib\net451\ScreenVersusWpf.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Xaml" />
-    <Reference Include="System.Xml" />
-    <Reference Include="WindowsBase" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Commands\CommandBase.cs" />
-    <Compile Include="Commands\CommandAdd.cs" />
-    <Compile Include="Commands\CommandChangeOrder.cs" />
-    <Compile Include="Commands\CommandChangeState.cs" />
-    <Compile Include="Commands\CommandDelete.cs" />
-    <Compile Include="Commands\CommandDeleteAll.cs" />
-    <Compile Include="Curves\CubicBezier.cs" />
-    <Compile Include="Curves\CurveBuilder.cs" />
-    <Compile Include="Curves\CurveFit.cs" />
-    <Compile Include="Curves\CurveFitBase.cs" />
-    <Compile Include="Curves\CurvePreprocess.cs" />
-    <Compile Include="Curves\Spline.cs" />
-    <Compile Include="Curves\SplineBuilder.cs" />
-    <Compile Include="Curves\VectorHelper.cs" />
-    <Compile Include="Definitions.cs" />
-    <Compile Include="DrawingBrush.cs" />
-    <Compile Include="DrawingCanvas.cs" />
-    <Compile Include="DrawingCanvasException.cs" />
-    <Compile Include="Filters\FilterBase.cs" />
-    <Compile Include="Filters\FilterEraser.cs" />
-    <Compile Include="Filters\FilterPixelate.cs" />
-    <Compile Include="FontConversions.cs" />
-    <Compile Include="GraphicCollection.cs" />
-    <Compile Include="Graphics\GraphicBase.cs" />
-    <Compile Include="Graphics\GraphicFilledRectangle.cs" />
-    <Compile Include="Graphics\GraphicImage.cs" />
-    <Compile Include="Graphics\GraphicArrow.cs" />
-    <Compile Include="Graphics\GraphicPolyLine.cs" />
-    <Compile Include="Graphics\GraphicText.cs" />
-    <Compile Include="Graphics\IActivatableGraphic.cs" />
-    <Compile Include="OriginIndicator.cs" />
-    <Compile Include="Properties\Annotations.cs" />
-    <Compile Include="Properties\Settings.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-      <DependentUpon>Settings.settings</DependentUpon>
-    </Compile>
-    <Compile Include="SerializationHelper.cs" />
-    <Compile Include="Tools\ToolDraggable.cs" />
-    <Compile Include="Tools\ToolFilter.cs" />
-    <Compile Include="Tools\ToolBase.cs" />
-    <Compile Include="Tools\ToolPointer.cs" />
-    <Compile Include="Tools\ToolPolyLine.cs" />
-    <Compile Include="HelperFunctions.cs" />
-    <Compile Include="Graphics\GraphicEllipse.cs" />
-    <Compile Include="Graphics\GraphicLine.cs" />
-    <Compile Include="Graphics\GraphicRectangle.cs" />
-    <Compile Include="Graphics\GraphicSelectionRectangle.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Include="Tools\ToolText.cs" />
-    <Compile Include="ToolTypeConverter.cs" />
-    <Compile Include="UndoManager.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <SubType>Designer</SubType>
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include=".editorconfig" />
-    <None Include="Images\Ellipse.cur" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Images\Line.cur" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Images\Pencil.cur" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Images\PolyHandle.cur" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Images\Rectangle.cur" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="app.config" />
-    <None Include="Images\Text.cur" />
-    <None Include="packages.config" />
-    <None Include="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
-  </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
       <Visible>False</Visible>
       <ProductName>.NET Framework 3.5 SP1</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Images\Rotate.cur" />
-    <None Include="Images\Arrow.cur" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Images\Resize0.cur" />
@@ -206,12 +72,11 @@
     <Content Include="Images\Resize8.cur" />
     <Content Include="Images\Resize9.cur" />
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+  <ItemGroup>
+    <PackageReference Include="ScreenVersusWpf" Version="1.0.9.0" />
+    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.2.233001">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2" />
+  </ItemGroup>
 </Project>

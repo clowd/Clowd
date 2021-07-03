@@ -1,0 +1,680 @@
+2021-07-03 20:48:34.828 +01:00 [INF] Loaded 3 extensions
+2021-07-03 20:48:35.830 +01:00 [INF] MSBuild registered from C:\Program Files\dotnet\sdk\5.0.202\
+2021-07-03 20:48:38.855 +01:00 [INF] Initializing upgrade step Select an entrypoint
+2021-07-03 20:49:13.393 +01:00 [INF] No state to save
+2021-07-03 20:49:40.898 +01:00 [INF] Loaded 3 extensions
+2021-07-03 20:49:41.426 +01:00 [INF] MSBuild registered from C:\Program Files\dotnet\sdk\5.0.202\
+2021-07-03 20:49:43.535 +01:00 [INF] Initializing upgrade step Select an entrypoint
+2021-07-03 20:49:46.664 +01:00 [INF] Applying upgrade step Select an entrypoint
+2021-07-03 20:50:05.835 +01:00 [INF] Upgrade step Select an entrypoint applied successfully
+2021-07-03 20:50:10.573 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:50:25.636 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:50:34.569 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:50:36.292 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:50:55.345 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:51:03.776 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\Clowd.Shared to C:\Source\Clowd\clowd-windows.backup\Clowd.Shared
+2021-07-03 20:51:04.196 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Clowd.Shared
+2021-07-03 20:51:04.197 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:51:05.512 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:51:11.898 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:51:11.900 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:51:13.990 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:51:14.434 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:51:16.177 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:51:24.771 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:51:26.872 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:51:26.876 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:52:00.689 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:52:00.693 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:52:03.282 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:52:04.924 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:52:04.926 +01:00 [INF] TFM needs updated to netstandard2.0
+2021-07-03 20:52:05.981 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:52:09.048 +01:00 [INF] Updated TFM to netstandard2.0
+2021-07-03 20:52:09.049 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:52:12.857 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:52:14.354 +01:00 [WRN] No version of ScreenVersusWpf found that supports ["netstandard2.0"]; leaving unchanged
+2021-07-03 20:52:14.366 +01:00 [INF] No package updates needed
+2021-07-03 20:52:14.366 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:52:14.371 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:52:14.373 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:52:15.461 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:52:43.388 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:52:43.389 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:52:59.202 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:53:00.906 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:53:04.964 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:53:06.610 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:53:07.568 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:53:08.550 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\Clowd.Installer to C:\Source\Clowd\clowd-windows.backup\Clowd.Installer
+2021-07-03 20:53:09.133 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Clowd.Installer
+2021-07-03 20:53:09.134 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:53:11.574 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:53:12.720 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:53:12.721 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:53:12.900 +01:00 [INF] [dotnet] C:\Source\Clowd\clowd-windows\src\Clowd.Installer\Clowd.Installer.csproj contains an App.config file. App.config is replaced by appsettings.json in .NET Core. You will need to delete App.config and migrate to appsettings.json if it's applicable to your project.
+2021-07-03 20:53:13.286 +01:00 [INF] [dotnet] This project has an unrecognized custom import which may need reviewed after conversion: Costura.Fody.props
+2021-07-03 20:53:13.286 +01:00 [INF] [dotnet] This project has an unrecognized custom import which may need reviewed after conversion: Fody.targets
+2021-07-03 20:53:15.188 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:53:15.703 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:53:17.470 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:53:24.766 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:53:25.924 +01:00 [INF] Marking package Microsoft.CSharp for removal because it appears to be a transitive dependency
+2021-07-03 20:53:25.929 +01:00 [INF] Marking package System.Data.DataSetExtensions for removal because it appears to be a transitive dependency
+2021-07-03 20:53:25.963 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:53:25.964 +01:00 [INF] Packages to be removed: Microsoft.CSharp, Version=4.7.0
+System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 20:53:25.964 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:53:26.034 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:53:26.035 +01:00 [INF] Removing outdated package reference: Microsoft.CSharp, Version=4.7.0
+2021-07-03 20:53:26.036 +01:00 [INF] Removing outdated package reference: System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 20:53:26.037 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:53:27.838 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:53:38.130 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:53:38.146 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 20:53:39.674 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:53:45.204 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 20:53:45.204 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:53:49.995 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:53:51.588 +01:00 [INF] Marking package Costura.Fody, Version=4.1.0 for removal because it doesn't support the target framework but a newer version (5.3.0) does
+2021-07-03 20:53:51.588 +01:00 [WRN] Package Costura.Fody has been upgraded across major versions (4.1.0 -> 5.3.0) which may introduce breaking changes
+2021-07-03 20:53:52.347 +01:00 [INF] Adding Microsoft.Windows.Compatibility 5.0.2
+2021-07-03 20:53:52.348 +01:00 [INF] Packages to be removed: Costura.Fody, Version=4.1.0
+2021-07-03 20:53:52.349 +01:00 [INF] Packages to be added: Costura.Fody, Version=5.3.0
+Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:54:03.271 +01:00 [INF] Applying upgrade step Update NuGet Packages
+2021-07-03 20:54:03.271 +01:00 [INF] Removing outdated package reference: Costura.Fody, Version=4.1.0
+2021-07-03 20:54:03.272 +01:00 [INF] Adding package reference: Costura.Fody, Version=5.3.0
+2021-07-03 20:54:03.273 +01:00 [INF] Adding package reference: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:54:09.461 +01:00 [INF] Marking package System.Management for removal because it appears to be a transitive dependency
+2021-07-03 20:54:09.513 +01:00 [INF] Removing outdated package reference: System.Management, Version=5.0.0
+2021-07-03 20:54:11.634 +01:00 [INF] Upgrade step Update NuGet Packages applied successfully
+2021-07-03 20:54:13.361 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:54:13.370 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:54:13.370 +01:00 [INF] Initializing upgrade step Upgrade app config files
+2021-07-03 20:54:13.394 +01:00 [INF] Found 0 app settings for upgrade: 
+2021-07-03 20:54:13.396 +01:00 [INF] Found 0 connection strings for upgrade: 
+2021-07-03 20:54:13.403 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:54:15.572 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:54:20.825 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:54:20.826 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:54:28.705 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:54:29.795 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:54:31.819 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:54:32.836 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:54:33.789 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:54:36.745 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\Clowd.Watch to C:\Source\Clowd\clowd-windows.backup\Clowd.Watch
+2021-07-03 20:54:36.765 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Clowd.Watch
+2021-07-03 20:54:36.766 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:54:37.706 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:54:46.538 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:54:46.539 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:54:46.722 +01:00 [INF] [dotnet] C:\Source\Clowd\clowd-windows\src\Clowd.Watch\Clowd.Watch.csproj contains an App.config file. App.config is replaced by appsettings.json in .NET Core. You will need to delete App.config and migrate to appsettings.json if it's applicable to your project.
+2021-07-03 20:54:48.686 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:54:49.247 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:54:50.444 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:54:54.389 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:54:55.548 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:54:55.549 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:55:02.062 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:55:02.063 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:55:03.890 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:55:05.072 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:55:05.073 +01:00 [INF] TFM needs updated to net5.0
+2021-07-03 20:55:06.213 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:55:08.122 +01:00 [INF] Updated TFM to net5.0
+2021-07-03 20:55:08.122 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:55:08.163 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:55:09.420 +01:00 [INF] No package updates needed
+2021-07-03 20:55:09.420 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:55:09.421 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:55:09.422 +01:00 [INF] Initializing upgrade step Upgrade app config files
+2021-07-03 20:55:09.423 +01:00 [INF] Found 0 app settings for upgrade: 
+2021-07-03 20:55:09.424 +01:00 [INF] Found 0 connection strings for upgrade: 
+2021-07-03 20:55:09.425 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:55:09.512 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:55:10.720 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:55:10.721 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:55:12.047 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:55:13.886 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:55:15.142 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:55:16.117 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:55:17.236 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:55:18.516 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\Clowd.Video to C:\Source\Clowd\clowd-windows.backup\Clowd.Video
+2021-07-03 20:55:18.655 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Clowd.Video
+2021-07-03 20:55:18.656 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:55:20.732 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:55:21.810 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:55:21.811 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:55:23.994 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:55:24.562 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:55:26.122 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:55:29.924 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:55:31.430 +01:00 [INF] Marking package Microsoft.CSharp for removal because it appears to be a transitive dependency
+2021-07-03 20:55:31.431 +01:00 [INF] Marking package System.Data.DataSetExtensions for removal because it appears to be a transitive dependency
+2021-07-03 20:55:31.433 +01:00 [INF] Marking package Newtonsoft.Json for removal because it appears to be a transitive dependency
+2021-07-03 20:55:31.434 +01:00 [INF] Marking package ScreenVersusWpf for removal because it appears to be a transitive dependency
+2021-07-03 20:55:31.449 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:55:31.451 +01:00 [INF] Packages to be removed: Microsoft.CSharp, Version=4.7.0
+System.Data.DataSetExtensions, Version=4.5.0
+Newtonsoft.Json, Version=12.0.3
+ScreenVersusWpf, Version=1.0.9.0
+2021-07-03 20:55:31.451 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:55:36.728 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:55:36.729 +01:00 [INF] Removing outdated package reference: Microsoft.CSharp, Version=4.7.0
+2021-07-03 20:55:36.730 +01:00 [INF] Removing outdated package reference: System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 20:55:36.730 +01:00 [INF] Removing outdated package reference: Newtonsoft.Json, Version=12.0.3
+2021-07-03 20:55:36.731 +01:00 [INF] Removing outdated package reference: ScreenVersusWpf, Version=1.0.9.0
+2021-07-03 20:55:36.732 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:55:38.862 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:55:38.903 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:55:38.955 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 20:55:39.684 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:55:42.150 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 20:55:42.151 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:55:42.194 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:55:43.933 +01:00 [INF] No package updates needed
+2021-07-03 20:55:43.934 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:55:43.934 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:55:43.947 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:55:44.276 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:55:44.307 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:55:44.307 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:55:45.348 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:55:46.494 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:55:47.723 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:55:50.298 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:55:55.694 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:55:59.762 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\Clowd.Interop to C:\Source\Clowd\clowd-windows.backup\Clowd.Interop
+2021-07-03 20:55:59.989 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Clowd.Interop
+2021-07-03 20:55:59.989 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:56:02.301 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:56:03.203 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:56:03.204 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:56:05.376 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:56:06.090 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:56:07.438 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:56:09.997 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:56:11.356 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:56:11.357 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:56:13.081 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:56:13.082 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:56:15.258 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:56:16.051 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:56:16.057 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 20:56:19.427 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:56:21.590 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 20:56:21.591 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:56:22.655 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:56:24.089 +01:00 [INF] Adding Microsoft.Windows.Compatibility 5.0.2
+2021-07-03 20:56:24.090 +01:00 [INF] Packages to be added: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:56:24.631 +01:00 [INF] Applying upgrade step Update NuGet Packages
+2021-07-03 20:56:24.632 +01:00 [INF] Adding package reference: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:56:27.035 +01:00 [INF] Marking package System.Data.DataSetExtensions for removal because it appears to be a transitive dependency
+2021-07-03 20:56:27.041 +01:00 [INF] Removing outdated package reference: System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 20:56:29.406 +01:00 [INF] Upgrade step Update NuGet Packages applied successfully
+2021-07-03 20:56:33.303 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:56:33.304 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:56:33.307 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:56:33.561 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:56:35.178 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:56:35.179 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:56:37.144 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:56:39.688 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:56:40.820 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:56:44.140 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:56:45.004 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:56:48.744 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\Clowd.Upload to C:\Source\Clowd\clowd-windows.backup\Clowd.Upload
+2021-07-03 20:56:48.832 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Clowd.Upload
+2021-07-03 20:56:48.833 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:56:58.530 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:56:59.991 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:56:59.992 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:57:02.092 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:57:02.947 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:57:04.666 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:57:04.710 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:57:06.169 +01:00 [INF] Marking package Microsoft.Azure.KeyVault.Core for removal because it appears to be a transitive dependency
+2021-07-03 20:57:06.170 +01:00 [INF] Marking package Microsoft.CSharp for removal because it appears to be a transitive dependency
+2021-07-03 20:57:06.171 +01:00 [INF] Marking package Newtonsoft.Json for removal because it appears to be a transitive dependency
+2021-07-03 20:57:06.172 +01:00 [INF] Marking package RT.PostBuild for removal because it appears to be a transitive dependency
+2021-07-03 20:57:06.173 +01:00 [INF] Marking package RT.Serialization for removal because it appears to be a transitive dependency
+2021-07-03 20:57:06.174 +01:00 [INF] Marking package System.Data.DataSetExtensions for removal because it appears to be a transitive dependency
+2021-07-03 20:57:06.205 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:57:06.206 +01:00 [INF] Packages to be removed: Microsoft.Azure.KeyVault.Core, Version=1.0.0
+Microsoft.CSharp, Version=4.7.0
+Newtonsoft.Json, Version=12.0.3
+RT.PostBuild, Version=2.0.1668
+RT.Serialization, Version=2.0.1668
+System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 20:57:06.206 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:57:14.813 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:57:14.814 +01:00 [INF] Removing outdated package reference: Microsoft.Azure.KeyVault.Core, Version=1.0.0
+2021-07-03 20:57:14.814 +01:00 [INF] Removing outdated package reference: Microsoft.CSharp, Version=4.7.0
+2021-07-03 20:57:14.815 +01:00 [INF] Removing outdated package reference: Newtonsoft.Json, Version=12.0.3
+2021-07-03 20:57:14.815 +01:00 [INF] Removing outdated package reference: RT.PostBuild, Version=2.0.1668
+2021-07-03 20:57:14.816 +01:00 [INF] Removing outdated package reference: RT.Serialization, Version=2.0.1668
+2021-07-03 20:57:14.816 +01:00 [INF] Removing outdated package reference: System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 20:57:14.817 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:57:17.204 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:57:34.365 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:57:34.398 +01:00 [INF] TFM needs updated to netstandard2.0
+2021-07-03 20:57:35.900 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:57:38.281 +01:00 [INF] Updated TFM to netstandard2.0
+2021-07-03 20:57:38.282 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:57:42.768 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:57:44.230 +01:00 [INF] No package updates needed
+2021-07-03 20:57:44.230 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:57:44.231 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:57:44.231 +01:00 [INF] Initializing upgrade step Upgrade app config files
+2021-07-03 20:57:44.233 +01:00 [INF] Found 0 app settings for upgrade: 
+2021-07-03 20:57:44.233 +01:00 [INF] Found 0 connection strings for upgrade: 
+2021-07-03 20:57:44.235 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:57:44.351 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:57:46.438 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:57:46.439 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:57:53.324 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:57:56.565 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:57:57.618 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:58:01.782 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:58:03.966 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:58:07.050 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\third-party\Cyotek.Windows.Forms.ColorPicker to C:\Source\Clowd\clowd-windows.backup\Cyotek.Windows.Forms.ColorPicker
+2021-07-03 20:58:07.462 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Cyotek.Windows.Forms.ColorPicker
+2021-07-03 20:58:07.462 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:58:09.401 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:58:10.203 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:58:10.204 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:58:12.281 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:58:13.083 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:58:14.641 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:58:16.118 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:58:17.619 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:58:17.621 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:58:19.959 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:58:19.960 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:58:22.315 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:58:23.669 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:58:23.670 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 20:58:29.146 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:58:31.529 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 20:58:31.530 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:58:31.716 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:58:33.277 +01:00 [INF] Adding Microsoft.Windows.Compatibility 5.0.2
+2021-07-03 20:58:33.278 +01:00 [INF] Packages to be added: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:58:33.815 +01:00 [INF] Applying upgrade step Update NuGet Packages
+2021-07-03 20:58:33.816 +01:00 [INF] Adding package reference: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:58:36.418 +01:00 [INF] Marking package System.Data.DataSetExtensions for removal because it appears to be a transitive dependency
+2021-07-03 20:58:36.432 +01:00 [INF] Removing outdated package reference: System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 20:58:39.066 +01:00 [INF] Upgrade step Update NuGet Packages applied successfully
+2021-07-03 20:58:39.108 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:58:39.109 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:58:39.112 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:58:40.092 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:58:41.213 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:58:41.214 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:58:42.520 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:58:43.733 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:58:44.959 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:58:47.396 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:58:48.056 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:58:49.111 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\Clowd.WinLegacy to C:\Source\Clowd\clowd-windows.backup\Clowd.WinLegacy
+2021-07-03 20:58:49.249 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Clowd.WinLegacy
+2021-07-03 20:58:49.250 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:58:50.158 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:58:50.550 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:58:50.551 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:58:52.726 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:58:53.625 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:58:55.314 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:58:55.358 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:58:57.000 +01:00 [INF] Marking package Microsoft.CSharp for removal because it appears to be a transitive dependency
+2021-07-03 20:58:57.001 +01:00 [INF] Marking package System.Data.DataSetExtensions for removal because it appears to be a transitive dependency
+2021-07-03 20:58:57.002 +01:00 [INF] Marking package ScreenVersusWpf for removal because it appears to be a transitive dependency
+2021-07-03 20:58:57.003 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:58:57.004 +01:00 [INF] Packages to be removed: Microsoft.CSharp, Version=4.7.0
+System.Data.DataSetExtensions, Version=4.5.0
+ScreenVersusWpf, Version=1.0.9.0
+2021-07-03 20:58:57.005 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:58:57.016 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:58:57.017 +01:00 [INF] Removing outdated package reference: Microsoft.CSharp, Version=4.7.0
+2021-07-03 20:58:57.017 +01:00 [INF] Removing outdated package reference: System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 20:58:57.018 +01:00 [INF] Removing outdated package reference: ScreenVersusWpf, Version=1.0.9.0
+2021-07-03 20:58:57.018 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:58:59.688 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:58:59.729 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:58:59.778 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 20:58:59.784 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:59:02.924 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 20:59:02.924 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:59:02.965 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:59:04.622 +01:00 [INF] No package updates needed
+2021-07-03 20:59:04.623 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:59:04.623 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:59:04.626 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:59:05.131 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:59:05.149 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:59:05.149 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:59:05.194 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:59:05.370 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:59:05.467 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:59:05.511 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:59:05.519 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:59:05.519 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\DrawToolsLib to C:\Source\Clowd\clowd-windows.backup\DrawToolsLib
+2021-07-03 20:59:06.113 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\DrawToolsLib
+2021-07-03 20:59:06.114 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:59:06.157 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:59:06.162 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:59:06.163 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:59:06.961 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:59:08.001 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:59:09.722 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:59:09.765 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:59:11.425 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:59:11.426 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:59:11.433 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:59:11.433 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:59:14.232 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:59:14.276 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:59:14.277 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 20:59:14.300 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:59:17.014 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 20:59:17.014 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:59:17.058 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:59:18.781 +01:00 [WRN] No version of ScreenVersusWpf found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 20:59:18.868 +01:00 [INF] Adding Microsoft.Windows.Compatibility 5.0.2
+2021-07-03 20:59:18.869 +01:00 [INF] Packages to be added: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:59:18.876 +01:00 [INF] Applying upgrade step Update NuGet Packages
+2021-07-03 20:59:18.876 +01:00 [INF] Adding package reference: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:59:21.871 +01:00 [WRN] No version of ScreenVersusWpf found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 20:59:21.875 +01:00 [INF] Upgrade step Update NuGet Packages applied successfully
+2021-07-03 20:59:21.918 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:59:21.919 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:59:21.919 +01:00 [INF] Initializing upgrade step Upgrade app config files
+2021-07-03 20:59:21.922 +01:00 [INF] Found 0 app settings for upgrade: 
+2021-07-03 20:59:21.923 +01:00 [INF] Found 0 connection strings for upgrade: 
+2021-07-03 20:59:21.929 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:59:22.766 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:59:22.782 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:59:22.783 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:59:22.827 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:59:23.000 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:59:23.068 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:59:23.111 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:59:23.115 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:59:23.116 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\LiveDraw to C:\Source\Clowd\clowd-windows.backup\LiveDraw
+2021-07-03 20:59:23.208 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\LiveDraw
+2021-07-03 20:59:23.209 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:59:23.252 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:59:23.253 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:59:24.998 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:59:24.999 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:59:25.003 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:59:25.003 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:59:27.923 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:59:27.966 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:59:27.983 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 20:59:28.006 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:59:30.876 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 20:59:30.877 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:59:30.918 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:59:32.784 +01:00 [INF] Adding Microsoft.Windows.Compatibility 5.0.2
+2021-07-03 20:59:32.789 +01:00 [INF] Packages to be added: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:59:32.796 +01:00 [INF] Applying upgrade step Update NuGet Packages
+2021-07-03 20:59:32.797 +01:00 [INF] Adding package reference: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 20:59:35.846 +01:00 [INF] Upgrade step Update NuGet Packages applied successfully
+2021-07-03 20:59:35.889 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:59:35.889 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:59:35.890 +01:00 [INF] Initializing upgrade step Upgrade app config files
+2021-07-03 20:59:35.893 +01:00 [INF] Found 0 app settings for upgrade: 
+2021-07-03 20:59:35.893 +01:00 [INF] Found 0 connection strings for upgrade: 
+2021-07-03 20:59:35.896 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:59:36.084 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:59:37.425 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:59:37.426 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:59:37.709 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:59:37.892 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:59:38.051 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:59:38.279 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:59:38.454 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:59:38.640 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\third-party\NotifyIconWpf to C:\Source\Clowd\clowd-windows.backup\NotifyIconWpf
+2021-07-03 20:59:38.822 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\NotifyIconWpf
+2021-07-03 20:59:38.823 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:59:38.877 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:59:39.020 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:59:39.021 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:59:39.618 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:59:40.709 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:59:42.597 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:59:42.641 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:59:44.518 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:59:44.519 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:59:44.525 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:59:44.525 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:59:47.497 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 20:59:47.541 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 20:59:47.559 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 20:59:47.579 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 20:59:50.838 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 20:59:50.839 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 20:59:50.880 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 20:59:52.784 +01:00 [WRN] No version of ScreenVersusWpf found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 20:59:52.795 +01:00 [INF] No package updates needed
+2021-07-03 20:59:52.796 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 20:59:52.796 +01:00 [INF] 0 expected template items needed
+2021-07-03 20:59:52.800 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 20:59:53.199 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 20:59:53.215 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 20:59:53.216 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 20:59:53.260 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 20:59:53.461 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 20:59:53.523 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 20:59:53.564 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 20:59:53.568 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 20:59:53.568 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\third-party\Ookii.Dialogs.Wpf to C:\Source\Clowd\clowd-windows.backup\Ookii.Dialogs.Wpf
+2021-07-03 20:59:53.867 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Ookii.Dialogs.Wpf
+2021-07-03 20:59:53.868 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 20:59:53.909 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 20:59:53.915 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 20:59:53.915 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 20:59:54.543 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 20:59:55.727 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 20:59:57.612 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 20:59:57.653 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 20:59:59.473 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 20:59:59.473 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 20:59:59.477 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 20:59:59.478 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 21:00:02.711 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 21:00:02.753 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 21:00:02.754 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 21:00:02.761 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 21:00:05.914 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 21:00:05.915 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 21:00:05.956 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 21:00:07.947 +01:00 [INF] Adding Microsoft.Windows.Compatibility 5.0.2
+2021-07-03 21:00:07.948 +01:00 [INF] Packages to be added: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 21:00:07.954 +01:00 [INF] Applying upgrade step Update NuGet Packages
+2021-07-03 21:00:07.955 +01:00 [INF] Adding package reference: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 21:00:11.413 +01:00 [INF] Upgrade step Update NuGet Packages applied successfully
+2021-07-03 21:00:11.457 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 21:00:11.457 +01:00 [INF] 0 expected template items needed
+2021-07-03 21:00:11.461 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 21:00:12.087 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 21:00:12.102 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 21:00:12.102 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 21:00:12.147 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 21:00:12.377 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 21:00:12.433 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 21:00:12.476 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 21:00:12.484 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 21:00:12.484 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\third-party\PropertyTools.Wpf to C:\Source\Clowd\clowd-windows.backup\PropertyTools.Wpf
+2021-07-03 21:00:13.737 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\PropertyTools.Wpf
+2021-07-03 21:00:13.737 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 21:00:13.781 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 21:00:13.787 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 21:00:13.788 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 21:00:16.257 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 21:00:17.532 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 21:00:20.263 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 21:00:20.304 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 21:00:22.315 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 21:00:22.316 +01:00 [INF] Packages to be added: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 21:00:22.335 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 21:00:22.337 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 21:00:25.707 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 21:00:25.748 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 21:00:25.749 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 21:00:25.758 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 21:00:29.101 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 21:00:29.102 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 21:00:29.143 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 21:00:31.253 +01:00 [INF] Adding Microsoft.Windows.Compatibility 5.0.2
+2021-07-03 21:00:31.254 +01:00 [INF] Packages to be added: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 21:00:31.264 +01:00 [INF] Applying upgrade step Update NuGet Packages
+2021-07-03 21:00:31.265 +01:00 [INF] Adding package reference: Microsoft.Windows.Compatibility, Version=5.0.2
+2021-07-03 21:00:34.941 +01:00 [INF] Upgrade step Update NuGet Packages applied successfully
+2021-07-03 21:00:34.985 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 21:00:34.985 +01:00 [INF] 0 expected template items needed
+2021-07-03 21:00:34.991 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 21:00:36.583 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 21:00:36.607 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 21:00:36.607 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 21:00:36.655 +01:00 [INF] Initializing upgrade step Select project to upgrade
+2021-07-03 21:00:36.927 +01:00 [INF] Applying upgrade step Select project to upgrade
+2021-07-03 21:00:36.981 +01:00 [INF] Upgrade step Select project to upgrade applied successfully
+2021-07-03 21:00:37.026 +01:00 [INF] Initializing upgrade step Back up project
+2021-07-03 21:00:37.033 +01:00 [INF] Applying upgrade step Back up project
+2021-07-03 21:00:37.034 +01:00 [INF] Backing up C:\Source\Clowd\clowd-windows\src\Clowd to C:\Source\Clowd\clowd-windows.backup\Clowd
+2021-07-03 21:00:37.957 +01:00 [INF] Project backed up to C:\Source\Clowd\clowd-windows.backup\Clowd
+2021-07-03 21:00:37.957 +01:00 [INF] Upgrade step Back up project applied successfully
+2021-07-03 21:00:38.000 +01:00 [INF] Initializing upgrade step Convert project file to SDK style
+2021-07-03 21:00:38.006 +01:00 [INF] Applying upgrade step Convert project file to SDK style
+2021-07-03 21:00:38.007 +01:00 [INF] Converting project file format with try-convert, version 0.7.226301
+2021-07-03 21:00:38.187 +01:00 [INF] [dotnet] C:\Source\Clowd\clowd-windows\src\Clowd\Clowd.csproj contains an App.config file. App.config is replaced by appsettings.json in .NET Core. You will need to delete App.config and migrate to appsettings.json if it's applicable to your project.
+2021-07-03 21:00:38.587 +01:00 [INF] [dotnet] This project has an unrecognized custom import which may need reviewed after conversion: Fody.targets
+2021-07-03 21:00:39.969 +01:00 [INF] [dotnet] Conversion complete!
+2021-07-03 21:00:41.323 +01:00 [INF] Project file converted successfully! The project may require additional changes to build successfully against the new .NET target.
+2021-07-03 21:00:44.513 +01:00 [INF] Upgrade step Convert project file to SDK style applied successfully
+2021-07-03 21:00:44.554 +01:00 [INF] Initializing upgrade step Clean up NuGet package references
+2021-07-03 21:00:47.081 +01:00 [INF] Marking package Microsoft.CSharp for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.084 +01:00 [INF] Marking package Newtonsoft.Json for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.090 +01:00 [INF] Marking package PropertyChangedAnalyzers for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.091 +01:00 [INF] Marking package RT.Json for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.093 +01:00 [INF] Marking package RT.PostBuild for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.095 +01:00 [INF] Marking package RT.Serialization for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.097 +01:00 [INF] Marking package RT.Serialization.Binary for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.099 +01:00 [INF] Marking package RT.Serialization.Json for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.101 +01:00 [INF] Marking package RT.Serialization.Xml for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.103 +01:00 [INF] Marking package RT.Util.Core for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.106 +01:00 [INF] Marking package ScreenVersusWpf for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.110 +01:00 [INF] Marking package System.Data.DataSetExtensions for removal because it appears to be a transitive dependency
+2021-07-03 21:00:47.112 +01:00 [INF] Marking assembly reference System.Configuration for removal based on package mapping configuration System.Configuration
+2021-07-03 21:00:47.114 +01:00 [INF] Adding package System.Configuration.ConfigurationManager based on package mapping configuration System.Configuration
+2021-07-03 21:00:47.115 +01:00 [INF] Marking assembly reference System.ServiceModel for removal based on package mapping configuration System.ServiceModel
+2021-07-03 21:00:47.116 +01:00 [INF] Adding package System.ServiceModel.Primitives based on package mapping configuration System.ServiceModel
+2021-07-03 21:00:47.116 +01:00 [INF] Adding package System.ServiceModel.Http based on package mapping configuration System.ServiceModel
+2021-07-03 21:00:47.117 +01:00 [INF] Adding package System.ServiceModel.Duplex based on package mapping configuration System.ServiceModel
+2021-07-03 21:00:47.117 +01:00 [INF] Adding package System.ServiceModel.NetTcp based on package mapping configuration System.ServiceModel
+2021-07-03 21:00:47.118 +01:00 [INF] Adding package System.ServiceModel.Security based on package mapping configuration System.ServiceModel
+2021-07-03 21:00:47.118 +01:00 [INF] Adding package System.ServiceModel.Federation based on package mapping configuration System.ServiceModel
+2021-07-03 21:00:48.613 +01:00 [INF] Reference to .NET Upgrade Assistant analyzer package (Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, version 0.2.233001) needs added
+2021-07-03 21:00:48.615 +01:00 [INF] References to be removed: System.Configuration
+System.ServiceModel
+2021-07-03 21:00:48.616 +01:00 [INF] Packages to be removed: Microsoft.CSharp, Version=4.7.0
+Newtonsoft.Json, Version=12.0.3
+PropertyChangedAnalyzers, Version=3.2.1
+RT.Json, Version=2.0.1668
+RT.PostBuild, Version=2.0.1668
+RT.Serialization, Version=2.0.1668
+RT.Serialization.Binary, Version=2.0.1668
+RT.Serialization.Json, Version=2.0.1668
+RT.Serialization.Xml, Version=2.0.1668
+RT.Util.Core, Version=2.0.1668
+ScreenVersusWpf, Version=1.0.9.0
+System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 21:00:48.616 +01:00 [INF] Packages to be added: System.Configuration.ConfigurationManager, Version=5.0.0
+System.ServiceModel.Primitives, Version=4.8.1
+System.ServiceModel.Http, Version=4.8.1
+System.ServiceModel.Duplex, Version=4.8.1
+System.ServiceModel.NetTcp, Version=4.8.1
+System.ServiceModel.Security, Version=4.8.1
+System.ServiceModel.Federation, Version=4.8.1
+Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 21:00:48.639 +01:00 [INF] Applying upgrade step Clean up NuGet package references
+2021-07-03 21:00:48.640 +01:00 [INF] Removing outdated assembly reference: System.Configuration
+2021-07-03 21:00:48.641 +01:00 [INF] Removing outdated assembly reference: System.ServiceModel
+2021-07-03 21:00:48.642 +01:00 [INF] Removing outdated package reference: Microsoft.CSharp, Version=4.7.0
+2021-07-03 21:00:48.643 +01:00 [INF] Removing outdated package reference: Newtonsoft.Json, Version=12.0.3
+2021-07-03 21:00:48.644 +01:00 [INF] Removing outdated package reference: PropertyChangedAnalyzers, Version=3.2.1
+2021-07-03 21:00:48.644 +01:00 [INF] Removing outdated package reference: RT.Json, Version=2.0.1668
+2021-07-03 21:00:48.645 +01:00 [INF] Removing outdated package reference: RT.PostBuild, Version=2.0.1668
+2021-07-03 21:00:48.645 +01:00 [INF] Removing outdated package reference: RT.Serialization, Version=2.0.1668
+2021-07-03 21:00:48.646 +01:00 [INF] Removing outdated package reference: RT.Serialization.Binary, Version=2.0.1668
+2021-07-03 21:00:48.647 +01:00 [INF] Removing outdated package reference: RT.Serialization.Json, Version=2.0.1668
+2021-07-03 21:00:48.647 +01:00 [INF] Removing outdated package reference: RT.Serialization.Xml, Version=2.0.1668
+2021-07-03 21:00:48.648 +01:00 [INF] Removing outdated package reference: RT.Util.Core, Version=2.0.1668
+2021-07-03 21:00:48.648 +01:00 [INF] Removing outdated package reference: ScreenVersusWpf, Version=1.0.9.0
+2021-07-03 21:00:48.649 +01:00 [INF] Removing outdated package reference: System.Data.DataSetExtensions, Version=4.5.0
+2021-07-03 21:00:48.650 +01:00 [INF] Adding package reference: System.Configuration.ConfigurationManager, Version=5.0.0
+2021-07-03 21:00:48.650 +01:00 [INF] Adding package reference: System.ServiceModel.Primitives, Version=4.8.1
+2021-07-03 21:00:48.651 +01:00 [INF] Adding package reference: System.ServiceModel.Http, Version=4.8.1
+2021-07-03 21:00:48.651 +01:00 [INF] Adding package reference: System.ServiceModel.Duplex, Version=4.8.1
+2021-07-03 21:00:48.652 +01:00 [INF] Adding package reference: System.ServiceModel.NetTcp, Version=4.8.1
+2021-07-03 21:00:48.653 +01:00 [INF] Adding package reference: System.ServiceModel.Security, Version=4.8.1
+2021-07-03 21:00:48.653 +01:00 [INF] Adding package reference: System.ServiceModel.Federation, Version=4.8.1
+2021-07-03 21:00:48.654 +01:00 [INF] Adding package reference: Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers, Version=0.2.233001
+2021-07-03 21:00:53.827 +01:00 [INF] Marking package System.ServiceModel.Primitives for removal because it appears to be a transitive dependency
+2021-07-03 21:00:53.831 +01:00 [INF] Marking package System.ServiceModel.Http for removal because it appears to be a transitive dependency
+2021-07-03 21:00:53.838 +01:00 [INF] Marking package System.ServiceModel.Security for removal because it appears to be a transitive dependency
+2021-07-03 21:00:53.874 +01:00 [INF] Removing outdated package reference: System.ServiceModel.Primitives, Version=4.8.1
+2021-07-03 21:00:53.874 +01:00 [INF] Removing outdated package reference: System.ServiceModel.Http, Version=4.8.1
+2021-07-03 21:00:53.875 +01:00 [INF] Removing outdated package reference: System.ServiceModel.Security, Version=4.8.1
+2021-07-03 21:00:57.838 +01:00 [INF] Upgrade step Clean up NuGet package references applied successfully
+2021-07-03 21:00:57.880 +01:00 [INF] Initializing upgrade step Update TFM
+2021-07-03 21:00:58.143 +01:00 [INF] TFM needs updated to net5.0-windows
+2021-07-03 21:00:58.172 +01:00 [INF] Applying upgrade step Update TFM
+2021-07-03 21:01:03.467 +01:00 [INF] Updated TFM to net5.0-windows
+2021-07-03 21:01:03.468 +01:00 [INF] Upgrade step Update TFM applied successfully
+2021-07-03 21:01:03.509 +01:00 [INF] Initializing upgrade step Update NuGet Packages
+2021-07-03 21:01:06.216 +01:00 [INF] Marking package System.ComponentModel.Annotations for removal because it appears to be a transitive dependency
+2021-07-03 21:01:06.222 +01:00 [INF] Marking package System.Management for removal because it appears to be a transitive dependency
+2021-07-03 21:01:06.229 +01:00 [INF] Marking package System.Configuration.ConfigurationManager for removal because it appears to be a transitive dependency
+2021-07-03 21:01:06.646 +01:00 [WRN] No version of Expression.Blend.Sdk.WPF found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 21:01:13.507 +01:00 [INF] Marking package MahApps.Metro, Version=1.1.2.0 for removal because it doesn't support the target framework but a newer version (1.6.5) does
+2021-07-03 21:01:14.495 +01:00 [INF] Marking package PropertyChanged.Fody, Version=1.51.0 for removal because it doesn't support the target framework but a newer version (1.53.0) does
+2021-07-03 21:01:14.875 +01:00 [WRN] No version of RT.Util found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 21:01:15.300 +01:00 [INF] Marking package SharpRaven, Version=2.2.0 for removal because it doesn't support the target framework but a newer version (2.4.0) does
+2021-07-03 21:01:15.434 +01:00 [INF] Marking package MahApps.Metro, Version=1.6.5 for removal because it doesn't support the target framework but a newer version (2.4.7) does
+2021-07-03 21:01:15.435 +01:00 [WRN] Package MahApps.Metro has been upgraded across major versions (1.6.5 -> 2.4.7) which may introduce breaking changes
+2021-07-03 21:01:15.437 +01:00 [FTL] Package analysis failed (analyzer Target compatibility reference analyzer: Collection was modified; enumeration operation may not execute.
+2021-07-03 21:01:15.489 +01:00 [INF] Applying upgrade step Update NuGet Packages
+2021-07-03 21:01:15.489 +01:00 [INF] Removing outdated package reference: MahApps.Metro, Version=1.1.2.0
+2021-07-03 21:01:15.490 +01:00 [INF] Removing outdated package reference: PropertyChanged.Fody, Version=1.51.0
+2021-07-03 21:01:15.490 +01:00 [INF] Removing outdated package reference: SharpRaven, Version=2.2.0
+2021-07-03 21:01:15.491 +01:00 [INF] Removing outdated package reference: System.ComponentModel.Annotations, Version=5.0.0
+2021-07-03 21:01:15.491 +01:00 [INF] Removing outdated package reference: System.Management, Version=5.0.0
+2021-07-03 21:01:15.491 +01:00 [INF] Removing outdated package reference: System.Configuration.ConfigurationManager, Version=5.0.0
+2021-07-03 21:01:15.492 +01:00 [INF] Adding package reference: MahApps.Metro, Version=1.6.5
+2021-07-03 21:01:15.492 +01:00 [INF] Adding package reference: PropertyChanged.Fody, Version=1.53.0
+2021-07-03 21:01:15.493 +01:00 [INF] Adding package reference: SharpRaven, Version=2.4.0
+2021-07-03 21:01:15.493 +01:00 [INF] Adding package reference: MahApps.Metro, Version=2.4.7
+2021-07-03 21:01:20.813 +01:00 [INF] Marking package MahApps.Metro, Version=1.6.5 for removal because it is referenced elsewhere in the project with a higher version
+2021-07-03 21:01:20.897 +01:00 [WRN] No version of Expression.Blend.Sdk.WPF found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 21:01:20.903 +01:00 [WRN] No version of RT.Util found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 21:01:21.262 +01:00 [INF] Removing outdated package reference: MahApps.Metro, Version=1.6.5
+2021-07-03 21:01:26.121 +01:00 [WRN] No version of Expression.Blend.Sdk.WPF found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 21:01:26.128 +01:00 [WRN] No version of RT.Util found that supports ["net5.0-windows"]; leaving unchanged
+2021-07-03 21:01:26.148 +01:00 [INF] Upgrade step Update NuGet Packages applied successfully
+2021-07-03 21:01:26.192 +01:00 [INF] Initializing upgrade step Add template files
+2021-07-03 21:01:26.195 +01:00 [INF] 0 expected template items needed
+2021-07-03 21:01:26.196 +01:00 [INF] Initializing upgrade step Upgrade app config files
+2021-07-03 21:01:26.201 +01:00 [INF] Found 0 app settings for upgrade: 
+2021-07-03 21:01:26.201 +01:00 [INF] Found 0 connection strings for upgrade: 
+2021-07-03 21:01:26.208 +01:00 [INF] Initializing upgrade step Update source code
+2021-07-03 21:01:28.071 +01:00 [INF] Initializing upgrade step Move to next project
+2021-07-03 21:01:28.109 +01:00 [INF] Applying upgrade step Move to next project
+2021-07-03 21:01:28.109 +01:00 [INF] Upgrade step Move to next project applied successfully
+2021-07-03 21:01:28.482 +01:00 [INF] Initializing upgrade step Finalize upgrade
+2021-07-03 21:01:28.509 +01:00 [INF] Applying upgrade step Finalize upgrade
+2021-07-03 21:01:28.510 +01:00 [INF] Upgrade step Finalize upgrade applied successfully
+2021-07-03 21:01:28.553 +01:00 [INF] Upgrade has completed. Please review any changes.
