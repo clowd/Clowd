@@ -82,6 +82,7 @@ namespace Clowd
                     {
                         DefaultLog.Info("Update available for OBS module... Downloading");
                         await obs.Install(obs.UpdateAvailable);
+                        DefaultLog.Info("Update available for OBS module... Done");
                     }
                 }
                 catch (Exception ecx)
