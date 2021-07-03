@@ -1,3 +1,6 @@
 [submodule "modules/Clowd.Win64"]
 	path = modules/Clowd.Win64
 	url = https://github.com/clowd/Clowd.Win64.git
+[submodule "modules/ScreenVersusWpf"]
+	path = modules/ScreenVersusWpf
+	url = https://github.com/clowd/ScreenVersusWpf.git
