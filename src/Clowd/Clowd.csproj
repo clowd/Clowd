@@ -1,44 +1,23 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{24FDFCC0-C491-412E-8EFA-E6CC352523DA}</ProjectGuid>
+    <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Clowd</RootNamespace>
-    <AssemblyName>Clowd</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
-    <WarningLevel>4</WarningLevel>
-    <TargetFrameworkProfile />
-    <NuGetPackageImportStamp>
-    </NuGetPackageImportStamp>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>x64</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
     <OutputPath>..\..\bin\x64\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseVSHostingProcess>false</UseVSHostingProcess>
     <NoWarn>CS4014</NoWarn>
-    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>x64</PlatformTarget>
     <DebugType>none</DebugType>
-    <Optimize>true</Optimize>
     <OutputPath>..\..\bin\x64\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseVSHostingProcess>false</UseVSHostingProcess>
   </PropertyGroup>
@@ -49,291 +28,23 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="DirectShowLib, Version=2.1.0.1599, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\DirectShowLib.1.0.0\lib\DirectShowLib.dll</HintPath>
-    </Reference>
-    <Reference Include="DotNetZip, Version=1.14.0.0, Culture=neutral, PublicKeyToken=6583c7c814667745, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\DotNetZip.1.14.0\lib\net40\DotNetZip.dll</HintPath>
-    </Reference>
-    <Reference Include="LightInject, Version=6.4.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\LightInject.6.4.0\lib\net46\LightInject.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Expression.Interactions, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\Expression.Blend.Sdk.WPF.1.0.1\lib\net45\Microsoft.Expression.Interactions.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.VisualBasic" />
-    <Reference Include="MahApps.Metro, Version=1.1.2.0, Culture=neutral, PublicKeyToken=f4fb5a3c4d1e5b4f, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\MahApps.Metro.1.1.2.0\lib\net45\MahApps.Metro.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="RT.Json, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\RT.Json.2.0.1668\lib\netstandard2.0\RT.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="RT.PostBuild, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\RT.PostBuild.2.0.1668\lib\netstandard2.0\RT.PostBuild.dll</HintPath>
-    </Reference>
-    <Reference Include="RT.Serialization, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\RT.Serialization.2.0.1668\lib\netstandard2.0\RT.Serialization.dll</HintPath>
-    </Reference>
-    <Reference Include="RT.Serialization.Binary, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\RT.Serialization.Binary.2.0.1668\lib\netstandard2.0\RT.Serialization.Binary.dll</HintPath>
-    </Reference>
-    <Reference Include="RT.Serialization.Json, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\RT.Serialization.Json.2.0.1668\lib\netstandard2.0\RT.Serialization.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="RT.Serialization.Xml, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\RT.Serialization.Xml.2.0.1668\lib\netstandard2.0\RT.Serialization.Xml.dll</HintPath>
-    </Reference>
-    <Reference Include="RT.Util, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\RT.Util.2.0.1668\lib\net472\RT.Util.dll</HintPath>
-    </Reference>
-    <Reference Include="RT.Util.Core, Version=2.0.1668.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\RT.Util.Core.2.0.1668\lib\netstandard2.0\RT.Util.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="ScreenVersusWpf, Version=1.0.9.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\ScreenVersusWpf.1.0.9.0\lib\net451\ScreenVersusWpf.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="SharpRaven, Version=2.2.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\SharpRaven.2.2.0\lib\net45\SharpRaven.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.ComponentModel.DataAnnotations" />
-    <Reference Include="System.Configuration" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Drawing" />
     <Reference Include="System.IO" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.Linq.Expressions" />
-    <Reference Include="System.Management" />
-    <Reference Include="System.Net.Http" />
     <Reference Include="System.Runtime" />
-    <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="System.ServiceModel" />
     <Reference Include="System.Threading.Tasks" />
     <Reference Include="System.Transactions" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Windows.Interactivity, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\Expression.Blend.Sdk.WPF.1.0.1\lib\net45\System.Windows.Interactivity.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Xml" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="System.Xaml">
-      <RequiredTargetFramework>4.0</RequiredTargetFramework>
-    </Reference>
-    <Reference Include="WindowsBase" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
   </ItemGroup>
   <ItemGroup>
-    <ApplicationDefinition Include="App.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </ApplicationDefinition>
-    <Compile Include="UI\FloatingButtonWindow.cs" />
-    <Compile Include="UI\Controls\CaptureToolButton.cs" />
-    <Compile Include="UI\Controls\CornerClippingBorder.cs" />
-    <Compile Include="UI\Controls\DockAndWrapPanel.cs" />
-    <Compile Include="UI\Controls\DPadControl.cs" />
-    <Compile Include="UI\Config\FeatureInstallerControl.cs" />
-    <Compile Include="UI\Config\GlobalTriggerEditor.cs" />
-    <Compile Include="UI\Controls\ToolButton.cs" />
-    <Compile Include="UI\Helpers\ResourceIcons.cs" />
-    <Compile Include="UI\Helpers\UIAudioMonitor.cs" />
-    <Compile Include="UI\Helpers\ToolStateManager.cs" />
-    <Compile Include="UI\InteropWindow.cs" />
-    <Compile Include="UI\Controls\ResetDefaultButton.cs" />
-    <Compile Include="UI\Controls\SpinnerTextBox.xaml.cs">
-      <DependentUpon>SpinnerTextBox.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\Config\UpdaterControl.xaml.cs">
-      <DependentUpon>UpdaterControl.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\Config\UploadProviderSettingsEditor.xaml.cs">
-      <DependentUpon>UploadProviderSettingsEditor.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\Converters\BoolToInverseVisibilityConverter.cs" />
-    <Compile Include="UI\Converters\EnumMatchToBooleanConverter.cs" />
-    <Compile Include="UI\Converters\EnumOptionsConverter.cs" />
-    <Compile Include="UI\Converters\OnOffBrushConverter.cs" />
-    <Compile Include="UI\Converters\SnapToPixelConverter.cs" />
-    <Compile Include="UI\Converters\StreamToBitmapSourceConverter.cs" />
-    <Compile Include="UI\Converters\TaskStatusToVisibilityConverter.cs" />
-    <Compile Include="UI\Converters\DrawingCanvasEditConverter.cs" />
-    <Compile Include="UI\ImageEditorPage.xaml.cs">
-      <DependentUpon>ImageEditorPage.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\AssemblyInfo.cs">
+    <Compile Update="Properties\AssemblyInfo.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
       <DependentUpon>AssemblyInfo.tt</DependentUpon>
     </Compile>
-    <Compile Include="UI\ScreenCaptureWindow.cs" />
-    <Compile Include="UI\SettingsPage.xaml.cs">
-      <DependentUpon>SettingsPage.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UI\Helpers\TasksView.cs" />
-    <Compile Include="UI\TaskWindow.xaml.cs">
-      <DependentUpon>TaskWindow.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Config\AutoDictionary.cs" />
-    <Compile Include="UI\Helpers\ButtonClickContextBehavior.cs" />
-    <Compile Include="Config\ClassifyOptions.cs" />
-    <Compile Include="UI\VideoCaptureWindow.cs" />
-    <Compile Include="Util\DisposableTimer.cs" />
-    <Compile Include="Util\MutexArgsForwarder.cs" />
-    <Compile Include="Util\ClipboardDataObject.cs" />
-    <Compile Include="Util\Debouncer.cs" />
-    <Compile Include="Util\Exposed.cs" />
-    <Compile Include="Util\Expr.cs" />
-    <Compile Include="Config\GlobalTrigger.cs" />
-    <Compile Include="Util\LogImpl.cs" />
-    <Compile Include="UI\PageManager.cs" />
-    <Compile Include="Util\PathEx.cs" />
-    <Compile Include="Util\ProgressStream.cs" />
-    <Compile Include="Util\ProxyMetaObject.cs" />
-    <Compile Include="UI\Helpers\NiceDialog.cs" />
-    <Compile Include="UI\Helpers\PropertyChangeNotifier.cs" />
-    <Compile Include="Util\RandomEx.cs" />
-    <Compile Include="UI\Helpers\RelayCommand.cs" />
-    <Compile Include="UI\Helpers\TrulyObservableCollection.cs" />
-    <Compile Include="UI\Controls\FadingScrollViewer.cs" />
-    <Compile Include="UI\Controls\OutlinedText.cs" />
-    <Compile Include="UI\Controls\OutlinedTextBlock.cs" />
-    <Compile Include="UI\Controls\ProgressRing.cs" />
-    <Compile Include="UI\Controls\SizeAwareProgressBar.cs" />
-    <Compile Include="UI\Controls\TransitioningContentControl.cs" />
-    <Compile Include="UI\Controls\UploadProgressBar.cs" />
-    <Compile Include="UI\Converters\BoolToInverseConverter.cs" />
-    <Compile Include="UI\Converters\BoolToVisibilityConverter2.cs" />
-    <Compile Include="UI\Converters\BorderThicknessToStrokeThicknessConverter.cs" />
-    <Compile Include="UI\Converters\ColorToBrushConverter.cs" />
-    <Compile Include="UI\Converters\DoubleToDecimalConverter.cs" />
-    <Compile Include="UI\Converters\DoubleToIntegerConverter.cs" />
-    <Compile Include="UI\Converters\FontSizeConverter.cs" />
-    <Compile Include="UI\Converters\MathConverter.cs" />
-    <Compile Include="UI\Converters\MethodToValueConverter.cs" />
-    <Compile Include="UI\Converters\RaduisConverter.cs" />
-    <Compile Include="UI\Converters\RectConverter.cs" />
-    <Compile Include="UI\Converters\StringNullOrEmptyToVisibilityConverter.cs" />
-    <Compile Include="UI\Converters\ValueConverterGroup.cs" />
-    <Compile Include="UI\Helpers\TemplatedWindow.cs" />
-    <Compile Include="Config\Hotkey.cs" />
-    <Compile Include="Util\SynchronizationContextProxy.cs" />
-    <Compile Include="Util\SysInfo.cs" />
-    <Compile Include="UI\Helpers\VisualTreeHelperEx.cs" />
-    <Compile Include="UI\HomePage.xaml.cs">
-      <DependentUpon>HomePage.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="UploadManager.cs" />
-    <Compile Include="Config\Settings.cs" />
-    <Compile Include="Util\AreoColor.cs" />
-    <Compile Include="Util\Extensions.cs" />
-    <Compile Include="Util\HSLColor.cs" />
-    <Compile Include="UI\VideoOverlayWindow.xaml.cs">
-      <DependentUpon>VideoOverlayWindow.xaml</DependentUpon>
-    </Compile>
-    <Page Include="Assets\Colors.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Assets\CustomWindowStyle.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Assets\MetroControls.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Assets\ProgressRingControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="Assets\TransitioningContentControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Include="Assets\VectorGeometries.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Compile Include="App.xaml.cs">
-      <DependentUpon>App.xaml</DependentUpon>
-      <SubType>Code</SubType>
-    </Compile>
-    <Page Include="Assets\VectorIcons.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\Controls\SpinnerTextBox.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\Config\UpdaterControl.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\Config\UploadProviderSettingsEditor.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\HomePage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\ImageEditorPage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\SettingsPage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\TaskWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="UI\VideoOverlayWindow.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\Settings.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Settings.settings</DependentUpon>
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-    </Compile>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
     <Resource Include="Assets\Raleway.ttf" />
-    <None Include=".editorconfig" />
-    <None Include="app.manifest" />
-    <None Include="packages.config">
-      <SubType>Designer</SubType>
-    </None>
-    <None Include="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
     <AppDesigner Include="Properties\" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\Screenshot\Print-26.png" />
@@ -358,58 +69,19 @@
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\modules\Clowd.Win64\Clowd.Win64.vcxproj">
-      <Project>{847efafa-f061-4350-81a8-a1d211aac62b}</Project>
-      <Name>Clowd.Win64</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj">
-      <Project>{a6ccafe6-26d8-4b2c-9b2d-1895788da246}</Project>
-      <Name>Clowd.Shared</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj">
-      <Project>{fa6fd7ee-a2d6-4c1a-99d6-a7f5354d0b65}</Project>
-      <Name>Clowd.Video</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj">
-      <Project>{ad6fd9e3-3c83-432e-9f19-74c71e881fe4}</Project>
-      <Name>Clowd.Installer</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj">
-      <Project>{a2da076b-eeba-4d4a-88ec-9bb9c960f552}</Project>
-      <Name>Clowd.Interop</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj">
-      <Project>{1b456368-42b0-412b-b31d-dfe369f2bee3}</Project>
-      <Name>Clowd.Upload</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj">
-      <Project>{fb2a5786-cd2e-42ce-bc5d-0fce90034221}</Project>
-      <Name>Cyotek.Windows.Forms.ColorPicker</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Clowd.WinLegacy\Clowd.WinLegacy.csproj">
-      <Project>{6896c296-a3b1-455a-86ee-35fec7cd35dc}</Project>
-      <Name>Clowd.WinLegacy</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj">
-      <Project>{04456dde-af72-4b83-9132-5afc5f89cc76}</Project>
-      <Name>DrawToolsLib</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\LiveDraw\LiveDraw.csproj">
-      <Project>{110f39d7-349d-4e27-88c1-02af6513015e}</Project>
-      <Name>LiveDraw</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\third-party\NotifyIconWpf\NotifyIconLib.csproj">
-      <Project>{7ac63864-7638-41c4-969c-d3197ef2bed9}</Project>
-      <Name>NotifyIconLib</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\third-party\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj">
-      <Project>{d01b1d20-8f5b-4834-8e5c-c7ec6dd587d4}</Project>
-      <Name>Ookii.Dialogs.Wpf</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\third-party\PropertyTools.Wpf\PropertyTools.Wpf.csproj">
-      <Project>{7168f82f-288a-42c4-9eb1-fbbe5112f211}</Project>
-      <Name>PropertyTools.Wpf</Name>
-    </ProjectReference>
+    <ProjectReference Include="..\..\modules\Clowd.Win64\Clowd.Win64.vcxproj" />
+    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
+    <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
+    <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj" />
+    <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj" />
+    <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
+    <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj" />
+    <ProjectReference Include="..\Clowd.WinLegacy\Clowd.WinLegacy.csproj" />
+    <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj" />
+    <ProjectReference Include="..\LiveDraw\LiveDraw.csproj" />
+    <ProjectReference Include="..\..\third-party\NotifyIconWpf\NotifyIconLib.csproj" />
+    <ProjectReference Include="..\..\third-party\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj" />
+    <ProjectReference Include="..\..\third-party\PropertyTools.Wpf\PropertyTools.Wpf.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\upload-basket.png" />
@@ -471,18 +143,26 @@
     <Analyzer Include="..\..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\Gu.Roslyn.Extensions.dll" />
     <Analyzer Include="..\..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\PropertyChangedAnalyzers.dll" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <PostBuildEvent>
-    </PostBuildEvent>
-  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DirectShowLib" Version="1.0.0" />
+    <PackageReference Include="DotNetZip" Version="1.14.0" />
+    <PackageReference Include="Expression.Blend.Sdk.WPF" Version="1.0.1" />
+    <PackageReference Include="Fody" Version="1.29.4" />
+    <PackageReference Include="LightInject" Version="6.4.0" />
+    <PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
+    <PackageReference Include="RT.Util" Version="2.0.1668" />
+    <PackageReference Include="System.ServiceModel.Duplex" Version="4.8.1" />
+    <PackageReference Include="System.ServiceModel.NetTcp" Version="4.8.1" />
+    <PackageReference Include="System.ServiceModel.Federation" Version="4.8.1" />
+    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.2.233001">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="PropertyChanged.Fody" Version="1.53.0" />
+    <PackageReference Include="SharpRaven" Version="2.4.0" />
+    <PackageReference Include="MahApps.Metro" Version="2.4.7" />
+  </ItemGroup>
+  <PropertyGroup />
   <Import Project="..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets" Condition="Exists('..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets')" />
-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
-    <PropertyGroup>
-      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
-    </PropertyGroup>
-    <Error Condition="!Exists('..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets'))" />
-  </Target>
   <PropertyGroup>
     <PreBuildEvent>if $(ConfigurationName) == Debug (
   "$(DevEnvDir)\TextTransform.exe" -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
@@ -491,11 +171,4 @@
 )
 </PreBuildEvent>
   </PropertyGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>

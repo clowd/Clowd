@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
     <RootNamespace>AntFu7.LiveDraw</RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -23,5 +23,11 @@
   <ItemGroup>
     <Resource Include="Rescoures\save29.png" />
     <Resource Include="Rescoures\undo6.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.2.233001">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2" />
   </ItemGroup>
 </Project>
