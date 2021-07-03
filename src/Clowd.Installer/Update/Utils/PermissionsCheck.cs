@@ -11,19 +11,20 @@ namespace NAppUpdate.Framework.Utils
 
         public static bool IsDirectory(string path)
         {
-			if (!Directory.Exists(path)) return false;
+            if (!Directory.Exists(path)) return false;
             FileAttributes attr = File.GetAttributes(path);
             return ((attr & FileAttributes.Directory) == FileAttributes.Directory);
         }
 
-        public static bool HaveWritePermissionsForFolder(string path) {
+        public static bool HaveWritePermissionsForFolder(string path)
+        {
             var folder = IsDirectory(path) ? path : Path.GetDirectoryName(path);
             return HaveWritePermissionsForFileOrFolder(folder);
         }
 
         public static bool HaveWritePermissionsForFileOrFolder(string path)
         {
-            var rules = Directory.GetAccessControl(path).GetAccessRules(true, true, typeof(SecurityIdentifier));
+            var rules = new DirectoryInfo(path).GetAccessControl().GetAccessRules(true, true, typeof(SecurityIdentifier));
 
             bool allowwrite = false, denywrite = false;
             foreach (FileSystemAccessRule rule in rules)

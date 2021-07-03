@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\..\packages\Costura.Fody.4.1.0\build\Costura.Fody.props" Condition="Exists('..\..\packages\Costura.Fody.4.1.0\build\Costura.Fody.props')" />
   <PropertyGroup>
     <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>Exe</OutputType>
@@ -7,19 +6,17 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWindowsForms>true</UseWindowsForms>
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>Embed\default.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
-    <StartupObject />
+    <StartupObject>Clowd.Installer.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Embed\UScreenCapture-x64.ax" />
     <EmbeddedResource Include="Embed\UScreenCapture-x86.ax" />
-    <None Update="FodyWeavers.xsd">
-      <SubType>Designer</SubType>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Embed\loopback-audio-x64.dll" />
@@ -29,20 +26,12 @@
     <EmbeddedResource Include="Embed\default.ico" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="FodyWeavers.xml" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Fody" Version="6.3.0" />
-    <PackageReference Include="Kurukuru" Version="1.1.0" />
+    <PackageReference Include="Kurukuru" Version="1.2.0" />
     <PackageReference Include="PowerArgs" Version="3.6.0" />
-    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.2.233001">
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Costura.Fody" Version="5.3.0" />
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2" />
+    <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
+    <PackageReference Include="System.Management" Version="5.0.0" />
   </ItemGroup>
-  <Import Project="..\..\packages\Fody.6.3.0\build\Fody.targets" Condition="Exists('..\..\packages\Fody.6.3.0\build\Fody.targets')" />
 </Project>
