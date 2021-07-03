@@ -68,8 +68,8 @@ namespace Clowd.UI
 
         public void Open(string category)
         {
-            this.PropertyGrid1.SelectedTabId = category;
             Open();
+            this.PropertyGrid1.SelectedTabId = category;
         }
     }
 
