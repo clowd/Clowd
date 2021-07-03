@@ -14,15 +14,11 @@
     <EmbeddedResource Include="Embed\ffmpeg-x64.exe.gz" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Watch\Clowd.Watch.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetZip" Version="1.15.0" />
     <PackageReference Include="NAudio" Version="1.10.0" />
-    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.2.233001">
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
   </ItemGroup>
 </Project>

@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
@@ -18,12 +18,9 @@
     <EmbeddedResource Include="Embed\mime-db.json" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1668" />
-    <PackageReference Include="RT.Util.Core" Version="2.0.1668" />
+    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1693" />
+    <PackageReference Include="RT.Util.Core" Version="2.0.1693" />
     <PackageReference Include="WindowsAzure.Storage" Version="9.3.3" />
-    <PackageReference Include="YamlDotNet" Version="8.1.2" />
-    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.2.233001">
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
+    <PackageReference Include="YamlDotNet" Version="11.2.1" />
   </ItemGroup>
 </Project>
