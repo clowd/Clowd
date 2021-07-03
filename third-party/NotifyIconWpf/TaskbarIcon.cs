@@ -32,7 +32,6 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using NotifyIconLib.Interop;
-using ScreenVersusWpf;
 using Point = NotifyIconLib.Interop.Point;
 
 
@@ -343,17 +342,8 @@ namespace NotifyIconLib
 
         #region Process Incoming Mouse Events
 
-        /// <summary>
-        /// Processes mouse events, which are bubbled
-        /// through the class' routed events, trigger
-        /// certain actions (e.g. show a popup), or
-        /// both.
-        /// </summary>
-        /// <param name="me">Event flag.</param>
-        private void OnMouseEvent(MouseEvent me)
+        private Point GetVirtualMousePosition()
         {
-            if (IsDisposed) return;
-
             //get mouse coordinates
             Point cursorPosition = new Point();
             if (messageSink.Version == NotifyIconVersion.Vista)
@@ -365,10 +355,34 @@ namespace NotifyIconLib
             {
                 WinApi.GetCursorPos(ref cursorPosition);
             }
-            
-            var dpiPoint = new ScreenPoint(cursorPosition.X, cursorPosition.Y).ToWpfPoint();
-            cursorPosition.X = (int)dpiPoint.X;
-            cursorPosition.Y = (int)dpiPoint.Y;
+
+            //var dpiPoint = new ScreenPoint(cursorPosition.X, cursorPosition.Y).ToWpfPoint();
+            //cursorPosition.X = (int)dpiPoint.X;
+            //cursorPosition.Y = (int)dpiPoint.Y;
+
+            IntPtr dc = WinApi.GetDC(IntPtr.Zero);
+            int dpi = WinApi.GetDeviceCaps(dc, WinApi.DEVICECAP.LOGPIXELSX);
+            WinApi.ReleaseDC(IntPtr.Zero, dc);
+
+            double dpiZoom = dpi / 96.0;
+
+            cursorPosition.X = (int)(cursorPosition.X * dpiZoom);
+            cursorPosition.Y = (int)(cursorPosition.Y * dpiZoom);
+            return cursorPosition;
+        }
+
+        /// <summary>
+        /// Processes mouse events, which are bubbled
+        /// through the class' routed events, trigger
+        /// certain actions (e.g. show a popup), or
+        /// both.
+        /// </summary>
+        /// <param name="me">Event flag.</param>
+        private void OnMouseEvent(MouseEvent me)
+        {
+            if (IsDisposed) return;
+
+            var cursorPosition = GetVirtualMousePosition();
 
             switch (me)
             {
@@ -389,30 +403,38 @@ namespace NotifyIconLib
                 case MouseEvent.IconRightMouseDown:
                     RaiseTrayRightMouseDownEvent();
                     break;
+
                 case MouseEvent.IconLeftMouseDown:
                     RaiseTrayLeftMouseDownEvent();
                     break;
+
                 case MouseEvent.IconRightMouseUp:
                     RaiseTrayRightMouseUpEvent();
                     break;
+
                 case MouseEvent.IconLeftMouseUp:
                     RaiseTrayLeftMouseUpEvent();
                     break;
+
                 case MouseEvent.IconMiddleMouseDown:
                     RaiseTrayMiddleMouseDownEvent();
                     break;
+
                 case MouseEvent.IconMiddleMouseUp:
                     RaiseTrayMiddleMouseUpEvent();
                     break;
+
                 case MouseEvent.IconDoubleClick:
                     //cancel single click timer
                     singleClickTimer.Change(Timeout.Infinite, Timeout.Infinite);
                     //bubble event
                     RaiseTrayMouseDoubleClickEvent();
                     break;
+
                 case MouseEvent.BalloonToolTipClicked:
                     RaiseTrayBalloonTipClickedEvent();
                     break;
+
                 default:
                     throw new ArgumentOutOfRangeException("me", "Missing handler for mouse event flag: " + me);
             }
@@ -1079,10 +1101,6 @@ namespace NotifyIconLib
                 //stop timers
                 singleClickTimer.Dispose();
                 balloonCloseTimer.Dispose();
-
-                //clean up drag/drop handles
-                if (TrayDropEnabled)
-                    StopDragDrop();
 
                 //dispose message sink
                 messageSink.Dispose();

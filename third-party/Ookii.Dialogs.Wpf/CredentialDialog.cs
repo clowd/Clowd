@@ -260,7 +260,8 @@ namespace Ookii.Dialogs.Wpf
         ///   property.
         /// </para>
         /// </remarks>
-        [Localizable(true), Category("Appearance"), Description("Additional text to display in the dialog."), DefaultValue(""), Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(System.Drawing.Design.UITypeEditor))]
+        [Localizable(true), Category("Appearance"), Description("Additional text to display in the dialog."), DefaultValue("")]
+        // Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(System.Drawing.Design.UITypeEditor))
         public string Content
         {
             get { return _text ?? string.Empty; }

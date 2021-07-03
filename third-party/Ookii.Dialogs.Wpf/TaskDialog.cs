@@ -25,7 +25,8 @@ namespace Ookii.Dialogs.Wpf
     /// OS, but calling <see cref="Show"/> or <see cref="ShowDialog()"/> will throw an exception.
     /// </remarks>
     /// <threadsafety static="true" instance="false" />
-    [DefaultProperty("MainInstruction"), DefaultEvent("ButtonClicked"), Description("Displays a task dialog."), Designer(typeof(TaskDialogDesigner))]
+    [DefaultProperty("MainInstruction"), DefaultEvent("ButtonClicked"), Description("Displays a task dialog.")]
+    // Designer(typeof(TaskDialogDesigner))
     public partial class TaskDialog : Component, IWin32Window
     {
 
@@ -235,7 +236,8 @@ namespace Ookii.Dialogs.Wpf
         /// The main instruction of a task dialog will be displayed in a larger font and a different color than
         /// the other text of the task dialog.
         /// </remarks>
-        [Localizable(true), Category("Appearance"), Description("The dialog's main instruction."), DefaultValue(""), Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))]
+        [Localizable(true), Category("Appearance"), Description("The dialog's main instruction."), DefaultValue("")]
+        // Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))
         public string MainInstruction
         {
             get { return _config.pszMainInstruction ?? string.Empty; }
@@ -252,7 +254,8 @@ namespace Ookii.Dialogs.Wpf
         /// <value>
         /// The dialog's primary content. The default is an empty string ("").
         /// </value>
-        [Localizable(true), Category("Appearance"), Description("The dialog's primary content."), DefaultValue(""), Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))]
+        [Localizable(true), Category("Appearance"), Description("The dialog's primary content."), DefaultValue("")]
+        // Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))
         public string Content
         {
             get { return _config.pszContent ?? string.Empty; }
@@ -508,7 +511,8 @@ namespace Ookii.Dialogs.Wpf
         ///   is set to <see langword="true" />, in which case it is shown in the footer area.
         /// </para>
         /// </remarks>
-        [Localizable(true), Category("Appearance"), Description("Additional information to be displayed on the dialog."), DefaultValue(""), Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))]
+        [Localizable(true), Category("Appearance"), Description("Additional information to be displayed on the dialog."), DefaultValue("")]
+        // Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))
         public string ExpandedInformation
         {
             get { return _config.pszExpandedInformation ?? string.Empty; }
@@ -590,7 +594,8 @@ namespace Ookii.Dialogs.Wpf
         /// The text to be used in the footer area of the task dialog, or an empty string ("")
         /// if the footer area is not displayed. The default value is an empty string ("").
         /// </value>
-        [Localizable(true), Category("Appearance"), Description("The text to be used in the footer area of the task dialog."), DefaultValue(""), Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))]
+        [Localizable(true), Category("Appearance"), Description("The text to be used in the footer area of the task dialog."), DefaultValue("")]
+        // Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))
         public string Footer
         {
             get { return _config.pszFooterText ?? string.Empty; }

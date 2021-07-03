@@ -17,10 +17,6 @@
     <AssemblyOriginatorKeyFile>..\..\assets\ookii-dialogs.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="System.Design" />
-    <Reference Include="System.Security" />
-  </ItemGroup>
-  <ItemGroup>
     <Compile Update="CredentialDialog.cs">
       <SubType>Component</SubType>
     </Compile>
