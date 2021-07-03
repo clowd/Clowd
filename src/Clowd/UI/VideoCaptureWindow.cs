@@ -56,8 +56,7 @@ namespace Clowd.UI
                 Primary = true,
                 Text = "CLOWD",
                 IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconClowd),
-                ShowHover = false,
-                //Cursor = Cursors.SizeAll,
+                IsDragHandle = true,
             };
 
             _btnStart = new CaptureToolButton

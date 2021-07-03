@@ -184,23 +184,30 @@ namespace Clowd.UI.Helpers
 
         public ProgressBar GetSpeakerVisual()
         {
-            ThrowIfStateInvalid();
-            var prog = new ProgressBar { Style = (Style)App.Current.Resources["AudioLevelProgressBarStyle"] };
-            var bnd = new Binding(nameof(SpeakerLevel));
-            bnd.Source = this;
-            bnd.Mode = BindingMode.OneWay;
-            prog.SetBinding(ProgressBar.ValueProperty, bnd);
-            return prog;
+            return GetLevelVisual(nameof(SpeakerLevel), nameof(SpeakerEnabled));
         }
 
         public ProgressBar GetMicrophoneVisual()
         {
+            return GetLevelVisual(nameof(MicrophoneLevel), nameof(MicrophoneEnabled));
+        }
+
+        private ProgressBar GetLevelVisual(string levelPath, string enabledPath)
+        {
             ThrowIfStateInvalid();
             var prog = new ProgressBar { Style = (Style)App.Current.Resources["AudioLevelProgressBarStyle"] };
-            var bnd = new Binding(nameof(MicrophoneLevel));
-            bnd.Source = this;
-            bnd.Mode = BindingMode.OneWay;
-            prog.SetBinding(ProgressBar.ValueProperty, bnd);
+
+            var valueBinding = new Binding(levelPath);
+            valueBinding.Source = this;
+            valueBinding.Mode = BindingMode.OneWay;
+            prog.SetBinding(ProgressBar.ValueProperty, valueBinding);
+
+            var visibilityBinding = new Binding(enabledPath);
+            visibilityBinding.Source = this;
+            visibilityBinding.Mode = BindingMode.OneWay;
+            visibilityBinding.Converter = new Converters.BoolToVisibilityConverter2();
+            prog.SetBinding(ProgressBar.VisibilityProperty, visibilityBinding);
+
             return prog;
         }
 
