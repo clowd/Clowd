@@ -31,6 +31,7 @@ namespace Clowd.UI
         private List<CaptureToolButton> _buttons;
         private System.Drawing.Rectangle _lastSelection;
         private bool _isVisible;
+        private bool _manuallyPositioned;
         private readonly object _lock = new object();
 
         public FloatingButtonWindow(IEnumerable<CaptureToolButton> buttons)
@@ -79,12 +80,77 @@ namespace Clowd.UI
 
             this.Content = grid;
             CommandManager.InvalidateRequerySuggested();
+
+            foreach (var btn in _buttons)
+                if (btn.IsDragHandle)
+                    SetupDragHandle(btn);
+        }
+
+        private void SetupDragHandle(CaptureToolButton btn)
+        {
+            btn.ToolTip = "Click to Rotate, Drag to Move";
+            btn.ShowHover = false;
+            btn.Cursor = Cursors.SizeAll;
+
+            bool dragging = false;
+            bool mouseDown = false;
+            ScreenPoint mouseDownPt = default;
+            ScreenRect initialPos = default;
+
+            btn.PreviewMouseDown += (s, e) =>
+            {
+                btn.CaptureMouse();
+                _manuallyPositioned = true;
+                mouseDown = true;
+                mouseDownPt = ScreenTools.GetMousePosition();
+                initialPos = ScreenPosition.Value;
+                e.Handled = true;
+            };
+
+            btn.PreviewMouseUp += (s, e) =>
+            {
+                btn.ReleaseMouseCapture();
+                mouseDown = false;
+                if (!dragging)
+                {
+                    MainPanel.Orientation = MainPanel.Orientation == Orientation.Horizontal ? Orientation.Vertical : Orientation.Horizontal;
+                    ScreenPosition = new ScreenRect(initialPos.Left, initialPos.Top, initialPos.Height, initialPos.Width);
+                }
+                dragging = false;
+                e.Handled = true;
+            };
+
+            btn.PreviewMouseMove += (s, e) =>
+            {
+                if (!mouseDown) return;
+                var pos = ScreenTools.GetMousePosition();
+                var deltaX = pos.X - mouseDownPt.X;
+                var deltaY = pos.Y - mouseDownPt.Y;
+
+                var zoom = PresentationSource.FromVisual(btn).CompositionTarget.TransformToDevice.M11;
+                var dragDelta = 5 * zoom;
+
+                if (Math.Abs(deltaX) > dragDelta || Math.Abs(deltaY) > dragDelta)
+                    dragging = true;
+
+                if (dragging)
+                {
+                    var newX = initialPos.Left + deltaX;
+                    var newY = initialPos.Top + deltaY;
+                    ScreenPosition = new ScreenRect(newX, newY, initialPos.Width, initialPos.Height);
+                }
+                e.Handled = true;
+            };
+
         }
 
         private void FloatingButtonWindow_LayoutUpdated(object sender, EventArgs e)
         {
             if (MainGrid == null || MainPanel == null || !_isVisible)
                 return; // on first render, content will not have been created yet.
+
+            if (_manuallyPositioned)
+                return; // if the user has dragged the window, stop automatic re-positioning
 
             //var selection = _lastSelection;
             var desiredSize = MainPanel.DesiredSize;
@@ -159,7 +225,6 @@ namespace Clowd.UI
             else if (indLeft + horizontalSize > screenBounds.Right)
                 indLeft = screenBounds.Right - horizontalSize;
 
-
             USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, indLeft, indTop, horizontalSize, verticalSize, SWP.NOACTIVATE);
         }
 
@@ -199,6 +264,7 @@ namespace Clowd.UI
 
                 USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE | SWP.NOMOVE | SWP.HIDEWINDOW);
                 _isVisible = false;
+                _manuallyPositioned = false;
             }
         }
 
