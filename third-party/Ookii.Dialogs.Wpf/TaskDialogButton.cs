@@ -99,7 +99,8 @@ namespace Ookii.Dialogs.Wpf
         ///   otherwise, it is ignored.
         /// </para>
         /// </remarks>
-        [Localizable(true), Category("Appearance"), Description("The text of the note associated with a command link button."), DefaultValue(""), Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))]
+        [Localizable(true), Category("Appearance"), Description("The text of the note associated with a command link button."), DefaultValue("")]
+        // Editor(typeof(System.ComponentModel.Design.MultilineStringEditor), typeof(UITypeEditor))
         public string CommandLinkNote
         {
             get { return _commandLinkNote ?? string.Empty; }

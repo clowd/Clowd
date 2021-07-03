@@ -19,10 +19,6 @@
     <AppDesigner Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Clowd.Interop\Clowd.Interop.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="ScreenVersusWpf" Version="1.0.9.0" />
     <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.2.233001">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
