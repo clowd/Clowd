@@ -38,6 +38,7 @@ namespace Clowd.Installer
             try
             {
                 Log.IsConsoleMode = true;
+
                 var t = Args.InvokeAction<InstallerArgs>(args);
                 if (t?.Args?.Debug == true)
                 {
