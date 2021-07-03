@@ -293,6 +293,7 @@ namespace Clowd.Video
             public string outputDirectory;
             public string performanceMode;
             public string subsamplingMode;
+            public bool trackMouseClicks;
         }
 
         private class ObsSize
