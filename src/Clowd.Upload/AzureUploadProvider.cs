@@ -104,15 +104,16 @@ namespace Clowd.Upload
 
         private async Task<CloudBlockBlob> CreateBlobAsync(string key)
         {
-            var container = await Task.Run(() =>
-            {
-                var account = CloudStorageAccount.Parse(ConnectionString);
-                var storage = account.CreateCloudBlobClient();
-                var serviceProperties = storage.GetServiceProperties();
-                serviceProperties.DefaultServiceVersion = AZURE_SERVICE_VERSION;
-                storage.SetServiceProperties(serviceProperties);
-                return storage.GetContainerReference(ContainerName);
-            });
+            //var container = await Task.Run(async () =>
+            //{
+            var account = CloudStorageAccount.Parse(ConnectionString);
+            var storage = account.CreateCloudBlobClient();
+            var serviceProperties = await storage.GetServicePropertiesAsync();
+            serviceProperties.DefaultServiceVersion = AZURE_SERVICE_VERSION;
+            await storage.SetServicePropertiesAsync(serviceProperties);
+            var container = storage.GetContainerReference(ContainerName);
+            //return storage.GetContainerReference(ContainerName);
+            //});
 
             var containerExists = await container.ExistsAsync();
             if (!containerExists)
