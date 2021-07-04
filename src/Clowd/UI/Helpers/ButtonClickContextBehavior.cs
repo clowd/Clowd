@@ -1,8 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Interactivity;
 using Clowd.UI.Controls;
+using Microsoft.Xaml.Behaviors;
 
 namespace Clowd.UI.Helpers
 {

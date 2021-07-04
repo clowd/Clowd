@@ -18,8 +18,6 @@
     <EmbeddedResource Include="Embed\mime-db.json" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1693" />
-    <PackageReference Include="RT.Util.Core" Version="2.0.1693" />
     <PackageReference Include="WindowsAzure.Storage" Version="9.3.3" />
     <PackageReference Include="YamlDotNet" Version="11.2.1" />
   </ItemGroup>

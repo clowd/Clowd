@@ -23,9 +23,9 @@
         </DataTemplate>
     </UserControl.Resources>
     <Grid Background="White">
-        <Grid.Resources>
+        <!--<Grid.Resources>
             <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.AnimatedTabControl.xaml" />
-        </Grid.Resources>
+        </Grid.Resources>-->
         <Grid.RowDefinitions>
             <RowDefinition Height="50" />
             <RowDefinition />
@@ -35,7 +35,7 @@
             Margin="20,10,20,0"
             VerticalAlignment="Center"
             Orientation="Horizontal">
-            <Button
+            <!--<Button
                 Width="23"
                 Height="23"
                 Margin="0,0,10,0"
@@ -65,7 +65,7 @@
                         </Setter>
                     </Style>
                 </Button.Style>
-            </Button>
+            </Button>-->
             <TextBlock
                 VerticalAlignment="Center"
                 FontSize="20"

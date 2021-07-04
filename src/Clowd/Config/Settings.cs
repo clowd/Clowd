@@ -63,7 +63,6 @@ namespace Clowd.Config
         WhenHovered
     }
 
-    [ImplementPropertyChanged]
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
     public class GeneralSettings : SettingsBase, INotifyPropertyChanged, IDisposable
     {
@@ -95,8 +94,8 @@ namespace Clowd.Config
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose { get; set; } = true;
 
-        [Description("Specifies whether to use the system default window chrome, or a modern metro design.")]
-        public bool UseCustomWindowChrome { get; set; } = false;
+        //[Description("Specifies whether to use the system default window chrome, or a modern metro design.")]
+        //public bool UseCustomWindowChrome { get; set; } = false;
 
         //[DisplayName("Tray-drop enabled")]
         //[Description("If true, allows dropping files directly on to the windows tray icon to start an upload.")]
@@ -218,7 +217,7 @@ namespace Clowd.Config
         }
     }
 
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     public class CaptureSettings : IDisposable
     {
         [DisplayName("Capture with cursor")]
@@ -261,7 +260,7 @@ namespace Clowd.Config
         }
     }
 
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     public class EditorSettings
     {
         public Color CanvasBackground { get; set; } = Colors.White;
@@ -275,7 +274,7 @@ namespace Clowd.Config
         public AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings> ToolSettings { get; set; } = new AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings>();
     }
 
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     public class SavedToolSettings
     {
         public bool TextObjectColorIsAuto { get; set; } = true;
@@ -318,7 +317,7 @@ namespace Clowd.Config
     //    }
     //}
 
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     public class FeatureSettings
     {
         [DisplayName("Auto Start on Login")]

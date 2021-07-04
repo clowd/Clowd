@@ -14,6 +14,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="RT.Serialization" Version="2.0.1693" />
+    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1693" />
+    <PackageReference Include="RT.Util.Core" Version="2.0.1693" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\modules\ScreenVersusWpf\Src\ScreenVersusWpf.csproj" />

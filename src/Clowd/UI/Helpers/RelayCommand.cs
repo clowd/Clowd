@@ -32,7 +32,8 @@ namespace Clowd.UI.Helpers
         }
         public void Execute(object parameter) { _execute(parameter); }
     }
-    [ImplementPropertyChanged]
+
+    [AddINotifyPropertyChangedInterface]
     public class RelayUICommand : RelayCommand
     {
         public DataTemplate IconTemplate { get; set; }

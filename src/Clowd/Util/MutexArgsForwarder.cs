@@ -11,13 +11,13 @@ using System.Threading.Tasks;
 
 namespace Clowd.Util
 {
-    [ServiceContract]
+    //[ServiceContract]
     public interface ICommandLineProxy
     {
-        [OperationContract]
+        //[OperationContract]
         void ProcessArgs(int pid, string[] args);
 
-        [OperationContract]
+        //[OperationContract]
         bool Heartbeat();
     }
 
@@ -52,7 +52,7 @@ namespace Clowd.Util
         private bool _ready;
         private List<string> _batch;
         private System.Timers.Timer _notifyTimer;
-        private ServiceHost _host;
+        //private ServiceHost _host;
         private Mutex _mutex;
         private string _mutexName;
         private string _pipeName;
@@ -107,27 +107,27 @@ namespace Clowd.Util
 
         private void SendArgsToRemote(string[] args)
         {
-            ChannelFactory<ICommandLineProxy> pipeFactory = new ChannelFactory<ICommandLineProxy>(
-                        new NetNamedPipeBinding(),
-                        new EndpointAddress("net.pipe://localhost/" + _pipeName));
+            //ChannelFactory<ICommandLineProxy> pipeFactory = new ChannelFactory<ICommandLineProxy>(
+            //            new NetNamedPipeBinding(),
+            //            new EndpointAddress("net.pipe://localhost/" + _pipeName));
 
-            ICommandLineProxy pipeProxy = pipeFactory.CreateChannel();
-            if (!pipeProxy.Heartbeat())
-                throw new HeartbeatFailedException($"Already running application instance is unresponsive.");
+            //ICommandLineProxy pipeProxy = pipeFactory.CreateChannel();
+            //if (!pipeProxy.Heartbeat())
+            //    throw new HeartbeatFailedException($"Already running application instance is unresponsive.");
 
-            if (args.Length > 0)
-                pipeProxy.ProcessArgs(Process.GetCurrentProcess().Id, args);
+            //if (args.Length > 0)
+            //    pipeProxy.ProcessArgs(Process.GetCurrentProcess().Id, args);
 
-            pipeFactory.Close();
+            //pipeFactory.Close();
         }
 
         private void StartServiceHost()
         {
-            _host = new ServiceHost(this, new[] { new Uri("net.pipe://localhost") });
-            var behaviour = _host.Description.Behaviors.Find<ServiceBehaviorAttribute>();
-            behaviour.InstanceContextMode = InstanceContextMode.Single;
-            _host.AddServiceEndpoint(typeof(ICommandLineProxy), new NetNamedPipeBinding(), _pipeName);
-            _host.Open();
+            //_host = new ServiceHost(this, new[] { new Uri("net.pipe://localhost") });
+            //var behaviour = _host.Description.Behaviors.Find<ServiceBehaviorAttribute>();
+            //behaviour.InstanceContextMode = InstanceContextMode.Single;
+            //_host.AddServiceEndpoint(typeof(ICommandLineProxy), new NetNamedPipeBinding(), _pipeName);
+            //_host.Open();
         }
 
         private void OnCommandLineBatchTimerTick(object sender, EventArgs e)
@@ -179,11 +179,11 @@ namespace Clowd.Util
                 _mutex = null;
             }
 
-            if (_host != null)
-            {
-                _host.Close();
-                _host = null;
-            }
+            //if (_host != null)
+            //{
+            //    _host.Close();
+            //    _host = null;
+            //}
         }
     }
 }

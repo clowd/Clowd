@@ -24,7 +24,7 @@ using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     public partial class ImageEditorPage : TemplatedControl
     {
         public override string Title => "Edit";
