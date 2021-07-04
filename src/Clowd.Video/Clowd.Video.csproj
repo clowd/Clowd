@@ -18,7 +18,6 @@
     <ProjectReference Include="..\Clowd.Watch\Clowd.Watch.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DotNetZip" Version="1.15.0" />
     <PackageReference Include="NAudio" Version="1.10.0" />
   </ItemGroup>
 </Project>
