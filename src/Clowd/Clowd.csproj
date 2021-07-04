@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
@@ -28,14 +28,6 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="System.IO" />
-    <Reference Include="System.IO.Compression" />
-    <Reference Include="System.Linq.Expressions" />
-    <Reference Include="System.Runtime" />
-    <Reference Include="System.Threading.Tasks" />
-    <Reference Include="System.Transactions" />
-  </ItemGroup>
-  <ItemGroup>
     <Compile Update="Properties\AssemblyInfo.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -61,9 +53,6 @@
     <Resource Include="Images\Screenshot\Search-26.png" />
     <Resource Include="Images\Screenshot\Undo-26.png" />
     <Resource Include="Images\Screenshot\Text.png" />
-    <Resource Include="FodyWeavers.xml">
-      <SubType>Designer</SubType>
-    </Resource>
     <Resource Include="Images\Screenshot\Cancel-26.png" />
     <Resource Include="Images\Screenshot\Clipboard-26.png" />
     <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
@@ -76,7 +65,6 @@
     <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj" />
     <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
     <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj" />
-    <ProjectReference Include="..\Clowd.WinLegacy\Clowd.WinLegacy.csproj" />
     <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj" />
     <ProjectReference Include="..\LiveDraw\LiveDraw.csproj" />
     <ProjectReference Include="..\..\third-party\NotifyIconWpf\NotifyIconLib.csproj" />
@@ -140,35 +128,25 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <Analyzer Include="..\..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\Gu.Roslyn.Extensions.dll" />
-    <Analyzer Include="..\..\packages\PropertyChangedAnalyzers.3.2.1\analyzers\dotnet\cs\PropertyChangedAnalyzers.dll" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="DirectShowLib" Version="1.0.0" />
-    <PackageReference Include="DotNetZip" Version="1.14.0" />
-    <PackageReference Include="Expression.Blend.Sdk.WPF" Version="1.0.1" />
-    <PackageReference Include="Fody" Version="1.29.4" />
-    <PackageReference Include="LightInject" Version="6.4.0" />
-    <PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
-    <PackageReference Include="RT.Util" Version="2.0.1668" />
-    <PackageReference Include="System.ServiceModel.Duplex" Version="4.8.1" />
-    <PackageReference Include="System.ServiceModel.NetTcp" Version="4.8.1" />
-    <PackageReference Include="System.ServiceModel.Federation" Version="4.8.1" />
-    <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.2.233001">
+    <PackageReference Include="DotNetZip" Version="1.15.0" />
+    <PackageReference Include="Fody" Version="6.5.2">
       <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="PropertyChanged.Fody" Version="1.53.0" />
+    <PackageReference Include="LightInject" Version="6.4.0" />
+    <PackageReference Include="Microsoft.VisualBasic" Version="10.4.0-preview.18571.3" />
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.31" />
+    <PackageReference Include="PropertyChanged.Fody" Version="3.4.0" PrivateAssets="all" />
     <PackageReference Include="SharpRaven" Version="2.4.0" />
-    <PackageReference Include="MahApps.Metro" Version="2.4.7" />
   </ItemGroup>
-  <PropertyGroup />
-  <Import Project="..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets" Condition="Exists('..\..\packages\Fody.1.29.4\build\dotnet\Fody.targets')" />
-  <PropertyGroup>
-    <PreBuildEvent>if $(ConfigurationName) == Debug (
-  "$(DevEnvDir)\TextTransform.exe" -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
-) ELSE (
- "$(DevEnvDir)\TextTransform.exe" -a !!revision!true -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
-)
-</PreBuildEvent>
-  </PropertyGroup>
+  <!--<PropertyGroup />-->
+  <!--<PropertyGroup>
+    <PreBuildEvent>
+      if $(ConfigurationName) == Debug (
+      "$(DevEnvDir)\TextTransform.exe" -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
+      ) ELSE (
+      "$(DevEnvDir)\TextTransform.exe" -a !!revision!true -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
+      )
+    </PreBuildEvent>
+  </PropertyGroup>-->
 </Project>

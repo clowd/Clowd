@@ -10,7 +10,7 @@ using PropertyChanged;
 
 namespace Clowd.UI.Config
 {
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     public partial class UpdaterControl : UserControl
     {
         public string CurrentVersion { get; set; }

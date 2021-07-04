@@ -13,9 +13,8 @@
                 <ResourceDictionary Source="Assets/CustomWindowStyle.xaml" />
                 <ResourceDictionary Source="Assets/VectorGeometries.xaml" />
                 <ResourceDictionary Source="Assets/VectorIcons.xaml" />
-                <ResourceDictionary Source="Assets/MetroControls.xaml" />
                 <ResourceDictionary Source="Assets/Colors.xaml" />
-                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
+                <!--<ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />-->
             </ResourceDictionary.MergedDictionaries>
 
             <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
