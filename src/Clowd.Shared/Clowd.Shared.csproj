@@ -10,10 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="PropertyChangedAnalyzers" Version="3.2.2">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="RT.Serialization" Version="2.0.1693" />
     <PackageReference Include="RT.Serialization.Xml" Version="2.0.1693" />
     <PackageReference Include="RT.Util.Core" Version="2.0.1693" />
