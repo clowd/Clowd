@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
@@ -39,25 +39,6 @@
     <AppDesigner Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Images\Screenshot\Print-26.png" />
-    <Resource Include="Images\Info-50white.png" />
-    <Resource Include="Images\Info-50.png" />
-    <Resource Include="Images\Screenshot\picker.png" />
-    <Resource Include="Images\Screenshot\Edit-26.png" />
-    <Resource Include="Images\Screenshot\Ellipse-26.png" />
-    <Resource Include="Images\Screenshot\External-26.png" />
-    <Resource Include="Images\Screenshot\Line-26.png" />
-    <Resource Include="Images\Screenshot\Process-26.png" />
-    <Resource Include="Images\Screenshot\Rectangle-26.png" />
-    <Resource Include="Images\Screenshot\Save-26.png" />
-    <Resource Include="Images\Screenshot\Search-26.png" />
-    <Resource Include="Images\Screenshot\Undo-26.png" />
-    <Resource Include="Images\Screenshot\Text.png" />
-    <Resource Include="Images\Screenshot\Cancel-26.png" />
-    <Resource Include="Images\Screenshot\Clipboard-26.png" />
-    <Resource Include="Images\Screenshot\Cursor Filled-25.png" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\..\modules\Clowd.Win64\Clowd.Win64.vcxproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
@@ -72,22 +53,7 @@
     <ProjectReference Include="..\..\third-party\PropertyTools.Wpf\PropertyTools.Wpf.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Images\upload-basket.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Images\Screenshot\Copy-26.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Images\External Link-26.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Checkmark-26.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Images\Double Down-26.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Images\Screenshot\View File-26.png" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\Clowd-250.png" />
@@ -96,17 +62,10 @@
     <Resource Include="Images\Help-64.png" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Images\Key-24.png" />
     <Resource Include="Images\Visible-24.png" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Images\Image File-50.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Settings-32.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Images\External Link-32.png" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\Help-25.png" />
