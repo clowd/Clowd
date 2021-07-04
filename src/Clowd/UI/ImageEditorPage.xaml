@@ -16,9 +16,9 @@
     mc:Ignorable="d">
     <UserControl.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
+            <!--<ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/FlatSlider.xaml" />
-            </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary.MergedDictionaries>-->
             <RoutedUICommand x:Key="Commands.Upload" />
             <RoutedUICommand x:Key="Commands.SelectTool" />
             <RoutedUICommand x:Key="Commands.ZoomFit" />
@@ -158,12 +158,8 @@
             Key="NumPad1"
             Command="{StaticResource Commands.ZoomActual}"
             Modifiers="Ctrl" />
-        <KeyBinding
-            Key="Home"
-            Command="{StaticResource Commands.MoveToFront}"/>
-        <KeyBinding
-            Key="End"
-            Command="{StaticResource Commands.MoveToBack}"/>
+        <KeyBinding Key="Home" Command="{StaticResource Commands.MoveToFront}" />
+        <KeyBinding Key="End" Command="{StaticResource Commands.MoveToBack}" />
     </UserControl.InputBindings>
     <UserControl.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Print" Executed="PrintCommand" />

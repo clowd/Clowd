@@ -18,7 +18,7 @@ using PropertyTools.Wpf;
 
 namespace Clowd.UI
 {
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     public partial class SettingsPage : UserControl, ISettingsPage
     {
         public GeneralSettings SelectedItem { get; set; }
@@ -33,10 +33,10 @@ namespace Clowd.UI
 
         public event EventHandler Closed;
 
-        private void Home_Clicked(object sender, RoutedEventArgs e)
-        {
-            TemplatedWindow.SetContent(this, new HomePage());
-        }
+        //private void Home_Clicked(object sender, RoutedEventArgs e)
+        //{
+        //    TemplatedWindow.SetContent(this, new HomePage());
+        //}
 
         private void ResetSettingsClick(object sender, MouseButtonEventArgs e)
         {

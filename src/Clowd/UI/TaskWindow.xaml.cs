@@ -17,7 +17,7 @@ using PropertyChanged;
 
 namespace Clowd.UI
 {
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     [TemplatePart(Type = typeof(Grid), Name = "PART_WindowContent")]
     public partial class TaskWindow : Window, INotifyPropertyChanged
     {
@@ -337,7 +337,7 @@ namespace Clowd.UI
         }
     }
 
-    [ImplementPropertyChanged]
+    [AddINotifyPropertyChangedInterface]
     public class TaskViewItem : INotifyPropertyChanged
     {
         public enum TaskStatus
@@ -416,7 +416,8 @@ namespace Clowd.UI
         //    }
         //}
     }
-    [ImplementPropertyChanged]
+
+    [AddINotifyPropertyChangedInterface]
     public class UploadTaskViewItem : TaskViewItem
     {
         public long FileSize { get; set; }

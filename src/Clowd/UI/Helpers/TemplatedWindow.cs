@@ -3,7 +3,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
-using MahApps.Metro.Controls;
 using RT.Util.ExtensionMethods;
 using ScreenVersusWpf;
 
@@ -19,9 +18,10 @@ namespace Clowd.UI.Helpers
 
         public static ITemplatable CreateTemplatedWindow()
         {
-            bool customChrome = App.Current.Settings.UseCustomWindowChrome;
-            ITemplatable window = customChrome ? (ITemplatable)new modernWindow() : new regWindow();
-            return window;
+            return new regWindow();
+            //bool customChrome = App.Current.Settings.UseCustomWindowChrome;
+            //ITemplatable window = customChrome ? (ITemplatable)new modernWindow() : new regWindow();
+            //return window;
         }
 
         public interface ITemplatable
@@ -29,65 +29,65 @@ namespace Clowd.UI.Helpers
             void SetContent(FrameworkElement control);
             FrameworkElement GetContent();
         }
-        private class modernWindow : MetroWindow, ITemplatable
-        {
-            private readonly Controls.TransitioningContentControl _content;
-            public modernWindow()
-            {
-                IconTemplate = (DataTemplate)App.Current.FindResource("MetroIconTemplate");
-                ResizeMode = ResizeMode.CanResizeWithGrip;
-                BorderThickness = new Thickness(1, 1, 1, 1);
-                SetResourceReference(MetroWindow.BorderBrushProperty, "WindowTitleColorBrush");
-                WindowTransitionsEnabled = false;
+        //private class modernWindow : MetroWindow, ITemplatable
+        //{
+        //    private readonly Controls.TransitioningContentControl _content;
+        //    public modernWindow()
+        //    {
+        //        IconTemplate = (DataTemplate)App.Current.FindResource("MetroIconTemplate");
+        //        ResizeMode = ResizeMode.CanResizeWithGrip;
+        //        BorderThickness = new Thickness(1, 1, 1, 1);
+        //        SetResourceReference(MetroWindow.BorderBrushProperty, "WindowTitleColorBrush");
+        //        WindowTransitionsEnabled = false;
 
-                Uri iconUri = new Uri("pack://application:,,,/Images/default.ico", UriKind.RelativeOrAbsolute);
-                this.Icon = BitmapFrame.Create(iconUri, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        //        Uri iconUri = new Uri("pack://application:,,,/Images/default.ico", UriKind.RelativeOrAbsolute);
+        //        this.Icon = BitmapFrame.Create(iconUri, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
 
-                var tcc = new Controls.TransitioningContentControl();
-                tcc.HorizontalAlignment = HorizontalAlignment.Stretch;
-                tcc.VerticalAlignment = VerticalAlignment.Stretch;
-                this.Content = tcc;
-                _content = tcc;
+        //        var tcc = new Controls.TransitioningContentControl();
+        //        tcc.HorizontalAlignment = HorizontalAlignment.Stretch;
+        //        tcc.VerticalAlignment = VerticalAlignment.Stretch;
+        //        this.Content = tcc;
+        //        _content = tcc;
 
-                this.Loaded += OnLoaded;
-            }
+        //        this.Loaded += OnLoaded;
+        //    }
 
-            private void OnLoaded(object sender, RoutedEventArgs routedEventArgs)
-            {
-                var templated = _content.Content as TemplatedControl;
-                if (templated != null)
-                {
-                    templated.IsActivated = true;
-                    templated.OnActivated(this);
-                }
-            }
+        //    private void OnLoaded(object sender, RoutedEventArgs routedEventArgs)
+        //    {
+        //        var templated = _content.Content as TemplatedControl;
+        //        if (templated != null)
+        //        {
+        //            templated.IsActivated = true;
+        //            templated.OnActivated(this);
+        //        }
+        //    }
 
-            public void SetContent(FrameworkElement control)
-            {
-                var templatedOld = _content.Content as TemplatedControl;
-                if (templatedOld != null)
-                {
-                    templatedOld.IsActivated = false;
-                    templatedOld.OnDeactivated();
-                }
+        //    public void SetContent(FrameworkElement control)
+        //    {
+        //        var templatedOld = _content.Content as TemplatedControl;
+        //        if (templatedOld != null)
+        //        {
+        //            templatedOld.IsActivated = false;
+        //            templatedOld.OnDeactivated();
+        //        }
 
-                _content.Content = control;
-                if (this.IsLoaded)
-                {
-                    var templated = control as TemplatedControl;
-                    if (templated != null)
-                    {
-                        this.Title = templated.Title;
-                        templated.IsActivated = true;
-                        templated.OnActivated(this);
-                    }
-                }
-            }
-            public FrameworkElement GetContent()
-            {
-                return (Control)_content.Content;
-            }
-        }
+        //        _content.Content = control;
+        //        if (this.IsLoaded)
+        //        {
+        //            var templated = control as TemplatedControl;
+        //            if (templated != null)
+        //            {
+        //                this.Title = templated.Title;
+        //                templated.IsActivated = true;
+        //                templated.OnActivated(this);
+        //            }
+        //        }
+        //    }
+        //    public FrameworkElement GetContent()
+        //    {
+        //        return (Control)_content.Content;
+        //    }
+        //}
         private class regWindow : Window, ITemplatable
         {
             private readonly Controls.TransitioningContentControl _content;
@@ -333,17 +333,17 @@ namespace Clowd.UI.Helpers
         public static BorderSize GetWindowBorderSize(Window wnd)
         {
             double titleHeight, borderWidth;
-            if (wnd is MetroWindow)
-            {
-                var metro = (MetroWindow)wnd;
-                titleHeight = metro.TitlebarHeight;
-                borderWidth = 1;
-            }
-            else
-            {
-                titleHeight = SystemParameters.WindowCaptionHeight + SystemParameters.ResizeFrameHorizontalBorderHeight;
-                borderWidth = SystemParameters.ResizeFrameVerticalBorderWidth;
-            }
+            //if (wnd is MetroWindow)
+            //{
+            //    var metro = (MetroWindow)wnd;
+            //    titleHeight = metro.TitlebarHeight;
+            //    borderWidth = 1;
+            //}
+            //else
+            //{
+            titleHeight = SystemParameters.WindowCaptionHeight + SystemParameters.ResizeFrameHorizontalBorderHeight;
+            borderWidth = SystemParameters.ResizeFrameVerticalBorderWidth;
+            //}
 
             return new BorderSize(titleHeight, borderWidth);
         }

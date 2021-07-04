@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Linq.Expressions;
-using PropertyChanged;
 
 namespace Clowd.Video.FFmpeg
 {
@@ -55,7 +54,6 @@ namespace Clowd.Video.FFmpeg
     //    }
     //}
 
-    [ImplementPropertyChanged]
     public class FFmpegCliOption : INotifyPropertyChanged
     {
         public string param_name { get; set; }
@@ -120,7 +118,6 @@ namespace Clowd.Video.FFmpeg
     //    }
     //}
 
-    [ImplementPropertyChanged]
     public abstract class FFmpegCodecPreset_AudioBase : FFmpegCodecPreset
     {
         [Browsable(false)]
@@ -317,7 +314,6 @@ namespace Clowd.Video.FFmpeg
         //}
     }
 
-    [ImplementPropertyChanged]
     public class FFmpegCodecPreset_h264_nvenc : FFmpegCodecPreset_AudioBase
     {
         //[PropertyTools.DataAnnotations.Category("Video")]
@@ -418,7 +414,6 @@ namespace Clowd.Video.FFmpeg
         }
     }
 
-    [ImplementPropertyChanged]
     public class FFmpegCodecPreset_libx264 : FFmpegCodecPreset_AudioBase
     {
         //public MaxResolution MaxResolution { get; set; } = MaxResolution.Uncapped;
