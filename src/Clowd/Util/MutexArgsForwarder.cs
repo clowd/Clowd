@@ -1,26 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.ServiceModel;
-using System.Text;
+using System.Net;
 using System.Threading;
-using System.Threading.Tasks;
-
+using Newtonsoft.Json;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd.Util
 {
-    //[ServiceContract]
-    public interface ICommandLineProxy
-    {
-        //[OperationContract]
-        void ProcessArgs(int pid, string[] args);
-
-        //[OperationContract]
-        bool Heartbeat();
-    }
-
     public class CommandLineEventArgs : EventArgs
     {
         public string[] Args { get; }
@@ -30,32 +18,20 @@ namespace Clowd.Util
         }
     }
 
-    public class HeartbeatFailedException : Exception
-    {
-        public HeartbeatFailedException() : base()
-        {
-        }
-
-        public HeartbeatFailedException(string message) : base(message)
-        {
-        }
-
-        public HeartbeatFailedException(string message, Exception innerException) : base(message, innerException)
-        {
-        }
-    }
-
-    internal class MutexArgsForwarder : ICommandLineProxy, IDisposable
+    internal sealed class MutexArgsForwarder : IDisposable
     {
         public event EventHandler<CommandLineEventArgs> ArgsReceived;
 
         private bool _ready;
         private List<string> _batch;
         private System.Timers.Timer _notifyTimer;
-        //private ServiceHost _host;
         private Mutex _mutex;
         private string _mutexName;
-        private string _pipeName;
+
+        private HttpListener _host;
+        private Thread _hostThread;
+
+        private const string _httpRoot = "http://127.0.0.1:45954/";
 
         public MutexArgsForwarder(string mutexName)
         {
@@ -65,7 +41,6 @@ namespace Clowd.Util
             _notifyTimer.Interval = 1000;
             _notifyTimer.Elapsed += OnCommandLineBatchTimerTick;
             _mutexName = mutexName;
-            _pipeName = mutexName + "npipe";
         }
 
         /// <summary>
@@ -91,7 +66,7 @@ namespace Clowd.Util
             else
             {
                 StartServiceHost();
-                (this as ICommandLineProxy).ProcessArgs(Process.GetCurrentProcess().Id, args);
+                ProcessArgs(Process.GetCurrentProcess().Id, args);
                 return true;
             }
         }
@@ -107,27 +82,84 @@ namespace Clowd.Util
 
         private void SendArgsToRemote(string[] args)
         {
-            //ChannelFactory<ICommandLineProxy> pipeFactory = new ChannelFactory<ICommandLineProxy>(
-            //            new NetNamedPipeBinding(),
-            //            new EndpointAddress("net.pipe://localhost/" + _pipeName));
-
-            //ICommandLineProxy pipeProxy = pipeFactory.CreateChannel();
-            //if (!pipeProxy.Heartbeat())
-            //    throw new HeartbeatFailedException($"Already running application instance is unresponsive.");
-
-            //if (args.Length > 0)
-            //    pipeProxy.ProcessArgs(Process.GetCurrentProcess().Id, args);
-
-            //pipeFactory.Close();
+            using (new SynchronizationContextChange()) // don't attempt top re-join the existing async context
+            {
+                var req = new SendArgsRequestModel(Process.GetCurrentProcess().Id, args);
+                using var http = new ClowdHttpClient();
+                http.PostJsonAsync<SendArgsRequestModel, object>(new Uri(_httpRoot + "args"), req, true)
+                    .GetAwaiter().GetResult();
+            }
         }
 
         private void StartServiceHost()
         {
-            //_host = new ServiceHost(this, new[] { new Uri("net.pipe://localhost") });
-            //var behaviour = _host.Description.Behaviors.Find<ServiceBehaviorAttribute>();
-            //behaviour.InstanceContextMode = InstanceContextMode.Single;
-            //_host.AddServiceEndpoint(typeof(ICommandLineProxy), new NetNamedPipeBinding(), _pipeName);
-            //_host.Open();
+            _host = new HttpListener();
+            _host.Prefixes.Add(_httpRoot);
+            _host.Start();
+
+            _hostThread = new Thread(ListenForHttpRequests);
+            _hostThread.IsBackground = true;
+            _hostThread.Priority = ThreadPriority.BelowNormal;
+            _hostThread.Start();
+        }
+
+        private void ListenForHttpRequests()
+        {
+            while (_host.IsListening)
+            {
+                ThreadPool.QueueUserWorkItem((cb) =>
+                {
+                    var context = cb as HttpListenerContext;
+                    ProcessHttpRequest(context.Request, context.Response);
+                }, _host.GetContext());
+            }
+        }
+
+        private void ProcessHttpRequest(HttpListenerRequest request, HttpListenerResponse response)
+        {
+            try
+            {
+                response.StatusCode = 204;
+
+                if (request.HttpMethod != "POST")
+                {
+                    response.StatusCode = 406;
+                    return;
+                }
+
+                if (!request.Url.AbsolutePath.EqualsNoCase("/args"))
+                {
+                    response.StatusCode = 404;
+                    return;
+                }
+
+                if (!(request.ContentType ?? "").Split(';').FirstOrDefault().EqualsNoCase("application/json"))
+                {
+                    response.StatusCode = 415;
+                    return;
+                }
+
+                SendArgsRequestModel reqBody;
+
+                try
+                {
+                    var json = request.InputStream.ReadAllText(request.ContentEncoding);
+                    reqBody = JsonConvert.DeserializeObject<SendArgsRequestModel>(json);
+                    if (reqBody.pid < 1) throw new ArgumentException();
+                    if (reqBody.args == null) throw new ArgumentException();
+                }
+                catch
+                {
+                    response.StatusCode = 400;
+                    return;
+                }
+
+                ProcessArgs(reqBody.pid, reqBody.args);
+            }
+            finally
+            {
+                response.OutputStream.Close();
+            }
         }
 
         private void OnCommandLineBatchTimerTick(object sender, EventArgs e)
@@ -144,7 +176,7 @@ namespace Clowd.Util
             }
         }
 
-        void ICommandLineProxy.ProcessArgs(int pid, string[] args)
+        private void ProcessArgs(int pid, string[] args)
         {
             if (args == null || args.Length < 1)
                 return;
@@ -162,11 +194,6 @@ namespace Clowd.Util
                 _notifyTimer.Enabled = true;
         }
 
-        bool ICommandLineProxy.Heartbeat()
-        {
-            return true;
-        }
-
         public void Dispose()
         {
             _notifyTimer.Enabled = false;
@@ -179,11 +206,13 @@ namespace Clowd.Util
                 _mutex = null;
             }
 
-            //if (_host != null)
-            //{
-            //    _host.Close();
-            //    _host = null;
-            //}
+            if (_host != null)
+            {
+                _host.Stop();
+                _host = null;
+            }
         }
+
+        private record SendArgsRequestModel(int pid, string[] args);
     }
 }
