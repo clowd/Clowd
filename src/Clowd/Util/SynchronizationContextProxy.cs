@@ -17,9 +17,23 @@ namespace Clowd.Util
         public static EventHandler<T> CreateDelegate<T>(EventHandler<T> action)
         {
             SynchronizationContext current = SynchronizationContext.Current;
+
             if (current == null)
                 throw new InvalidOperationException("SynchronizationContext.Current is null. This delegate must be created on a thread which can be synchronized.");
-            return (s, aq) => current.Post(delegate { action(s, aq); }, null);
+
+            return (s, aq) =>
+            {
+                if (SynchronizationContext.Current == current)
+                {
+                    // already in the correct context
+                    action(s, aq);
+                }
+                else
+                {
+                    // post event to target context
+                    current.Post(delegate { action(s, aq); }, null);
+                }
+            };
         }
     }
 
