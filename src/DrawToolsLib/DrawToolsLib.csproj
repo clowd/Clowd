@@ -52,6 +52,6 @@
     <Content Include="Images\Resize9.cur" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\modules\ScreenVersusWpf\Src\ScreenVersusWpf.csproj" />
+    <PackageReference Include="System.Drawing.Common" Version="5.0.2" />
   </ItemGroup>
 </Project>

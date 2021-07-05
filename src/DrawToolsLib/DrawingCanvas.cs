@@ -11,7 +11,6 @@ using System.Xml.Serialization;
 using DrawToolsLib.Filters;
 using DrawToolsLib.Graphics;
 using DrawToolsLib.Tools;
-using ScreenVersusWpf;
 
 namespace DrawToolsLib
 {
@@ -874,13 +873,14 @@ namespace DrawToolsLib
                 }
                 result.Union(rect);
             }
-            var right = Math.Round(result.Right * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
-            var bottom = Math.Round(result.Bottom * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
-            result.X = Math.Round(result.X * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
-            result.Y = Math.Round(result.Y * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
-            result.Width = right - result.X;
-            result.Height = bottom - result.Y;
             return result;
+            //var right = Math.Round(result.Right * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
+            //var bottom = Math.Round(result.Bottom * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
+            //result.X = Math.Round(result.X * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
+            //result.Y = Math.Round(result.Y * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
+            //result.Width = right - result.X;
+            //result.Height = bottom - result.Y;
+            //return result;
         }
 
         /// <summary>
@@ -1940,11 +1940,13 @@ namespace DrawToolsLib
             var pt = (Point)e.NewValue;
             if (me.ContentScale == 1)
             {
-                double dpiZoom = 0;
-                try { dpiZoom = ScreenTools.DpiZoom; }
-                catch { } // WPF designer hasn't initialised library
-                me._translateTransform.X = Math.Round(pt.X * dpiZoom) / dpiZoom;
-                me._translateTransform.Y = Math.Round(pt.Y * dpiZoom) / dpiZoom;
+                //double dpiZoom = 0;
+                //try { dpiZoom = ScreenTools.DpiZoom; }
+                //catch { } // WPF designer hasn't initialised library
+                //me._translateTransform.X = Math.Round(pt.X * dpiZoom) / dpiZoom;
+                //me._translateTransform.Y = Math.Round(pt.Y * dpiZoom) / dpiZoom;
+                me._translateTransform.X = pt.X;
+                me._translateTransform.Y = pt.Y;
             }
             else
             {
