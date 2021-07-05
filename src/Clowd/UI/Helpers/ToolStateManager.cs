@@ -258,7 +258,7 @@ namespace Clowd.UI.Helpers
 
         public override bool HasAngle => typeof(TGraphic).GetProperty(ANGLE_NAME) != null;
 
-        public override bool CanStitchAndCrop => IsOneOf(typeof(GraphicImage));
+        public override bool CanStitchAndCrop => false; // IsOneOf(typeof(GraphicImage));
 
         public override bool CanChangeCanvasBackground => false;
 
@@ -306,13 +306,13 @@ namespace Clowd.UI.Helpers
                     page.resetObjectAngle.SetBinding(ResetDefaultButton.CurrentValueProperty, angleResetBinding);
                 }
 
-                if (CanStitchAndCrop)
-                {
-                    var croppingBinding = new Binding(nameof(GraphicImage.IsCropping));
-                    croppingBinding.Source = obj;
-                    croppingBinding.Mode = BindingMode.TwoWay;
-                    page.btnCropImage.SetBinding(ToggleButton.IsCheckedProperty, croppingBinding);
-                }
+                //if (CanStitchAndCrop)
+                //{
+                //    var croppingBinding = new Binding(nameof(GraphicImage.IsCropping));
+                //    croppingBinding.Source = obj;
+                //    croppingBinding.Mode = BindingMode.TwoWay;
+                //    page.btnCropImage.SetBinding(ToggleButton.IsCheckedProperty, croppingBinding);
+                //}
             }
         }
 
