@@ -29,7 +29,6 @@ namespace Clowd
             return JsonConvert.DeserializeObject<T>(content);
         }
 
-
         public async Task<TRESP> PostNothingAsync<TRESP>(Uri uri, bool throwOnErrorCode = true)
         {
             var response = await PostAsync(uri, new StringContent(""));

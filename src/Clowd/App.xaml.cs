@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -178,13 +179,10 @@ namespace Clowd
         private async Task SetupMutex(StartupEventArgs e)
         {
             _processor = new MutexArgsForwarder(Constants.ClowdMutex);
-            _processor.ArgsReceived += (s, pev) =>
+            _processor.ArgsReceived += SynchronizationContextEventHandler.CreateDelegate<CommandLineEventArgs>((s, e) =>
             {
-                Dispatcher.Invoke(() =>
-                {
-                    OnFilesReceived(pev.Args);
-                });
-            };
+                OnFilesReceived(e.Args);
+            });
 
             try
             {
@@ -207,7 +205,7 @@ namespace Clowd
                     }
                 }
             }
-            catch (HeartbeatFailedException)
+            catch (HttpRequestException)
             {
                 // there is an unresponsive clowd process, try to kill it and re-start
                 KillOtherClowdProcess();
