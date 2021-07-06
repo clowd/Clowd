@@ -24,6 +24,14 @@ namespace Clowd.PlatformUtil
 
         public static LogicalRect Empty => new LogicalRect(0, 0, 0, 0);
 
+        public LogicalRect(LogicalPoint topLeft, LogicalSize size)
+        {
+            X = topLeft.X;
+            Y = topLeft.Y;
+            Width = size.Width;
+            Height = size.Height;
+        }
+
         public LogicalRect(double x, double y, double width, double height)
         {
             X = x;

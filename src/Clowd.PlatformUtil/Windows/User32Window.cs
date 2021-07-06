@@ -14,7 +14,7 @@ using static CsWin32.PInvoke;
 
 namespace Clowd.PlatformUtil.Windows
 {
-    public delegate int WindowProcedure(nint hWnd, WndMsg msg, nuint wParam, nint lParam, out bool handled);
+    public delegate int WindowProcedure(nint hWnd, WindowMessage msg, nuint wParam, nint lParam, out bool handled);
 
     public unsafe partial record User32Window : IWindow
     {
@@ -47,7 +47,8 @@ namespace Clowd.PlatformUtil.Windows
                 GetWindowRect(Handle, out var rect);
                 return ScreenRect.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
             }
-            set => SetWindowPos(Handle, HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height, SET_WINDOW_POS_FLAGS.SWP_NOOWNERZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
+            set => SetWindowPos(Handle, HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height, 
+                SET_WINDOW_POS_FLAGS.SWP_NOOWNERZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER);
         }
 
         public ScreenRect DwmRenderBounds
@@ -225,12 +226,29 @@ namespace Clowd.PlatformUtil.Windows
 
         public bool Activate()
         {
-            return SetForegroundWindow(Handle);
+            SetForegroundWindow(Handle);
+            SetActiveWindow(Handle);
+            return true;
+        }
+
+        public bool Show()
+        {
+            return Show(WindowShowCommand.Show);
+        }
+
+        public bool Show(bool activate)
+        {
+            return Show(WindowShowCommand.ShowNA);
         }
 
         public bool Show(WindowShowCommand cmd)
         {
             return ShowWindow(Handle, (SHOW_WINDOW_CMD)(uint)cmd);
+        }
+
+        public bool Hide()
+        {
+            return Show(WindowShowCommand.Hide);
         }
 
         public bool Minimize()
@@ -254,6 +272,24 @@ namespace Clowd.PlatformUtil.Windows
             catch { }
         }
 
+        public void SetNeverActivateStyle(bool neverActivate)
+        {
+            var exs = GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+
+            if (neverActivate)
+                exs |= (int)WINDOW_EX_STYLE.WS_EX_NOACTIVATE;
+            else
+                exs &= ~(int)WINDOW_EX_STYLE.WS_EX_NOACTIVATE;
+
+            SetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, exs);
+        }
+
+        public void DwmSetTransitionsDisabled(bool transitionsDisabled)
+        {
+            int disabled = transitionsDisabled ? 1 : 0;
+            DwmSetWindowAttribute(Handle, (uint)DWMWINDOWATTRIBUTE.DWMWA_TRANSITIONS_FORCEDISABLED, &disabled, sizeof(int));
+        }
+
         public override string ToString()
         {
             return $"Window {((nint)Handle).ToString("X8")} {{'{Caption}/{ClassName}', {WindowBounds}}}";
@@ -264,16 +300,6 @@ namespace Clowd.PlatformUtil.Windows
         private void SetStyle(WINDOW_STYLE style, bool set) => SetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_STYLE, GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_STYLE) & ~((int)style) | (set ? ((int)style) : 0));
         private void SetStyle(WINDOW_EX_STYLE style, bool set) => SetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE) & ~((int)style) | (set ? ((int)style) : 0));
 
-        public bool Show()
-        {
-            return Show(WindowShowCommand.Show);
-        }
-
-        public bool Show(bool activate)
-        {
-            return Show(WindowShowCommand.ShowNA);
-        }
-
         public IScreen GetCurrentScreen()
         {
             return User32Screen.FromRect(WindowBounds);
@@ -282,6 +308,16 @@ namespace Clowd.PlatformUtil.Windows
         public bool Equals(IWindow other)
         {
             return Equals(other as User32Window);
+        }
+
+        public void SetPosition(ScreenRect newPosition)
+        {
+            WindowBounds = newPosition;
+        }
+
+        public void SetEnabled(bool enabled)
+        {
+            IsDisabled = !enabled;
         }
     }
 }

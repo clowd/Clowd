@@ -2,7 +2,7 @@
 
 namespace Clowd.PlatformUtil.Windows
 {
-    public enum WndMsg : uint
+    public enum WindowMessage : uint
     {
         WM_NULL = 0x0000,
         WM_CREATE = 0x0001,
