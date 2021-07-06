@@ -16,6 +16,7 @@ using System.Windows.Threading;
 using Clowd.Capture;
 using Clowd.Config;
 using Clowd.Interop;
+using Clowd.PlatformUtil;
 using Clowd.UI;
 using Clowd.UI.Helpers;
 using Clowd.Util;
@@ -25,7 +26,6 @@ using Ookii.Dialogs.Wpf;
 using RT.Serialization;
 using RT.Util;
 using RT.Util.ExtensionMethods;
-using ScreenVersusWpf;
 using Color = System.Windows.Media.Color;
 using Point = System.Windows.Point;
 
@@ -63,7 +63,6 @@ namespace Clowd
                     DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
 
                 SetupExceptionHandling();
-                ScreenTools.InitializeDpi(ScreenTools.GetSystemDpi());
                 await SetupMutex(e);
                 SetupSettings();
                 SetupDependencyInjection();
@@ -530,7 +529,7 @@ namespace Clowd
             Settings.SaveQuiet();
         }
 
-        public void StartCapture(ScreenRect? region = null)
+        public void StartCapture(ScreenRect region = null)
         {
             Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
         }

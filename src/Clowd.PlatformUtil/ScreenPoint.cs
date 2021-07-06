@@ -24,5 +24,6 @@ namespace Clowd.PlatformUtil
         public static ScreenPoint operator -(ScreenPoint point, ScreenPoint sub) => point + (-sub);
 
         public static explicit operator System.Drawing.Point(ScreenPoint pt) => new System.Drawing.Point(pt.X, pt.Y);
+        public static explicit operator ScreenPoint(System.Drawing.Point pt) => new ScreenPoint(pt.X, pt.Y);
     }
 }

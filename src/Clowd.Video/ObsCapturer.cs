@@ -1,5 +1,5 @@
-﻿using Newtonsoft.Json;
-using ScreenVersusWpf;
+﻿using Clowd.PlatformUtil;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -175,7 +175,7 @@ namespace Clowd.Video
                     var req = new ObsStartRequest
                     {
                         fps = settings.Fps,
-                        captureRegion = captureRect.ToSystem(),
+                        captureRegion = captureRect,
                         cq = (int)settings.Quality,
                         hardwareAccelerated = settings.HardwareAccelerated,
                         performanceMode = settings.Performance.ToString(),
@@ -308,6 +308,7 @@ namespace Clowd.Video
             public int y;
             //public static implicit operator ObsRect(ScreenRect rect) => new ObsRect { x = rect.Left, y = rect.Top, width = rect.Width, height = rect.Height };
             public static implicit operator ObsRect(Rectangle rect) => new ObsRect { x = rect.X, y = rect.Y, width = rect.Width, height = rect.Height };
+            public static implicit operator ObsRect(ScreenRect rect) => new ObsRect { x = rect.X, y = rect.Y, width = rect.Width, height = rect.Height };
         }
 
         private class Statistics

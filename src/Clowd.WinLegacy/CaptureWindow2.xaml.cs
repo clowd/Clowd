@@ -118,6 +118,12 @@ namespace Clowd.WinLegacy
             StartCaptureInstance(null);
         }
 
+        public void Open(Clowd.PlatformUtil.ScreenRect area)
+        {
+            var svw = new ScreenRect(area.X, area.Y, area.Width, area.Height);
+            StartCaptureInstance(svw.ToWpfRect());
+        }
+
         public void Open(ScreenRect area)
         {
             StartCaptureInstance(area.ToWpfRect());

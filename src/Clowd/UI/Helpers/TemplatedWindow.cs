@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using RT.Util.ExtensionMethods;
-using ScreenVersusWpf;
 
 namespace Clowd.UI.Helpers
 {
@@ -181,7 +180,7 @@ namespace Clowd.UI.Helpers
 
             if (!Double.IsNaN(content.Width) && !Double.IsNaN(content.Height))
             {
-                SizeToContent(window, new Size(content.Width, content.Height));
+                //SizeToContent(window, new Size(content.Width, content.Height));
                 content.Width = Double.NaN;
                 content.Height = Double.NaN;
             }
@@ -200,46 +199,49 @@ namespace Clowd.UI.Helpers
         //    return SizeToContent(window, new Size(bounds.Width, bounds.Height));
         //}
 
-        public static bool SizeToContent(Window window, Size size, double contentLeft = Double.NaN, double contentTop = Double.NaN)
-        {
-            var border = GetWindowBorderSize(window);
+        //public static bool SizeToContent(Window window, Size size, double contentLeft = Double.NaN, double contentTop = Double.NaN)
+        //{
+        //    var border = GetWindowBorderSize(window);
 
-            var wndHeight = size.Height + border.TotalBorderHeight;
-            var wndWidth = size.Width + border.TotalBorderWidth;
+        //    var wndHeight = size.Height + border.TotalBorderHeight;
+        //    var wndWidth = size.Width + border.TotalBorderWidth;
 
-            if (!Double.IsNaN(contentLeft) && !Double.IsNaN(contentTop))
-            {
-                window.Left = contentLeft - border.BorderEdgeSize;
-                window.Top = contentTop - border.TitleBarHeight;
-            }
+        //    if (!Double.IsNaN(contentLeft) && !Double.IsNaN(contentTop))
+        //    {
+        //        window.Left = contentLeft - border.BorderEdgeSize;
+        //        window.Top = contentTop - border.TitleBarHeight;
+        //    }
 
-            if (!Double.IsNaN(window.Left) && !Double.IsNaN(window.Top))
-            {
-                WpfRect primaryScreenRect = ScreenTools.Screens.First().Bounds.ToWpfRect();
-                WpfRect ctrlRect = new WpfRect(window.Left + primaryScreenRect.Left, window.Top + primaryScreenRect.Top, window.Width, window.Height);
-                WpfRect screenRect = ScreenTools.GetScreenContaining(ctrlRect.ToScreenRect())?.WorkingArea.ToWpfRect() ?? primaryScreenRect;
+        //    if (!Double.IsNaN(window.Left) && !Double.IsNaN(window.Top))
+        //    {
 
-                if (wndWidth > screenRect.Width || wndHeight > screenRect.Height)
-                {
-                    window.WindowState = WindowState.Maximized;
-                }
-                else
-                {
-                    window.Height = wndHeight;
-                    window.Width = wndWidth;
 
-                    window.Left = window.Left.Clip(screenRect.Left - primaryScreenRect.Left, screenRect.Right - window.Width - primaryScreenRect.Left);
-                    window.Top = window.Top.Clip(screenRect.Top - primaryScreenRect.Top, screenRect.Bottom - window.Height - primaryScreenRect.Top);
-                    return true;
-                }
-            }
-            else
-            {
-                window.Height = wndHeight;
-                window.Width = wndWidth;
-            }
-            return false;
-        }
+
+        //        WpfRect primaryScreenRect = ScreenTools.Screens.First().Bounds.ToWpfRect();
+        //        WpfRect ctrlRect = new WpfRect(window.Left + primaryScreenRect.Left, window.Top + primaryScreenRect.Top, window.Width, window.Height);
+        //        WpfRect screenRect = ScreenTools.GetScreenContaining(ctrlRect.ToScreenRect())?.WorkingArea.ToWpfRect() ?? primaryScreenRect;
+
+        //        if (wndWidth > screenRect.Width || wndHeight > screenRect.Height)
+        //        {
+        //            window.WindowState = WindowState.Maximized;
+        //        }
+        //        else
+        //        {
+        //            window.Height = wndHeight;
+        //            window.Width = wndWidth;
+
+        //            window.Left = window.Left.Clip(screenRect.Left - primaryScreenRect.Left, screenRect.Right - window.Width - primaryScreenRect.Left);
+        //            window.Top = window.Top.Clip(screenRect.Top - primaryScreenRect.Top, screenRect.Bottom - window.Height - primaryScreenRect.Top);
+        //            return true;
+        //        }
+        //    }
+        //    else
+        //    {
+        //        window.Height = wndHeight;
+        //        window.Width = wndWidth;
+        //    }
+        //    return false;
+        //}
 
         public static void SetContent(Window window, FrameworkElement content)
         {
