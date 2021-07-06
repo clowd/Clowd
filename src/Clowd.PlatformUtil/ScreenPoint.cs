@@ -22,5 +22,7 @@ namespace Clowd.PlatformUtil
         public static ScreenPoint operator /(ScreenPoint point, int div) => new ScreenPoint(point.X / div, point.Y / div);
         public static ScreenPoint operator +(ScreenPoint point, ScreenPoint add) => new ScreenPoint(point.X + add.X, point.Y + add.Y);
         public static ScreenPoint operator -(ScreenPoint point, ScreenPoint sub) => point + (-sub);
+
+        public static explicit operator System.Drawing.Point(ScreenPoint pt) => new System.Drawing.Point(pt.X, pt.Y);
     }
 }
