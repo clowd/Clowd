@@ -156,7 +156,7 @@ namespace Clowd.PlatformUtil.Windows
 
         public int Index => IsVirtual ? -1 : AllScreens.ToList().IndexOf(this);
 
-        public int DpiX
+        public double PixelDensity
         {
             get
             {
@@ -166,7 +166,7 @@ namespace Clowd.PlatformUtil.Windows
 
                 uint dpiX = 0, dpiY = 0;
                 if (0 == GetDpiForMonitor(Handle, CsWin32.MONITOR_DPI_TYPE.MDT_DEFAULT, ref dpiX, ref dpiY))
-                    return (int)dpiX;
+                    return dpiX / 96.0;
 
                 throw new Win32Exception("Unspecified error occurred.");
             }

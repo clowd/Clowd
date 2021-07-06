@@ -22,6 +22,8 @@ namespace Clowd.PlatformUtil
             throw new NotImplementedException();
         }
 
+        public static void SetPlatform(Platform platform) => _current = platform;
+
         private static Platform _current;
 
         // instance members
@@ -42,5 +44,11 @@ namespace Clowd.PlatformUtil
 
         // window
         public abstract IWindow GetWindowFromHandle(nint handle);
+        public abstract IWindow GetForegroundWindow();
+
+        // screen capture
+        public abstract IBitmap CaptureDesktop(bool drawCursor);
+        public abstract IBitmap CaptureRegion(ScreenRect region, bool drawCursor);
+        public abstract IBitmap CaptureWindow(IWindow window);
     }
 }

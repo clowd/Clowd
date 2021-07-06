@@ -6,7 +6,7 @@ namespace Clowd.PlatformUtil
     {
         nint Handle { get; }
         int Index { get; }
-        int DpiX { get; }
+        double PixelDensity { get; }
         bool IsPrimary { get; }
         bool IsVirtual { get; }
         ScreenRect Bounds { get; }

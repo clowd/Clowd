@@ -20,6 +20,8 @@ namespace Clowd.PlatformUtil
         public ScreenPoint BottomLeft => new ScreenPoint(Left, Bottom);
         public ScreenPoint Center => new ScreenPoint(Left + Width / 2, Top + Height / 2);
 
+        public ScreenSize Size => new ScreenSize(Width, Height);
+
         public static ScreenRect Empty => new ScreenRect(0, 0, 0, 0);
 
         public ScreenRect(int x, int y, int width, int height)
@@ -58,5 +60,17 @@ namespace Clowd.PlatformUtil
 
             return result;
         }
+
+        public static explicit operator System.Drawing.Rectangle(ScreenRect rect) 
+            => new System.Drawing.Rectangle(rect.X, rect.Y, rect.Width, rect.Height);
+
+        public static explicit operator ScreenRect(System.Drawing.Rectangle rect)
+          => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
+
+        [Obsolete]
+        public System.Drawing.Rectangle ToSystem() => (System.Drawing.Rectangle)this;
+
+        [Obsolete]
+        public static ScreenRect FromSystem(System.Drawing.Rectangle rect) => (ScreenRect)rect;
     }
 }
