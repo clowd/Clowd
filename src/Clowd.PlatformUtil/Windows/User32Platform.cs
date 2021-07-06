@@ -70,6 +70,11 @@ namespace Clowd.PlatformUtil.Windows
             return User32Window.FromHandle(handle);
         }
 
+        public override void RevealFileOrFolder(string fileOrFolderPath)
+        {
+            Explorer.SelectSingleItem(fileOrFolderPath, false);
+        }
+
         public override void SetMousePosition(ScreenPoint pt)
         {
             if (!SetCursorPos(pt.X, pt.Y))
