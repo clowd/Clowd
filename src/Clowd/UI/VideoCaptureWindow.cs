@@ -212,9 +212,9 @@ namespace Clowd.UI
                 await Task.Delay(1000);
                 // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
                 if (File.Exists(_fileName))
-                    Interop.Shell32.WindowsExplorer.ShowFileOrFolder(_fileName);
+                    Platform.Current.RevealFileOrFolder(_fileName);
                 else
-                    Interop.Shell32.WindowsExplorer.ShowFileOrFolder(_settings.OutputDirectory);
+                    Platform.Current.RevealFileOrFolder(_settings.OutputDirectory);
             }
         }
 

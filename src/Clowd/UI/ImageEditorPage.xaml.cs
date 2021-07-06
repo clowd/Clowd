@@ -73,10 +73,7 @@ namespace Clowd.UI
             var window = TemplatedWindow.CreateWindow("Edit Capture", page);
             //page.DoWindowFit(window);
             window.Show();
-
-            var iop = new WindowInteropHelper(window);
-            Interop.USER32.SetForegroundWindow(iop.Handle);
-            Interop.USER32.SetActiveWindow(iop.Handle);
+            window.GetPlatformWindow().Activate();
         }
 
         protected override async void OnActivated(Window wnd)
@@ -277,7 +274,7 @@ namespace Clowd.UI
                 using (var fs = new FileStream(filename, FileMode.Create, FileAccess.Write))
                     GetRenderedPng().Save(fs);
 
-                Interop.Shell32.WindowsExplorer.ShowFileOrFolder(filename);
+                Platform.Current.RevealFileOrFolder(filename);
                 App.Current.Settings.LastSavePath = System.IO.Path.GetDirectoryName(filename);
             }
         }
