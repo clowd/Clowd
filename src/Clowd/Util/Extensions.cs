@@ -10,7 +10,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Clowd.Interop;
 using LightInject;
 
 namespace Clowd.Util
@@ -68,12 +67,6 @@ namespace Clowd.Util
             }
         }
 
-        public static void MakeForeground(this Window wnd)
-        {
-            var handle = new System.Windows.Interop.WindowInteropHelper(wnd).Handle;
-            USER32.SetForegroundWindow(handle);
-        }
-
         public static string ToHexString(this IntPtr ptr)
         {
             return string.Format("0x{0:X8}", ptr.ToInt32());
@@ -91,19 +84,13 @@ namespace Clowd.Util
 
         public static BitmapSource ToBitmapSource(this System.Drawing.Bitmap original)
         {
-            IntPtr ip = original.GetHbitmap();
-            BitmapSource bs = null;
-            try
-            {
-                bs = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(ip,
-                   IntPtr.Zero, Int32Rect.Empty,
-                   System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
-            }
-            finally
-            {
-                Interop.Gdi32.GDI32.DeleteObject(ip);
-            }
-            return bs;
+            using var bitmap = new PlatformUtil.Windows.GdiCompatibleBitmap(original.GetHbitmap());
+            return System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
+               bitmap.Handle,
+               IntPtr.Zero,
+               Int32Rect.Empty,
+               System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+
         }
         public static BitmapSource ConvertToBitmapSourceFast(this System.Drawing.Bitmap bitmap)
         {

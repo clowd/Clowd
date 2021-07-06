@@ -13,9 +13,6 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using Clowd.Config;
-using Clowd.Interop;
-using Clowd.Interop.DwmApi;
-using Clowd.Interop.Shcore;
 using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Converters;
@@ -214,7 +211,7 @@ namespace Clowd.UI
             else if (indLeft + horizontalSize > screenBounds.Right)
                 indLeft = screenBounds.Right - horizontalSize;
 
-            USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, indLeft, indTop, horizontalSize, verticalSize, SWP.NOACTIVATE);
+            ScreenPosition = new ScreenRect(indLeft, indTop, horizontalSize, verticalSize);
         }
 
         public static FloatingButtonWindow Create(IEnumerable<CaptureToolButton> buttons)
@@ -239,7 +236,7 @@ namespace Clowd.UI
                     _isVisible = true;
                     this.InvalidateMeasure();
                     this.UpdateLayout();
-                    USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE | SWP.NOMOVE | SWP.SHOWWINDOW);
+                    this.GetPlatformWindow().Show(false);
                 }
             }
         }
@@ -251,7 +248,7 @@ namespace Clowd.UI
                 if (!_isVisible)
                     return;
 
-                USER32.SetWindowPos(Handle, SWP_HWND.HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOACTIVATE | SWP.NOMOVE | SWP.HIDEWINDOW);
+                this.GetPlatformWindow().Hide();
                 _isVisible = false;
                 _manuallyPositioned = false;
             }

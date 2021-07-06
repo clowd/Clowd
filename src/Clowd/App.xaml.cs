@@ -15,7 +15,6 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Clowd.Capture;
 using Clowd.Config;
-using Clowd.Interop;
 using Clowd.PlatformUtil;
 using Clowd.UI;
 using Clowd.UI.Helpers;
@@ -409,7 +408,7 @@ namespace Clowd
             _taskbarIcon.ToolTipText = "Clowd\nRight click me or drop something on me\nto see what I can do!";
 
             //force the correct icon size
-            string iconLocation = SysInfo.IsWindows8OrLater ? "/Images/default-white.ico" : "/Images/default.ico";
+            string iconLocation = PlatformUtil.Windows.SysInfo.IsWindows8OrLater ? "/Images/default-white.ico" : "/Images/default.ico";
             System.Windows.Resources.StreamResourceInfo sri = Application.GetResourceStream(new Uri("pack://application:,,," + iconLocation));
             var desiredSize = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
             var avaliableSizes = new[] { 64, 48, 40, 32, 24, 20, 16 };
@@ -539,7 +538,8 @@ namespace Clowd
         }
         public void QuickCaptureCurrentWindow()
         {
-            Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open(USER32.GetForegroundWindow());
+            var window = Platform.Current.GetForegroundWindow();
+            Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open(window.Handle);
         }
         public async void UploadFile(Window owner = null)
         {
@@ -573,7 +573,7 @@ namespace Clowd
 
         private void OnWndProcMessageReceived(uint obj)
         {
-            if (obj == (uint)Interop.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED
+            if (obj == (uint)PlatformUtil.Windows.WindowMessage.WM_DWMCOLORIZATIONCOLORCHANGED
                 && Settings?.AccentScheme == AccentScheme.System)
             {
                 SetupAccentColors();

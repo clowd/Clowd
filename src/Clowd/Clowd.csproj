@@ -43,7 +43,6 @@
     <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
-    <ProjectReference Include="..\Clowd.Interop\Clowd.Interop.csproj" />
     <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
     <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj" />
     <ProjectReference Include="..\DrawToolsLib\DrawToolsLib.csproj" />
