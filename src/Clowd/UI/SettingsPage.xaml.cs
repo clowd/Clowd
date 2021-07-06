@@ -58,7 +58,7 @@ namespace Clowd.UI
         public void Open()
         {
             Window.Show();
-            Window.MakeForeground();
+            Window.GetPlatformWindow().Activate();
         }
 
         public void Open(SettingsCategory category)
@@ -219,7 +219,7 @@ namespace Clowd.UI
                         var windowTarget = page.GetValue(dependency);
                         if (windowTarget == GetPropertyValue<object>())
                         {
-                            window.MakeForeground();
+                            window.GetPlatformWindow().Activate();
                             return;
                         }
                     }

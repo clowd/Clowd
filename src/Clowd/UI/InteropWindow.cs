@@ -6,9 +6,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
-using Clowd.Interop;
-using Clowd.Interop.DwmApi;
 using Clowd.PlatformUtil;
+using Clowd.PlatformUtil.Windows;
 
 namespace Clowd.UI
 {
@@ -23,14 +22,13 @@ namespace Clowd.UI
             }
         }
 
-        public ScreenRect? ScreenPosition
+        public ScreenRect ScreenPosition
         {
             get
             {
                 if (SourceCreated)
                 {
-                    USER32.GetWindowRect(_handle, out var rect);
-                    return new ScreenRect(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+                    return PlatformWindow.WindowBounds;
                 }
                 else
                 {
@@ -68,8 +66,9 @@ namespace Clowd.UI
 
         private bool? _neverActivate;
         private bool? _transitionsDisabled;
-        private ScreenRect? _screenPosition;
+        private ScreenRect _screenPosition;
         private IntPtr _handle;
+        public User32Window PlatformWindow => User32Window.FromHandle(Handle);
 
         public InteropWindow()
         {
@@ -108,31 +107,20 @@ namespace Clowd.UI
             var rect = _screenPosition;
             if (rect != null && SourceCreated)
             {
-                var swp = (this.Topmost && !Debugger.IsAttached) ? SWP_HWND.HWND_TOPMOST : SWP_HWND.HWND_TOP;
-                USER32.SetWindowPos(_handle, swp, rect.Left, rect.Top, rect.Width, rect.Height, SWP.NOACTIVATE);
+                PlatformWindow.WindowBounds = _screenPosition;
             }
         }
 
-        private unsafe void SetTransitionsDisabled()
+        private void SetTransitionsDisabled()
         {
-            if (_transitionsDisabled.HasValue && SourceCreated)
-            {
-                int disabled = _transitionsDisabled == true ? 1 : 0;
-                DWMAPI.DwmSetWindowAttribute(_handle, DWMWINDOWATTRIBUTE.DWMWA_TRANSITIONS_FORCEDISABLED, &disabled, sizeof(int));
-            }
+            if (_transitionsDisabled.HasValue)
+                PlatformWindow.DwmSetTransitionsDisabled(_transitionsDisabled == true);
         }
 
         private void SetNeverActivate()
         {
-            if (_neverActivate.HasValue && SourceCreated)
-            {
-                var exs = USER32.GetWindowLong(_handle, WindowLongIndex.GWL_EXSTYLE);
-                if (_neverActivate == true)
-                    exs |= (int)WindowStylesEx.WS_EX_NOACTIVATE;
-                else
-                    exs &= ~(int)WindowStylesEx.WS_EX_NOACTIVATE;
-                USER32.SetWindowLong(_handle, WindowLongIndex.GWL_EXSTYLE, exs);
-            }
+            if (_neverActivate.HasValue)
+                PlatformWindow.SetNeverActivateStyle(_neverActivate == true);
         }
 
         protected virtual IntPtr WndProc(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

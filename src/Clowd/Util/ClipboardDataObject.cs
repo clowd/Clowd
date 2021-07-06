@@ -1,6 +1,4 @@
-﻿using Clowd.Interop;
-using Clowd.Interop.Gdi32;
-using Clowd.UI.Helpers;
+﻿using Clowd.UI.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -295,15 +293,21 @@ namespace Clowd.Util
                 : default(T);
         }
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetOpenClipboardWindow();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
         private static Process GetProcessHoldingClipboard()
         {
-            IntPtr hwnd = USER32.GetOpenClipboardWindow();
+            IntPtr hwnd = GetOpenClipboardWindow();
 
             if (hwnd == IntPtr.Zero)
                 return null;
 
             uint processId;
-            uint threadId = USER32.GetWindowThreadProcessId(hwnd, out processId);
+            uint threadId = GetWindowThreadProcessId(hwnd, out processId);
 
             return Process.GetProcessById((int)processId);
         }
@@ -481,6 +485,35 @@ namespace Clowd.Util
             {
                 return null;
             }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BITMAPV5HEADER
+        {
+            public uint bV5Size;
+            public int bV5Width;
+            public int bV5Height;
+            public UInt16 bV5Planes;
+            public UInt16 bV5BitCount;
+            public uint bV5Compression;
+            public uint bV5SizeImage;
+            public int bV5XPelsPerMeter;
+            public int bV5YPelsPerMeter;
+            public UInt16 bV5ClrUsed;
+            public UInt16 bV5ClrImportant;
+            public UInt16 bV5RedMask;
+            public UInt16 bV5GreenMask;
+            public UInt16 bV5BlueMask;
+            public UInt16 bV5AlphaMask;
+            public UInt16 bV5CSType;
+            public IntPtr bV5Endpoints;
+            public UInt16 bV5GammaRed;
+            public UInt16 bV5GammaGreen;
+            public UInt16 bV5GammaBlue;
+            public UInt16 bV5Intent;
+            public UInt16 bV5ProfileData;
+            public UInt16 bV5ProfileSize;
+            public UInt16 bV5Reserved;
         }
     }
 }

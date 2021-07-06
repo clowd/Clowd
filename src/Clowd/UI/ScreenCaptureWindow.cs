@@ -8,7 +8,6 @@ using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Clowd.Capture;
 using Clowd.Config;
-using Clowd.Interop;
 using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
@@ -183,7 +182,7 @@ namespace Clowd.UI
                 if (!String.IsNullOrWhiteSpace(filename) && Directory.Exists(Path.GetDirectoryName(filename)))
                 {
                     b.Save(filename, System.Drawing.Imaging.ImageFormat.Png);
-                    Interop.Shell32.WindowsExplorer.ShowFileOrFolder(filename);
+                    Platform.Current.RevealFileOrFolder(filename);
                     App.Current.Settings.LastSavePath = Path.GetDirectoryName(filename);
                 }
                 _floating.HidePanel();
