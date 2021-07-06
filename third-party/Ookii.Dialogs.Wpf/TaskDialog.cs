@@ -113,8 +113,8 @@ namespace Ookii.Dialogs.Wpf
         private TaskDialogItemCollection<TaskDialogRadioButton> _radioButtons;
         private NativeMethods.TASKDIALOGCONFIG _config = new NativeMethods.TASKDIALOGCONFIG();
         private TaskDialogIcon _mainIcon;
-        private System.Drawing.Icon _customMainIcon;
-        private System.Drawing.Icon _customFooterIcon;
+        private IntPtr _customMainIcon;
+        private IntPtr _customFooterIcon;
         private TaskDialogIcon _footerIcon;
         private Dictionary<int, TaskDialogButton> _buttonsById;
         private Dictionary<int, TaskDialogRadioButton> _radioButtonsById;
@@ -127,7 +127,7 @@ namespace Ookii.Dialogs.Wpf
         private int _inEventHandler;
         private bool _updatePending;
         private object _tag;
-        private System.Drawing.Icon _windowIcon;
+        private IntPtr _windowIcon;
 
         #endregion
 
@@ -270,21 +270,21 @@ namespace Ookii.Dialogs.Wpf
         /// Gets or sets the icon to be used in the title bar of the dialog.
         /// </summary>
         /// <value>
-        /// An <see cref="System.Drawing.Icon"/> that represents the icon of the task dialog's window.
+        /// An HICON that represents the icon of the task dialog's window.
         /// </value>
         /// <remarks>
         /// This property is used only when the dialog is shown as a modeless dialog; if the dialog
         /// is modal, it will have no icon.
         /// </remarks>
         [Localizable(true), Category("Appearance"), Description("The icon to be used in the title bar of the dialog. Used only when the dialog is shown as a modeless dialog."), DefaultValue(null)]
-        public System.Drawing.Icon WindowIcon
+        public nint WindowIcon
         {
             get
             {
                 if (IsDialogRunning)
                 {
                     IntPtr icon = NativeMethods.SendMessage(Handle, NativeMethods.WM_GETICON, new IntPtr(NativeMethods.ICON_SMALL), IntPtr.Zero);
-                    return System.Drawing.Icon.FromHandle(icon);
+                    return icon;
                 }
                 return _windowIcon;
             }
@@ -321,14 +321,14 @@ namespace Ookii.Dialogs.Wpf
         /// Gets or sets a custom icon to display in the dialog.
         /// </summary>
         /// <value>
-        /// An <see cref="System.Drawing.Icon"/> that represents the icon to display in the main content area of the task dialog,
+        /// An HICON that represents the icon to display in the main content area of the task dialog,
         /// or <see langword="null" /> if no custom icon is used. The default value is <see langword="null"/>.
         /// </value>
         /// <remarks>
         /// This property is ignored if the <see cref="MainIcon"/> property has a value other than <see cref="TaskDialogIcon.Custom"/>.
         /// </remarks>
         [Localizable(true), Category("Appearance"), Description("A custom icon to display in the dialog."), DefaultValue(null)]
-        public System.Drawing.Icon CustomMainIcon
+        public nint CustomMainIcon
         {
             get { return _customMainIcon; }
             set
@@ -375,7 +375,7 @@ namespace Ookii.Dialogs.Wpf
         /// Gets or sets a custom icon to display in the footer area of the task dialog.
         /// </summary>
         /// <value>
-        /// An <see cref="System.Drawing.Icon"/> that represents the icon to display in the footer area of the task dialog,
+        /// An HICON that represents the icon to display in the footer area of the task dialog,
         /// or <see langword="null" /> if no custom icon is used. The default value is <see langword="null"/>.
         /// </value>
         /// <remarks>
@@ -387,7 +387,7 @@ namespace Ookii.Dialogs.Wpf
         /// </para>
         /// </remarks>
         [Localizable(true), Category("Appearance"), Description("A custom icon to display in the footer area of the task dialog."), DefaultValue(null)]
-        public System.Drawing.Icon CustomFooterIcon
+        public nint CustomFooterIcon
         {
             get { return _customFooterIcon; }
             set
@@ -1354,18 +1354,18 @@ namespace Ookii.Dialogs.Wpf
             SetupIcon(FooterIcon, CustomFooterIcon, NativeMethods.TaskDialogFlags.UseHIconFooter);
         }
 
-        private void SetupIcon(TaskDialogIcon icon, System.Drawing.Icon customIcon, NativeMethods.TaskDialogFlags flag)
+        private void SetupIcon(TaskDialogIcon icon, nint customIcon, NativeMethods.TaskDialogFlags flag)
         {
             SetFlag(flag, false);
             if (icon == TaskDialogIcon.Custom)
             {
-                if (customIcon != null)
+                if (customIcon != 0)
                 {
                     SetFlag(flag, true);
                     if (flag == NativeMethods.TaskDialogFlags.UseHIconMain)
-                        _config.hMainIcon = customIcon.Handle;
+                        _config.hMainIcon = customIcon;
                     else
-                        _config.hFooterIcon = customIcon.Handle;
+                        _config.hFooterIcon = customIcon;
                 }
             }
             else
@@ -1550,9 +1550,9 @@ namespace Ookii.Dialogs.Wpf
 
         private void DialogCreated()
         {
-            if (_config.hwndParent == IntPtr.Zero && _windowIcon != null)
+            if (_config.hwndParent == IntPtr.Zero && _windowIcon != IntPtr.Zero)
             {
-                NativeMethods.SendMessage(Handle, NativeMethods.WM_SETICON, new IntPtr(NativeMethods.ICON_SMALL), _windowIcon.Handle);
+                NativeMethods.SendMessage(Handle, NativeMethods.WM_SETICON, new IntPtr(NativeMethods.ICON_SMALL), _windowIcon);
             }
 
             foreach (TaskDialogButton button in Buttons)

@@ -1,20 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
-    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DocumentationFile>bin\Debug\Ookii.Dialogs.Wpf.xml</DocumentationFile>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <RunCodeAnalysis>true</RunCodeAnalysis>
-    <DocumentationFile>bin\Release\Ookii.Dialogs.Wpf.xml</DocumentationFile>
-  </PropertyGroup>
-  <PropertyGroup>
-    <AssemblyOriginatorKeyFile>..\..\assets\ookii-dialogs.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <ItemGroup>
     <Compile Update="CredentialDialog.cs">
@@ -37,20 +26,11 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="CredentialDialog.bmp" />
-    <CodeAnalysisDictionary Include="CustomDictionary.xml" />
-    <EmbeddedResource Include="ProgressDialog.bmp" />
-    <EmbeddedResource Include="TaskDialog.bmp" />
-    <EmbeddedResource Include="VistaFolderBrowserDialog.bmp" />
-    <EmbeddedResource Include="VistaOpenFileDialog.bmp" />
-    <EmbeddedResource Include="VistaSaveFileDialog.bmp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Update="Ookii.Dialogs.Wpf.nuspec">
-      <SubType>Designer</SubType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Windows.Compatibility" Version="5.0.2" PrivateAssets="all" />
+    <EmbeddedResource Include="Icons\CredentialDialog.bmp" />
+    <EmbeddedResource Include="Icons\ProgressDialog.bmp" />
+    <EmbeddedResource Include="Icons\TaskDialog.bmp" />
+    <EmbeddedResource Include="Icons\VistaFolderBrowserDialog.bmp" />
+    <EmbeddedResource Include="Icons\VistaOpenFileDialog.bmp" />
+    <EmbeddedResource Include="Icons\VistaSaveFileDialog.bmp" />
   </ItemGroup>
 </Project>
