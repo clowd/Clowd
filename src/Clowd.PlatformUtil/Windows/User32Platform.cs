@@ -12,17 +12,46 @@ namespace Clowd.PlatformUtil.Windows
 {
     public class User32Platform : Platform
     {
+        public User32Platform() : base()
+        {
+            if (ThreadDpiScalingContext.GetCurrentThreadScalingMode() == ThreadScalingMode.Unaware)
+            {
+                throw new InvalidOperationException(
+                    "Can only be used from a DPI-Aware process thread. " +
+                    "Please include an application manifest to set the dpi awarenes of this process.");
+            }
+        }
+
         public override IEnumerable<IScreen> AllScreens => User32Screen.AllScreens;
 
         public override IScreen VirtualScreen => User32Screen.VirtualScreen;
 
         public override IScreen PrimaryScreen => User32Screen.PrimaryScreen;
 
+        public override IBitmap CaptureDesktop(bool drawCursor)
+        {
+            return GdiScreenCapture.CaptureScreen(VirtualScreen.Bounds, drawCursor);
+        }
+
+        public override IBitmap CaptureRegion(ScreenRect region, bool drawCursor)
+        {
+            return GdiScreenCapture.CaptureScreen(region, drawCursor);
+        }
+
+        public override IBitmap CaptureWindow(IWindow window)
+        {
+            return GdiScreenCapture.CaptureWindow(window);
+        }
+
+        public override IWindow GetForegroundWindow()
+        {
+            return GetWindowFromHandle(CsWin32.PInvoke.GetForegroundWindow());
+        }
+
         public override ScreenPoint GetMousePosition()
         {
             if (!GetCursorPos(out POINT pt))
                 throw new Win32Exception();
-
             return pt;
         }
 
