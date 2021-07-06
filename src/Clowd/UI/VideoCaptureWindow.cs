@@ -10,10 +10,10 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using Clowd.Config;
+using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
@@ -152,7 +152,6 @@ namespace Clowd.UI
         public void Open(ScreenRect captureArea)
         {
             _selection = captureArea;
-            var sys = captureArea.ToSystem();
             var clr = System.Drawing.Color.FromArgb(App.Current.AccentColor.A, App.Current.AccentColor.R, App.Current.AccentColor.G, App.Current.AccentColor.B);
 
             _monitor = new UIAudioMonitor(_settings, 20);
@@ -161,9 +160,9 @@ namespace Clowd.UI
             _btnSpeaker.Overlay = _monitor.GetSpeakerVisual();
             _btnSpeaker.SetBinding(CaptureToolButton.ShowAlternateIconProperty, _monitor.GetSpeakerEnabledBinding());
 
-            _border = new ClowdWin64.BorderWindow(clr, sys);
+            _border = new ClowdWin64.BorderWindow(clr, (System.Drawing.Rectangle)captureArea);
             _border.OverlayText = "Press Start";
-            _floating.ShowPanel(sys);
+            _floating.ShowPanel(captureArea);
         }
 
         private async void OnStart(object sender, EventArgs e)

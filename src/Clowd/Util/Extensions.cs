@@ -12,7 +12,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clowd.Interop;
 using LightInject;
-using ScreenVersusWpf;
 
 namespace Clowd.Util
 {

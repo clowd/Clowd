@@ -24,5 +24,6 @@ namespace Clowd.PlatformUtil
         public static ScreenSize operator -(ScreenSize size, ScreenSize sub) => size + (-sub);
 
         public static explicit operator System.Drawing.Size(ScreenSize pt) => new System.Drawing.Size(pt.Width, pt.Height);
+        public static explicit operator ScreenSize(System.Drawing.Size pt) => new ScreenSize(pt.Width, pt.Height);
     }
 }
