@@ -16,10 +16,10 @@ using Clowd.Config;
 using Clowd.Interop;
 using Clowd.Interop.DwmApi;
 using Clowd.Interop.Shcore;
+using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Converters;
 using PropertyChanged;
-using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
@@ -29,7 +29,7 @@ namespace Clowd.UI
         public StackPanel MainPanel { get; private set; }
 
         private List<CaptureToolButton> _buttons;
-        private System.Drawing.Rectangle _lastSelection;
+        private ScreenRect _lastSelection;
         private bool _isVisible;
         private bool _manuallyPositioned;
         private readonly object _lock = new object();
@@ -102,8 +102,8 @@ namespace Clowd.UI
                 btn.CaptureMouse();
                 _manuallyPositioned = true;
                 mouseDown = true;
-                mouseDownPt = ScreenTools.GetMousePosition();
-                initialPos = ScreenPosition.Value;
+                mouseDownPt = Platform.Current.GetMousePosition();
+                initialPos = ScreenPosition;
                 e.Handled = true;
             };
 
@@ -123,7 +123,7 @@ namespace Clowd.UI
             btn.PreviewMouseMove += (s, e) =>
             {
                 if (!mouseDown) return;
-                var pos = ScreenTools.GetMousePosition();
+                var pos = Platform.Current.GetMousePosition();
                 var deltaX = pos.X - mouseDownPt.X;
                 var deltaY = pos.Y - mouseDownPt.Y;
 
@@ -156,21 +156,10 @@ namespace Clowd.UI
             var desiredSize = MainPanel.DesiredSize;
 
             // get bounds and dpi of target display (display which contains the center point of the rect)
-            RECT nativeSel = _lastSelection;
-            var hMon = USER32.MonitorFromRect(ref nativeSel, MonitorOptions.MONITOR_DEFAULTTONEAREST);
-            var monInfo = new MONITORINFO();
-            monInfo.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
-            USER32.GetMonitorInfo(hMon, ref monInfo);
-
-            // TODO translate this for virtual screen so all coordinates are > 0
-            //var screenBounds = ScreenRect.FromSystem(monInfo.rcMonitor);
-            //var selection = ScreenRect.FromSystem(_lastSelection);
-            System.Drawing.Rectangle screenBounds = monInfo.rcMonitor;
-            System.Drawing.Rectangle selection = _lastSelection;
-
-            uint dpiX = 0, dpiY = 0;
-            SHCORE.GetDpiForMonitor(hMon, MONITOR_DPI_TYPE.MDT_EFFECTIVE_DPI, ref dpiX, ref dpiY);
-            double dpiZoom = dpiX / 96.0;
+            var monitor = Platform.Current.GetScreenFromRect(_lastSelection);
+            ScreenRect screenBounds = monitor.Bounds;
+            ScreenRect selection = _lastSelection;
+            double dpiZoom = monitor.PixelDensity;
 
             // padding measurements
             int minDistance = (int)Math.Ceiling(2 * dpiZoom);
@@ -234,7 +223,7 @@ namespace Clowd.UI
             return w;
         }
 
-        public void ShowPanel(System.Drawing.Rectangle selection)
+        public void ShowPanel(ScreenRect selection)
         {
             lock (_lock)
             {

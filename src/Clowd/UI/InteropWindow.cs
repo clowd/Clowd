@@ -8,7 +8,7 @@ using System.Windows;
 using System.Windows.Interop;
 using Clowd.Interop;
 using Clowd.Interop.DwmApi;
-using ScreenVersusWpf;
+using Clowd.PlatformUtil;
 
 namespace Clowd.UI
 {
@@ -105,9 +105,9 @@ namespace Clowd.UI
 
         private void SetWindowPosition()
         {
-            if (_screenPosition.HasValue && SourceCreated)
+            var rect = _screenPosition;
+            if (rect != null && SourceCreated)
             {
-                var rect = _screenPosition.Value;
                 var swp = (this.Topmost && !Debugger.IsAttached) ? SWP_HWND.HWND_TOPMOST : SWP_HWND.HWND_TOP;
                 USER32.SetWindowPos(_handle, swp, rect.Left, rect.Top, rect.Width, rect.Height, SWP.NOACTIVATE);
             }

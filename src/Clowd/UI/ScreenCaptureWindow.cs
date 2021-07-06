@@ -9,10 +9,10 @@ using System.Windows.Media.Imaging;
 using Clowd.Capture;
 using Clowd.Config;
 using Clowd.Interop;
+using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
@@ -145,7 +145,7 @@ namespace Clowd.UI
         {
             ProcessBitmap(async (s, b) =>
             {
-                ImageEditorPage.ShowNewEditor(b, ScreenRect.FromSystem(s).ToWpfRect());
+                ImageEditorPage.ShowNewEditor(b, ScreenRect.FromSystem(s));
             });
         }
 
@@ -316,7 +316,7 @@ namespace Clowd.UI
         {
             if (e.Captured)
             {
-                _floating.ShowPanel(e.Selection);
+                _floating.ShowPanel(ScreenRect.FromSystem(e.Selection));
             }
             else
             {

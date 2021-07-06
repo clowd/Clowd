@@ -14,13 +14,13 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clowd.Capture;
 using Clowd.Config;
+using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
 using DrawToolsLib;
 using DrawToolsLib.Graphics;
 using PropertyChanged;
-using ScreenVersusWpf;
 
 namespace Clowd.UI
 {
@@ -34,7 +34,7 @@ namespace Clowd.UI
         private ToolStateManager _manager = new ToolStateManager();
         private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private BitmapSource _initialImage;
-        private WpfRect? _initialBounds;
+        //private ScreenRect? _initialBounds;
         private PropertyChangeNotifier toolNotifier;
 
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
@@ -65,13 +65,13 @@ namespace Clowd.UI
             Keyboard.Focus(buttonFocus);
         }
 
-        public static void ShowNewEditor(BitmapSource image = null, WpfRect? screenBounds = null, bool allowPrompt = true)
+        public static void ShowNewEditor(BitmapSource image = null, ScreenRect? screenBounds = null, bool allowPrompt = true)
         {
             var page = new ImageEditorPage();
             page._initialImage = image;
-            page._initialBounds = screenBounds;
+            //page._initialBounds = screenBounds;
             var window = TemplatedWindow.CreateWindow("Edit Capture", page);
-            page.DoWindowFit(window);
+            //page.DoWindowFit(window);
             window.Show();
 
             var iop = new WindowInteropHelper(window);
@@ -89,18 +89,18 @@ namespace Clowd.UI
             var wasSidebarWidth = toolBar.ActualWidth;
             var wasActionRowHeight = propertiesBar.ActualHeight;
 
-            bool fit = DoWindowFit(wnd);
-            if (propertiesBar.ActualHeight != wasActionRowHeight || toolBar.ActualWidth != wasSidebarWidth)
-                fit = DoWindowFit(wnd); // re-fit in case the action row has reflowed
+            //bool fit = DoWindowFit(wnd);
+            //if (propertiesBar.ActualHeight != wasActionRowHeight || toolBar.ActualWidth != wasSidebarWidth)
+            //    fit = DoWindowFit(wnd); // re-fit in case the action row has reflowed
 
             // just doing this to force a thread context switch.
             // by the time we get back on to the UI thread the window will be done resizing.
             await Task.Delay(10);
 
-            if (fit)
-                drawingCanvas.ZoomPanActualSize();
-            else
-                drawingCanvas.ZoomPanFit();
+            //if (fit)
+            drawingCanvas.ZoomPanActualSize();
+            //else
+            //    drawingCanvas.ZoomPanFit();
 
             SyncToolState();
         }
@@ -112,37 +112,44 @@ namespace Clowd.UI
             if (img == null)
                 return;
 
-            var width = ScreenTools.ScreenToWpf(img.PixelWidth);
-            var height = ScreenTools.ScreenToWpf(img.PixelHeight);
+            //var width = ScreenTools.ScreenToWpf(img.PixelWidth);
+            //var height = ScreenTools.ScreenToWpf(img.PixelHeight);
+            //var graphic = new GraphicImage(drawingCanvas, new Rect(
+            //    ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.X - (width / 2)),
+            //    ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.Y - (height / 2)),
+            //    width, height), img);
+
+            var width = img.PixelWidth;
+            var height = img.PixelHeight;
             var graphic = new GraphicImage(drawingCanvas, new Rect(
-                ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.X - (width / 2)),
-                ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.Y - (height / 2)),
+               drawingCanvas.WorldOffset.X - (width / 2),
+              drawingCanvas.WorldOffset.Y - (height / 2),
                 width, height), img);
 
             drawingCanvas.AddGraphic(graphic);
         }
 
-        private bool DoWindowFit(Window wnd)
-        {
-            if (_initialImage == null)
-                return true;
+        //private bool DoWindowFit(Window wnd)
+        //{
+        //    //if (_initialImage == null)
+        //    //    return true;
 
-            var imageSize = new Size(ScreenTools.ScreenToWpf(_initialImage.PixelWidth), ScreenTools.ScreenToWpf(_initialImage.Height));
-            var capturePadding = App.Current.Settings.EditorSettings.CapturePadding;
-            var contentOffsetX = capturePadding + Math.Max(30, toolBar.ActualWidth);
-            var contentOffsetY = capturePadding + Math.Max(30, propertiesBar.ActualHeight);
+        //    //var imageSize = new Size(ScreenTools.ScreenToWpf(_initialImage.PixelWidth), ScreenTools.ScreenToWpf(_initialImage.Height));
+        //    //var capturePadding = App.Current.Settings.EditorSettings.CapturePadding;
+        //    //var contentOffsetX = capturePadding + Math.Max(30, toolBar.ActualWidth);
+        //    //var contentOffsetY = capturePadding + Math.Max(30, propertiesBar.ActualHeight);
 
-            var contentSize = new Size(imageSize.Width + contentOffsetX + capturePadding, imageSize.Height + contentOffsetY + capturePadding);
+        //    //var contentSize = new Size(imageSize.Width + contentOffsetX + capturePadding, imageSize.Height + contentOffsetY + capturePadding);
 
-            if (_initialBounds != null)
-            {
-                return TemplatedWindow.SizeToContent(wnd, contentSize, _initialBounds.Value.Left - contentOffsetX, _initialBounds.Value.Top - contentOffsetY);
-            }
-            else
-            {
-                return TemplatedWindow.SizeToContent(wnd, contentSize);
-            }
-        }
+        //    ////if (_initialBounds != null)
+        //    ////{
+        //    ////    return TemplatedWindow.SizeToContent(wnd, contentSize, _initialBounds.Value.Left - contentOffsetX, _initialBounds.Value.Top - contentOffsetY);
+        //    ////}
+        //    ////else
+        //    ////{
+        //    //return TemplatedWindow.SizeToContent(wnd, contentSize);
+        //    //}
+        //}
 
         private bool VerifyArtworkExists()
         {
@@ -177,10 +184,14 @@ namespace Clowd.UI
             var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
 
             RenderTargetBitmap bmp = new RenderTargetBitmap(
-                ScreenTools.WpfToScreen(bounds.Width),
-                ScreenTools.WpfToScreen(bounds.Height),
-                ScreenTools.WpfToScreen(96),
-                ScreenTools.WpfToScreen(96),
+                //ScreenTools.WpfToScreen(bounds.Width),
+                //ScreenTools.WpfToScreen(bounds.Height),
+                //ScreenTools.WpfToScreen(96),
+                //ScreenTools.WpfToScreen(96),
+                (int)bounds.Width,
+                (int)bounds.Height,
+                96,
+                96,
                 PixelFormats.Pbgra32);
             DrawingVisual background = new DrawingVisual();
             using (DrawingContext dc = background.RenderOpen())
