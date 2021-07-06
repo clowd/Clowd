@@ -16,7 +16,7 @@ namespace Clowd.PlatformUtil.Windows
 {
     public unsafe class GdiCompatibleBitmap : BitmapBase
     {
-        //public nint Handle => hBitmap;
+        public nint Handle => hBitmap;
         //public nint HdcHandle => hdcBitmap;
 
         internal readonly CreatedHDC hdcBitmap;

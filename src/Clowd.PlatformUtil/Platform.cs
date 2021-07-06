@@ -50,5 +50,8 @@ namespace Clowd.PlatformUtil
         public abstract IBitmap CaptureDesktop(bool drawCursor);
         public abstract IBitmap CaptureRegion(ScreenRect region, bool drawCursor);
         public abstract IBitmap CaptureWindow(IWindow window);
+
+        // files
+        public abstract void RevealFileOrFolder(string fileOrFolderPath);
     }
 }

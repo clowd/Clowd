@@ -54,10 +54,14 @@ namespace Clowd.PlatformUtil
         //IWindow Owner { get; }
         IEnumerable<IWindow> Children { get; }
 
+        bool Activate();
         bool Show();
         bool Show(bool activate);
+        bool Hide();
         void Close();
         void KillProcess();
+        void SetPosition(ScreenRect newPosition);
+        void SetEnabled(bool enabled);
 
         IScreen GetCurrentScreen();
     }

@@ -4,7 +4,7 @@ using CsWin32.UI.WindowsAndMessaging;
 namespace Clowd.PlatformUtil.Windows
 {
     [Flags]
-    public enum ClassStyle : uint
+    public enum WindowClassStyle : uint
     {
         VRedraw = WNDCLASS_STYLES.CS_VREDRAW,
         HRedraw = WNDCLASS_STYLES.CS_HREDRAW,

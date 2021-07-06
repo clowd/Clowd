@@ -3,7 +3,6 @@ using CsWin32.UI.WindowsAndMessaging;
 
 namespace Clowd.PlatformUtil
 {
-
     /// <summary>
     /// Controls how the window is to be shown.
     /// </summary>

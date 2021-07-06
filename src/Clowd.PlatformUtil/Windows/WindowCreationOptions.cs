@@ -6,7 +6,7 @@ namespace Clowd.PlatformUtil.Windows
     {
         public string Caption;
         public StandardCursor DefaultCursor;
-        public ClassStyle ClassStyle;
+        public WindowClassStyle ClassStyle;
         public WindowStyle WindowStyle;
         public WindowStyleEx ExtendedStyle;
         public Rectangle StartPosition;

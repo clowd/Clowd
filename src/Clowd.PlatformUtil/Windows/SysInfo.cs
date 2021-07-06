@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Drawing;
-using Clowd.Interop;
-using Clowd.Interop.DwmApi;
+using static CsWin32.PInvoke;
 
-namespace Clowd.Util
+namespace Clowd.PlatformUtil.Windows
 {
-    internal static class SysInfo
+    public static class SysInfo
     {
         private readonly static bool _isWindowsNT = Environment.OSVersion.Platform == PlatformID.Win32NT;
 
@@ -30,31 +29,31 @@ namespace Clowd.Util
             get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(10, 0, 0); }
         }
 
-        public static bool ForegroundWindowIsFullScreen
-        {
-            get
-            {
-                IntPtr foreWindow = USER32.GetForegroundWindow();
+        //public static bool ForegroundWindowIsFullScreen
+        //{
+        //    get
+        //    {
+        //        IntPtr foreWindow = USER32.GetForegroundWindow();
 
-                RECT foreRect;
-                USER32.GetWindowRect(foreWindow, out foreRect);
+        //        RECT foreRect;
+        //        USER32.GetWindowRect(foreWindow, out foreRect);
 
-                Size screenSize = System.Windows.Forms.SystemInformation.PrimaryMonitorSize;
+        //        Size screenSize = System.Windows.Forms.SystemInformation.PrimaryMonitorSize;
 
-                return (foreRect.left <= 0 && foreRect.top <= 0 &&
-                    foreRect.right >= screenSize.Width && foreRect.bottom >= screenSize.Height);
-            }
-        }
+        //        return (foreRect.left <= 0 && foreRect.top <= 0 &&
+        //            foreRect.right >= screenSize.Width && foreRect.bottom >= screenSize.Height);
+        //    }
+        //}
 
-        public static bool IsRemoteSession
-        {
-            get
-            {
-                //return System.Windows.Forms.SystemInformation.TerminalServerSession;
-                return (System.Windows.SystemParameters.IsRemoteSession || System.Windows.SystemParameters.IsRemotelyControlled);
-                //above were introduced with .net 4.0
-            }
-        }
+        //public static bool IsRemoteSession
+        //{
+        //    get
+        //    {
+        //        //return System.Windows.Forms.SystemInformation.TerminalServerSession;
+        //        return (System.Windows.SystemParameters.IsRemoteSession || System.Windows.SystemParameters.IsRemotelyControlled);
+        //        //above were introduced with .net 4.0
+        //    }
+        //}
 
         public static bool IsDWMEnabled
         {
@@ -63,7 +62,7 @@ namespace Clowd.Util
                 if (!SysInfo.IsWindowsVistaOrLater)
                     return false;
                 bool result;
-                DWMAPI.DwmIsCompositionEnabled(out result);
+                DwmIsCompositionEnabled(out result);
                 return result;
             }
         }

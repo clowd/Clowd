@@ -24,6 +24,14 @@ namespace Clowd.PlatformUtil
 
         public static ScreenRect Empty => new ScreenRect(0, 0, 0, 0);
 
+        public ScreenRect(ScreenPoint topLeft, ScreenSize size)
+        {
+            X = topLeft.X;
+            Y = topLeft.Y;
+            Width = size.Width;
+            Height = size.Height;
+        }
+
         public ScreenRect(int x, int y, int width, int height)
         {
             X = x;
