@@ -9,11 +9,15 @@ namespace Clowd.PlatformUtil
         None = 0,
         OK = 1,
         Cancel = 2,
+        Abort = 3,
+        Retry = 4,
+        Ignore = 5,
         Yes = 6,
         No = 7,
+        TryAgain = 10,
     }
 
-    public enum MessageBoxImage
+    public enum MessageBoxIcon
     {
         None = 0,
         Hand = 0x00000010,
@@ -26,11 +30,13 @@ namespace Clowd.PlatformUtil
         Information = Asterisk,
     }
 
-    public enum MessageBoxButton
+    public enum MessageBoxButtons
     {
         OK = 0x00000000,
         OKCancel = 0x00000001,
+        AbortRetryIgnore = 0x00000002,
         YesNoCancel = 0x00000003,
         YesNo = 0x00000004,
+        RetryCancel = 0x00000005,
     }
 }
