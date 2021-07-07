@@ -81,7 +81,7 @@ namespace Clowd.PlatformUtil.Windows
                 throw new Win32Exception();
         }
 
-        public override MessageBoxResult ShowMessageBox(nint owner, string messageBoxText, string caption, MessageBoxButton button, MessageBoxImage icon)
+        public override MessageBoxResult ShowMessageBox(nint owner, string messageBoxText, string caption, MessageBoxButtons button, MessageBoxIcon icon)
         {
             return User32MessageBox.ShowCore(owner, messageBoxText, caption, button, icon, MessageBoxResult.None, MessageBoxOptions.None);
         }

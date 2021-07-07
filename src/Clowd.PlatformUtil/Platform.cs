@@ -56,9 +56,9 @@ namespace Clowd.PlatformUtil
         public abstract MessageBoxResult ShowMessageBox(
             nint owner,
             string messageBoxText,
-            string caption,
-            MessageBoxButton button,
-            MessageBoxImage icon
+            string title,
+            MessageBoxButtons button,
+            MessageBoxIcon icon
         );
     }
 
@@ -66,29 +66,63 @@ namespace Clowd.PlatformUtil
     {
         public static MessageBoxResult ShowMessageBox(
             this Platform platform,
-            IntPtr owner,
+            nint owner,
             string messageBoxText,
-            string caption,
-            MessageBoxButton button)
+            string title,
+            MessageBoxButtons button)
         {
-            return platform.ShowMessageBox(owner, messageBoxText, caption, button, MessageBoxImage.None);
+            return platform.ShowMessageBox(owner, messageBoxText, title, button, MessageBoxIcon.None);
         }
 
         public static MessageBoxResult ShowMessageBox(
             this Platform platform,
-            IntPtr owner,
+            nint owner,
             string messageBoxText,
-            string caption)
+            string title)
         {
-            return platform.ShowMessageBox(owner, messageBoxText, caption, MessageBoxButton.OK, MessageBoxImage.None);
+            return platform.ShowMessageBox(owner, messageBoxText, title, MessageBoxButtons.OK, MessageBoxIcon.None);
         }
 
         public static MessageBoxResult ShowMessageBox(
             this Platform platform,
-            IntPtr owner,
+            nint owner,
             string messageBoxText)
         {
-            return platform.ShowMessageBox(owner, messageBoxText, "", MessageBoxButton.OK, MessageBoxImage.None);
+            return platform.ShowMessageBox(owner, messageBoxText, "", MessageBoxButtons.OK, MessageBoxIcon.None);
+        }
+
+        public static MessageBoxResult ShowMessageBox(
+             this Platform platform,
+             string messageBoxText,
+             string title,
+             MessageBoxButtons button,
+             MessageBoxIcon icon)
+        {
+            return platform.ShowMessageBox(0, messageBoxText, title, button, icon);
+        }
+
+        public static MessageBoxResult ShowMessageBox(
+        this Platform platform,
+        string messageBoxText,
+        string title,
+        MessageBoxButtons button)
+        {
+            return platform.ShowMessageBox(0, messageBoxText, title, button, MessageBoxIcon.None);
+        }
+
+        public static MessageBoxResult ShowMessageBox(
+            this Platform platform,
+            string messageBoxText,
+            string title)
+        {
+            return platform.ShowMessageBox(0, messageBoxText, title, MessageBoxButtons.OK, MessageBoxIcon.None);
+        }
+
+        public static MessageBoxResult ShowMessageBox(
+            this Platform platform,
+            string messageBoxText)
+        {
+            return platform.ShowMessageBox(0, messageBoxText, "", MessageBoxButtons.OK, MessageBoxIcon.None);
         }
     }
 }
