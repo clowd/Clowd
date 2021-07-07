@@ -70,6 +70,12 @@ namespace CsWin32
 
     namespace Foundation
     {
+        internal partial struct HWND
+        {
+            //public static implicit operator HandleRef(HWND value) => new HandleRef(value.Value);
+            public static implicit operator HWND(HandleRef value) => new HWND(value.Handle);
+        }
+
         internal partial struct POINT
         {
             public static implicit operator Point(POINT value) => new Point(value.x, value.y);

@@ -189,7 +189,9 @@ SetCursorPos
 SetForegroundWindow
 SetParent
 SetProcessDPIAware
+SetFocus
 SetWindowLong
+SetWindowLongPtr
 SetWindowPos
 SetWindowsHookEx
 ShowWindow
