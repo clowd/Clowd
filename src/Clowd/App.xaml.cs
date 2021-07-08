@@ -50,6 +50,20 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+            var w = new Dialogs.MessageDialogWpf()
+            {
+                BodyText = "A more flexible type of message box. Among other things, it supports custom buttons, command links, scroll bars, expanding sections. A more flexible type of message box. Among other things, it supports custom buttons, command links, scroll bars, expanding sections. A more flexible type of message box. Among other things, it supports custom buttons, command links, scroll bars, expanding sections.",
+                MainInstruction = "This is an example of a main instruction.",
+            };
+
+            w.BodyText += "\n\n\n" + w.BodyText;
+            w.BodyText += "\n\n\n" + w.BodyText;
+            //w.BodyText += "\n\n\n" + w.BodyText;
+            //w.BodyText += "\n\n\n" + w.BodyText;
+            //w.BodyText += "\n\n\n" + w.BodyText;
+
+            w.Show();
+            return;
             try
             {
                 base.OnStartup(e);

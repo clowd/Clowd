@@ -1,0 +1,268 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Common.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <ControlTemplate x:Key="DropDownButtonTemplate" TargetType="{x:Type Button}">
+        <Grid Background="Transparent">
+            <Path
+                x:Name="Path"
+                Width="16"
+                Height="16"
+                Margin="{TemplateBinding Padding}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Data="M 0,1.37483L 3.9995,1.37483L 3.9995,2.38419e-006L 5.33267,2.38419e-006L 5.33267,1.37483L 15.998,1.37483L 15.998,-1.43051e-006L 17.3312,-1.43051e-006L 17.3312,1.37483L 21.3307,1.37483L 21.3307,20.0392L 0,20.0392L 0,1.37483 Z M 1.33317,2.708L 1.33317,5.37433L 19.9975,5.37433L 19.9975,2.708L 17.3312,2.708L 17.3312,3.9995L 15.998,3.9995L 15.998,2.708L 5.33267,2.708L 5.33267,3.99951L 3.9995,3.99951L 3.9995,2.708L 1.33317,2.708 Z M 1.33317,6.7075L 1.33317,18.706L 19.9975,18.706L 19.9975,6.7075L 1.33317,6.7075 Z M 3.97867,10.6653L 5.31184,10.6653L 5.31184,11.9985L 3.97867,11.9985L 3.97867,10.6653 Z M 8.01982,10.6653L 9.35299,10.6653L 9.35299,11.9985L 8.01982,11.9985L 8.01982,10.6653 Z M 11.936,10.6653L 13.2692,10.6653L 13.2692,11.9985L 11.936,11.9985L 11.936,10.6653 Z M 16.0188,10.6653L 17.352,10.6653L 17.352,11.9985L 16.0188,11.9985L 16.0188,10.6653 Z M 8.01982,13.3108L 9.35299,13.3108L 9.35299,14.644L 8.01982,14.644L 8.01982,13.3108 Z M 8.01982,15.998L 9.35299,15.998L 9.35299,17.3312L 8.01982,17.3312L 8.01982,15.998 Z M 11.936,13.3108L 13.2692,13.3108L 13.2692,14.644L 11.936,14.644L 11.936,13.3108 Z M 11.936,15.998L 13.2692,15.998L 13.2692,17.3312L 11.936,17.3312L 11.936,15.998 Z M 16.0188,13.3108L 17.352,13.3108L 17.352,14.644L 16.0188,14.644L 16.0188,13.3108 Z M 16.0188,7.99901L 17.352,7.99901L 17.352,9.33217L 16.0188,9.33217L 16.0188,7.99901 Z M 11.936,7.999L 13.2692,7.999L 13.2692,9.33217L 11.936,9.33217L 11.936,7.999 Z M 8.01983,7.999L 9.35299,7.999L 9.35299,9.33217L 8.01983,9.33217L 8.01983,7.999 Z M 3.97867,13.3108L 5.31183,13.3108L 5.31183,14.644L 3.97867,14.644L 3.97867,13.3108 Z M 3.97867,15.998L 5.31183,15.998L 5.31183,17.3312L 3.97867,17.3312L 3.97867,15.998 Z "
+                Fill="{TemplateBinding Foreground}"
+                Stretch="Fill" />
+        </Grid>
+    </ControlTemplate>
+    <Style TargetType="{x:Type DatePicker}">
+        <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
+        <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
+        <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
+        <Setter Property="Foreground" Value="{StaticResource TextBoxForeground}" />
+        <Setter Property="Background" Value="{StaticResource TextBoxOuterBackground}" />
+        <Setter Property="BorderBrush" Value="{StaticResource TextBoxOuterBorder}" />
+        <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
+        <Setter Property="Margin" Value="{StaticResource ControlsMargin}" />
+        <Setter Property="BorderThickness" Value="{StaticResource ControlsBorderThickness}" />
+        <Setter Property="CalendarStyle" Value="{StaticResource DefaultCalendarStyle}" />
+        <Setter Property="IsTodayHighlighted" Value="True" />
+        <Setter Property="SelectedDateFormat" Value="Short" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type DatePicker}">
+                    <Border
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding Control.BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
+                        <Grid
+                            Name="PART_Root"
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                Name="PART_Button"
+                                Grid.Row="0"
+                                Grid.Column="1"
+                                Margin="0"
+                                Cursor="Hand"
+                                Focusable="False"
+                                Foreground="{TemplateBinding Foreground}"
+                                Template="{StaticResource DropDownButtonTemplate}" />
+                            <DatePickerTextBox
+                                Name="PART_TextBox"
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                Focusable="{TemplateBinding UIElement.Focusable}"
+                                Foreground="{TemplateBinding Foreground}" />
+                            <Grid
+                                Name="PART_DisabledVisual"
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="2"
+                                IsHitTestVisible="False"
+                                Opacity="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Rectangle
+                                    Grid.Row="0"
+                                    Grid.Column="0"
+                                    Fill="#A5FFFFFF"
+                                    RadiusX="1"
+                                    RadiusY="1" />
+                                <Rectangle
+                                    Grid.Row="0"
+                                    Grid.Column="1"
+                                    Width="19"
+                                    Height="18"
+                                    Margin="3,0,3,0"
+                                    Fill="#A5FFFFFF"
+                                    RadiusX="1"
+                                    RadiusY="1" />
+                                <Popup
+                                    Name="PART_Popup"
+                                    AllowsTransparency="True"
+                                    Placement="Bottom"
+                                    PlacementTarget="{Binding ElementName=PART_Button}"
+                                    StaysOpen="False" />
+                            </Grid>
+                        </Grid>
+
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsFocused" Value="true">
+                            <Setter Property="Background" Value="{StaticResource FocusedTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{StaticResource FocusedTextBoxOuterBorder}" />
+                            <Setter Property="Foreground" Value="{StaticResource FocusedTextBoxForeground}" />
+                        </Trigger>
+                        <Trigger SourceName="PART_TextBox" Property="IsFocused" Value="true">
+                            <Setter Property="Background" Value="{StaticResource FocusedTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{StaticResource FocusedTextBoxOuterBorder}" />
+                            <Setter Property="Foreground" Value="{StaticResource FocusedTextBoxForeground}" />
+                        </Trigger>
+                        <Trigger SourceName="PART_Popup" Property="IsOpen" Value="true">
+                            <Setter Property="Background" Value="{StaticResource FocusedTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{StaticResource FocusedTextBoxOuterBorder}" />
+                            <Setter Property="Foreground" Value="{StaticResource FocusedTextBoxForeground}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Background" Value="{StaticResource DisabledTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{StaticResource DisabledTextBoxOuterBorder}" />
+                            <Setter Property="Foreground" Value="{StaticResource DisabledTextBoxForeground}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="{x:Type DatePickerTextBox}">
+        <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
+        <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
+        <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Foreground" Value="{StaticResource TextBoxForeground}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type DatePickerTextBox}">
+                    <Grid>
+                        <Grid.Resources>
+                            <SolidColorBrush x:Key="ģ" Color="#FFAAAAAA" />
+                        </Grid.Resources>
+                        <Border
+                            x:Name="Border"
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                            <Grid
+                                x:Name="WatermarkContent"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                                <Border
+                                    x:Name="ContentElement"
+                                    BorderBrush="White"
+                                    BorderThickness="0" />
+                                <Border
+                                    x:Name="watermark_decorator"
+                                    BorderBrush="White"
+                                    BorderThickness="0">
+                                    <ContentControl
+                                        x:Name="PART_Watermark"
+                                        Padding="2"
+                                        Focusable="False"
+                                        IsHitTestVisible="False"
+                                        Opacity="0" />
+                                </Border>
+                                <ScrollViewer
+                                    x:Name="PART_ContentHost"
+                                    Margin="0"
+                                    HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                <Border
+                                    x:Name="FocusVisual"
+                                    BorderBrush="#FF45D6FA"
+                                    IsHitTestVisible="False"
+                                    Opacity="0" />
+                            </Grid>
+                        </Border>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualStateGroup.Transitions>
+                                    <VisualTransition
+                                        GeneratedDuration="0"
+                                        GeneratedEasingFunction="{x:Null}"
+                                        Storyboard="{x:Null}"
+                                        From="{x:Null}"
+                                        To="{x:Null}" />
+                                    <VisualTransition
+                                        GeneratedDuration="0:0:0.1"
+                                        GeneratedEasingFunction="{x:Null}"
+                                        Storyboard="{x:Null}"
+                                        From="{x:Null}"
+                                        To="MouseOver" />
+                                </VisualStateGroup.Transitions>
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="MouseOver">
+                                    <Storyboard>
+                                        <ColorAnimation
+                                            Storyboard.TargetName="ContentElement"
+                                            Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                            To="#FF99C1E2"
+                                            Duration="0" />
+                                        <ColorAnimation
+                                            Storyboard.TargetName="watermark_decorator"
+                                            Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                            To="#FF99C1E2"
+                                            Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="WatermarkStates">
+                                <VisualStateGroup.Transitions>
+                                    <VisualTransition
+                                        GeneratedDuration="0"
+                                        GeneratedEasingFunction="{x:Null}"
+                                        Storyboard="{x:Null}"
+                                        From="{x:Null}"
+                                        To="{x:Null}" />
+                                </VisualStateGroup.Transitions>
+                                <VisualState x:Name="Unwatermarked" />
+                                <VisualState x:Name="Watermarked">
+                                    <Storyboard>
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="ContentElement"
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="0"
+                                            Duration="0" />
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PART_Watermark"
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="1"
+                                            Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="FocusStates">
+                                <VisualStateGroup.Transitions>
+                                    <VisualTransition
+                                        GeneratedDuration="0"
+                                        GeneratedEasingFunction="{x:Null}"
+                                        Storyboard="{x:Null}"
+                                        From="{x:Null}"
+                                        To="{x:Null}" />
+                                </VisualStateGroup.Transitions>
+                                <VisualState x:Name="Unfocused" />
+                                <VisualState x:Name="Focused">
+                                    <Storyboard>
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="FocusVisual"
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="1"
+                                            Duration="0" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
