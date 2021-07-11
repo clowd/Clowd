@@ -50,6 +50,11 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+
+            Dialogs.Font.ColorFontDialog d = new Dialogs.Font.ColorFontDialog();
+            d.Font = new Dialogs.Font.FontInfo(new FontFamily("Arial"), 16, FontStyles.Italic, FontStretches.Normal, FontWeights.Bold, Brushes.Red);
+            d.Show();
+
             var w = new Dialogs.MessageDialogWpf()
             {
                 BodyText = "A more flexible type of message box. Among other things, it supports custom buttons, command links, scroll bars, expanding sections. A more flexible type of message box. Among other things, it supports custom buttons, command links, scroll bars, expanding sections. A more flexible type of message box. Among other things, it supports custom buttons, command links, scroll bars, expanding sections.",
@@ -63,7 +68,7 @@ namespace Clowd
             //w.BodyText += "\n\n\n" + w.BodyText;
 
             w.Show();
-            //return;
+            return;
             try
             {
                 base.OnStartup(e);
