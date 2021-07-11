@@ -5,11 +5,11 @@
     </ResourceDictionary.MergedDictionaries>
 
     <Style TargetType="{x:Type GroupBox}">
-        <Setter Property="Foreground" Value="{StaticResource GroupBoxForeground}" />
+        <Setter Property="Foreground" Value="{DynamicResource GroupBoxForeground}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="FontSize" Value="{StaticResource GroupBoxFontSize}" />
-        <Setter Property="Background" Value="{StaticResource GroupBoxOuterBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource GroupBoxOuterBorder}" />
+        <Setter Property="Background" Value="{DynamicResource GroupBoxOuterBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource GroupBoxOuterBorder}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Margin" Value="3" />
         <Setter Property="Template">
@@ -23,16 +23,16 @@
                         <Border
                             x:Name="HeaderOuterBorder"
                             Grid.Row="0"
-                            Background="{StaticResource GroupBoxHeaderOuterBackground}"
-                            BorderBrush="{StaticResource GroupBoxHeaderOuterBorder}"
+                            Background="{DynamicResource GroupBoxHeaderOuterBackground}"
+                            BorderBrush="{DynamicResource GroupBoxHeaderOuterBorder}"
                             BorderThickness="0,0,0,1"
                             CornerRadius="4,4,0,0"
                             SnapsToDevicePixels="true">
                             <Border
                                 x:Name="HeaderInnerBorder"
                                 Padding="3"
-                                Background="{StaticResource ButtonInnerBackground}"
-                                BorderBrush="{StaticResource ButtonInnerBorder}"
+                                Background="{DynamicResource ButtonInnerBackground}"
+                                BorderBrush="{DynamicResource ButtonInnerBorder}"
                                 BorderThickness="1"
                                 CornerRadius="3,3,0,0"
                                 SnapsToDevicePixels="true">
@@ -53,8 +53,8 @@
                             <Border
                                 x:Name="InnerBorder"
                                 Padding="3"
-                                Background="{StaticResource GroupBoxInnerBackground}"
-                                BorderBrush="{StaticResource GroupBoxInnerBorder}"
+                                Background="{DynamicResource GroupBoxInnerBackground}"
+                                BorderBrush="{DynamicResource GroupBoxInnerBorder}"
                                 CornerRadius="0,0,3,3"
                                 SnapsToDevicePixels="true">
                                 <ContentPresenter Margin="{TemplateBinding Padding}" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
@@ -63,9 +63,9 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource DisabledButtonForeground}" />
-                            <Setter TargetName="HeaderOuterBorder" Property="Background" Value="{StaticResource DisabledGroupBoxHeaderOuterBackground}" />
-                            <Setter TargetName="OuterBorder" Property="Background" Value="{StaticResource DisabledGroupBoxOuterBackground}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledButtonForeground}" />
+                            <Setter TargetName="HeaderOuterBorder" Property="Background" Value="{DynamicResource DisabledGroupBoxHeaderOuterBackground}" />
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource DisabledGroupBoxOuterBackground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

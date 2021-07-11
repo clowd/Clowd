@@ -11,8 +11,8 @@
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
         <Setter Property="Margin" Value="{StaticResource ControlsMargin}" />
         <Setter Property="BorderThickness" Value="{StaticResource ControlsBorderThickness}" />
-        <Setter Property="BorderBrush" Value="{StaticResource TabControlBorder}" />
-        <Setter Property="Background" Value="{StaticResource TabControlBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TabControlBorder}" />
+        <Setter Property="Background" Value="{DynamicResource TabControlBackground}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Template">

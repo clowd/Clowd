@@ -23,9 +23,9 @@
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
-        <Setter Property="Foreground" Value="{StaticResource TextBoxForeground}" />
-        <Setter Property="Background" Value="{StaticResource TextBoxOuterBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource TextBoxOuterBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBoxForeground}" />
+        <Setter Property="Background" Value="{DynamicResource TextBoxOuterBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TextBoxOuterBorder}" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
         <Setter Property="Margin" Value="{StaticResource ControlsMargin}" />
         <Setter Property="BorderThickness" Value="{StaticResource ControlsBorderThickness}" />
@@ -104,24 +104,24 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsFocused" Value="true">
-                            <Setter Property="Background" Value="{StaticResource FocusedTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource FocusedTextBoxOuterBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource FocusedTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource FocusedTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource FocusedTextBoxOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource FocusedTextBoxForeground}" />
                         </Trigger>
                         <Trigger SourceName="PART_TextBox" Property="IsFocused" Value="true">
-                            <Setter Property="Background" Value="{StaticResource FocusedTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource FocusedTextBoxOuterBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource FocusedTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource FocusedTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource FocusedTextBoxOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource FocusedTextBoxForeground}" />
                         </Trigger>
                         <Trigger SourceName="PART_Popup" Property="IsOpen" Value="true">
-                            <Setter Property="Background" Value="{StaticResource FocusedTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource FocusedTextBoxOuterBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource FocusedTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource FocusedTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource FocusedTextBoxOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource FocusedTextBoxForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Background" Value="{StaticResource DisabledTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledTextBoxOuterBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource DisabledTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledTextBoxOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledTextBoxForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -134,7 +134,7 @@
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Margin" Value="0" />
-        <Setter Property="Foreground" Value="{StaticResource TextBoxForeground}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBoxForeground}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />

@@ -8,9 +8,9 @@
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
-        <Setter Property="Foreground" Value="{StaticResource MenuForeground}" />
-        <Setter Property="Background" Value="{StaticResource MenuBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource MenuBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource MenuForeground}" />
+        <Setter Property="Background" Value="{DynamicResource MenuBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource MenuBorder}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
@@ -203,19 +203,19 @@
                 <Setter TargetName="Icon" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <Trigger Property="IsHighlighted" Value="true">
-                <Setter Property="Background" Value="{StaticResource HoverMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource HoverMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource HoverMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource HoverMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource HoverMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource HoverMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="true">
-                <Setter Property="Background" Value="{StaticResource KeyBoardFocusMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource KeyBoardFocusMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource KeyBoardFocusMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource KeyBoardFocusMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource KeyBoardFocusMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource KeyBoardFocusMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter Property="Background" Value="{StaticResource DisabledMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource DisabledMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource DisabledMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource DisabledMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DisabledMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource DisabledMenuItemForeground}" />
                 <Setter TargetName="Icon" Property="Opacity" Value=".5" />
             </Trigger>
         </ControlTemplate.Triggers>
@@ -292,30 +292,30 @@
                 <Setter TargetName="Icon" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <Trigger Property="IsHighlighted" Value="true">
-                <Setter Property="Background" Value="{StaticResource HoverMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource HoverMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource HoverMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource HoverMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource HoverMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource HoverMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="true">
-                <Setter Property="Background" Value="{StaticResource KeyBoardFocusMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource KeyBoardFocusMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource KeyBoardFocusMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource KeyBoardFocusMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource KeyBoardFocusMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource KeyBoardFocusMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter Property="Background" Value="{StaticResource DisabledMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource DisabledMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource DisabledMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource DisabledMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DisabledMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource DisabledMenuItemForeground}" />
                 <Setter TargetName="Icon" Property="Opacity" Value=".5" />
             </Trigger>
             <Trigger Property="IsSubmenuOpen" Value="true">
-                <Setter Property="Background" Value="{StaticResource SubMenuOpenMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource SubMenuOpenMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource SubMenuOpenMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource SubMenuOpenMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource SubMenuOpenMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource SubMenuOpenMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter Property="Background" Value="{StaticResource DisabledMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource DisabledMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource DisabledMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource DisabledMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DisabledMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource DisabledMenuItemForeground}" />
                 <Setter TargetName="Icon" Property="Opacity" Value=".5" />
             </Trigger>
         </ControlTemplate.Triggers>
@@ -410,30 +410,30 @@
                 <Setter TargetName="Icon" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <Trigger Property="IsHighlighted" Value="true">
-                <Setter Property="Background" Value="{StaticResource HoverMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource HoverMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource HoverMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource HoverMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource HoverMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource HoverMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="true">
-                <Setter Property="Background" Value="{StaticResource HoverMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource HoverMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource HoverMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource HoverMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource HoverMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource HoverMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter Property="Background" Value="{StaticResource DisabledMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource DisabledMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource DisabledMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource DisabledMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DisabledMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource DisabledMenuItemForeground}" />
                 <Setter TargetName="Icon" Property="Opacity" Value=".5" />
             </Trigger>
             <Trigger Property="IsSubmenuOpen" Value="true">
-                <Setter Property="Background" Value="{StaticResource SubMenuOpenMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource SubMenuOpenMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource SubMenuOpenMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource SubMenuOpenMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource SubMenuOpenMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource SubMenuOpenMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter Property="Background" Value="{StaticResource DisabledMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource DisabledMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource DisabledMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource DisabledMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DisabledMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource DisabledMenuItemForeground}" />
                 <Setter TargetName="Icon" Property="Opacity" Value=".5" />
             </Trigger>
         </ControlTemplate.Triggers>
@@ -462,7 +462,7 @@
                         Height="12"
                         Margin="5,0"
                         Data="{StaticResource Checkmark}"
-                        Fill="{StaticResource ButtonForeground}"
+                        Fill="{DynamicResource ButtonForeground}"
                         FlowDirection="LeftToRight"
                         Stretch="Uniform"
                         Visibility="Hidden" />
@@ -484,25 +484,25 @@
                 <Setter TargetName="Icon" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <Trigger Property="IsHighlighted" Value="true">
-                <Setter Property="Background" Value="{StaticResource HoverMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource HoverMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource HoverMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource HoverMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource HoverMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource HoverMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="true">
-                <Setter Property="Background" Value="{StaticResource HoverMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource HoverMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource HoverMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource HoverMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource HoverMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource HoverMenuItemForeground}" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter Property="Background" Value="{StaticResource DisabledMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource DisabledMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource DisabledMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource DisabledMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DisabledMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource DisabledMenuItemForeground}" />
                 <Setter TargetName="Icon" Property="Opacity" Value=".5" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter Property="Background" Value="{StaticResource DisabledMenuItemBackground}" />
-                <Setter Property="BorderBrush" Value="{StaticResource DisabledMenuItemBorder}" />
-                <Setter Property="Foreground" Value="{StaticResource DisabledMenuItemForeground}" />
+                <Setter Property="Background" Value="{DynamicResource DisabledMenuItemBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DisabledMenuItemBorder}" />
+                <Setter Property="Foreground" Value="{DynamicResource DisabledMenuItemForeground}" />
                 <Setter TargetName="Icon" Property="Opacity" Value=".5" />
             </Trigger>
         </ControlTemplate.Triggers>
@@ -514,9 +514,9 @@
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
-        <Setter Property="Foreground" Value="{StaticResource MenuItemForeground}" />
-        <Setter Property="Background" Value="{StaticResource MenuItemBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource MenuItemBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource MenuItemForeground}" />
+        <Setter Property="Background" Value="{DynamicResource MenuItemBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource MenuItemBorder}" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
         <Setter Property="Template" Value="{DynamicResource {ComponentResourceKey ResourceId=SubmenuItemTemplateKey, TypeInTargetAssembly={x:Type MenuItem}}}" />
         <Style.Triggers>
@@ -543,7 +543,7 @@
         BasedOn="{StaticResource DefaultMenu}"
         TargetType="Menu">
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSizeSmall}" />
-        <Setter Property="Foreground" Value="{StaticResource ButtonForeground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
         <Setter Property="Background" Value="Transparent" />
         <Style.Resources>
             <Style BasedOn="{StaticResource DefaultMenuItem}" TargetType="MenuItem" />

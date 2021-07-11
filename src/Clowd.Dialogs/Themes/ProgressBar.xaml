@@ -6,9 +6,9 @@
 
 
     <Style TargetType="{x:Type ProgressBar}">
-        <Setter Property="Foreground" Value="{StaticResource GradientAnimated}" />
-        <Setter Property="Background" Value="{StaticResource ProgressBarBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ProgressBarBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource GradientAnimated}" />
+        <Setter Property="Background" Value="{DynamicResource ProgressBarBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ProgressBarBorder}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
         <Setter Property="Margin" Value="{StaticResource ControlsMargin}" />
@@ -44,12 +44,12 @@
                                     Grid.RowSpan="2"
                                     Grid.ColumnSpan="3"
                                     Margin="-1"
-                                    Background="{StaticResource IndicatorBrush}" />
+                                    Background="{DynamicResource IndicatorBrush}" />
                                 <Rectangle
                                     x:Name="Animation"
                                     Grid.RowSpan="2"
                                     Grid.ColumnSpan="3"
-                                    Fill="{StaticResource GradientAnimated}"
+                                    Fill="{DynamicResource GradientAnimated}"
                                     OpacityMask="{StaticResource ProgressBarIndicatorAnimatedFill}"
                                     RenderTransformOrigin="0,0.5">
                                     <Rectangle.RenderTransform>
@@ -77,13 +77,13 @@
                                 Grid.Column="0"
                                 Padding="0"
                                 Content="{TemplateBinding Value}"
-                                Foreground="{StaticResource TextBoxForeground}" />
+                                Foreground="{DynamicResource TextBoxForeground}" />
                             <Label
                                 x:Name="LabelPercent"
                                 Grid.Column="1"
                                 Padding="0"
                                 Content="%"
-                                Foreground="{StaticResource TextBoxForeground}" />
+                                Foreground="{DynamicResource TextBoxForeground}" />
                         </Grid>
                     </Grid>
                     <ControlTemplate.Triggers>
@@ -117,7 +117,7 @@
                             <Setter TargetName="LabelPercent" Property="Visibility" Value="Collapsed" />
                         </Trigger>
                         <Trigger Property="IsIndeterminate" Value="false">
-                            <Setter TargetName="Animation" Property="Fill" Value="{StaticResource GradientAnimated}" />
+                            <Setter TargetName="Animation" Property="Fill" Value="{DynamicResource GradientAnimated}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

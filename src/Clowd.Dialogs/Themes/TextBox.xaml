@@ -10,9 +10,9 @@
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
         <Setter Property="Margin" Value="{StaticResource ControlsMargin}" />
-        <Setter Property="Foreground" Value="{StaticResource TextBoxForeground}" />
-        <Setter Property="Background" Value="{StaticResource TextBoxOuterBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource TextBoxOuterBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBoxForeground}" />
+        <Setter Property="Background" Value="{DynamicResource TextBoxOuterBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TextBoxOuterBorder}" />
         <Setter Property="BorderThickness" Value="{StaticResource ControlsBorderThickness}" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -31,8 +31,8 @@
                         SnapsToDevicePixels="True">
                         <Border
                             x:Name="InnerBorder"
-                            Background="{StaticResource TextBoxInnerBackground}"
-                            BorderBrush="{StaticResource TextBoxInnerBorder}"
+                            Background="{DynamicResource TextBoxInnerBackground}"
+                            BorderBrush="{DynamicResource TextBoxInnerBorder}"
                             BorderThickness="0"
                             SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
@@ -40,25 +40,25 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverTextBoxOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource HoverTextBoxInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource HoverTextBoxInnerBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverTextBoxOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource HoverTextBoxInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource HoverTextBoxInnerBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverTextBoxForeground}" />
                         </Trigger>
                         <Trigger Property="IsFocused" Value="true">
-                            <Setter Property="Background" Value="{StaticResource FocusedTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource FocusedTextBoxOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource FocusedTextBoxInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource FocusedTextBoxInnerBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource FocusedTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource FocusedTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource FocusedTextBoxOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource FocusedTextBoxInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource FocusedTextBoxInnerBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource FocusedTextBoxForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Background" Value="{StaticResource DisabledTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledTextBoxOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource DisabledTextBoxInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource DisabledTextBoxInnerBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource DisabledTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledTextBoxOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource DisabledTextBoxInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource DisabledTextBoxInnerBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledTextBoxForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -79,9 +79,9 @@
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
-        <Setter Property="Foreground" Value="{StaticResource TextBoxForeground}" />
-        <Setter Property="Background" Value="{StaticResource TextBoxOuterBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource TextBoxOuterBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBoxForeground}" />
+        <Setter Property="Background" Value="{DynamicResource TextBoxOuterBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TextBoxOuterBorder}" />
         <Setter Property="BorderThickness" Value="{StaticResource ControlsBorderThickness}" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -100,33 +100,33 @@
                         CornerRadius="{StaticResource ControlsCornerRadius}">
                         <Border
                             x:Name="InnerBorder"
-                            Background="{StaticResource TextBoxInnerBackground}"
-                            BorderBrush="{StaticResource TextBoxInnerBorder}"
+                            Background="{DynamicResource TextBoxInnerBackground}"
+                            BorderBrush="{DynamicResource TextBoxInnerBorder}"
                             BorderThickness="0">
                             <ScrollViewer x:Name="PART_ContentHost" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
                         </Border>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverTextBoxOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource HoverTextBoxInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource HoverTextBoxInnerBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverTextBoxOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource HoverTextBoxInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource HoverTextBoxInnerBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverTextBoxForeground}" />
                         </Trigger>
                         <Trigger Property="IsFocused" Value="true">
-                            <Setter Property="Background" Value="{StaticResource FocusedTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource FocusedTextBoxOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource FocusedTextBoxInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource FocusedTextBoxInnerBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource FocusedTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource FocusedTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource FocusedTextBoxOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource FocusedTextBoxInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource FocusedTextBoxInnerBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource FocusedTextBoxForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Background" Value="{StaticResource DisabledTextBoxOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledTextBoxOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource DisabledTextBoxInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource DisabledTextBoxInnerBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource DisabledTextBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledTextBoxOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledTextBoxOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource DisabledTextBoxInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource DisabledTextBoxInnerBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledTextBoxForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

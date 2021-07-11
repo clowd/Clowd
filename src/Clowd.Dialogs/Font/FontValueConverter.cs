@@ -10,6 +10,9 @@ namespace Clowd.Dialogs.Font
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
+            if (value == null)
+                return "";
+
             if (value is FontFamily font)
             {
                 //var name = I18NUtil.CurrentLanguage;

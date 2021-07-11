@@ -5,9 +5,9 @@
     </ResourceDictionary.MergedDictionaries>
 
     <Style x:Key="{ComponentResourceKey ResourceId=DataGridSelectAllButtonStyle, TypeInTargetAssembly={x:Type DataGrid}}" TargetType="{x:Type Button}">
-        <Setter Property="Foreground" Value="{StaticResource ButtonForeground}" />
-        <Setter Property="Background" Value="{StaticResource ButtonOuterBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ButtonOuterBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonOuterBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonOuterBorder}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
@@ -31,19 +31,19 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverButtonOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverButtonOuterBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverButtonForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverButtonOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverButtonOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverButtonForeground}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="true">
-                            <Setter Property="Background" Value="{StaticResource PressedButtonOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource PressedButtonOuterBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource PressedButtonForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource PressedButtonOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource PressedButtonOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource PressedButtonForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Background" Value="{StaticResource DisabledButtonOuterBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledButtonOuterBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource DisabledButtonForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledButtonOuterBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledButtonOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledButtonForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -63,9 +63,9 @@
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
         <Setter Property="Margin" Value="{StaticResource ControlsMargin}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ListViewBorder}" />
-        <Setter Property="Background" Value="{StaticResource ListViewBackground}" />
-        <Setter Property="Foreground" Value="{StaticResource ListViewForeground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ListViewBorder}" />
+        <Setter Property="Background" Value="{DynamicResource ListViewBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ListViewForeground}" />
         <Setter Property="RowDetailsVisibilityMode" Value="VisibleWhenSelected" />
         <Setter Property="ScrollViewer.CanContentScroll" Value="true" />
         <Setter Property="ScrollViewer.PanningMode" Value="Both" />
@@ -140,8 +140,8 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter TargetName="Border" Property="Background" Value="{StaticResource DisabledGroupBoxOuterBackground}" />
-                            <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource DisabledGroupBoxOuterBorder}" />
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource DisabledGroupBoxOuterBackground}" />
+                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource DisabledGroupBoxOuterBorder}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -179,9 +179,9 @@
         <Setter Property="FontWeight" Value="ExtraBold" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ListHeaderBorder}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ListHeaderBorder}" />
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="{StaticResource ListHeaderForeground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ListHeaderForeground}" />
         <Setter Property="BorderThickness" Value="0,0,1,0" />
         <Setter Property="Template">
             <Setter.Value>
@@ -194,8 +194,8 @@
                             BorderThickness="{TemplateBinding BorderThickness}">
                             <Border
                                 x:Name="InnerBorder"
-                                Background="{StaticResource ButtonInnerBackground}"
-                                BorderBrush="{StaticResource ButtonInnerBorder}"
+                                Background="{DynamicResource ButtonInnerBackground}"
+                                BorderBrush="{DynamicResource ButtonInnerBorder}"
                                 BorderThickness="{TemplateBinding BorderThickness}">
                                 <StackPanel Margin="{TemplateBinding Padding}" Orientation="Horizontal">
                                     <ContentPresenter VerticalAlignment="Center" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
@@ -217,19 +217,19 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverListHeaderBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverListHeaderBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverListHeaderForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverListHeaderBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverListHeaderBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverListHeaderForeground}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="true">
-                            <Setter Property="Background" Value="{StaticResource PressedListHeaderBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource PressedListHeaderBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource PressedListHeaderForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource PressedListHeaderBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource PressedListHeaderBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource PressedListHeaderForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Background" Value="{StaticResource DisabledListHeaderBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledListHeaderBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource DisabledListHeaderForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledListHeaderBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledListHeaderBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledListHeaderForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -263,9 +263,9 @@
         <Setter Property="FontWeight" Value="ExtraBold" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ListHeaderBorder}" />
-        <Setter Property="Background" Value="{StaticResource ListHeaderBackground}" />
-        <Setter Property="Foreground" Value="{StaticResource ListHeaderForeground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ListHeaderBorder}" />
+        <Setter Property="Background" Value="{DynamicResource ListHeaderBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ListHeaderForeground}" />
         <Setter Property="BorderThickness" Value="0,0,0,2" />
         <Setter Property="Height" Value="Auto" />
         <Setter Property="Template">
@@ -279,8 +279,8 @@
                             BorderThickness="{TemplateBinding BorderThickness}">
                             <Border
                                 x:Name="InnerBorder"
-                                Background="{StaticResource ButtonInnerBackground}"
-                                BorderBrush="{StaticResource ButtonInnerBorder}"
+                                Background="{DynamicResource ButtonInnerBackground}"
+                                BorderBrush="{DynamicResource ButtonInnerBorder}"
                                 BorderThickness="{TemplateBinding BorderThickness}">
                                 <ContentPresenter
                                     Margin="{TemplateBinding Padding}"
@@ -301,19 +301,19 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverListHeaderBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverListHeaderBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverListHeaderForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverListHeaderBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverListHeaderBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverListHeaderForeground}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="true">
-                            <Setter Property="Background" Value="{StaticResource PressedListHeaderBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource PressedListHeaderBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource PressedListHeaderForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource PressedListHeaderBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource PressedListHeaderBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource PressedListHeaderForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Background" Value="{StaticResource DisabledListHeaderBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledListHeaderBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource DisabledListHeaderForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledListHeaderBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledListHeaderBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledListHeaderForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -327,9 +327,9 @@
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ListItemBorder}" />
-        <Setter Property="Background" Value="{StaticResource ListItemBackground}" />
-        <Setter Property="Foreground" Value="{StaticResource ListItemForeground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ListItemBorder}" />
+        <Setter Property="Background" Value="{DynamicResource ListItemBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ListItemForeground}" />
         <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
         <Setter Property="ValidationErrorTemplate">
             <Setter.Value>
@@ -379,31 +379,31 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsSelected" Value="true">
-                            <Setter Property="Background" Value="{StaticResource SelectedListItemBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource SelectedListItemBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource SelectedListItemForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource SelectedListItemBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource SelectedListItemBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource SelectedListItemForeground}" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverListItemBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverListItemBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverListItemForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverListItemBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverListItemBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverListItemForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource DisabledListForeground}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledListForeground}" />
                         </Trigger>
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsSelected" Value="true" />
                                 <Condition Property="IsEnabled" Value="False" />
                             </MultiTrigger.Conditions>
-                            <Setter Property="Background" Value="{StaticResource DisabledGroupBoxOuterBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledGroupBoxOuterBorder}" />
                         </MultiTrigger>
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsSelected" Value="True" />
                                 <Condition Property="IsMouseOver" Value="True" />
                             </MultiTrigger.Conditions>
-                            <Setter Property="Background" Value="{StaticResource SelectedHoverListItemBackground}" />
+                            <Setter Property="Background" Value="{DynamicResource SelectedHoverListItemBackground}" />
                         </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

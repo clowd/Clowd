@@ -11,8 +11,8 @@
     </Style>
 
     <Style x:Key="ToolBarHorizontalOverflowButtonStyle" TargetType="{x:Type ToggleButton}">
-        <Setter Property="Foreground" Value="{StaticResource ButtonForeground}" />
-        <Setter Property="Background" Value="{StaticResource ButtonOuterBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonOuterBackground}" />
         <Setter Property="MinHeight" Value="0" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="Template">
@@ -37,13 +37,13 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverButtonOuterBackground}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverButtonOuterBackground}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="true">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverButtonOuterBackground}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverButtonOuterBackground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource ButtonOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource ButtonOuterBorder}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -101,8 +101,8 @@
     </LinearGradientBrush>
 
     <Style x:Key="ToolBarVerticalOverflowButtonStyle" TargetType="{x:Type ToggleButton}">
-        <Setter Property="Foreground" Value="{StaticResource ButtonForeground}" />
-        <Setter Property="Background" Value="{StaticResource ButtonOuterBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonOuterBackground}" />
         <Setter Property="MinHeight" Value="0" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="Template">
@@ -127,13 +127,13 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverButtonOuterBackground}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverButtonOuterBackground}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="true">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverButtonOuterBackground}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverButtonOuterBackground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource ButtonOuterBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource ButtonOuterBorder}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -142,8 +142,8 @@
     </Style>
 
     <Style TargetType="{x:Type ToolBar}">
-        <Setter Property="Foreground" Value="{StaticResource ButtonForeground}" />
-        <Setter Property="Background" Value="{StaticResource ButtonOuterBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
+        <Setter Property="Background" Value="{DynamicResource ButtonOuterBackground}" />
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
@@ -172,8 +172,8 @@
                                 StaysOpen="false">
                                 <Border x:Name="Shdw" Style="{StaticResource PopUPBorderStyle}">
                                     <Border
-                                        Background="{StaticResource ToolBarSubMenuBackground}"
-                                        BorderBrush="{StaticResource ToolBarMenuBorder}"
+                                        Background="{DynamicResource ToolBarSubMenuBackground}"
+                                        BorderBrush="{DynamicResource ToolBarMenuBorder}"
                                         BorderThickness="1">
                                         <ToolBarOverflowPanel
                                             x:Name="PART_ToolBarOverflowPanel"
@@ -247,7 +247,7 @@
                             <Setter TargetName="OverflowGrid" Property="VerticalAlignment" Value="Bottom" />
                             <Setter TargetName="OverflowPopup" Property="Placement" Value="Right" />
                             <Setter TargetName="MainPanelBorder" Property="Margin" Value="0,0,0,11" />
-                            <Setter Property="Background" Value="{StaticResource ToolBarVerticalBackground}" />
+                            <Setter Property="Background" Value="{DynamicResource ToolBarVerticalBackground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
                             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
