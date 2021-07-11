@@ -1,9 +1,9 @@
 ﻿using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
-using System.Windows.Media;
 using Clowd.PlatformUtil.Windows;
 
-namespace Clowd.Util
+namespace Clowd.PlatformUtil.Windows
 {
     public class AreoColor
     {
@@ -13,36 +13,30 @@ namespace Clowd.Util
         /// </summary>
         public static Color GetColor()
         {
-            if (SysInfo.IsDWMEnabled)
-            {
-                if (SysInfo.IsWindows8OrLater)
-                {
-                    var selected = GetImmersiveColor("ImmersiveSaturatedHoverBackground");
-                    var hsl = HSLColor.FromRGB(selected);
-                    if (hsl.IsBoring())
-                    {
-                        hsl.Excite();
-                    }
-                    return hsl.ToRGB();
-                }
-                else
-                {
-                    DWM_COLORIZATION_PARAMS parameters;
-                    DwmGetColorizationParameters(out parameters);
-                    var targetColor = GetAeroColorFromNumeric(parameters.clrColor);
-                    var baseColor = Color.FromRgb(217, 217, 217);
-                    var color = BlendColor(targetColor, baseColor, (double)(100 - parameters.nIntensity));
-                    var hsl = HSLColor.FromRGB(color);
-                    if (hsl.IsBoring())
-                        hsl.Excite();
-                    return hsl.ToRGB();
-                }
-            }
-            else
-            {
-                //with no params, this will return the clowd default color.
-                return GetAeroColorFromNumeric();
-            }
+            return GetImmersiveColor("ImmersiveSaturatedHoverBackground");
+            //if (SysInfo.IsDWMEnabled)
+            //{
+            //    if (SysInfo.IsWindows8OrLater)
+            //    {
+            //    }
+            //    else
+            //    {
+            //        DWM_COLORIZATION_PARAMS parameters;
+            //        DwmGetColorizationParameters(out parameters);
+            //        var targetColor = GetAeroColorFromNumeric(parameters.clrColor);
+            //        var baseColor = Color.FromRgb(217, 217, 217);
+            //        var color = BlendColor(targetColor, baseColor, (double)(100 - parameters.nIntensity));
+            //        var hsl = HSLColor.FromRGB(color);
+            //        if (hsl.IsBoring())
+            //            hsl.Excite();
+            //        return hsl.ToRGB();
+            //    }
+            //}
+            //else
+            //{
+            //    //with no params, this will return the clowd default color.
+            //    return GetAeroColorFromNumeric();
+            //}
         }
 
         private static Color GetImmersiveColor(string immersiveColorName)
@@ -60,6 +54,7 @@ namespace Clowd.Util
             Color color = Color.FromArgb(colourbytes[0], colourbytes[3], colourbytes[2], colourbytes[1]);
             return color;
         }
+
         private static Color GetAeroColorFromNumeric(uint color = 0)
         {
             const byte a = 255;
@@ -83,7 +78,7 @@ namespace Clowd.Util
             if ((color2Perc < 0) || (100 < color2Perc))
                 throw new ArgumentOutOfRangeException("color2Perc");
 
-            return Color.FromRgb(
+            return Color.FromArgb(
                 BlendColorChannel(color1.R, color2.R, color2Perc),
                 BlendColorChannel(color1.G, color2.G, color2Perc),
                 BlendColorChannel(color1.B, color2.B, color2Perc));
@@ -94,6 +89,7 @@ namespace Clowd.Util
             var buff = channel1 + (channel2 - channel1) * channel2Perc / 100D;
             return Math.Min((byte)Math.Round(buff), (byte)255);
         }
+
         //these are all UNDOCUMENTED imports. There is no guarentee that this will succeed or be accurate.
         //these must be used, because "DwmGetColorizationColor" is very inaccurate.
         //perhaps a fall-back could be coded in the future to use DwmGetColorizationColor if these fail.
