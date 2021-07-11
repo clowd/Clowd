@@ -8,7 +8,7 @@
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
-        <Setter Property="Foreground" Value="{StaticResource TextBoxForeground}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBoxForeground}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -30,7 +30,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource DisabledTextBoxForeground}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledTextBoxForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

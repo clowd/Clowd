@@ -6,9 +6,9 @@
 
 
     <Style TargetType="{x:Type TreeView}">
-        <Setter Property="Background" Value="{StaticResource GroupBoxOuterBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource GroupBoxOuterBorder}" />
-        <Setter Property="Foreground" Value="{StaticResource GroupBoxForeground}" />
+        <Setter Property="Background" Value="{DynamicResource GroupBoxOuterBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource GroupBoxOuterBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource GroupBoxForeground}" />
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
@@ -28,8 +28,8 @@
                         SnapsToDevicePixels="true">
                         <Border
                             x:Name="InnerBorder"
-                            Background="{StaticResource GroupBoxInnerBorder}"
-                            BorderBrush="{StaticResource GroupBoxInnerBorder}"
+                            Background="{DynamicResource GroupBoxInnerBorder}"
+                            BorderBrush="{DynamicResource GroupBoxInnerBorder}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             SnapsToDevicePixels="true">
                             <ScrollViewer
@@ -46,11 +46,11 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource DisabledButtonForeground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledGroupBoxOuterBorder}" />
-                            <Setter Property="Background" Value="{StaticResource DisabledGroupBoxOuterBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource DisabledGroupBoxInnerBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource DisabledGroupBoxInnerBackground}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledButtonForeground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledGroupBoxOuterBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledGroupBoxOuterBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource DisabledGroupBoxInnerBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource DisabledGroupBoxInnerBackground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -85,7 +85,7 @@
                         <Path
                             x:Name="ExpandPath"
                             Data="{StaticResource TreeArrow}"
-                            Fill="{StaticResource ButtonForeground}"
+                            Fill="{DynamicResource ButtonForeground}"
                             Stroke="#FF989898">
                             <Path.RenderTransform>
                                 <RotateTransform Angle="135" CenterX="3" CenterY="3" />
@@ -115,7 +115,7 @@
     </Style>
 
     <Style TargetType="{x:Type TreeViewItem}">
-        <Setter Property="Foreground" Value="{StaticResource ComboBoxItemForeground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ComboBoxItemForeground}" />
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
@@ -170,17 +170,17 @@
                             <Setter TargetName="Expander" Property="Visibility" Value="Hidden" />
                         </Trigger>
                         <Trigger SourceName="Bd" Property="IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverComboBoxItemBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverComboBoxItemBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverComboBoxItemForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverComboBoxItemBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverComboBoxItemBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverComboBoxItemForeground}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="true">
-                            <Setter Property="Background" Value="{StaticResource SelectedComboBoxItemBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource SelectedComboBoxItemBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource SelectedComboBoxItemForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource SelectedComboBoxItemBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource SelectedComboBoxItemBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource SelectedComboBoxItemForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource DisabledComboBoxItemForeground}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledComboBoxItemForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

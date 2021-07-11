@@ -25,43 +25,43 @@
                     <Border
                         Name="OuterBorder"
                         Margin="0"
-                        Background="{StaticResource ButtonOuterBackground}"
-                        BorderBrush="{StaticResource ButtonOuterBorder}"
+                        Background="{DynamicResource ButtonOuterBackground}"
+                        BorderBrush="{DynamicResource ButtonOuterBorder}"
                         BorderThickness="1">
                         <Border
                             Name="InnerBorder"
                             Margin="0"
-                            Background="{StaticResource ButtonInnerBackground}"
-                            BorderBrush="{StaticResource ButtonInnerBorder}">
+                            Background="{DynamicResource ButtonInnerBackground}"
+                            BorderBrush="{DynamicResource ButtonInnerBorder}">
                             <Path
                                 x:Name="Arrow"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Data="{Binding Path=Content, RelativeSource={RelativeSource TemplatedParent}}"
-                                Fill="{StaticResource ButtonForeground}" />
+                                Fill="{DynamicResource ButtonForeground}" />
                         </Border>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter TargetName="OuterBorder" Property="Background" Value="{StaticResource HoverButtonOuterBackground}" />
-                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{StaticResource HoverButtonOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource HoverButtonInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource HoverButtonInnerBorder}" />
-                            <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource HoverButtonForeground}" />
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource HoverButtonOuterBackground}" />
+                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource HoverButtonOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource HoverButtonInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource HoverButtonInnerBorder}" />
+                            <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource HoverButtonForeground}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="true">
-                            <Setter TargetName="OuterBorder" Property="Background" Value="{StaticResource PressedButtonOuterBackground}" />
-                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{StaticResource PressedButtonOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource PressedButtonInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource PressedButtonInnerBorder}" />
-                            <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource PressedButtonForeground}" />
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource PressedButtonOuterBackground}" />
+                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource PressedButtonOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource PressedButtonInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource PressedButtonInnerBorder}" />
+                            <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource PressedButtonForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter TargetName="OuterBorder" Property="Background" Value="{StaticResource DisabledButtonOuterBackground}" />
-                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{StaticResource DisabledButtonOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource DisabledButtonInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource DisabledButtonInnerBorder}" />
-                            <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource DisabledButtonForeground}" />
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource DisabledButtonOuterBackground}" />
+                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource DisabledButtonOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource DisabledButtonInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource DisabledButtonInnerBorder}" />
+                            <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource DisabledButtonForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -93,26 +93,26 @@
                 <ControlTemplate TargetType="{x:Type Thumb}">
                     <Border
                         Name="OuterBorder"
-                        Background="{StaticResource ButtonOuterBackground}"
-                        BorderBrush="{StaticResource ButtonOuterBorder}"
+                        Background="{DynamicResource ButtonOuterBackground}"
+                        BorderBrush="{DynamicResource ButtonOuterBorder}"
                         BorderThickness="1">
                         <Border
                             Name="InnerBorder"
-                            Background="{StaticResource ButtonInnerBackground}"
-                            BorderBrush="{StaticResource ButtonInnerBorder}" />
+                            Background="{DynamicResource ButtonInnerBackground}"
+                            BorderBrush="{DynamicResource ButtonInnerBorder}" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter TargetName="OuterBorder" Property="Background" Value="{StaticResource HoverButtonOuterBackground}" />
-                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{StaticResource HoverButtonOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource HoverButtonInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource HoverButtonInnerBorder}" />
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource HoverButtonOuterBackground}" />
+                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource HoverButtonOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource HoverButtonInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource HoverButtonInnerBorder}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter TargetName="OuterBorder" Property="Background" Value="{StaticResource DisabledButtonOuterBackground}" />
-                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{StaticResource DisabledButtonOuterBorder}" />
-                            <Setter TargetName="InnerBorder" Property="Background" Value="{StaticResource DisabledButtonInnerBackground}" />
-                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{StaticResource DisabledButtonInnerBorder}" />
+                            <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource DisabledButtonOuterBackground}" />
+                            <Setter TargetName="OuterBorder" Property="BorderBrush" Value="{DynamicResource DisabledButtonOuterBorder}" />
+                            <Setter TargetName="InnerBorder" Property="Background" Value="{DynamicResource DisabledButtonInnerBackground}" />
+                            <Setter TargetName="InnerBorder" Property="BorderBrush" Value="{DynamicResource DisabledButtonInnerBorder}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -131,8 +131,8 @@
             <Border
                 x:Name="BorderBackground"
                 Grid.RowSpan="3"
-                Background="{StaticResource ScrollBarBackground}"
-                BorderBrush="{StaticResource ScrollBarBorder}"
+                Background="{DynamicResource ScrollBarBackground}"
+                BorderBrush="{DynamicResource ScrollBarBorder}"
                 BorderThickness="1" />
             <RepeatButton
                 Grid.Row="0"
@@ -164,8 +164,8 @@
         </Grid>
         <ControlTemplate.Triggers>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter TargetName="BorderBackground" Property="BorderBrush" Value="{StaticResource DisabledScrollBarBorder}" />
-                <Setter TargetName="BorderBackground" Property="Background" Value="{StaticResource DisabledScrollBarBackground}" />
+                <Setter TargetName="BorderBackground" Property="BorderBrush" Value="{DynamicResource DisabledScrollBarBorder}" />
+                <Setter TargetName="BorderBackground" Property="Background" Value="{DynamicResource DisabledScrollBarBackground}" />
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
@@ -180,8 +180,8 @@
             <Border
                 x:Name="BorderBackground"
                 Grid.ColumnSpan="3"
-                Background="{StaticResource ScrollBarHorizontalBackground}"
-                BorderBrush="{StaticResource ScrollBarBorder}"
+                Background="{DynamicResource ScrollBarHorizontalBackground}"
+                BorderBrush="{DynamicResource ScrollBarBorder}"
                 BorderThickness="1" />
             <RepeatButton
                 Grid.Column="0"
@@ -212,8 +212,8 @@
         </Grid>
         <ControlTemplate.Triggers>
             <Trigger Property="IsEnabled" Value="false">
-                <Setter TargetName="BorderBackground" Property="BorderBrush" Value="{StaticResource DisabledScrollBarBorder}" />
-                <Setter TargetName="BorderBackground" Property="Background" Value="{StaticResource DisabledScrollBarHorizontalBackground}" />
+                <Setter TargetName="BorderBackground" Property="BorderBrush" Value="{DynamicResource DisabledScrollBarBorder}" />
+                <Setter TargetName="BorderBackground" Property="Background" Value="{DynamicResource DisabledScrollBarHorizontalBackground}" />
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>

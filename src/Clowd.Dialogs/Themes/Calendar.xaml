@@ -62,7 +62,7 @@
     </ControlTemplate>
 
     <Style x:Key="{x:Type CalendarItem}" TargetType="{x:Type CalendarItem}">
-        <Setter Property="Foreground" Value="{StaticResource CalendarForeground}" />
+        <Setter Property="Foreground" Value="{DynamicResource CalendarForeground}" />
         <Setter Property="Margin" Value="0,3,0,3" />
         <Setter Property="Template">
             <Setter.Value>
@@ -163,12 +163,12 @@
                         </Border>
                         <Rectangle
                             Name="PART_DisabledVisual"
-                            Fill="{StaticResource DisabledColor}"
+                            Fill="{DynamicResource DisabledColor}"
                             Opacity="0"
                             RadiusX="2"
                             RadiusY="2"
                             Stretch="Fill"
-                            Stroke="{StaticResource DisabledColor}"
+                            Stroke="{DynamicResource DisabledColor}"
                             StrokeThickness="1"
                             Visibility="Collapsed" />
                         <VisualStateManager.VisualStateGroups>

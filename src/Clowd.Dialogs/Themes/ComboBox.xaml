@@ -51,14 +51,14 @@
 
                     <ControlTemplate.Triggers>
                         <Trigger Property="ToggleButton.IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverComboBoxBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverComboBoxBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverComboBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverComboBoxBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverComboBoxBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverComboBoxForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Background" Value="{StaticResource DisabledComboBoxBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledComboBoxBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource DisabledComboBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledComboBoxBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledComboBoxBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledComboBoxForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -79,9 +79,9 @@
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
         <Setter Property="Margin" Value="{StaticResource ControlsMargin}" />
-        <Setter Property="Background" Value="{StaticResource ComboBoxBackground}" />
-        <Setter Property="Foreground" Value="{StaticResource ComboBoxForeground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ComboBoxBorder}" />
+        <Setter Property="Background" Value="{DynamicResource ComboBoxBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ComboBoxForeground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorder}" />
         <Setter Property="BorderThickness" Value="{StaticResource ControlsBorderThickness}" />
         <Setter Property="IsSynchronizedWithCurrentItem" Value="False" />
         <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -152,7 +152,7 @@
                             <Setter TargetName="DropDownBorder" Property="MinHeight" Value="95" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource DisabledComboBoxForeground}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledComboBoxForeground}" />
                         </Trigger>
                         <Trigger Property="IsGrouping" Value="true">
                             <Setter Property="ScrollViewer.CanContentScroll" Value="false" />
@@ -163,9 +163,9 @@
                             <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverComboBoxBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverComboBoxBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverComboBoxForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverComboBoxBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverComboBoxBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverComboBoxForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -194,9 +194,9 @@
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
-        <Setter Property="Foreground" Value="{StaticResource ComboBoxItemForeground}" />
-        <Setter Property="Background" Value="{StaticResource ComboBoxItemBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ComboBoxItemBorder}" />
+        <Setter Property="Foreground" Value="{DynamicResource ComboBoxItemForeground}" />
+        <Setter Property="Background" Value="{DynamicResource ComboBoxItemBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxItemBorder}" />
         <Setter Property="BorderThickness" Value="{StaticResource ControlsBorderThickness}" />
         <Setter Property="BorderThickness" Value="1,1,1,0" />
         <Setter Property="Padding" Value="{StaticResource ControlsPadding}" />
@@ -214,19 +214,19 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="true">
-                            <Setter Property="Background" Value="{StaticResource HoverComboBoxItemBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverComboBoxItemBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource HoverComboBoxItemForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverComboBoxItemBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverComboBoxItemBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource HoverComboBoxItemForeground}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="true">
-                            <Setter Property="Background" Value="{StaticResource SelectedComboBoxItemBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource SelectedComboBoxItemBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource SelectedComboBoxItemForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource SelectedComboBoxItemBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource SelectedComboBoxItemBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource SelectedComboBoxItemForeground}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Background" Value="{StaticResource DisabledComboBoxItemBackground}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledComboBoxItemBorder}" />
-                            <Setter Property="Foreground" Value="{StaticResource DisabledComboBoxItemForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledComboBoxItemBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledComboBoxItemBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledComboBoxItemForeground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
