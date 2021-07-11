@@ -68,7 +68,6 @@ namespace Clowd
             //w.BodyText += "\n\n\n" + w.BodyText;
 
             w.Show();
-            return;
             try
             {
                 base.OnStartup(e);
@@ -320,7 +319,7 @@ namespace Clowd
         {
             //var scheme = Settings.ColorScheme;
             //var baseColor = Settings.AccentScheme == AccentScheme.User ? Settings.UserAccentColor : AreoColor.GetColor();
-            var baseColor = Settings.AccentScheme == AccentScheme.User ? Settings.UserAccentColor : AreoColor.GetColor();
+            //var baseColor = Settings.AccentScheme == AccentScheme.User ? Settings.UserAccentColor : AreoColor.GetColor();
 
 
             //_lightBase = new ResourceDictionary
@@ -363,60 +362,60 @@ namespace Clowd
             //        this.Resources.MergedDictionaries.Add(_darkBase);
             //}
 
-            var hsl = HSLColor.FromRGB(baseColor);
-            hsl.Lightness = hsl.Lightness - 10;
-            baseColor = hsl.ToRGB();
+            //var hsl = HSLColor.FromRGB(baseColor);
+            //hsl.Lightness = hsl.Lightness - 10;
+            //baseColor = hsl.ToRGB();
 
-            //http://stackoverflow.com/a/596243/184746
-            double luminance = Math.Sqrt(0.299 * Math.Pow(baseColor.R, 2) + 0.587 * Math.Pow(baseColor.G, 2) + 0.114 * Math.Pow(baseColor.B, 2));
-            if (luminance > 170)
-            {
-                //create a dark foreground color, this accent color is light.
-                var dark = HSLColor.FromRGB(baseColor);
-                dark.Lightness = 15;
-                this.Resources["IdealForegroundColor"] = dark.ToRGB();
-            }
-            else
-            {
-                this.Resources["IdealForegroundColor"] = Colors.White;
-            }
+            ////http://stackoverflow.com/a/596243/184746
+            //double luminance = Math.Sqrt(0.299 * Math.Pow(baseColor.R, 2) + 0.587 * Math.Pow(baseColor.G, 2) + 0.114 * Math.Pow(baseColor.B, 2));
+            //if (luminance > 170)
+            //{
+            //    //create a dark foreground color, this accent color is light.
+            //    var dark = HSLColor.FromRGB(baseColor);
+            //    dark.Lightness = 15;
+            //    this.Resources["IdealForegroundColor"] = dark.ToRGB();
+            //}
+            //else
+            //{
+            //    this.Resources["IdealForegroundColor"] = Colors.White;
+            //}
 
-            this.AccentColor = baseColor;
-            this.Resources["HighlightColor"] = baseColor;
-            this.Resources["AccentColor"] = Color.FromArgb(204, baseColor.R, baseColor.G, baseColor.B); //80%
-            this.Resources["AccentColor2"] = Color.FromArgb(153, baseColor.R, baseColor.G, baseColor.B); //60%
-            this.Resources["AccentColor3"] = Color.FromArgb(102, baseColor.R, baseColor.G, baseColor.B); //40%
-            this.Resources["AccentColor4"] = Color.FromArgb(51, baseColor.R, baseColor.G, baseColor.B); //20%
+            //this.AccentColor = baseColor;
+            //this.Resources["HighlightColor"] = baseColor;
+            //this.Resources["AccentColor"] = Color.FromArgb(204, baseColor.R, baseColor.G, baseColor.B); //80%
+            //this.Resources["AccentColor2"] = Color.FromArgb(153, baseColor.R, baseColor.G, baseColor.B); //60%
+            //this.Resources["AccentColor3"] = Color.FromArgb(102, baseColor.R, baseColor.G, baseColor.B); //40%
+            //this.Resources["AccentColor4"] = Color.FromArgb(51, baseColor.R, baseColor.G, baseColor.B); //20%
 
-            this.Resources["HighlightBrush"] = new SolidColorBrush(baseColor);
-            ((Freezable)this.Resources["HighlightBrush"]).Freeze();
-            this.Resources["AccentColorBrush"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
-            ((Freezable)this.Resources["AccentColorBrush"]).Freeze();
-            this.Resources["AccentColorBrush2"] = new SolidColorBrush((Color)this.Resources["AccentColor2"]);
-            ((Freezable)this.Resources["AccentColorBrush2"]).Freeze();
-            this.Resources["AccentColorBrush3"] = new SolidColorBrush((Color)this.Resources["AccentColor3"]);
-            ((Freezable)this.Resources["AccentColorBrush3"]).Freeze();
-            this.Resources["AccentColorBrush4"] = new SolidColorBrush((Color)this.Resources["AccentColor4"]);
-            ((Freezable)this.Resources["AccentColorBrush4"]).Freeze();
-            this.Resources["WindowTitleColorBrush"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
-            ((Freezable)this.Resources["WindowTitleColorBrush"]).Freeze();
-            var gstops = new GradientStopCollection()
-            {
-                new GradientStop((Color)this.Resources["HighlightColor"], 0),
-                new GradientStop((Color)this.Resources["AccentColor3"], 1),
-            };
-            this.Resources["ProgressBrush"] = new LinearGradientBrush(gstops, new Point(1.002, 0.5), new Point(0.001, 0.5));
-            ((Freezable)this.Resources["ProgressBrush"]).Freeze();
-            this.Resources["CheckmarkFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
-            ((Freezable)this.Resources["CheckmarkFill"]).Freeze();
-            this.Resources["RightArrowFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
-            ((Freezable)this.Resources["RightArrowFill"]).Freeze();
-            this.Resources["IdealForegroundBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
-            ((Freezable)this.Resources["IdealForegroundBrush"]).Freeze();
-            this.Resources["IdealForegroundDisabledBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]) { Opacity = 0.4 };
-            ((Freezable)this.Resources["IdealForegroundDisabledBrush"]).Freeze();
-            this.Resources["AccentSelectedColorBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
-            ((Freezable)this.Resources["AccentSelectedColorBrush"]).Freeze();
+            //this.Resources["HighlightBrush"] = new SolidColorBrush(baseColor);
+            //((Freezable)this.Resources["HighlightBrush"]).Freeze();
+            //this.Resources["AccentColorBrush"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
+            //((Freezable)this.Resources["AccentColorBrush"]).Freeze();
+            //this.Resources["AccentColorBrush2"] = new SolidColorBrush((Color)this.Resources["AccentColor2"]);
+            //((Freezable)this.Resources["AccentColorBrush2"]).Freeze();
+            //this.Resources["AccentColorBrush3"] = new SolidColorBrush((Color)this.Resources["AccentColor3"]);
+            //((Freezable)this.Resources["AccentColorBrush3"]).Freeze();
+            //this.Resources["AccentColorBrush4"] = new SolidColorBrush((Color)this.Resources["AccentColor4"]);
+            //((Freezable)this.Resources["AccentColorBrush4"]).Freeze();
+            //this.Resources["WindowTitleColorBrush"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
+            //((Freezable)this.Resources["WindowTitleColorBrush"]).Freeze();
+            //var gstops = new GradientStopCollection()
+            //{
+            //    new GradientStop((Color)this.Resources["HighlightColor"], 0),
+            //    new GradientStop((Color)this.Resources["AccentColor3"], 1),
+            //};
+            //this.Resources["ProgressBrush"] = new LinearGradientBrush(gstops, new Point(1.002, 0.5), new Point(0.001, 0.5));
+            //((Freezable)this.Resources["ProgressBrush"]).Freeze();
+            //this.Resources["CheckmarkFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
+            //((Freezable)this.Resources["CheckmarkFill"]).Freeze();
+            //this.Resources["RightArrowFill"] = new SolidColorBrush((Color)this.Resources["AccentColor"]);
+            //((Freezable)this.Resources["RightArrowFill"]).Freeze();
+            //this.Resources["IdealForegroundBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
+            //((Freezable)this.Resources["IdealForegroundBrush"]).Freeze();
+            //this.Resources["IdealForegroundDisabledBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]) { Opacity = 0.4 };
+            //((Freezable)this.Resources["IdealForegroundDisabledBrush"]).Freeze();
+            //this.Resources["AccentSelectedColorBrush"] = new SolidColorBrush((Color)this.Resources["IdealForegroundColor"]);
+            //((Freezable)this.Resources["AccentSelectedColorBrush"]).Freeze();
         }
 
         private void SetupTrayIcon()
