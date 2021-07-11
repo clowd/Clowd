@@ -18,21 +18,21 @@ namespace Clowd.Dialogs
 {
     public class ThemedWindow : Window
     {
-        public static readonly ResourceDictionary LightTheme = new ResourceDictionary()
+        public static readonly ResourceDictionary ThemeBase = new ResourceDictionary()
         {
-            Source = new Uri("/Clowd.Dialogs;component/Themes/Light/LightTheme.xaml", UriKind.RelativeOrAbsolute)
+            Source = new Uri("/Clowd.Dialogs;component/Themes/ThemeBase.xaml", UriKind.RelativeOrAbsolute)
         };
 
-        public static readonly ResourceDictionary DarkTheme = new ResourceDictionary()
+        public static readonly ResourceDictionary ThemeDark = new ResourceDictionary()
         {
-            Source = new Uri("/Clowd.Dialogs;component/Themes/Dark/DarkTheme.xaml", UriKind.RelativeOrAbsolute)
+            Source = new Uri("/Clowd.Dialogs;component/Themes/ThemeDark.xaml", UriKind.RelativeOrAbsolute)
         };
 
         private bool? _isDark;
 
         public ThemedWindow()
         {
-            Resources.MergedDictionaries.Add(LightTheme);
+            Resources.MergedDictionaries.Add(ThemeBase);
         }
 
         protected virtual IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -58,18 +58,18 @@ namespace Clowd.Dialogs
             if (systemIsDark && _isDark != true)
             {
                 DarkMode.UseImmersiveDarkMode(handle, true);
-                Resources.MergedDictionaries.Add(DarkTheme);
-                Background = Brushes.Black;
+                Resources.MergedDictionaries.Add(ThemeDark);
+                //Background = Brushes.Black;
                 _isDark = true;
             }
             else if (!systemIsDark && _isDark != false)
             {
                 DarkMode.UseImmersiveDarkMode(handle, false);
 
-                if (Resources.MergedDictionaries.Contains(DarkTheme))
-                    Resources.MergedDictionaries.Remove(DarkTheme);
+                if (Resources.MergedDictionaries.Contains(ThemeDark))
+                    Resources.MergedDictionaries.Remove(ThemeDark);
 
-                Background = Brushes.White;
+                //Background = Brushes.White;
                 _isDark = false;
             }
         }
