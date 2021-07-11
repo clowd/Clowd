@@ -13,14 +13,16 @@
     SizeToContent="Height"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
-    <Window.Resources>
+    <!--<Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Light/LightTheme.xaml" />
-                <!--<d:ResourceDictionary Source="Themes/Dark/DarkTheme.xaml" />-->
+    -->
+    <!--<d:ResourceDictionary Source="Themes/Dark/DarkTheme.xaml" />-->
+    <!--
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
-    </Window.Resources>
+    </Window.Resources>-->
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />

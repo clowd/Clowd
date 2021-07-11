@@ -63,7 +63,7 @@ namespace Clowd
             //w.BodyText += "\n\n\n" + w.BodyText;
 
             w.Show();
-            return;
+            //return;
             try
             {
                 base.OnStartup(e);

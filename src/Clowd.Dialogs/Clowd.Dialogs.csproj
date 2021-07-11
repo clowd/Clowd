@@ -13,11 +13,4 @@
     <ProjectReference Include="..\Clowd.PlatformUtil\Clowd.PlatformUtil.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Page Update="Themes\Dark\DarkTheme.xaml">
-      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-      <SubType>Designer</SubType>
-    </Page>
-  </ItemGroup>
-
 </Project>

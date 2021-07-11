@@ -1,8 +1,11 @@
-﻿<ResourceDictionary
+<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:System="clr-namespace:System;assembly=mscorlib">
 
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Colors.xaml" />
+    </ResourceDictionary.MergedDictionaries>
 
     <Geometry x:Key="Checkmark">F1 M -0.182069,10.5241L 1.70331,8.63876L 7.62294,14.5584L 19.4492,2.73215L 21.3346,4.61753L 7.62294,18.3292L -0.182069,10.5241 Z</Geometry>
     <Geometry x:Key="DownArrowGeometry">F1 M 0.500012,0.659958L 8.28963,8.49903L 16.498,0.500034</Geometry>
@@ -20,14 +23,14 @@
     <FontWeight x:Key="ControlsFontWeight">Bold</FontWeight>
 
     <Style x:Key="PopUPBorderStyle" TargetType="{x:Type Border}">
-        <Setter Property="Background" Value="#2b2b2b" />
-        <Setter Property="BorderBrush" Value="#767676" />
+        <Setter Property="Background" Value="{StaticResource FlyoutBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource FlyoutBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
     </Style>
 
     <Style x:Key="PopUpMenuBorderStyle" TargetType="{x:Type Border}">
-        <Setter Property="Background" Value="#2b2b2b" />
-        <Setter Property="BorderBrush" Value="#767676" />
+        <Setter Property="Background" Value="{StaticResource FlyoutMenuBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource FlyoutBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
     </Style>
 
@@ -49,144 +52,144 @@
     </Style>
 
     <!--  NORMAL  -->
-    <SolidColorBrush x:Key="ButtonForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="ButtonForeground" Color="{StaticResource ControlItemForeground}" />
 
     <LinearGradientBrush x:Key="ButtonOuterBackground" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Offset="0" Color="#333333" />
-        <GradientStop Offset="1" Color="#333333" />
+        <GradientStop Offset="0" Color="{StaticResource ControlItemBackground}" />
+        <GradientStop Offset="1" Color="{StaticResource ControlItemBackground}" />
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="ButtonOuterBorder" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Offset="0" Color="#333333" />
-        <GradientStop Offset="1" Color="#333333" />
+        <GradientStop Offset="0" Color="{StaticResource ControlItemBackground}" />
+        <GradientStop Offset="1" Color="{StaticResource ControlItemBackground}" />
     </LinearGradientBrush>
 
     <SolidColorBrush x:Key="ButtonInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="ButtonInnerBorder" Color="Transparent" />
 
     <!--  HOVER  -->
-    <SolidColorBrush x:Key="HoverButtonForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="HoverButtonForeground" Color="{StaticResource TextForeground}" />
 
     <LinearGradientBrush x:Key="HoverButtonOuterBackground" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Offset="0" Color="#333333" />
-        <GradientStop Offset="1" Color="#333333" />
+        <GradientStop Offset="0" Color="{StaticResource ControlItemBackground}" />
+        <GradientStop Offset="1" Color="{StaticResource ControlItemBackground}" />
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="HoverButtonOuterBorder" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Offset="0" Color="#858585" />
-        <GradientStop Offset="1" Color="#858585" />
+        <GradientStop Offset="0" Color="{StaticResource ControlHoverBorder}" />
+        <GradientStop Offset="1" Color="{StaticResource ControlHoverBorder}" />
     </LinearGradientBrush>
 
     <SolidColorBrush x:Key="HoverButtonInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="HoverButtonInnerBorder" Color="Transparent" />
 
     <!--  PRESSED  -->
-    <SolidColorBrush x:Key="PressedButtonForeground" Color="#f1f1f1" />
+    <SolidColorBrush x:Key="PressedButtonForeground" Color="{StaticResource ControlItemPressedForeground}" />
 
     <LinearGradientBrush x:Key="PressedButtonOuterBackground" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Offset="1" Color="#666666" />
-        <GradientStop Offset="0" Color="#666666" />
+        <GradientStop Offset="1" Color="{StaticResource ControlItemPressedBackground}" />
+        <GradientStop Offset="0" Color="{StaticResource ControlItemPressedBackground}" />
     </LinearGradientBrush>
-    <SolidColorBrush x:Key="PressedButtonOuterBorder" Color="Transparent" />
+    <SolidColorBrush x:Key="PressedButtonOuterBorder" Color="{StaticResource ControlItemPressedBorder}" />
 
     <SolidColorBrush x:Key="PressedButtonInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="PressedButtonInnerBorder" Color="Transparent" />
 
-    <SolidColorBrush x:Key="CheckedToggleButtonBackground" Color="#0078d7" />
-    <SolidColorBrush x:Key="CheckedToggleButtonBorder" Color="#0078d7" />
-    <SolidColorBrush x:Key="CheckedToggleButtonForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="CheckedMouseOverToggleButtonBorder" Color="#66aee7" />
+    <SolidColorBrush x:Key="CheckedToggleButtonBackground" Color="{StaticResource ControlActive}" />
+    <SolidColorBrush x:Key="CheckedToggleButtonBorder" Color="{StaticResource ControlActive}" />
+    <SolidColorBrush x:Key="CheckedToggleButtonForeground" Color="{StaticResource ControlActiveForeground}" />
+    <SolidColorBrush x:Key="CheckedMouseOverToggleButtonBorder" Color="{StaticResource ControlCheckedBorder}" />
 
 
     <!--  DISABLED  -->
-    <SolidColorBrush x:Key="DisabledButtonForeground" Color="#858585" />
-    <SolidColorBrush x:Key="DisabledButtonOuterBackground" Color="#333333" />
-    <SolidColorBrush x:Key="DisabledButtonOuterBorder" Color="#333333" />
+    <SolidColorBrush x:Key="DisabledButtonForeground" Color="{StaticResource ControlDisabledForeground}" />
+    <SolidColorBrush x:Key="DisabledButtonOuterBackground" Color="{StaticResource ControlDisabledBackground}" />
+    <SolidColorBrush x:Key="DisabledButtonOuterBorder" Color="{StaticResource ControlDisabledBackground}" />
 
     <SolidColorBrush x:Key="DisabledButtonInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="DisabledButtonInnerBorder" Color="Transparent" />
 
     <!--  CALENDAR  -->
 
-    <SolidColorBrush x:Key="CalendarForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="CalendarBackground" Color="#000000" />
+    <SolidColorBrush x:Key="CalendarForeground" Color="{StaticResource FlyoutCalendarForeground}" />
+    <SolidColorBrush x:Key="CalendarBackground" Color="{StaticResource ControlBackground}" />
 
-    <SolidColorBrush x:Key="CalendarDayButtonBackground" Color="#0078d7" />
-    <SolidColorBrush x:Key="CalendarButtonBorder" Color="#1f1f1f" />
-    <SolidColorBrush x:Key="CalendarButtonNotMonthBackground" Color="#2b2b2b" />
+    <SolidColorBrush x:Key="CalendarDayButtonBackground" Color="{StaticResource ControlActive}" />
+    <SolidColorBrush x:Key="CalendarButtonBorder" Color="{StaticResource FlyoutCalendarBorder}" />
+    <SolidColorBrush x:Key="CalendarButtonNotMonthBackground" Color="{StaticResource FlyoutBackground}" />
 
-    <SolidColorBrush x:Key="CalendarBorder" Color="#1f1f1f" />
+    <SolidColorBrush x:Key="CalendarBorder" Color="{StaticResource FlyoutCalendarBorder}" />
 
     <!--  CHECKBOX  -->
     <SolidColorBrush x:Key="CheckBoxBoxBackground" Color="Transparent" />
-    <SolidColorBrush x:Key="CheckBoxBoxBorder" Color="#cccccc" />
-    <SolidColorBrush x:Key="CheckBoxSignColor" Color="#cccccc" />
+    <SolidColorBrush x:Key="CheckBoxBoxBorder" Color="{StaticResource ControlItemBorder}" />
+    <SolidColorBrush x:Key="CheckBoxSignColor" Color="{StaticResource ControlItemBorder}" />
 
     <SolidColorBrush x:Key="HoverCheckBoxBoxBackground" Color="Transparent" />
-    <SolidColorBrush x:Key="HoverCheckBoxBoxBorder" Color="#ffffff" />
-    <SolidColorBrush x:Key="HoverCheckBoxSignColor" Color="#ffffff" />
+    <SolidColorBrush x:Key="HoverCheckBoxBoxBorder" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="HoverCheckBoxSignColor" Color="{StaticResource TextForeground}" />
 
     <SolidColorBrush x:Key="DisabledCheckBoxBoxBackground" Color="Transparent" />
-    <SolidColorBrush x:Key="DisabledCheckBoxBoxBorder" Color="#999999" />
-    <SolidColorBrush x:Key="DisabledCheckBoxSignColor" Color="#999999" />
+    <SolidColorBrush x:Key="DisabledCheckBoxBoxBorder" Color="{StaticResource ControlDisabledItemForeground}" />
+    <SolidColorBrush x:Key="DisabledCheckBoxSignColor" Color="{StaticResource ControlDisabledItemForeground}" />
 
-    <SolidColorBrush x:Key="DisabledCheckedCheckBoxBoxBackground" Color="#999999" />
-    <SolidColorBrush x:Key="DisabledCheckedCheckBoxSignColor" Color="#ffffff" />
+    <SolidColorBrush x:Key="DisabledCheckedCheckBoxBoxBackground" Color="{StaticResource ControlDisabledItemForeground}" />
+    <SolidColorBrush x:Key="DisabledCheckedCheckBoxSignColor" Color="{StaticResource ControlActiveForeground}" />
 
 
 
-    <SolidColorBrush x:Key="CheckBoxCheckedBoxBackground" Color="#0078d7" />
-    <SolidColorBrush x:Key="CheckBoxCheckedBoxBorder" Color="#0078d7" />
-    <SolidColorBrush x:Key="CheckBoxCheckedSignColor" Color="#ffffff" />
+    <SolidColorBrush x:Key="CheckBoxCheckedBoxBackground" Color="{StaticResource ControlActive}" />
+    <SolidColorBrush x:Key="CheckBoxCheckedBoxBorder" Color="{StaticResource ControlActive}" />
+    <SolidColorBrush x:Key="CheckBoxCheckedSignColor" Color="{StaticResource ControlActiveForeground}" />
 
-    <SolidColorBrush x:Key="HoverCheckBoxCheckedBoxBackground" Color="#006cc1" />
-    <SolidColorBrush x:Key="HoverCheckBoxCheckedBoxBorder" Color="#006cc1" />
-    <SolidColorBrush x:Key="HoverCheckBoxCheckedSignColor" Color="#ffffff" />
+    <SolidColorBrush x:Key="HoverCheckBoxCheckedBoxBackground" Color="{StaticResource ControlItemHoverBorder}" />
+    <SolidColorBrush x:Key="HoverCheckBoxCheckedBoxBorder" Color="{StaticResource ControlItemHoverBorder}" />
+    <SolidColorBrush x:Key="HoverCheckBoxCheckedSignColor" Color="{StaticResource ControlActiveForeground}" />
 
     <!--  RadioButton  -->
-    <SolidColorBrush x:Key="RadioButtonBorder" Color="#cccccc" />
+    <SolidColorBrush x:Key="RadioButtonBorder" Color="{StaticResource ControlItemBorder}" />
     <SolidColorBrush x:Key="RadioButtonBackground" Color="Transparent" />
 
-    <SolidColorBrush x:Key="HoverRadioButtonBorder" Color="#ffffff" />
+    <SolidColorBrush x:Key="HoverRadioButtonBorder" Color="{StaticResource TextForeground}" />
     <SolidColorBrush x:Key="HoverRadioButtonBackground" Color="Transparent" />
 
-    <SolidColorBrush x:Key="RadioButtonCheckedBorder" Color="#0078d7" />
-    <SolidColorBrush x:Key="RadioButtonCheckedBackground" Color="#333333" />
+    <SolidColorBrush x:Key="RadioButtonCheckedBorder" Color="{StaticResource ControlActive}" />
+    <SolidColorBrush x:Key="RadioButtonCheckedBackground" Color="{StaticResource ControlRadioCheckedBackground}" />
 
-    <SolidColorBrush x:Key="HoverRadioButtonCheckedBorder" Color="#006cc1" />
-    <SolidColorBrush x:Key="HoverRadioButtonCheckedBackground" Color="#ffffff" />
+    <SolidColorBrush x:Key="HoverRadioButtonCheckedBorder" Color="{StaticResource ControlItemHoverBorder}" />
+    <SolidColorBrush x:Key="HoverRadioButtonCheckedBackground" Color="{StaticResource TextForeground}" />
 
     <!--  NORMAL  -->
-    <SolidColorBrush x:Key="TextBoxForeground" Color="#ffff" />
+    <SolidColorBrush x:Key="TextBoxForeground" Color="{StaticResource TextForeground}" />
 
-    <SolidColorBrush x:Key="TextBoxOuterBackground" Color="#000000" />
-    <SolidColorBrush x:Key="TextBoxOuterBorder" Color="#666666" />
+    <SolidColorBrush x:Key="TextBoxOuterBackground" Color="{StaticResource ControlBackground}" />
+    <SolidColorBrush x:Key="TextBoxOuterBorder" Color="{StaticResource ControlTextBoxBorder}" />
 
     <SolidColorBrush x:Key="TextBoxInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="TextBoxInnerBorder" Color="Transparent" />
 
     <!--  HOVER  -->
-    <SolidColorBrush x:Key="HoverTextBoxForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="HoverTextBoxForeground" Color="{StaticResource TextForeground}" />
 
-    <SolidColorBrush x:Key="HoverTextBoxOuterBackground" Color="#000000" />
-    <SolidColorBrush x:Key="HoverTextBoxOuterBorder" Color="#999999" />
+    <SolidColorBrush x:Key="HoverTextBoxOuterBackground" Color="{StaticResource ControlTextBoxHoverBackground}" />
+    <SolidColorBrush x:Key="HoverTextBoxOuterBorder" Color="{StaticResource ControlTextBoxHoverBorder}" />
 
     <SolidColorBrush x:Key="HoverTextBoxInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="HoverTextBoxInnerBorder" Color="Transparent" />
 
     <!--  FOCUSED  -->
-    <SolidColorBrush x:Key="FocusedTextBoxForeground" Color="#232323" />
+    <SolidColorBrush x:Key="FocusedTextBoxForeground" Color="{StaticResource ControlTextBoxFocusedForeground}" />
 
-    <SolidColorBrush x:Key="FocusedTextBoxOuterBackground" Color="#ffffff" />
-    <SolidColorBrush x:Key="FocusedTextBoxOuterBorder" Color="#0078d7" />
+    <SolidColorBrush x:Key="FocusedTextBoxOuterBackground" Color="{StaticResource ControlActiveForeground}" />
+    <SolidColorBrush x:Key="FocusedTextBoxOuterBorder" Color="{StaticResource ControlActive}" />
 
     <SolidColorBrush x:Key="FocusedTextBoxInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="FocusedTextBoxInnerBorder" Color="Transparent" />
 
 
     <!--  DISABLED  -->
-    <SolidColorBrush x:Key="DisabledTextBoxForeground" Color="#b5b5b5" />
+    <SolidColorBrush x:Key="DisabledTextBoxForeground" Color="{StaticResource ControlTextBoxDIsabledForeground}" />
 
-    <SolidColorBrush x:Key="DisabledTextBoxOuterBackground" Color="#ffff" />
-    <SolidColorBrush x:Key="DisabledTextBoxOuterBorder" Color="#b5b5b5" />
+    <SolidColorBrush x:Key="DisabledTextBoxOuterBackground" Color="{StaticResource ControlActiveForeground}" />
+    <SolidColorBrush x:Key="DisabledTextBoxOuterBorder" Color="{StaticResource ControlTextBoxDIsabledForeground}" />
 
     <SolidColorBrush x:Key="DisabledTextBoxInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="DisabledTextBoxInnerBorder" Color="Transparent" />
@@ -195,8 +198,8 @@
 
 
     <!--  GROUPBOX  -->
-    <SolidColorBrush x:Key="GroupBoxForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="GroupBoxOuterBackground" Color="Transparent" />
+    <SolidColorBrush x:Key="GroupBoxForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="GroupBoxOuterBackground" Color="{StaticResource ControlItemDisabledBackground}" />
     <SolidColorBrush x:Key="GroupBoxOuterBorder" Color="Transparent" />
 
     <SolidColorBrush x:Key="GroupBoxInnerBackground" Color="Transparent" />
@@ -212,7 +215,7 @@
 
     <!--  GOUPBOX HEADER  -->
     <SolidColorBrush x:Key="GroupBoxHeaderOuterBackground" Color="Transparent" />
-    <SolidColorBrush x:Key="GroupBoxHeaderOuterBorder" Color="#2e2e2e" />
+    <SolidColorBrush x:Key="GroupBoxHeaderOuterBorder" Color="{StaticResource ControlGroupBorder}" />
 
 
     <!--  GOUPBOX HEADER  -->
@@ -220,198 +223,202 @@
 
     <!--  EXPANDER HEADER  -->
 
-    <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#000000" />
+    <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="{StaticResource ControlBackground}" />
     <SolidColorBrush x:Key="ExpanderHeaderBorder" Color="Transparent" />
 
     <!--  LISTS  -->
-    <SolidColorBrush x:Key="ListForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="ListBackground" Color="#2b2b2b" />
-    <SolidColorBrush x:Key="ListBorder" Color="#2b2b2b" />
+    <SolidColorBrush x:Key="ListForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="ListBackground" Color="{StaticResource FlyoutBackground}" />
+    <SolidColorBrush x:Key="ListBorder" Color="{StaticResource FlyoutBackground}" />
 
-    <SolidColorBrush x:Key="ListViewForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="ListViewBackground" Color="#000000" />
-    <SolidColorBrush x:Key="ListViewBorder" Color="#696969" />
+    <SolidColorBrush x:Key="ListViewForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="ListViewBackground" Color="{StaticResource ControlListBackground}" />
+    <SolidColorBrush x:Key="ListViewBorder" Color="{StaticResource ControlListBorder}" />
 
-    <SolidColorBrush x:Key="DisabledListForeground" Color="#484848" />
-    <SolidColorBrush x:Key="DisabledListBackground" Color="#262626" />
+    <SolidColorBrush x:Key="DisabledListForeground" Color="{StaticResource ControlListDisabledForeground}" />
+    <SolidColorBrush x:Key="DisabledListBackground" Color="{StaticResource ControlListDisabledBackground}" />
     <SolidColorBrush x:Key="DisabledListBorder" Color="Transparent" />
 
-    <SolidColorBrush x:Key="ListItemForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="ListItemForeground" Color="{StaticResource ControlItemForeground}" />
     <SolidColorBrush x:Key="ListItemBackground" Color="Transparent" />
     <SolidColorBrush x:Key="ListItemBorder" Color="Transparent" />
 
-    <SolidColorBrush x:Key="HoverListItemForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="HoverListItemBackground" Color="#323232" />
+    <SolidColorBrush x:Key="HoverListItemForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="HoverListItemBackground" Color="{StaticResource ControlListHoverBackground}" />
     <SolidColorBrush x:Key="HoverListItemBorder" Color="Transparent" />
 
-    <SolidColorBrush x:Key="SelectedListItemForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="SelectedListItemBackground" Color="#004881" />
-    <SolidColorBrush x:Key="SelectedHoverListItemBackground" Color="#1c71b5" />
+    <SolidColorBrush x:Key="SelectedListItemForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="SelectedListItemBackground" Color="{StaticResource ControlActiveDark}" />
+    <SolidColorBrush x:Key="SelectedHoverListItemBackground" Color="{StaticResource ControlActiveLight}" />
     <SolidColorBrush x:Key="SelectedListItemBorder" Color="Transparent" />
 
-    <SolidColorBrush x:Key="ListHeaderBackground" Color="#000000" />
-    <SolidColorBrush x:Key="ListHeaderBorder" Color="#282828" />
-    <SolidColorBrush x:Key="ListHeaderForeground" Color="#999999" />
+    <SolidColorBrush x:Key="ListHeaderBackground" Color="{StaticResource ControlBackground}" />
+    <SolidColorBrush x:Key="ListHeaderBorder" Color="{StaticResource ControlListHeaderBorder}" />
+    <SolidColorBrush x:Key="ListHeaderForeground" Color="{StaticResource ControlListHeaderForeground}" />
 
-    <SolidColorBrush x:Key="HoverListHeaderBackground" Color="#474747" />
-    <SolidColorBrush x:Key="HoverListHeaderBorder" Color="#646464" />
-    <SolidColorBrush x:Key="HoverListHeaderForeground" Color="#b5b5b5" />
+    <SolidColorBrush x:Key="HoverListHeaderBackground" Color="{StaticResource ControlListHeaderBackground}" />
+    <SolidColorBrush x:Key="HoverListHeaderBorder" Color="{StaticResource ControlListHoverHeaderBorder}" />
+    <SolidColorBrush x:Key="HoverListHeaderForeground" Color="{StaticResource ControlListHoverHeaderForeground}" />
 
-    <SolidColorBrush x:Key="PressedListHeaderBackground" Color="#5c5c5c" />
-    <SolidColorBrush x:Key="PressedListHeaderBorder" Color="#5c5c5c" />
-    <SolidColorBrush x:Key="PressedListHeaderForeground" Color="#bebebe" />
+    <SolidColorBrush x:Key="PressedListHeaderBackground" Color="{StaticResource ControlListPressedHeaderBackground}" />
+    <SolidColorBrush x:Key="PressedListHeaderBorder" Color="{StaticResource ControlListPressedHeaderBackground}" />
+    <SolidColorBrush x:Key="PressedListHeaderForeground" Color="{StaticResource ControlListPressedHeaderForeground}" />
 
-    <SolidColorBrush x:Key="DisabledListHeaderBackground" Color="#202020" />
-    <SolidColorBrush x:Key="DisabledListHeaderBorder" Color="#202020" />
-    <SolidColorBrush x:Key="DisabledListHeaderForeground" Color="#848484" />
+    <SolidColorBrush x:Key="DisabledListHeaderBackground" Color="{StaticResource ControlListDisabledHeaderBackground}" />
+    <SolidColorBrush x:Key="DisabledListHeaderBorder" Color="{StaticResource ControlListDisabledHeaderBorder}" />
+    <SolidColorBrush x:Key="DisabledListHeaderForeground" Color="{StaticResource ControlListDisabledHeaderForeground}" />
 
 
     <!--  PROGRESSBAR  -->
 
-    <SolidColorBrush x:Key="ProgressBarBackground" Color="#333333" />
-    <SolidColorBrush x:Key="IndicatorBrush" Color="#0078d7" />
+    <SolidColorBrush x:Key="ProgressBarBackground" Color="{StaticResource ControlItemBackground}" />
+    <SolidColorBrush x:Key="IndicatorBrush" Color="{StaticResource ControlActive}" />
     <SolidColorBrush x:Key="ProgressBarBorder" Color="Transparent" />
 
-    <DrawingBrush x:Key="ProgressBarIndicatorAnimatedFill">
+    <DrawingBrush x:Key="ProgressBarIndicatorAnimatedFill" Stretch="Uniform">
         <DrawingBrush.Drawing>
             <DrawingGroup>
-                <GeometryDrawing>
-                    <GeometryDrawing.Geometry>
-                        <RectangleGeometry Rect="0,0 1,1" />
-                    </GeometryDrawing.Geometry>
-                    <GeometryDrawing.Brush>
-                        <RadialGradientBrush Center="0.5,1" GradientOrigin="0.5,1" RadiusX="0.2" RadiusY="0.5">
-                            <RadialGradientBrush.GradientStops>
-                                <GradientStop Offset="0" Color="#00000000" />
-                                <GradientStop Offset="0.5" Color="#FF000000" />
-                                <GradientStop Offset="1" Color="#00000000" />
-                            </RadialGradientBrush.GradientStops>
-                            <RadialGradientBrush.RelativeTransform>
-                                <TransformGroup />
-                            </RadialGradientBrush.RelativeTransform>
-                        </RadialGradientBrush>
-                    </GeometryDrawing.Brush>
-                </GeometryDrawing>
-                <GeometryDrawing>
-                    <GeometryDrawing.Geometry>
-                        <RectangleGeometry Rect="0,0 1,1" />
-                    </GeometryDrawing.Geometry>
-                    <GeometryDrawing.Brush>
-                        <RadialGradientBrush Center="0.5,0" GradientOrigin="0.5,0" RadiusX="0.2" RadiusY="0.95">
-                            <RadialGradientBrush.GradientStops>
-                                <GradientStop Offset="0" Color="#00000000" />
-                                <GradientStop Offset="0.5" Color="#4F000000" />
-                                <GradientStop Offset="1" Color="#00000000" />
-                            </RadialGradientBrush.GradientStops>
-                            <RadialGradientBrush.RelativeTransform>
-                                <TransformGroup />
-                            </RadialGradientBrush.RelativeTransform>
-                        </RadialGradientBrush>
-                    </GeometryDrawing.Brush>
-                </GeometryDrawing>
+                <DrawingGroup.Children>
+                    <GeometryDrawing Geometry="F1 M -8.41745e-005,6.10352e-005L 799.9,6.10352e-005L 799.9,799.9L -8.41745e-005,799.9L -8.41745e-005,6.10352e-005 Z ">
+                        <GeometryDrawing.Pen>
+                            <Pen
+                                Brush="{StaticResource ProgressBarIndicatorPenBrush}"
+                                LineJoin="Round"
+                                Thickness="1.33317" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Brush>
+                            <RadialGradientBrush Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.501482" RadiusY="0.625">
+                                <RadialGradientBrush.GradientStops>
+                                    <GradientStop Offset="0.206897" Color="{StaticResource ProgressBarIndicator1}" />
+                                    <GradientStop Offset="1" Color="{StaticResource ProgressBarIndicator2}" />
+                                </RadialGradientBrush.GradientStops>
+                                <RadialGradientBrush.RelativeTransform>
+                                    <TransformGroup />
+                                </RadialGradientBrush.RelativeTransform>
+                            </RadialGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                    <GeometryDrawing Geometry="F1 M 1.62768e-005,6.10352e-005L 799.9,6.10352e-005L 799.9,799.9L 1.62768e-005,799.9L 1.62768e-005,6.10352e-005 Z ">
+                        <GeometryDrawing.Pen>
+                            <Pen
+                                Brush="{StaticResource ProgressBarIndicatorPenBrush}"
+                                LineJoin="Round"
+                                Thickness="1.33317" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Brush>
+                            <LinearGradientBrush StartPoint="-0.00148212,0.5" EndPoint="1.00148,0.5">
+                                <LinearGradientBrush.GradientStops>
+                                    <GradientStop Offset="0.0431034" Color="{StaticResource ProgressBarIndicator2}" />
+                                    <GradientStop Offset="0.5" Color="{StaticResource ProgressBarIndicator3}" />
+                                    <GradientStop Offset="0.943965" Color="{StaticResource ProgressBarIndicator2}" />
+                                </LinearGradientBrush.GradientStops>
+                            </LinearGradientBrush>
+                        </GeometryDrawing.Brush>
+                    </GeometryDrawing>
+                </DrawingGroup.Children>
             </DrawingGroup>
         </DrawingBrush.Drawing>
     </DrawingBrush>
 
-    <SolidColorBrush x:Key="GradientAnimated" Color="#4fffffff" />
+    <SolidColorBrush x:Key="GradientAnimated" Color="{StaticResource ProgressBarAnimatedGradient}" />
 
 
     <!--  SLIDERS  -->
-    <SolidColorBrush x:Key="HorizontalSliderTrackNormalBackground" Color="#202020" />
-    <SolidColorBrush x:Key="VerticalSliderTrackNormalBackground" Color="#202020" />
+    <SolidColorBrush x:Key="HorizontalSliderTrackNormalBackground" Color="{StaticResource ControlSliderTrackBackground}" />
+    <SolidColorBrush x:Key="VerticalSliderTrackNormalBackground" Color="{StaticResource ControlSliderTrackBackground}" />
 
     <!--  TABCONTROL  -->
-    <SolidColorBrush x:Key="TabControlBorder" Color="#1c1c1c" />
-    <SolidColorBrush x:Key="TabControlBackground" Color="#161616" />
+    <SolidColorBrush x:Key="TabControlBorder" Color="{StaticResource ControlTabBorder}" />
+    <SolidColorBrush x:Key="TabControlBackground" Color="{StaticResource ControlTabBackground}" />
 
 
 
     <!--  TABITEM  -->
     <!--  SELECTED  -->
-    <SolidColorBrush x:Key="TabItemForeground" Color="#a2a2a2" />
-    <SolidColorBrush x:Key="TabItemOuterBorder" Color="#161616" />
-    <SolidColorBrush x:Key="TabItemOuterBackground" Color="#161616" />
+    <SolidColorBrush x:Key="TabItemForeground" Color="{StaticResource ControlTabItemForeground}" />
+    <SolidColorBrush x:Key="TabItemOuterBorder" Color="{StaticResource ControlTabBackground}" />
+    <SolidColorBrush x:Key="TabItemOuterBackground" Color="{StaticResource ControlTabBackground}" />
 
-    <SolidColorBrush x:Key="SelectedTabItemForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="SelectedTabItemOuterBorder" Color="#0078d7" />
-    <SolidColorBrush x:Key="SelectedTabItemOuterBackground" Color="#161616" />
+    <SolidColorBrush x:Key="SelectedTabItemForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="SelectedTabItemOuterBorder" Color="{StaticResource ControlActive}" />
+    <SolidColorBrush x:Key="SelectedTabItemOuterBackground" Color="{StaticResource ControlTabBackground}" />
 
-    <SolidColorBrush x:Key="HoverTabItemForeground" Color="#d0d0d0" />
-    <SolidColorBrush x:Key="HoverTabItemOuterBorder" Color="#4da1e3" />
-    <SolidColorBrush x:Key="HoverTabItemOuterBackground" Color="#1c1c1c" />
+    <SolidColorBrush x:Key="HoverTabItemForeground" Color="{StaticResource ControlTabItemHoverForeground}" />
+    <SolidColorBrush x:Key="HoverTabItemOuterBorder" Color="{StaticResource ControlTabItemHoverBorder}" />
+    <SolidColorBrush x:Key="HoverTabItemOuterBackground" Color="{StaticResource ControlTabBorder}" />
 
-    <SolidColorBrush x:Key="DisabledTabItemForeground" Color="#424242" />
-    <SolidColorBrush x:Key="DisabledTabItemOuterBorder" Color="Transparent" />
-    <SolidColorBrush x:Key="DisabledTabItemOuterBackground" Color="Transparent" />
+    <SolidColorBrush x:Key="DisabledTabItemForeground" Color="{StaticResource ControlTabItemDisabledForeground}" />
+    <SolidColorBrush x:Key="DisabledTabItemOuterBorder" Color="{StaticResource ControlTabItemDisabledBorder}" />
+    <SolidColorBrush x:Key="DisabledTabItemOuterBackground" Color="{StaticResource ControlItemDisabledBackground}" />
 
     <SolidColorBrush x:Key="SelectedTabItemInnerBackground" Color="Transparent" />
     <SolidColorBrush x:Key="SelectedTabItemInnerBorder" Color="Transparent" />
 
     <!--  COMBOBOX  -->
-    <SolidColorBrush x:Key="ComboBoxForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="ComboBoxBackground" Color="#000000" />
-    <SolidColorBrush x:Key="ComboBoxBorder" Color="#666666" />
+    <SolidColorBrush x:Key="ComboBoxForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="ComboBoxBackground" Color="{StaticResource ControlBackground}" />
+    <SolidColorBrush x:Key="ComboBoxBorder" Color="{StaticResource ControlItemPressedBackground}" />
 
-    <SolidColorBrush x:Key="DisabledComboBoxForeground" Color="#999999" />
-    <SolidColorBrush x:Key="DisabledComboBoxBackground" Color="#ffffff" />
-    <SolidColorBrush x:Key="DisabledComboBoxBorder" Color="#999999" />
+    <SolidColorBrush x:Key="DisabledComboBoxForeground" Color="{StaticResource ControlDisabledItemForeground}" />
+    <SolidColorBrush x:Key="DisabledComboBoxBackground" Color="{StaticResource ControlActiveForeground}" />
+    <SolidColorBrush x:Key="DisabledComboBoxBorder" Color="{StaticResource ControlDisabledItemForeground}" />
 
-    <SolidColorBrush x:Key="HoverComboBoxForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="HoverComboBoxBackground" Color="#000000" />
-    <SolidColorBrush x:Key="HoverComboBoxBorder" Color="#999999" />
+    <SolidColorBrush x:Key="HoverComboBoxForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="HoverComboBoxBackground" Color="{StaticResource ControlBackground}" />
+    <SolidColorBrush x:Key="HoverComboBoxBorder" Color="{StaticResource ControlComboBoxHoverBorder}" />
 
     <!--  COMBOBOXITEM  -->
-    <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="ComboBoxItemForeground" Color="{StaticResource TextForeground}" />
     <SolidColorBrush x:Key="ComboBoxItemBackground" Color="Transparent" />
     <SolidColorBrush x:Key="ComboBoxItemBorder" Color="Transparent" />
 
-    <SolidColorBrush x:Key="HoverComboBoxItemForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="HoverComboBoxItemBackground" Color="#545454" />
+    <SolidColorBrush x:Key="HoverComboBoxItemForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="HoverComboBoxItemBackground" Color="{StaticResource ControlComboBoxHoverBackground}" />
     <SolidColorBrush x:Key="HoverComboBoxItemBorder" Color="Transparent" />
 
-    <SolidColorBrush x:Key="SelectedComboBoxItemForeground" Color="#ffffff" />
-    <SolidColorBrush x:Key="SelectedComboBoxItemBackground" Color="#002541" />
+    <SolidColorBrush x:Key="SelectedComboBoxItemForeground" Color="{StaticResource TextForeground}" />
+    <SolidColorBrush x:Key="SelectedComboBoxItemBackground" Color="{StaticResource ControlComboBoxSelectedBackground}" />
     <SolidColorBrush x:Key="SelectedComboBoxItemBorder" Color="Transparent" />
 
-    <SolidColorBrush x:Key="DisabledComboBoxItemForeground" Color="#999999" />
+    <SolidColorBrush x:Key="DisabledComboBoxItemForeground" Color="{StaticResource ControlDisabledItemForeground}" />
     <SolidColorBrush x:Key="DisabledComboBoxItemBackground" Color="Transparent" />
     <SolidColorBrush x:Key="DisabledComboBoxItemBorder" Color="Transparent" />
 
     <!--  MENU  -->
-    <SolidColorBrush x:Key="MenuBackground" Color="#000000" />
+    <SolidColorBrush x:Key="MenuBackground" Color="{StaticResource ControlBackground}" />
     <SolidColorBrush x:Key="MenuBorder" Color="Transparent" />
-    <SolidColorBrush x:Key="MenuForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="MenuForeground" Color="{StaticResource TextForeground}" />
 
     <SolidColorBrush x:Key="MenuItemBackground" Color="Transparent" />
     <SolidColorBrush x:Key="MenuItemBorder" Color="Transparent" />
-    <SolidColorBrush x:Key="MenuItemForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="MenuItemForeground" Color="{StaticResource TextForeground}" />
 
-    <SolidColorBrush x:Key="HoverMenuItemBackground" Color="#404040" />
-    <SolidColorBrush x:Key="HoverMenuItemBorder" Color="#404040" />
-    <SolidColorBrush x:Key="HoverMenuItemForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="HoverMenuItemBackground" Color="{StaticResource MenuHoverBackground}" />
+    <SolidColorBrush x:Key="HoverMenuItemBorder" Color="{StaticResource MenuHoverBackground}" />
+    <SolidColorBrush x:Key="HoverMenuItemForeground" Color="{StaticResource TextForeground}" />
 
-    <SolidColorBrush x:Key="PressedMenuItemBackground" Color="#555555" />
-    <SolidColorBrush x:Key="PressedMenuItemBorder" Color="#555555" />
-    <SolidColorBrush x:Key="PressedMenuItemForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="PressedMenuItemBackground" Color="{StaticResource MenuPressedBorder}" />
+    <SolidColorBrush x:Key="PressedMenuItemBorder" Color="{StaticResource MenuPressedBorder}" />
+    <SolidColorBrush x:Key="PressedMenuItemForeground" Color="{StaticResource TextForeground}" />
 
-    <SolidColorBrush x:Key="SubMenuOpenMenuItemBackground" Color="#115992" />
-    <SolidColorBrush x:Key="SubMenuOpenMenuItemBorder" Color="#115992" />
-    <SolidColorBrush x:Key="SubMenuOpenMenuItemForeground" Color="#ffff" />
+    <SolidColorBrush x:Key="SubMenuOpenMenuItemBackground" Color="{StaticResource MenuSubBackground}" />
+    <SolidColorBrush x:Key="SubMenuOpenMenuItemBorder" Color="{StaticResource MenuSubBackground}" />
+    <SolidColorBrush x:Key="SubMenuOpenMenuItemForeground" Color="{StaticResource TextForeground}" />
 
-    <SolidColorBrush x:Key="KeyBoardFocusMenuItemBackground" Color="Transparent" />
-    <SolidColorBrush x:Key="KeyBoardFocusMenuItemBorder" Color="#ffffff" />
-    <SolidColorBrush x:Key="KeyBoardFocusMenuItemForeground" Color="#ffffff" />
+    <SolidColorBrush x:Key="KeyBoardFocusMenuItemBackground" Color="{StaticResource MenuKeyboardFocusedBackground}" />
+    <SolidColorBrush x:Key="KeyBoardFocusMenuItemBorder" Color="{StaticResource MenuKeyboardFocusedBorder}" />
+    <SolidColorBrush x:Key="KeyBoardFocusMenuItemForeground" Color="{StaticResource TextForeground}" />
 
     <SolidColorBrush x:Key="DisabledMenuItemBackground" Color="Transparent" />
     <SolidColorBrush x:Key="DisabledMenuItemBorder" Color="Transparent" />
-    <SolidColorBrush x:Key="DisabledMenuItemForeground" Color="#B5B5B5" />
+    <SolidColorBrush x:Key="DisabledMenuItemForeground" Color="{StaticResource ControlTextBoxDIsabledForeground}" />
 
-    <SolidColorBrush x:Key="MenuItemPressedFill" Color="#8fbfe5" />
+    <SolidColorBrush x:Key="MenuItemPressedFill" Color="{StaticResource MenuPressedBackground}" />
 
-    <SolidColorBrush x:Key="MenuItemHoverFill" Color="#d5d5d5" />
+    <SolidColorBrush x:Key="MenuItemHoverFill" Color="{StaticResource MenuHoverFill}" />
 
-    <SolidColorBrush x:Key="StatusBarBackground" Color="#1f1f1f" />
+    <SolidColorBrush x:Key="StatusBarBackground" Color="{StaticResource ControlBackgroundLight}" />
 
     <Style x:Key="CalendarButton" TargetType="{x:Type CalendarButton}">
         <Setter Property="Foreground" Value="{StaticResource CalendarForeground}" />
@@ -446,7 +453,7 @@
                             IsHitTestVisible="False"
                             RadiusX="1"
                             RadiusY="1"
-                            Stroke="#FF45D6FA"
+                            Stroke="{StaticResource ControlActiveLightLightBrush}"
                             Visibility="Collapsed" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup Name="CommonStates">
@@ -592,7 +599,7 @@
                             IsHitTestVisible="False"
                             RadiusX="1"
                             RadiusY="1"
-                            Stroke="#FF45D6FA"
+                            Stroke="{StaticResource ControlActiveLightLightBrush}"
                             Visibility="Collapsed" />
                         <Border BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" />
                         <VisualStateManager.VisualStateGroups>
