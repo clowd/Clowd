@@ -33,6 +33,7 @@ namespace Clowd.Dialogs
         public ThemedWindow()
         {
             Resources.MergedDictionaries.Add(ThemeBase);
+            this.Style = (Style)ThemeBase["DefaultWindowStyle"];
         }
 
         protected virtual IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -59,17 +60,13 @@ namespace Clowd.Dialogs
             {
                 DarkMode.UseImmersiveDarkMode(handle, true);
                 Resources.MergedDictionaries.Add(ThemeDark);
-                //Background = Brushes.Black;
                 _isDark = true;
             }
             else if (!systemIsDark && _isDark != false)
             {
                 DarkMode.UseImmersiveDarkMode(handle, false);
-
                 if (Resources.MergedDictionaries.Contains(ThemeDark))
                     Resources.MergedDictionaries.Remove(ThemeDark);
-
-                //Background = Brushes.White;
                 _isDark = false;
             }
         }
