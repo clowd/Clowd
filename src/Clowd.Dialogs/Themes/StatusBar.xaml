@@ -5,8 +5,8 @@
     </ResourceDictionary.MergedDictionaries>
 
     <Style TargetType="{x:Type StatusBar}">
-        <Setter Property="Background" Value="{StaticResource StatusBarBackground}" />
-        <Setter Property="Foreground" Value="{StaticResource GroupBoxForeground}" />
+        <Setter Property="Background" Value="{DynamicResource StatusBarBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource GroupBoxForeground}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
         <Setter Property="Padding" Value="0" />

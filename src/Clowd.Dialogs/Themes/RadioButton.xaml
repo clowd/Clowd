@@ -26,12 +26,12 @@
         <Setter Property="FontSize" Value="{StaticResource ControlsFontSize}" />
         <Setter Property="FontWeight" Value="{StaticResource ControlsFontWeight}" />
         <Setter Property="FontFamily" Value="{StaticResource ControlsFontFamily}" />
-        <Setter Property="Foreground" Value="{StaticResource ButtonForeground}" />
+        <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}" />
         <Setter Property="SnapsToDevicePixels" Value="true" />
         <Setter Property="OverridesDefaultStyle" Value="true" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="BorderBrush" Value="{StaticResource RadioButtonBorder}" />
-        <Setter Property="Background" Value="{StaticResource RadioButtonBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonBorder}" />
+        <Setter Property="Background" Value="{DynamicResource RadioButtonBackground}" />
         <Setter Property="Margin" Value="{StaticResource ControlsMargin}" />
         <Setter Property="FocusVisualStyle" Value="{StaticResource RadioButtonFocusVisual}" />
         <Setter Property="Template">
@@ -71,30 +71,30 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="true">
-                            <Setter Property="BorderBrush" Value="{StaticResource RadioButtonCheckedBorder}" />
-                            <Setter Property="Background" Value="{StaticResource RadioButtonCheckedBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckedBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource RadioButtonCheckedBackground}" />
                             <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverRadioButtonBorder}" />
-                            <Setter Property="Background" Value="{StaticResource HoverRadioButtonBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverRadioButtonBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverRadioButtonBackground}" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="{x:Null}">
-                            <Setter TargetName="Holder" Property="Fill" Value="{StaticResource DisabledCheckBoxBoxBorder}" />
+                            <Setter TargetName="Holder" Property="Fill" Value="{DynamicResource DisabledCheckBoxBoxBorder}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource DisabledCheckBoxBoxBorder}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledCheckBoxBoxBorder}" />
-                            <Setter Property="Background" Value="{StaticResource DisabledCheckBoxBoxBackground}" />
-                            <Setter TargetName="CheckMark" Property="Fill" Value="{StaticResource DisabledCheckBoxSignColor}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledCheckBoxBoxBorder}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledCheckBoxBoxBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledCheckBoxBoxBackground}" />
+                            <Setter TargetName="CheckMark" Property="Fill" Value="{DynamicResource DisabledCheckBoxSignColor}" />
                         </Trigger>
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsMouseOver" Value="True" />
                                 <Condition Property="IsChecked" Value="True" />
                             </MultiTrigger.Conditions>
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverRadioButtonCheckedBorder}" />
-                            <Setter Property="Background" Value="{StaticResource HoverRadioButtonCheckedBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverRadioButtonCheckedBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverRadioButtonCheckedBackground}" />
                         </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -148,30 +148,30 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="true">
-                            <Setter Property="BorderBrush" Value="{StaticResource ButtonForeground}" />
-                            <Setter Property="Background" Value="{StaticResource RadioButtonCheckedBorder}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource ButtonForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource RadioButtonCheckedBorder}" />
                             <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="true">
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverRadioButtonBorder}" />
-                            <Setter Property="Background" Value="{StaticResource HoverRadioButtonBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverRadioButtonBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverRadioButtonBackground}" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="{x:Null}">
-                            <Setter TargetName="Holder" Property="Fill" Value="{StaticResource DisabledCheckBoxBoxBorder}" />
+                            <Setter TargetName="Holder" Property="Fill" Value="{DynamicResource DisabledCheckBoxBoxBorder}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="false">
-                            <Setter Property="Foreground" Value="{StaticResource DisabledCheckBoxBoxBorder}" />
-                            <Setter Property="BorderBrush" Value="{StaticResource DisabledCheckBoxBoxBorder}" />
-                            <Setter Property="Background" Value="{StaticResource DisabledCheckBoxBoxBackground}" />
-                            <Setter TargetName="CheckMark" Property="Fill" Value="{StaticResource DisabledCheckBoxSignColor}" />
+                            <Setter Property="Foreground" Value="{DynamicResource DisabledCheckBoxBoxBorder}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource DisabledCheckBoxBoxBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource DisabledCheckBoxBoxBackground}" />
+                            <Setter TargetName="CheckMark" Property="Fill" Value="{DynamicResource DisabledCheckBoxSignColor}" />
                         </Trigger>
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsMouseOver" Value="True" />
                                 <Condition Property="IsChecked" Value="True" />
                             </MultiTrigger.Conditions>
-                            <Setter Property="BorderBrush" Value="{StaticResource HoverRadioButtonCheckedBorder}" />
-                            <Setter Property="Background" Value="{StaticResource HoverRadioButtonCheckedBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource HoverRadioButtonCheckedBorder}" />
+                            <Setter Property="Background" Value="{DynamicResource HoverRadioButtonCheckedBackground}" />
                         </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
