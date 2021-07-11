@@ -49,7 +49,6 @@ namespace Clowd.Dialogs
             UpdateDarkModeState(handle);
             HwndSource source = HwndSource.FromHwnd(handle);
             source.AddHook(new HwndSourceHook(WndProc));
-            UpdateDarkModeState(handle);
             base.OnSourceInitialized(e);
         }
 
