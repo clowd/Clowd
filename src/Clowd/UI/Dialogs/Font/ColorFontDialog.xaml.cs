@@ -2,9 +2,9 @@
 using System.Windows;
 using System.Windows.Media;
 
-namespace Clowd.Dialogs.Font
+namespace Clowd.UI.Dialogs.Font
 {
-    public partial class ColorFontDialog : ThemedWindow
+    public partial class ColorFontDialog : SystemThemedWindow
     {
         private FontInfo _selectedFont;
 

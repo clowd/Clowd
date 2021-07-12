@@ -40,7 +40,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\modules\Clowd.Win64\Clowd.Win64.vcxproj" />
-    <ProjectReference Include="..\Clowd.Dialogs\Clowd.Dialogs.csproj" />
     <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
@@ -98,6 +97,20 @@
     <PackageReference Include="ModernWpfUI" Version="0.9.4" />
     <PackageReference Include="PropertyChanged.Fody" Version="3.4.0" PrivateAssets="all" />
     <PackageReference Include="SharpRaven" Version="2.4.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="UI\Dialogs\Font\ColorFontChooser.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="UI\Dialogs\Font\ColorFontDialog.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="UI\Dialogs\Font\ColorPicker.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
   </ItemGroup>
   <!--<PropertyGroup />-->
   <!--<PropertyGroup>
