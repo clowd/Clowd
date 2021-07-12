@@ -24,30 +24,60 @@ namespace Clowd.Config
         [Browsable(false), ClassifyIgnore]
         public static ClowdSettings Current { get; private set; }
 
-        public GeneralSettings General { get; init; } = new GeneralSettings();
+        public GeneralSettings General { get; private set; } = new GeneralSettings();
 
-        public HotkeySettings Hotkey { get; init; } = new HotkeySettings();
+        public HotkeySettings Hotkey { get; private set; } = new HotkeySettings();
 
-        public CaptureSettings Capture { get; init; } = new CaptureSettings();
+        public CaptureSettings Capture { get; private set; } = new CaptureSettings();
 
-        public EditorSettings Editor { get; init; } = new EditorSettings();
+        public EditorSettings Editor { get; private set; } = new EditorSettings();
 
-        public UploadSettings Upload { get; init; } = new UploadSettings();
+        public UploadSettings Upload { get; private set; } = new UploadSettings();
 
-        public VideoCapturerSettings Video { get; init; } = new VideoCapturerSettings();
+        public VideoCapturerSettings Video { get; private set; } = new VideoCapturerSettings();
+
+        protected INotifyPropertyChanged[] All => new INotifyPropertyChanged[] { General, Hotkey, Capture, Editor, Upload, Video };
 
         public ClowdSettings()
         {
             if (Current != null)
                 throw new InvalidOperationException("Dispose old settings before creating a new one");
             Current = this;
+            All.ToList().ForEach(a => a.PropertyChanged += Item_PropertyChanged);
+        }
+
+        private void Item_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            SaveLoud();
+        }
+
+        public override void Save(string filename = null, SettingsSerializer? serializer = null, SettingsOnFailure onFailure = SettingsOnFailure.Throw)
+        {
+            SaveInternal(filename, serializer, onFailure);
+        }
+
+        public override void SaveLoud(string filename = null, SettingsSerializer? serializer = null)
+        {
+            SaveInternal(filename, serializer, SettingsOnFailure.Throw);
+        }
+
+        public override void SaveQuiet(string filename = null, SettingsSerializer? serializer = null)
+        {
+            SaveInternal(filename, serializer, SettingsOnFailure.DoNothing);
+        }
+
+        protected void SaveInternal(string filename = null, SettingsSerializer? serializer = null, SettingsOnFailure onFailure = SettingsOnFailure.Throw)
+        {
+            base.Save(filename, serializer, onFailure);
+            System.Diagnostics.Trace.WriteLine("Saved Settings");
         }
 
         public void Dispose()
         {
-            General.Dispose();
-            Capture.Dispose();
-            Editor.Dispose();
+            All.ToList().ForEach(a => a.PropertyChanged -= Item_PropertyChanged);
+            General?.Dispose();
+            Capture?.Dispose();
+            Editor?.Dispose();
             Current = null;
         }
     }
@@ -56,19 +86,22 @@ namespace Clowd.Config
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
-        protected SettingsCategoryBase()
+        private List<INotifyPropertyChanged> _subscriptions = new List<INotifyPropertyChanged>();
+
+        protected void Subscribe(params INotifyPropertyChanged[] subscriptions)
         {
-            PropertyChanged += SettingsCategoryBase_PropertyChanged;
+            _subscriptions.AddRange(subscriptions);
+            subscriptions.ToList().ForEach(a => a.PropertyChanged += Item_PropertyChanged);
         }
 
-        private void SettingsCategoryBase_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        private void Item_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            ClowdSettings.Current.SaveLoud();
+            PropertyChanged?.Invoke(this, e);
         }
 
         public void Dispose()
         {
-            PropertyChanged -= SettingsCategoryBase_PropertyChanged;
+            _subscriptions.ForEach(a => a.PropertyChanged -= Item_PropertyChanged);
             DisposeInternal();
         }
 
@@ -108,6 +141,19 @@ namespace Clowd.Config
         [DisplayName("Capture - Active Window"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureActiveShortcut { get; set; }
             = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Alt, App.Current.QuickCaptureCurrentWindow);
+
+        public HotkeySettings()
+        {
+            Subscribe(FileUploadShortcut, CaptureRegionShortcut, CaptureFullscreenShortcut, CaptureActiveShortcut);
+        }
+
+        public override void DisposeInternal()
+        {
+            FileUploadShortcut?.Dispose();
+            CaptureRegionShortcut?.Dispose();
+            CaptureFullscreenShortcut?.Dispose();
+            CaptureActiveShortcut?.Dispose();
+        }
     }
 
     public class CaptureSettings : SettingsCategoryBase
@@ -126,11 +172,16 @@ namespace Clowd.Config
     {
         public Color CanvasBackground { get; set; } = Colors.White;
 
+        [DisplayName("Tool preferences")]
         public AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings> Tools { get; set; } = new AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings>();
+
+        public EditorSettings()
+        {
+            Subscribe(Tools);
+        }
     }
 
-    [AddINotifyPropertyChangedInterface]
-    public class SavedToolSettings
+    public class SavedToolSettings : INotifyPropertyChanged
     {
         public bool TextObjectColorIsAuto { get; set; } = true;
         public Color ObjectColor { get; set; } = Colors.Red;
@@ -140,5 +191,7 @@ namespace Clowd.Config
         public FontStyle FontStyle { get; set; } = FontStyles.Normal;
         public FontWeight FontWeight { get; set; } = FontWeights.Normal;
         public FontStretch FontStretch { get; set; } = FontStretches.Normal;
+
+        public event PropertyChangedEventHandler PropertyChanged;
     }
 }

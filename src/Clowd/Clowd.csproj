@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net5.0-windows10.0.18362</TargetFramework>
     <OutputType>WinExe</OutputType>
@@ -6,13 +6,14 @@
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>x64</PlatformTarget>
     <OutputPath>..\..\bin\x64\Debug\</OutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseVSHostingProcess>false</UseVSHostingProcess>
-    <NoWarn>CS4014</NoWarn>
+    <NoWarn>CS4014,CA1416</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>x64</PlatformTarget>
@@ -27,6 +28,10 @@
   <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <ItemGroup>
+    <None Remove="UI\Dialogs\ColorPicker\ColorPicker.png" />
+    <None Remove="UI\Dialogs\ColorPicker\Hsv.png" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Update="Properties\AssemblyInfo.cs">
       <AutoGen>True</AutoGen>
@@ -70,6 +75,8 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\Cross-26.png" />
+    <Resource Include="UI\Dialogs\ColorPicker\ColorPicker.png" />
+    <Resource Include="UI\Dialogs\ColorPicker\Hsv.png" />
   </ItemGroup>
   <ItemGroup>
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
@@ -98,6 +105,9 @@
     <PackageReference Include="SharpRaven" Version="2.4.0" />
   </ItemGroup>
   <ItemGroup>
+    <Page Update="UI\Dialogs\ColorPicker\Generic.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+    </Page>
     <Page Update="UI\Dialogs\Font\ColorFontChooser.xaml">
       <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
       <SubType>Designer</SubType>
