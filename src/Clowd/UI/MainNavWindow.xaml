@@ -38,7 +38,7 @@
             <ui:NavigationViewItem
                 Content="Hotkeys"
                 Icon="Keyboard"
-                Tag="Hotkeys" />
+                Tag="Hotkey" />
             <ui:NavigationViewItem
                 Content="Capture"
                 Icon="Camera"
@@ -50,7 +50,7 @@
             <ui:NavigationViewItem
                 Content="Uploads"
                 Icon="Globe"
-                Tag="Uploads" />
+                Tag="Upload" />
             <ui:NavigationViewItem
                 Content="Video"
                 Icon="Video"
