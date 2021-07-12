@@ -403,7 +403,7 @@ namespace PropertyTools.Wpf
         /// <summary>
         /// The panel control.
         /// </summary>
-        private StackPanel panelControl;
+        private Panel panelControl;
 
         /// <summary>
         /// The scroll viewer.
@@ -1122,7 +1122,7 @@ namespace PropertyTools.Wpf
         {
             base.OnApplyTemplate();
             this.tabControl = this.Template.FindName(PartTabs, this) as TabControl;
-            this.panelControl = this.Template.FindName(PartPanel, this) as StackPanel;
+            this.panelControl = this.Template.FindName(PartPanel, this) as Panel;
             this.scrollViewer = this.Template.FindName(PartScrollViewer, this) as ScrollViewerFixedNested;
             this.UpdateControls();
         }
