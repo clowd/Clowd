@@ -42,8 +42,7 @@ namespace Clowd.UI
             WindowStyle = WindowStyle.None;
             ShowActivated = false;
             ShowInTaskbar = false;
-            Width = 0;
-            Height = 0;
+            ScreenPosition = new ScreenRect(Platform.Current.VirtualScreen.Bounds.TopLeft - new ScreenPoint(100, 100), new ScreenSize(5, 5));
             KeyDown += FloatingButtonWindow_KeyDown;
             LayoutUpdated += FloatingButtonWindow_LayoutUpdated;
 

@@ -35,17 +35,16 @@ namespace Clowd.UI
         private ScreenRect _selection;
         private IVideoCapturer _capturer;
         private readonly IPageManager _pages;
-        private VideoCapturerSettings _settings;
+        private static VideoCapturerSettings _settings => ClowdSettings.Current.Video;
         private UIAudioMonitor _monitor;
         private string _fileName;
         private ClowdWin64.BorderWindow _border;
         private FloatingButtonWindow _floating;
         private bool _isCancelled = false;
 
-        public VideoCaptureWindow(VideoCapturerSettings settings, IVideoCapturer capturer, IPageManager pages)
+        public VideoCaptureWindow(IVideoCapturer capturer, IPageManager pages)
         {
             _pages = pages;
-            _settings = settings;
 
             _capturer = capturer;
             _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
