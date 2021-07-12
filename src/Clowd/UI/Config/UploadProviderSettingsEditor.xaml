@@ -6,14 +6,13 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:ptools="http://propertytools.org/wpf"
     Width="600"
     Height="600"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     mc:Ignorable="d">
     <UserControl.Resources>
-        <local:AppSettingsItemFactory x:Key="itemFactory" />
-        <local:AppSettingsControlFactory x:Key="controlFactory" />
+        <!--<local:AppSettingsItemFactory x:Key="itemFactory" />
+        <local:AppSettingsControlFactory x:Key="controlFactory" />-->
         <conv:StreamToBitmapSourceConverter x:Key="Stream2Bitmap" />
         <conv:BoolToVisibilityConverter2 x:Key="bool2vis" />
         <conv:ValueConverterGroup x:Key="supportedVisGreen">
@@ -119,7 +118,7 @@
                                 <TextBlock Margin="0,0,5,0">Enabled:</TextBlock>
                                 <CheckBox IsChecked="{Binding IsEnabled}" />
                             </StackPanel>
-                            <ptools:PropertyGrid
+                            <!--<ptools:PropertyGrid
                                 x:Name="PropertyGrid1"
                                 CategoryControlType="Template"
                                 DescriptionIcon="/Images/Help-25.png"
@@ -129,7 +128,7 @@
                                 SelectedObject="{Binding}"
                                 TabStripPlacement="Left"
                                 TabVisibility="Collapsed"
-                                Visibility="{Binding IsEnabled, Converter={StaticResource bool2vis}}" />
+                                Visibility="{Binding IsEnabled, Converter={StaticResource bool2vis}}" />-->
                         </StackPanel>
                         <Rectangle
                             Grid.ColumnSpan="2"
