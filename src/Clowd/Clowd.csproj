@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net5.0-windows10.0.18362</TargetFramework>
     <OutputType>WinExe</OutputType>
@@ -49,7 +49,6 @@
     <ProjectReference Include="..\LiveDraw\LiveDraw.csproj" />
     <ProjectReference Include="..\..\third-party\NotifyIconWpf\NotifyIconLib.csproj" />
     <ProjectReference Include="..\..\third-party\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj" />
-    <ProjectReference Include="..\..\third-party\PropertyTools.Wpf\PropertyTools.Wpf.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\Checkmark-26.png" />

@@ -19,6 +19,7 @@ namespace Clowd.UI
     {
         static ClowdWin64.DxScreenCapture _wdxc;
         static FloatingButtonWindow _floating;
+        static ClowdSettings _settings => ClowdSettings.Current;
 
         static readonly object _lock = new object();
 
@@ -178,12 +179,12 @@ namespace Clowd.UI
         {
             ProcessBitmap(async (s, b) =>
             {
-                var filename = await NiceDialog.ShowSelectSaveFileDialog(_floating, "Save Screenshot", App.Current.Settings.LastSavePath, "screenshot", "png");
+                var filename = await NiceDialog.ShowSelectSaveFileDialog(_floating, "Save Screenshot", _settings.General.LastSavePath, "screenshot", "png");
                 if (!String.IsNullOrWhiteSpace(filename) && Directory.Exists(Path.GetDirectoryName(filename)))
                 {
                     b.Save(filename, System.Drawing.Imaging.ImageFormat.Png);
                     Platform.Current.RevealFileOrFolder(filename);
-                    App.Current.Settings.LastSavePath = Path.GetDirectoryName(filename);
+                    _settings.General.LastSavePath = Path.GetDirectoryName(filename);
                 }
                 _floating.HidePanel();
             });
