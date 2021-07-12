@@ -20,9 +20,9 @@ using Page = ModernWpf.Controls.Page;
 
 namespace Clowd.UI
 {
-    public partial class MainNavWindow : SystemThemedWindow
+    public partial class MainWindow : SystemThemedWindow
     {
-        public MainNavWindow()
+        public MainWindow()
         {
             InitializeComponent();
         }

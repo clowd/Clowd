@@ -227,6 +227,7 @@ namespace Clowd.UI
                 var options = new ClowdWin64.ScreenCaptureOptions()
                 {
                     AccentColor = clr,
+                    TipsDisabled = _settings.Capture.HideTipsPanel,
                 };
                 var dx = new ClowdWin64.DxScreenCapture(options);
                 dx.Disposed += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxDisposedEventArgs>(CaptureDisposed);

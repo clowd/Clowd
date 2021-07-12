@@ -42,18 +42,10 @@ namespace Clowd
         void Open(IntPtr captureWindow);
     }
 
-    public interface ISettingsPage : IPage
-    {
-        void Open();
-        void Open(SettingsCategory category);
-        void Open(string category);
-    }
-
     public interface IPageManager
     {
         IVideoCapturePage CreateVideoCapturePage();
         IScreenCapturePage CreateScreenCapturePage();
-        ISettingsPage CreateSettingsPage();
         ILiveDrawPage CreateLiveDrawPage();
     }
 }
