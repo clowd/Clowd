@@ -39,6 +39,7 @@ namespace Clowd.Installer.Features
 
         public void Install(string assetPath)
         {
+            Uninstall(assetPath);
             foreach (var str in ContextMenuInstallLocations)
             {
                 using (var root = RegistryEx.CreateKeyFromRootPath(str, InstallMode.CurrentUser))

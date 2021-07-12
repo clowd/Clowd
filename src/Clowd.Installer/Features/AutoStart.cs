@@ -24,6 +24,7 @@ namespace Clowd.Installer.Features
 
         public void Install(string assetPath)
         {
+            Uninstall(assetPath);
             using (var root = RegistryEx.CreateKeyFromRootPath(Constants.RunRegistryPath, InstallMode.CurrentUser))
             {
                 root.SetValue(Constants.ClowdAppName, assetPath);
@@ -39,7 +40,11 @@ namespace Clowd.Installer.Features
         {
             foreach (var root in RegistryEx.OpenKeysFromRootPath(Constants.RunRegistryPath, RegistryQuery.CurrentUser))
             {
-                root.DeleteValue(Constants.ClowdAppName);
+                try
+                {
+                    root.DeleteValue(Constants.ClowdAppName);
+                }
+                catch { } // throws if value does not exist
                 root.Dispose();
             }
         }
