@@ -4,7 +4,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:conv="clr-namespace:Clowd.UI.Converters"
-    xmlns:ptools="http://propertytools.org/wpf"
     xmlns:ui="http://schemas.modernwpf.com/2019"
     ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
@@ -19,37 +18,6 @@
                 <ui:ThemeResources />
                 <ui:XamlControlsResources />
             </ResourceDictionary.MergedDictionaries>
-
-            <Style BasedOn="{StaticResource DefaultTextBoxStyle}" TargetType="ptools:TextBoxEx" />
-
-            <ControlTemplate x:Key="PropertyGridSimplified" TargetType="{x:Type ptools:PropertyGrid}">
-                <Border
-                    Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}">
-                    <Grid>
-                        <TabControl
-                            x:Name="PART_Tabs"
-                            AutomationProperties.AutomationId="Tabs"
-                            Focusable="false"
-                            SelectedIndex="{Binding Path=SelectedTabIndex, RelativeSource={RelativeSource TemplatedParent}}"
-                            TabStripPlacement="{TemplateBinding TabStripPlacement}"
-                            Visibility="Collapsed" />
-                        <ptools:ScrollViewerFixedNested
-                            x:Name="PART_ScrollViewer"
-                            AutomationProperties.AutomationId="ScrollViewer"
-                            Focusable="false"
-                            VerticalScrollBarVisibility="Visible">
-                            <!--<ui:SimpleStackPanel
-                                x:Name="PART_Panel"
-                                Margin="12"
-                                Orientation
-                                Spacing="100" />-->
-                            <StackPanel x:Name="PART_Panel" Margin="24,0,24,50" />
-                        </ptools:ScrollViewerFixedNested>
-                    </Grid>
-                </Border>
-            </ControlTemplate>
 
             <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
             <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />

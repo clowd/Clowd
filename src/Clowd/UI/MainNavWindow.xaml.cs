@@ -13,7 +13,6 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using ModernWpf.Controls;
 using ModernWpf.Media.Animation;
-using PropertyTools.Wpf;
 using Page = ModernWpf.Controls.Page;
 
 namespace Clowd.UI
@@ -37,23 +36,23 @@ namespace Clowd.UI
     {
         public ModernSettingsPage()
         {
-            var prop = new PropertyGrid();
-            prop.SelectedObject = App.Current.Settings.VideoSettings;
-            prop.PropertyControlFactory = new AppSettingsControlFactory();
-            prop.PropertyItemFactory = new AppSettingsItemFactory();
-            prop.TabVisibility = TabVisibility.Collapsed;
-            prop.EnumAsRadioButtonsLimit = 0;
-            prop.Padding = new Thickness(24, 20, 24, 20);
-            //prop.CategoryControlTemplate = new ControlTemplate();// new Label();
-            //prop.CategoryHeaderTemplate = new DataTemplate();
-            prop.CategoryControlType = CategoryControlType.GroupBox;
-            prop.Template = (ControlTemplate)FindResource("PropertyGridSimplified");
+            //var prop = new PropertyGrid();
+            //prop.SelectedObject = App.Current.Settings.VideoSettings;
+            //prop.PropertyControlFactory = new AppSettingsControlFactory();
+            //prop.PropertyItemFactory = new AppSettingsItemFactory();
+            //prop.TabVisibility = TabVisibility.Collapsed;
+            //prop.EnumAsRadioButtonsLimit = 0;
+            //prop.Padding = new Thickness(24, 20, 24, 20);
+            ////prop.CategoryControlTemplate = new ControlTemplate();// new Label();
+            ////prop.CategoryHeaderTemplate = new DataTemplate();
+            //prop.CategoryControlType = CategoryControlType.GroupBox;
+            //prop.Template = (ControlTemplate)FindResource("PropertyGridSimplified");
 
-            var wrap = new Border();
-            //wrap.Margin = new Thickness(24, 20, 24, 20);
-            wrap.Child = prop;
+            //var wrap = new Border();
+            ////wrap.Margin = new Thickness(24, 20, 24, 20);
+            //wrap.Child = prop;
 
-            Content = wrap;
+            //Content = wrap;
         }
     }
 }

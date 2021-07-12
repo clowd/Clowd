@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -491,6 +492,7 @@ namespace RT.Util
         /// <summary>
         ///     Gets the <see cref="SettingsAttribute"/> instance specified on this settings class, or null if none are
         ///     specified.</summary>
+        [Browsable(false), ClassifyIgnore]
         public SettingsAttribute Attribute
         {
             get { return this.GetType().GetCustomAttributes<SettingsAttribute>(false).FirstOrDefault(); }

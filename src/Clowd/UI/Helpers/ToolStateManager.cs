@@ -222,7 +222,7 @@ namespace Clowd.UI.Helpers
             return false;
         }
 
-        private SavedToolSettings GetToolSettings() => App.Current.Settings.EditorSettings.ToolSettings[_tool];
+        private SavedToolSettings GetToolSettings() => ClowdSettings.Current.Editor.Tools[_tool];
 
         public override bool IsCurrent(object obj)
         {

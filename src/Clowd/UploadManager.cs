@@ -16,6 +16,8 @@ namespace Clowd.Capture
 {
     public static class UploadManager
     {
+        static ClowdSettings _settings => ClowdSettings.Current;
+
         private delegate Task<UploadResult> DoUploadDelegate(IUploadProvider provider, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
 
         private static readonly ITasksView _view = App.GetService<ITasksView>();
@@ -212,7 +214,7 @@ namespace Clowd.Capture
 
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
         {
-            var settings = App.Current.Settings.UploadSettings;
+            var settings = _settings.Upload;
             IUploadProvider provider;
 
             switch (type)

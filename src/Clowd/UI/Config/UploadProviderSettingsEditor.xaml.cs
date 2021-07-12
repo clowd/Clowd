@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using Clowd.Config;
 
 namespace Clowd.UI.Config
 {
@@ -38,7 +39,7 @@ namespace Clowd.UI.Config
 
         private static void ProviderPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            App.Current.Settings.SaveQuiet();
+            ClowdSettings.Current.Save();
         }
 
         public UploadProviderSettingsEditor()

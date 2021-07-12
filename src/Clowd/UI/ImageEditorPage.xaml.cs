@@ -36,6 +36,7 @@ namespace Clowd.UI
         private BitmapSource _initialImage;
         //private ScreenRect? _initialBounds;
         private PropertyChangeNotifier toolNotifier;
+        private ClowdSettings _settings => ClowdSettings.Current;
 
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
 
@@ -43,7 +44,7 @@ namespace Clowd.UI
         {
             InitializeComponent();
             drawingCanvas.SetResourceReference(DrawingCanvas.HandleColorProperty, "AccentColor");
-            drawingCanvas.ArtworkBackground = new SolidColorBrush(App.Current.Settings.EditorSettings.CanvasBackground);
+            drawingCanvas.ArtworkBackground = new SolidColorBrush(_settings.Editor.CanvasBackground);
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
 
             // register tool changed listener
@@ -168,7 +169,7 @@ namespace Clowd.UI
             using (DrawingContext dc = vs.RenderOpen())
             {
                 dc.PushTransform(transform);
-                dc.DrawRectangle(new SolidColorBrush(App.Current.Settings.EditorSettings.CanvasBackground), null, bounds);
+                dc.DrawRectangle(new SolidColorBrush(_settings.Editor.CanvasBackground), null, bounds);
                 dc.Pop();
                 drawingCanvas.Draw(dc, null, transform, false);
             }
@@ -194,7 +195,7 @@ namespace Clowd.UI
             using (DrawingContext dc = background.RenderOpen())
             {
                 dc.PushTransform(transform);
-                dc.DrawRectangle(new SolidColorBrush(App.Current.Settings.EditorSettings.CanvasBackground), null, bounds);
+                dc.DrawRectangle(new SolidColorBrush(_settings.Editor.CanvasBackground), null, bounds);
             }
             bmp.Render(background);
             drawingCanvas.Draw(null, bmp, transform, false);
@@ -263,7 +264,7 @@ namespace Clowd.UI
             if (!VerifyArtworkExists())
                 return;
 
-            var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Image", App.Current.Settings.LastSavePath, "screenshot", "png");
+            var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Image", _settings.General.LastSavePath, "screenshot", "png");
 
             if (String.IsNullOrWhiteSpace(filename))
             {
@@ -275,7 +276,7 @@ namespace Clowd.UI
                     GetRenderedPng().Save(fs);
 
                 Platform.Current.RevealFileOrFolder(filename);
-                App.Current.Settings.LastSavePath = System.IO.Path.GetDirectoryName(filename);
+                _settings.General.LastSavePath = System.IO.Path.GetDirectoryName(filename);
             }
         }
 
@@ -449,7 +450,7 @@ namespace Clowd.UI
             var oldColor = drawingCanvas.ArtworkBackground as SolidColorBrush;
             var newColor = await NiceDialog.ShowColorDialogAsync(this, oldColor?.Color ?? Colors.White);
             drawingCanvas.ArtworkBackground = new SolidColorBrush(newColor);
-            App.Current.Settings.EditorSettings.CanvasBackground = newColor;
+            _settings.Editor.CanvasBackground = newColor;
         }
 
         private async void font_Click(object sender, RoutedEventArgs e)
