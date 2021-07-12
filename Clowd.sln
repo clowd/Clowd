@@ -41,8 +41,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.PlatformUtil", "src\C
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "legacy", "legacy", "{6AF29106-9CDD-426B-B9C5-55B109639CC8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Dialogs", "src\Clowd.Dialogs\Clowd.Dialogs.csproj", "{B33172FA-E9C3-4946-9CBB-0984B496F69A}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -187,14 +185,6 @@ Global
 		{35EBE651-1A03-4D4C-82D2-D26A93A6CBCF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{35EBE651-1A03-4D4C-82D2-D26A93A6CBCF}.Release|x64.ActiveCfg = Release|Any CPU
 		{35EBE651-1A03-4D4C-82D2-D26A93A6CBCF}.Release|x64.Build.0 = Release|Any CPU
-		{B33172FA-E9C3-4946-9CBB-0984B496F69A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B33172FA-E9C3-4946-9CBB-0984B496F69A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B33172FA-E9C3-4946-9CBB-0984B496F69A}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{B33172FA-E9C3-4946-9CBB-0984B496F69A}.Debug|x64.Build.0 = Debug|Any CPU
-		{B33172FA-E9C3-4946-9CBB-0984B496F69A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B33172FA-E9C3-4946-9CBB-0984B496F69A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B33172FA-E9C3-4946-9CBB-0984B496F69A}.Release|x64.ActiveCfg = Release|Any CPU
-		{B33172FA-E9C3-4946-9CBB-0984B496F69A}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
