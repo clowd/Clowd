@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Threading;
 using System.Windows.Media;
 
-namespace Clowd.Dialogs.Font
+namespace Clowd.UI.Dialogs.Font
 {
 	internal class ColorPickerViewModel : INotifyPropertyChanged
 	{

@@ -3,11 +3,11 @@
     http://blogs.msdn.com/b/text/archive/2006/06/20/592777.aspx
 -->
 <UserControl
-    x:Class="Clowd.Dialogs.Font.ColorFontChooser"
+    x:Class="Clowd.UI.Dialogs.Font.ColorFontChooser"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="clr-namespace:Clowd.Dialogs.Font"
+    xmlns:local="clr-namespace:Clowd.UI.Dialogs.Font"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
     xmlns:sysCollection="clr-namespace:System.Collections;assembly=mscorlib"

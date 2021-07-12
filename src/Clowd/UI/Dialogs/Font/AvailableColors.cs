@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Windows.Media;
 
-namespace Clowd.Dialogs.Font
+namespace Clowd.UI.Dialogs.Font
 {
 	internal class AvailableColors : List<FontColor>
 	{

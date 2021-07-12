@@ -12,7 +12,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-namespace Clowd.Dialogs.Font
+namespace Clowd.UI.Dialogs.Font
 {
     /// <summary>
     /// Interaction logic for ColorFontChooser.xaml

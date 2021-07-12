@@ -4,7 +4,7 @@ using System.Windows.Data;
 using System.Windows.Markup;
 using System.Windows.Media;
 
-namespace Clowd.Dialogs.Font
+namespace Clowd.UI.Dialogs.Font
 {
     public class FontValueConverter : IValueConverter
     {

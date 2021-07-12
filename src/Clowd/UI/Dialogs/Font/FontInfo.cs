@@ -5,7 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
-namespace Clowd.Dialogs.Font
+namespace Clowd.UI.Dialogs.Font
 {
 	public class FontInfo
 	{
