@@ -1,0 +1,73 @@
+﻿<local:SystemThemedWindow
+    x:Class="Clowd.UI.MainNavWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd.UI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="http://schemas.modernwpf.com/2019"
+    Title="MainNavWindow"
+    Width="800"
+    Height="600"
+    mc:Ignorable="d">
+    <ui:NavigationView
+        IsBackButtonVisible="Collapsed"
+        IsPaneOpen="True"
+        IsPaneToggleButtonVisible="False"
+        IsSettingsVisible="False"
+        IsTabStop="False"
+        OpenPaneLength="200"
+        PaneDisplayMode="Left"
+        SelectionChanged="NavigationSelectionChanged">
+        <ui:NavigationView.MenuItems>
+            <!--<ui:NavigationViewItemHeader Content="Clowd" />-->
+            <ui:NavigationViewItem
+                Content="New"
+                Icon="Add"
+                IsSelected="True"
+                Tag="NewCapturePage" />
+            <ui:NavigationViewItem
+                Content="Recent"
+                Icon="BrowsePhotos"
+                Tag="RecentCapturePage" />
+            <ui:NavigationViewItemHeader Content="Settings" />
+            <ui:NavigationViewItem
+                Content="General"
+                Icon="Setting"
+                Tag="General" />
+            <ui:NavigationViewItem
+                Content="Hotkeys"
+                Icon="Keyboard"
+                Tag="Hotkeys" />
+            <ui:NavigationViewItem
+                Content="Capture"
+                Icon="Camera"
+                Tag="Capture" />
+            <ui:NavigationViewItem
+                Content="Editor"
+                Icon="Edit"
+                Tag="Editor" />
+            <ui:NavigationViewItem
+                Content="Uploads"
+                Icon="Globe"
+                Tag="Uploads" />
+            <ui:NavigationViewItem
+                Content="Video"
+                Icon="Video"
+                Tag="Video" />
+        </ui:NavigationView.MenuItems>
+        <ui:NavigationView.FooterMenuItems>
+            <ui:NavigationViewItem
+                Content="About"
+                Icon="OutlineStar"
+                Tag="AboutPage" />
+        </ui:NavigationView.FooterMenuItems>
+        <ui:Frame x:Name="ContentFrame" HorizontalAlignment="Stretch">
+            <ui:Frame.ContentTransitions>
+                <ui:TransitionCollection>
+                    <ui:NavigationThemeTransition />
+                </ui:TransitionCollection>
+            </ui:Frame.ContentTransitions>
+        </ui:Frame>
+    </ui:NavigationView>
+</local:SystemThemedWindow>
