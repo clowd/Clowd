@@ -23,11 +23,6 @@ namespace Clowd.Util
             return CreatePage<IScreenCapturePage>();
         }
 
-        public ISettingsPage CreateSettingsPage()
-        {
-            return CreatePage<ISettingsPage>();
-        }
-
         public IVideoCapturePage CreateVideoCapturePage()
         {
             return CreatePage<IVideoCapturePage>();

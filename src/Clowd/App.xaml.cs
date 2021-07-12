@@ -68,9 +68,6 @@ namespace Clowd
                 // start receiving command line arguments
                 _processor.Ready();
 
-                MainNavWindow w = new MainNavWindow();
-                w.Show();
-
                 try
                 {
                     // until proper module updater is built... we check for OBS updates manually.
@@ -316,7 +313,11 @@ namespace Clowd
             var settings = new MenuItem() { Header = "_Settings" };
             settings.Click += (s, e) =>
             {
-                Container.GetInstance<IPageManager>().CreateSettingsPage().Open();
+                var main = Windows.Cast<Window>().Select(w => w as MainWindow).Where(w => w != null).FirstOrDefault();
+                if (main != null)
+                    main.PlatformWindow.Activate();
+                else
+                    new MainWindow().Show();
             };
             context.Items.Add(settings);
 
