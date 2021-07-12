@@ -122,6 +122,15 @@ namespace Clowd.Config
         [DisplayName("Confirm before exit")]
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose { get; set; } = true;
+
+        [ClassifyIgnore]
+        public Installer.Features.AutoStart StartWithWindows { get; set; } = new Installer.Features.AutoStart();
+
+        [ClassifyIgnore]
+        public Installer.Features.ContextMenu AddExplorerContextMenu { get; set; } = new Installer.Features.ContextMenu();
+
+        [ClassifyIgnore]
+        public Installer.Features.Shortcuts CreateDesktopShortcuts { get; set; } = new Installer.Features.Shortcuts();
     }
 
     public class HotkeySettings : SettingsCategoryBase

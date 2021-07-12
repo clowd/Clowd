@@ -131,6 +131,9 @@ namespace Clowd.UI.Config
                 });
             }
 
+            if (pd.Is(typeof(Installer.Features.IFeature)))
+                return new FeatureInstallerControl((Installer.Features.IFeature)pd.GetValue(obj));
+
             return new Label() { Content = pd.Name };
         }
 
