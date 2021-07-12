@@ -248,6 +248,7 @@ namespace Clowd.PlatformUtil.Windows
 
         public bool Hide()
         {
+            SetWindowPos(Handle, HWND_BOTTOM, 0, 0, 0, 0, SET_WINDOW_POS_FLAGS.SWP_HIDEWINDOW | SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER);
             return Show(WindowShowCommand.Hide);
         }
 
