@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
@@ -242,6 +243,168 @@ namespace Clowd.Util
                 scope.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Gets the attributes of the specified type.
+        /// </summary>
+        /// <typeparam name="T">The type of attribute to get.</typeparam>
+        /// <param name="fieldInfo">The field info.</param>
+        /// <param name="inherit">The inherit flag.</param>
+        /// <returns>
+        /// The attributes enumeration.
+        /// </returns>
+        public static IEnumerable<T> GetCustomAttributes<T>(this FieldInfo fieldInfo, bool inherit)
+        {
+            return fieldInfo.GetCustomAttributes(typeof(T), inherit).Cast<T>();
+        }
+
+        /// <summary>
+        /// Return the first attribute of a given type for the specified property descriptor.
+        /// </summary>
+        /// <typeparam name="T">An attribute type.</typeparam>
+        /// <param name="descriptor">The property descriptor.</param>
+        /// <returns>The first attribute of the specified type.</returns>
+        public static T GetFirstAttributeOrDefault<T>(this System.ComponentModel.PropertyDescriptor descriptor) where T : Attribute
+        {
+            return descriptor.Attributes.OfType<T>().FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Gets the first attribute of the specified type.
+        /// </summary>
+        /// <param name="descriptor">The descriptor.</param>
+        /// <param name="attributeType">Type of the attribute.</param>
+        /// <returns>The first attribute of the specified type.</returns>
+        public static Attribute GetFirstAttributeOrDefault(this System.ComponentModel.PropertyDescriptor descriptor, Type attributeType)
+        {
+            return descriptor.Attributes.Cast<Attribute>().FirstOrDefault(attribute => attribute.GetType().IsAssignableFrom(attributeType));
+        }
+
+        /// <summary>
+        /// Determines whether the specified property is browsable.
+        /// </summary>
+        /// <param name="pd">The property descriptor.</param>
+        /// <returns><c>true</c> if the specified property is browsable; otherwise, <c>false</c>.</returns>
+        public static bool IsBrowsable(this System.ComponentModel.PropertyDescriptor pd)
+        {
+            var a = pd.GetFirstAttributeOrDefault<BrowsableAttribute>();
+            if (a != null)
+            {
+                return a.Browsable;
+            }
+
+            return pd.IsBrowsable;
+        }
+
+        /// <summary>
+        /// Determines whether the property is read-only.
+        /// </summary>
+        /// <param name="pd">The property descriptor.</param>
+        /// <returns><c>true</c> if the property is read-only; otherwise, <c>false</c>.</returns>
+        public static bool IsReadOnly(this System.ComponentModel.PropertyDescriptor pd)
+        {
+            var a = pd.GetFirstAttributeOrDefault<ReadOnlyAttribute>();
+            if (a != null)
+            {
+                return a.IsReadOnly;
+            }
+
+            return pd.IsReadOnly;
+        }
+
+        /// <summary>
+        /// Gets the category for the specified property.
+        /// </summary>
+        /// <param name="pd">The property descriptor.</param>
+        /// <returns>The category.</returns>
+        public static string GetCategory(this System.ComponentModel.PropertyDescriptor pd)
+        {
+            var a = pd.GetFirstAttributeOrDefault<CategoryAttribute>();
+            if (a != null)
+            {
+                return a.Category;
+            }
+
+            return pd.Category;
+        }
+
+        /// <summary>
+        /// Gets the description for the specified property.
+        /// </summary>
+        /// <param name="pd">The property descriptor.</param>
+        /// <returns>The description.</returns>
+        public static string GetDescription(this System.ComponentModel.PropertyDescriptor pd)
+        {
+            var a = pd.GetFirstAttributeOrDefault<DescriptionAttribute>();
+            if (a != null)
+            {
+                return a.Description;
+            }
+
+            return pd.Description;
+        }
+
+        /// <summary>
+        /// Gets the display name for the specified property.
+        /// </summary>
+        /// <param name="pd">The property descriptor.</param>
+        /// <returns>The display name.</returns>
+        public static string GetDisplayName(this System.ComponentModel.PropertyDescriptor pd)
+        {
+            var a = pd.GetFirstAttributeOrDefault<DisplayNameAttribute>();
+            if (a != null)
+            {
+                return a.DisplayName;
+            }
+
+            return pd.DisplayName;
+        }
+
+        public static bool Is(this PropertyDescriptor property, Type secondType)
+        {
+            return Is(property.PropertyType, secondType);
+        }
+
+        public static bool Is(this Type firstType, Type secondType)
+        {
+            if (firstType.IsGenericType && secondType == firstType.GetGenericTypeDefinition())
+            {
+                return true;
+            }
+
+            // checking generic interfaces
+            foreach (var @interface in firstType.GetInterfaces())
+            {
+                if (@interface.IsGenericType)
+                {
+                    if (secondType == @interface.GetGenericTypeDefinition())
+                    {
+                        return true;
+                    }
+                }
+
+                if (secondType == @interface)
+                {
+                    return true;
+                }
+            }
+
+            var ult = Nullable.GetUnderlyingType(firstType);
+            if (ult != null)
+            {
+                if (secondType.IsAssignableFrom(ult))
+                {
+                    return true;
+                }
+            }
+
+            if (secondType.IsAssignableFrom(firstType))
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }

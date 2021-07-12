@@ -10,7 +10,10 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Navigation;
 using System.Windows.Shapes;
+using Clowd.Config;
+using Clowd.UI.Config;
 using ModernWpf.Controls;
 using ModernWpf.Media.Animation;
 using Page = ModernWpf.Controls.Page;
@@ -28,31 +31,18 @@ namespace Clowd.UI
         {
             var selectedItem = (NavigationViewItem)args.SelectedItem;
             sender.Header = selectedItem.Content as string;
-            ContentFrame.Navigate(typeof(ModernSettingsPage), selectedItem.Tag, new DrillInNavigationTransitionInfo());
+
+            var settingsPage = typeof(ClowdSettings).GetProperties().FirstOrDefault(f => f.Name == selectedItem.Tag as string);
+            if (settingsPage != null)
+                ContentFrame.Navigate(typeof(ModernSettingsPage), settingsPage.GetValue(ClowdSettings.Current), new DrillInNavigationTransitionInfo());
         }
     }
 
     public class ModernSettingsPage : Page
     {
-        public ModernSettingsPage()
+        protected override void OnNavigatedTo(NavigationEventArgs e)
         {
-            //var prop = new PropertyGrid();
-            //prop.SelectedObject = App.Current.Settings.VideoSettings;
-            //prop.PropertyControlFactory = new AppSettingsControlFactory();
-            //prop.PropertyItemFactory = new AppSettingsItemFactory();
-            //prop.TabVisibility = TabVisibility.Collapsed;
-            //prop.EnumAsRadioButtonsLimit = 0;
-            //prop.Padding = new Thickness(24, 20, 24, 20);
-            ////prop.CategoryControlTemplate = new ControlTemplate();// new Label();
-            ////prop.CategoryHeaderTemplate = new DataTemplate();
-            //prop.CategoryControlType = CategoryControlType.GroupBox;
-            //prop.Template = (ControlTemplate)FindResource("PropertyGridSimplified");
-
-            //var wrap = new Border();
-            ////wrap.Margin = new Thickness(24, 20, 24, 20);
-            //wrap.Child = prop;
-
-            //Content = wrap;
+            this.Content = new SettingsControlFactory(e.ExtraData).GetSettingsPanel();
         }
     }
 }

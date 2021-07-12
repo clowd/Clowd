@@ -3,210 +3,275 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Config;
-using Clowd.Installer.Features;
-using Clowd.UI.Config;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using PropertyChanged;
+using ModernWpf.Controls;
 
 namespace Clowd.UI.Config
 {
-    //public class SettingsControlFactory
-    //{
-    //    FrameworkElement SimpleControlBinding(FrameworkElement control, DependencyProperty dependency)
-    //    {
-    //        var bind = property.CreateBinding();
-    //        bind.Source = property.TargetObject;
-    //        control.SetBinding(dependency, bind);
-    //        return control;
-    //    }
+    public class SettingsControlFactory
+    {
+        private readonly object obj;
 
-    //    FrameworkElement ComboSelectBinding(Func<System.Collections.IEnumerable> items, string displayPath, bool canClear = true)
-    //    {
-    //        var bind = property.CreateBinding();
-    //        bind.Source = property.TargetObject;
+        public SettingsControlFactory(object obj)
+        {
+            this.obj = obj;
+        }
 
-    //        var panel = new DockPanel();
-    //        var reset = new Button();
-    //        var combo = new ComboBox();
+        public FrameworkElement GetSettingsPanel()
+        {
+            var scroll = new ScrollViewerEx();
 
-    //        if (canClear)
-    //        {
-    //            DockPanel.SetDock(reset, Dock.Right);
-    //            reset.Margin = new Thickness(5, 0, 0, 0);
-    //            reset.Padding = new Thickness(10, 0, 10, 0);
-    //            reset.Content = "Clear";
-    //            reset.Click += (s, e) => { combo.SelectedIndex = -1; };
-    //            panel.Children.Add(reset);
-    //        }
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(0, GridUnitType.Auto) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
 
-    //        combo.DisplayMemberPath = displayPath;
-    //        combo.ItemsSource = items();
-    //        combo.DropDownOpened += (s, e) => { combo.ItemsSource = items(); };
-    //        combo.SelectionChanged += (s, e) => { App.Current?.Settings?.SaveQuiet(); };
-    //        combo.SetBinding(ComboBox.SelectedItemProperty, bind);
-    //        panel.Children.Add(combo);
+            var instanceType = obj.GetType();
 
-    //        return panel;
-    //    }
+            var props = TypeDescriptor.GetProperties(obj);
+            int row = 0;
 
-    //    FrameworkElement ButtonControl(string buttonText, RoutedEventHandler buttonClick, FrameworkElement top = null, FrameworkElement right = null, FrameworkElement bottom = null)
-    //    {
-    //        StackPanel panel = new StackPanel();
-    //        panel.Orientation = Orientation.Vertical;
+            foreach (PropertyDescriptor pd in props)
+            {
+                if (pd.ComponentType != instanceType)
+                    continue;
 
-    //        var btn = new Button();
-    //        btn.Padding = new Thickness(10, 0, 10, 0);
-    //        btn.Margin = new Thickness(0, top == null ? 0 : 5, right == null ? 0 : 5, bottom == null ? 0 : 5);
-    //        btn.Content = buttonText;
-    //        btn.Click += buttonClick;
+                if (!pd.IsBrowsable())
+                    continue;
 
-    //        if (top != null)
-    //            panel.Children.Add(top);
+                if (pd.IsReadOnly())
+                    continue;
 
-    //        if (right == null)
-    //        {
-    //            panel.Children.Add(btn);
-    //        }
-    //        else
-    //        {
-    //            StackPanel panel2 = new StackPanel();
-    //            panel2.Orientation = Orientation.Horizontal;
-    //            panel2.Children.Add(btn);
-    //            panel2.Children.Add(right);
-    //            panel.Children.Add(panel2);
-    //        }
+                grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(0, GridUnitType.Auto) });
 
-    //        if (bottom != null)
-    //            panel.Children.Add(bottom);
+                var rowLabel = new Label();
+                rowLabel.VerticalAlignment = VerticalAlignment.Center;
+                rowLabel.HorizontalAlignment = HorizontalAlignment.Left;
+                rowLabel.Margin = new Thickness(24, 4, 0, 4);
+                rowLabel.Content = FromCamelCase(pd.DisplayName);
+                Grid.SetRow(rowLabel, row);
+                Grid.SetColumn(rowLabel, 0);
 
-    //        return panel;
-    //    }
+                var rowContent = new Border();
+                rowContent.VerticalAlignment = VerticalAlignment.Center;
+                rowContent.HorizontalAlignment = HorizontalAlignment.Stretch;
+                rowContent.Child = GetRowForProperty(pd);
+                rowContent.Margin = new Thickness(24, 4, 56, 4);
+                Grid.SetRow(rowContent, row);
+                Grid.SetColumn(rowContent, 1);
 
-    //    FrameworkElement PageBinding(FrameworkElement control, DependencyProperty dependency, string windowText, string buttonText, FrameworkElement top = null, FrameworkElement right = null, FrameworkElement bottom = null)
-    //    {
-    //        var page = SimpleControlBinding(control, dependency);
-    //        var width = page.Width;
-    //        var height = page.Height;
-    //        var click = new RoutedEventHandler((s, e) =>
-    //        {
-    //            var window = TemplatedWindow.GetWindow(page);
-    //            if (window != null)
-    //            {
-    //                var windowTarget = page.GetValue(dependency);
-    //                if (windowTarget == GetPropertyValue<object>())
-    //                {
-    //                    window.GetPlatformWindow().Activate();
-    //                    return;
-    //                }
-    //            }
+                grid.Children.Add(rowLabel);
+                grid.Children.Add(rowContent);
 
-    //            window = TemplatedWindow.CreateWindow(windowText, page);
-    //            window.Width = width;
-    //            window.Height = height;
-    //            window.Show();
-    //        });
+                row++;
+            }
 
-    //        return ButtonControl(buttonText, click, top, right, bottom);
-    //    }
-    //    public override FrameworkElement CreateControl(PropertyItem property, PropertyControlFactoryOptions options)
-    //    {
-    //        T GetPropertyValue<T>() where T : class
-    //        {
-    //            var pinfo = property.GetDescriptor(property.PropertyName);
-    //            var val = pinfo.GetValue(property.TargetObject) as T;
-    //            return val;
-    //        }
+            grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(56) });
 
-    //        if (property.Is(typeof(GlobalTrigger)))
-    //        {
-    //            return SimpleControlBinding(new GlobalTriggerEditor(), GlobalTriggerEditor.TriggerProperty);
-    //        }
+            scroll.Content = grid;
+            return scroll;
+        }
 
-    //        if (property.Is(typeof(IAudioMicrophoneDevice)))
-    //        {
-    //            return ComboSelectBinding(Video.AudioDeviceManager.GetMicrophones, nameof(IAudioDevice.FriendlyName), false);
-    //        }
+        public FrameworkElement GetRowForProperty(PropertyDescriptor pd)
+        {
+            var type = pd.PropertyType;
+            var tcode = Type.GetTypeCode(pd.PropertyType);
 
-    //        if (property.Is(typeof(IAudioSpeakerDevice)))
-    //        {
-    //            return ComboSelectBinding(Video.AudioDeviceManager.GetSpeakers, nameof(IAudioDevice.FriendlyName), false);
-    //        }
+            if (pd.Is(typeof(string)))
+                return SimpleControlBinding(new TextBox(), pd, TextBox.TextProperty);
 
-    //        if (property.Is(typeof(IFeature)))
-    //        {
-    //            return new FeatureInstallerControl(GetPropertyValue<IFeature>());
-    //        }
+            if (pd.Is(typeof(bool)))
+                return SimpleControlBinding(new ToggleSwitch(), pd, ToggleSwitch.IsOnProperty);
 
-    //        if (property.Is(typeof(IUploadProvider)))
-    //        {
-    //            var propertyName = property.Descriptor.Name;
-    //            var parsedEnum = (SupportedUploadType)Enum.Parse(typeof(SupportedUploadType), propertyName, true);
-    //            return ComboSelectBinding(() => App.Current.Settings.UploadSettings.GetEnabledProviders(parsedEnum), nameof(IUploadProvider.Name));
-    //        }
+            if (pd.PropertyType.IsEnum)
+                return ComboSelectBinding(() => Enum.GetValues(type), pd, null, false);
 
-    //        if (property.Is(typeof(List<IUploadProvider>)))
-    //        {
-    //            var val = GetPropertyValue<List<IUploadProvider>>();
+            if ((int)tcode >= (int)TypeCode.Char && (int)tcode <= (int)TypeCode.Decimal)
+            {
+                return SimpleControlBinding(new NumberBox()
+                {
+                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline
+                }, pd, NumberBox.ValueProperty);
+            }
 
-    //            var totalCount = val.Count();
-    //            var enabledCount = val.Where(p => p.IsEnabled).Count();
+            if (pd.Is(typeof(Color)))
+                return SimpleControlBinding(new Dialogs.ColorPicker.ColorPicker(), pd, Dialogs.ColorPicker.ColorPicker.SelectedColorProperty);
 
-    //            return PageBinding(
-    //                new UploadProviderSettingsEditor(),
-    //                UploadProviderSettingsEditor.ProvidersProperty,
-    //                "Configure Upload Providers",
-    //                "Configure",
-    //                new TextBlock()
-    //                {
-    //                    TextWrapping = TextWrapping.Wrap,
-    //                    Margin = new Thickness(0, 5, 0, 0),
-    //                    Text = $"{enabledCount}/{totalCount} available providers are enabled."
-    //                },
-    //                null,
-    //                new TextBlock()
-    //                {
-    //                    TextWrapping = TextWrapping.Wrap,
-    //                    Foreground = Brushes.Gray,
-    //                    Margin = new Thickness(0, 0, 0, 10),
-    //                    Text = $"First, configure upload providers and then select which provider you would like to be triggered for different file types. " +
-    //                    $"Not all providers support all file types (ex. YouTube, Imgur). " +
-    //                    $"Leaving the provider for a specific file type blank will ask you every time." +
-    //                    Environment.NewLine +
-    //                    $"0 providers are currently loaded by user-added modules."
-    //                }
-    //            );
-    //        }
+            if (pd.Is(typeof(IAudioMicrophoneDevice)))
+                return ComboSelectBinding(Video.AudioDeviceManager.GetMicrophones, pd, nameof(IAudioDevice.FriendlyName), false);
 
-    //        if (property.Is(typeof(FrameworkElement)))
-    //        {
-    //            var val = GetPropertyValue<FrameworkElement>();
-    //            // if the control was used elsewhere prior, we need to reset the logical tree before using it again
-    //            val.DisconnectFromLogicalParent();
-    //            return val;
-    //        }
+            if (pd.Is(typeof(IAudioSpeakerDevice)))
+                return ComboSelectBinding(Video.AudioDeviceManager.GetSpeakers, pd, nameof(IAudioDevice.FriendlyName), false);
 
-    //        if (property.Is(typeof(AutoDictionary<,>)))
-    //        {
-    //            return ButtonControl("Reset", async (s, e) =>
-    //            {
-    //                if (await NiceDialog.ShowYesNoPromptAsync(s as FrameworkElement, NiceDialogIcon.Warning, "Are you sure you wish to reset these settings to defaults?"))
-    //                {
-    //                    var pinfo = property.GetDescriptor(property.PropertyName);
-    //                    pinfo.SetValue(property.TargetObject, Activator.CreateInstance(property.ActualPropertyType));
-    //                }
-    //            });
-    //        }
+            if (pd.Is(typeof(GlobalTrigger)))
+                return SimpleControlBinding(new GlobalTriggerEditor(), pd, GlobalTriggerEditor.TriggerProperty);
 
-    //        return base.CreateControl(property, options);
-    //    }
+            if (pd.Is(typeof(FrameworkElement)))
+            {
+                var val = (FrameworkElement)pd.GetValue(obj);// GetPropertyValue<FrameworkElement>();
+                // if the control was used elsewhere prior, we need to reset the logical tree before using it again
+                val.DisconnectFromLogicalParent();
+                return val;
+            }
 
+            if (pd.Is(typeof(AutoDictionary<,>)))
+            {
+                return ButtonControl("Reset", async (s, e) =>
+                {
+                    if (await NiceDialog.ShowYesNoPromptAsync(s as FrameworkElement, NiceDialogIcon.Warning, "Are you sure you wish to reset these settings to defaults?"))
+                    {
+                        pd.SetValue(obj, Activator.CreateInstance(pd.PropertyType));
+                    }
+                });
+            }
 
-    //}
+            return new Label() { Content = pd.Name };
+        }
+
+        public static string FromCamelCase(string variableName)
+        {
+            if (variableName.Contains(' '))
+                return variableName;
+            var sb = new StringBuilder();
+            for (int i = 0; i < variableName.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(variableName[i]) && !char.IsUpper(variableName[i - 1]))
+                {
+                    sb.Append(" ");
+                    if (i == variableName.Length - 1 || char.IsUpper(variableName[i + 1]))
+                    {
+                        sb.Append(variableName[i]);
+                    }
+                    else
+                    {
+                        sb.Append(variableName[i].ToString(CultureInfo.InvariantCulture).ToLower());
+                    }
+
+                    continue;
+                }
+
+                sb.Append(variableName[i]);
+            }
+
+            return sb.ToString();
+        }
+
+        public Binding CreateBinding(string bindingPath, UpdateSourceTrigger trigger = UpdateSourceTrigger.Default)
+        {
+            var binding = new Binding(bindingPath)
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = trigger,
+                ValidatesOnDataErrors = true,
+                ValidatesOnExceptions = true,
+                NotifyOnSourceUpdated = true,
+                Source = obj,
+            };
+
+            return binding;
+        }
+
+        FrameworkElement SimpleControlBinding(FrameworkElement control, PropertyDescriptor pd, DependencyProperty dependency)
+        {
+            var bind = CreateBinding(pd.Name);
+            control.SetBinding(dependency, bind);
+            return control;
+        }
+
+        FrameworkElement ComboSelectBinding(Func<System.Collections.IEnumerable> items, PropertyDescriptor pd, string displayPath, bool canClear = true)
+        {
+            var bind = CreateBinding(pd.Name);
+
+            var combo = new ComboBox();
+            combo.DisplayMemberPath = displayPath;
+            combo.ItemsSource = items();
+            combo.DropDownOpened += (s, e) => { combo.ItemsSource = items(); };
+            //combo.SelectionChanged += (s, e) => { App.Current?.Settings?.SaveQuiet(); };
+            combo.SetBinding(ComboBox.SelectedItemProperty, bind);
+
+            if (canClear)
+            {
+                var panel = new DockPanel();
+                var reset = new Button();
+                DockPanel.SetDock(reset, Dock.Right);
+                reset.Margin = new Thickness(5, 0, 0, 0);
+                reset.Padding = new Thickness(10, 0, 10, 0);
+                reset.Content = "Clear";
+                reset.Click += (s, e) => { combo.SelectedIndex = -1; };
+                panel.Children.Add(reset);
+                panel.Children.Add(combo);
+                return panel;
+            }
+            else
+            {
+                return combo;
+            }
+        }
+
+        FrameworkElement ButtonControl(string buttonText, RoutedEventHandler buttonClick, FrameworkElement top = null, FrameworkElement right = null, FrameworkElement bottom = null)
+        {
+            StackPanel panel = new StackPanel();
+            panel.Orientation = Orientation.Vertical;
+
+            var btn = new Button();
+            btn.Padding = new Thickness(10, 0, 10, 0);
+            btn.Margin = new Thickness(0, top == null ? 0 : 5, right == null ? 0 : 5, bottom == null ? 0 : 5);
+            btn.Content = buttonText;
+            btn.Click += buttonClick;
+
+            if (top != null)
+                panel.Children.Add(top);
+
+            if (right == null)
+            {
+                panel.Children.Add(btn);
+            }
+            else
+            {
+                StackPanel panel2 = new StackPanel();
+                panel2.Orientation = Orientation.Horizontal;
+                panel2.Children.Add(btn);
+                panel2.Children.Add(right);
+                panel.Children.Add(panel2);
+            }
+
+            if (bottom != null)
+                panel.Children.Add(bottom);
+
+            return panel;
+        }
+
+        FrameworkElement PageBinding(FrameworkElement control, PropertyDescriptor pd, DependencyProperty dependency, string windowText, string buttonText, FrameworkElement top = null, FrameworkElement right = null, FrameworkElement bottom = null)
+        {
+            var page = SimpleControlBinding(control, pd, dependency);
+            var width = page.Width;
+            var height = page.Height;
+            var click = new RoutedEventHandler((s, e) =>
+            {
+                var window = TemplatedWindow.GetWindow(page);
+                if (window != null)
+                {
+                    var windowTarget = page.GetValue(dependency);
+                    if (windowTarget == pd.GetValue(obj))
+                    {
+                        window.GetPlatformWindow().Activate();
+                        return;
+                    }
+                }
+
+                window = TemplatedWindow.CreateWindow(windowText, page);
+                window.Width = width;
+                window.Height = height;
+                window.Show();
+            });
+
+            return ButtonControl(buttonText, click, top, right, bottom);
+        }
+    }
 }
