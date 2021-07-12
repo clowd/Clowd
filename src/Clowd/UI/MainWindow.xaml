@@ -6,7 +6,7 @@
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.modernwpf.com/2019"
-    Title="MainNavWindow"
+    Title="Clowd"
     Width="800"
     Height="600"
     mc:Ignorable="d">

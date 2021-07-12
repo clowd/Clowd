@@ -1,80 +1,42 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Installer.Features;
 using Clowd.UI.Helpers;
+using ModernWpf.Controls;
 
 namespace Clowd.UI.Config
 {
-    class FeatureInstallerControl : StackPanel
+    class FeatureInstallerControl : ToggleSwitch
     {
         private readonly IFeature _feature;
-
-        Button insButton;
-        TextBlock insLabel;
 
         public FeatureInstallerControl(IFeature feature)
         {
             this._feature = feature;
-            this.Orientation = Orientation.Horizontal;
-
-            insButton = new Button();
-            insButton.Content = "Install";
-            insButton.IsEnabled = false;
-            insButton.Click += InsButton_Click;
-            Children.Add(insButton);
-
-            insLabel = new TextBlock();
-            insLabel.Text = "Not Available";
-            insLabel.VerticalAlignment = System.Windows.VerticalAlignment.Center;
-            insLabel.Margin = new Thickness(10, 0, 0, 0);
-            insLabel.Foreground = Brushes.DarkRed;
-            Children.Add(insLabel);
-
-            Update();
+            this.IsOn = _feature.CheckInstalled(App.ExePath);
         }
 
-        private async void InsButton_Click(object sender, RoutedEventArgs e)
+        protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
         {
-            insButton.IsEnabled = false;
-            insLabel.Text = "Working...";
-            insLabel.Foreground = Brushes.DarkGoldenrod;
+            e.Handled = true;
+            var asset = App.ExePath;
 
-            var asset = Assembly.GetEntryAssembly().Location;
-            var installed = _feature.CheckInstalled(asset);
-
-            try
+            if (this.IsOn)
             {
-                if (installed)
-                {
-                    await Task.Run(() => _feature.Uninstall(asset));
-                }
-                else
-                {
-                    await Task.Run(() => _feature.Install(asset));
-                }
+                _feature.Uninstall(asset);
             }
-            catch (Exception ex)
+            else
             {
-                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "An error has occured: " + ex.Message, "Unable to " + (installed ? "uninstall" : "install"));
+                _feature.Install(asset);
             }
 
-            Update();
-        }
-
-        private void Update()
-        {
-            if (_feature != null)
-            {
-                var installed = _feature.CheckInstalled(Assembly.GetEntryAssembly().Location);
-                insButton.Content = installed ? "Uninstall" : "Install";
-                insButton.IsEnabled = true;
-                insLabel.Text = "Status: " + (installed ? "Installed" : "Not installed");
-                insLabel.Foreground = installed ? Brushes.DarkGreen : Brushes.DarkRed;
-            }
+            this.IsOn = _feature.CheckInstalled(asset);
         }
     }
 }

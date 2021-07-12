@@ -41,6 +41,7 @@ namespace Clowd
         public static ServiceContainer Container { get; private set; }
         public Color AccentColor => (Color)FindResource("SystemAccentColor");
         public static bool Debugging => Debugger.IsAttached;
+        public static string ExePath => Process.GetCurrentProcess().MainModule.FileName;
 
         private TaskbarIcon _taskbarIcon;
         private MutexArgsForwarder _processor;
