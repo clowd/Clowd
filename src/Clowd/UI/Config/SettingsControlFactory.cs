@@ -7,6 +7,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Interop;
 using System.Windows.Media;
 using Clowd.Config;
 using Clowd.UI.Helpers;
@@ -18,10 +19,12 @@ namespace Clowd.UI.Config
     public class SettingsControlFactory
     {
         private readonly object obj;
+        private readonly Window wnd;
 
-        public SettingsControlFactory(object obj)
+        public SettingsControlFactory(Window wnd, object obj)
         {
             this.obj = obj;
+            this.wnd = wnd;
         }
 
         public FrameworkElement GetSettingsPanel()
@@ -84,7 +87,27 @@ namespace Clowd.UI.Config
             var tcode = Type.GetTypeCode(pd.PropertyType);
 
             if (pd.Is(typeof(string)))
-                return SimpleControlBinding(new TextBox(), pd, TextBox.TextProperty);
+            {
+                var txt = SimpleControlBinding(new TextBox(), pd, TextBox.TextProperty);
+                if (pd.Name.EndsWith("Directory"))
+                {
+                    var btn = ButtonControl("Browse", (s, e) =>
+                    {
+                        var whwnd = new WindowInteropHelper(wnd).Handle;
+                        var dlg = new PlatformUtil.Windows.FolderBrowserDialog();
+                        dlg.Title = "Pick a folder";
+                        if (dlg.ShowDialog(whwnd))
+                            pd.SetValue(obj, dlg.SelectedPath);
+                    });
+                    btn.Margin = new Thickness(10, 0, 0, 0);
+                    btn.VerticalAlignment = VerticalAlignment.Center;
+                    return DockBinding(txt, btn, Dock.Right);
+                }
+                else
+                {
+                    return txt;
+                }
+            }
 
             if (pd.Is(typeof(bool)))
                 return SimpleControlBinding(new ToggleSwitch(), pd, ToggleSwitch.IsOnProperty);
@@ -165,7 +188,7 @@ namespace Clowd.UI.Config
             return sb.ToString();
         }
 
-        public Binding CreateBinding(string bindingPath, UpdateSourceTrigger trigger = UpdateSourceTrigger.Default)
+        Binding CreateBinding(string bindingPath, UpdateSourceTrigger trigger = UpdateSourceTrigger.Default)
         {
             var binding = new Binding(bindingPath)
             {
@@ -178,6 +201,17 @@ namespace Clowd.UI.Config
             };
 
             return binding;
+        }
+
+        FrameworkElement DockBinding(FrameworkElement fill, FrameworkElement dock, Dock position)
+        {
+            var panel = new DockPanel();
+            panel.VerticalAlignment = VerticalAlignment.Stretch;
+            panel.HorizontalAlignment = HorizontalAlignment.Stretch;
+            DockPanel.SetDock(dock, position);
+            panel.Children.Add(dock);
+            panel.Children.Add(fill);
+            return panel;
         }
 
         FrameworkElement SimpleControlBinding(FrameworkElement control, PropertyDescriptor pd, DependencyProperty dependency)
@@ -223,7 +257,7 @@ namespace Clowd.UI.Config
             panel.Orientation = Orientation.Vertical;
 
             var btn = new Button();
-            btn.Padding = new Thickness(10, 0, 10, 0);
+            //btn.Padding = new Thickness(10, 0, 10, 0);
             btn.Margin = new Thickness(0, top == null ? 0 : 5, right == null ? 0 : 5, bottom == null ? 0 : 5);
             btn.Content = buttonText;
             btn.Click += buttonClick;
