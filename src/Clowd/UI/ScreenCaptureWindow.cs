@@ -41,7 +41,7 @@ namespace Clowd.UI
                 {
                     Primary = true,
                     Text = "_Upload",
-                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconClowd),
+                    IconPath = AppStyles.GetIconElement(ResourceIcon.IconClowd),
                     Executed = OnUpload,
                     Gestures = new StorableKeyGesture[]
                     {
@@ -53,7 +53,7 @@ namespace Clowd.UI
                 {
                     Primary = true,
                     Text = "_Photo",
-                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconPhoto),
+                    IconPath = AppStyles.GetIconElement(ResourceIcon.IconPhoto),
                     Executed = OnPhoto,
                     Gestures = new StorableKeyGesture[]
                     {
@@ -67,7 +67,7 @@ namespace Clowd.UI
                 {
                     Primary = true,
                     Text = "_Video",
-                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconVideo),
+                    IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideo),
                     Executed = OnVideo,
                     Gestures = new StorableKeyGesture[]
                     {
@@ -79,7 +79,7 @@ namespace Clowd.UI
                 {
                     Primary = true,
                     Text = "_Copy",
-                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconCopy),
+                    IconPath = AppStyles.GetIconElement(ResourceIcon.IconCopy),
                     Executed = OnCopy,
                     Gestures = new StorableKeyGesture[]
                     {
@@ -93,7 +93,7 @@ namespace Clowd.UI
                 {
                     Primary = true,
                     Text = "_Save",
-                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconSave),
+                    IconPath = AppStyles.GetIconElement(ResourceIcon.IconSave),
                     Executed = OnSave,
                     Gestures = new StorableKeyGesture[]
                     {
@@ -106,7 +106,7 @@ namespace Clowd.UI
                 _buttons.Add(new CaptureToolButton
                 {
                     Text = "_Reset",
-                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconReset),
+                    IconPath = AppStyles.GetIconElement(ResourceIcon.IconReset),
                     Executed = OnReset,
                     Gestures = new StorableKeyGesture[]
                     {
@@ -117,7 +117,7 @@ namespace Clowd.UI
                 _buttons.Add(new CaptureToolButton
                 {
                     Text = "E_xit",
-                    IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconClose),
+                    IconPath = AppStyles.GetIconElement(ResourceIcon.IconClose),
                     Executed = OnExit,
                     Gestures = new StorableKeyGesture[]
                     {
@@ -221,7 +221,8 @@ namespace Clowd.UI
                     //throw new InvalidOperationException("Floating window does not exist. Please create it first.");
                 }
 
-                var clr = System.Drawing.Color.FromArgb(App.Current.AccentColor.A, App.Current.AccentColor.R, App.Current.AccentColor.G, App.Current.AccentColor.B);
+                var wpfclr = AppStyles.AccentColor;
+                var clr = System.Drawing.Color.FromArgb(wpfclr.A, wpfclr.R, wpfclr.G, wpfclr.B);
 
                 // create new capture
                 var options = new ClowdWin64.ScreenCaptureOptions()

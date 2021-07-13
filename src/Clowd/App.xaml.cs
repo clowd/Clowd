@@ -39,7 +39,6 @@ namespace Clowd
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
         public static IScopedLog DefaultLog { get; private set; }
         public static ServiceContainer Container { get; private set; }
-        public Color AccentColor => (Color)FindResource("SystemAccentColor");
         public static bool Debugging => Debugger.IsAttached;
         public static string ExePath => Process.GetCurrentProcess().MainModule.FileName;
 

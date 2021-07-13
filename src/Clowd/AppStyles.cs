@@ -4,8 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 
-namespace Clowd.UI.Helpers
+namespace Clowd
 {
     enum ResourceIcon
     {
@@ -46,11 +47,24 @@ namespace Clowd.UI.Helpers
         IconHamburgerMore,
     }
 
-    static class ResourceIcons
+    static class AppStyles
     {
+        public static Color AccentColor => (Color)FindResource("SystemAccentColor");
+
+        public static Brush AccentBackgroundBrush => (Brush)FindResource("SystemControlBackgroundAccentBrush");
+        public static Brush IdealBackgroundBrush => new SolidColorBrush(Color.FromRgb(55, 55, 55));
+        public static Brush IdealForegroundBrush => Brushes.White;
+
+        public static Style AudioLevelProgressBarStyle => (Style)FindResource("AudioLevelProgressBarStyle");
+
         public static System.Windows.Shapes.Path GetIconElement(ResourceIcon icon)
         {
-            return (System.Windows.Shapes.Path)Application.Current.Resources[icon.ToString()];
+            return (System.Windows.Shapes.Path)FindResource(icon.ToString());
+        }
+
+        private static object FindResource(string resourceName)
+        {
+            return App.Current.FindResource(resourceName);
         }
     }
 }
