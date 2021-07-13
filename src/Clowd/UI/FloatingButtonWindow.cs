@@ -55,7 +55,7 @@ namespace Clowd.UI
 
             var sp = new StackPanel();
             sp.Orientation = Orientation.Horizontal;
-            sp.Background = this.Resources["IdealBackgroundBrush"] as Brush;
+            sp.Background = AppStyles.IdealBackgroundBrush;
 
             if (!_buttons.Any())
                 throw new ArgumentException("Can not create a FloatingButtonWindow with no buttons.");
@@ -267,7 +267,7 @@ namespace Clowd.UI
 
             var path = new Path();
             path.Data = ell;
-            path.Fill = this.Resources["HighlightBrush"] as Brush;
+            path.Fill = AppStyles.AccentBackgroundBrush;
             path.Width = sz.Width;
             path.Height = sz.Height;
 

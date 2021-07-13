@@ -81,11 +81,11 @@ namespace Clowd.UI.Controls
             {
                 if (value)
                 {
-                    this.Background = (Brush)FindResource("SystemControlBackgroundAccentBrush");
+                    this.Background = AppStyles.AccentBackgroundBrush;
                 }
                 else
                 {
-                    this.Background = (Brush)FindResource("SystemControlBackgroundBaseLowBrush");
+                    this.Background = AppStyles.IdealBackgroundBrush;
                 }
             }
         }

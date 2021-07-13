@@ -54,7 +54,7 @@ namespace Clowd.UI
             {
                 Primary = true,
                 Text = "CLOWD",
-                IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconClowd),
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconClowd),
                 IsDragHandle = true,
             };
 
@@ -62,7 +62,7 @@ namespace Clowd.UI
             {
                 Primary = true,
                 Text = "Start",
-                IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconPlay),
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconPlay),
                 PulseBackground = true,
                 Executed = OnStart,
             };
@@ -71,23 +71,23 @@ namespace Clowd.UI
             {
                 Primary = true,
                 Text = "Finish",
-                IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconStop),
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconStop),
                 Executed = OnStop,
                 Visibility = Visibility.Collapsed,
             };
 
             _btnMicrophone = new CaptureToolButton
             {
-                IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconMicrophoneDisabled),
-                IconPathAlternate = ResourceIcons.GetIconElement(ResourceIcon.IconMicrophoneEnabled),
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconMicrophoneDisabled),
+                IconPathAlternate = AppStyles.GetIconElement(ResourceIcon.IconMicrophoneEnabled),
                 Executed = OnMicrophoneToggle,
                 Text = "Mic",
             };
 
             _btnSpeaker = new CaptureToolButton
             {
-                IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconSpeakerDisabled),
-                IconPathAlternate = ResourceIcons.GetIconElement(ResourceIcon.IconSpeakerEnabled),
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconSpeakerDisabled),
+                IconPathAlternate = AppStyles.GetIconElement(ResourceIcon.IconSpeakerEnabled),
                 Executed = OnSpeakerToggle,
                 Text = "Spk",
             };
@@ -95,21 +95,21 @@ namespace Clowd.UI
             _btnSettings = new CaptureToolButton
             {
                 Text = "Settings",
-                IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconSettings),
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconSettings),
                 Executed = OnSettings,
             };
 
             _btnDraw = new CaptureToolButton
             {
                 Text = "Draw",
-                IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconDrawing),
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconDrawing),
                 Executed = OnDraw,
             };
 
             _btnCancel = new CaptureToolButton
             {
                 Text = "Cancel",
-                IconPath = ResourceIcons.GetIconElement(ResourceIcon.IconClose),
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconClose),
                 Executed = OnCancel,
             };
 
@@ -151,7 +151,9 @@ namespace Clowd.UI
         public void Open(ScreenRect captureArea)
         {
             _selection = captureArea;
-            var clr = System.Drawing.Color.FromArgb(App.Current.AccentColor.A, App.Current.AccentColor.R, App.Current.AccentColor.G, App.Current.AccentColor.B);
+
+            var wpfclr = AppStyles.AccentColor;
+            var clr = System.Drawing.Color.FromArgb(wpfclr.A, wpfclr.R, wpfclr.G, wpfclr.B);
 
             _monitor = new UIAudioMonitor(_settings, 20);
             _btnMicrophone.Overlay = _monitor.GetMicrophoneVisual();
