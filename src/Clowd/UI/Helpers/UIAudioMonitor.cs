@@ -195,7 +195,7 @@ namespace Clowd.UI.Helpers
         private ProgressBar GetLevelVisual(string levelPath, string enabledPath)
         {
             ThrowIfStateInvalid();
-            var prog = new ProgressBar { Style = (Style)App.Current.Resources["AudioLevelProgressBarStyle"] };
+            var prog = new ProgressBar { Style = AppStyles.AudioLevelProgressBarStyle };
 
             var valueBinding = new Binding(levelPath);
             valueBinding.Source = this;
