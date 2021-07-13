@@ -28,7 +28,6 @@
             </DataTemplate>
         </ui:NavigationView.HeaderTemplate>
         <ui:NavigationView.MenuItems>
-            <!--<ui:NavigationViewItemHeader Content="Clowd" />-->
             <ui:NavigationViewItem
                 Content="New"
                 Icon="Add"
@@ -38,6 +37,10 @@
                 Content="Recent"
                 Icon="BrowsePhotos"
                 Tag="RecentCapturePage" />
+            <ui:NavigationViewItem
+                Content="Uploads"
+                Icon="Upload"
+                Tag="UploadsPage" />
             <ui:NavigationViewItemHeader Content="Settings" />
             <ui:NavigationViewItem
                 Content="General"
