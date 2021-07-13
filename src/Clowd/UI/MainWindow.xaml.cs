@@ -22,9 +22,18 @@ namespace Clowd.UI
 {
     public partial class MainWindow : SystemThemedWindow
     {
+        private Dictionary<string, FrameworkElement> _tagCache = new Dictionary<string, FrameworkElement>();
+
         public MainWindow()
         {
             InitializeComponent();
+
+            // set DrillIn page transition
+            var trans = new NavigationThemeTransition();
+            trans.DefaultNavigationTransitionInfo = new DrillInNavigationTransitionInfo();
+            var col = new TransitionCollection();
+            col.Add(trans);
+            ContentFrame.ContentTransitions = col;
         }
 
         private void NavigationSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -32,17 +41,32 @@ namespace Clowd.UI
             var selectedItem = (NavigationViewItem)args.SelectedItem;
             sender.Header = selectedItem.Content as string;
 
-            var settingsPage = typeof(ClowdSettings).GetProperties().FirstOrDefault(f => f.Name == selectedItem.Tag as string);
-            if (settingsPage != null)
-                ContentFrame.Navigate(typeof(ModernSettingsPage), settingsPage.GetValue(ClowdSettings.Current), new DrillInNavigationTransitionInfo());
-        }
-    }
+            var tag = selectedItem.Tag as string;
+            if (tag == null)
+                return;
 
-    public class ModernSettingsPage : Page
-    {
-        protected override void OnNavigatedTo(NavigationEventArgs e)
+            if (_tagCache.TryGetValue(tag, out var panel))
+            {
+                ContentFrame.Navigate(panel);
+            }
+            else
+            {
+                var item = GetPanelForTag(tag);
+                if (item != null)
+                {
+                    _tagCache[tag] = item;
+                    ContentFrame.Navigate(item);
+                }
+            }
+        }
+
+        private FrameworkElement GetPanelForTag(string tag)
         {
-            this.Content = new SettingsControlFactory(e.ExtraData).GetSettingsPanel();
+            var settingsPage = typeof(ClowdSettings).GetProperties().FirstOrDefault(f => f.Name == tag);
+            if (settingsPage != null)
+                return new SettingsControlFactory(this, settingsPage.GetValue(ClowdSettings.Current)).GetSettingsPanel();
+
+            return null;
         }
     }
 }
