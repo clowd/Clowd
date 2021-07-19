@@ -141,7 +141,7 @@ namespace Clowd.UI
         {
             var session = GetSessionAndDispose();
             if (session != null)
-                ImageEditorPage.ShowFromSession(session);
+                EditorWindow.ShowSession(session);
         }
 
         static void OnVideo(object sender, EventArgs e)
