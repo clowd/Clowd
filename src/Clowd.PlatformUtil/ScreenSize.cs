@@ -9,6 +9,10 @@ namespace Clowd.PlatformUtil
         public int Width { get; init; }
         public int Height { get; init; }
 
+        public ScreenSize()
+        {
+        }
+
         public ScreenSize(int width, int height)
         {
             Width = width;

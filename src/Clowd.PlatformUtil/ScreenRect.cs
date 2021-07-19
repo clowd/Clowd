@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 
 namespace Clowd.PlatformUtil
 {
@@ -23,6 +24,10 @@ namespace Clowd.PlatformUtil
         public ScreenSize Size => new ScreenSize(Width, Height);
 
         public static ScreenRect Empty => new ScreenRect(0, 0, 0, 0);
+
+        public ScreenRect()
+        {
+        }
 
         public ScreenRect(ScreenPoint topLeft, ScreenSize size)
         {
@@ -76,9 +81,11 @@ namespace Clowd.PlatformUtil
           => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
 
         [Obsolete]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public System.Drawing.Rectangle ToSystem() => (System.Drawing.Rectangle)this;
 
         [Obsolete]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public static ScreenRect FromSystem(System.Drawing.Rectangle rect) => (ScreenRect)rect;
     }
 }
