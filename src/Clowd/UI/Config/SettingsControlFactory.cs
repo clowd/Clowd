@@ -284,31 +284,31 @@ namespace Clowd.UI.Config
             return panel;
         }
 
-        FrameworkElement PageBinding(FrameworkElement control, PropertyDescriptor pd, DependencyProperty dependency, string windowText, string buttonText, FrameworkElement top = null, FrameworkElement right = null, FrameworkElement bottom = null)
-        {
-            var page = SimpleControlBinding(control, pd, dependency);
-            var width = page.Width;
-            var height = page.Height;
-            var click = new RoutedEventHandler((s, e) =>
-            {
-                var window = TemplatedWindow.GetWindow(page);
-                if (window != null)
-                {
-                    var windowTarget = page.GetValue(dependency);
-                    if (windowTarget == pd.GetValue(obj))
-                    {
-                        window.GetPlatformWindow().Activate();
-                        return;
-                    }
-                }
+        //FrameworkElement PageBinding(FrameworkElement control, PropertyDescriptor pd, DependencyProperty dependency, string windowText, string buttonText, FrameworkElement top = null, FrameworkElement right = null, FrameworkElement bottom = null)
+        //{
+        //    var page = SimpleControlBinding(control, pd, dependency);
+        //    var width = page.Width;
+        //    var height = page.Height;
+        //    var click = new RoutedEventHandler((s, e) =>
+        //    {
+        //        var window = TemplatedWindow.GetWindow(page);
+        //        if (window != null)
+        //        {
+        //            var windowTarget = page.GetValue(dependency);
+        //            if (windowTarget == pd.GetValue(obj))
+        //            {
+        //                window.GetPlatformWindow().Activate();
+        //                return;
+        //            }
+        //        }
 
-                window = TemplatedWindow.CreateWindow(windowText, page);
-                window.Width = width;
-                window.Height = height;
-                window.Show();
-            });
+        //        window = TemplatedWindow.CreateWindow(windowText, page);
+        //        window.Width = width;
+        //        window.Height = height;
+        //        window.Show();
+        //    });
 
-            return ButtonControl(buttonText, click, top, right, bottom);
-        }
+        //    return ButtonControl(buttonText, click, top, right, bottom);
+        //}
     }
 }

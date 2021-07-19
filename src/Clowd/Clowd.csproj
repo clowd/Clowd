@@ -93,6 +93,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetZip" Version="1.15.0" />
+    <PackageReference Include="Dragablz" Version="0.0.3.223" />
     <PackageReference Include="Fody" Version="6.5.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

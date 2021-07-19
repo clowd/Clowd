@@ -12,6 +12,7 @@
                 <ResourceDictionary Source="Assets/ProgressRingControl.xaml" />
                 <ResourceDictionary Source="Assets/VectorGeometries.xaml" />
                 <ResourceDictionary Source="Assets/VectorIcons.xaml" />
+                <ResourceDictionary Source="Assets/DragablzStyles.xaml" />
                 <ui:ThemeResources />
                 <ui:XamlControlsResources />
             </ResourceDictionary.MergedDictionaries>
