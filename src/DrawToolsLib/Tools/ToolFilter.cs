@@ -99,7 +99,7 @@ namespace DrawToolsLib.Tools
             if (clicked is GraphicImage)
             {
                 var gImg = clicked as GraphicImage;
-                gImg.Flatten();
+                //gImg.Flatten();
                 _filter = CreateFilter(canvas, gImg);
                 _filter.Handle(_brush, point);
             }

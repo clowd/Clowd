@@ -51,18 +51,51 @@ namespace Clowd.UI
             toolNotifier.ValueChanged += drawingCanvas_ToolChanged;
 
             this.Loaded += ImageEditorPage2_Loaded;
-            this.KeyDown += ImageEditorPage_KeyDown;
+            //this.KeyDown += ImageEditorPage_KeyDown;
             SyncToolState();
         }
 
-        private void ImageEditorPage_KeyDown(object sender, KeyEventArgs e)
-        {
-            Console.WriteLine(e.Key + " - " + e.Handled);
-        }
+        //private void ImageEditorPage_KeyDown(object sender, KeyEventArgs e)
+        //{
+        //    Console.WriteLine(e.Key + " - " + e.Handled);
+        //}
 
         private void ImageEditorPage2_Loaded(object sender, RoutedEventArgs e)
         {
             Keyboard.Focus(buttonFocus);
+
+            if (File.Exists(_session.DesktopPath))
+            {
+                var sel = _session.SelectionRect;
+                var crop = new Int32Rect(sel.X, sel.Y, sel.Width, sel.Height);
+
+                double width = crop.Width;
+                double height = crop.Height;
+
+                var graphic = new GraphicImage(
+                    _session.DesktopPath,
+                    new Rect(
+                        Math.Floor(drawingCanvas.WorldOffset.X - (width / 2)),
+                        Math.Floor(drawingCanvas.WorldOffset.Y - (height / 2)),
+                        width,
+                        height),
+                    crop);
+
+                // add image
+                drawingCanvas.AddGraphic(graphic);
+
+                // if window is bigger than image, show at actual size. else, zoom to fit
+                if (this.ActualHeight > height && this.ActualWidth > width)
+                {
+                    drawingCanvas.ZoomPanActualSize();
+                }
+                else
+                {
+                    drawingCanvas.ZoomPanFit();
+                }
+            }
+
+            SyncToolState();
         }
 
         //public static void ShowFromSession(SessionInfo info)
@@ -88,53 +121,53 @@ namespace Clowd.UI
 
         //protected override async void OnActivated(Window wnd)
         //{
-            //if (_initialImage == null)
-            //    return;
+        //if (_initialImage == null)
+        //    return;
 
-            //AddImage(_initialImage);
+        //AddImage(_initialImage);
 
-            //var wasSidebarWidth = toolBar.ActualWidth;
-            //var wasActionRowHeight = propertiesBar.ActualHeight;
+        //var wasSidebarWidth = toolBar.ActualWidth;
+        //var wasActionRowHeight = propertiesBar.ActualHeight;
 
-            ////bool fit = DoWindowFit(wnd);
-            ////if (propertiesBar.ActualHeight != wasActionRowHeight || toolBar.ActualWidth != wasSidebarWidth)
-            ////    fit = DoWindowFit(wnd); // re-fit in case the action row has reflowed
+        ////bool fit = DoWindowFit(wnd);
+        ////if (propertiesBar.ActualHeight != wasActionRowHeight || toolBar.ActualWidth != wasSidebarWidth)
+        ////    fit = DoWindowFit(wnd); // re-fit in case the action row has reflowed
 
-            //// just doing this to force a thread context switch.
-            //// by the time we get back on to the UI thread the window will be done resizing.
-            //await Task.Delay(10);
+        //// just doing this to force a thread context switch.
+        //// by the time we get back on to the UI thread the window will be done resizing.
+        //await Task.Delay(10);
 
-            ////if (fit)
-            //drawingCanvas.ZoomPanActualSize();
-            ////else
-            ////    drawingCanvas.ZoomPanFit();
+        ////if (fit)
+        //drawingCanvas.ZoomPanActualSize();
+        ////else
+        ////    drawingCanvas.ZoomPanFit();
 
-            //SyncToolState();
+        //SyncToolState();
         //}
 
         #region Helpers
 
-        private void AddImage(BitmapSource img)
-        {
-            if (img == null)
-                return;
+        //private void AddImage(BitmapSource img)
+        //{
+        //    if (img == null)
+        //        return;
 
-            //var width = ScreenTools.ScreenToWpf(img.PixelWidth);
-            //var height = ScreenTools.ScreenToWpf(img.PixelHeight);
-            //var graphic = new GraphicImage(drawingCanvas, new Rect(
-            //    ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.X - (width / 2)),
-            //    ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.Y - (height / 2)),
-            //    width, height), img);
+        //    //var width = ScreenTools.ScreenToWpf(img.PixelWidth);
+        //    //var height = ScreenTools.ScreenToWpf(img.PixelHeight);
+        //    //var graphic = new GraphicImage(drawingCanvas, new Rect(
+        //    //    ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.X - (width / 2)),
+        //    //    ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.Y - (height / 2)),
+        //    //    width, height), img);
 
-            var width = img.PixelWidth;
-            var height = img.PixelHeight;
-            var graphic = new GraphicImage(drawingCanvas, new Rect(
-               drawingCanvas.WorldOffset.X - (width / 2),
-              drawingCanvas.WorldOffset.Y - (height / 2),
-                width, height), img);
+        //    var width = img.PixelWidth;
+        //    var height = img.PixelHeight;
+        //    var graphic = new GraphicImage(drawingCanvas, new Rect(
+        //       drawingCanvas.WorldOffset.X - (width / 2),
+        //      drawingCanvas.WorldOffset.Y - (height / 2),
+        //        width, height), img);
 
-            drawingCanvas.AddGraphic(graphic);
-        }
+        //    drawingCanvas.AddGraphic(graphic);
+        //}
 
         //private bool DoWindowFit(Window wnd)
         //{
@@ -374,7 +407,7 @@ namespace Clowd.UI
                 var img = data.GetImage();
                 if (img != null)
                 {
-                    AddImage(img);
+                    //AddImage(img);
                     SyncToolState();
                     return;
                 }
