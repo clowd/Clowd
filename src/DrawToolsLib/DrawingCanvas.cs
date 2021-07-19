@@ -107,8 +107,8 @@ namespace DrawToolsLib
             toolText = new ToolText(this);
             tools[(int)ToolType.Text] = toolText;   // kept as class member for in-place editing
 
-            tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>();
-            tools[(int)ToolType.Erase] = new ToolFilter<FilterEraser>();
+            //tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>();
+            //tools[(int)ToolType.Erase] = new ToolFilter<FilterEraser>();
 
             // Create undo manager
             undoManager = new UndoManager(this);

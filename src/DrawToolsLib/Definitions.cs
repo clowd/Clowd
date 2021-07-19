@@ -15,8 +15,8 @@ namespace DrawToolsLib
         Arrow,
         PolyLine,
         Text,
-        Pixelate,
-        Erase,
+        //Pixelate,
+        //Erase,
         Max
     };
 

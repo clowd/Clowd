@@ -30,6 +30,7 @@ namespace DrawToolsLib.Graphics
             get { return _objectId; }
             protected set { _objectId = value; }
         }
+
         public Color ObjectColor
         {
             get { return _objectColor; }
@@ -40,6 +41,7 @@ namespace DrawToolsLib.Graphics
                 OnPropertyChanged(nameof(ObjectColor));
             }
         }
+
         public double LineWidth
         {
             get { return _lineWidth; }
@@ -50,6 +52,7 @@ namespace DrawToolsLib.Graphics
                 OnPropertyChanged(nameof(LineWidth));
             }
         }
+
         public virtual bool IsSelected
         {
             get { return _isSelected; }
@@ -78,8 +81,10 @@ namespace DrawToolsLib.Graphics
 
         [XmlIgnore]
         internal static double HandleSize { get; set; } = 12.0;
+
         [XmlIgnore]
         internal static SolidColorBrush HandleBrush { get; set; } = new SolidColorBrush(Color.FromRgb(0, 0, 255));
+
         [XmlIgnore]
         protected static SolidColorBrush HandleBrush2 { get; set; } = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
 
@@ -88,10 +93,12 @@ namespace DrawToolsLib.Graphics
             ObjectId = this.GetHashCode();
             _effect = new DropShadowEffect() { Opacity = 0.5, ShadowDepth = 2, RenderingBias = RenderingBias.Performance };
         }
+
         protected GraphicBase(DrawingCanvas canvas)
             : this(canvas.ObjectColor, canvas.LineWidth)
         {
         }
+
         protected GraphicBase(Color objectColor, double lineWidth)
             : this()
         {
@@ -101,6 +108,7 @@ namespace DrawToolsLib.Graphics
 
         [XmlIgnore]
         public abstract Rect Bounds { get; }
+
         [XmlIgnore]
         internal abstract int HandleCount { get; }
 
