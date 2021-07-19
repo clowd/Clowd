@@ -494,7 +494,7 @@ namespace Clowd.UI.Helpers
         private static void CaptureOwner(FrameworkElement parent, out Window ownerWindow, out IntPtr ownerHandle, out bool isFake)
         {
             if (parent != null && !(parent is Window))
-                parent = TemplatedWindow.GetWindow(parent);
+                parent = Window.GetWindow(parent);
 
             // get, or create owner window.
             if (parent != null && parent is Window window)

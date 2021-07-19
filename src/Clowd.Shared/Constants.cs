@@ -53,6 +53,9 @@ namespace Clowd
             if (!Directory.Exists(dataDirectory))
                 throw new ArgumentException($"Directory '{dataDirectory}' does not exist.");
 
+            if (String.IsNullOrWhiteSpace(dataName))
+                throw new ArgumentException($"Directory name can not be empty.");
+
             var clowdPath = Path.Combine(dataDirectory, "Clowd");
 
             if (!Directory.Exists(clowdPath))

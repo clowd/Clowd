@@ -64,6 +64,11 @@ namespace Clowd.PlatformUtil
 
     public static class BuiltInPlatformExtensions
     {
+        public static DpiContext ToDpiContext(this IScreen screen)
+        {
+            return new DpiContext((int)(screen.PixelDensity * 96.0), (int)(screen.PixelDensity * 96.0));
+        }
+
         public static MessageBoxResult ShowMessageBox(
             this Platform platform,
             nint owner,
