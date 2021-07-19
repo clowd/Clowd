@@ -181,6 +181,9 @@ namespace Clowd.Config
     {
         public Color CanvasBackground { get; set; } = Colors.White;
 
+        [Browsable(false)]
+        public int StartupPadding { get; set; } = 30;
+
         [DisplayName("Tool preferences")]
         public AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings> Tools { get; set; } = new AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings>();
 
