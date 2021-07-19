@@ -25,23 +25,22 @@ using PropertyChanged;
 namespace Clowd.UI
 {
     [AddINotifyPropertyChangedInterface]
-    public partial class ImageEditorPage : TemplatedControl
+    public partial class ImageEditorPage : UserControl
     {
-        public override string Title => "Edit";
-
         public StateCapabilities Capabilities { get; set; } = ToolStateManager.Empty();
 
         private ToolStateManager _manager = new ToolStateManager();
         private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
-        private BitmapSource _initialImage;
-        //private ScreenRect? _initialBounds;
         private PropertyChangeNotifier toolNotifier;
         private ClowdSettings _settings => ClowdSettings.Current;
+        private SessionInfo _session;
 
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
 
-        private ImageEditorPage()
+        public ImageEditorPage(SessionInfo info)
         {
+            _session = info;
+
             InitializeComponent();
             drawingCanvas.SetResourceReference(DrawingCanvas.HandleColorProperty, "AccentColor");
             drawingCanvas.ArtworkBackground = new SolidColorBrush(_settings.Editor.CanvasBackground);
@@ -66,42 +65,52 @@ namespace Clowd.UI
             Keyboard.Focus(buttonFocus);
         }
 
-        public static void ShowNewEditor(BitmapSource image = null, ScreenRect? screenBounds = null, bool allowPrompt = true)
-        {
-            var page = new ImageEditorPage();
-            page._initialImage = image;
-            //page._initialBounds = screenBounds;
-            var window = TemplatedWindow.CreateWindow("Edit Capture", page);
-            //page.DoWindowFit(window);
-            window.Show();
-            window.GetPlatformWindow().Activate();
-        }
+        //public static void ShowFromSession(SessionInfo info)
+        //{
+        //    var w = new ImageEditorPage();
+        //    w._session = info;
 
-        protected override async void OnActivated(Window wnd)
-        {
-            if (_initialImage == null)
-                return;
+        //    var screen = Platform.Current.GetScreenFromRect(info.SelectionRect);
+        //    var dpi = screen.ToDpiContext();
+        //    var padding = dpi.ToWorldWH(w._settings.Editor.StartupPadding);
 
-            AddImage(_initialImage);
 
-            var wasSidebarWidth = toolBar.ActualWidth;
-            var wasActionRowHeight = propertiesBar.ActualHeight;
+        //    // get wpf to do a layout pass, check if it can be fully fit within the screen
+        //    var availableSize = dpi.ToWorldSize(screen.WorkingArea.Size);
+        //    w.Measure(new Size(availableSize.Width, availableSize.Height));
+        //    var requestedSize = w.DesiredSize;
 
-            //bool fit = DoWindowFit(wnd);
-            //if (propertiesBar.ActualHeight != wasActionRowHeight || toolBar.ActualWidth != wasSidebarWidth)
-            //    fit = DoWindowFit(wnd); // re-fit in case the action row has reflowed
+        //    //var t = w.toolBar.DesiredSize;
 
-            // just doing this to force a thread context switch.
-            // by the time we get back on to the UI thread the window will be done resizing.
-            await Task.Delay(10);
+        //    //w.Show();
+        //    //w.GetPlatformWindow().Activate();
+        //}
 
-            //if (fit)
-            drawingCanvas.ZoomPanActualSize();
-            //else
-            //    drawingCanvas.ZoomPanFit();
+        //protected override async void OnActivated(Window wnd)
+        //{
+            //if (_initialImage == null)
+            //    return;
 
-            SyncToolState();
-        }
+            //AddImage(_initialImage);
+
+            //var wasSidebarWidth = toolBar.ActualWidth;
+            //var wasActionRowHeight = propertiesBar.ActualHeight;
+
+            ////bool fit = DoWindowFit(wnd);
+            ////if (propertiesBar.ActualHeight != wasActionRowHeight || toolBar.ActualWidth != wasSidebarWidth)
+            ////    fit = DoWindowFit(wnd); // re-fit in case the action row has reflowed
+
+            //// just doing this to force a thread context switch.
+            //// by the time we get back on to the UI thread the window will be done resizing.
+            //await Task.Delay(10);
+
+            ////if (fit)
+            //drawingCanvas.ZoomPanActualSize();
+            ////else
+            ////    drawingCanvas.ZoomPanFit();
+
+            //SyncToolState();
+        //}
 
         #region Helpers
 
@@ -485,18 +494,22 @@ namespace Clowd.UI
 
         private async void ImageStitch_Click(object sender, DPadButtonClickEventArgs e)
         {
-            var wnd = TemplatedWindow.GetWindow(this);
-            var state = wnd.WindowState;
-            wnd.WindowState = WindowState.Minimized;
-            await Task.Delay(400); // wait for window to hide
+            //var wnd = TemplatedWindow.GetWindow(this);
+            //var state = wnd.WindowState;
+            //wnd.WindowState = WindowState.Minimized;
+            //await Task.Delay(400); // wait for window to hide
 
-            var selection = drawingCanvas.Selection.ToArray();
-            if (selection.Length != 1)
-                return;
+            //var selection = drawingCanvas.Selection.ToArray();
+            //if (selection.Length != 1)
+            //    return;
 
-            var image = selection[0] as GraphicImage;
-            if (image == null)
-                return;
+            //var image = selection[0] as GraphicImage;
+            //if (image == null)
+            //    return;
+
+
+
+
 
             //CaptureWindow2.ShowNewCapture(_initialBounds, (img) =>
             //{
@@ -537,8 +550,8 @@ namespace Clowd.UI
 
         private void toggleTopMost_Click(object sender, RoutedEventArgs e)
         {
-            var wnd = TemplatedWindow.GetWindow(this);
-            wnd.Topmost = toggleTopMost.IsChecked == true;
+            var w = Window.GetWindow(this);
+            w.Topmost = toggleTopMost.IsChecked == true;
         }
 
         #endregion
