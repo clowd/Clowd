@@ -1,8 +1,12 @@
 <Project>
  <PropertyGroup>
-   <LangVersion>9.0</LangVersion>
+    <LangVersion>9.0</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <MSBuildProjectExtensionsPath>$(SolutionDir)\bin\intermediate\obj\$(MSBuildProjectName)</MSBuildProjectExtensionsPath>
+    <BaseIntermediateOutputPath>$(SolutionDir)\bin\intermediate\obj</BaseIntermediateOutputPath>
+    <OutputPath>$(SolutionDir)\bin\intermediate\bin\$(MSBuildProjectName)\$(Configuration)\</OutputPath>
  </PropertyGroup>
-
   <PropertyGroup>
     <Version>2.4</Version>
     <AssemblyVersion>2.4.65.3271</AssemblyVersion>
