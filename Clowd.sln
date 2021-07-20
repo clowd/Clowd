@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.29806.167
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd", "src\Clowd\Clowd.csproj", "{24FDFCC0-C491-412E-8EFA-E6CC352523DA}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Drawing", "src\DrawToolsLib\Clowd.Drawing.csproj", "{04456DDE-AF72-4B83-9132-5AFC5F89CC76}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Drawing", "src\Clowd.Drawing\Clowd.Drawing.csproj", "{04456DDE-AF72-4B83-9132-5AFC5F89CC76}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Interop", "src\Clowd.Interop\Clowd.Interop.csproj", "{A2DA076B-EEBA-4D4A-88EC-9BB9C960F552}"
 EndProject

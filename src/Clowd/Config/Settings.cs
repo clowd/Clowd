@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using Clowd.Drawing;
 using Clowd.UI;
 using Clowd.UI.Config;
 using Clowd.UI.Helpers;
@@ -233,7 +234,7 @@ namespace Clowd.Config
         public int StartupPadding { get; set; } = 30;
 
         [DisplayName("Tool preferences")]
-        public AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings> Tools { get; set; } = new AutoDictionary<DrawToolsLib.ToolType, SavedToolSettings>();
+        public AutoDictionary<ToolType, SavedToolSettings> Tools { get; set; } = new AutoDictionary<ToolType, SavedToolSettings>();
 
         public EditorSettings()
         {
