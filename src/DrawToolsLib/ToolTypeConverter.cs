@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
@@ -21,7 +21,7 @@ namespace DrawToolsLib
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return new NotSupportedException(this.GetType().Name + Properties.Settings.Default.ConvertBackNotSupported);
+            return new NotSupportedException(this.GetType().Name + " ConvertBackNotSupported");
         }
     }
 }

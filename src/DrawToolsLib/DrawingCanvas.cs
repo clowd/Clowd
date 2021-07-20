@@ -187,7 +187,7 @@ namespace DrawToolsLib
 
             // TextFontFamilyName
             metaData = new PropertyMetadata(
-                Properties.Settings.Default.DefaultFontFamily,
+                "Tahoma",
                 new PropertyChangedCallback(TextFontFamilyNameChanged));
 
             TextFontFamilyNameProperty = DependencyProperty.Register(
