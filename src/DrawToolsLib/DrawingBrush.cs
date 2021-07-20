@@ -10,7 +10,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Media;
-using DrawToolsLib.Annotations;
 using Microsoft.Win32.SafeHandles;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
@@ -130,7 +129,6 @@ namespace DrawToolsLib
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        [NotifyPropertyChangedInvocator]
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
