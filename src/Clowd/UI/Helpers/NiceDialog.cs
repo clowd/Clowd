@@ -177,7 +177,16 @@ namespace Clowd.UI.Helpers
                 if (!String.IsNullOrWhiteSpace(footerTxt))
                 {
                     dialog.FooterIcon = (TaskDialogIcon)(int)footerIcon;
-                    dialog.Footer = footerTxt;
+                    if (footerTxt.Length > 100)
+                    {
+                        dialog.ExpandFooterArea = true;
+                        dialog.ExpandedInformation = footerTxt;
+                        dialog.ExpandedByDefault = false;
+                    }
+                    else
+                    {
+                        dialog.Footer = footerTxt;
+                    }
                 }
 
                 var trueBtn = new TaskDialogButton(trueTxt);
@@ -326,7 +335,7 @@ namespace Clowd.UI.Helpers
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
             //HwndWindow.HwndWindowHook dialogWindowHook = null;
-          
+
             try
             {
                 return Task.FromResult(showDialog(ownerHandle));
