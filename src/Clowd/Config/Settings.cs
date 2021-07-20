@@ -26,17 +26,17 @@ namespace Clowd.Config
 
         public GeneralSettings General { get; private set; } = new GeneralSettings();
 
-        public HotkeySettings Hotkey { get; private set; } = new HotkeySettings();
+        public HotkeySettings Hotkeys { get; private set; } = new HotkeySettings();
 
         public CaptureSettings Capture { get; private set; } = new CaptureSettings();
 
         public EditorSettings Editor { get; private set; } = new EditorSettings();
 
-        public UploadSettings Upload { get; private set; } = new UploadSettings();
+        public UploadSettings Uploads { get; private set; } = new UploadSettings();
 
         public VideoCapturerSettings Video { get; private set; } = new VideoCapturerSettings();
 
-        protected INotifyPropertyChanged[] All => new INotifyPropertyChanged[] { General, Hotkey, Capture, Editor, Upload, Video };
+        protected INotifyPropertyChanged[] All => new INotifyPropertyChanged[] { General, Hotkeys, Capture, Editor, Uploads, Video };
 
         public ClowdSettings()
         {
@@ -72,6 +72,25 @@ namespace Clowd.Config
             System.Diagnostics.Trace.WriteLine("Saved Settings");
         }
 
+        public static void LoadDefault()
+        {
+            try
+            {
+                ClowdSettings tmp;
+                SettingsUtil.LoadSettings(out tmp);
+            }
+            catch
+            {
+                Current?.Dispose();
+                throw;
+            }
+        }
+
+        public static void CreateNew()
+        {
+            new ClowdSettings();
+        }
+
         public void Dispose()
         {
             All.ToList().ForEach(a => a.PropertyChanged -= Item_PropertyChanged);
@@ -86,7 +105,8 @@ namespace Clowd.Config
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
-        private List<INotifyPropertyChanged> _subscriptions = new List<INotifyPropertyChanged>();
+        [ClassifyIgnore]
+        private readonly List<INotifyPropertyChanged> _subscriptions = new List<INotifyPropertyChanged>();
 
         protected void Subscribe(params INotifyPropertyChanged[] subscriptions)
         {
@@ -124,6 +144,24 @@ namespace Clowd.Config
         public bool ConfirmClose { get; set; } = true;
 
         [ClassifyIgnore]
+        public AppTheme Theme
+        {
+            get => ModernWpf.ThemeManager.Current.ApplicationTheme switch
+            {
+                ModernWpf.ApplicationTheme.Light => AppTheme.Light,
+                ModernWpf.ApplicationTheme.Dark => AppTheme.Dark,
+                _ => AppTheme.Auto,
+            };
+
+            set => ModernWpf.ThemeManager.Current.ApplicationTheme = value switch
+            {
+                AppTheme.Light => ModernWpf.ApplicationTheme.Light,
+                AppTheme.Dark => ModernWpf.ApplicationTheme.Dark,
+                _ => null,
+            };
+        }
+
+        [ClassifyIgnore]
         public Installer.Features.AutoStart StartWithWindows { get; set; } = new Installer.Features.AutoStart();
 
         [ClassifyIgnore]
@@ -131,6 +169,14 @@ namespace Clowd.Config
 
         [ClassifyIgnore]
         public Installer.Features.Shortcuts CreateDesktopShortcuts { get; set; } = new Installer.Features.Shortcuts();
+
+        public enum AppTheme
+        {
+            [Description("Auto / System")]
+            Auto,
+            Light,
+            Dark
+        }
     }
 
     public class HotkeySettings : SettingsCategoryBase
