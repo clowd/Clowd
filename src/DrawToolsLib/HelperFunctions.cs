@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -41,6 +41,12 @@ namespace DrawToolsLib
             }
 
             return new Rect(l, t, w, h);
+        }
+
+        public static Rect CreateRectSafeRounded(double Left, double Top, double Right, double Bottom)
+        {
+            var r = CreateRectSafe(Left, Top, Right, Bottom);
+            return new Rect(Math.Round(r.Left), Math.Round(r.Top), Math.Round(r.Width), Math.Round(r.Height));
         }
     }
 }

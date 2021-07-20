@@ -874,13 +874,6 @@ namespace DrawToolsLib
                 result.Union(rect);
             }
             return result;
-            //var right = Math.Round(result.Right * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
-            //var bottom = Math.Round(result.Bottom * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
-            //result.X = Math.Round(result.X * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
-            //result.Y = Math.Round(result.Y * ScreenTools.DpiZoom) / ScreenTools.DpiZoom;
-            //result.Width = right - result.X;
-            //result.Height = bottom - result.Y;
-            //return result;
         }
 
         /// <summary>
@@ -1553,18 +1546,21 @@ namespace DrawToolsLib
 
             menuItem = new MenuItem();
             menuItem.Header = "Select all";
+            menuItem.InputGestureText = "Ctrl+A";
             menuItem.Tag = ContextMenuCommand.SelectAll;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Unselect all";
+            menuItem.InputGestureText = "Esc";
             menuItem.Tag = ContextMenuCommand.UnselectAll;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Delete";
+            menuItem.InputGestureText = "Del";
             menuItem.Tag = ContextMenuCommand.Delete;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
@@ -1579,12 +1575,14 @@ namespace DrawToolsLib
 
             menuItem = new MenuItem();
             menuItem.Header = "Move to front";
+            menuItem.InputGestureText = "Home";
             menuItem.Tag = ContextMenuCommand.MoveToFront;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Move to back";
+            menuItem.InputGestureText = "End";
             menuItem.Tag = ContextMenuCommand.MoveToBack;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
@@ -1593,18 +1591,20 @@ namespace DrawToolsLib
 
             menuItem = new MenuItem();
             menuItem.Header = "Undo";
+            menuItem.InputGestureText = "Ctrl+Z";
             menuItem.Tag = ContextMenuCommand.Undo;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Redo";
+            menuItem.InputGestureText = "Ctrl+Y";
             menuItem.Tag = ContextMenuCommand.Redo;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
-            menuItem.Header = "Set properties";
+            menuItem.Header = "Reset attributes";
             menuItem.Tag = ContextMenuCommand.SetProperties;
             menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
             contextMenu.Items.Add(menuItem);
@@ -1619,11 +1619,13 @@ namespace DrawToolsLib
 
             menuItem = new MenuItem();
             menuItem.Header = "Zoom to fit content";
+            menuItem.InputGestureText = "Ctrl+0";
             menuItem.Click += (s, e) => this.ZoomPanFit();
             contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Zoom to actual size";
+            menuItem.InputGestureText = "Ctrl+1";
             menuItem.Click += (s, e) => this.ZoomPanActualSize();
             contextMenu.Items.Add(menuItem);
 
@@ -1938,21 +1940,8 @@ namespace DrawToolsLib
         {
             var me = (DrawingCanvas)d;
             var pt = (Point)e.NewValue;
-            if (me.ContentScale == 1)
-            {
-                //double dpiZoom = 0;
-                //try { dpiZoom = ScreenTools.DpiZoom; }
-                //catch { } // WPF designer hasn't initialised library
-                //me._translateTransform.X = Math.Round(pt.X * dpiZoom) / dpiZoom;
-                //me._translateTransform.Y = Math.Round(pt.Y * dpiZoom) / dpiZoom;
-                me._translateTransform.X = pt.X;
-                me._translateTransform.Y = pt.Y;
-            }
-            else
-            {
-                me._translateTransform.X = pt.X;
-                me._translateTransform.Y = pt.Y;
-            }
+            me._translateTransform.X = Math.Floor(pt.X);
+            me._translateTransform.Y = Math.Floor(pt.Y);
         }
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {

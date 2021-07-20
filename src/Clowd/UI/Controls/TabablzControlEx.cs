@@ -74,9 +74,6 @@ namespace Clowd.UI.Controls
         {
             if (_tabContainerGrid != null)
             {
-                // don't show tab bar if < 2 tabs
-                _tabContainerGrid.Visibility = Items.Count < 2 ? Visibility.Collapsed : Visibility.Visible;
-
                 // Add up width taken by custom content and + button
                 double widthTaken = 0.0;
                 if (_leftContentColumn != null)
