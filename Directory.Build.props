@@ -2,4 +2,16 @@
  <PropertyGroup>
    <LangVersion>9.0</LangVersion>
  </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>2.4</Version>
+    <AssemblyVersion>2.4.65.3271</AssemblyVersion>
+    <Authors>Caelan Sayler</Authors>
+    <Product>Clowd</Product>
+    <NeutralLanguage>en</NeutralLanguage>
+    <Description>A screen/video capture and editing tool</Description>
+    <Copyright>Copyright © Caelan Sayler, 2014-2021</Copyright>
+    <PackageTags>screen capture, video, image editing</PackageTags>
+    <RepositoryUrl>https://github.com/clowd</RepositoryUrl>
+  </PropertyGroup>
 </Project>
