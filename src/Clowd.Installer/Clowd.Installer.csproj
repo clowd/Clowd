@@ -3,27 +3,15 @@
     <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>Exe</OutputType>
     <AssemblyName>ClowdCLI</AssemblyName>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <UseWindowsForms>true</UseWindowsForms>
-    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>Embed\default.ico</ApplicationIcon>
+    <ApplicationIcon>default.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>Clowd.Installer.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Embed\UScreenCapture-x64.ax" />
-    <EmbeddedResource Include="Embed\UScreenCapture-x86.ax" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Embed\loopback-audio-x64.dll" />
-    <EmbeddedResource Include="Embed\loopback-audio-x86.dll" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Embed\default.ico" />
+    <EmbeddedResource Include="default.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />

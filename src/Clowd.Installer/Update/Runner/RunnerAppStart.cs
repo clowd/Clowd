@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Threading;
-using System.Windows.Forms;
 using Clowd.Installer;
 using NAppUpdate.Framework;
 using NAppUpdate.Framework.Common;
@@ -174,7 +173,7 @@ namespace NAppUpdate.Updater
                 }
                 else
                 {
-                    MessageBox.Show("Update Failed");
+                    Clowd.PlatformUtil.BuiltInPlatformExtensions.ShowMessageBox(Clowd.PlatformUtil.Platform.Current, "Update failed");
                     Log(Logger.SeverityLevel.Error, "Update failed");
                 }
 
@@ -242,7 +241,7 @@ namespace NAppUpdate.Updater
                 //    _console.ReadKey();
                 //}
                 if (!string.IsNullOrEmpty(tempFolder)) SelfCleanUp(tempFolder);
-                Application.Exit();
+                Environment.Exit(0);
             }
         }
 
