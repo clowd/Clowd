@@ -11,9 +11,13 @@
     Title="Edit - Clowd"
     Width="1050"
     Height="750"
+    UseLayoutRounding="True"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
-    <controls:TabablzControlEx x:Name="TabView" ShowDefaultCloseButton="True">
+    <controls:TabablzControlEx
+        x:Name="TabView"
+        ShowDefaultAddButton="True"
+        ShowDefaultCloseButton="True">
         <controls:TabablzControlEx.InterTabController>
             <dragablz:InterTabController />
         </controls:TabablzControlEx.InterTabController>

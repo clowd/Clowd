@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -19,20 +20,23 @@ namespace DrawToolsLib.Graphics
             {
                 _bitmapFilePath = value;
                 _bitmap = new BitmapImage(new Uri(_bitmapFilePath));
-                //_cropped.Source = _bitmap;
+                _cropped = new CroppedBitmap(_bitmap, Crop);
                 OnPropertyChanged(nameof(BitmapFilePath));
             }
         }
 
         public Int32Rect Crop
         {
-            get;set;
-            //get { return _cropped.SourceRect; }
-            //set
-            //{
-            //    _cropped.SourceRect = value;
-            //    OnPropertyChanged(nameof(Crop));
-            //}
+            get { return _crop; }
+            set
+            {
+                if (!_crop.Equals(value))
+                {
+                    _crop = value;
+                    _cropped = new CroppedBitmap(_bitmap, value);
+                    OnPropertyChanged(nameof(Crop));
+                }
+            }
         }
 
         public int FlipX
@@ -59,22 +63,22 @@ namespace DrawToolsLib.Graphics
         public BitmapSource Bitmap => _bitmap;
 
         private BitmapSource _bitmap;
-        //private CroppedBitmap _cropped;
+        private CroppedBitmap _cropped;
         private string _bitmapFilePath;
         private int _scaleX = 1;
         private int _scaleY = 1;
+        private Int32Rect _crop;
 
         protected GraphicImage()
         {
             Effect = null;
-            //_cropped = new CroppedBitmap();
         }
 
         public GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle = 0, int flipX = 1, int flipY = 1)
             : base(Colors.Transparent, 0, displayRect)
         {
+            _crop = crop;
             Effect = null;
-            //_cropped = new CroppedBitmap();
             BitmapFilePath = imageFilePath;
             Angle = angle;
             Crop = crop;
@@ -99,7 +103,10 @@ namespace DrawToolsLib.Graphics
             if (Right <= Left || Bottom <= Top)
                 drawingContext.PushTransform(new ScaleTransform(Right <= Left ? -1 : 1, Bottom <= Top ? -1 : 1, centerX, centerY));
 
-            drawingContext.DrawImage(_bitmap, r);
+            drawingContext.DrawImage(_cropped, r);
+
+            var txt = new FormattedText(Bounds.ToString(), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Arial"), 18, Brushes.Pink);
+            drawingContext.DrawText(txt, r.TopLeft);
 
             if (Right <= Left || Bottom <= Top)
                 drawingContext.Pop();

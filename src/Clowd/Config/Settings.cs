@@ -227,6 +227,8 @@ namespace Clowd.Config
     {
         public Color CanvasBackground { get; set; } = Colors.White;
 
+        public bool TabsEnabled { get; set; } = true;
+
         [Browsable(false)]
         public int StartupPadding { get; set; } = 30;
 

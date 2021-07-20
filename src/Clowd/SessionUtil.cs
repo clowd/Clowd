@@ -44,6 +44,14 @@ namespace Clowd
             return dir;
         }
 
+        public static SessionInfo CreateNewSession()
+        {
+            return new SessionInfo
+            {
+                RootPath = CreateNewSessionDirectory()
+            };
+        }
+
         public static SessionInfo Parse(string sessionPath)
         {
             if (sessionPath == null)

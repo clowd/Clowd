@@ -130,7 +130,7 @@ namespace DrawToolsLib.Graphics
             }
         }
 
-        public Rect UnrotatedBounds => HelperFunctions.CreateRectSafe(Left, Top, Right, Bottom);
+        public virtual Rect UnrotatedBounds => HelperFunctions.CreateRectSafeRounded(Left, Top, Right, Bottom);
 
         internal override int HandleCount => 9;
 
@@ -322,6 +322,7 @@ namespace DrawToolsLib.Graphics
             // Step 2: reverse the rotation, but about the *new* center of rotation.
             topLeft = UnapplyRotation(topLeft);
             bottomRight = UnapplyRotation(bottomRight);
+
             Left = topLeft.X;
             Top = topLeft.Y;
             Right = bottomRight.X;

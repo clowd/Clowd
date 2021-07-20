@@ -427,6 +427,7 @@
                             Margin="0"
                             Padding="0"
                             HorizontalAlignment="Center"
+                            Style="{x:Null}"
                             Visibility="Visible" />
                     </Viewbox>
                     <TextBlock HorizontalAlignment="Center" FontSize="8">Auto</TextBlock>
@@ -506,15 +507,13 @@
             <draw:DrawingCanvas
                 x:Name="drawingCanvas"
                 Width="{Binding ActualWidth, ElementName=objectCanvas}"
-                Height="{Binding ActualHeight, ElementName=objectCanvas}"
-                Background="#00000000"
-                LineWidth="{Binding LineWidth}"
-                ObjectColor="{Binding ObjectColor}" />
+                Height="{Binding ActualHeight, ElementName=objectCanvas}" />
         </Canvas>
         <Button
             x:Name="buttonFocus"
             Width="1"
             Height="1"
-            Opacity="0.01" />
+            Opacity="0.01"
+            Style="{x:Null}" />
     </Grid>
 </UserControl>

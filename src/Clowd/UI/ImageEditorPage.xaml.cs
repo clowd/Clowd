@@ -42,7 +42,8 @@ namespace Clowd.UI
             _session = info;
 
             InitializeComponent();
-            drawingCanvas.SetResourceReference(DrawingCanvas.HandleColorProperty, "AccentColor");
+            //drawingCanvas.SetResourceReference(DrawingCanvas.HandleColorProperty, "AccentColor");
+            drawingCanvas.HandleColor = AppStyles.AccentColor;
             drawingCanvas.ArtworkBackground = new SolidColorBrush(_settings.Editor.CanvasBackground);
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
 
@@ -75,8 +76,8 @@ namespace Clowd.UI
                 var graphic = new GraphicImage(
                     _session.DesktopPath,
                     new Rect(
-                        Math.Floor(drawingCanvas.WorldOffset.X - (width / 2)),
-                        Math.Floor(drawingCanvas.WorldOffset.Y - (height / 2)),
+                        0, 0, //Math.Floor(drawingCanvas.WorldOffset.X - (width / 2)),
+                        //Math.Floor(drawingCanvas.WorldOffset.Y - (height / 2)),
                         width,
                         height),
                     crop);
