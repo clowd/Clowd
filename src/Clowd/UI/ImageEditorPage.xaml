@@ -5,7 +5,7 @@
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:draw="clr-namespace:DrawToolsLib;assembly=DrawToolsLib"
+    xmlns:draw="clr-namespace:Clowd.Drawing;assembly=Clowd.Drawing"
     xmlns:helpers="clr-namespace:Clowd.UI.Helpers"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"

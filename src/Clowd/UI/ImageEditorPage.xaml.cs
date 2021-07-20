@@ -18,8 +18,8 @@ using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using DrawToolsLib;
-using DrawToolsLib.Graphics;
+using Clowd.Drawing;
+using Clowd.Drawing.Graphics;
 using PropertyChanged;
 
 namespace Clowd.UI
@@ -30,7 +30,7 @@ namespace Clowd.UI
         public StateCapabilities Capabilities { get; set; } = ToolStateManager.Empty();
 
         private ToolStateManager _manager = new ToolStateManager();
-        private DrawToolsLib.ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
+        private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private PropertyChangeNotifier toolNotifier;
         private ClowdSettings _settings => ClowdSettings.Current;
         private SessionInfo _session;
@@ -452,7 +452,7 @@ namespace Clowd.UI
             if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool == null && Mouse.LeftButton != MouseButtonState.Pressed)
             {
                 _shiftPanPreviousTool = drawingCanvas.Tool;
-                drawingCanvas.Tool = DrawToolsLib.ToolType.None;
+                drawingCanvas.Tool = ToolType.None;
                 // i need to change a random property here so WPF updates. really weird, fix it some day?
                 buttonFocus.Opacity = 0.02;
                 //shiftIndicator.Background = (Brush)App.Current.Resources["AccentColorBrush"];
