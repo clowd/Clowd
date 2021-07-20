@@ -1,0 +1,1 @@
+powershell -ExecutionPolicy Bypass -File %0\..\publish.ps1

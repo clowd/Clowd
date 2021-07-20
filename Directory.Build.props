@@ -1,15 +1,16 @@
 <Project>
- <PropertyGroup>
+  <PropertyGroup>
     <LangVersion>9.0</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <MSBuildProjectExtensionsPath>$(SolutionDir)\bin\intermediate\obj\$(MSBuildProjectName)</MSBuildProjectExtensionsPath>
     <BaseIntermediateOutputPath>$(SolutionDir)\bin\intermediate\obj</BaseIntermediateOutputPath>
     <OutputPath>$(SolutionDir)\bin\intermediate\bin\$(MSBuildProjectName)\$(Configuration)\</OutputPath>
- </PropertyGroup>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
   <PropertyGroup>
-    <Version>2.4</Version>
-    <AssemblyVersion>2.4.65.3271</AssemblyVersion>
+    <Version>3.1</Version>
+    <AssemblyVersion>$(Version).$([System.DateTime]::UtcNow.Date.Subtract($([System.DateTime]::Parse("2000-01-01"))).TotalDays).$([System.Math]::Floor($([MSBuild]::Divide($([System.DateTime]::UtcNow.TimeOfDay.TotalSeconds), 1.32))))</AssemblyVersion>
     <Authors>Caelan Sayler</Authors>
     <Product>Clowd</Product>
     <NeutralLanguage>en</NeutralLanguage>
