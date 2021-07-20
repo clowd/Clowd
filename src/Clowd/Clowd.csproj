@@ -2,43 +2,26 @@
   <PropertyGroup>
     <TargetFramework>net5.0-windows10.0.18362</TargetFramework>
     <OutputType>WinExe</OutputType>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
-    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <PlatformTarget>x64</PlatformTarget>
+    <NoWarn>CS4014,CA1416</NoWarn>
+    <ApplicationIcon>Images\default.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>x64</PlatformTarget>
     <OutputPath>..\..\bin\x64\Debug\</OutputPath>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <UseVSHostingProcess>false</UseVSHostingProcess>
-    <NoWarn>CS4014,CA1416</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>x64</PlatformTarget>
     <DebugType>none</DebugType>
     <OutputPath>..\..\bin\x64\Release\</OutputPath>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <UseVSHostingProcess>false</UseVSHostingProcess>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>Images\default.ico</ApplicationIcon>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="UI\Dialogs\ColorPicker\ColorPicker.png" />
     <None Remove="UI\Dialogs\ColorPicker\Hsv.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Update="Properties\AssemblyInfo.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>AssemblyInfo.tt</DependentUpon>
-    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\Raleway.ttf" />
@@ -58,39 +41,18 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\Checkmark-26.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Clowd-250.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Help-64.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Visible-24.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Settings-32.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Help-25.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\Cross-26.png" />
     <Resource Include="UI\Dialogs\ColorPicker\ColorPicker.png" />
     <Resource Include="UI\Dialogs\ColorPicker\Hsv.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\default-white.ico" />
     <Resource Include="Images\default.ico" />
     <Resource Include="Images\cancel_24px.png" />
     <Resource Include="Images\ok_48px.png" />
-    <Content Include="Properties\AssemblyInfo.tt">
-      <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>AssemblyInfo.cs</LastGenOutput>
-    </Content>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetZip" Version="1.15.0" />
@@ -123,14 +85,4 @@
       <SubType>Designer</SubType>
     </Page>
   </ItemGroup>
-  <!--<PropertyGroup />-->
-  <!--<PropertyGroup>
-    <PreBuildEvent>
-      if $(ConfigurationName) == Debug (
-      "$(DevEnvDir)\TextTransform.exe" -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
-      ) ELSE (
-      "$(DevEnvDir)\TextTransform.exe" -a !!revision!true -a !!build!true "$(ProjectDir)Properties\AssemblyInfo.tt"
-      )
-    </PreBuildEvent>
-  </PropertyGroup>-->
 </Project>
