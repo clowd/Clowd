@@ -11,8 +11,8 @@ using System.Windows.Data;
 using System.Windows.Media;
 using Clowd.Config;
 using Clowd.UI.Controls;
-using DrawToolsLib;
-using DrawToolsLib.Graphics;
+using Clowd.Drawing;
+using Clowd.Drawing.Graphics;
 
 namespace Clowd.UI.Helpers
 {
