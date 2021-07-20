@@ -1,4 +1,6 @@
-﻿using System;
+﻿#pragma warning disable CS0108 // Member hides inherited member; missing new keyword
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -128,7 +130,6 @@ namespace Clowd.PlatformUtil.Windows
         InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IModalWindow
     {
-
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime),
         PreserveSig]
         int Show([In] IntPtr parent);
