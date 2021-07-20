@@ -133,7 +133,7 @@ namespace Clowd.Installer
                         if (IsConsoleMode)
                         {
                             // if it's the first time writing to this file, lets print the command line args to this program
-                            File.AppendAllText(path, $"{Environment.NewLine}> {Assembly.GetEntryAssembly().Location} {String.Join(" ", Environment.GetCommandLineArgs().Skip(1))}{Environment.NewLine}{Environment.NewLine}");
+                            File.AppendAllText(path, $"{Environment.NewLine}> {Constants.CurrentExePath} {String.Join(" ", Environment.GetCommandLineArgs().Skip(1))}{Environment.NewLine}{Environment.NewLine}");
                         }
                     }
 

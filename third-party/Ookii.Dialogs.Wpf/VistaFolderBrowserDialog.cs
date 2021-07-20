@@ -1,4 +1,4 @@
-// Copyright (c) Sven Groot (Ookii.org) 2009
+﻿// Copyright (c) Sven Groot (Ookii.org) 2009
 // BSD license; see LICENSE for details.
 using System;
 using System.Collections.Generic;
@@ -232,13 +232,13 @@ namespace Ookii.Dialogs.Wpf
             }
             finally
             {
-                if (rootItemIdList != null)
+                if (rootItemIdList != IntPtr.Zero)
                 {
                     IMalloc malloc = NativeMethods.SHGetMalloc();
                     malloc.Free(rootItemIdList);
                     Marshal.ReleaseComObject(malloc);
                 }
-                if (resultItemIdList != null)
+                if (resultItemIdList != IntPtr.Zero)
                 {
                     Marshal.FreeCoTaskMem(resultItemIdList);
                 }

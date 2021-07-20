@@ -3,9 +3,6 @@
     <LangVersion>9.0</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-    <MSBuildProjectExtensionsPath>$(SolutionDir)\bin\intermediate\obj\$(MSBuildProjectName)</MSBuildProjectExtensionsPath>
-    <BaseIntermediateOutputPath>$(SolutionDir)\bin\intermediate\obj</BaseIntermediateOutputPath>
-    <OutputPath>$(SolutionDir)\bin\intermediate\bin\$(MSBuildProjectName)\$(Configuration)\</OutputPath>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
   <PropertyGroup>

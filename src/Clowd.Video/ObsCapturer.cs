@@ -268,6 +268,8 @@ namespace Clowd.Video
             File.WriteAllText(fileName, _output.ToString());
         }
 
+#pragma warning disable CS0649 // is never assigned to
+
         private class PJsonVersion
         {
             public string version;

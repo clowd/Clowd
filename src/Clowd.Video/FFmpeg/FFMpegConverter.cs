@@ -91,6 +91,8 @@ namespace Clowd.Video.FFmpeg
             }
             catch (Exception ex)
             {
+                // don't care
+                this.FFMpegLogHandler(ex.ToString());
             }
         }
 
