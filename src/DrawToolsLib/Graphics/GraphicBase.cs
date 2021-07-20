@@ -6,7 +6,6 @@ using System.Windows.Media;
 using System.Runtime.CompilerServices;
 using System.Windows.Media.Effects;
 using System.Xml.Serialization;
-using DrawToolsLib.Annotations;
 
 namespace DrawToolsLib.Graphics
 {
@@ -172,7 +171,6 @@ namespace DrawToolsLib.Graphics
                 size, size);
         }
 
-        [NotifyPropertyChangedInvocator]
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
