@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
 using Clowd.PlatformUtil.Windows;
+using ModernWpf;
 
 namespace Clowd.UI
 {
@@ -14,10 +15,18 @@ namespace Clowd.UI
         private bool? _isDark;
         public SystemThemedWindow()
         {
-            ModernWpf.ThemeManager.SetIsThemeAware(this, true);
+            ThemeManager.SetIsThemeAware(this, true);
+            ThemeManager.Current.ActualApplicationThemeChanged += ThemeChanged;
+
             this.SetResourceReference(Window.BackgroundProperty, "SystemControlPageBackgroundAltHighBrush");
             this.SetResourceReference(Window.ForegroundProperty, "SystemControlPageTextBaseHighBrush");
             this.SourceInitialized += SystemThemedWindow_SourceInitialized;
+        }
+
+        private void ThemeChanged(ThemeManager sender, object args)
+        {
+            var hWnd = new WindowInteropHelper(this).Handle;
+            UpdateDarkModeState(hWnd);
         }
 
         private void SystemThemedWindow_SourceInitialized(object sender, EventArgs e)
@@ -36,13 +45,14 @@ namespace Clowd.UI
 
         protected virtual void UpdateDarkModeState(IntPtr handle)
         {
-            var systemIsDark = DarkMode.IsDarkModeEnabled();
-            if (systemIsDark && _isDark != true)
+            bool shouldBeDark = ThemeManager.Current.ActualApplicationTheme == ApplicationTheme.Dark;
+
+            if (shouldBeDark && _isDark != true)
             {
                 DarkMode.UseImmersiveDarkMode(handle, true);
                 _isDark = true;
             }
-            else if (!systemIsDark && _isDark != false)
+            else if (!shouldBeDark && _isDark != false)
             {
                 DarkMode.UseImmersiveDarkMode(handle, false);
                 _isDark = false;

@@ -214,7 +214,7 @@ namespace Clowd.Capture
 
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
         {
-            var settings = _settings.Upload;
+            var settings = _settings.Uploads;
             IUploadProvider provider;
 
             switch (type)

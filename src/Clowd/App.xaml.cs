@@ -54,13 +54,37 @@ namespace Clowd
                 // initialize GDI+ (our native lib depends on it, but does not initialize it)
                 new System.Drawing.Region().Dispose();
 
+                // default classify settings
+                Classify.DefaultOptions = new ClassifyOptions();
+                Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
+                Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
+
                 DefaultLog = new DefaultScopedLog("Clowd");
                 if (!Debugging)
                     DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
 
                 SetupExceptionHandling();
                 await SetupMutex(e);
-                SetupSettings();
+
+                try
+                {
+                    ClowdSettings.LoadDefault();
+                }
+                catch (Exception ex)
+                {
+                    if (await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Error,
+                        "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
+                        "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
+                    {
+                        ClowdSettings.CreateNew();
+                        ClowdSettings.Current.Save();
+                    }
+                    else
+                    {
+                        Environment.Exit(1);
+                    }
+                }
+
                 SetupDependencyInjection();
                 SetupTrayIcon();
                 SetupTrayContextMenu();
@@ -206,15 +230,6 @@ namespace Clowd
                 if (!_processor.Startup(e.Args))
                     throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Clowd instance? Uninstaller?");
             }
-        }
-
-        private void SetupSettings()
-        {
-            ClowdSettings tmp;
-            Classify.DefaultOptions = new ClassifyOptions();
-            Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
-            Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
-            SettingsUtil.LoadSettings(out tmp);
         }
 
         private void SetupDependencyInjection()
