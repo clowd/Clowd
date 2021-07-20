@@ -245,7 +245,6 @@ namespace Clowd.Installer
                 typeof(AutoStart),
                 typeof(ContextMenu),
                 typeof(ControlPanel),
-                typeof(DShowFilter),
                 typeof(Shortcuts),
             };
 
