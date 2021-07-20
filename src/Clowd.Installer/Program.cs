@@ -20,7 +20,7 @@ namespace Clowd.Installer
             Log.White($"Starting elevated process, logging to: \"{logFile}\"");
 
             ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = Assembly.GetExecutingAssembly().Location;
+            psi.FileName = Constants.CurrentExePath;
             var action = install ? nameof(InstallerArgs.AddFeature) : nameof(InstallerArgs.RemoveFeature);
             psi.Arguments = $"{action} {feature.Name} -dir \"{appDirectory}\" -log \"{logFile}\"";
             psi.UseShellExecute = true;
@@ -54,7 +54,7 @@ namespace Clowd.Installer
                 Log.Red(ex.ToString());
                 Log.Red(ex.Message); // log the message as the last thing before we exit, just makes reading easier.
                 Console.WriteLine();
-                $"To see help, run '{Path.GetFileName(Assembly.GetExecutingAssembly().Location)} -h'".ToYellow().WriteLine();
+                $"To see help, run '{Path.GetFileName(Constants.CurrentExePath)} -h'".ToYellow().WriteLine();
                 //ArgUsage.GenerateUsageFromTemplate<InstallerArgs>().WriteLine();
                 return 1;
             }

@@ -3,7 +3,7 @@ $MSBuildPath = $MSBuildPath.Trim();
 
 Remove-Item "$PSScriptRoot\publish" -Recurse
 
-<#
+
 &$MSBuildPath "$PSScriptRoot\src\Clowd\Clowd.csproj" `
 /t:Restore,Rebuild,Publish `
 /v:minimal `
@@ -15,10 +15,9 @@ Remove-Item "$PSScriptRoot\publish" -Recurse
 /p:PublishDir=$PSScriptRoot\publish\Clowd `
 /p:RuntimeIdentifier=win-x64 `
 /p:PublishReadyToRun=False `
-/p:PublishTrimmed=False `
+/p:PublishTrimmed=True `
 /p:SolutionDir=$PSScriptRoot `
 /p:AllowedReferenceRelatedFileExtensions=none
-
 
 &$MSBuildPath "$PSScriptRoot\src\Clowd.Installer\Clowd.Installer.csproj" `
 /t:Restore,Rebuild,Publish `
@@ -35,20 +34,3 @@ Remove-Item "$PSScriptRoot\publish" -Recurse
 /p:SolutionDir=$PSScriptRoot `
 /p:AllowedReferenceRelatedFileExtensions=none `
 /p:IncludeNativeLibrariesForSelfExtract=True
-#>
-
-&$MSBuildPath "$PSScriptRoot\src\Clowd.Watch\Clowd.Watch.csproj" `
-/t:Restore,Rebuild,Publish `
-/v:minimal `
-/p:PublishSingleFile=True `
-/p:SelfContained=False `
-/p:PublishProtocol=FileSystem `
-/p:Configuration=Release `
-/p:Platform=AnyCPU `
-/p:PublishDir=$PSScriptRoot\publish\Clowd.Watch `
-/p:RuntimeIdentifier=win-x64 `
-/p:PublishReadyToRun=False `
-/p:PublishTrimmed=False `
-/p:SolutionDir=$PSScriptRoot 
-
-

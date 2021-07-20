@@ -14,7 +14,6 @@ namespace Clowd.Drawing.Tools
         private readonly Action<T> _end;
 
         internal T _instance;
-        internal Point _start;
 
         public ToolDraggable(Cursor cursor, Func<Point, T> create, Action<Point, T> update)
             : this(cursor, create, update, null)

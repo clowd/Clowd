@@ -24,6 +24,8 @@ namespace Clowd
         public const string ReleaseFeedUrl = "https://caesay.com/clowd-updates";
         public const string InstallerExeName = "ClowdCLI.exe";
         public const string UpdateProcessName = "ClowdUpdate";
+        public static bool Debugging => System.Diagnostics.Debugger.IsAttached;
+        public static string CurrentExePath => System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
     }
 
     public static class PathConstants

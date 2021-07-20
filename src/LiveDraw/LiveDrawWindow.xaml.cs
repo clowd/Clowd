@@ -185,7 +185,7 @@ namespace AntFu7.LiveDraw
 
         private ColorPicker _selectedColor;
         private bool _inkVisibility = true;
-        private bool _displayExtraToolPanel = false;
+        //private bool _displayExtraToolPanel = false;
         private bool _enable = false;
         private readonly int[] _brushSizes = { 4, 6, 8, 10, 14 };
         private int _brushIndex = 0;
@@ -680,12 +680,12 @@ namespace AntFu7.LiveDraw
 
         #region /---------Helper---------/
         private string _staticInfo = "";
-        private bool _displayingInfo;
+        //private bool _displayingInfo;
 
         private async void Display(string info)
         {
             InfoBox.Text = info;
-            _displayingInfo = true;
+            //_displayingInfo = true;
             await InfoDisplayTimeUp(new Progress<string>(box => InfoBox.Text = box));
         }
         private Task InfoDisplayTimeUp(IProgress<string> box)
@@ -694,7 +694,7 @@ namespace AntFu7.LiveDraw
             {
                 Task.Delay(2000).Wait();
                 box.Report(_staticInfo);
-                _displayingInfo = false;
+                //_displayingInfo = false;
             });
         }
         //private void SetStaticInfo(string info)

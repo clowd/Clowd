@@ -97,18 +97,18 @@ namespace Clowd.Util
         {
             throw new NotImplementedException(); // this method is buggy, the Pixel Format is hard coded in the BitmapSource.Create call..
 
-            var bitmapData = bitmap.LockBits(
-                new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
-                System.Drawing.Imaging.ImageLockMode.ReadOnly, bitmap.PixelFormat);
+            //var bitmapData = bitmap.LockBits(
+            //    new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
+            //    System.Drawing.Imaging.ImageLockMode.ReadOnly, bitmap.PixelFormat);
 
-            var bitmapSource = BitmapSource.Create(
-                bitmapData.Width, bitmapData.Height,
-                96, 96,
-                PixelFormats.Bgr24, null,
-                bitmapData.Scan0, bitmapData.Stride * bitmapData.Height, bitmapData.Stride);
+            //var bitmapSource = BitmapSource.Create(
+            //    bitmapData.Width, bitmapData.Height,
+            //    96, 96,
+            //    PixelFormats.Bgr24, null,
+            //    bitmapData.Scan0, bitmapData.Stride * bitmapData.Height, bitmapData.Stride);
 
-            bitmap.UnlockBits(bitmapData);
-            return bitmapSource;
+            //bitmap.UnlockBits(bitmapData);
+            //return bitmapSource;
         }
 
         public static System.Drawing.Bitmap Crop(this System.Drawing.Bitmap b, System.Drawing.Rectangle r)

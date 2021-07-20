@@ -7,8 +7,7 @@ namespace Clowd.Util
 {
     class ProgressStream : Stream
     {
-
-        public EventHandler<BytesReadEventArgs> BytesReadEvent;
+        public event EventHandler<BytesReadEventArgs> BytesReadEvent;
 
         public long BytesRead { get; set; }
 

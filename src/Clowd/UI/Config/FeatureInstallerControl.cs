@@ -19,13 +19,13 @@ namespace Clowd.UI.Config
         public FeatureInstallerControl(IFeature feature)
         {
             this._feature = feature;
-            this.IsOn = _feature.CheckInstalled(App.ExePath);
+            this.IsOn = _feature.CheckInstalled(Constants.CurrentExePath);
         }
 
         protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
         {
             e.Handled = true;
-            var asset = App.ExePath;
+            var asset = Constants.CurrentExePath;
 
             if (this.IsOn)
             {

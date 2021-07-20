@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Threading;
+using Clowd;
 using Clowd.Installer;
 using NAppUpdate.Framework;
 using NAppUpdate.Framework.Common;
@@ -34,7 +35,7 @@ namespace NAppUpdate.Updater
 
             Log("Starting to process cold updates...");
 
-            var workingDir = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+            var workingDir = Path.GetDirectoryName(Constants.CurrentExePath);
             //if (_args.LogTo)
             //{
             //    // Setup a temporary location for the log file, until we can get the DTO
@@ -45,7 +46,7 @@ namespace NAppUpdate.Updater
             {
                 // Get the update process name, to be used to create a named pipe and to wait on the application
                 // to quit
-                string syncProcessName = Clowd.Constants.UpdateProcessName;
+                string syncProcessName = Constants.UpdateProcessName;
                 if (string.IsNullOrEmpty(syncProcessName)) //Application.Exit();
                     throw new ArgumentException("The command line needs to specify the mutex of the program to update.", "ar" + "gs");
 
@@ -57,7 +58,7 @@ namespace NAppUpdate.Updater
                 {
                     Log("Loading {0}", assemblyPath);
 
-                    if (assemblyPath.Equals(Assembly.GetEntryAssembly().Location, StringComparison.InvariantCultureIgnoreCase) || assemblyPath.EndsWith("NAppUpdate.Framework.dll"))
+                    if (assemblyPath.Equals(Constants.CurrentExePath, StringComparison.InvariantCultureIgnoreCase) || assemblyPath.EndsWith("NAppUpdate.Framework.dll"))
                     {
                         Log("\tSkipping (part of current execution)");
                         continue;

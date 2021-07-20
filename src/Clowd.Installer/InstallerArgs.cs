@@ -54,7 +54,7 @@ namespace Clowd.Installer
         public string AppExePath => Path.Combine(AppDirectory, Constants.ClowdExeName);
 
         [ArgIgnore]
-        public bool IsInstallerInUse => Assembly.GetEntryAssembly().Location.StartsWith(Path.GetFullPath(AppDirectory), StringComparison.OrdinalIgnoreCase);
+        public bool IsInstallerInUse => Constants.CurrentExePath.StartsWith(Path.GetFullPath(AppDirectory), StringComparison.OrdinalIgnoreCase);
 
         [ArgActionMethod]
         [ArgDescription("Update's the application to the specified (or latest) version")]
@@ -82,7 +82,7 @@ namespace Clowd.Installer
             if (package == null)
                 throw new ArgumentException($"Version '{args.Version ?? "latest"}' in channel '{args.Channel}' was not found and could not be downloaded.");
 
-            var manager = UpdateHelper.GetUpdaterInstance(AppDirectory, Assembly.GetEntryAssembly().Location);
+            var manager = UpdateHelper.GetUpdaterInstance(AppDirectory, Constants.CurrentExePath);
 
             Log.Spinner("Preparing...", (s) =>
             {
@@ -224,8 +224,7 @@ namespace Clowd.Installer
             }
             else
             {
-                var assy = Assembly.GetExecutingAssembly();
-                var location = assy.Location;
+                var location = Constants.CurrentExePath;
                 var directory = Path.GetDirectoryName(location);
 
                 if (File.Exists(Path.Combine(directory, Constants.ClowdExeName)))

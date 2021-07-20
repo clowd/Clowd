@@ -82,13 +82,13 @@ namespace Clowd.Config
         public bool Remove(TKey key)
         {
             throw new NotImplementedException();
-            return _impl.Remove(key);
+            //return _impl.Remove(key);
         }
 
         public bool Remove(KeyValuePair<TKey, TValue> item)
         {
             throw new NotImplementedException();
-            return _impl.Remove(item.Key);
+            //return _impl.Remove(item.Key);
         }
 
         public bool TryGetValue(TKey key, out TValue value)

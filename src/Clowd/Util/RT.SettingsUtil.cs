@@ -365,9 +365,6 @@ namespace RT.Util
         /// <summary>Lock object used to protect concurrent access.</summary>
         [ClassifyIgnore, NonSerialized]
         protected internal object _lock = new object();
-        /// <summary>The thread on which the background saving is performed.</summary>
-        [ClassifyIgnore, NonSerialized]
-        protected internal Thread _saveThread;
 
         /// <summary>
         ///     This method is called just before the settings class is written out to disk, allowing any required changes to
@@ -396,11 +393,6 @@ namespace RT.Util
             // Save and delete must not be interrupted or superseded by a SaveThreaded
             lock (_lock)
             {
-                if (_saveThread != null) // this can only ever occur in the Sleep/lock wait phase of the quick save thread
-                {
-                    _saveThread.Abort();
-                    _saveThread = null;
-                }
                 SettingsUtil.save(this, filename, serializer, onFailure);
             }
         }
@@ -436,11 +428,6 @@ namespace RT.Util
             // Save and delete must not be interrupted or superseded by a SaveThreaded
             lock (_lock)
             {
-                if (_saveThread != null) // this can only ever occur in the Sleep/lock wait phase of the quick save thread
-                {
-                    _saveThread.Abort();
-                    _saveThread = null;
-                }
                 var attr = SettingsUtil.GetAttribute(GetType());
                 if (filename == null)
                     filename = attr.GetFileName();
@@ -497,61 +484,6 @@ namespace RT.Util
         {
             get { return this.GetType().GetCustomAttributes<SettingsAttribute>(false).FirstOrDefault(); }
         }
-    }
-
-    /// <summary>Like <see cref="SettingsBase"/>, but implements an additional save method.</summary>
-    public abstract class SettingsThreadedBase : SettingsBase
-    {
-        [ClassifyIgnore, NonSerialized]
-        private SettingsBase _saveObj;
-        [ClassifyIgnore, NonSerialized]
-        private string _saveFilename;
-        [ClassifyIgnore, NonSerialized]
-        private SettingsSerializer? _saveSerializer;
-
-        /// <summary>
-        ///     Must return a deep clone of this class. This will be used to create a snapshot of the settings at the time
-        ///     when <see cref="SaveThreaded"/> is called.</summary>
-        protected abstract SettingsThreadedBase CloneForSaveThreaded();
-
-        /// <summary>
-        ///     <para>
-        ///         Saves the settings. Intended for frequent use at any point where it would make sense to commit settings,
-        ///         but would not make sense to bug the user about any failures. This method is like <see
-        ///         cref="SettingsBase.SaveQuiet"/>, except that the actual save occurs slightly later on a separate thread.
-        ///         The method returns as soon as <see cref="CloneForSaveThreaded"/> returns.</para>
-        ///     <para>
-        ///         Note that this method is NOT guaranteed to save settings, but it usually will. Make sure you call <see
-        ///         cref="SettingsBase.Save"/> when you want to guarantee a save, especially just before the program
-        ///         terminates.</para></summary>
-        public virtual void SaveThreaded(string filename = null, SettingsSerializer? serializer = null)
-        {
-            lock (_lock)
-            {
-                _saveObj = CloneForSaveThreaded();
-                _saveFilename = filename;
-                _saveSerializer = serializer;
-                if (_saveObj == null)
-                    throw new InvalidOperationException("CloneForSaveThreaded returned null.");
-                if (_saveThread == null)
-                {
-                    _saveThread = new Thread(saveThreadFunc);
-                    _saveThread.IsBackground = true;
-                    _saveThread.Start();
-                }
-            }
-        }
-
-        private void saveThreadFunc()
-        {
-            Thread.Sleep(2000);
-            lock (_lock)
-            {
-                SettingsUtil.save(_saveObj, _saveFilename, _saveSerializer, SettingsOnFailure.DoNothing);
-                _saveThread = null;
-            }
-        }
-
     }
 
     /// <summary>Determines what the settings in the settings file are logically "attached" to.</summary>
@@ -633,6 +565,14 @@ namespace RT.Util
         public SettingsCancelException()
             : base("User chose to cancel the operation")
         { }
+
+        public SettingsCancelException(string message) : base(message)
+        {
+        }
+
+        public SettingsCancelException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
     }
 
     /// <summary>Describes the intended usage of a "settings" class to <see cref="SettingsUtil"/> methods.</summary>

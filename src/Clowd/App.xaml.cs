@@ -39,8 +39,6 @@ namespace Clowd
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
         public static IScopedLog DefaultLog { get; private set; }
         public static ServiceContainer Container { get; private set; }
-        public static bool Debugging => Debugger.IsAttached;
-        public static string ExePath => Process.GetCurrentProcess().MainModule.FileName;
 
         private TaskbarIcon _taskbarIcon;
         private MutexArgsForwarder _processor;
@@ -60,7 +58,7 @@ namespace Clowd
                 Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
 
                 DefaultLog = new DefaultScopedLog("Clowd");
-                if (!Debugging)
+                if (!Constants.Debugging)
                     DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
 
                 SetupExceptionHandling();
@@ -207,7 +205,7 @@ namespace Clowd
                 bool mutexCreated = _processor.Startup(e.Args);
                 if (!mutexCreated)
                 {
-                    if (Debugging && await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Warning,
+                    if (Constants.Debugging && await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Warning,
                         "There is already an instance of clowd running. Would you like to kill it before continuing?",
                         "Debugger attached; Clowd already running",
                         "Kill Clowd", "Exit"))

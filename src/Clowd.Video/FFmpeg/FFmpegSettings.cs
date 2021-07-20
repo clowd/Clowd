@@ -1,4 +1,5 @@
-﻿using System;
+﻿#pragma warning disable CS0414,CS0067
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;

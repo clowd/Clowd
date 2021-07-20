@@ -4,6 +4,7 @@
     <OutputType>Library</OutputType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
+    <NoWarn>1701;1702;SYSLIB0003;SYSLIB0004;CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Update="CredentialDialog.cs">

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -10,6 +10,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using NAppUpdate.Framework.Common;
 using NAppUpdate.Framework.Tasks;
 using System.Reflection;
+using Clowd;
 
 namespace NAppUpdate.Framework.Utils
 {
@@ -177,10 +178,9 @@ namespace NAppUpdate.Framework.Utils
                 Directory.CreateDirectory(updaterPath);
 
             // copy self
-            var myAssy = Assembly.GetExecutingAssembly();
-            var myLocation = myAssy.Location;
+            //var myAssy = Assembly.GetExecutingAssembly();
+            var myLocation = Constants.CurrentExePath;
             var myName = Path.GetFileName(myLocation);
-
             var targetPath = Path.Combine(updaterPath, myName);
 
             File.Copy(myLocation, targetPath);

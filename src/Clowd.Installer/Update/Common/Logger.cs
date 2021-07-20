@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using Clowd;
 
 namespace NAppUpdate.Framework.Common
 {
@@ -91,7 +92,7 @@ namespace NAppUpdate.Framework.Common
 		{
 			if (string.IsNullOrEmpty(filePath))
 			{
-				var workingDir = Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().Location);
+				var workingDir = Path.GetDirectoryName(Constants.CurrentExePath);
 				filePath = Path.Combine(workingDir ?? string.Empty, @"NauUpdate.log");
 			}
 
