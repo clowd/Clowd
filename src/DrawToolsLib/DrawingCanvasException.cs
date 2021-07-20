@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Runtime.Serialization;
@@ -24,7 +24,7 @@ namespace DrawToolsLib
 
         // FxCop requirements
         public DrawingCanvasException() 
-            : base(Properties.Settings.Default.UnknownException)
+            : base("Unknown error")
         {
 
         }
