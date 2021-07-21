@@ -1,11 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using CsWin32.Graphics.Gdi;
-using CsWin32.UI.WindowsAndMessaging;
 using CsWin32.Foundation;
 using static CsWin32.PInvoke;
-using static CsWin32.Constants;
 using System.ComponentModel;
 
 namespace Clowd.PlatformUtil.Windows

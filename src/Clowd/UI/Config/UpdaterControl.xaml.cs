@@ -1,10 +1,8 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using Clowd.Installer;
-using Clowd.UI.Helpers;
 using NAppUpdate.Framework;
 using PropertyChanged;
 

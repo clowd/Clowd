@@ -4,31 +4,31 @@ using NAppUpdate.Framework.Common;
 
 namespace NAppUpdate.Framework.Conditions
 {
-	[Serializable]
+    [Serializable]
     public class OSCondition : IUpdateCondition
     {
-		[NauField("bit", "File size to compare with (in bytes)", true)]
-		public int OsBits { get; set; }
+        [NauField("bit", "File size to compare with (in bytes)", true)]
+        public int OsBits { get; set; }
 
-		// TODO: Work with enums on code and Attributes to get a proper and full OS version comparison
-		// use http://stackoverflow.com/questions/545666/how-to-translate-ms-windows-os-version-numbers-into-product-names-in-net
-		// and http://msdn.microsoft.com/en-us/library/ms724429(VS.85).aspx
+        // TODO: Work with enums on code and Attributes to get a proper and full OS version comparison
+        // use http://stackoverflow.com/questions/545666/how-to-translate-ms-windows-os-version-numbers-into-product-names-in-net
+        // and http://msdn.microsoft.com/en-us/library/ms724429(VS.85).aspx
 
-		public bool IsMet(Tasks.IUpdateTask task)
-		{
-			var is64Bit = Is64BitOperatingSystem();
+        public bool IsMet(Tasks.IUpdateTask task)
+        {
+            var is64Bit = Is64BitOperatingSystem();
 
-			if (OsBits == 32 && OsBits != 64)
-				return true;
+            if (OsBits == 32 && OsBits != 64)
+                return true;
 
-			// OS bitness check, if requested
-			if (OsBits == 32 && is64Bit)
-				return false;
-			if (OsBits == 64 && !is64Bit)
-				return false;
+            // OS bitness check, if requested
+            if (OsBits == 32 && is64Bit)
+                return false;
+            if (OsBits == 64 && !is64Bit)
+                return false;
 
-			return true;
-		}
+            return true;
+        }
 
         // Check OS bitness (32 / 64 bit)
         // As seen on http://1code.codeplex.com/SourceControl/changeset/view/39074#842775
@@ -86,7 +86,7 @@ namespace NAppUpdate.Framework.Conditions
 
         [DllImport("kernel32", CharSet = CharSet.Auto, SetLastError = true)]
         static extern IntPtr GetProcAddress(IntPtr hModule,
-            [MarshalAs(UnmanagedType.LPStr)]string procName);
+            [MarshalAs(UnmanagedType.LPStr)] string procName);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]

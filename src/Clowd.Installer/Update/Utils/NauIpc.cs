@@ -1,5 +1,4 @@
 ﻿using System;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -9,7 +8,6 @@ using System.Collections.Generic;
 using System.Runtime.Serialization.Formatters.Binary;
 using NAppUpdate.Framework.Common;
 using NAppUpdate.Framework.Tasks;
-using System.Reflection;
 using Clowd;
 
 namespace NAppUpdate.Framework.Utils

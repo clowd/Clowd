@@ -1,5 +1,4 @@
-﻿using System;
-using CsWin32.UI.WindowsAndMessaging;
+﻿using CsWin32.UI.WindowsAndMessaging;
 
 namespace Clowd.PlatformUtil
 {

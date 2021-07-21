@@ -1,11 +1,7 @@
-﻿using Microsoft.Win32;
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
 using System;
-using System.Collections.Generic;
-using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
-using System.Text;
 
 namespace Clowd.Installer
 {

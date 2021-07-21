@@ -1,19 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Drawing;
-using Clowd.UI;
-using Clowd.UI.Config;
-using Clowd.UI.Helpers;
 using Clowd.Upload;
-using Clowd.Util;
-using PropertyChanged;
 using RT.Serialization;
 using RT.Util;
 
