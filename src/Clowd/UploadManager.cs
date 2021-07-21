@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Clowd.Config;
-using Clowd.UI;
 using Clowd.UI.Helpers;
 using Clowd.Upload;
 using Clowd.Util;

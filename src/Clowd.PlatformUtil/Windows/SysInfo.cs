@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Drawing;
 using static CsWin32.PInvoke;
 
 namespace Clowd.PlatformUtil.Windows

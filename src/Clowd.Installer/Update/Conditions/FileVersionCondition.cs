@@ -5,7 +5,7 @@ using NAppUpdate.Framework.Common;
 
 namespace NAppUpdate.Framework.Conditions
 {
-	[Serializable]
+    [Serializable]
     [UpdateConditionAlias("version")]
     public class FileVersionCondition : IUpdateCondition
     {
@@ -34,9 +34,9 @@ namespace NAppUpdate.Framework.Conditions
             if (!File.Exists(localPath))
                 return ComparisonType.Equals("below", StringComparison.InvariantCultureIgnoreCase);
 
-        	var versionInfo = FileVersionInfo.GetVersionInfo(localPath);
-			if (versionInfo.FileVersion == null) return true; // perform the update if no version info is found
-			
+            var versionInfo = FileVersionInfo.GetVersionInfo(localPath);
+            if (versionInfo.FileVersion == null) return true; // perform the update if no version info is found
+
             var localVersion = new Version(versionInfo.FileMajorPart, versionInfo.FileMinorPart, versionInfo.FileBuildPart, versionInfo.FilePrivatePart);
             var updateVersion = Version != null ? new Version(Version) : new Version();
 

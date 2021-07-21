@@ -2,7 +2,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using Clowd.Util;

@@ -4,7 +4,7 @@ using NAppUpdate.Framework.Common;
 
 namespace NAppUpdate.Framework.Conditions
 {
-	[Serializable]
+    [Serializable]
     public class FileSizeCondition : IUpdateCondition
     {
         [NauField("localPath",

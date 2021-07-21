@@ -112,9 +112,10 @@ namespace Clowd.UI.Dialogs.ColorPicker
         private void SetBackground()
         {
             var backgroundBrush = new LinearGradientBrush
-                {
-                   StartPoint = new Point(0.5, 1), EndPoint = new Point(0.5, 0)
-                };
+            {
+                StartPoint = new Point(0.5, 1),
+                EndPoint = new Point(0.5, 0)
+            };
 
             const int SpectrumColorCount = 30;
 

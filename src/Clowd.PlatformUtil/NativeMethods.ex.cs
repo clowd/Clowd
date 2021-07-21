@@ -1,8 +1,5 @@
-﻿using System;
-using System.Drawing;
+﻿using System.Drawing;
 using System.Runtime.InteropServices;
-using CsWin32.Graphics.Gdi;
-using CsWin32.UI.WindowsAndMessaging;
 using CsWin32.UI.HiDpi;
 using Clowd.PlatformUtil;
 

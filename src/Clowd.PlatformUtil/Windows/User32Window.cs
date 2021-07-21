@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -47,7 +46,7 @@ namespace Clowd.PlatformUtil.Windows
                 GetWindowRect(Handle, out var rect);
                 return ScreenRect.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
             }
-            set => SetWindowPos(Handle, HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height, 
+            set => SetWindowPos(Handle, HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height,
                 SET_WINDOW_POS_FLAGS.SWP_NOOWNERZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER);
         }
 

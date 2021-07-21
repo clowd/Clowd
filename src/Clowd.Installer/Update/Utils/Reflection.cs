@@ -44,23 +44,23 @@ namespace NAppUpdate.Framework.Utils
             string attValue = string.Empty;
             foreach (PropertyInfo pi in propertyInfos)
             {
-                object[] atts = pi.GetCustomAttributes(typeof (NauFieldAttribute), false);
+                object[] atts = pi.GetCustomAttributes(typeof(NauFieldAttribute), false);
                 if (atts.Length != 1) continue; // NauFieldAttribute doesn't allow multiples
 
-                NauFieldAttribute nfa = (NauFieldAttribute) atts[0];
+                NauFieldAttribute nfa = (NauFieldAttribute)atts[0];
 
                 // Get the attribute value, process it, and set the object's property with that value
                 if (!attributes.TryGetValue(nfa.Alias, out attValue)) continue;
-				if (pi.PropertyType == typeof(String))
-				{
-					pi.SetValue(fieldsHolder, attValue, null);
-				}
-				else if (pi.PropertyType == typeof(DateTime))
-				{
-					DateTime dt = DateTime.MaxValue;
+                if (pi.PropertyType == typeof(String))
+                {
+                    pi.SetValue(fieldsHolder, attValue, null);
+                }
+                else if (pi.PropertyType == typeof(DateTime))
+                {
+                    DateTime dt = DateTime.MaxValue;
                     long filetime = long.MaxValue;
-					if (DateTime.TryParse(attValue, out dt))
-						pi.SetValue(fieldsHolder, dt, null);
+                    if (DateTime.TryParse(attValue, out dt))
+                        pi.SetValue(fieldsHolder, dt, null);
                     else if (long.TryParse(attValue, out filetime))
                     {
                         try
@@ -71,8 +71,8 @@ namespace NAppUpdate.Framework.Utils
                         }
                         catch { }
                     }
-				}
-				// TODO: type: Uri
+                }
+                // TODO: type: Uri
                 else if (pi.PropertyType.IsEnum)
                 {
                     object eObj = Enum.Parse(pi.PropertyType, attValue);
@@ -81,12 +81,12 @@ namespace NAppUpdate.Framework.Utils
                 }
                 else
                 {
-                    MethodInfo mi = pi.PropertyType.GetMethod("Parse", new Type[] {typeof (String)});
+                    MethodInfo mi = pi.PropertyType.GetMethod("Parse", new Type[] { typeof(String) });
                     if (mi == null) continue;
-                    object o = mi.Invoke(null, new object[] {attValue});
-                    
+                    object o = mi.Invoke(null, new object[] { attValue });
+
                     if (o != null)
-                    	pi.SetValue(fieldsHolder, o, null);
+                        pi.SetValue(fieldsHolder, o, null);
                 }
             }
         }

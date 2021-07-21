@@ -1,15 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
-using System.Windows.Data;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clowd.Capture;
@@ -77,7 +71,7 @@ namespace Clowd.UI
                     _session.DesktopPath,
                     new Rect(
                         0, 0, //Math.Floor(drawingCanvas.WorldOffset.X - (width / 2)),
-                        //Math.Floor(drawingCanvas.WorldOffset.Y - (height / 2)),
+                              //Math.Floor(drawingCanvas.WorldOffset.Y - (height / 2)),
                         width,
                         height),
                     crop);

@@ -27,7 +27,7 @@ namespace NAppUpdate.Framework.FeedReaders
 
                 FileVersionCondition cnd = new FileVersionCondition();
                 cnd.Version = n["appcast:version"].InnerText;
-				if (task.UpdateConditions == null) task.UpdateConditions = new BooleanCondition();
+                if (task.UpdateConditions == null) task.UpdateConditions = new BooleanCondition();
                 task.UpdateConditions.AddCondition(cnd, BooleanCondition.ConditionType.AND);
 
                 ret.Add(task);

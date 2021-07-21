@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Clowd.PlatformUtil.Windows
+﻿namespace Clowd.PlatformUtil.Windows
 {
     public enum WindowMessage : uint
     {

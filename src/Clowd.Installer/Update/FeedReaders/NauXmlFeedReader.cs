@@ -12,7 +12,7 @@ namespace NAppUpdate.Framework.FeedReaders
         private Dictionary<string, Type> _updateConditions { get; set; }
         private Dictionary<string, Type> _updateTasks { get; set; }
 
-    	#region IUpdateFeedReader Members
+        #region IUpdateFeedReader Members
 
         public IList<IUpdateTask> Read(string feed)
         {
@@ -35,7 +35,7 @@ namespace NAppUpdate.Framework.FeedReaders
 
             if (root.Attributes["BaseUrl"] != null && !string.IsNullOrEmpty(root.Attributes["BaseUrl"].Value))
                 UpdateManager.Instance.BaseUrl = root.Attributes["BaseUrl"].Value;
-			
+
             // Temporary collection of attributes, used to aggregate them all with their values
             // to reduce Reflection calls
             Dictionary<string, string> attributes = new Dictionary<string, string>();
@@ -79,14 +79,14 @@ namespace NAppUpdate.Framework.FeedReaders
                         IUpdateCondition conditionObject = ReadCondition(node["Conditions"]);
                         if (conditionObject != null)
                         {
-                        	var boolCond = conditionObject as BooleanCondition;
-							if (boolCond != null)
-								task.UpdateConditions = boolCond;
-							else
-							{
-								if (task.UpdateConditions == null) task.UpdateConditions = new BooleanCondition();
-								task.UpdateConditions.AddCondition(conditionObject);
-							}
+                            var boolCond = conditionObject as BooleanCondition;
+                            if (boolCond != null)
+                                task.UpdateConditions = boolCond;
+                            else
+                            {
+                                if (task.UpdateConditions == null) task.UpdateConditions = new BooleanCondition();
+                                task.UpdateConditions.AddCondition(conditionObject);
+                            }
                         }
                     }
                 }

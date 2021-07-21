@@ -1,11 +1,9 @@
 ﻿#pragma warning disable CS0108 // Member hides inherited member; missing new keyword
 
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace Clowd.PlatformUtil.Windows
 {

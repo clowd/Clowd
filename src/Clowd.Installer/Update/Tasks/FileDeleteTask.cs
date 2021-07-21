@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using System.IO;
 using NAppUpdate.Framework.Common;
-using NAppUpdate.Framework.Conditions;
 using NAppUpdate.Framework.Sources;
 using NAppUpdate.Framework.Utils;
 
