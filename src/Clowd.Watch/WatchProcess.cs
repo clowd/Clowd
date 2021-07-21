@@ -29,7 +29,7 @@ namespace Clowd
         private readonly Process[] _other;
         private Dictionary<int, string> _namecache = new Dictionary<int, string>();
 
-        public EventHandler<WatchLogEventArgs> OutputReceived;
+        public event EventHandler<WatchLogEventArgs> OutputReceived;
 
         public bool IsRunning => !_watcher.HasExited;
 
