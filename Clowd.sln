@@ -17,7 +17,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Cyotek.Windows.Forms.ColorP
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ookii.Dialogs.Wpf", "third-party\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj", "{D01B1D20-8F5B-4834-8E5C-C7EC6DD587D4}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LiveDraw", "src\LiveDraw\LiveDraw.csproj", "{110F39D7-349D-4E27-88C1-02AF6513015E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LiveDraw", "third-party\LiveDraw\LiveDraw.csproj", "{110F39D7-349D-4E27-88C1-02AF6513015E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Video", "src\Clowd.Video\Clowd.Video.csproj", "{FA6FD7EE-A2D6-4C1A-99D6-A7F5354D0B65}"
 EndProject
@@ -37,7 +37,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{E12FDD
 		.gitattributes = .gitattributes
 		.gitignore = .gitignore
 		.gitmodules = .gitmodules
-		Directory.Build.props = Directory.Build.props
+		src\Directory.Build.props = src\Directory.Build.props
 	EndProjectSection
 EndProject
 Global
@@ -106,6 +106,7 @@ Global
 		{7AC63864-7638-41C4-969C-D3197EF2BED9} = {186217DA-744C-45D7-A040-67A279EE34C8}
 		{FB2A5786-CD2E-42CE-BC5D-0FCE90034221} = {186217DA-744C-45D7-A040-67A279EE34C8}
 		{D01B1D20-8F5B-4834-8E5C-C7EC6DD587D4} = {186217DA-744C-45D7-A040-67A279EE34C8}
+		{110F39D7-349D-4E27-88C1-02AF6513015E} = {186217DA-744C-45D7-A040-67A279EE34C8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {044F5710-CD07-4D96-8879-35D70E5AF5CD}

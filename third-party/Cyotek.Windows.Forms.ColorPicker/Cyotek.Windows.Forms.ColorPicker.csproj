@@ -3,7 +3,7 @@
     <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
     <RootNamespace>Cyotek.Windows.Forms</RootNamespace>
-    <AssemblyName>ColorDialog</AssemblyName>
+    <AssemblyName>ColorPicker</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWindowsForms>true</UseWindowsForms>
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
