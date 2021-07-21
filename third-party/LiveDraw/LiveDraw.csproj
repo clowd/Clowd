@@ -15,7 +15,7 @@
     <AppDesigner Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Clowd.Shared\Clowd.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Rescoures\Icon.ico" />
