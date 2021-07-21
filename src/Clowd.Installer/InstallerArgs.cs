@@ -1,13 +1,8 @@
 ﻿using Clowd.Installer.Features;
 using PowerArgs;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Clowd.Installer
 {
@@ -131,7 +126,7 @@ namespace Clowd.Installer
         [ArgExample("clowdcli addfeature autostart", "Install AutoStart feature")]
         [ArgExample("clowdcli addfeature controlpanel", "Install ControlPanel feature")]
         [ArgExample("clowdcli addfeature shortcuts", "Install Shortcuts feature")]
-        public void AddFeature([ArgRequired][ArgDescription("The name of the feature")]string FeatureName)
+        public void AddFeature([ArgRequired][ArgDescription("The name of the feature")] string FeatureName)
         {
             Startup();
             var feature = GetFeature(FeatureName);
@@ -157,7 +152,7 @@ namespace Clowd.Installer
         [ArgExample("clowdcli removefeature autostart", "Uninstall AutoStart feature")]
         [ArgExample("clowdcli removefeature controlpanel", "Uninstall ControlPanel feature")]
         [ArgExample("clowdcli removefeature shortcuts", "Uninstall Shortcuts feature")]
-        public void RemoveFeature([ArgRequired][ArgDescription("The name of the feature")]string FeatureName)
+        public void RemoveFeature([ArgRequired][ArgDescription("The name of the feature")] string FeatureName)
         {
             Startup();
             var feature = GetFeature(FeatureName);

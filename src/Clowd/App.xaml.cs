@@ -1,12 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.ServiceModel;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -23,10 +21,8 @@ using LightInject;
 using NotifyIconLib;
 using Ookii.Dialogs.Wpf;
 using RT.Serialization;
-using RT.Util;
 using RT.Util.ExtensionMethods;
 using Color = System.Windows.Media.Color;
-using Point = System.Windows.Point;
 
 namespace Clowd
 {

@@ -28,8 +28,8 @@ namespace NAppUpdate.Framework.Sources
             return Feed;
         }
 
-		public bool GetData(string filePath, string basePath, Action<UpdateProgressInfo> onProgress, ref string tempFile)
-    	{
+        public bool GetData(string filePath, string basePath, Action<UpdateProgressInfo> onProgress, ref string tempFile)
+        {
             Uri uriKey = null;
 
             if (Uri.IsWellFormedUriString(filePath, UriKind.Absolute))

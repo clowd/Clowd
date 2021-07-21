@@ -1,13 +1,5 @@
-﻿using System;
-using System.Diagnostics;
-using System.Reflection;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
+﻿using System.Windows.Input;
 using Clowd.Installer.Features;
-using Clowd.UI.Helpers;
 using ModernWpf.Controls;
 
 namespace Clowd.UI.Config

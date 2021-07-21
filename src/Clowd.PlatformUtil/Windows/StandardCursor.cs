@@ -1,7 +1,4 @@
-﻿using System;
-using CsWin32.UI.WindowsAndMessaging;
-
-namespace Clowd.PlatformUtil
+﻿namespace Clowd.PlatformUtil
 {
     public enum StandardCursor : uint
     {

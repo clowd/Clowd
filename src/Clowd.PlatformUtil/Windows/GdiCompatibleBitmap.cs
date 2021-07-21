@@ -1,11 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using CsWin32;
-using CsWin32.Foundation;
-using CsWin32.UI.WindowsAndMessaging;
-using CsWin32.UI.Shell;
-using CsWin32.Graphics.Dwm;
 using CsWin32.Graphics.Gdi;
 using static CsWin32.Constants;
 using static CsWin32.PInvoke;

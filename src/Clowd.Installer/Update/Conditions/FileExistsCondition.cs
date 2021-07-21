@@ -5,7 +5,7 @@ using NAppUpdate.Framework.Common;
 
 namespace NAppUpdate.Framework.Conditions
 {
-	[Serializable]
+    [Serializable]
     [UpdateConditionAlias("exists")]
     public class FileExistsCondition : IUpdateCondition
     {

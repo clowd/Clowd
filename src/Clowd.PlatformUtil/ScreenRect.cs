@@ -74,7 +74,7 @@ namespace Clowd.PlatformUtil
             return result;
         }
 
-        public static explicit operator System.Drawing.Rectangle(ScreenRect rect) 
+        public static explicit operator System.Drawing.Rectangle(ScreenRect rect)
             => new System.Drawing.Rectangle(rect.X, rect.Y, rect.Width, rect.Height);
 
         public static explicit operator ScreenRect(System.Drawing.Rectangle rect)

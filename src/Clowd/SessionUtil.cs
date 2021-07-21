@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Clowd.PlatformUtil;
 using Newtonsoft.Json;
 
@@ -62,7 +59,7 @@ namespace Clowd
 
         public static IEnumerable<SessionInfo> GetSavedSessions()
         {
-            foreach(var d in Directory.EnumerateDirectories(PathConstants.SessionData))
+            foreach (var d in Directory.EnumerateDirectories(PathConstants.SessionData))
             {
                 var p = Path.Combine(d, "session.json");
                 if (File.Exists(p))
