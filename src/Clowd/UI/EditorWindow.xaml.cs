@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Linq;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using Clowd.Config;
 using Clowd.PlatformUtil;
+using Clowd.UI.Helpers;
 using Dragablz;
 using ModernWpf.Controls;
 using ModernWpf.Controls.Primitives;
@@ -14,6 +16,8 @@ namespace Clowd.UI
     public partial class EditorWindow : SystemThemedWindow
     {
         public DateTime LastTouched { get; private set; } = DateTime.Now;
+
+        public string WindowId { get; } = Guid.NewGuid().ToString().ToLower();
 
         public EditorWindow()
         {
@@ -26,11 +30,53 @@ namespace Clowd.UI
 
             TabView.NewItemFactory = () =>
             {
-                var newItem = new TabItem { Header = "Document" };
-                TabItemHelper.SetIcon(newItem, new SymbolIcon(Symbol.Document));
-                newItem.Content = new ImageEditorPage(SessionUtil.CreateNewSession());
-                return newItem;
+                return GetTabFromSession(SessionUtil.CreateNewSession());
             };
+
+            TabView.ItemsChanged += TabView_ItemsChanged;
+            TabView.ClosingItemCallback = TabClosing;
+            Closing += EditorWindow_Closing;
+        }
+
+        private void TabView_ItemsChanged(object sender, EventArgs e)
+        {
+            // loop through my items and make sure their WindowId is up to date
+            // items can move from window to window
+            foreach (var t in TabView.Items)
+            {
+                var session = GetSessionFromTab(t);
+                session.ActiveWindowId = WindowId;
+            }
+        }
+
+        private async void EditorWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (TabView.Items.Count > 1 && ClowdSettings.Current.Editor.AskBeforeClosingMultipleTabs)
+            {
+                e.Cancel = true;
+                if (await NiceDialog.ShowPromptAsync(this,
+                    NiceDialogIcon.Information,
+                    $"You are closing several tabs - you will not be able to open this window again.",
+                    $"Close {TabView.Items.Count} tabs?", $"Close {TabView.Items.Count} Tabs", "Cancel"))
+                {
+                    TabView.Items.Clear();
+                    this.Close();
+                }
+            }
+
+            // reset all tab sessions window id to null 
+            foreach (var t in TabView.Items)
+            {
+                var session = GetSessionFromTab(t);
+                session.ActiveWindowId = null;
+            }
+        }
+
+        private void TabClosing(ItemActionCallbackArgs<TabablzControl> args)
+        {
+            // reset session window id to null for closing tab
+            var session = GetSessionFromTab(args.DragablzItem);
+            session.ActiveWindowId = null;
         }
 
         protected override void OnActivated(EventArgs e)
@@ -45,11 +91,43 @@ namespace Clowd.UI
             LastTouched = DateTime.Now;
         }
 
+        private SessionInfo GetSessionFromTab(object tabObj)
+        {
+            if (tabObj is DragablzItem drag)
+                return GetSessionFromTab(drag.Content);
+
+            if (tabObj is TabItem tab)
+                return GetSessionFromTab(tab.DataContext);
+
+            if (tabObj is SessionInfo session)
+                return session;
+
+            throw new InvalidOperationException($"Unable to convert object of type '{tabObj.GetType()}' to SessionInfo");
+        }
+
+        private TabItem GetTabFromSession(SessionInfo info)
+        {
+            if (info.ActiveWindowId != null)
+                throw new InvalidOperationException("Document can only be open in one window at a time");
+
+            var newItem = new TabItem();
+            newItem.DataContext = info;
+
+            // bind icon
+            var icon = new SymbolIcon();
+            icon.SetBinding(SymbolIcon.SymbolProperty, new Binding(nameof(SessionInfo.Icon)) { Source = info });
+            TabItemHelper.SetIcon(newItem, icon);
+
+            // bind tab name
+            newItem.SetBinding(TabItem.HeaderProperty, new Binding(nameof(SessionInfo.Name)));
+
+            newItem.Content = new ImageEditorPage(info);
+            return newItem;
+        }
+
         public void AddSession(SessionInfo session)
         {
-            var newItem = new TabItem { Header = "Capture" };
-            TabItemHelper.SetIcon(newItem, new SymbolIcon(Symbol.Camera));
-            newItem.Content = new ImageEditorPage(session);
+            var newItem = GetTabFromSession(session);
             TabView.Items.Add(newItem);
             TabView.SelectedItem = newItem;
             this.PlatformWindow.Activate();
