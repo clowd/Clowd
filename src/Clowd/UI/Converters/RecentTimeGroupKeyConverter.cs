@@ -17,7 +17,10 @@ namespace Clowd.UI.Converters
                 if (time.AddDays(1).Date == DateTime.UtcNow.Date)
                     return "Yesterday";
 
-                var diff = DateTime.UtcNow - time;
+                if (time == default)
+                    return "Unknown";
+
+                var diff = time - DateTime.UtcNow;
                 return PrettyTime.Format(diff);
             }
 

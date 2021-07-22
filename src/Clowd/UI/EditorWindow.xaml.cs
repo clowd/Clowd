@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Linq;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using Clowd.Config;
 using Clowd.PlatformUtil;
-using Clowd.UI.Helpers;
 using Dragablz;
 using ModernWpf.Controls;
 using ModernWpf.Controls.Primitives;
@@ -46,29 +44,18 @@ namespace Clowd.UI
             {
                 var session = GetSessionFromTab(t);
                 session.ActiveWindowId = WindowId;
+                session.Save();
             }
         }
 
-        private async void EditorWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        private void EditorWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (TabView.Items.Count > 1 && ClowdSettings.Current.Editor.AskBeforeClosingMultipleTabs)
-            {
-                e.Cancel = true;
-                if (await NiceDialog.ShowPromptAsync(this,
-                    NiceDialogIcon.Information,
-                    $"You are closing several tabs - you will not be able to open this window again.",
-                    $"Close {TabView.Items.Count} tabs?", $"Close {TabView.Items.Count} Tabs", "Cancel"))
-                {
-                    TabView.Items.Clear();
-                    this.Close();
-                }
-            }
-
             // reset all tab sessions window id to null 
             foreach (var t in TabView.Items)
             {
                 var session = GetSessionFromTab(t);
                 session.ActiveWindowId = null;
+                session.Save();
             }
         }
 
@@ -77,6 +64,7 @@ namespace Clowd.UI
             // reset session window id to null for closing tab
             var session = GetSessionFromTab(args.DragablzItem);
             session.ActiveWindowId = null;
+            session.Save();
         }
 
         protected override void OnActivated(EventArgs e)
@@ -91,7 +79,7 @@ namespace Clowd.UI
             LastTouched = DateTime.Now;
         }
 
-        private SessionInfo GetSessionFromTab(object tabObj)
+        private static SessionInfo GetSessionFromTab(object tabObj)
         {
             if (tabObj is DragablzItem drag)
                 return GetSessionFromTab(drag.Content);
@@ -133,22 +121,58 @@ namespace Clowd.UI
             this.PlatformWindow.Activate();
         }
 
+        public static void ShowAllPreviouslyActiveSessions()
+        {
+            var sessions = SessionUtil.GetSavedSessions()
+                .Where(s => !String.IsNullOrWhiteSpace(s.ActiveWindowId))
+                .GroupBy(s => s.ActiveWindowId);
+
+            foreach (var g in sessions)
+            {
+                var ew = new EditorWindow();
+                foreach (var s in g)
+                {
+                    s.ActiveWindowId = null;
+                    ew.AddSession(s);
+                }
+                ew.Show();
+            }
+        }
+
         public static void ShowSession(SessionInfo session)
         {
             if (session == null)
                 throw new ArgumentNullException(nameof(session));
 
-            var preferredScreen = Platform.Current.GetScreenFromRect(session.SelectionRect);
+            // if the session is already open somewhere, just switch to that window / tab
+            if (session.ActiveWindowId != null)
+            {
+                var openWnd = App.Current.Windows.OfType<EditorWindow>().FirstOrDefault(f => f.WindowId == session.ActiveWindowId);
+                if (openWnd != null)
+                {
+                    openWnd.PlatformWindow.Activate();
+                    var tab = openWnd.TabView.Items.OfType<TabItem>().FirstOrDefault(t => GetSessionFromTab(t).RootPath == session.RootPath);
+                    if (tab != null)
+                        openWnd.TabView.SelectedItem = tab;
+                    return;
+                }
+                else
+                {
+                    session.ActiveWindowId = null;
+                    session.Save();
+                }
+            }
 
+            // look for a candidate window to open this tab in, or open a new window if one can't be found
             var query = from w in App.Current.Windows.OfType<EditorWindow>()
-                        let p = w.GetPlatformWindow()
-                        where p.IsCurrentVirtualDesktop
+                        where w.PlatformWindow.IsCurrentVirtualDesktop
                         where w.TabView.IsHeaderPanelVisible
                         orderby w.LastTouched descending
                         select w;
 
             var items = query.ToArray();
 
+            var preferredScreen = session.SelectionRect == null ? Platform.Current.PrimaryScreen : Platform.Current.GetScreenFromRect(session.SelectionRect);
             var preferred = items.FirstOrDefault(w => Platform.Current.GetScreenFromRect(w.ScreenPosition) == preferredScreen);
             var any = items.FirstOrDefault();
 

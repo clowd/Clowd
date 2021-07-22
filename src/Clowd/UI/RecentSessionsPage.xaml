@@ -7,41 +7,41 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="http://schemas.modernwpf.com/2019"
     Title="RecentSessionsPage"
     d:Background="White"
     d:DesignHeight="450"
     d:DesignWidth="800"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     mc:Ignorable="d">
-    <Page.Resources>
-        <conv:RecentTimeGroupKeyConverter x:Key="recentTimeConv" />
-        <CollectionViewSource x:Key="SessionsViewSource">
-            <CollectionViewSource.GroupDescriptions>
-                <PropertyGroupDescription Converter="{StaticResource recentTimeConv}" PropertyName="Created" />
-            </CollectionViewSource.GroupDescriptions>
-            <CollectionViewSource.SortDescriptions>
-                <cm:SortDescription Direction="Descending" PropertyName="Created" />
-            </CollectionViewSource.SortDescriptions>
-        </CollectionViewSource>
-    </Page.Resources>
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
         <ListView
             x:Name="listView"
-            ItemsSource="{Binding Source={StaticResource SessionsViewSource}}"
+            Margin="10,0,0,0"
+            MouseDoubleClick="ViewDoubleClick"
             VirtualizingPanel.IsVirtualizingWhenGrouping="True"
             VirtualizingPanel.VirtualizationMode="Recycling">
             <ListView.GroupStyle>
                 <GroupStyle>
                     <GroupStyle.HeaderTemplate>
                         <DataTemplate>
-                            <TextBlock Style="{DynamicResource TitleTextBlockStyle}" Text="{Binding Name, Mode=OneTime}" />
+                            <TextBlock Style="{DynamicResource SubTitleTextBlockStyle}" Text="{Binding Name, Mode=OneTime}" />
                         </DataTemplate>
                     </GroupStyle.HeaderTemplate>
                 </GroupStyle>
             </ListView.GroupStyle>
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Grid>
+                    <Grid HorizontalAlignment="Stretch">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" />
                             <RowDefinition Height="*" />
@@ -49,16 +49,17 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition />
                         </Grid.ColumnDefinitions>
-                        <Ellipse
-                            x:Name="Ellipse"
+                        <Border
+                            x:Name="imgBorder"
                             Grid.RowSpan="2"
-                            Width="32"
-                            Height="32"
-                            Margin="6"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Fill="Gray" />
+                            Width="110"
+                            Height="70"
+                            Margin="4"
+                            Background="{StaticResource CheckeredLightGrayBackgroundBrush}">
+                            <Image Source="{Binding CroppedPath, Mode=OneTime}" Stretch="Uniform" />
+                        </Border>
                         <TextBlock
                             Grid.Column="1"
                             Margin="12,6,0,0"
@@ -69,10 +70,69 @@
                             Grid.Column="1"
                             Margin="12,0,0,6"
                             Style="{StaticResource BodyTextBlockStyle}"
-                            Text="{Binding Company, Mode=OneTime}" />
+                            Text="{Binding TimeAgo, Mode=OneTime}" />
+                        <ui:CommandBar
+                            x:Name="cmdBar"
+                            Grid.RowSpan="2"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            DefaultLabelPosition="Collapsed"
+                            Visibility="Hidden">
+                            <ui:AppBarButton
+                                Click="OpenItemClicked"
+                                Icon="OpenFile"
+                                Label="Open"
+                                ToolTip="Open in Editor" />
+                            <ui:AppBarButton
+                                Click="CopyItemClicked"
+                                Icon="Copy"
+                                Label="Copy"
+                                ToolTip="Copy to Clipboard" />
+                            <ui:AppBarButton
+                                Click="DeleteItemClicked"
+                                Icon="Delete"
+                                Label="Delete"
+                                ToolTip="Delete" />
+                        </ui:CommandBar>
                     </Grid>
+                    <DataTemplate.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListViewItem}}, Path=IsSelected}" Value="True" />
+                                <Condition Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListView}}, Path=SelectedItems.Count}" Value="1" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="cmdBar" Property="Visibility" Value="Visible" />
+                        </MultiDataTrigger>
+                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListViewItem}}, Path=IsSelected}" Value="True">
+                            <Setter TargetName="imgBorder" Property="Background" Value="Transparent" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+        <ui:CommandBar
+            Name="multiCommandBar"
+            Grid.Row="1"
+            HorizontalAlignment="Right"
+            DefaultLabelPosition="Right"
+            Visibility="Collapsed">
+            <ui:AppBarButton
+                Name="cmdBtnDeleteSelected"
+                Icon="Delete"
+                Label="Delete Selected">
+                <ui:FlyoutService.Flyout>
+                    <ui:Flyout Placement="TopEdgeAlignedRight">
+                        <StackPanel>
+                            <TextBlock
+                                Margin="0,0,0,12"
+                                Style="{StaticResource BaseTextBlockStyle}"
+                                Text="All selected items will be deleted, this can not be un-done.&#x0a;Do you want to continue?" />
+                            <Button Click="DeleteSelectedFlyoutClicked" Content="Yes, delete all selected items" />
+                        </StackPanel>
+                    </ui:Flyout>
+                </ui:FlyoutService.Flyout>
+            </ui:AppBarButton>
+        </ui:CommandBar>
     </Grid>
 </Page>
