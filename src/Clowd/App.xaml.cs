@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -89,6 +89,8 @@ namespace Clowd
 
                 // start receiving command line arguments
                 _processor.Ready();
+
+                EditorWindow.ShowAllPreviouslyActiveSessions();
 
                 try
                 {

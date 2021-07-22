@@ -3,13 +3,17 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using Clowd.PlatformUtil;
+using Clowd.UI;
+using Clowd.Util;
 using ModernWpf.Controls;
 using Newtonsoft.Json;
+using WeakEvent;
 
 namespace Clowd
 {
     public class SessionInfo : INotifyPropertyChanged
     {
+        public string TimeAgo => Created == default ? "Unknown" : PrettyTime.Format(Created - DateTime.UtcNow);
         public DateTime Created { get; init; }
         public string RootPath { get; init; }
         public string CroppedPath { get; init; }
@@ -24,31 +28,29 @@ namespace Clowd
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        public SessionInfo()
-        {
-            PropertyChanged += SessionInfo_PropertyChanged;
-        }
-
-        private void SessionInfo_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            SaveSafe();
-        }
-
         public void Save()
         {
             if (String.IsNullOrEmpty(RootPath))
                 throw new InvalidOperationException("RootPath can not be null");
-            SaveSafe();
-        }
-
-        private void SaveSafe()
-        {
-            if (String.IsNullOrEmpty(RootPath))
-                return;
-
             LastModified = DateTime.UtcNow;
             var json = JsonConvert.SerializeObject(this);
             File.WriteAllText(Path.Combine(RootPath, "session.json"), json);
+        }
+
+        public void Delete()
+        {
+            if (ActiveWindowId != null)
+                throw new InvalidOperationException("Can't delete session that is opened in an editor");
+        }
+
+        public void Open()
+        {
+            EditorWindow.ShowSession(this);
+        }
+
+        public void Copy()
+        {
+
         }
     }
 
@@ -64,6 +66,25 @@ namespace Clowd
 
     static class SessionUtil
     {
+        public static event EventHandler<EventArgs> WeakSessionsUpdated
+        {
+            add { _myEventSource.Subscribe(value); }
+            remove { _myEventSource.Unsubscribe(value); }
+        }
+
+        static readonly WeakEventSource<EventArgs> _myEventSource = new WeakEventSource<EventArgs>();
+        static FileSystemWatcher _fsw;
+        static SessionUtil()
+        {
+            _fsw = new FileSystemWatcher(PathConstants.SessionData);
+            _fsw.IncludeSubdirectories = true;
+            _fsw.EnableRaisingEvents = true;
+            _fsw.Changed += _myEventSource.Raise;
+            _fsw.Created += _myEventSource.Raise;
+            _fsw.Deleted += _myEventSource.Raise;
+            _fsw.Renamed += _myEventSource.Raise;
+        }
+
         public static string CreateNewSessionDirectory()
         {
             var dir = PathConstants.GetDatedFilePath("session", "0", PathConstants.SessionData);
@@ -73,10 +94,13 @@ namespace Clowd
 
         public static SessionInfo CreateNewSession()
         {
-            return new SessionInfo
+            var session = new SessionInfo
             {
-                RootPath = CreateNewSessionDirectory()
+                RootPath = CreateNewSessionDirectory(),
+                Created = DateTime.UtcNow,
             };
+            session.Save();
+            return session;
         }
 
         public static SessionInfo Parse(string sessionPath)
