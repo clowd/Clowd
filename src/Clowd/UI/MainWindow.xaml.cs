@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using Clowd.Config;
@@ -53,6 +54,10 @@ namespace Clowd.UI
             var settingsPage = typeof(ClowdSettings).GetProperties().FirstOrDefault(f => f.Name == tag);
             if (settingsPage != null)
                 return new SettingsControlFactory(this, settingsPage.GetValue(ClowdSettings.Current)).GetSettingsPanel();
+
+            var type = Type.GetType("Clowd.UI." + tag);
+            if (type != null && type.IsAssignableTo(typeof(FrameworkElement)))
+                return (FrameworkElement)Activator.CreateInstance(type);
 
             return null;
         }

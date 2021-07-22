@@ -1,0 +1,78 @@
+﻿<Page
+    x:Class="Clowd.UI.RecentSessionsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd.UI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="RecentSessionsPage"
+    d:Background="White"
+    d:DesignHeight="450"
+    d:DesignWidth="800"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    mc:Ignorable="d">
+    <Page.Resources>
+        <conv:RecentTimeGroupKeyConverter x:Key="recentTimeConv" />
+        <CollectionViewSource x:Key="SessionsViewSource">
+            <CollectionViewSource.GroupDescriptions>
+                <PropertyGroupDescription Converter="{StaticResource recentTimeConv}" PropertyName="Created" />
+            </CollectionViewSource.GroupDescriptions>
+            <CollectionViewSource.SortDescriptions>
+                <cm:SortDescription Direction="Descending" PropertyName="Created" />
+            </CollectionViewSource.SortDescriptions>
+        </CollectionViewSource>
+    </Page.Resources>
+    <Grid>
+        <ListView
+            x:Name="listView"
+            ItemsSource="{Binding Source={StaticResource SessionsViewSource}}"
+            VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+            VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Style="{DynamicResource TitleTextBlockStyle}" Text="{Binding Name, Mode=OneTime}" />
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListView.GroupStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Ellipse
+                            x:Name="Ellipse"
+                            Grid.RowSpan="2"
+                            Width="32"
+                            Height="32"
+                            Margin="6"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Fill="Gray" />
+                        <TextBlock
+                            Grid.Column="1"
+                            Margin="12,6,0,0"
+                            Style="{StaticResource BaseTextBlockStyle}"
+                            Text="{Binding Name, Mode=OneTime}" />
+                        <TextBlock
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Margin="12,0,0,6"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Text="{Binding Company, Mode=OneTime}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</Page>

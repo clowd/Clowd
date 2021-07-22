@@ -223,6 +223,8 @@ namespace Clowd.Config
 
         public bool TabsEnabled { get; set; } = true;
 
+        public bool AskBeforeClosingMultipleTabs { get; set; } = true;
+
         [Browsable(false)]
         public int StartupPadding { get; set; } = 30;
 
