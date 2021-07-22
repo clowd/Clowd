@@ -18,6 +18,7 @@ using Clowd.UI;
 using Clowd.UI.Helpers;
 using Clowd.Util;
 using LightInject;
+using ModernWpf;
 using NotifyIconLib;
 using Ookii.Dialogs.Wpf;
 using RT.Serialization;
@@ -60,6 +61,7 @@ namespace Clowd
                 SetupExceptionHandling();
                 await SetupMutex(e);
 
+                // settings
                 try
                 {
                     ClowdSettings.LoadDefault();
@@ -80,8 +82,10 @@ namespace Clowd
                 }
 
                 SetupDependencyInjection();
-                SetupTrayIcon();
-                SetupTrayContextMenu();
+
+                // theme
+                SetupTrayIconAndTheme();
+                ThemeManager.Current.ActualApplicationThemeChanged += (s, e) => SetupTrayIconAndTheme();
 
                 // start receiving command line arguments
                 _processor.Ready();
@@ -255,31 +259,28 @@ namespace Clowd
             Container = container;
         }
 
-        private void SetupTrayIcon()
+        private void SetupTrayIconAndTheme()
         {
+            // theme resources
+            this.Resources["ButtonBorderBrushPointerOver"] = new SolidColorBrush((Color)FindResource("SystemBaseMediumColor"));
+
+            // tray icon
             if (_taskbarIcon == null)
             {
                 _taskbarIcon = new TaskbarIcon();
-                _taskbarIcon.WndProcMessageReceived += OnWndProcMessageReceived;
+                //_taskbarIcon.WndProcMessageReceived += OnWndProcMessageReceived;
                 _taskbarIcon.ToolTipText = "Clowd\nRight click me or drop something on me\nto see what I can do!";
             }
 
-            //force the correct icon size
-            string iconLocation = PlatformUtil.Windows.DarkMode.IsDarkModeEnabled() ? "/Images/default-white.ico" : "/Images/default.ico";
-            System.Windows.Resources.StreamResourceInfo sri = Application.GetResourceStream(new Uri("pack://application:,,," + iconLocation));
-            var desiredSize = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
-            var avaliableSizes = new[] { 64, 48, 40, 32, 24, 20, 16 };
-            var nearest = avaliableSizes.OrderBy(x => Math.Abs(x - desiredSize)).First();
-            _taskbarIcon.Icon = new System.Drawing.Icon(sri.Stream, new System.Drawing.Size(nearest, nearest));
-        }
+            // force/refresh the correct icon size
+            _taskbarIcon.Icon = AppStyles.AppIconGdi;
 
-        internal void SetupTrayContextMenu()
-        {
+            // context menu
             ContextMenu context = new ContextMenu();
             var capture = new MenuItem() { Header = "_Capture Screen" };
             capture.Click += async (s, e) =>
             {
-                //wait long enough for context menu to disappear.
+                // wait long enough for context menu to disappear.
                 await Task.Delay(400);
                 StartCapture();
             };
@@ -313,9 +314,9 @@ namespace Clowd
             };
             context.Items.Add(screend);
 
-            //var editor = new MenuItem() { Header = "Image _Editor" };
-            //editor.Click += (s, e) => ImageEditorPage.ShowNewEditor();
-            //context.Items.Add(editor);
+            var editor = new MenuItem() { Header = "Image _Editor" };
+            editor.Click += (s, e) => EditorWindow.ShowSession(SessionUtil.CreateNewSession());
+            context.Items.Add(editor);
 
             context.Items.Add(new Separator());
 
@@ -409,14 +410,6 @@ namespace Clowd
             {
                 var collection = data.GetFileDropList();
                 OnFilesReceived(collection);
-            }
-        }
-
-        private void OnWndProcMessageReceived(uint obj)
-        {
-            if (obj == (uint)PlatformUtil.Windows.WindowMessage.WM_THEMECHANGED)
-            {
-                SetupTrayIcon();
             }
         }
 

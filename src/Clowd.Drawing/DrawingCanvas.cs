@@ -1543,6 +1543,7 @@ namespace Clowd.Drawing
             MenuItem menuItem;
 
             contextMenu = new ContextMenu();
+            contextMenu.PlacementTarget = this;
 
             menuItem = new MenuItem();
             menuItem.Header = "Select all";
