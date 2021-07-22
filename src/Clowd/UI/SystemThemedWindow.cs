@@ -13,7 +13,6 @@ namespace Clowd.UI
         {
             ThemeManager.SetIsThemeAware(this, true);
             ThemeManager.Current.ActualApplicationThemeChanged += ThemeChanged;
-
             this.SetResourceReference(Window.BackgroundProperty, "SystemControlPageBackgroundAltHighBrush");
             this.SetResourceReference(Window.ForegroundProperty, "SystemControlPageTextBaseHighBrush");
             this.SourceInitialized += SystemThemedWindow_SourceInitialized;
@@ -35,14 +34,13 @@ namespace Clowd.UI
         {
             if (msg == (int)WindowMessage.WM_SETTINGCHANGE)
                 UpdateDarkModeState(hWnd);
-
             return base.WndProc(hWnd, msg, wParam, lParam, ref handled);
         }
 
         protected virtual void UpdateDarkModeState(IntPtr handle)
         {
-            bool shouldBeDark = ThemeManager.Current.ActualApplicationTheme == ApplicationTheme.Dark;
-
+            Icon = AppStyles.AppIconWpf;
+            bool shouldBeDark = AppStyles.IsDarkTheme;
             if (shouldBeDark && _isDark != true)
             {
                 DarkMode.UseImmersiveDarkMode(handle, true);
