@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Dragablz;
+using System;
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
@@ -10,6 +11,8 @@ namespace Clowd.UI.Controls
 {
     public class TabablzControlEx : TabablzControl
     {
+        public event EventHandler ItemsChanged;
+
         static TabablzControlEx()
         {
             DefaultStyleKeyProperty.OverrideMetadata(typeof(TabablzControlEx), new FrameworkPropertyMetadata(typeof(TabablzControlEx)));
@@ -62,6 +65,7 @@ namespace Clowd.UI.Controls
         {
             base.OnItemsChanged(e);
             UpdateTabWidths();
+            ItemsChanged?.Invoke(this, e);
         }
 
         private void OnItemsPresenterSizeChanged(object sender, SizeChangedEventArgs e)

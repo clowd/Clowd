@@ -36,7 +36,7 @@
             <ui:NavigationViewItem
                 Content="Recent"
                 Icon="BrowsePhotos"
-                Tag="RecentCapturePage" />
+                Tag="RecentSessionsPage" />
             <ui:NavigationViewItem
                 Content="Uploads"
                 Icon="Upload"

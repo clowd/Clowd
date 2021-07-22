@@ -1,22 +1,52 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using Clowd.PlatformUtil;
+using ModernWpf.Controls;
 using Newtonsoft.Json;
 
 namespace Clowd
 {
-    public class SessionInfo
+    public class SessionInfo : INotifyPropertyChanged
     {
-        public DateTime Created;
-        public string RootPath;
-        public string CroppedPath;
-        public string DesktopPath;
-        public ScreenRect SelectionRect;
-        public SessionWindow[] Windows;
+        public DateTime Created { get; init; }
+        public string RootPath { get; init; }
+        public string CroppedPath { get; init; }
+        public string DesktopPath { get; init; }
+        public ScreenRect SelectionRect { get; init; }
+        public SessionWindow[] Windows { get; init; }
+
+        public string ActiveWindowId { get; set; }
+        public string Name { get; set; } = "Document";
+        public Symbol Icon { get; set; } = Symbol.Document;
+        public DateTime LastModified { get; private set; }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public SessionInfo()
+        {
+            PropertyChanged += SessionInfo_PropertyChanged;
+        }
+
+        private void SessionInfo_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            SaveSafe();
+        }
 
         public void Save()
         {
+            if (String.IsNullOrEmpty(RootPath))
+                throw new InvalidOperationException("RootPath can not be null");
+            SaveSafe();
+        }
+
+        private void SaveSafe()
+        {
+            if (String.IsNullOrEmpty(RootPath))
+                return;
+
+            LastModified = DateTime.UtcNow;
             var json = JsonConvert.SerializeObject(this);
             File.WriteAllText(Path.Combine(RootPath, "session.json"), json);
         }
