@@ -95,7 +95,7 @@ namespace Clowd.Config
         }
     }
 
-    public abstract class SettingsCategoryBase : IDisposable, INotifyPropertyChanged
+    public abstract class SettingsCategoryBase : IDisposable, INotifyPropertyChanged, IClassifyObjectProcessor
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -119,7 +119,19 @@ namespace Clowd.Config
             DisposeInternal();
         }
 
-        public virtual void DisposeInternal() { }
+        void IClassifyObjectProcessor.BeforeSerialize()
+        {
+            BeforeSerializeInternal();
+        }
+
+        void IClassifyObjectProcessor.AfterDeserialize()
+        {
+            AfterDeserializeInternal();
+        }
+
+        protected virtual void DisposeInternal() { }
+        protected virtual void BeforeSerializeInternal() { }
+        protected virtual void AfterDeserializeInternal() { }
     }
 
     public class GeneralSettings : SettingsCategoryBase
@@ -137,23 +149,18 @@ namespace Clowd.Config
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose { get; set; } = true;
 
-        [ClassifyIgnore]
         public AppTheme Theme
         {
-            get => ModernWpf.ThemeManager.Current.ApplicationTheme switch
+            get => _Theme;
+            set
             {
-                ModernWpf.ApplicationTheme.Light => AppTheme.Light,
-                ModernWpf.ApplicationTheme.Dark => AppTheme.Dark,
-                _ => AppTheme.Auto,
-            };
-
-            set => ModernWpf.ThemeManager.Current.ApplicationTheme = value switch
-            {
-                AppTheme.Light => ModernWpf.ApplicationTheme.Light,
-                AppTheme.Dark => ModernWpf.ApplicationTheme.Dark,
-                _ => null,
-            };
+                _Theme = value;
+                UpdateModernWpfTheme(_Theme);
+            }
         }
+
+        // this is here to allow Classify to serialize / save. 
+        private AppTheme _Theme;
 
         [ClassifyIgnore]
         public Installer.Features.AutoStart StartWithWindows { get; set; } = new Installer.Features.AutoStart();
@@ -166,10 +173,24 @@ namespace Clowd.Config
 
         public enum AppTheme
         {
-            [Description("Auto / System")]
-            Auto,
+            System,
             Light,
             Dark
+        }
+
+        protected override void AfterDeserializeInternal()
+        {
+            UpdateModernWpfTheme(_Theme);
+        }
+
+        private void UpdateModernWpfTheme(AppTheme theme)
+        {
+            ModernWpf.ThemeManager.Current.ApplicationTheme = theme switch
+            {
+                AppTheme.Light => ModernWpf.ApplicationTheme.Light,
+                AppTheme.Dark => ModernWpf.ApplicationTheme.Dark,
+                _ => null,
+            };
         }
     }
 
@@ -196,7 +217,7 @@ namespace Clowd.Config
             Subscribe(FileUploadShortcut, CaptureRegionShortcut, CaptureFullscreenShortcut, CaptureActiveShortcut);
         }
 
-        public override void DisposeInternal()
+        protected override void DisposeInternal()
         {
             FileUploadShortcut?.Dispose();
             CaptureRegionShortcut?.Dispose();
