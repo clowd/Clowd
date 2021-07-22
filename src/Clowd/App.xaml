@@ -13,7 +13,16 @@
                 <ResourceDictionary Source="Assets/VectorGeometries.xaml" />
                 <ResourceDictionary Source="Assets/VectorIcons.xaml" />
                 <ResourceDictionary Source="Assets/DragablzStyles.xaml" />
-                <ui:ThemeResources />
+                <ui:ThemeResources>
+                    <ui:ThemeResources.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Light" ui:ThemeDictionary.Key="Light">
+                            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource SystemBaseMediumColor}" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Dark" ui:ThemeDictionary.Key="Dark">
+                            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource SystemBaseMediumColor}" />
+                        </ResourceDictionary>
+                    </ui:ThemeResources.ThemeDictionaries>
+                </ui:ThemeResources>
                 <ui:XamlControlsResources />
                 <ResourceDictionary Source="Assets/ModernWpfPreFluent.xaml" />
             </ResourceDictionary.MergedDictionaries>
@@ -24,6 +33,16 @@
             <conv:OnOffBrushConverter x:Key="OnOffBrush" />
 
             <SolidColorBrush x:Key="AccentColorBrush" Color="{DynamicResource SystemAccentColor}" />
+
+            <DrawingBrush
+                x:Key="CheckeredLightGrayBackgroundBrush"
+                TileMode="Tile"
+                Viewport="0,0,10,10"
+                ViewportUnits="Absolute">
+                <DrawingBrush.Drawing>
+                    <GeometryDrawing Brush="#96969696" Geometry="M0,0 H1 V1 H2 V2 H1 V1 H0Z" />
+                </DrawingBrush.Drawing>
+            </DrawingBrush>
 
             <DropShadowEffect
                 x:Key="z-depth1"
