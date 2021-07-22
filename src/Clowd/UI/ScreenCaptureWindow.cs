@@ -245,6 +245,7 @@ namespace Clowd.UI
             var session = SessionUtil.Parse(_wdxc?.SaveSession(SessionUtil.CreateNewSessionDirectory()));
             session.Name = "Capture";
             session.Icon = ModernWpf.Controls.Symbol.Camera;
+            session.Save();
             DisposeInternal();
             return session;
         }
