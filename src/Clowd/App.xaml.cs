@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -261,9 +261,6 @@ namespace Clowd
 
         private void SetupTrayIconAndTheme()
         {
-            // theme resources
-            this.Resources["ButtonBorderBrushPointerOver"] = new SolidColorBrush((Color)FindResource("SystemBaseMediumColor"));
-
             // tray icon
             if (_taskbarIcon == null)
             {
