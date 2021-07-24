@@ -15,7 +15,7 @@ namespace Clowd.PlatformUtil
                 return _current;
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                return (_current = new Windows.User32Platform());
+                return _current = new Windows.User32Platform();
 
             throw new NotImplementedException();
         }

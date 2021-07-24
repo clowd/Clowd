@@ -162,7 +162,7 @@ namespace Clowd.Util
             }
         }
 
-        public T RunProfiled<T>(string name, Func<IScopedLog, T> func)
+        public Y RunProfiled<Y>(string name, Func<IScopedLog, Y> func)
         {
             using (var scope = CreateProfiledScope(name))
             {
@@ -199,7 +199,7 @@ namespace Clowd.Util
             }
         }
 
-        public async Task<T> RunProfiledAsync<T>(string name, Func<IScopedLog, Task<T>> func)
+        public async Task<Y> RunProfiledAsync<Y>(string name, Func<IScopedLog, Task<Y>> func)
         {
             using (var scope = CreateProfiledScope(name))
             {

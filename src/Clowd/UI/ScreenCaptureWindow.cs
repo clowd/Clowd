@@ -9,6 +9,7 @@ using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace Clowd.UI
 {
@@ -149,7 +150,7 @@ namespace Clowd.UI
             DisposeInternal();
             var manager = App.GetService<IPageManager>();
             var video = manager.CreateVideoCapturePage();
-            video.Open(ScreenRect.FromSystem(sel.Value));
+            video.Open((ScreenRect)sel.Value);
         }
 
         static void OnReset(object sender, EventArgs e)
@@ -187,7 +188,7 @@ namespace Clowd.UI
 
         public void Open(ScreenRect captureArea)
         {
-            OpenInternal(rect: captureArea.ToSystem());
+            OpenInternal(rect: (Rectangle)captureArea);
         }
 
         public void Open(IntPtr captureWindow)
@@ -279,7 +280,7 @@ namespace Clowd.UI
         {
             if (e.Captured)
             {
-                _floating.ShowPanel(ScreenRect.FromSystem(e.Selection));
+                _floating.ShowPanel((ScreenRect)e.Selection);
             }
             else
             {

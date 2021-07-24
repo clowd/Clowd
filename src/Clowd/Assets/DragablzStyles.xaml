@@ -58,7 +58,7 @@
                             ContentTemplate="{TemplateBinding ContentTemplate}"
                             TextElement.FontFamily="{TemplateBinding FontFamily}"
                             TextElement.FontSize="{TemplateBinding FontSize}"
-                            TextElement.FontWeight="350" />
+                            TextElement.FontWeight="Medium" />
                     </Border>
 
                     <ControlTemplate.Triggers>
