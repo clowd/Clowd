@@ -79,13 +79,5 @@ namespace Clowd.PlatformUtil
 
         public static explicit operator ScreenRect(System.Drawing.Rectangle rect)
           => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
-
-        [Obsolete]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public System.Drawing.Rectangle ToSystem() => (System.Drawing.Rectangle)this;
-
-        [Obsolete]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static ScreenRect FromSystem(System.Drawing.Rectangle rect) => (ScreenRect)rect;
     }
 }
