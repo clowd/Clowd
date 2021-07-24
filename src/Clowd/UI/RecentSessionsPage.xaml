@@ -14,6 +14,16 @@
     d:DesignWidth="800"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     mc:Ignorable="d">
+    <Page.Resources>
+        <CollectionViewSource x:Key="viewSource" Source="{Binding Sessions}">
+            <CollectionViewSource.GroupDescriptions>
+                <PropertyGroupDescription Converter="{StaticResource convTimeAgo}" PropertyName="CreatedUtc" />
+            </CollectionViewSource.GroupDescriptions>
+            <CollectionViewSource.SortDescriptions>
+                <cm:SortDescription Direction="Descending" PropertyName="CreatedUtc" />
+            </CollectionViewSource.SortDescriptions>
+        </CollectionViewSource>
+    </Page.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition />
@@ -22,6 +32,7 @@
         <ListView
             x:Name="listView"
             Margin="10,0,0,0"
+            ItemsSource="{Binding Source={StaticResource viewSource}}"
             MouseDoubleClick="ViewDoubleClick"
             VirtualizingPanel.IsVirtualizingWhenGrouping="True"
             VirtualizingPanel.VirtualizationMode="Recycling">
@@ -58,19 +69,19 @@
                             Height="70"
                             Margin="4"
                             Background="{StaticResource CheckeredLightGrayBackgroundBrush}">
-                            <Image Source="{Binding CroppedPath, Mode=OneTime}" Stretch="Uniform" />
+                            <Image Source="{Binding CroppedImgPath, Mode=OneTime}" Stretch="Uniform" />
                         </Border>
                         <TextBlock
                             Grid.Column="1"
                             Margin="12,6,0,0"
                             Style="{StaticResource BaseTextBlockStyle}"
-                            Text="{Binding Name, Mode=OneTime}" />
+                            Text="{Binding Name}" />
                         <TextBlock
                             Grid.Row="1"
                             Grid.Column="1"
                             Margin="12,0,0,6"
                             Style="{StaticResource BodyTextBlockStyle}"
-                            Text="{Binding TimeAgo, Mode=OneTime}" />
+                            Text="{Binding CreatedUtc, Mode=OneTime, Converter={StaticResource convTimeAgo}}" />
                         <ui:CommandBar
                             x:Name="cmdBar"
                             Grid.RowSpan="2"
@@ -81,7 +92,7 @@
                             Visibility="Hidden">
                             <ui:AppBarButton
                                 Click="OpenItemClicked"
-                                Icon="OpenFile"
+                                Icon="Edit"
                                 Label="Open"
                                 ToolTip="Open in Editor" />
                             <ui:AppBarButton

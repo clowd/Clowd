@@ -59,16 +59,16 @@ namespace Clowd.UI
         {
             Keyboard.Focus(buttonFocus);
 
-            if (File.Exists(_session.DesktopPath))
+            if (File.Exists(_session.DesktopImgPath))
             {
-                var sel = _session.SelectionRect;
+                var sel = _session.CroppedRect;
                 var crop = new Int32Rect(sel.X, sel.Y, sel.Width, sel.Height);
 
                 double width = crop.Width;
                 double height = crop.Height;
 
                 var graphic = new GraphicImage(
-                    _session.DesktopPath,
+                    _session.DesktopImgPath,
                     new Rect(
                         0, 0, //Math.Floor(drawingCanvas.WorldOffset.X - (width / 2)),
                               //Math.Floor(drawingCanvas.WorldOffset.Y - (height / 2)),
