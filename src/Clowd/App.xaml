@@ -31,6 +31,7 @@
             <conv:BoolToInverseVisibilityConverter x:Key="Bool2InverseVis" />
             <conv:BoolToInverseConverter x:Key="Bool2Inverse" />
             <conv:OnOffBrushConverter x:Key="OnOffBrush" />
+            <conv:TimeAgoConverter x:Key="convTimeAgo" />
 
             <SolidColorBrush x:Key="AccentColorBrush" Color="{DynamicResource SystemAccentColor}" />
 

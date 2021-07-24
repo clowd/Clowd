@@ -14,13 +14,13 @@ namespace Clowd.Util
     {
         public DateTime LastModifiedUtc { get; private set; }
 
+        [JsonIgnore]
+        public string FilePath { get; }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         // static cache
         private readonly static Dictionary<string, FileSyncObject> _alive = new Dictionary<string, FileSyncObject>(StringComparer.OrdinalIgnoreCase);
-
-        // readonly
-        private readonly string _filePath;
         private readonly FileSystemWatcher _fsw;
         private readonly object _lock = new object();
         private readonly Dictionary<string, object> _store = new Dictionary<string, object>();
@@ -30,6 +30,11 @@ namespace Clowd.Util
         private bool _disposed;
         private bool _busy;
         private bool _initialized;
+
+        public static bool CheckPathInUse(string path)
+        {
+            return _alive.ContainsKey(path);
+        }
 
         protected FileSyncObject(string file)
         {
@@ -42,20 +47,20 @@ namespace Clowd.Util
             if (!file.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("File must end with '.json' as this is the only supported format");
 
-            _filePath = Path.GetFullPath(file);
+            FilePath = Path.GetFullPath(file);
 
             lock (_alive)
             {
-                if (_alive.ContainsKey(_filePath))
+                if (_alive.ContainsKey(FilePath))
                     throw new InvalidOperationException("Only one FileSyncObject can be tracking a given file at any one time.");
-                _alive[_filePath] = this;
+                _alive[FilePath] = this;
             }
 
             // create a save file with default values
-            if (!File.Exists(_filePath))
+            if (!File.Exists(FilePath))
                 Save();
 
-            _fsw = new FileSystemWatcher(Path.GetDirectoryName(_filePath));
+            _fsw = new FileSystemWatcher(Path.GetDirectoryName(FilePath));
             _fsw.NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite;
             _fsw.EnableRaisingEvents = true;
 
@@ -64,7 +69,7 @@ namespace Clowd.Util
 
             _fsw.Changed += (s, e) =>
             {
-                if (e.FullPath == _filePath)
+                if (e.FullPath == FilePath)
                 {
                     Thread.Sleep(10);
                     fileChanged(s, e);
@@ -73,7 +78,7 @@ namespace Clowd.Util
 
             _fsw.Deleted += (s, e) =>
             {
-                if (e.FullPath == _filePath)
+                if (e.FullPath == FilePath)
                     Save();
             };
 
@@ -92,7 +97,7 @@ namespace Clowd.Util
             DoRetryDiskAction(() =>
             {
                 var json = JsonConvert.SerializeObject(this);
-                File.WriteAllText(_filePath, json);
+                File.WriteAllText(FilePath, json);
             });
         }
 
@@ -100,7 +105,7 @@ namespace Clowd.Util
         {
             DoRetryDiskAction(() =>
             {
-                var json = File.ReadAllText(_filePath);
+                var json = File.ReadAllText(FilePath);
                 JsonConvert.PopulateObject(json, this);
             });
         }
@@ -186,8 +191,12 @@ namespace Clowd.Util
                 ThrowIfDisposed();
 
                 if (_store.TryGetValue(propertyName, out var stor))
+                {
+                    if (stor == null)
+                        return default;
                     if (stor.GetType().IsAssignableFrom(typeof(T)))
                         return (T)stor;
+                }
 
                 return default;
             }
@@ -220,7 +229,7 @@ namespace Clowd.Util
                 _disposed = true;
                 GC.SuppressFinalize(this);
                 lock (_alive)
-                    _alive.Remove(_filePath);
+                    _alive.Remove(FilePath);
                 _fsw.Dispose();
             }
         }

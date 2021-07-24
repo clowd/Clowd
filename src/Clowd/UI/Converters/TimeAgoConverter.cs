@@ -5,7 +5,7 @@ using Clowd.Util;
 
 namespace Clowd.UI.Converters
 {
-    public class RecentTimeGroupKeyConverter : IValueConverter
+    public class TimeAgoConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {

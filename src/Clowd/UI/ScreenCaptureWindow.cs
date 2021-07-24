@@ -132,7 +132,7 @@ namespace Clowd.UI
         {
             var session = GetSessionAndDispose();
             if (session != null)
-                UploadManager.UploadImage(File.OpenRead(session.CroppedPath), "png", viewName: "Screenshot");
+                UploadManager.UploadImage(File.OpenRead(session.CroppedImgPath), "png", viewName: "Screenshot");
         }
 
         static void OnPhoto(object sender, EventArgs e)
@@ -170,7 +170,7 @@ namespace Clowd.UI
             if (session != null)
             {
                 var filename = await NiceDialog.ShowSelectSaveFileDialog(_floating, "Save Screenshot", _settings.General.LastSavePath, "screenshot", "png");
-                File.Copy(session.CroppedPath, filename);
+                File.Copy(session.CroppedImgPath, filename);
                 Platform.Current.RevealFileOrFolder(filename);
                 _settings.General.LastSavePath = Path.GetDirectoryName(filename);
             }
@@ -243,10 +243,16 @@ namespace Clowd.UI
 
         private static SessionInfo GetSessionAndDispose()
         {
-            var session = SessionUtil.Parse(_wdxc?.SaveSession(SessionUtil.CreateNewSessionDirectory()));
-            session.Name = "Capture";
-            session.Icon = ModernWpf.Controls.Symbol.Camera;
-            session.Save();
+            var dir = SessionManager.Current.CreateNewSessionDirectory();
+            _wdxc?.SaveSession(dir);
+
+            var session = SessionManager.Current.GetSessionFromPath(dir);
+            if (session != null)
+            {
+                session.Name = "Capture";
+                session.Icon = ModernWpf.Controls.Symbol.Camera;
+            }
+
             DisposeInternal();
             return session;
         }
