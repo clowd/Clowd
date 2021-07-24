@@ -28,7 +28,7 @@ namespace Clowd.UI
 
             TabView.NewItemFactory = () =>
             {
-                return GetTabFromSession(SessionUtil.CreateNewSession());
+                return GetTabFromSession(SessionManager.Current.CreateNewSession());
             };
 
             TabView.ItemsChanged += TabView_ItemsChanged;
@@ -44,7 +44,6 @@ namespace Clowd.UI
             {
                 var session = GetSessionFromTab(t);
                 session.ActiveWindowId = WindowId;
-                session.Save();
             }
         }
 
@@ -55,7 +54,6 @@ namespace Clowd.UI
             {
                 var session = GetSessionFromTab(t);
                 session.ActiveWindowId = null;
-                session.Save();
             }
         }
 
@@ -64,7 +62,6 @@ namespace Clowd.UI
             // reset session window id to null for closing tab
             var session = GetSessionFromTab(args.DragablzItem);
             session.ActiveWindowId = null;
-            session.Save();
         }
 
         protected override void OnActivated(EventArgs e)
@@ -123,7 +120,7 @@ namespace Clowd.UI
 
         public static void ShowAllPreviouslyActiveSessions()
         {
-            var sessions = SessionUtil.GetSavedSessions()
+            var sessions = SessionManager.Current.Sessions
                 .Where(s => !String.IsNullOrWhiteSpace(s.ActiveWindowId))
                 .GroupBy(s => s.ActiveWindowId);
 
@@ -151,7 +148,7 @@ namespace Clowd.UI
                 if (openWnd != null)
                 {
                     openWnd.PlatformWindow.Activate();
-                    var tab = openWnd.TabView.Items.OfType<TabItem>().FirstOrDefault(t => GetSessionFromTab(t).RootPath == session.RootPath);
+                    var tab = openWnd.TabView.Items.OfType<TabItem>().FirstOrDefault(t => GetSessionFromTab(t) == session);
                     if (tab != null)
                         openWnd.TabView.SelectedItem = tab;
                     return;
@@ -159,7 +156,6 @@ namespace Clowd.UI
                 else
                 {
                     session.ActiveWindowId = null;
-                    session.Save();
                 }
             }
 
@@ -172,7 +168,7 @@ namespace Clowd.UI
 
             var items = query.ToArray();
 
-            var preferredScreen = session.SelectionRect == null ? Platform.Current.PrimaryScreen : Platform.Current.GetScreenFromRect(session.SelectionRect);
+            var preferredScreen = session.CroppedRect == null ? Platform.Current.PrimaryScreen : Platform.Current.GetScreenFromRect(session.CroppedRect);
             var preferred = items.FirstOrDefault(w => Platform.Current.GetScreenFromRect(w.ScreenPosition) == preferredScreen);
             var any = items.FirstOrDefault();
 

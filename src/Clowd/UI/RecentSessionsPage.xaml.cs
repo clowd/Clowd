@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -17,42 +18,22 @@ using Clowd.UI.Helpers;
 
 namespace Clowd.UI
 {
-    public partial class RecentSessionsPage : Page
+    public partial class RecentSessionsPage : Page, INotifyPropertyChanged
     {
+        public TrulyObservableCollection<SessionInfo> Sessions { get; set; }
+
         public RecentSessionsPage()
         {
+            Sessions = SessionManager.Current.Sessions;
             InitializeComponent();
-            SessionUtil.WeakSessionsUpdated += SessionUtil_SessionsUpdated;
-            UpdateSessions();
             listView.SelectionChanged += ListView_SelectionChanged;
         }
+
+        public event PropertyChangedEventHandler PropertyChanged;
 
         private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             multiCommandBar.Visibility = listView.SelectedItems.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        private void SessionUtil_SessionsUpdated(object sender, EventArgs e)
-        {
-            //UpdateSessions();
-        }
-
-        private void UpdateSessions()
-        {
-            var sessions = SessionUtil.GetSavedSessions().ToList();
-            var source = new CollectionViewSource();
-            source.Source = sessions;
-            source.GroupDescriptions.Add(new PropertyGroupDescription()
-            {
-                Converter = new RecentTimeGroupKeyConverter(),
-                PropertyName = nameof(SessionInfo.Created)
-            });
-            source.SortDescriptions.Add(new System.ComponentModel.SortDescription()
-            {
-                Direction = System.ComponentModel.ListSortDirection.Descending,
-                PropertyName = nameof(SessionInfo.Created)
-            });
-            listView.ItemsSource = source.View;
         }
 
         private async void DeleteSelectedFlyoutClicked(object sender, RoutedEventArgs e)
@@ -69,7 +50,7 @@ namespace Clowd.UI
                 }
                 else
                 {
-                    session.Delete();
+                    SessionManager.Current.DeleteSession(session);
                 }
             }
 
@@ -80,13 +61,13 @@ namespace Clowd.UI
         private void OpenItemClicked(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement el && el.DataContext is SessionInfo session)
-                session.Open();
+                SessionManager.Current.OpenSession(session);
         }
 
         private void CopyItemClicked(object sender, RoutedEventArgs e)
         {
             if (sender is FrameworkElement el && el.DataContext is SessionInfo session)
-                session.Copy();
+                SessionManager.Current.CopySession(session);
         }
 
         private void DeleteItemClicked(object sender, RoutedEventArgs e)
@@ -98,7 +79,7 @@ namespace Clowd.UI
         private void ViewDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (e.OriginalSource is FrameworkElement el && el.DataContext is SessionInfo session)
-                session.Open();
+                SessionManager.Current.OpenSession(session);
         }
     }
 }
