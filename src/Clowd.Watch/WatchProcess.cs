@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
 
 namespace Clowd
 {
@@ -145,9 +145,14 @@ namespace Clowd
 
         public static Process Watch(params int[] watchIds)
         {
+            var watchExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "watch.exe");
+            if (!File.Exists(watchExePath))
+                throw new FileNotFoundException("Could not find 'watch.exe', ensure it's in the application directory.");
+
             var me = Process.GetCurrentProcess();
+
             ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = Assembly.GetExecutingAssembly().Location;
+            psi.FileName = watchExePath;
             psi.Arguments = $"{me.Id} " + String.Join(" ", watchIds.Select(i => i.ToString())); // args will be [clowdPID, ffmpegPID, etcPID]
             psi.UseShellExecute = false;
             psi.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
@@ -155,66 +160,7 @@ namespace Clowd
             psi.RedirectStandardOutput = true;
             psi.RedirectStandardError = true;
             psi.CreateNoWindow = true;
-            var p = Process.Start(psi);
-            return p;
-        }
-
-        private static Process GetProcessByIdSafe(int id)
-        {
-            try
-            {
-                return Process.GetProcessById(id);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        internal static int Main(string[] args)
-        {
-            // args will be [clowdPID, ffmpegPID, ...]
-            try
-            {
-                var clowdId = Convert.ToInt32(args[0]);
-                var watchIds = args
-                    .Skip(1)
-                    .Select(i => Convert.ToInt32(i))
-                    .Select(GetProcessByIdSafe)
-                    .Where(p => p != null)
-                    .ToArray();
-
-                if (!watchIds.Any())
-                    return 0;
-
-                var clowd = Process.GetProcessById(clowdId);
-
-                Console.WriteLine($"[Clowd.Watch] watch started successfully. Clowd PID: {clowd.Id}, Watching PID's: {String.Join(", ", watchIds.Select(s => s.Id))}");
-
-                while (true)
-                {
-                    Thread.Sleep(1000);
-
-                    if (watchIds.All(w => w.HasExited))
-                    {
-                        Console.WriteLine("[Clowd.Watch] All watched processes have exited.");
-                        return 0;
-                    }
-
-                    if (clowd.HasExited)
-                    {
-                        Console.WriteLine("[Clowd.Watch] Clowd has exited, watched processes still exist, killing...");
-                        foreach (var p in watchIds)
-                            if (!p.HasExited)
-                                p.Kill();
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"[Clowd.Watch] watch process failed. {Environment.NewLine}{e.ToString()}");
-                return 1;
-            }
+            return Process.Start(psi);
         }
     }
 }

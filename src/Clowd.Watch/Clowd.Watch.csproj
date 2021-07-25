@@ -1,10 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
-    <OutputType>Exe</OutputType>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <OutputType>Library</OutputType>
     <RootNamespace>Clowd</RootNamespace>
   </PropertyGroup>
-  <PropertyGroup>
-    <StartupObject>Clowd.WatchProcess</StartupObject>
-  </PropertyGroup>
+  <ItemGroup>
+    <None Include="watch.cs" />
+    <Content Include="watch.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
