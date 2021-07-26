@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="450"
+             x:Class="Clowd.Setup.Views.InstallView">
+  <DockPanel>
+    
+    <StackPanel DockPanel.Dock="Top">
+      <StackPanel.Styles>
+        <Style Selector="Button">
+          <Setter Property="Background" Value="White" />
+          <Setter Property="BorderThickness" Value="1" />
+          <Setter Property="BorderBrush" Value="Transparent" />
+          <Setter Property="Margin" Value="0,10,0,0" />
+        </Style>
+        <Style Selector="TextBlock">
+          <Setter Property="Margin" Value="10,5" />
+        </Style>
+      </StackPanel.Styles>
+
+      <TextBlock FontWeight="DemiBold" FontSize="24" DockPanel.Dock="Top">
+        Install Clowd
+      </TextBlock>
+      
+      <TextBlock DockPanel.Dock="Top">
+        <TextBlock.Text>
+          Requirements:
+          • Windows 10 (18362) or newer
+          • x64 platform
+          • (Recommended) Dedicated GPU
+        </TextBlock.Text>
+      </TextBlock>
+
+      <Button Click="OnInstallClick" Width="400" BorderBrush="#7F007FFF">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition />
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition />
+          </Grid.RowDefinitions>
+          <Path Fill="#FF007FFF" Width="16" Height="16" Data="M10.757813 3.050781L10.042969 3.75L13.214844 7L2 7L2 8L13.214844 8L10.042969 11.25L10.757813 11.949219L15.097656 7.5Z" />
+          <TextBlock FontWeight="Bold" Grid.Column="1" Foreground="#FF007FFF">Install Now</TextBlock>
+          <TextBlock Grid.Column="1" Grid.Row="1">Install to "%localappdata%\Clowd"</TextBlock>
+        </Grid>
+      </Button>
+
+      <Button Click="OnCustomizeClick" Width="400">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition />
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition />
+          </Grid.RowDefinitions>
+          <Path Fill="Black" Width="16" Height="16" Data="M10.757813 3.050781L10.042969 3.75L13.214844 7L2 7L2 8L13.214844 8L10.042969 11.25L10.757813 11.949219L15.097656 7.5Z" />
+          <TextBlock FontWeight="Bold" Grid.Column="1">Customize</TextBlock>
+          <TextBlock Grid.Column="1" Grid.Row="1">Choose location and features</TextBlock>
+        </Grid>
+      </Button>
+    </StackPanel>
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+      <Button Content="Cancel" Background="#ffd1d1" Click="OnCancelClick" />
+    </StackPanel>
+    
+  </DockPanel>
+</UserControl>

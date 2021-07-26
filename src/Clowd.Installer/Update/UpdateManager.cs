@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System;
@@ -231,7 +231,7 @@ namespace NAppUpdate.Framework
         /// <summary>
         /// Starts the updater executable and sends update data to it
         /// </summary>
-        public void ApplyUpdate(bool relaunchApplication, bool debug, string logFile)
+        public void ApplyUpdate(bool relaunchApplication, bool debug, string logFile, bool forceColdRun)
         {
             if (IsWorking)
                 throw new InvalidOperationException("Another update process is already in progress");
@@ -308,7 +308,7 @@ namespace NAppUpdate.Framework
                         try
                         {
                             // Execute the task
-                            task.ExecutionStatus = task.Execute(false);
+                            task.ExecutionStatus = task.Execute(forceColdRun);
                         }
                         catch (Exception ex)
                         {
@@ -330,6 +330,9 @@ namespace NAppUpdate.Framework
                         if (task.ExecutionStatus != TaskExecutionStatus.Successful)
                             throw new UpdateProcessFailedException("Update task execution failed: " + task.Description);
                     }
+
+                    if (forceColdRun && hasColdUpdates)
+                        throw new NotSupportedException("A task requested a restart, but this is not supported when forceColdRun is true");
 
                     // If an application restart is required
                     if (hasColdUpdates)

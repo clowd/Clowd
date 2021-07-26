@@ -5,7 +5,7 @@ using System.IO;
 
 namespace Clowd.Installer
 {
-    internal class Program
+    public class Program
     {
         internal static void Elevate(string appDirectory, bool install, Type feature)
         {
@@ -27,7 +27,7 @@ namespace Clowd.Installer
                 throw new OutOfProcessException(Constants.InstallerExeName, p.ExitCode, logFile);
         }
 
-        internal static int Main(string[] args)
+        public static int Main(string[] args)
         {
             try
             {
