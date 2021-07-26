@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NotifyIconLib", "third-part
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "third-party", "third-party", "{186217DA-744C-45D7-A040-67A279EE34C8}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Installer", "src\Clowd.Installer\Clowd.Installer.csproj", "{AD6FD9E3-3C83-432E-9F19-74C71E881FE4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.SetupLib", "src\Clowd.SetupLib\Clowd.SetupLib.csproj", "{AD6FD9E3-3C83-432E-9F19-74C71E881FE4}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Cyotek.Windows.Forms.ColorPicker", "third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj", "{FB2A5786-CD2E-42CE-BC5D-0FCE90034221}"
 EndProject

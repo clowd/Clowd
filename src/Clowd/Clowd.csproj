@@ -29,7 +29,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\modules\Clowd.Win64\Clowd.Win64.vcxproj" />
-    <ProjectReference Include="..\Clowd.Installer\Clowd.Installer.csproj" />
+    <ProjectReference Include="..\Clowd.SetupLib\Clowd.SetupLib.csproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
     <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
