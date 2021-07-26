@@ -20,7 +20,7 @@ namespace Clowd.Setup.Views
 
         private void OnInstallClick(object sender, RoutedEventArgs e)
         {
-            MainWindow.Current.SetContent(new DoWorkView(true, new CustomizeViewModel()));
+            MainWindow.Current.SetContent(new DoWorkView(new CustomizeViewModel()));
         }
 
         private void OnCustomizeClick(object sender, RoutedEventArgs e)

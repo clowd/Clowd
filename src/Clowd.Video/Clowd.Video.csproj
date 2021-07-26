@@ -4,9 +4,6 @@
     <OutputType>Library</OutputType>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Embed\ffmpeg-x64.exe.gz" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Watch\Clowd.Watch.csproj" />
   </ItemGroup>
