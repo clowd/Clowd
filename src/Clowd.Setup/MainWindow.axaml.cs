@@ -21,8 +21,8 @@ namespace Clowd.Setup
             this.AttachDevTools();
 #endif
 
-            var info = ControlPanelInfo.GetInfo("Clowd", RegistryQuery.CurrentUser);
-            ContentView.Child = info == null ? new InstallView() : null;
+            var info = ControlPanelInfo.GetInfo(Constants.ClowdAppName, RegistryQuery.CurrentUser);
+            ContentView.Child = info == null ? new InstallView() : new UninstallSplashView();
         }
 
         private void InitializeComponent()

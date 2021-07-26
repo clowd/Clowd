@@ -208,7 +208,7 @@ namespace Clowd
 
         public IEnumerable<LocalPackage> GetInstalledVersions()
         {
-            var pluginsDir = PathConstants.Plugins;
+            var pluginsDir = PathConstants.PluginData;
             foreach (var dir in Directory.EnumerateDirectories(pluginsDir))
             {
                 var cut = dir.Substring(pluginsDir.Length).Trim(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -233,7 +233,7 @@ namespace Clowd
             await _lock.WaitAsync();
             try
             {
-                var pluginsDir = PathConstants.Plugins;
+                var pluginsDir = PathConstants.PluginData;
                 var dlpath = PathConstants.GetDatedFilePath(AssetName, "zip", pluginsDir);
                 var extractPath = Path.Combine(pluginsDir, $"{AssetName}-{pkg.Version}");
 
