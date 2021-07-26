@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="450"
+             x:Class="Clowd.Setup.Views.CustomizeView">
+  <DockPanel>
+
+    <StackPanel DockPanel.Dock="Top">
+
+      <TextBlock Margin="5" FontWeight="DemiBold" FontSize="24" DockPanel.Dock="Top">
+        Custom Install
+      </TextBlock>
+
+      <TextBlock Margin="5,25,5,5">Install to Directory:</TextBlock>
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBox Text="{Binding InstallDirectory}" Margin="0,0,10,0" />
+        <Button Click="OnBrowseClick" Grid.Column="1" DockPanel.Dock="Right" Content="Browse" />
+      </Grid>
+
+      <TextBlock Margin="5,25,5,5">Features:</TextBlock>
+      <CheckBox IsChecked="{Binding FeatureAutoStart}">Start automatically with Windows</CheckBox>
+      <CheckBox IsChecked="{Binding FeatureContextMenu}">Add item to Windows Explorer context menu</CheckBox>
+      <CheckBox IsChecked="{Binding FeatureShortcuts}">Add shortcuts to Start Menu and Desktop</CheckBox>
+      <TextBlock TextWrapping="Wrap" Margin="5,25,5,5" Foreground="Gray" FontStyle="Italic"> * All features can be modified later via Clowd settings dialog</TextBlock>
+
+    </StackPanel>
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+      <StackPanel.Styles>
+        <Style Selector="Button">
+          <Setter Property="Margin" Value="10,0,0,0" />
+        </Style>
+      </StackPanel.Styles>
+      <Button Content="Next" Click="OnNextClick" />
+      <Button Content="Cancel" Background="#ffd1d1" Click="OnCancelClick" />
+    </StackPanel>
+
+  </DockPanel>
+</UserControl>

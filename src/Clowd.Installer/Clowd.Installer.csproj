@@ -1,14 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net5.0-windows</TargetFramework>
-    <OutputType>Exe</OutputType>
-    <AssemblyName>ClowdCLI</AssemblyName>
-    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
-    <ApplicationIcon>default.ico</ApplicationIcon>
-  </PropertyGroup>
-  <PropertyGroup>
-    <StartupObject>Clowd.Installer.Program</StartupObject>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <OutputType>Library</OutputType>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="default.ico" />

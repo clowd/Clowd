@@ -12,7 +12,7 @@
     <Product>Clowd</Product>
     <NeutralLanguage>en</NeutralLanguage>
     <Description>A screen/video capture and editing tool</Description>
-    <Copyright>Copyright © Caelan Sayler, 2014-2021</Copyright>
+    <Copyright>Copyright © Caelan Sayler, 2014-$([System.DateTime]::UtcNow.Date.Year)</Copyright>
     <PackageTags>screen capture, video, image editing</PackageTags>
     <RepositoryUrl>https://github.com/clowd</RepositoryUrl>
   </PropertyGroup>
@@ -48,5 +48,9 @@
   /p:PublishTrimmed=False
 
 &"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
+
+
+following causes all dependencies to be copied to output (instead of just the locally built ones)
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
 -->

@@ -40,6 +40,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{E12FDD
 		src\Directory.Build.props = src\Directory.Build.props
 	EndProjectSection
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Setup", "src\Clowd.Setup\Clowd.Setup.csproj", "{05434914-582D-41F6-BF7E-1947A3A8F14E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -98,6 +100,10 @@ Global
 		{35EBE651-1A03-4D4C-82D2-D26A93A6CBCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{35EBE651-1A03-4D4C-82D2-D26A93A6CBCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{35EBE651-1A03-4D4C-82D2-D26A93A6CBCF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{05434914-582D-41F6-BF7E-1947A3A8F14E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{05434914-582D-41F6-BF7E-1947A3A8F14E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{05434914-582D-41F6-BF7E-1947A3A8F14E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{05434914-582D-41F6-BF7E-1947A3A8F14E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
