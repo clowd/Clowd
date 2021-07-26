@@ -11,7 +11,7 @@ namespace Clowd
         public const string ClowdMutex = "ClowdMutex000";
         public const string DirectShowAppName = "ClowdDirectShow";
         public const string ShortcutName = "Clowd.lnk";
-        public const string PublishingCompany = "Caesa Consulting Ltd.";
+        public const string PublishingCompany = "Caelan Sayler";
         public const string ContextMenuShellName = "Upload with Clowd";
         public const string RunRegistryPath = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
         public const string UninstallRegistryPath = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
@@ -28,6 +28,7 @@ namespace Clowd
         //public static string RoamingAppData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
         //public static string LocalAppData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
 
+        public static string App => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "App");
         public static string UpdateData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Updates");
         public static string BackupData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Backup");
         public static string LogData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Logs");

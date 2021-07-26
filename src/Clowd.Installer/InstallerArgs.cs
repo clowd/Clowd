@@ -117,7 +117,7 @@ namespace Clowd.Installer
 
             Log.YesOrThrow("Would you like to install updates now? This program will terminate.", "Update cancelled by user");
 
-            manager.ApplyUpdate(args.Launch, Debug, LogFile);
+            manager.ApplyUpdate(args.Launch, Debug, LogFile, false);
         }
 
         [ArgActionMethod]

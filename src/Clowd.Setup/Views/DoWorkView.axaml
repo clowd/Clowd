@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="450"
+             x:Class="Clowd.Setup.Views.DoWorkView">
+  <Grid>
+
+    <StackPanel>
+      <TextBlock Margin="5" FontWeight="DemiBold" FontSize="24" DockPanel.Dock="Top">
+        Working
+      </TextBlock>
+    </StackPanel>
+
+    <StackPanel VerticalAlignment="Center">
+      <TextBlock Margin="0,0,0,10" TextWrapping="Wrap" Text="{Binding Step}"></TextBlock>
+      <ProgressBar Value="{Binding Progress}" IsIndeterminate="{Binding ProgressIndeterminate}"></ProgressBar>
+    </StackPanel>
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+      <Button IsEnabled="{Binding CanCancel}" Content="Cancel" Background="#ffd1d1" Click="OnCancelClick" />
+    </StackPanel>
+    
+  </Grid>
+</UserControl>
