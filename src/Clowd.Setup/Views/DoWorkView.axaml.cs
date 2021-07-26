@@ -1,8 +1,10 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Reflection.Metadata;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -62,19 +64,31 @@ namespace Clowd.Setup.Views
     {
         public DoWorkViewModel WorkModel { get; }
         public CustomizeViewModel CustomizeModel { get; }
+        public UninstallViewModel UninstModel { get; }
         public UpdateManager Manager { get; private set; }
 
-        public DoWorkView() : this(true, new CustomizeViewModel())
+        public DoWorkView() // designer
         {
+            this.DataContext = new DoWorkViewModel();
+            InitializeComponent();
         }
 
-        public DoWorkView(bool installing, CustomizeViewModel model)
+        public DoWorkView(CustomizeViewModel model) // install
         {
             CustomizeModel = model;
             WorkModel = new DoWorkViewModel();
             this.DataContext = WorkModel;
             InitializeComponent();
             Install();
+        }
+
+        public DoWorkView(UninstallViewModel model) // uninstall
+        {
+            UninstModel = model;
+            WorkModel = new DoWorkViewModel();
+            this.DataContext = WorkModel;
+            InitializeComponent();
+            Uninstall();
         }
 
         private void InitializeComponent()
@@ -101,7 +115,7 @@ namespace Clowd.Setup.Views
                 // if chosen directory in local app data, nest it in our default location
                 if (instDir.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), StringComparison.OrdinalIgnoreCase))
                 {
-                    instDir = PathConstants.App;
+                    instDir = PathConstants.AppData;
                 }
                 else
                 {
@@ -110,7 +124,7 @@ namespace Clowd.Setup.Views
 
                 CustomizeModel.InstallDirectory = instDir;
 
-                var exePath = Path.Combine(instDir, "Clowd.exe");
+                var exePath = Path.Combine(instDir, Constants.ClowdExeName);
 
                 // init update manager
                 var manager = UpdateHelper.GetUpdaterInstance(instDir, exePath);
@@ -174,6 +188,14 @@ namespace Clowd.Setup.Views
                     at.Install(exePath);
                 }
 
+                WorkModel.Step = " Downloading core plugin - [1/1] obs-express";
+                var obs = new Video.ObsModule(null);
+                await obs.CheckForUpdates(false);
+                if (obs.UpdateAvailable != null)
+                {
+                    await obs.Install(obs.UpdateAvailable);
+                }
+
                 // TODO get info from dll
                 //var resolver = new PathAssemblyResolver(new string[] { exePath, Path.Combine(instDir, "mscorlib.dll") });
                 //using (var context = new MetadataLoadContext(resolver, "mscorlib"))
@@ -182,6 +204,7 @@ namespace Clowd.Setup.Views
                 //}
 
                 WorkModel.ProgressIndeterminate = false;
+                WorkModel.Progress = 100;
                 WorkModel.Step = "Done";
             }
             catch (Exception) when (WorkModel.CancelRequested)
@@ -194,15 +217,87 @@ namespace Clowd.Setup.Views
             }
         }
 
-        private void Uninstall()
+        private void DirDeleteSafeRetry(string directory)
         {
+            int retry = 10;
+            while (--retry > 0)
+            {
+                try
+                {
+                    Directory.Delete(directory, true);
+                    break;
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    break;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    if (retry <= 0)
+                        throw;
+                }
+            }
+        }
 
+        private async void Uninstall()
+        {
+            WorkModel.CanCancel = false;
+            var exePath = Path.Combine(UninstModel.InstallationDirectory, Constants.ClowdExeName);
+
+            WorkModel.Step = "Removing features...";
+            await Task.Delay(100);
+            new AutoStart().Uninstall(exePath);
+            new Installer.Features.ContextMenu().Uninstall(exePath);
+            new Shortcuts().Uninstall(exePath);
+
+            WorkModel.Step = "Closing running processes...";
+            await Task.Delay(100);
+            await Task.Run(() =>
+            {
+                foreach (var p in Process.GetProcessesByName("Clowd"))
+                    try { p.Kill(); p.WaitForExit(); } catch { }
+
+                foreach (var p in Process.GetProcessesByName("obs-express"))
+                    try { p.Kill(); p.WaitForExit(); } catch { }
+
+                foreach (var p in Process.GetProcessesByName("obs64"))
+                    try { p.Kill(); p.WaitForExit(); } catch { }
+            });
+
+            WorkModel.Step = "Deleting files...";
+            await Task.Delay(100);
+            await Task.Run(() =>
+            {
+                if (UninstModel.KeepSettings)
+                {
+                    DirDeleteSafeRetry(PathConstants.AppData);
+                    DirDeleteSafeRetry(PathConstants.BackupData);
+                    DirDeleteSafeRetry(PathConstants.UpdateData);
+                    DirDeleteSafeRetry(PathConstants.PluginData);
+                    DirDeleteSafeRetry(PathConstants.LogData);
+                }
+                else
+                {
+                    var local = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
+                    var roaming = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
+                    DirDeleteSafeRetry(UninstModel.InstallationDirectory);
+                    DirDeleteSafeRetry(local);
+                    DirDeleteSafeRetry(roaming);
+                }
+            });
+
+            WorkModel.Step = "Finishing...";
+            new ControlPanel().Uninstall(exePath);
+
+            WorkModel.ProgressIndeterminate = false;
+            WorkModel.Progress = 100;
+            WorkModel.Step = "Done";
         }
 
         private void Cancel()
         {
             if (Manager != null)
-                Directory.Delete(Manager.Config.TempFolder, true);
+                DirDeleteSafeRetry(Manager.Config.TempFolder);
 
             Manager = null;
 

@@ -28,12 +28,13 @@ namespace Clowd
         //public static string RoamingAppData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
         //public static string LocalAppData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
 
-        public static string App => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "App");
+        public static string AppData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "App");
         public static string UpdateData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Updates");
         public static string BackupData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Backup");
         public static string LogData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Logs");
         public static string SessionData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Session");
-        public static string Plugins => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Plugins");
+        public static string PluginData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "Plugins");
+        public static string SettingsData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
 
         public static string GetFolderPath(string name, string parentDirectory)
         {

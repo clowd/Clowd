@@ -71,7 +71,7 @@ namespace Clowd.Setup.Views
 
         private void OnNextClick(object sender, RoutedEventArgs e)
         {
-            MainWindow.Current.SetContent(new DoWorkView(true, (CustomizeViewModel)this.DataContext));
+            MainWindow.Current.SetContent(new DoWorkView((CustomizeViewModel)this.DataContext));
         }
     }
 }

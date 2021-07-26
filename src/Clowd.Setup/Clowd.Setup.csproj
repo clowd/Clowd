@@ -29,5 +29,6 @@
    </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.SetupLib\Clowd.SetupLib.csproj" />
+    <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
   </ItemGroup>
 </Project>
