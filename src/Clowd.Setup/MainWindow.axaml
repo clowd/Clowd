@@ -9,7 +9,7 @@
         x:Class="Clowd.Setup.MainWindow"
         TransparencyLevelHint="AcrylicBlur"
         Background="Transparent"
-        Icon="default.ico"
+        Icon="default-setup.ico"
         WindowStartupLocation="CenterScreen"
         ExtendClientAreaToDecorationsHint="True"
         MinHeight="250"

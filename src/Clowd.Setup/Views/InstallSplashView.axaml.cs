@@ -6,9 +6,9 @@ using Avalonia.Markup.Xaml;
 
 namespace Clowd.Setup.Views
 {
-    public partial class InstallView : UserControl
+    public partial class InstallSplashView : UserControl
     {
-        public InstallView()
+        public InstallSplashView()
         {
             InitializeComponent();
         }
