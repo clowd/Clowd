@@ -16,9 +16,15 @@ namespace Clowd.Setup
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 desktop.MainWindow = new MainWindow();
+                desktop.Startup += Desktop_Startup;
             }
 
             base.OnFrameworkInitializationCompleted();
+        }
+
+        private void Desktop_Startup(object sender, ControlledApplicationLifetimeStartupEventArgs e)
+        {
+            // get args here
         }
     }
 }

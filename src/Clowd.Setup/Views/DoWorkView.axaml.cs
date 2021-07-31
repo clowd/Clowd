@@ -108,9 +108,13 @@ namespace Clowd.Setup.Views
 
             try
             {
+                await KillProcesses();
+
                 WorkModel.Step = "Searching for packages online...";
 
-                var instDir = Path.Combine(CustomizeModel.InstallDirectory, "Clowd");
+                var instDir = CustomizeModel.InstallDirectory;
+                if (!instDir.EndsWith("Clowd", StringComparison.OrdinalIgnoreCase))
+                    instDir = Path.Combine(CustomizeModel.InstallDirectory, "Clowd");
 
                 // if chosen directory in local app data, nest it in our default location
                 if (instDir.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), StringComparison.OrdinalIgnoreCase))
@@ -131,7 +135,6 @@ namespace Clowd.Setup.Views
                 var package = await UpdateHelper.GetLatestChannelReleaseAsync();
                 var source = new SimpleWebSource(package.FeedUrl);
                 Manager = manager;
-
 
                 if (WorkModel.CancelRequested) throw new UserAbortException();
 
@@ -192,9 +195,7 @@ namespace Clowd.Setup.Views
                 var obs = new Video.ObsModule(null);
                 await obs.CheckForUpdates(false);
                 if (obs.UpdateAvailable != null)
-                {
                     await obs.Install(obs.UpdateAvailable);
-                }
 
                 // TODO get info from dll
                 //var resolver = new PathAssemblyResolver(new string[] { exePath, Path.Combine(instDir, "mscorlib.dll") });
@@ -203,13 +204,24 @@ namespace Clowd.Setup.Views
                 //    Assembly a = context.LoadFromAssemblyPath(exePath);
                 //}
 
-                WorkModel.ProgressIndeterminate = false;
-                WorkModel.Progress = 100;
-                WorkModel.Step = "Done";
+                MainWindow.Current.SetContent(new FinishedView(new FinishedViewModel
+                {
+                    Title = "Installed Successfully",
+                    CanStartClowd = true,
+                    ClowdExePath = exePath,
+                }));
+
+                //WorkModel.ProgressIndeterminate = false;
+                //WorkModel.Progress = 100;
+                //WorkModel.Step = "Done";
             }
             catch (Exception) when (WorkModel.CancelRequested)
             {
                 Cancel();
+            }
+            catch (Exception ex)
+            {
+                Error(ex);
             }
             finally
             {
@@ -239,17 +251,8 @@ namespace Clowd.Setup.Views
             }
         }
 
-        private async void Uninstall()
+        private async Task KillProcesses()
         {
-            WorkModel.CanCancel = false;
-            var exePath = Path.Combine(UninstModel.InstallationDirectory, Constants.ClowdExeName);
-
-            WorkModel.Step = "Removing features...";
-            await Task.Delay(100);
-            new AutoStart().Uninstall(exePath);
-            new Installer.Features.ContextMenu().Uninstall(exePath);
-            new Shortcuts().Uninstall(exePath);
-
             WorkModel.Step = "Closing running processes...";
             await Task.Delay(100);
             await Task.Run(() =>
@@ -263,35 +266,61 @@ namespace Clowd.Setup.Views
                 foreach (var p in Process.GetProcessesByName("obs64"))
                     try { p.Kill(); p.WaitForExit(); } catch { }
             });
+        }
 
-            WorkModel.Step = "Deleting files...";
-            await Task.Delay(100);
-            await Task.Run(() =>
+        private async void Uninstall()
+        {
+            try
             {
-                if (UninstModel.KeepSettings)
-                {
-                    DirDeleteSafeRetry(PathConstants.AppData);
-                    DirDeleteSafeRetry(PathConstants.BackupData);
-                    DirDeleteSafeRetry(PathConstants.UpdateData);
-                    DirDeleteSafeRetry(PathConstants.PluginData);
-                    DirDeleteSafeRetry(PathConstants.LogData);
-                }
-                else
-                {
-                    var local = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
-                    var roaming = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
-                    DirDeleteSafeRetry(UninstModel.InstallationDirectory);
-                    DirDeleteSafeRetry(local);
-                    DirDeleteSafeRetry(roaming);
-                }
-            });
+                WorkModel.CanCancel = false;
+                var exePath = Path.Combine(UninstModel.InstallationDirectory, Constants.ClowdExeName);
 
-            WorkModel.Step = "Finishing...";
-            new ControlPanel().Uninstall(exePath);
+                WorkModel.Step = "Removing features...";
+                await Task.Delay(100);
+                new AutoStart().Uninstall(exePath);
+                new Installer.Features.ContextMenu().Uninstall(exePath);
+                new Shortcuts().Uninstall(exePath);
 
-            WorkModel.ProgressIndeterminate = false;
-            WorkModel.Progress = 100;
-            WorkModel.Step = "Done";
+                await KillProcesses();
+
+                WorkModel.Step = "Deleting files...";
+                await Task.Delay(100);
+                await Task.Run(() =>
+                {
+                    if (UninstModel.KeepSettings)
+                    {
+                        DirDeleteSafeRetry(PathConstants.AppData);
+                        DirDeleteSafeRetry(PathConstants.BackupData);
+                        DirDeleteSafeRetry(PathConstants.UpdateData);
+                        DirDeleteSafeRetry(PathConstants.PluginData);
+                        DirDeleteSafeRetry(PathConstants.LogData);
+                    }
+                    else
+                    {
+                        var local = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
+                        var roaming = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
+                        DirDeleteSafeRetry(UninstModel.InstallationDirectory);
+                        DirDeleteSafeRetry(local);
+                        DirDeleteSafeRetry(roaming);
+                    }
+                });
+
+                WorkModel.Step = "Finishing...";
+                new ControlPanel().Uninstall(exePath);
+
+                MainWindow.Current.SetContent(new FinishedView(new FinishedViewModel
+                {
+                    Title = "Uninstalled Successfully",
+                }));
+            }
+            catch (Exception ex)
+            {
+                Error(ex);
+            }
+
+            //WorkModel.ProgressIndeterminate = false;
+            //WorkModel.Progress = 100;
+            //WorkModel.Step = "Done";
         }
 
         private void Cancel()
@@ -301,10 +330,25 @@ namespace Clowd.Setup.Views
 
             Manager = null;
 
-            WorkModel.CanCancel = true;
-            WorkModel.Step = "Cancelled";
-            WorkModel.ProgressIndeterminate = false;
-            WorkModel.Progress = 0;
+            MainWindow.Current.SetContent(new FinishedView(new FinishedViewModel
+            {
+                Title = "Setup Cancelled",
+                Body = "The setup was cancelled by the user."
+            }));
+
+            //WorkModel.CanCancel = true;
+            //WorkModel.Step = "Cancelled";
+            //WorkModel.ProgressIndeterminate = false;
+            //WorkModel.Progress = 0;
+        }
+
+        private void Error(Exception ex)
+        {
+            MainWindow.Current.SetContent(new FinishedView(new FinishedViewModel
+            {
+                Title = "Error",
+                Body = "An unhandled error has occurred." + Environment.NewLine + Environment.NewLine + ex.ToString()
+            }));
         }
 
         private void OnCancelClick(object sender, RoutedEventArgs e)

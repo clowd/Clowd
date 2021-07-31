@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="450"
+             x:Class="Clowd.Setup.Views.FinishedView">
+  <DockPanel>
+
+    <StackPanel DockPanel.Dock="Top">
+      <StackPanel.Styles>
+        <Style Selector="Button">
+          <Setter Property="Background" Value="White" />
+          <Setter Property="BorderThickness" Value="1" />
+          <Setter Property="BorderBrush" Value="Transparent" />
+          <Setter Property="Margin" Value="0,10,0,0" />
+        </Style>
+        <Style Selector="TextBlock">
+          <Setter Property="Margin" Value="0,5,0,5" />
+        </Style>
+      </StackPanel.Styles>
+
+      <TextBlock FontWeight="DemiBold" FontSize="24" Text="{Binding Title}" />
+
+      <TextBlock Text="{Binding Body}" TextWrapping="Wrap" />
+
+      <CheckBox IsVisible="{Binding CanStartClowd}" Margin="0,25,0,25">Start Clowd</CheckBox>
+
+    </StackPanel>
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+      <Button Content="Exit" Click="OnCancelClick" />
+    </StackPanel>
+
+  </DockPanel>
+</UserControl>
