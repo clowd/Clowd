@@ -3,7 +3,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 
-namespace Clowd.Installer
+namespace Clowd.Setup
 {
     class ResourcesEx
     {

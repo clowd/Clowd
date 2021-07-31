@@ -1,10 +1,10 @@
-﻿using Clowd.Installer.Features;
+﻿using Clowd.Setup.Features;
 using PowerArgs;
 using System;
 using System.IO;
 using System.Linq;
 
-namespace Clowd.Installer
+namespace Clowd.Setup
 {
     [ArgExceptionBehavior(ArgExceptionPolicy.DontHandleExceptions)]
     public class InstallerArgs

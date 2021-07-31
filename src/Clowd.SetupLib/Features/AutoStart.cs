@@ -1,4 +1,4 @@
-﻿namespace Clowd.Installer.Features
+﻿namespace Clowd.Setup.Features
 {
     public class AutoStart : IFeature
     {

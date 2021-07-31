@@ -1,8 +1,9 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
-using Clowd.Installer;
-using Clowd.Installer.Features;
+using Clowd.Setup;
+using Clowd.Setup.Features;
+using Clowd.Setup.Features.Util;
 using Clowd.Setup.Views;
 
 namespace Clowd.Setup

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Management;
 using System.IO;
 
-namespace Clowd.Installer
+namespace Clowd.Setup
 {
     public class RegistryEx
     {

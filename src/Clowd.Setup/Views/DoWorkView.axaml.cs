@@ -10,10 +10,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Clowd.Installer;
-using Clowd.Installer.Features;
+using Clowd.Setup.Features;
 using NAppUpdate.Framework;
 using NAppUpdate.Framework.Sources;
+using ContextMenu = Clowd.Setup.Features.ContextMenu;
 
 namespace Clowd.Setup.Views
 {
@@ -181,7 +181,7 @@ namespace Clowd.Setup.Views
 
                 if (CustomizeModel.FeatureContextMenu)
                 {
-                    var at = new Installer.Features.ContextMenu();
+                    var at = new ContextMenu();
                     at.Install(exePath);
                 }
 
@@ -278,7 +278,7 @@ namespace Clowd.Setup.Views
                 WorkModel.Step = "Removing features...";
                 await Task.Delay(100);
                 new AutoStart().Uninstall(exePath);
-                new Installer.Features.ContextMenu().Uninstall(exePath);
+                new ContextMenu().Uninstall(exePath);
                 new Shortcuts().Uninstall(exePath);
 
                 await KillProcesses();
