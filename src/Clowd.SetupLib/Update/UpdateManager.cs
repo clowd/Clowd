@@ -109,6 +109,7 @@ namespace NAppUpdate.Framework
             //This was an assumed int, which meant we never reached 100% with an odd number of tasks
             float taskPerc = 100F / UpdatesToApply.Count;
             currentStatus.Percentage = (int)Math.Round((currentStatus.Percentage * taskPerc / 100) + (currentStatus.TaskId - 1) * taskPerc);
+            currentStatus.Message = $"[{currentStatus.TaskId}/{UpdatesToApply.Count}] " + currentStatus.Message;
 
             ReportProgress(currentStatus);
         }

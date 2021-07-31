@@ -1,8 +1,10 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <ApplicationIcon>default-setup.ico</ApplicationIcon>
+    <AssemblyName>clowdinst</AssemblyName>
   </PropertyGroup>
   <PropertyGroup>
     <PublishSingleFile>true</PublishSingleFile>
@@ -11,13 +13,9 @@
     <PublishTrimmed>true</PublishTrimmed>
     <PublishReadyToRun>false</PublishReadyToRun>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <ApplicationIcon>default.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <None Remove="default-white.ico" />
-    <None Remove="default.ico" />
-  </ItemGroup>
-  <ItemGroup>
+    <AvaloniaResource Include="default-setup.ico" />
     <AvaloniaResource Include="default-white.ico" />
     <AvaloniaResource Include="default.ico" />
   </ItemGroup>
@@ -25,7 +23,7 @@
     <PackageReference Include="Avalonia" Version="0.10.3" />
     <PackageReference Include="Avalonia.Desktop" Version="0.10.3" />
     <PackageReference Include="Avalonia.Diagnostics" Version="0.10.3" />
-    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="5.0.1" />
+    <!--<PackageReference Include="System.Reflection.MetadataLoadContext" Version="5.0.1" />-->
    </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.SetupLib\Clowd.SetupLib.csproj" />

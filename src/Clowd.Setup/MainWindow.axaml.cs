@@ -1,6 +1,5 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Clowd.Installer;
 using Clowd.Installer.Features;
@@ -22,7 +21,7 @@ namespace Clowd.Setup
 #endif
 
             var info = ControlPanelInfo.GetInfo(Constants.ClowdAppName, RegistryQuery.CurrentUser);
-            ContentView.Child = info == null ? new InstallView() : new UninstallSplashView();
+            ContentView.Child = info == null ? new InstallSplashView() : new UninstallSplashView();
         }
 
         private void InitializeComponent()
