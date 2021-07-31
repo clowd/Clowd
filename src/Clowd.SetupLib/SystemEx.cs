@@ -3,7 +3,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 
-namespace Clowd.Installer
+namespace Clowd.Setup
 {
     public static class SystemEx
     {

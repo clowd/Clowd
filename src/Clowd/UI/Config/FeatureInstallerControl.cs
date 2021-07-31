@@ -1,5 +1,5 @@
 ﻿using System.Windows.Input;
-using Clowd.Installer.Features;
+using Clowd.Setup.Features;
 using ModernWpf.Controls;
 
 namespace Clowd.UI.Config

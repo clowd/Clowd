@@ -9,7 +9,7 @@ using NAppUpdate.Framework.Sources;
 using NAppUpdate.Framework.Tasks;
 using NAppUpdate.Framework.Utils;
 using System.Threading.Tasks;
-using Clowd.Installer;
+using Clowd.Setup;
 using Clowd;
 
 namespace NAppUpdate.Framework

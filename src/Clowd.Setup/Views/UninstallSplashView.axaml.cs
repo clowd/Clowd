@@ -3,8 +3,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Clowd.Installer;
-using Clowd.Installer.Features;
+using Clowd.Setup;
+using Clowd.Setup.Features;
+using Clowd.Setup.Features.Util;
 
 namespace Clowd.Setup.Views
 {

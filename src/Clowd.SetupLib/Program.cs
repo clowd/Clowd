@@ -3,7 +3,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 
-namespace Clowd.Installer
+namespace Clowd.Setup
 {
     public class Program
     {

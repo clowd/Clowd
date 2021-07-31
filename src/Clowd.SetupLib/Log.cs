@@ -3,7 +3,7 @@ using System;
 using System.IO;
 using System.Linq;
 
-namespace Clowd.Installer
+namespace Clowd.Setup
 {
     internal enum LogAutoResponse
     {

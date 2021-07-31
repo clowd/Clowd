@@ -1,6 +1,7 @@
 ﻿using System.IO;
+using Clowd.Setup.Features.Util;
 
-namespace Clowd.Installer.Features
+namespace Clowd.Setup.Features
 {
     public class ControlPanel : IFeature
     {

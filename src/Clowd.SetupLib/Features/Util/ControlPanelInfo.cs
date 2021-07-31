@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace Clowd.Installer.Features
+namespace Clowd.Setup.Features.Util
 {
     public class ControlPanelInfo
     {

@@ -7,7 +7,7 @@ using System.Net;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
-namespace Clowd.Installer
+namespace Clowd.Setup
 {
     public static class UpdateHelper
     {

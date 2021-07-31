@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 
-namespace Clowd.Installer.Features
+namespace Clowd.Setup.Features
 {
     public class Shortcuts : IFeature
     {

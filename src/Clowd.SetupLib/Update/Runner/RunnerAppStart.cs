@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 using Clowd;
-using Clowd.Installer;
+using Clowd.Setup;
 using NAppUpdate.Framework;
 using NAppUpdate.Framework.Common;
 using NAppUpdate.Framework.Tasks;
@@ -270,7 +270,7 @@ namespace NAppUpdate.Updater
 
         private static void Log(string message, params object[] args)
         {
-            Clowd.Installer.Log.White(String.Format(message, args));
+            Clowd.Setup.Log.White(String.Format(message, args));
         }
 
         private static void Log(Logger.SeverityLevel severity, string message, params object[] args)
@@ -278,20 +278,20 @@ namespace NAppUpdate.Updater
             switch (severity)
             {
                 case Logger.SeverityLevel.Debug:
-                    Clowd.Installer.Log.White(String.Format(message, args));
+                    Clowd.Setup.Log.White(String.Format(message, args));
                     break;
                 case Logger.SeverityLevel.Warning:
-                    Clowd.Installer.Log.Yellow(String.Format(message, args));
+                    Clowd.Setup.Log.Yellow(String.Format(message, args));
                     break;
                 case Logger.SeverityLevel.Error:
-                    Clowd.Installer.Log.Red(String.Format(message, args));
+                    Clowd.Setup.Log.Red(String.Format(message, args));
                     break;
             }
         }
 
         private static void Log(Exception ex)
         {
-            Clowd.Installer.Log.Red(ex.ToString());
+            Clowd.Setup.Log.Red(ex.ToString());
         }
     }
 }

@@ -163,13 +163,13 @@ namespace Clowd.Config
         private AppTheme _Theme;
 
         [ClassifyIgnore]
-        public Installer.Features.AutoStart StartWithWindows { get; set; } = new Installer.Features.AutoStart();
+        public Setup.Features.AutoStart StartWithWindows { get; set; } = new();
 
         [ClassifyIgnore]
-        public Installer.Features.ContextMenu AddExplorerContextMenu { get; set; } = new Installer.Features.ContextMenu();
+        public Setup.Features.ContextMenu AddExplorerContextMenu { get; set; } = new();
 
         [ClassifyIgnore]
-        public Installer.Features.Shortcuts CreateDesktopShortcuts { get; set; } = new Installer.Features.Shortcuts();
+        public Setup.Features.Shortcuts CreateDesktopShortcuts { get; set; } = new();
 
         public enum AppTheme
         {
