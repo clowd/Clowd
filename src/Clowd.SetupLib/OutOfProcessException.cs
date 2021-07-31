@@ -2,7 +2,7 @@
 using System.IO;
 using System.Linq;
 
-namespace Clowd.Installer
+namespace Clowd.Setup
 {
     public class OutOfProcessException : Exception
     {

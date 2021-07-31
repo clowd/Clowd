@@ -1,6 +1,6 @@
 ﻿using Microsoft.Win32;
 
-namespace Clowd.Installer.Features
+namespace Clowd.Setup.Features
 {
     public class ContextMenu : IFeature
     {
