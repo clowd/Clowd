@@ -38,6 +38,13 @@ namespace NAppUpdate.Framework.Conditions
                     return true;
             }
 
+            if ("sha1".Equals(ChecksumType, StringComparison.InvariantCultureIgnoreCase))
+            {
+                var sha1 = Utils.FileChecksum.GetSHA1Checksum(localPath);
+                if (!string.IsNullOrEmpty(sha1) && sha1.Equals(Checksum, StringComparison.InvariantCultureIgnoreCase))
+                    return true;
+            }
+
             // TODO: Support more checksum algorithms (although SHA256 isn't known to have collisions, other are more commonly used)
 
             return false;

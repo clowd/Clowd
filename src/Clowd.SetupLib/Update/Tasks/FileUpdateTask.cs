@@ -17,8 +17,8 @@ namespace NAppUpdate.Framework.Tasks
             , false)]
         public string UpdateTo { get; set; }
 
-        [NauField("sha256-checksum", "SHA-256 checksum to validate the file after download (optional)", false)]
-        public string Sha256Checksum { get; set; }
+        [NauField("sha1", "SHA-1 checksum to validate the file after download (optional)", false)]
+        public string Sha1Checksum { get; set; }
 
         [NauField("hotswap",
             "Default update action is a cold update; check here if a hot file swap should be attempted"
@@ -55,11 +55,11 @@ namespace NAppUpdate.Framework.Tasks
             if (_tempFile == null)
                 throw new UpdateProcessFailedException("FileUpdateTask: Failed to get file from source");
 
-            if (!string.IsNullOrEmpty(Sha256Checksum))
+            if (!string.IsNullOrEmpty(Sha1Checksum))
             {
-                string checksum = Utils.FileChecksum.GetSHA256Checksum(_tempFile);
-                if (!checksum.Equals(Sha256Checksum))
-                    throw new UpdateProcessFailedException(string.Format("FileUpdateTask: Checksums do not match; expected {0} but got {1}", Sha256Checksum, checksum));
+                string checksum = Utils.FileChecksum.GetSHA1Checksum(_tempFile);
+                if (!checksum.Equals(Sha1Checksum))
+                    throw new UpdateProcessFailedException(string.Format("FileUpdateTask: Checksums do not match; expected {0} but got {1}", Sha1Checksum, checksum));
             }
 
             _destinationFile = Path.Combine(UpdateManager.Instance.Config.DirectoryToUpdate, LocalPath);

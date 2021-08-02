@@ -33,8 +33,8 @@ namespace NAppUpdate.Framework.FeedReaders
             // Support for different feed versions
             XmlNode root = doc.SelectSingleNode(@"/Feed[version=""1.0""] | /Feed") ?? doc;
 
-            if (root.Attributes["BaseUrl"] != null && !string.IsNullOrEmpty(root.Attributes["BaseUrl"].Value))
-                UpdateManager.Instance.BaseUrl = root.Attributes["BaseUrl"].Value;
+            if (root.Attributes["baseUrl"] != null && !string.IsNullOrEmpty(root.Attributes["baseUrl"].Value))
+                UpdateManager.Instance.BaseUrl = root.Attributes["baseUrl"].Value;
 
             // Temporary collection of attributes, used to aggregate them all with their values
             // to reduce Reflection calls
@@ -49,6 +49,7 @@ namespace NAppUpdate.Framework.FeedReaders
                     continue;
 
                 IUpdateTask task = (IUpdateTask)Activator.CreateInstance(_updateTasks[node.Name]);
+                task.UpdateConditions = new BooleanCondition();
 
                 // Store all other task attributes, to be used by the task object later
                 if (node.Attributes != null)
@@ -58,7 +59,15 @@ namespace NAppUpdate.Framework.FeedReaders
                         if ("type".Equals(att.Name))
                             continue;
 
-                        attributes.Add(att.Name, att.Value);
+                        // special attribute, which is actually a condition
+                        if (att.Name.Equals("sha1"))
+                            task.UpdateConditions.AddCondition(new FileChecksumCondition() { Checksum = att.Value, ChecksumType = "sha1" }, BooleanCondition.ConditionType.NOT);
+
+                        var nm = att.Name;
+                        if (nm.Equals("redirectTo"))
+                            nm = "updateTo";
+
+                        attributes.Add(nm, att.Value);
                     }
                     if (attributes.Count > 0)
                     {
@@ -78,16 +87,7 @@ namespace NAppUpdate.Framework.FeedReaders
                     {
                         IUpdateCondition conditionObject = ReadCondition(node["Conditions"]);
                         if (conditionObject != null)
-                        {
-                            var boolCond = conditionObject as BooleanCondition;
-                            if (boolCond != null)
-                                task.UpdateConditions = boolCond;
-                            else
-                            {
-                                if (task.UpdateConditions == null) task.UpdateConditions = new BooleanCondition();
-                                task.UpdateConditions.AddCondition(conditionObject);
-                            }
-                        }
+                            task.UpdateConditions.AddCondition(conditionObject);
                     }
                 }
 

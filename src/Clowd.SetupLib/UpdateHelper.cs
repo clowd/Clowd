@@ -31,119 +31,78 @@ namespace Clowd.Setup
             return _updateManager;
         }
 
-        public static async Task<UpdatePackage> GetLatestChannelReleaseAsync(string channel = null)
+        public static async Task<UpdatePackage> GetLatestReleaseAsync(bool includePrerelease = false)
         {
             var avl = await GetAvailablePackagesAsync();
-
-            if (String.IsNullOrEmpty(channel))
-                channel = avl.MainChannel;
-
-            var rel = avl.Packages
-                .Where(p => p.Channel.Equals(channel, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(p => p.Version)
-                .FirstOrDefault();
-
-            return rel;
+            return GetLatest(avl, includePrerelease);
         }
 
-        public static UpdatePackage GetLatestChannelRelease(string channel = null)
+        public static UpdatePackage GetLatestRelease(bool includePrerelease = false)
         {
             var avl = GetAvailablePackages();
-
-            if (String.IsNullOrEmpty(channel))
-                channel = avl.MainChannel;
-
-            var rel = avl.Packages
-                .Where(p => p.Channel.Equals(channel, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(p => p.Version)
-                .FirstOrDefault();
-
-            return rel;
+            return GetLatest(avl, includePrerelease);
         }
 
-        public static string GetCurrentVersion()
+        private static UpdatePackage GetLatest(AvailablePackagesResult packages, bool includePre)
         {
-            if (File.Exists("version"))
-                return File.ReadAllText("version");
+            var ordered = packages.Packages.OrderByDescending(p => Version.Parse(p.Version));
 
-            return "dev-build";
-        }
+            if (includePre)
+                return ordered.FirstOrDefault();
 
-        public static async Task<AvailablePackagesResult> GetAvailablePackagesAsync()
-        {
-            using (var wc = new WebClient())
-            {
-                var feed = await wc.DownloadStringTaskAsync(Constants.ReleaseFeedUrl);
-                var doc = XDocument.Parse(feed);
-
-                var defaultChannel = doc.Root.Attribute("MainChannel").Value;
-                var packages = new List<UpdatePackage>();
-
-                foreach (var el in doc.Root.Elements("Package"))
-                {
-                    var version = el.Attribute("Version").Value;
-                    var channel = el.Attribute("Channel").Value;
-                    var url = el.Attribute("FeedUrl").Value;
-
-                    packages.Add(new UpdatePackage()
-                    {
-                        Version = version,
-                        Channel = channel,
-                        FeedUrl = url
-                    });
-                }
-
-                return new AvailablePackagesResult()
-                {
-                    MainChannel = defaultChannel,
-                    Packages = packages,
-                };
-            }
+            return ordered.FirstOrDefault(o => !o.Prerelease) ?? ordered.FirstOrDefault();
         }
 
         public static AvailablePackagesResult GetAvailablePackages()
         {
-            using (var wc = new WebClient())
+            using var wc = new WebClient();
+            var feed = wc.DownloadString(Constants.ReleaseFeedUrl);
+            return ParsePackagesResult(feed);
+        }
+
+        public static async Task<AvailablePackagesResult> GetAvailablePackagesAsync()
+        {
+            using var wc = new WebClient();
+            var feed = await wc.DownloadStringTaskAsync(Constants.ReleaseFeedUrl);
+            return ParsePackagesResult(feed);
+        }
+
+        private static AvailablePackagesResult ParsePackagesResult(string xml)
+        {
+            var doc = XDocument.Parse(xml);
+            var packages = new List<UpdatePackage>();
+
+            foreach (var el in doc.Root.Elements("Package"))
             {
-                var feed = wc.DownloadString(Constants.ReleaseFeedUrl);
-                var doc = XDocument.Parse(feed);
+                var version = el.Attribute("version").Value;
+                var pre = el.Attribute("pre")?.Value.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
+                var url = el.Attribute("feedUrl").Value;
 
-                var defaultChannel = doc.Root.Attribute("MainChannel").Value;
-                var packages = new List<UpdatePackage>();
-
-                foreach (var el in doc.Root.Elements("Package"))
+                packages.Add(new UpdatePackage()
                 {
-                    var version = el.Attribute("Version").Value;
-                    var channel = el.Attribute("Channel").Value;
-                    var url = el.Attribute("FeedUrl").Value;
-
-                    packages.Add(new UpdatePackage()
-                    {
-                        Version = version,
-                        Channel = channel,
-                        FeedUrl = url
-                    });
-                }
-
-                return new AvailablePackagesResult()
-                {
-                    MainChannel = defaultChannel,
-                    Packages = packages,
-                };
+                    Version = version,
+                    Prerelease = pre,
+                    FeedUrl = url
+                });
             }
+
+            return new AvailablePackagesResult()
+            {
+                Packages = packages,
+            };
         }
     }
 
     public class AvailablePackagesResult
     {
-        public string MainChannel { get; set; }
+        //public string MainChannel { get; set; }
         public List<UpdatePackage> Packages { get; set; }
     }
 
     public class UpdatePackage
     {
         public string Version { get; set; }
-        public string Channel { get; set; }
         public string FeedUrl { get; set; }
+        public bool Prerelease { get; set; }
     }
 }
