@@ -58,66 +58,67 @@ namespace Clowd.Setup
         [ArgExample("clowdcli update -y", "Updates to the latest version in non-interactive mode")]
         public void Update(UpdateArgs args)
         {
-            Startup();
+            throw new NotImplementedException();
+            //Startup();
 
-            AvailablePackagesResult result = null;
-            UpdatePackage package = null;
+            //AvailablePackagesResult result = null;
+            //UpdatePackage package = null;
 
-            Log.Spinner("Getting list of available packages...", (s) =>
-            {
-                result = UpdateHelper.GetAvailablePackages();
-                package = UpdateHelper.GetLatestChannelRelease(args.Channel);
-            });
+            //Log.Spinner("Getting list of available packages...", (s) =>
+            //{
+            //    result = UpdateHelper.GetAvailablePackages();
+            //    package = UpdateHelper.GetLatestChannelRelease(args.Channel);
+            //});
 
-            if (!String.IsNullOrEmpty(args.Version))
-            {
-                package = result.Packages.FirstOrDefault(p => p.Channel.Equals(args.Channel, StringComparison.OrdinalIgnoreCase) && p.Version == args.Version);
-            }
+            //if (!String.IsNullOrEmpty(args.Version))
+            //{
+            //    package = result.Packages.FirstOrDefault(p => p.Channel.Equals(args.Channel, StringComparison.OrdinalIgnoreCase) && p.Version == args.Version);
+            //}
 
-            if (package == null)
-                throw new ArgumentException($"Version '{args.Version ?? "latest"}' in channel '{args.Channel}' was not found and could not be downloaded.");
+            //if (package == null)
+            //    throw new ArgumentException($"Version '{args.Version ?? "latest"}' in channel '{args.Channel}' was not found and could not be downloaded.");
 
-            var manager = UpdateHelper.GetUpdaterInstance(AppDirectory, Constants.CurrentExePath);
+            //var manager = UpdateHelper.GetUpdaterInstance(AppDirectory, Constants.CurrentExePath);
 
-            Log.Spinner("Preparing...", (s) =>
-            {
-                manager.CleanUp();
-            });
+            //Log.Spinner("Preparing...", (s) =>
+            //{
+            //    manager.CleanUp();
+            //});
 
-            var source = new NAppUpdate.Framework.Sources.SimpleWebSource(package.FeedUrl);
+            //var source = new NAppUpdate.Framework.Sources.SimpleWebSource(package.FeedUrl);
 
-            Log.Spinner("Checking for updates...", (s) =>
-            {
-                manager.CheckForUpdates(source);
-            });
+            //Log.Spinner("Checking for updates...", (s) =>
+            //{
+            //    manager.CheckForUpdates(source);
+            //});
 
-            if (manager.UpdatesAvailable == 0)
-            {
-                Log.Green($"{Constants.ClowdAppName} is up to date.");
-                return;
-            }
-            else
-            {
-                Log.Yellow("Updates are available");
-            }
+            //if (manager.UpdatesAvailable == 0)
+            //{
+            //    Log.Green($"{Constants.ClowdAppName} is up to date.");
+            //    return;
+            //}
+            //else
+            //{
+            //    Log.Yellow("Updates are available");
+            //}
 
-            Log.Spinner("Downloading updates...", (s) =>
-            {
-                NAppUpdate.Framework.Common.ReportProgressDelegate prog = (p) =>
-                {
-                    s.Text = $"Downloading updates ({p.Percentage}%)...";
-                };
+            //Log.Spinner("Downloading updates...", (s) =>
+            //{
+            //    NAppUpdate.Framework.Common.ReportProgressDelegate prog = (p) =>
+            //    {
+            //        s.Text = $"Downloading updates ({p.Percentage}%)...";
+            //    };
 
-                manager.ReportProgress += prog;
-                manager.PrepareUpdates(source);
-                manager.ReportProgress -= prog;
-            });
+            //    manager.ReportProgress += prog;
+            //    manager.PrepareUpdates(source);
+            //    manager.ReportProgress -= prog;
+            //});
 
-            Log.White($"Updates have been downloaded.");
+            //Log.White($"Updates have been downloaded.");
 
-            Log.YesOrThrow("Would you like to install updates now? This program will terminate.", "Update cancelled by user");
+            //Log.YesOrThrow("Would you like to install updates now? This program will terminate.", "Update cancelled by user");
 
-            manager.ApplyUpdate(args.Launch, Debug, LogFile, false);
+            //manager.ApplyUpdate(args.Launch, Debug, LogFile, false);
         }
 
         [ArgActionMethod]
