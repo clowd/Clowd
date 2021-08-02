@@ -14,7 +14,7 @@ namespace NAppUpdate.Framework.FeedReaders
 
         #region IUpdateFeedReader Members
 
-        public IList<IUpdateTask> Read(string feed)
+        public NauFeed Read(string feed)
         {
             // Lazy-load the Condition and Task objects contained in this assembly, unless some have already
             // been loaded (by a previous lazy-loading in a call to Read, or by an explicit loading)
@@ -25,23 +25,32 @@ namespace NAppUpdate.Framework.FeedReaders
                 Utils.Reflection.FindTasksAndConditionsInAssembly(this.GetType().Assembly, _updateTasks, _updateConditions);
             }
 
-            List<IUpdateTask> ret = new List<IUpdateTask>();
-
             XmlDocument doc = new XmlDocument();
             doc.LoadXml(feed);
+
+            var nau = new NauFeed();
+            nau.Tasks = new List<IUpdateTask>();
 
             // Support for different feed versions
             XmlNode root = doc.SelectSingleNode(@"/Feed[version=""1.0""] | /Feed") ?? doc;
 
-            if (root.Attributes["baseUrl"] != null && !string.IsNullOrEmpty(root.Attributes["baseUrl"].Value))
-                UpdateManager.Instance.BaseUrl = root.Attributes["baseUrl"].Value;
+            // feed attributes
+            nau.BaseUrl = root.Attributes["baseUrl"]?.Value;
+            nau.CompressedFilePath = root.Attributes["compressedName"]?.Value;
+
+            if (long.TryParse(root.Attributes["compressedSize"]?.Value, out var compressedSize))
+                nau.CompressedSize = compressedSize;
+
+            if (long.TryParse(root.Attributes["size"]?.Value, out var totalSize))
+                nau.TotalSize = totalSize;
 
             // Temporary collection of attributes, used to aggregate them all with their values
             // to reduce Reflection calls
             Dictionary<string, string> attributes = new Dictionary<string, string>();
 
             XmlNodeList nl = root.SelectNodes("./Tasks/*");
-            if (nl == null) return new List<IUpdateTask>(); // TODO: wrong format, probably should throw exception
+            if (nl == null) return nau; // TODO: wrong format, probably should throw exception
+
             foreach (XmlNode node in nl)
             {
                 // Find the requested task type and create a new instance of it
@@ -49,6 +58,7 @@ namespace NAppUpdate.Framework.FeedReaders
                     continue;
 
                 IUpdateTask task = (IUpdateTask)Activator.CreateInstance(_updateTasks[node.Name]);
+                task.BaseUrl = nau.BaseUrl;
                 task.UpdateConditions = new BooleanCondition();
 
                 // Store all other task attributes, to be used by the task object later
@@ -91,9 +101,9 @@ namespace NAppUpdate.Framework.FeedReaders
                     }
                 }
 
-                ret.Add(task);
+                nau.Tasks.Add(task);
             }
-            return ret;
+            return nau;
         }
 
         private IUpdateCondition ReadCondition(XmlNode cnd)
@@ -138,14 +148,14 @@ namespace NAppUpdate.Framework.FeedReaders
 
         #endregion
 
-        public void LoadConditionsAndTasks(System.Reflection.Assembly assembly)
-        {
-            if (_updateTasks == null)
-            {
-                _updateConditions = new Dictionary<string, Type>();
-                _updateTasks = new Dictionary<string, Type>();
-            }
-            Utils.Reflection.FindTasksAndConditionsInAssembly(assembly, _updateTasks, _updateConditions);
-        }
+        //public void LoadConditionsAndTasks(System.Reflection.Assembly assembly)
+        //{
+        //    if (_updateTasks == null)
+        //    {
+        //        _updateConditions = new Dictionary<string, Type>();
+        //        _updateTasks = new Dictionary<string, Type>();
+        //    }
+        //    Utils.Reflection.FindTasksAndConditionsInAssembly(assembly, _updateTasks, _updateConditions);
+        //}
     }
 }

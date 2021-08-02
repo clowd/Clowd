@@ -43,12 +43,11 @@ namespace NAppUpdate.Framework.Tasks
 
             _tempFile = null;
 
-            string baseUrl = UpdateManager.Instance.BaseUrl;
             string tempFileLocal = Path.Combine(UpdateManager.Instance.Config.TempFolder, Guid.NewGuid().ToString());
 
-            UpdateManager.Instance.Logger.Log("FileUpdateTask: Downloading {0} with BaseUrl of {1} to {2}", fileName, baseUrl, tempFileLocal);
+            UpdateManager.Instance.Logger.Log("FileUpdateTask: Downloading {0} with BaseUrl of {1} to {2}", fileName, BaseUrl, tempFileLocal);
 
-            if (!source.GetData(fileName, baseUrl, OnProgress, ref tempFileLocal))
+            if (!source.GetData(fileName, BaseUrl, OnProgress, ref tempFileLocal))
                 throw new UpdateProcessFailedException("FileUpdateTask: Failed to get file from source");
 
             _tempFile = tempFileLocal;
@@ -57,7 +56,7 @@ namespace NAppUpdate.Framework.Tasks
 
             if (!string.IsNullOrEmpty(Sha1Checksum))
             {
-                string checksum = Utils.FileChecksum.GetSHA1Checksum(_tempFile);
+                string checksum = FileChecksum.GetSHA1Checksum(_tempFile);
                 if (!checksum.Equals(Sha1Checksum))
                     throw new UpdateProcessFailedException(string.Format("FileUpdateTask: Checksums do not match; expected {0} but got {1}", Sha1Checksum, checksum));
             }

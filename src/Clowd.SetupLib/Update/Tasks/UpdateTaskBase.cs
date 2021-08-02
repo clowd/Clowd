@@ -8,6 +8,7 @@ namespace NAppUpdate.Framework.Tasks
     [Serializable]
     public abstract class UpdateTaskBase : IUpdateTask
     {
+        public string BaseUrl { get; set; }
         public string Description { get; set; }
         public TaskExecutionStatus ExecutionStatus { get; set; }
 
