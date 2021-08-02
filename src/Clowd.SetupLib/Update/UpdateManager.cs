@@ -79,8 +79,8 @@ namespace NAppUpdate.Framework
 
         public NauConfigurations Config { get; set; }
 
-        internal string BaseUrl { get; set; }
-        internal IList<IUpdateTask> UpdatesToApply { get; private set; }
+        private string BaseUrl { get; set; }
+        private IList<IUpdateTask> UpdatesToApply { get; set; }
         public int UpdatesAvailable { get { return UpdatesToApply == null ? 0 : UpdatesToApply.Count; } }
         public UpdateProcessState State { get; private set; }
 
@@ -141,8 +141,8 @@ namespace NAppUpdate.Framework
                 lock (UpdatesToApply)
                 {
                     UpdatesToApply.Clear();
-                    var tasks = UpdateFeedReader.Read(source.GetUpdatesFeed());
-                    foreach (var t in tasks)
+                    var feed = UpdateFeedReader.Read(source.GetUpdatesFeed());
+                    foreach (var t in feed.Tasks)
                     {
                         if (ShouldStop)
                             throw new UserAbortException();
