@@ -18,6 +18,7 @@ namespace NAppUpdate.Framework.Tasks
 
     public interface IUpdateTask : INauFieldsHolder
     {
+        string BaseUrl { get; set; }
         string Description { get; set; }
         BooleanCondition UpdateConditions { get; set; }
         TaskExecutionStatus ExecutionStatus { get; set; }

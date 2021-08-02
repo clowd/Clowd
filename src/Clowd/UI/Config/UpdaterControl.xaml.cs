@@ -21,7 +21,7 @@ namespace Clowd.UI.Config
 
         public UpdaterControl()
         {
-            CurrentVersion = UpdateHelper.GetCurrentVersion();
+            CurrentVersion = null; // UpdateHelper.GetCurrentVersion();
             CanDoAction = true;
             var myDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
             _manager = UpdateHelper.GetUpdaterInstance(myDir, System.Reflection.Assembly.GetExecutingAssembly().Location);
@@ -44,7 +44,7 @@ namespace Clowd.UI.Config
 
             if (_package == null)
             {
-                _package = await UpdateHelper.GetLatestChannelReleaseAsync();
+                _package = null;// await UpdateHelper.GetLatestChannelReleaseAsync();
             }
 
             var pkg = _package;
@@ -115,7 +115,7 @@ namespace Clowd.UI.Config
                 return;
             }
 
-            var newVer = $"{_package?.Version}-{_package?.Channel}";
+            string newVer = null; // $"{_package?.Version}-{_package?.Channel}";
 
             if (_manager.UpdatesAvailable > 0 && CurrentVersion.Equals(newVer, StringComparison.OrdinalIgnoreCase))
             {
