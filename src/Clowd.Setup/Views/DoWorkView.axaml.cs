@@ -132,7 +132,7 @@ namespace Clowd.Setup.Views
 
                 // init update manager
                 var manager = UpdateHelper.GetUpdaterInstance(instDir, exePath);
-                var package = await UpdateHelper.GetLatestChannelReleaseAsync();
+                var package = await UpdateHelper.GetLatestReleaseAsync();
                 var source = new SimpleWebSource(package.FeedUrl);
                 Manager = manager;
 
