@@ -2,33 +2,32 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using System.Threading;
-using System.IO;
+using System.Threading.Tasks;
 
-class Program
+namespace Clowd.Aot
 {
-    static string MyExeName { get; } = Path.GetFileName(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
-
-    static Process GetProcessByIdSafe(int id)
+    static class Watch
     {
-        try
+        static Process GetProcessByIdSafe(int id)
         {
-            return Process.GetProcessById(id);
+            try
+            {
+                return Process.GetProcessById(id);
+            }
+            catch
+            {
+                return null;
+            }
         }
-        catch
+
+        static void Write(string txt)
         {
-            return null;
+            Console.WriteLine($"[Clowd.Watch] [{DateTime.Now.ToShortTimeString()}] {txt}");
         }
-    }
 
-    static void Write(string txt)
-    {
-        Console.WriteLine($"[{MyExeName}] [{DateTime.Now.ToShortTimeString()}] {txt}");
-    }
-
-    static int Main(string[] args)
-    {
-        try
+        public static void Run(string[] args)
         {
             if (args.Length < 2)
                 throw new ArgumentException("Must provide at least two arguments.");
@@ -61,7 +60,7 @@ class Program
             if (!children.Any())
             {
                 Write("Exiting; There are no valid/running children processes to watch");
-                return 0;
+                return;
             }
 
             Write($"Starting; Owner process: {parent.Id}, children: {String.Join(", ", children.Select(s => s.Id))}");
@@ -73,7 +72,7 @@ class Program
                 if (children.All(w => w.HasExited))
                 {
                     Write("Exiting; All watched processes have exited.");
-                    return 0;
+                    return;
                 }
 
                 if (parent.HasExited)
@@ -84,17 +83,6 @@ class Program
                             p.Kill();
                 }
             }
-            return 0;
-        }
-        catch (Exception e)
-        {
-            var clr = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.DarkRed;
-            Write($"Exiting with error: {e.Message}");
-            Console.WriteLine();
-            Console.ForegroundColor = clr;
-            Console.WriteLine($"Usage instructions:  '{MyExeName} parentPid childPid [otherChildPid ...]'");
-            return 1;
         }
     }
 }

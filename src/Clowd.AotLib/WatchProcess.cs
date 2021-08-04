@@ -145,7 +145,7 @@ namespace Clowd
 
         public static Process Watch(params int[] watchIds)
         {
-            var watchExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "watch.exe");
+            var watchExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "clowdaot.exe");
             if (!File.Exists(watchExePath))
                 throw new FileNotFoundException("Could not find 'watch.exe', ensure it's in the application directory.");
 
@@ -153,7 +153,7 @@ namespace Clowd
 
             ProcessStartInfo psi = new ProcessStartInfo();
             psi.FileName = watchExePath;
-            psi.Arguments = $"{me.Id} " + String.Join(" ", watchIds.Select(i => i.ToString())); // args will be [clowdPID, ffmpegPID, etcPID]
+            psi.Arguments = $"watch {me.Id} " + String.Join(" ", watchIds.Select(i => i.ToString())); // args will be [watch, clowdPID, ffmpegPID, etcPID]
             psi.UseShellExecute = false;
             psi.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
             psi.WindowStyle = ProcessWindowStyle.Hidden;
