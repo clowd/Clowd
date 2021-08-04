@@ -4,8 +4,8 @@
     <OutputType>Library</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Clowd.AotLib\Clowd.AotLib.csproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
-    <ProjectReference Include="..\Clowd.Watch\Clowd.Watch.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="NAudio" Version="1.10.0" />
