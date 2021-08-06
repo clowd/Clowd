@@ -130,7 +130,7 @@ namespace Clowd.PlatformUtil.Windows
         {
             var path = @"\VarFileInfo\Translation";
             void* memRef;
-            if (VerQueryValue(memPtr, path, &memRef, out var memLen))
+            if (VerQueryValue(memPtr, path, &memRef, out _))
                 return (Marshal.ReadInt16((IntPtr)memRef) << 16) + Marshal.ReadInt16((IntPtr)((long)memRef + 2));
             return 0x040904E4;
         }
@@ -139,7 +139,7 @@ namespace Clowd.PlatformUtil.Windows
         {
             var path = $@"\StringFileInfo\{codepage}\{name}";
             void* memRef;
-            if (VerQueryValue(memPtr, path, &memRef, out var memLen) && memRef != (void*)0)
+            if (VerQueryValue(memPtr, path, &memRef, out var _) && memRef != (void*)0)
                 return Marshal.PtrToStringAuto((IntPtr)memRef);
             return "";
         }
