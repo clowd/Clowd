@@ -96,18 +96,10 @@ SetDefaultDllDirectories
 AddDllDirectory
 QueryFullProcessImageName
 
-// these are not handled well...
-// SHCore
-// GetDpiForMonitor
-// GetProcessDpiAwareness
-// SetProcessDpiAwareness
-
 // Shell32
-SHAppBarMessage
 SHGetDesktopFolder
 SHGetKnownFolderPath
 SHOpenFolderAndSelectItems
-Shell_NotifyIconGetRect
 ILFree
 
 // User32
@@ -165,7 +157,6 @@ GetWindow
 GetWindowDC
 GetWindowInfo
 GetWindowLong
-GetWindowLongPtr
 GetWindowPlacement
 GetWindowRect
 GetWindowText
@@ -189,7 +180,6 @@ SetParent
 SetProcessDPIAware
 SetFocus
 SetWindowLong
-SetWindowLongPtr
 SetWindowPos
 SetWindowsHookEx
 ShowWindow

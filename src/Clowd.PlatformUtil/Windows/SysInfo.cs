@@ -60,8 +60,7 @@ namespace Clowd.PlatformUtil.Windows
             {
                 if (!SysInfo.IsWindowsVistaOrLater)
                     return false;
-                bool result;
-                DwmIsCompositionEnabled(out result);
+                DwmIsCompositionEnabled(out var result);
                 return result;
             }
         }
