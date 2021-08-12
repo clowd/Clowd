@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package>
+  <metadata>
+    <id>Clowd</id>
+    <description>A screen/video capture and editing tool</description>
+    <authors>Clowd</authors>
+    <version>0</version>
+  </metadata>
+  <files>
+    <file src="*.*" target="lib\net45\" exclude="*.pdb;*.nupkg;*.vshost.*"/>
+  </files>
+</package>
