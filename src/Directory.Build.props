@@ -6,8 +6,6 @@
     <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
   </PropertyGroup>
   <PropertyGroup>
-    <Version>3.1</Version>
-    <AssemblyVersion>$(Version).$([System.DateTime]::UtcNow.Date.Subtract($([System.DateTime]::Parse("2000-01-01"))).TotalDays).$([System.Math]::Floor($([MSBuild]::Divide($([System.DateTime]::UtcNow.TimeOfDay.TotalSeconds), 1.32))))</AssemblyVersion>
     <Authors>Caelan Sayler</Authors>
     <Product>Clowd</Product>
     <NeutralLanguage>en</NeutralLanguage>
@@ -16,41 +14,7 @@
     <PackageTags>screen capture, video, image editing</PackageTags>
     <RepositoryUrl>https://github.com/clowd</RepositoryUrl>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.4.231" PrivateAssets="all" />
+  </ItemGroup>
 </Project>
-
-<!--
-
-<PropertyGroup>
-  <PublishSingleFile>true</PublishSingleFile>
-  <SelfContained>true</SelfContained>
-  <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-  <PublishTrimmed>true</PublishTrimmed>
-  <PublishReadyToRun>true</PublishReadyToRun>
-  <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-  <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-</PropertyGroup>
-  
-<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-  
-  
-"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\msbuild.exe" C:\Users\xxxx\Source\Repos\netcore-agent1\CoreAgent1\CoreAgent1.csproj
-  
-  /t:Restore;Rebuild;Publish 
-  /p:PublishSingleFile=True 
-  /p:SelfContained=True 
-  /p:PublishProtocol=FileSystem 
-  /p:Configuration=Release 
-  /p:Platform=x64 
-  /p:TargetFrameworks=netcoreapp3.1 
-  /p:PublishDir=bin\Release\netcoreapp3.1\publish\win-x64 
-  /p:RuntimeIdentifier=win-x64 
-  /p:PublishReadyToRun=False 
-  /p:PublishTrimmed=False
-
-&"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
-
-
-following causes all dependencies to be copied to output (instead of just the locally built ones)
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-
--->
