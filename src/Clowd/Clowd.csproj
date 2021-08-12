@@ -3,7 +3,6 @@
     <TargetFramework>net5.0-windows10.0.18362</TargetFramework>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
-    <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseVSHostingProcess>false</UseVSHostingProcess>
