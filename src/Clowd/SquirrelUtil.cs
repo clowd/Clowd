@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using Clowd.PlatformUtil.Windows;
 using Squirrel;
 
 [assembly: AssemblyMetadata("SquirrelAwareVersion", "1")]
@@ -14,9 +15,12 @@ namespace Clowd
 {
     internal static class SquirrelUtil
     {
+        public static string UniqueAppKey => "Clowd";
+        //public static string InstallDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), UniqueAppKey);
+
         public static void Startup(string[] args)
         {
-            using var mgr = Get();
+            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
             SquirrelAwareApp.HandleEvents(
                 onInitialInstall: OnInstall,
                 onAppUpdate: OnUpdate,
@@ -27,31 +31,46 @@ namespace Clowd
 
         private static void OnInstall(Version obj)
         {
-            MessageBox.Show("Thanks for install clowd");
+            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+            mgr.CreateUninstallerRegistryEntry();
+            mgr.CreateShortcutForThisExe();
+
+            var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
+            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath, "--upload");
+            srv.ExplorerAllFilesMenu = menu;
+            srv.ExplorerDirectoryMenu = menu;
+            srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
         }
 
         private static void OnUpdate(Version obj)
         {
-            MessageBox.Show("Thanks for updating clowd");
+            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+            mgr.CreateShortcutForThisExe();
+
+            // only update registry during update if they have not been removed by user
+            var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
+            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath, "--upload");
+            if (srv.ExplorerAllFilesMenu != null)
+                srv.ExplorerAllFilesMenu = menu;
+            if (srv.ExplorerDirectoryMenu != null)
+                srv.ExplorerDirectoryMenu = menu;
+            if (srv.AutoStartLaunchPath != null)
+                srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
         }
 
         private static void OnUninstall(Version obj)
         {
-            MessageBox.Show("Thanks for uninstalling clowd");
+            var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
+            srv.RemoveAll();
+
+            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+            mgr.RemoveShortcutForThisExe();
+            mgr.RemoveUninstallerRegistryEntry();
         }
 
         private static void OnFirstRun()
         {
-            MessageBox.Show("Thanks for first run clowd");
-        }
-
-        private static UpdateManager Get()
-        {
-            return new UpdateManager(
-                Constants.ReleaseFeedUrl,
-                "Clowd",
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd")
-            );
+            MessageBox.Show("Thanks for installing clowd, it is running in the system tray!");
         }
     }
 }
