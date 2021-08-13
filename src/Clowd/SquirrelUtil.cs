@@ -17,15 +17,17 @@ namespace Clowd
     {
         public static string UniqueAppKey => "Clowd";
 
-        public static void Startup(string[] args)
+        public static string[] Startup(string[] args)
         {
-            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
             SquirrelAwareApp.HandleEvents(
                 onInitialInstall: OnInstall,
                 onAppUpdate: OnUpdate,
                 onAppUninstall: OnUninstall,
                 onFirstRun: OnFirstRun,
                 arguments: args);
+
+            // if app is still running, filter out squirrel args and continue
+            return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
         private static void OnInstall(Version obj)
@@ -35,7 +37,7 @@ namespace Clowd
             mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
             var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
-            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath, "--upload");
+            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath);
             srv.ExplorerAllFilesMenu = menu;
             srv.ExplorerDirectoryMenu = menu;
             srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
@@ -49,7 +51,7 @@ namespace Clowd
 
             // only update registry during update if they have not been removed by user
             var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
-            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath, "--upload");
+            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath);
             if (srv.ExplorerAllFilesMenu != null)
                 srv.ExplorerAllFilesMenu = menu;
             if (srv.ExplorerDirectoryMenu != null)
