@@ -14,10 +14,12 @@ $MSBuildPath = (&"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vsw
 $MSBuildPath = $MSBuildPath.Trim();
 
 # calculate version
+Write-Host "Get Clowd Version"
 $gitVerJson = (&nbgv get-version -f json) | ConvertFrom-Json
 $version = $gitVerJson.SimpleVersion
 
 # publish Clowd project
+Write-Host "Build Clowd"
 &$MSBuildPath "$PSScriptRoot\src\Clowd\Clowd.csproj" `
 /t:Restore,Rebuild,Publish `
 /v:minimal `
@@ -33,40 +35,24 @@ $version = $gitVerJson.SimpleVersion
 /p:SolutionDir=$PSScriptRoot 
 
 # build packaging tools
-# powershell -ExecutionPolicy Bypass -File "$PSScriptRoot\modules\Clowd.Squirrel\build.ps1"
+Write-Host "Build Packaging Tools"
+Set-Location "$PSScriptRoot\modules\Clowd.Squirrel"
+Copy-Item "$PSScriptRoot\default-setup.ico" "src\Update\ins-update.ico"
+& ".\build.cmd"
+Set-Location "$PSScriptRoot"
 
 # create nuget package
-&$PSScriptRoot\tools\NuGet.exe pack "$PSScriptRoot\src\Clowd\Clowd.nuspec" `
+Write-Host "Create Nuget Package"
+& $PSScriptRoot\modules\Clowd.Squirrel\build\publish\NuGet.exe pack "$PSScriptRoot\src\Clowd\Clowd.nuspec" `
 -BasePath "$PSScriptRoot\publish\Clowd\" `
 -OutputDirectory "$PSScriptRoot\publish" `
 -Version $version
 
 # releasify
-&$PSScriptRoot\tools\Squirrel.com --releasify "$PSScriptRoot\publish\Clowd.$($version).nupkg" `
---setupIcon="$PSScriptRoot\src\Clowd\Images\default.ico" `
+Write-Host "Releasify Nuget Package"
+& $PSScriptRoot\modules\Clowd.Squirrel\build\publish\Squirrel --releasify "$PSScriptRoot\publish\Clowd.$($version).nupkg" `
+--setupIcon="$PSScriptRoot\default-setup.ico" `
 --no-msi `
 --releaseDir="$PSScriptRoot\releases"
 
-# # Set-Location "$PSScriptRoot\publish\Clowd"
-# # &$PSScriptRoot\tools\NuGet.exe spec Clowd.dll
-
-# # &$MSBuildPath "$PSScriptRoot\src\Clowd\Clowd.csproj" `
-# # /t:Pack `
-# # /p:NoBuild=true `
-# # /p:IncludeBuildOutput=false `
-# # /p:PackageVersion="1.3" `
-# # /p:PackageOutputPath="$PSScriptRoot\publish" `
-# # /p:NuspecBasePath="$PSScriptRoot\publish\Clowd" `
-# # /p:NuspecFile="$PSScriptRoot\src\Clowd\Clowd.nuspec"
-
-
-
-# &$PSScriptRoot\tools\NuGet.exe pack "$PSScriptRoot\src\Clowd\Clowd.nuspec" `
-# -BasePath "$PSScriptRoot\publish\Clowd\" `
-# -OutputDirectory "$PSScriptRoot\publish" `
-# -Version $Ver
-
-# &$PSScriptRoot\tools\Squirrel.com --releasify "$PSScriptRoot\publish\Clowd.$($Ver).nupkg" `
-# --setupIcon="$PSScriptRoot\src\Clowd\Images\default.ico" `
-# --no-msi `
-# --releaseDir="$PSScriptRoot\releases"
+Write-Host "Done"
