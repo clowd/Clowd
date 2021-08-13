@@ -42,6 +42,8 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+            SquirrelUtil.Startup(e.Args);
+
             try
             {
                 base.OnStartup(e);

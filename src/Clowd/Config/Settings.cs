@@ -162,14 +162,14 @@ namespace Clowd.Config
         // this is here to allow Classify to serialize / save. 
         private AppTheme _Theme;
 
-        [ClassifyIgnore]
-        public Setup.Features.AutoStart StartWithWindows { get; set; } = new();
+        //[ClassifyIgnore]
+        //public Setup.Features.AutoStart StartWithWindows { get; set; } = new();
 
-        [ClassifyIgnore]
-        public Setup.Features.ContextMenu AddExplorerContextMenu { get; set; } = new();
+        //[ClassifyIgnore]
+        //public Setup.Features.ContextMenu AddExplorerContextMenu { get; set; } = new();
 
-        [ClassifyIgnore]
-        public Setup.Features.Shortcuts CreateDesktopShortcuts { get; set; } = new();
+        //[ClassifyIgnore]
+        //public Setup.Features.Shortcuts CreateDesktopShortcuts { get; set; } = new();
 
         public enum AppTheme
         {
