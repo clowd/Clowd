@@ -2,8 +2,9 @@
 <package>
   <metadata>
     <id>Clowd</id>
-    <description>A screen/video capture and editing tool</description>
-    <authors>Clowd</authors>
+    <title>Clowd</title>
+    <description>Clowd</description>
+    <authors>Caelan Sayler</authors>
     <version>0</version>
   </metadata>
   <files>
