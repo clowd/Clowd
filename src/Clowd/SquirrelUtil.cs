@@ -16,7 +16,6 @@ namespace Clowd
     internal static class SquirrelUtil
     {
         public static string UniqueAppKey => "Clowd";
-        //public static string InstallDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), UniqueAppKey);
 
         public static void Startup(string[] args)
         {
