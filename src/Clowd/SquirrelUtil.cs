@@ -33,7 +33,7 @@ namespace Clowd
         {
             using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
             mgr.CreateUninstallerRegistryEntry();
-            mgr.CreateShortcutForThisExe();
+            mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
             var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
             var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath, "--upload");
@@ -45,7 +45,8 @@ namespace Clowd
         private static void OnUpdate(Version obj)
         {
             using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-            mgr.CreateShortcutForThisExe();
+            mgr.CreateUninstallerRegistryEntry();
+            mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
             // only update registry during update if they have not been removed by user
             var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
@@ -64,7 +65,7 @@ namespace Clowd
             srv.RemoveAll();
 
             using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-            mgr.RemoveShortcutForThisExe();
+            mgr.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
             mgr.RemoveUninstallerRegistryEntry();
         }
 
