@@ -42,7 +42,7 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
-            SquirrelUtil.Startup(e.Args);
+            var appArgs = SquirrelUtil.Startup(e.Args);
 
             try
             {
@@ -61,7 +61,7 @@ namespace Clowd
                     DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
 
                 SetupExceptionHandling();
-                await SetupMutex(e);
+                await SetupMutex(appArgs);
 
                 // settings
                 try
@@ -196,7 +196,7 @@ namespace Clowd
 #endif
         }
 
-        private async Task SetupMutex(StartupEventArgs e)
+        private async Task SetupMutex(string[] args)
         {
             _processor = new MutexArgsForwarder(Constants.ClowdMutex);
             _processor.ArgsReceived += SynchronizationContextEventHandler.CreateDelegate<CommandLineEventArgs>((s, e) =>
@@ -206,7 +206,7 @@ namespace Clowd
 
             try
             {
-                bool mutexCreated = _processor.Startup(e.Args);
+                bool mutexCreated = _processor.Startup(args);
                 if (!mutexCreated)
                 {
                     if (Constants.Debugging && await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Warning,
@@ -215,7 +215,7 @@ namespace Clowd
                         "Kill Clowd", "Exit"))
                     {
                         KillOtherClowdProcess();
-                        if (!_processor.Startup(e.Args))
+                        if (!_processor.Startup(args))
                             throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Clowd instance? Uninstaller?");
                     }
                     else
@@ -229,7 +229,7 @@ namespace Clowd
             {
                 // there is an unresponsive clowd process, try to kill it and re-start
                 KillOtherClowdProcess();
-                if (!_processor.Startup(e.Args))
+                if (!_processor.Startup(args))
                     throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Clowd instance? Uninstaller?");
             }
         }
