@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Security.Principal;
 using static CsWin32.PInvoke;
 
 namespace Clowd.PlatformUtil.Windows
@@ -53,6 +54,15 @@ namespace Clowd.PlatformUtil.Windows
         //        //above were introduced with .net 4.0
         //    }
         //}
+
+        public static bool IsProcessElevated
+        {
+            get
+            {
+                return WindowsIdentity.GetCurrent().Owner
+                  .IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid);
+            }
+        }
 
         public static bool IsDWMEnabled
         {
