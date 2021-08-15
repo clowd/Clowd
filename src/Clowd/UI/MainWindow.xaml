@@ -73,12 +73,17 @@
                 Icon="OutlineStar"
                 Tag="AboutPage" />
         </ui:NavigationView.FooterMenuItems>
-        <ui:Frame x:Name="ContentFrame" HorizontalAlignment="Stretch">
-            <ui:Frame.ContentTransitions>
-                <ui:TransitionCollection>
-                    <ui:NavigationThemeTransition />
-                </ui:TransitionCollection>
-            </ui:Frame.ContentTransitions>
-        </ui:Frame>
+        <ui:ScrollViewerEx>
+            <ui:Frame
+                x:Name="ContentFrame"
+                Margin="24,0,0,0"
+                HorizontalAlignment="Stretch">
+                <ui:Frame.ContentTransitions>
+                    <ui:TransitionCollection>
+                        <ui:NavigationThemeTransition />
+                    </ui:TransitionCollection>
+                </ui:Frame.ContentTransitions>
+            </ui:Frame>
+        </ui:ScrollViewerEx>
     </ui:NavigationView>
 </local:SystemThemedWindow>
