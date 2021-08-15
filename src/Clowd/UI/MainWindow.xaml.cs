@@ -51,13 +51,24 @@ namespace Clowd.UI
 
         private FrameworkElement GetPanelForTag(string tag)
         {
+            var typesToCheck = new[]
+            {
+                "Clowd.UI." + tag,
+                "Clowd.UI.Pages." + tag,
+                "Clowd.UI." + tag + "Page",
+                "Clowd.UI.Pages." + tag + "Page",
+            };
+
+            foreach(var t in typesToCheck)
+            {
+                var type = Type.GetType(t);
+                if (type != null && type.IsAssignableTo(typeof(FrameworkElement)))
+                    return (FrameworkElement)Activator.CreateInstance(type);
+            }
+
             var settingsPage = typeof(ClowdSettings).GetProperties().FirstOrDefault(f => f.Name == tag);
             if (settingsPage != null)
                 return new SettingsControlFactory(this, settingsPage.GetValue(ClowdSettings.Current)).GetSettingsPanel();
-
-            var type = Type.GetType("Clowd.UI." + tag);
-            if (type != null && type.IsAssignableTo(typeof(FrameworkElement)))
-                return (FrameworkElement)Activator.CreateInstance(type);
 
             return null;
         }
