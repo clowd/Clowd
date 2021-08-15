@@ -22,6 +22,13 @@ namespace Clowd
         private static string UniqueAppKey => "Clowd";
         private static readonly object _lock = new object();
         private static SquirrelUpdateViewModel _model;
+        private static InstallerServices _srv;
+
+        static SquirrelUtil()
+        {
+            _model = new SquirrelUpdateViewModelInst();
+            _srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
+        }
 
         public static string[] Startup(string[] args)
         {
@@ -33,7 +40,6 @@ namespace Clowd
                 arguments: args);
 
             // if app is still running, filter out squirrel args and continue
-            _model = new SquirrelUpdateViewModelInst();
             return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
@@ -48,11 +54,10 @@ namespace Clowd
             mgr.CreateUninstallerRegistryEntry();
             mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
-            var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
             var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath);
-            srv.ExplorerAllFilesMenu = menu;
-            srv.ExplorerDirectoryMenu = menu;
-            srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
+            _srv.ExplorerAllFilesMenu = menu;
+            _srv.ExplorerDirectoryMenu = menu;
+            _srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
         }
 
         private static void OnUpdate(Version obj)
@@ -62,20 +67,18 @@ namespace Clowd
             mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
             // only update registry during update if they have not been removed by user
-            var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
             var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath);
-            if (srv.ExplorerAllFilesMenu != null)
-                srv.ExplorerAllFilesMenu = menu;
-            if (srv.ExplorerDirectoryMenu != null)
-                srv.ExplorerDirectoryMenu = menu;
-            if (srv.AutoStartLaunchPath != null)
-                srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
+            if (_srv.ExplorerAllFilesMenu != null)
+                _srv.ExplorerAllFilesMenu = menu;
+            if (_srv.ExplorerDirectoryMenu != null)
+                _srv.ExplorerDirectoryMenu = menu;
+            if (_srv.AutoStartLaunchPath != null)
+                _srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
         }
 
         private static void OnUninstall(Version obj)
         {
-            var srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
-            srv.RemoveAll();
+            _srv.RemoveAll();
 
             using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
             mgr.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
@@ -97,6 +100,38 @@ namespace Clowd
 
         public class SquirrelUpdateViewModel : INotifyPropertyChanged
         {
+            public bool ContextMenuRegistered
+            {
+                get
+                {
+                    var files = _srv.ExplorerAllFilesMenu;
+                    var directory = _srv.ExplorerDirectoryMenu;
+                    if (files == null || directory == null)
+                        return false;
+                    return true;
+                }
+                set
+                {
+                    if (value)
+                    {
+                        var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath);
+                        _srv.ExplorerAllFilesMenu = menu;
+                        _srv.ExplorerDirectoryMenu = menu;
+                    }
+                    else
+                    {
+                        _srv.ExplorerAllFilesMenu = null;
+                        _srv.ExplorerDirectoryMenu = null;
+                    }
+                }
+            }
+
+            public bool AutoRunRegistered
+            {
+                get => _srv.AutoStartLaunchPath != null;
+                set => _srv.AutoStartLaunchPath = value ? AssemblyRuntimeInfo.EntryExePath : null;
+            }
+
             public RelayUICommand ClickCommand { get; protected set; }
             public string ClickCommandText { get; protected set; }
             public string Description { get; protected set; }
@@ -118,6 +153,7 @@ namespace Clowd
                     Description = "Version: " + Assembly.GetExecutingAssembly()
                         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
                         .InformationalVersion;
+                    _timer = DisposableTimer.Start(TimeSpan.FromHours(1), CheckForUpdateTimer);
                 }
                 else
                 {
@@ -125,8 +161,6 @@ namespace Clowd
                     ClickCommandText = "Not Available";
                     Description = "Can't check for updates in portable app";
                 }
-
-                _timer = DisposableTimer.Start(TimeSpan.FromHours(1), CheckForUpdateTimer);
             }
 
             private void CheckForUpdateTimer()
