@@ -12,37 +12,38 @@
     d:DesignWidth="400"
     mc:Ignorable="d">
     <Page.Resources>
-        <Style
-            x:Key="ComboBoxHeaderStyle"
-            BasedOn="{StaticResource BodyTextBlockStyle}"
-            TargetType="TextBlock">
-            <Setter Property="Margin" Value="0,0,0,8" />
-        </Style>
+        <Style BasedOn="{StaticResource BodyTextBlockStyle}" TargetType="TextBlock" />
         <Style BasedOn="{StaticResource {x:Type ComboBox}}" TargetType="ComboBox">
             <Setter Property="MinWidth" Value="180" />
-            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Margin" Value="0,8,0,12" />
+        </Style>
+        <Style BasedOn="{StaticResource {x:Type ui:ToggleSwitch}}" TargetType="ui:ToggleSwitch">
+            <Setter Property="Margin" Value="0,4,0,8" />
+        </Style>
+        <Style BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+            <Setter Property="Margin" Value="0,8,0,8" />
         </Style>
     </Page.Resources>
     <ui:SimpleStackPanel>
         <GroupBox x:Name="grpUpdates" Header="Updates">
             <StackPanel>
-                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="{Binding Description}" />
+                <TextBlock Style="{StaticResource BodyTextBlockStyle}" Text="{Binding Description}" />
                 <Button Command="{Binding ClickCommand}" Content="{Binding ClickCommandText}" />
             </StackPanel>
         </GroupBox>
         <GroupBox x:Name="grpBehavior" Header="Behavior">
             <StackPanel>
-                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="App theme" />
+                <TextBlock Text="App color scheme" />
                 <ComboBox>
                     <ComboBoxItem IsSelected="True">Auto / System</ComboBoxItem>
                     <ComboBoxItem>Light</ComboBoxItem>
                     <ComboBoxItem>Dark</ComboBoxItem>
                 </ComboBox>
-                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="Ask/confirm before exiting" />
+                <TextBlock Text="Ask/confirm before exiting" />
                 <ui:ToggleSwitch />
-                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="Add context menu to Explorer" />
+                <TextBlock Text="Add context menu to Explorer" />
                 <ui:ToggleSwitch />
-                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="Start Clowd with Windows" />
+                <TextBlock Text="Start Clowd with Windows" />
                 <ui:ToggleSwitch />
             </StackPanel>
         </GroupBox>
