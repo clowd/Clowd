@@ -54,7 +54,7 @@ namespace Clowd.UI.Config
                 var rowLabel = new Label();
                 rowLabel.VerticalAlignment = VerticalAlignment.Center;
                 rowLabel.HorizontalAlignment = HorizontalAlignment.Left;
-                rowLabel.Margin = new Thickness(24, 4, 0, 4);
+                rowLabel.Margin = new Thickness(0, 4, 0, 4);
                 rowLabel.Content = FromCamelCase(pd.DisplayName);
                 Grid.SetRow(rowLabel, row);
                 Grid.SetColumn(rowLabel, 0);
