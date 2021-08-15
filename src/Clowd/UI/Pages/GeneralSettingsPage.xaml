@@ -34,17 +34,17 @@
         <GroupBox x:Name="grpBehavior" Header="Behavior">
             <StackPanel>
                 <TextBlock Text="App color scheme" />
-                <ComboBox>
-                    <ComboBoxItem IsSelected="True">Auto / System</ComboBoxItem>
-                    <ComboBoxItem>Light</ComboBoxItem>
-                    <ComboBoxItem>Dark</ComboBoxItem>
-                </ComboBox>
+                <ComboBox x:Name="comboTheme" SelectedValue="{Binding Theme}" />
                 <TextBlock Text="Ask/confirm before exiting" />
-                <ui:ToggleSwitch />
+                <ui:ToggleSwitch IsOn="{Binding ConfirmClose}" />
+            </StackPanel>
+        </GroupBox>
+        <GroupBox x:Name="grpShell" Header="Shell">
+            <StackPanel>
                 <TextBlock Text="Add context menu to Explorer" />
-                <ui:ToggleSwitch />
+                <ui:ToggleSwitch IsOn="{Binding ContextMenuRegistered}" />
                 <TextBlock Text="Start Clowd with Windows" />
-                <ui:ToggleSwitch />
+                <ui:ToggleSwitch IsOn="{Binding AutoRunRegistered}" />
             </StackPanel>
         </GroupBox>
     </ui:SimpleStackPanel>

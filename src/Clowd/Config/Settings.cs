@@ -173,9 +173,9 @@ namespace Clowd.Config
 
         public enum AppTheme
         {
-            System,
-            Light,
-            Dark
+            System = 0,
+            Light = 1,
+            Dark = 2,
         }
 
         protected override void AfterDeserializeInternal()
