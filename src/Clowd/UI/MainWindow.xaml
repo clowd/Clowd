@@ -45,7 +45,7 @@
             <ui:NavigationViewItem
                 Content="General"
                 Icon="Setting"
-                Tag="General" />
+                Tag="GeneralSettings" />
             <ui:NavigationViewItem
                 Content="Hotkeys"
                 Icon="Keyboard"

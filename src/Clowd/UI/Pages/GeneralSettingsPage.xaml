@@ -1,0 +1,50 @@
+﻿<Page
+    x:Class="Clowd.UI.Pages.GeneralSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd.UI.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="http://schemas.modernwpf.com/2019"
+    Title="GeneralSettingsPage"
+    d:Background="White"
+    d:DesignHeight="450"
+    d:DesignWidth="400"
+    mc:Ignorable="d">
+    <Page.Resources>
+        <Style
+            x:Key="ComboBoxHeaderStyle"
+            BasedOn="{StaticResource BodyTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style BasedOn="{StaticResource {x:Type ComboBox}}" TargetType="ComboBox">
+            <Setter Property="MinWidth" Value="180" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+    </Page.Resources>
+    <ui:SimpleStackPanel>
+        <GroupBox x:Name="grpUpdates" Header="Updates">
+            <StackPanel>
+                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="{Binding Description}" />
+                <Button Command="{Binding ClickCommand}" Content="{Binding ClickCommandText}" />
+            </StackPanel>
+        </GroupBox>
+        <GroupBox x:Name="grpBehavior" Header="Behavior">
+            <StackPanel>
+                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="App theme" />
+                <ComboBox>
+                    <ComboBoxItem IsSelected="True">Auto / System</ComboBoxItem>
+                    <ComboBoxItem>Light</ComboBoxItem>
+                    <ComboBoxItem>Dark</ComboBoxItem>
+                </ComboBox>
+                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="Ask/confirm before exiting" />
+                <ui:ToggleSwitch />
+                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="Add context menu to Explorer" />
+                <ui:ToggleSwitch />
+                <TextBlock Style="{StaticResource ComboBoxHeaderStyle}" Text="Start Clowd with Windows" />
+                <ui:ToggleSwitch />
+            </StackPanel>
+        </GroupBox>
+    </ui:SimpleStackPanel>
+</Page>
