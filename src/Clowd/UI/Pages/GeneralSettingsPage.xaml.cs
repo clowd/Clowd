@@ -21,7 +21,7 @@ namespace Clowd.UI.Pages
         public GeneralSettingsPage()
         {
             InitializeComponent();
-            grpUpdates.DataContext = new SquirrelUpdateViewModel();
+            grpUpdates.DataContext = SquirrelUtil.GetUpdateViewModel();
             grpBehavior.DataContext = ClowdSettings.Current.General;
         }
     }

@@ -10,101 +10,18 @@ using System.Windows;
 using System.Windows.Input;
 using Clowd.PlatformUtil.Windows;
 using Clowd.UI.Helpers;
+using Clowd.Util;
 using Squirrel;
 
 [assembly: AssemblyMetadata("SquirrelAwareVersion", "1")]
 
 namespace Clowd
 {
-    internal class SquirrelUpdateViewModel : INotifyPropertyChanged
-    {
-        public RelayUICommand ClickCommand { get; protected set; }
-        public string ClickCommandText { get; protected set; }
-        public string Description { get; protected set; }
-        public bool IsWorking { get; protected set; }
-
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        private static string UniqueAppKey => "Clowd";
-        private ReleaseEntry _newVersion;
-        private static readonly object _lock = new object();
-
-        public SquirrelUpdateViewModel()
-        {
-            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-
-            ClickCommand = new RelayUICommand(OnClick, CanExecute);
-            if (mgr.IsInstalledApp)
-            {
-                ClickCommandText = "Check for updates";
-                Description = "Version: " + Assembly.GetExecutingAssembly()
-                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                    .InformationalVersion;
-            }
-            else
-            {
-                IsWorking = true;
-                ClickCommandText = "Not Available";
-                Description = "Can't check for updates in portable app";
-            }
-        }
-
-        private async void OnClick(object parameter)
-        {
-            lock (_lock)
-            {
-                if (IsWorking) return;
-                IsWorking = true;
-            }
-
-            CommandManager.InvalidateRequerySuggested();
-            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-
-            if (_newVersion == null)
-            {
-                // no update downloaded, lets check
-                ClickCommandText = "Checking...";
-                _newVersion = await mgr.UpdateApp(OnProgress);
-
-                if (_newVersion != null)
-                {
-                    ClickCommandText = "Restart";
-                    Description = $"Version {_newVersion.Version} has been downloaded";
-                }
-                else
-                {
-                    ClickCommandText = "Check for Updates";
-                    Description = "Version: " + Assembly.GetExecutingAssembly()
-                      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                      .InformationalVersion + ", no update available";
-                }
-            }
-            else
-            {
-                var newAppPath = Path.Combine(mgr.RootAppDirectory, "app-" + _newVersion.Version.ToString(), "Clowd.exe");
-                UpdateManager.RestartApp(newAppPath);
-            }
-
-            lock (_lock)
-                IsWorking = false;
-
-            CommandManager.InvalidateRequerySuggested();
-        }
-
-        private void OnProgress(int obj)
-        {
-            Description = $"Checking for updates: {obj}%";
-        }
-
-        private bool CanExecute(object parameter)
-        {
-            return !IsWorking;
-        }
-    }
-
     internal static class SquirrelUtil
     {
-        public static string UniqueAppKey => "Clowd";
+        private static string UniqueAppKey => "Clowd";
+        private static readonly object _lock = new object();
+        private static SquirrelUpdateViewModel _model;
 
         public static string[] Startup(string[] args)
         {
@@ -116,7 +33,13 @@ namespace Clowd
                 arguments: args);
 
             // if app is still running, filter out squirrel args and continue
+            _model = new SquirrelUpdateViewModelInst();
             return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+
+        public static SquirrelUpdateViewModel GetUpdateViewModel()
+        {
+            return _model;
         }
 
         private static void OnInstall(Version obj)
@@ -162,6 +85,121 @@ namespace Clowd
         private static void OnFirstRun()
         {
             MessageBox.Show("Thanks for installing clowd, it is running in the system tray!");
+        }
+
+        private class SquirrelUpdateViewModelInst : SquirrelUpdateViewModel
+        {
+            public SquirrelUpdateViewModelInst() : base()
+            {
+                // hide constructor
+            }
+        }
+
+        public class SquirrelUpdateViewModel : INotifyPropertyChanged
+        {
+            public RelayUICommand ClickCommand { get; protected set; }
+            public string ClickCommandText { get; protected set; }
+            public string Description { get; protected set; }
+            public bool IsWorking { get; protected set; }
+
+            public event PropertyChangedEventHandler PropertyChanged;
+
+            private ReleaseEntry _newVersion;
+            private IDisposable _timer;
+
+            protected SquirrelUpdateViewModel()
+            {
+                using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+
+                ClickCommand = new RelayUICommand(OnClick, CanExecute);
+                if (mgr.IsInstalledApp)
+                {
+                    ClickCommandText = "Check for updates";
+                    Description = "Version: " + Assembly.GetExecutingAssembly()
+                        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                        .InformationalVersion;
+                }
+                else
+                {
+                    IsWorking = true;
+                    ClickCommandText = "Not Available";
+                    Description = "Can't check for updates in portable app";
+                }
+
+                _timer = DisposableTimer.Start(TimeSpan.FromHours(1), CheckForUpdateTimer);
+            }
+
+            private void CheckForUpdateTimer()
+            {
+                if (_newVersion != null) return;
+                using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+                CheckForUpdatesUnattended(mgr).ContinueWith(t =>
+                {
+                    if (t.Exception != null)
+                    {
+                        Description = t.Exception.Message;
+                        // log this
+                    }
+                });
+            }
+
+            public async Task CheckForUpdatesUnattended(UpdateManager mgr)
+            {
+                lock (_lock)
+                {
+                    if (_newVersion != null) return;
+                    if (IsWorking) return;
+                    IsWorking = true;
+                }
+
+                CommandManager.InvalidateRequerySuggested();
+
+                ClickCommandText = "Checking...";
+                _newVersion = await mgr.UpdateApp(OnProgress);
+
+                if (_newVersion != null)
+                {
+                    ClickCommandText = "Restart";
+                    Description = $"Version {_newVersion.Version} has been downloaded";
+                }
+                else
+                {
+                    ClickCommandText = "Check for Updates";
+                    Description = "Version: " + Assembly.GetExecutingAssembly()
+                      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                      .InformationalVersion + ", no update available";
+                }
+
+                lock (_lock)
+                    IsWorking = false;
+
+                CommandManager.InvalidateRequerySuggested();
+            }
+
+            private async void OnClick(object parameter)
+            {
+                using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+                if (_newVersion == null)
+                {
+                    // no update downloaded, lets check
+                    await CheckForUpdatesUnattended(mgr);
+                }
+                else
+                {
+                    var newAppPath = Path.Combine(mgr.RootAppDirectory, "app-" + _newVersion.Version.ToString(), "Clowd.exe");
+                    UpdateManager.RestartApp(newAppPath);
+                }
+            }
+
+            private void OnProgress(int obj)
+            {
+                Description = $"Checking for updates: {obj}%";
+            }
+
+            private bool CanExecute(object parameter)
+            {
+                return !IsWorking;
+            }
         }
     }
 }
