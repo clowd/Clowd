@@ -19,6 +19,10 @@ namespace Clowd
 {
     internal static class SquirrelUtil
     {
+        public static string CurrentVersion { get; } = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            .InformationalVersion;
+
         private static string UniqueAppKey => "Clowd";
         private static readonly object _lock = new object();
         private static SquirrelUpdateViewModel _model;
@@ -199,9 +203,7 @@ namespace Clowd
                 else
                 {
                     ClickCommandText = "Check for Updates";
-                    Description = "Version: " + Assembly.GetExecutingAssembly()
-                      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                      .InformationalVersion + ", no update available";
+                    Description = "Version: " + CurrentVersion + ", no update available";
                 }
 
                 lock (_lock)
