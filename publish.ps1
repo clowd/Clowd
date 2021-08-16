@@ -55,6 +55,20 @@ Write-Host "Create Nuget Package" -ForegroundColor Magenta
 -OutputDirectory "$PSScriptRoot\publish" `
 -Version $version
 
+if (Test-Path '.\clowd_secrets.json') {
+    $secrets = Get-Content '.\clowd_secrets.json' | Out-String | ConvertFrom-Json
+} elseif (Test-Path '..\clowd_secrets.json') {
+    $secrets = Get-Content '..\clowd_secrets.json' | Out-String | ConvertFrom-Json
+} else {
+    throw "Unable to find clowd_secrets.json"
+}
+
+# download recent packages
+Write-Host "Download latest release" -ForegroundColor Magenta
+& $PSScriptRoot\modules\Clowd.Squirrel\build\publish\SyncReleases.exe -r "$PSScriptRoot\releases\" `
+-p b2 --bucketId $secrets.b2bucket --b2keyid $secrets.b2keyid `
+--b2key $secrets.b2key
+
 # releasify
 Write-Host "Releasify Nuget Package" -ForegroundColor Magenta
 & $PSScriptRoot\modules\Clowd.Squirrel\build\publish\Squirrel --releasify "$PSScriptRoot\publish\Clowd.$($version).nupkg" `
@@ -62,6 +76,4 @@ Write-Host "Releasify Nuget Package" -ForegroundColor Magenta
 --no-msi `
 --releaseDir="$PSScriptRoot\releases"
 
-# upload new release
-
-Write-Host "Done" -ForegroundColor Magenta
+Write-Host "Done. Run .\upload.cmd to release" -ForegroundColor Magenta
