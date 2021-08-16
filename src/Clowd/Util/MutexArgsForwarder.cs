@@ -105,13 +105,17 @@ namespace Clowd.Util
 
         private void ListenForHttpRequests()
         {
-            while (_host.IsListening)
+            while (_host != null && _host.IsListening)
             {
-                ThreadPool.QueueUserWorkItem((cb) =>
+                try
                 {
-                    var context = cb as HttpListenerContext;
-                    ProcessHttpRequest(context.Request, context.Response);
-                }, _host.GetContext());
+                    var request = _host.GetContext();
+                    ThreadPool.QueueUserWorkItem((cb) =>
+                    {
+                        var context = cb as HttpListenerContext;
+                        ProcessHttpRequest(context.Request, context.Response);
+                    }, request);
+                } catch { }
             }
         }
 
@@ -201,14 +205,15 @@ namespace Clowd.Util
 
             if (_mutex != null)
             {
-                _mutex.ReleaseMutex();
-                _mutex.Dispose();
+                // I don't know why this fails, but the process is exiting so I also don't care
+                try { _mutex.ReleaseMutex(); } catch { }
+                try { _mutex.Dispose(); } catch { }
                 _mutex = null;
             }
 
             if (_host != null)
             {
-                _host.Stop();
+                _host.Abort();
                 _host = null;
             }
         }
