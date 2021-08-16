@@ -159,7 +159,7 @@ namespace Clowd
                 {
                     IsWorking = true;
                     ClickCommandText = "Not Available";
-                    Description = "Can't check for updates in portable app";
+                    Description = "Can't check for updates in portable mode";
                 }
             }
 
@@ -193,7 +193,7 @@ namespace Clowd
 
                 if (_newVersion != null)
                 {
-                    ClickCommandText = "Restart";
+                    ClickCommandText = "Restart Clowd";
                     Description = $"Version {_newVersion.Version} has been downloaded";
                 }
                 else
