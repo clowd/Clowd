@@ -1,4 +1,4 @@
-using Clowd.PlatformUtil;
+﻿using Clowd.PlatformUtil;
 using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
@@ -244,7 +244,7 @@ namespace Clowd
         yuv444,
     }
 
-    public interface IVideoCapturer : IDisposable, INotifyPropertyChanged, IModule
+    public interface IVideoCapturer : IDisposable, INotifyPropertyChanged
     {
         event EventHandler<VideoCriticalErrorEventArgs> CriticalError;
         event EventHandler<VideoStatusEventArgs> StatusReceived;

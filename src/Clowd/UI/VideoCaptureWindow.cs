@@ -44,6 +44,9 @@ namespace Clowd.UI
             _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
             _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
 
+            if (!Directory.Exists(_settings.OutputDirectory))
+                _settings.OutputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+
             _btnClowd = new CaptureToolButton
             {
                 Primary = true,
