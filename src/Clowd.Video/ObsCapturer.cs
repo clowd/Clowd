@@ -181,6 +181,7 @@ namespace Clowd.Video
                         outputDirectory = dir,
                         maxOutputHeight = settings.MaxResolutionWidth,
                         maxOutputWidth = settings.MaxResolutionWidth,
+                        trackMouseClicks = settings.TrackMouseClicks,
                     };
 
                     if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice != null)
