@@ -102,9 +102,6 @@ namespace Clowd.Drawing.Graphics
 
             drawingContext.DrawImage(_cropped, r);
 
-            var txt = new FormattedText(Bounds.ToString(), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Arial"), 18, Brushes.Pink);
-            drawingContext.DrawText(txt, r.TopLeft);
-
             if (Right <= Left || Bottom <= Top)
                 drawingContext.Pop();
 
