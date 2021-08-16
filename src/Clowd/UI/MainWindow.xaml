@@ -76,7 +76,7 @@
         <ui:ScrollViewerEx>
             <ui:Frame
                 x:Name="ContentFrame"
-                Margin="24,0,0,0"
+                Padding="24,0,24,24"
                 HorizontalAlignment="Stretch">
                 <ui:Frame.ContentTransitions>
                     <ui:TransitionCollection>
