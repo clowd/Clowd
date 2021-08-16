@@ -4,3 +4,6 @@
 [submodule "modules/Clowd.Squirrel"]
 	path = modules/Clowd.Squirrel
 	url = https://github.com/clowd/Clowd.Squirrel.git
+[submodule "modules/obs-express"]
+	path = modules/obs-express
+	url = https://github.com/clowd/obs-express
