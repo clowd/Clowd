@@ -86,6 +86,8 @@ namespace Clowd
 
         public static SessionManager Current { get; }
 
+        private static readonly object _lock = new object();
+
         static SessionManager()
         {
             Current = new SessionManager();
@@ -117,23 +119,22 @@ namespace Clowd
 
         private void OnDeleted(object sender, FileSystemEventArgs e)
         {
-            foreach (var s in Sessions.ToArray())
+            lock (_lock)
             {
-                if (s.FilePath.StartsWith(e.FullPath, StringComparison.OrdinalIgnoreCase))
+                foreach (var s in Sessions.ToArray())
                 {
-                    Sessions.Remove(s);
-                    s.Dispose();
+                    if (s.FilePath.StartsWith(e.FullPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Sessions.Remove(s);
+                        s.Dispose();
+                    }
                 }
             }
         }
 
         private void OnCreated(object sender, FileSystemEventArgs e)
         {
-            var jsonPath = Path.Combine(e.FullPath, "session.json");
-            if (File.Exists(jsonPath) && !FileSyncObject.CheckPathInUse(jsonPath))
-                Sessions.Add(new SessionInfo(jsonPath));
-            else if (e.FullPath.EndsWith("session.json", StringComparison.OrdinalIgnoreCase) && !FileSyncObject.CheckPathInUse(e.FullPath))
-                Sessions.Add(new SessionInfo(e.FullPath));
+            GetSessionFromPath(e.FullPath); // will cause to be loaded if not already
         }
 
         public void Dispose()
@@ -143,8 +144,27 @@ namespace Clowd
 
         public SessionInfo GetSessionFromPath(string path)
         {
-            return Sessions.FirstOrDefault(s => s.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase))
-                ?? Sessions.FirstOrDefault(s => s.FilePath.Equals(Path.Combine(path, "session.json"), StringComparison.OrdinalIgnoreCase));
+            lock (_lock)
+            {
+                var inmem = Sessions.FirstOrDefault(s => s.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase))
+                    ?? Sessions.FirstOrDefault(s => s.FilePath.Equals(Path.Combine(path, "session.json"), StringComparison.OrdinalIgnoreCase));
+
+                if (inmem != null)
+                    return inmem;
+
+                SessionInfo loaded = null;
+
+                var jsonPath = Path.Combine(path, "session.json");
+                if (File.Exists(jsonPath) && !FileSyncObject.CheckPathInUse(jsonPath))
+                    loaded = new SessionInfo(jsonPath);
+                else if (path.EndsWith("session.json", StringComparison.OrdinalIgnoreCase) && !FileSyncObject.CheckPathInUse(path))
+                    loaded = new SessionInfo(path);
+
+                if (loaded != null)
+                    Sessions.Add(loaded);
+
+                return loaded;
+            }
         }
 
         public void OpenSession(SessionInfo session)
