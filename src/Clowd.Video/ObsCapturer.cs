@@ -28,7 +28,7 @@ namespace Clowd.Video
         private readonly IScopedLog _log;
         private readonly string _libraryPath;
 
-        internal ObsCapturer(IScopedLog log, string libraryPath)
+        public ObsCapturer(IScopedLog log, string libraryPath)
         {
             lock (_lock)
             {

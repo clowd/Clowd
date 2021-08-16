@@ -17,6 +17,7 @@ using Clowd.PlatformUtil;
 using Clowd.UI;
 using Clowd.UI.Helpers;
 using Clowd.Util;
+using Clowd.Video;
 using LightInject;
 using ModernWpf;
 using NotifyIconLib;
@@ -93,24 +94,6 @@ namespace Clowd
                 _processor.Ready();
 
                 EditorWindow.ShowAllPreviouslyActiveSessions();
-
-                try
-                {
-                    // until proper module updater is built... we check for OBS updates manually.
-                    var obs = Container.GetInstance<IModuleInfo<IVideoCapturer>>();
-                    await obs.CheckForUpdates(false);
-                    if (obs.UpdateAvailable != null)
-                    {
-                        DefaultLog.Info("Update available for OBS module... Downloading");
-                        await obs.Install(obs.UpdateAvailable);
-                        DefaultLog.Info("Update available for OBS module... Done");
-                    }
-                }
-                catch (Exception ecx)
-                {
-                    DefaultLog.Error(ecx);
-                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ecx.ToString(), "Error updating OBS, will try again later.");
-                }
             }
             catch (Exception ex)
             {
@@ -251,14 +234,7 @@ namespace Clowd
             container.Register<ITasksView>(_ => tasksView);
 
             // video
-            container.Register<IModuleInfo<IVideoCapturer>, Video.ObsModule>(nameof(Video.ObsModule), new PerContainerLifetime());
-            container.Register<IVideoCapturer>(f =>
-            {
-                var module = f.GetInstance<IModuleInfo<IVideoCapturer>>();
-                if (module.InstalledVersion == null)
-                    return null;
-                return module.GetNewInstance();
-            }, new PerScopeLifetime());
+            container.Register<IVideoCapturer>(f => new ObsCapturer(DefaultLog, Path.Combine(AppContext.BaseDirectory, "obs-express")), new PerScopeLifetime());
 
             Container = container;
         }
