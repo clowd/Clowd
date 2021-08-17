@@ -5,7 +5,7 @@
     xmlns:cm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
     xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="clr-namespace:Clowd.UI"
+    xmlns:local="clr-namespace:Clowd"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.modernwpf.com/2019"
     Title="RecentSessionsPage"
@@ -81,7 +81,7 @@
                             Grid.Column="1"
                             Margin="12,0,0,6"
                             Style="{StaticResource BodyTextBlockStyle}"
-                            Text="{Binding CreatedUtc, Mode=OneTime, Converter={StaticResource convTimeAgo}}" />
+                            Text="{Binding CreatedUtc, Mode=OneTime, StringFormat={x:Static local:AppStyles.UiDateTimePattern}}" />
                         <ui:CommandBar
                             x:Name="cmdBar"
                             Grid.RowSpan="2"
