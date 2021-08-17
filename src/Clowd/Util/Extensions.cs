@@ -161,6 +161,14 @@ namespace Clowd.Util
             return string.Format("#{0:X2}{1:X2}{2:X2}", c.R, c.G, c.B);
         }
 
+        public static void LoadCachedUri(this BitmapImage bi, string filePath)
+        {
+            bi.BeginInit();
+            bi.UriSource = new Uri(filePath);
+            bi.CacheOption = BitmapCacheOption.OnLoad;
+            bi.EndInit();
+        }
+
         public static void Save(this BitmapSource source, string filePath, ImageFormat format)
         {
             using (var fs = File.Create(filePath))

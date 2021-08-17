@@ -225,6 +225,10 @@ namespace Clowd.PlatformUtil.Windows
 
         public bool Activate()
         {
+            // show window if minimized
+            if (IsIconic(Handle))
+                ShowWindow(Handle, SHOW_WINDOW_CMD.SW_RESTORE);
+
             SetForegroundWindow(Handle);
             SetActiveWindow(Handle);
             return true;
