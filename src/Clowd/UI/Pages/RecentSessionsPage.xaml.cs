@@ -42,7 +42,7 @@ namespace Clowd.UI
             f?.Hide();
 
             bool itemOpen = false;
-            foreach (SessionInfo session in listView.SelectedItems)
+            foreach (SessionInfo session in listView.SelectedItems.OfType<SessionInfo>().ToArray())
             {
                 if (session.ActiveWindowId != null)
                 {

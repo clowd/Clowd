@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Windows.Media.Imaging;
 using Clowd.PlatformUtil;
 using Clowd.UI;
 using Clowd.UI.Helpers;
@@ -182,11 +183,23 @@ namespace Clowd
         {
             if (session.ActiveWindowId != null)
                 throw new InvalidOperationException("Can't delete session that is opened in an editor");
+
+            lock (_lock)
+            {
+                Sessions.Remove(session);
+                session.Dispose();
+                Directory.Delete(Path.GetDirectoryName(session.FilePath), true);
+            }
         }
 
         public void CopySession(SessionInfo session)
         {
+            BitmapImage bi = new BitmapImage();
+            bi.LoadCachedUri(session.PreviewImgPath);
 
+            var data = new ClipboardDataObject();
+            data.SetImage(bi);
+            data.SetClipboardData();
         }
 
         public string CreateNewSessionDirectory()

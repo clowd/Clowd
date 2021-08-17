@@ -62,6 +62,10 @@ namespace Clowd
         public static Stream AppIconDarkThemeStream => Application.GetResourceStream(new Uri("pack://application:,,,/Images/default-white.ico")).Stream;
         public static Stream AppIconLightThemeStream => Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico")).Stream;
 
+        public static string UiDateTimePattern 
+            => System.Threading.Thread.CurrentThread.CurrentCulture.DateTimeFormat.ShortDatePattern + " " +
+            System.Threading.Thread.CurrentThread.CurrentCulture.DateTimeFormat.ShortTimePattern;
+
         public static Icon AppIconGdi
         {
             get
