@@ -68,6 +68,7 @@ namespace Clowd.UI
                 {
                     var ms = new MemoryStream(Convert.FromBase64String(_session.GraphicsStream));
                     drawingCanvas.AddGraphicsFromStream(ms);
+                    drawingCanvas.UnselectAll();
                     loaded = true;
                 }
                 catch { }
@@ -507,7 +508,8 @@ namespace Clowd.UI
                 preview.Save(newpreview, System.Drawing.Imaging.ImageFormat.Png);
                 var oldpreview = _session.PreviewImgPath;
                 _session.PreviewImgPath = newpreview;
-                File.Delete(oldpreview);
+                if (File.Exists(oldpreview))
+                    File.Delete(oldpreview);
             }
         }
 
