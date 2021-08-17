@@ -15,6 +15,7 @@ using Clowd.Util;
 using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
 using PropertyChanged;
+using System.Text;
 
 namespace Clowd.UI
 {
@@ -59,7 +60,21 @@ namespace Clowd.UI
         {
             Keyboard.Focus(buttonFocus);
 
-            if (File.Exists(_session.DesktopImgPath))
+            bool loaded = false;
+
+            if (!String.IsNullOrWhiteSpace(_session.GraphicsStream))
+            {
+                try
+                {
+                    var ms = new MemoryStream(Convert.FromBase64String(_session.GraphicsStream));
+                    drawingCanvas.AddGraphicsFromStream(ms);
+                    loaded = true;
+                }
+                catch { }
+            }
+
+            // if there is a desktop image, and we failed to load an existing set of graphics
+            if (!loaded && File.Exists(_session.DesktopImgPath))
             {
                 var sel = _session.CroppedRect;
                 var crop = new Int32Rect(sel.X, sel.Y, sel.Width, sel.Height);
@@ -78,16 +93,17 @@ namespace Clowd.UI
 
                 // add image
                 drawingCanvas.AddGraphic(graphic);
+            }
 
-                // if window is bigger than image, show at actual size. else, zoom to fit
-                if (this.ActualHeight > height && this.ActualWidth > width)
-                {
-                    drawingCanvas.ZoomPanActualSize();
-                }
-                else
-                {
-                    drawingCanvas.ZoomPanFit();
-                }
+            // if window is bigger than image, show at actual size. else, zoom to fit
+            var artBounds = drawingCanvas.GetArtworkBounds(false);
+            if (this.ActualHeight > artBounds.Height && this.ActualWidth > artBounds.Width)
+            {
+                drawingCanvas.ZoomPanActualSize();
+            }
+            else
+            {
+                drawingCanvas.ZoomPanFit();
             }
 
             SyncToolState();
@@ -475,6 +491,24 @@ namespace Clowd.UI
         private void drawingCanvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
             SyncToolState();
+
+            // persist editor state to session file
+            MemoryStream ms = new MemoryStream();
+            drawingCanvas.WriteGraphicsToStream(ms, false);
+            var newstream = Convert.ToBase64String(ms.ToArray());
+
+            if (newstream != _session.GraphicsStream)
+            {
+                _session.GraphicsStream = newstream;
+
+                // save new preview image to file
+                var newpreview = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
+                var preview = GetRenderedBitmap();
+                preview.Save(newpreview, System.Drawing.Imaging.ImageFormat.Png);
+                var oldpreview = _session.PreviewImgPath;
+                _session.PreviewImgPath = newpreview;
+                File.Delete(oldpreview);
+            }
         }
 
         private async void objectColor_Click(object sender, MouseButtonEventArgs e)

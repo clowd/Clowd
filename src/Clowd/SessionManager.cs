@@ -35,7 +35,7 @@ namespace Clowd
             set => Set(value);
         }
 
-        public string CroppedImgPath
+        public string PreviewImgPath
         {
             get => Get<string>();
             set => Set(value);
@@ -74,6 +74,12 @@ namespace Clowd
         public Symbol Icon
         {
             get => Get<Symbol>();
+            set => Set(value);
+        }
+
+        public string GraphicsStream
+        {
+            get => Get<string>();
             set => Set(value);
         }
     }

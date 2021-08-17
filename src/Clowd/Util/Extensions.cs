@@ -163,10 +163,9 @@ namespace Clowd.Util
 
         public static void Save(this BitmapSource source, string filePath, ImageFormat format)
         {
-            using (var ms = new MemoryStream())
-            {
-                source.Save(ms, format);
-                File.WriteAllBytes(filePath, ms.ToArray());
+            using (var fs = File.Create(filePath))
+            { 
+                source.Save(fs, format);
             }
         }
         public static void Save(this BitmapSource source, Stream stream, ImageFormat format)
