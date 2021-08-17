@@ -31,15 +31,17 @@
             <ui:NavigationViewItem
                 Content="New"
                 Icon="Add"
-                IsSelected="True"
+                IsEnabled="False"
                 Tag="NewItemPage" />
             <ui:NavigationViewItem
                 Content="Recent"
                 Icon="BrowsePhotos"
+                IsSelected="True"
                 Tag="RecentSessionsPage" />
             <ui:NavigationViewItem
                 Content="Uploads"
                 Icon="Upload"
+                IsEnabled="False"
                 Tag="UploadsPage" />
             <ui:NavigationViewItemHeader Content="Settings" />
             <ui:NavigationViewItem
