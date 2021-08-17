@@ -32,6 +32,7 @@
             <conv:BoolToInverseConverter x:Key="Bool2Inverse" />
             <conv:OnOffBrushConverter x:Key="OnOffBrush" />
             <conv:TimeAgoConverter x:Key="convTimeAgo" />
+            <conv:UriToCachedImageConverter x:Key="convCacheImage" />
 
             <SolidColorBrush x:Key="AccentColorBrush" Color="{DynamicResource SystemAccentColor}" />
 

@@ -69,7 +69,7 @@
                             Height="70"
                             Margin="4"
                             Background="{StaticResource CheckeredLightGrayBackgroundBrush}">
-                            <Image Source="{Binding CroppedImgPath, Mode=OneTime}" Stretch="Uniform" />
+                            <Image Source="{Binding PreviewImgPath, Converter={StaticResource convCacheImage}}" Stretch="Uniform" />
                         </Border>
                         <TextBlock
                             Grid.Column="1"

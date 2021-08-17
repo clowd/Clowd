@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
@@ -15,10 +16,22 @@ namespace Clowd.Drawing.Graphics
             get { return _bitmapFilePath; }
             set
             {
-                _bitmapFilePath = value;
-                _bitmap = new BitmapImage(new Uri(_bitmapFilePath));
-                _cropped = new CroppedBitmap(_bitmap, Crop);
-                OnPropertyChanged(nameof(BitmapFilePath));
+                if (!EqualityComparer<string>.Default.Equals(_bitmapFilePath, value))
+                {
+                    _bitmapFilePath = value;
+
+                    // load this way so the file handle is not kept open
+                    BitmapImage bi = new BitmapImage();
+                    bi.BeginInit();
+                    bi.UriSource = new Uri(_bitmapFilePath);
+                    bi.CacheOption = BitmapCacheOption.OnLoad;
+                    bi.EndInit();
+
+                    _bitmap = bi;
+
+                    _cropped = new CroppedBitmap(_bitmap, Crop);
+                    OnPropertyChanged(nameof(BitmapFilePath));
+                }
             }
         }
 
@@ -56,6 +69,16 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
+        public Size OriginalSize
+        {
+            get => _originalSize;
+            set
+            {
+                _originalSize = value;
+                OnPropertyChanged(nameof(OriginalSize));
+            }
+        }
+
         [XmlIgnore]
         public BitmapSource Bitmap => _bitmap;
 
@@ -65,6 +88,7 @@ namespace Clowd.Drawing.Graphics
         private int _scaleX = 1;
         private int _scaleY = 1;
         private Int32Rect _crop;
+        private Size _originalSize;
 
         protected GraphicImage()
         {
@@ -72,9 +96,16 @@ namespace Clowd.Drawing.Graphics
         }
 
         public GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle = 0, int flipX = 1, int flipY = 1)
+            : this(imageFilePath, displayRect, crop, angle, flipX, flipY, displayRect.Size)
+        {
+            Effect = null;
+        }
+
+        protected GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle, int flipX, int flipY, Size originalSize)
             : base(Colors.Transparent, 0, displayRect)
         {
-            _crop = crop;
+            _originalSize = originalSize;
+            _crop = crop; // must set crop before bitmap due to property setters
             Effect = null;
             BitmapFilePath = imageFilePath;
             Angle = angle;
@@ -117,7 +148,7 @@ namespace Clowd.Drawing.Graphics
 
         public override GraphicBase Clone()
         {
-            return new GraphicImage(BitmapFilePath, UnrotatedBounds, Crop, Angle, FlipX, FlipY) { ObjectId = ObjectId };
+            return new GraphicImage(BitmapFilePath, UnrotatedBounds, Crop, Angle, FlipX, FlipY, OriginalSize) { ObjectId = ObjectId };
         }
     }
 }
