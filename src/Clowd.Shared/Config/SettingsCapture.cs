@@ -11,8 +11,7 @@ using RT.Util;
 
 namespace Clowd.Config
 {
-
-    public class SettingsCapture : SettingsCategoryBase
+    public class SettingsCapture : CategoryBase
     {
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]
