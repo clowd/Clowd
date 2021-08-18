@@ -41,6 +41,11 @@ Set-Location "$PSScriptRoot\modules\obs-express"
 &npm run build
 Copy-Item "bin" -Destination "$PSScriptRoot\publish\Clowd\obs-express" -Recurse
 
+# remove un-used obs plugins that are _huge_
+Write-Host "Remove obs-browser plugin" -ForegroundColor Magenta
+Remove-Item "$PSScriptRoot\publish\Clowd\obs-express\lib\obs-plugins\64bit\*" -Include *cef*,*browser*,*v8*,*devtools*,*chrome*,icudtl.dat
+Set-Location "$PSScriptRoot"
+
 # build packaging tools
 Write-Host "Build Packaging Tools" -ForegroundColor Magenta
 Set-Location "$PSScriptRoot\modules\Clowd.Squirrel"
