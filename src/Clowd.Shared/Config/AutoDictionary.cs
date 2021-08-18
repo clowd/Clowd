@@ -41,7 +41,11 @@ namespace Clowd.Config
         protected virtual TValue GetValue(TKey key)
         {
             if (!_impl.ContainsKey(key))
+            {
                 _impl[key] = (TValue)Activator.CreateInstance(typeof(TValue));
+                _impl[key].PropertyChanged += Item_PropertyChanged;
+            }
+
             return _impl[key];
         }
 
