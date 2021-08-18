@@ -79,6 +79,11 @@ namespace Clowd
                     }
                 }
 
+                SettingsRoot.Current.Hotkeys.FileUploadShortcut.TriggerExecuted += (s, e) => Paste();
+                SettingsRoot.Current.Hotkeys.CaptureActiveShortcut.TriggerExecuted += (s, e) => QuickCaptureCurrentWindow();
+                SettingsRoot.Current.Hotkeys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
+                SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
+
                 SetupDependencyInjection();
 
                 // theme

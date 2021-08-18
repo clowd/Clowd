@@ -43,6 +43,28 @@ namespace Clowd.Config
             if (other == null) return false;
             return other.Key == Key && other.Modifiers == Modifiers;
         }
+
+        public override string ToString()
+        {
+            if (Key == Key.None)
+                return String.Empty;
+
+            string strBinding = "";
+            string strKey = Key.ToString();
+            if (strKey != String.Empty)
+            {
+                if (Modifiers != ModifierKeys.None)
+                {
+                    strBinding += Modifiers.ToString();
+                    if (strBinding != String.Empty)
+                    {
+                        strBinding += '+';
+                    }
+                }
+                strBinding += strKey;
+            }
+            return strBinding;
+        }
     }
 
     /// <summary>
