@@ -89,7 +89,7 @@ namespace Clowd.UI.Controls
 
         public bool IsDragHandle { get; set; }
 
-        public List<StorableKeyGesture> Gestures { get; set; } = new List<StorableKeyGesture>();
+        public List<GlobalKeyGesture> Gestures { get; set; } = new List<GlobalKeyGesture>();
 
         public EventHandler Executed { get; set; }
 

@@ -64,7 +64,7 @@ namespace Clowd.UI.Config
             if (IsEditing)
                 return;
             IsEditing = true;
-            Trigger.Gesture = null;
+            Trigger.KeyGesture = null;
             this.KeyDown += OnKeyDown;
             this.KeyUp += OnKeyUp;
             UpdateControls();
@@ -101,7 +101,7 @@ namespace Clowd.UI.Config
             {
                 try
                 {
-                    Trigger.Gesture = new KeyGesture(key, modifiers);
+                    Trigger.KeyGesture = new GlobalKeyGesture(key, modifiers);
                 }
                 catch
                 {
@@ -137,7 +137,7 @@ namespace Clowd.UI.Config
             }
             else
             {
-                if (Trigger == null || Trigger.Gesture == null)
+                if (Trigger == null || Trigger.KeyGesture == null)
                 {
                     _button.Content = "(undefined)";
                     _status.ToolTip = "The gesture is not set or is an invalid gesture.";
@@ -151,7 +151,7 @@ namespace Clowd.UI.Config
                 }
                 else
                 {
-                    _button.Content = Trigger.Gesture.GetDisplayStringForCulture(CultureInfo.CurrentUICulture);
+                    _button.Content = Trigger.KeyGesture.ToString();
                     _status.ToolTip = null;
                     _status.Background = Brushes.PaleGreen;
                 }

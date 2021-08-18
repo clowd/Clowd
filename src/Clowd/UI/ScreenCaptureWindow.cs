@@ -41,9 +41,9 @@ namespace Clowd.UI
                     Text = "_Upload",
                     IconPath = AppStyles.GetIconElement(ResourceIcon.IconClowd),
                     Executed = OnUpload,
-                    Gestures = new StorableKeyGesture[]
+                    Gestures = new GlobalKeyGesture[]
                     {
-                        new StorableKeyGesture(Key.U),
+                        new GlobalKeyGesture(Key.U),
                     }.ToList()
                 });
 
@@ -53,11 +53,11 @@ namespace Clowd.UI
                     Text = "_Photo",
                     IconPath = AppStyles.GetIconElement(ResourceIcon.IconPhoto),
                     Executed = OnPhoto,
-                    Gestures = new StorableKeyGesture[]
+                    Gestures = new GlobalKeyGesture[]
                     {
-                        new StorableKeyGesture(Key.E),
-                        new StorableKeyGesture(Key.P),
-                        new StorableKeyGesture(Key.Enter),
+                        new GlobalKeyGesture(Key.E),
+                        new GlobalKeyGesture(Key.P),
+                        new GlobalKeyGesture(Key.Enter),
                     }.ToList()
                 });
 
@@ -67,9 +67,9 @@ namespace Clowd.UI
                     Text = "_Video",
                     IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideo),
                     Executed = OnVideo,
-                    Gestures = new StorableKeyGesture[]
+                    Gestures = new GlobalKeyGesture[]
                     {
-                        new StorableKeyGesture(Key.V),
+                        new GlobalKeyGesture(Key.V),
                     }.ToList()
                 });
 
@@ -79,11 +79,11 @@ namespace Clowd.UI
                     Text = "_Copy",
                     IconPath = AppStyles.GetIconElement(ResourceIcon.IconCopy),
                     Executed = OnCopy,
-                    Gestures = new StorableKeyGesture[]
+                    Gestures = new GlobalKeyGesture[]
                     {
-                        new StorableKeyGesture(Key.C),
-                        new StorableKeyGesture(Key.C, ModifierKeys.Control),
-                        new StorableKeyGesture(Key.Insert, ModifierKeys.Control),
+                        new GlobalKeyGesture(Key.C),
+                        new GlobalKeyGesture(Key.C, ModifierKeys.Control),
+                        new GlobalKeyGesture(Key.Insert, ModifierKeys.Control),
                     }.ToList()
                 });
 
@@ -93,11 +93,11 @@ namespace Clowd.UI
                     Text = "_Save",
                     IconPath = AppStyles.GetIconElement(ResourceIcon.IconSave),
                     Executed = OnSave,
-                    Gestures = new StorableKeyGesture[]
+                    Gestures = new GlobalKeyGesture[]
                     {
-                        new StorableKeyGesture(Key.S),
-                        new StorableKeyGesture(Key.S, ModifierKeys.Control),
-                        new StorableKeyGesture(Key.S, ModifierKeys.Control | ModifierKeys.Shift),
+                        new GlobalKeyGesture(Key.S),
+                        new GlobalKeyGesture(Key.S, ModifierKeys.Control),
+                        new GlobalKeyGesture(Key.S, ModifierKeys.Control | ModifierKeys.Shift),
                     }.ToList()
                 });
 
@@ -106,9 +106,9 @@ namespace Clowd.UI
                     Text = "_Reset",
                     IconPath = AppStyles.GetIconElement(ResourceIcon.IconReset),
                     Executed = OnReset,
-                    Gestures = new StorableKeyGesture[]
+                    Gestures = new GlobalKeyGesture[]
                     {
-                        new StorableKeyGesture(Key.R),
+                        new GlobalKeyGesture(Key.R),
                     }.ToList()
                 });
 
@@ -117,10 +117,10 @@ namespace Clowd.UI
                     Text = "E_xit",
                     IconPath = AppStyles.GetIconElement(ResourceIcon.IconClose),
                     Executed = OnExit,
-                    Gestures = new StorableKeyGesture[]
+                    Gestures = new GlobalKeyGesture[]
                     {
-                        new StorableKeyGesture(Key.X),
-                        new StorableKeyGesture(Key.Escape),
+                        new GlobalKeyGesture(Key.X),
+                        new GlobalKeyGesture(Key.Escape),
                     }.ToList()
                 });
 
