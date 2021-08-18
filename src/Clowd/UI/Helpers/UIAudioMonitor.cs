@@ -112,11 +112,11 @@ namespace Clowd.UI.Helpers
         public event PropertyChangedEventHandler PropertyChanged;
 
         private bool _disposed;
-        private VideoSettings _settings;
+        private SettingsVideo _settings;
         private IDisposable _timer;
         private Thread _thread;
 
-        public UIAudioMonitor(VideoSettings settings, int refreshDelayMs)
+        public UIAudioMonitor(SettingsVideo settings, int refreshDelayMs)
         {
             _thread = Thread.CurrentThread;
             _settings = settings;

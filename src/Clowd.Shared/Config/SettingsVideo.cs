@@ -31,7 +31,7 @@ namespace Clowd.Config
         yuv444,
     }
 
-    public class VideoSettings : SettingsCategoryBase
+    public class SettingsVideo : SettingsCategoryBase
     {
         public string OutputDirectory
         {

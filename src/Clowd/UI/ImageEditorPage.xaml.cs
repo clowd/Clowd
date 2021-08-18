@@ -27,7 +27,7 @@ namespace Clowd.UI
         private ToolStateManager _manager = new ToolStateManager();
         private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private PropertyChangeNotifier toolNotifier;
-        private ClowdSettings _settings => ClowdSettings.Current;
+        private SettingsRoot _settings => SettingsRoot.Current;
         private SessionInfo _session;
 
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";

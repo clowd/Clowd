@@ -66,9 +66,9 @@ namespace Clowd.UI
                     return (FrameworkElement)Activator.CreateInstance(type);
             }
 
-            var settingsPage = typeof(ClowdSettings).GetProperties().FirstOrDefault(f => f.Name == tag);
+            var settingsPage = typeof(SettingsRoot).GetProperties().FirstOrDefault(f => f.Name == tag);
             if (settingsPage != null)
-                return new SettingsControlFactory(this, settingsPage.GetValue(ClowdSettings.Current)).GetSettingsPanel();
+                return new SettingsControlFactory(this, settingsPage.GetValue(SettingsRoot.Current)).GetSettingsPanel();
 
             return null;
         }

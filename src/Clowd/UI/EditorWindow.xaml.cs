@@ -21,8 +21,8 @@ namespace Clowd.UI
         {
             InitializeComponent();
 
-            var b = new Binding(nameof(EditorSettings.TabsEnabled));
-            b.Source = ClowdSettings.Current.Editor;
+            var b = new Binding(nameof(SettingsEditor.TabsEnabled));
+            b.Source = SettingsRoot.Current.Editor;
             b.Mode = BindingMode.TwoWay;
             TabView.SetBinding(TabablzControl.IsHeaderPanelVisibleProperty, b);
 

@@ -17,7 +17,7 @@ namespace Clowd.UI
     {
         static ClowdWin64.DxScreenCapture _wdxc;
         static FloatingButtonWindow _floating;
-        static ClowdSettings _settings => ClowdSettings.Current;
+        static SettingsRoot _settings => SettingsRoot.Current;
 
         static readonly object _lock = new object();
 
