@@ -1,73 +1,43 @@
-﻿using RT.Serialization;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using RT.Serialization;
+using RT.Util;
 
-namespace Clowd.Upload
+namespace Clowd.Config
 {
-    public class UploadSettings : INotifyPropertyChanged, IClassifyObjectProcessor
+    public class UploadSettings : SettingsCategoryBase
     {
         public List<IUploadProvider> Providers { get; private set; } = new List<IUploadProvider>();
 
         public IUploadProvider Image
         {
             get => _image;
-            set
-            {
-                if (_image != value)
-                {
-                    _image = value;
-                    OnPropertyChanged(nameof(Image));
-                }
-            }
+            set => Set(ref _image, value);
         }
 
         public IUploadProvider Video
         {
             get => _video;
-            set
-            {
-                if (_video != value)
-                {
-                    _video = value;
-                    OnPropertyChanged(nameof(Video));
-                }
-            }
+            set => Set(ref _video, value);
         }
 
         public IUploadProvider Binary
         {
             get => _binary;
-            set
-            {
-                if (_binary != value)
-                {
-                    _binary = value;
-                    OnPropertyChanged(nameof(Binary));
-                }
-            }
+            set => Set(ref _binary, value);
         }
 
         public IUploadProvider Text
         {
             get => _text;
-            set
-            {
-                if (_text != value)
-                {
-                    _text = value;
-                    OnPropertyChanged(nameof(Text));
-                }
-            }
+            set => Set(ref _text, value);
         }
-
-        public UploadSettings()
-        {
-        }
-
-        public event PropertyChangedEventHandler PropertyChanged;
 
         private IUploadProvider _image;
         private IUploadProvider _video;
@@ -81,16 +51,7 @@ namespace Clowd.Upload
                 .Where(p => p.SupportedUpload == SupportedUploadType.All || p.SupportedUpload.HasFlag(type));
         }
 
-        protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-
-        public void BeforeSerialize()
-        {
-        }
-
-        public void AfterDeserialize()
+        protected override void AfterDeserializeInternal()
         {
             // add any providers to the list which are 
             var assembliesToSearch = new Assembly[] { Assembly.GetExecutingAssembly() };

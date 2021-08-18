@@ -1,4 +1,5 @@
-﻿using Clowd.PlatformUtil;
+﻿using Clowd.Config;
+using Clowd.PlatformUtil;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,14 +15,14 @@ namespace Clowd.Video.FFmpeg
         public string OutputDirectory => settings.OutputDirectory;
 
         private readonly ScreenRect bounds;
-        private readonly VideoCapturerSettings settings;
+        private readonly VideoSettings settings;
         private readonly FFMpegConverter ffmpeg;
         private Task runner;
         private StringBuilder log = new StringBuilder();
 
         public event EventHandler<FFMpegLogEventArgs> LogReceived;
 
-        public LiveScreenRecording(ScreenRect bounds, VideoCapturerSettings settings)
+        public LiveScreenRecording(ScreenRect bounds, VideoSettings settings)
         {
             this.bounds = bounds;
             this.settings = settings;

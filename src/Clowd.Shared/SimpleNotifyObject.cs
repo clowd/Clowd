@@ -8,7 +8,7 @@ namespace Clowd
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
-        protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
+        protected virtual bool Set<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
         {
             if (Equals(storage, value))
                 return false;
@@ -23,6 +23,11 @@ namespace Clowd
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
+        protected void OnPropertyChanged(PropertyChangedEventArgs args)
+        {
+            PropertyChanged?.Invoke(this, args);
+        }
+
         protected void OnPropertiesChanged(params string[] propertyNames)
         {
             foreach (string propertyName in propertyNames)
@@ -30,13 +35,18 @@ namespace Clowd
                 OnPropertyChanged(propertyName);
             }
         }
+
+        protected void ClearPropertyChangedHandlers()
+        {
+            PropertyChanged = null;
+        }
     }
 
     public abstract class DictionaryNotifyObject : SimpleNotifyObject
     {
         private Dictionary<string, object> _store = new Dictionary<string, object>();
 
-        protected bool SetProperty<T>(T value, [CallerMemberName] string propertyName = null)
+        protected virtual bool Set<T>(T value, [CallerMemberName] string propertyName = null)
         {
             if (_store.TryGetValue(propertyName, out var stor) && Equals(stor, value))
                 return false;
@@ -46,7 +56,7 @@ namespace Clowd
             return true;
         }
 
-        protected T GetProperty<T>([CallerMemberName] string propertyName = null)
+        protected virtual T Get<T>([CallerMemberName] string propertyName = null)
         {
             if (_store.TryGetValue(propertyName, out var stor))
                 if (stor.GetType().IsAssignableFrom(typeof(T)))
