@@ -58,32 +58,7 @@ namespace Clowd
 
                 SetupExceptionHandling();
                 await SetupMutex(appArgs);
-
-                // settings
-                try
-                {
-                    SettingsRoot.LoadDefault();
-                }
-                catch (Exception ex)
-                {
-                    if (await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Error,
-                        "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
-                        "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
-                    {
-                        SettingsRoot.CreateNew();
-                        SettingsRoot.Current.Save();
-                    }
-                    else
-                    {
-                        Environment.Exit(1);
-                    }
-                }
-
-                SettingsRoot.Current.Hotkeys.FileUploadShortcut.TriggerExecuted += (s, e) => Paste();
-                SettingsRoot.Current.Hotkeys.CaptureActiveShortcut.TriggerExecuted += (s, e) => QuickCaptureCurrentWindow();
-                SettingsRoot.Current.Hotkeys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
-                SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
-
+                await SetupSettings();
                 SetupDependencyInjection();
 
                 // theme
@@ -108,6 +83,51 @@ namespace Clowd
             _processor.Dispose();
             _taskbarIcon.Dispose();
             base.OnExit(e);
+        }
+
+        private async Task SetupSettings()
+        {
+            try
+            {
+                SettingsRoot.LoadDefault();
+            }
+            catch (Exception ex)
+            {
+                if (await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Error,
+                    "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
+                    "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
+                {
+                    SettingsRoot.CreateNew();
+                    SettingsRoot.Current.Save();
+                }
+                else
+                {
+                    Environment.Exit(1);
+                }
+            }
+
+            SettingsRoot.Current.Hotkeys.FileUploadShortcut.TriggerExecuted += (s, e) => Paste();
+            SettingsRoot.Current.Hotkeys.CaptureActiveShortcut.TriggerExecuted += (s, e) => QuickCaptureCurrentWindow();
+            SettingsRoot.Current.Hotkeys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
+            SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
+
+            void setTheme()
+            {
+                ModernWpf.ThemeManager.Current.ApplicationTheme = SettingsRoot.Current.General.Theme switch
+                {
+                    AppTheme.Light => ModernWpf.ApplicationTheme.Light,
+                    AppTheme.Dark => ModernWpf.ApplicationTheme.Dark,
+                    _ => null,
+                };
+            }
+            SettingsRoot.Current.General.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(SettingsGeneral.Theme))
+                {
+                    setTheme();
+                }
+            };
+            setTheme();
         }
 
         private void SetupExceptionHandling()
