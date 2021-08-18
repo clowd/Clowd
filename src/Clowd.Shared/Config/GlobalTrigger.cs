@@ -199,6 +199,7 @@ namespace Clowd.Config
             _disposed = true;
             _hotKey?.Dispose();
             IsRegistered = false;
+            TriggerExecuted = null;
         }
 
         public override string ToString()
