@@ -12,7 +12,7 @@ using RT.Util;
 namespace Clowd.Config
 {
 
-    public class SettingsHotkey : SettingsCategoryBase
+    public class SettingsHotkey : CategoryBase
     {
         [DisplayName("General - File Upload"), ClassifyIgnoreIfDefault]
         public GlobalTrigger FileUploadShortcut

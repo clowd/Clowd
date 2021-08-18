@@ -18,7 +18,7 @@ namespace Clowd.Config
         Dark = 2,
     }
 
-    public class SettingsGeneral : SettingsCategoryBase
+    public class SettingsGeneral : CategoryBase
     {
         [Browsable(false)]
         public bool FirstRun

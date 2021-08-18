@@ -14,7 +14,7 @@ using RT.Util.ExtensionMethods;
 namespace RT.Util
 {
     /// <summary>Provides convenience methods for loading and saving application settings.</summary>
-    public static class SettingsUtil
+    internal static class SettingsUtil
     {
         /// <summary>
         ///     Retrieves the mandatory <see cref="SettingsAttribute"/> for the specified settings class type. Throws if the

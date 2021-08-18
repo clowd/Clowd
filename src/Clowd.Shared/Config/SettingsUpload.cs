@@ -11,7 +11,7 @@ using RT.Util;
 
 namespace Clowd.Config
 {
-    public class SettingsUpload : SettingsCategoryBase
+    public class SettingsUpload : CategoryBase
     {
         public List<IUploadProvider> Providers { get; private set; } = new List<IUploadProvider>();
 
@@ -43,6 +43,11 @@ namespace Clowd.Config
         private IUploadProvider _video;
         private IUploadProvider _binary;
         private IUploadProvider _text;
+
+        public SettingsUpload()
+        {
+            Subscribe(Image, Video, Binary, Text);
+        }
 
         public IEnumerable<IUploadProvider> GetEnabledProviders(SupportedUploadType type)
         {
