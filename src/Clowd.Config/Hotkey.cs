@@ -7,7 +7,7 @@ using System.Windows.Interop;
 
 namespace Clowd.Config
 {
-    public class HotKey : IDisposable
+    internal class HotKey : IDisposable
     {
         private static Dictionary<int, HotKey> _dictHotKeyToCalBackProc;
 

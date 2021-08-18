@@ -29,8 +29,7 @@ namespace Clowd.Config
             }
         }
 
-        [ClassifyIgnore]
-        public Action Action { get; private set; }
+        public event EventHandler TriggerExecuted;
 
         [ClassifyIgnore]
         public bool IsRegistered { get; private set; }
@@ -52,27 +51,25 @@ namespace Clowd.Config
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        public GlobalTrigger(Key key, ModifierKeys modifier, Action action)
-            : this(new KeyGesture(key, modifier), action)
+        public GlobalTrigger(Key key, ModifierKeys modifier)
+            : this(new KeyGesture(key, modifier))
         {
         }
-        public GlobalTrigger(Key key, Action action)
-            : this(new KeyGesture(key, ModifierKeys.None), action)
+
+        public GlobalTrigger(Key key)
+            : this(new KeyGesture(key, ModifierKeys.None))
         {
         }
-        public GlobalTrigger(Action action)
-            : this(null, action)
-        {
-        }
-        public GlobalTrigger(KeyGesture gesture, Action action)
+
+        public GlobalTrigger(KeyGesture gesture)
         {
             _gesture = gesture;
-            Action = action;
             Initialize();
         }
-        private GlobalTrigger()
+
+        public GlobalTrigger()
         {
-            // only invoked by classify
+            Initialize();
         }
 
         private void Initialize()
@@ -86,7 +83,7 @@ namespace Clowd.Config
 
             try
             {
-                _hotKey = new HotKey(Gesture.Key, Gesture.Modifiers, key => Action(), false);
+                _hotKey = new HotKey(Gesture.Key, Gesture.Modifiers, OnExecuted, false);
             }
             catch (InvalidOperationException)
             {
@@ -116,6 +113,12 @@ namespace Clowd.Config
                 Error = "Internal Error: " + e.Message;
             }
         }
+
+        private void OnExecuted(HotKey obj)
+        {
+            TriggerExecuted?.Invoke(this, new EventArgs());
+        }
+
         private void RefreshHotkey()
         {
             _hotKey?.Dispose();
