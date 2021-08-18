@@ -21,13 +21,6 @@ namespace Clowd.Config
     public class SettingsGeneral : CategoryBase
     {
         [Browsable(false)]
-        public bool FirstRun
-        {
-            get => _firstRun;
-            set => Set(ref _firstRun, value);
-        }
-
-        [Browsable(false)]
         public string LastUploadPath
         {
             get => _lastUploadPath;
@@ -55,7 +48,6 @@ namespace Clowd.Config
             set => Set(ref _theme, value);
         }
 
-        private bool _firstRun = true;
         private string _lastUploadPath;
         private string _lastSavePath;
         private AppTheme _theme;
