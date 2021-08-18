@@ -159,10 +159,10 @@ namespace Clowd.Video
             }
         }
 
-        public override async Task<string> StartAsync(ScreenRect captureRect, VideoSettings settings)
+        public override async Task<string> StartAsync(ScreenRect captureRect, SettingsVideo settings)
         {
             if (!Directory.Exists(settings.OutputDirectory))
-                throw new ArgumentNullException($"{nameof(VideoSettings)}.{nameof(VideoSettings.OutputDirectory)} must be non null and point to an existing directory.");
+                throw new ArgumentNullException($"{nameof(SettingsVideo)}.{nameof(SettingsVideo.OutputDirectory)} must be non null and point to an existing directory.");
 
             using (var scoped = _log.CreateProfiledScope("OBSStart"))
             {

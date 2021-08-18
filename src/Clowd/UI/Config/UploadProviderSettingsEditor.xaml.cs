@@ -39,7 +39,7 @@ namespace Clowd.UI.Config
 
         private static void ProviderPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            ClowdSettings.Current.Save();
+            SettingsRoot.Current.Save();
         }
 
         public UploadProviderSettingsEditor()

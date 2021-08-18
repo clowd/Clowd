@@ -11,7 +11,7 @@ using RT.Util;
 
 namespace Clowd.Config
 {
-    public class UploadSettings : SettingsCategoryBase
+    public class SettingsUpload : SettingsCategoryBase
     {
         public List<IUploadProvider> Providers { get; private set; } = new List<IUploadProvider>();
 

@@ -62,7 +62,7 @@ namespace Clowd
                 // settings
                 try
                 {
-                    ClowdSettings.LoadDefault();
+                    SettingsRoot.LoadDefault();
                 }
                 catch (Exception ex)
                 {
@@ -70,8 +70,8 @@ namespace Clowd
                         "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
                         "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
                     {
-                        ClowdSettings.CreateNew();
-                        ClowdSettings.Current.Save();
+                        SettingsRoot.CreateNew();
+                        SettingsRoot.Current.Save();
                     }
                     else
                     {
@@ -306,7 +306,7 @@ namespace Clowd
             var exit = new MenuItem() { Header = "E_xit" };
             exit.Click += async (s, e) =>
             {
-                if (ClowdSettings.Current.General.ConfirmClose)
+                if (SettingsRoot.Current.General.ConfirmClose)
                 {
                     using (TaskDialog dialog = new TaskDialog())
                     {
@@ -325,15 +325,15 @@ namespace Clowd
                         if (clicked == okButton)
                         {
                             if (dialog.IsVerificationChecked == true)
-                                ClowdSettings.Current.General.ConfirmClose = false;
-                            ClowdSettings.Current.Save();
+                                SettingsRoot.Current.General.ConfirmClose = false;
+                            SettingsRoot.Current.Save();
                             Application.Current.Shutdown();
                         }
                     }
                 }
                 else
                 {
-                    ClowdSettings.Current.Save();
+                    SettingsRoot.Current.Save();
                     Application.Current.Shutdown();
                 }
             };
@@ -357,7 +357,7 @@ namespace Clowd
         }
         public async void UploadFile(Window owner = null)
         {
-            var result = await NiceDialog.ShowSelectFilesDialog(owner, "Select files to upload", ClowdSettings.Current.General.LastUploadPath, true);
+            var result = await NiceDialog.ShowSelectFilesDialog(owner, "Select files to upload", SettingsRoot.Current.General.LastUploadPath, true);
             if (result != null)
                 OnFilesReceived(result);
         }

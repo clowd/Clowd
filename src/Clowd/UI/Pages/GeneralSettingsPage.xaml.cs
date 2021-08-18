@@ -13,7 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Clowd.Config;
-using static Clowd.Config.GeneralSettings;
+using static Clowd.Config.SettingsGeneral;
 
 namespace Clowd.UI.Pages
 {
@@ -23,7 +23,7 @@ namespace Clowd.UI.Pages
         {
             InitializeComponent();
             grpUpdates.DataContext = grpShell.DataContext = SquirrelUtil.GetUpdateViewModel();
-            grpBehavior.DataContext = ClowdSettings.Current.General;
+            grpBehavior.DataContext = SettingsRoot.Current.General;
             comboTheme.ItemsSource = Enum.GetValues(typeof(AppTheme)).Cast<AppTheme>();
         }
     }

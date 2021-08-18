@@ -15,14 +15,14 @@ namespace Clowd.Video.FFmpeg
         public string OutputDirectory => settings.OutputDirectory;
 
         private readonly ScreenRect bounds;
-        private readonly VideoSettings settings;
+        private readonly SettingsVideo settings;
         private readonly FFMpegConverter ffmpeg;
         private Task runner;
         private StringBuilder log = new StringBuilder();
 
         public event EventHandler<FFMpegLogEventArgs> LogReceived;
 
-        public LiveScreenRecording(ScreenRect bounds, VideoSettings settings)
+        public LiveScreenRecording(ScreenRect bounds, SettingsVideo settings)
         {
             this.bounds = bounds;
             this.settings = settings;

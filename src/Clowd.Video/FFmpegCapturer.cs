@@ -12,7 +12,7 @@ namespace Clowd.Video
         private LiveScreenRecording _recorder;
         private Task _process;
 
-        public override Task<string> StartAsync(ScreenRect captureRect, VideoSettings settings)
+        public override Task<string> StartAsync(ScreenRect captureRect, SettingsVideo settings)
         {
             BusyStatus = "Starting...";
             _recorder = new LiveScreenRecording(captureRect, settings);
