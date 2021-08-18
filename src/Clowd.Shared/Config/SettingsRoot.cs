@@ -29,7 +29,7 @@ namespace Clowd.Config
 
         public SettingsVideo Video { get; private set; } = new SettingsVideo();
 
-        private SettingsCategoryBase[] All => new SettingsCategoryBase[] { General, Hotkeys, Capture, Editor, Uploads, Video };
+        private CategoryBase[] All => new CategoryBase[] { General, Hotkeys, Capture, Editor, Uploads, Video };
 
         static SettingsRoot()
         {

@@ -89,7 +89,7 @@ namespace Clowd
             private bool _textObjectColorIsAuto = true;
         }
 
-        public class SettingsEditor : SettingsCategoryBase
+        public class SettingsEditor : CategoryBase
         {
             public Color CanvasBackground
             {
