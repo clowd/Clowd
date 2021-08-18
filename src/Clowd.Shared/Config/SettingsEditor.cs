@@ -89,7 +89,7 @@ namespace Clowd
             private bool _textObjectColorIsAuto = true;
         }
 
-        public class EditorSettings : SettingsCategoryBase
+        public class SettingsEditor : SettingsCategoryBase
         {
             public Color CanvasBackground
             {
@@ -129,7 +129,7 @@ namespace Clowd
             private int _startupPadding = 30;
             private AutoDictionary<ToolType, SavedToolSettings> _tools = new AutoDictionary<ToolType, SavedToolSettings>();
 
-            public EditorSettings()
+            public SettingsEditor()
             {
                 Subscribe(Tools);
             }

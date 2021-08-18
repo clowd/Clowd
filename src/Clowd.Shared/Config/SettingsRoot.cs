@@ -12,33 +12,33 @@ using RT.Util;
 namespace Clowd.Config
 {
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
-    public sealed class ClowdSettings : SettingsBase, IDisposable
+    public sealed class SettingsRoot : SettingsBase, IDisposable
     {
         [Browsable(false), ClassifyIgnore]
-        public static ClowdSettings Current { get; private set; }
+        public static SettingsRoot Current { get; private set; }
 
-        public GeneralSettings General { get; private set; } = new GeneralSettings();
+        public SettingsGeneral General { get; private set; } = new SettingsGeneral();
 
-        public HotkeySettings Hotkeys { get; private set; } = new HotkeySettings();
+        public SettingsHotkey Hotkeys { get; private set; } = new SettingsHotkey();
 
-        public CaptureSettings Capture { get; private set; } = new CaptureSettings();
+        public SettingsCapture Capture { get; private set; } = new SettingsCapture();
 
-        public EditorSettings Editor { get; private set; } = new EditorSettings();
+        public SettingsEditor Editor { get; private set; } = new SettingsEditor();
 
-        public UploadSettings Uploads { get; private set; } = new UploadSettings();
+        public SettingsUpload Uploads { get; private set; } = new SettingsUpload();
 
-        public VideoSettings Video { get; private set; } = new VideoSettings();
+        public SettingsVideo Video { get; private set; } = new SettingsVideo();
 
         private SettingsCategoryBase[] All => new SettingsCategoryBase[] { General, Hotkeys, Capture, Editor, Uploads, Video };
 
-        static ClowdSettings()
+        static SettingsRoot()
         {
             Classify.DefaultOptions = new ClassifyOptions();
             Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
             Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
         }
 
-        public ClowdSettings()
+        public SettingsRoot()
         {
             if (Current != null)
                 throw new InvalidOperationException("Dispose old settings before creating a new one");
@@ -64,7 +64,7 @@ namespace Clowd.Config
         {
             try
             {
-                ClowdSettings tmp;
+                SettingsRoot tmp;
                 SettingsUtil.LoadSettings(out tmp);
                 tmp.RegisterEvents();
             }
@@ -77,7 +77,7 @@ namespace Clowd.Config
 
         public static void CreateNew()
         {
-            var tmp = new ClowdSettings();
+            var tmp = new SettingsRoot();
             tmp.RegisterEvents();
         }
 

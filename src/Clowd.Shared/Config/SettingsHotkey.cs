@@ -12,7 +12,7 @@ using RT.Util;
 namespace Clowd.Config
 {
 
-    public class HotkeySettings : SettingsCategoryBase
+    public class SettingsHotkey : SettingsCategoryBase
     {
         [DisplayName("General - File Upload"), ClassifyIgnoreIfDefault]
         public GlobalTrigger FileUploadShortcut
@@ -47,7 +47,7 @@ namespace Clowd.Config
         private GlobalTrigger _captureFullscreenShortcut = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Control);
         private GlobalTrigger _captureActiveShortcut = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Alt);
 
-        public HotkeySettings()
+        public SettingsHotkey()
         {
             Subscribe(FileUploadShortcut, CaptureRegionShortcut, CaptureFullscreenShortcut, CaptureActiveShortcut);
         }

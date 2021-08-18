@@ -15,7 +15,7 @@ namespace Clowd.Capture
 {
     public static class UploadManager
     {
-        static ClowdSettings _settings => ClowdSettings.Current;
+        static SettingsRoot _settings => SettingsRoot.Current;
 
         private delegate Task<UploadResult> DoUploadDelegate(IUploadProvider provider, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
 

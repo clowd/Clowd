@@ -13,7 +13,7 @@ namespace Clowd
         string BusyStatus { get; }
         bool IsRecording { get; }
         Task Initialize();
-        Task<string> StartAsync(ScreenRect captureRect, VideoSettings settings);
+        Task<string> StartAsync(ScreenRect captureRect, SettingsVideo settings);
         Task StopAsync();
         void WriteLogToFile(string fileName);
     }
@@ -69,7 +69,7 @@ namespace Clowd
 
         public abstract void Dispose();
 
-        public abstract Task<string> StartAsync(ScreenRect captureRect, VideoSettings settings);
+        public abstract Task<string> StartAsync(ScreenRect captureRect, SettingsVideo settings);
 
         public abstract Task StopAsync();
 
