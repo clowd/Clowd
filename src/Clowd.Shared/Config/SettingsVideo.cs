@@ -113,8 +113,8 @@ namespace Clowd.Config
 
         private string _outputDirectory;
         private int _fps = 30;
-        private int _maxResolutionWidth = 0;
-        private int _maxResolutionHeight = 0;
+        private int _maxResolutionWidth;
+        private int _maxResolutionHeight;
         private VideoQuality _quality = VideoQuality.Medium;
         private VideoPerformance _performance = VideoPerformance.Medium;
         private VideoSubsamplingMode _subsamplingMode = VideoSubsamplingMode.yuv420;
