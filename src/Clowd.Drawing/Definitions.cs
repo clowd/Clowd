@@ -1,20 +1,21 @@
 ﻿namespace Clowd.Drawing
 {
-    public enum ToolType
-    {
-        None,
-        Pointer,
-        Rectangle,
-        FilledRectangle,
-        Ellipse,
-        Line,
-        Arrow,
-        PolyLine,
-        Text,
-        //Pixelate,
-        //Erase,
-        Max
-    };
+    // relocated to Clowd.Shared
+    //public enum ToolType
+    //{
+    //    None,
+    //    Pointer,
+    //    Rectangle,
+    //    FilledRectangle,
+    //    Ellipse,
+    //    Line,
+    //    Arrow,
+    //    PolyLine,
+    //    Text,
+    //    //Pixelate,
+    //    //Erase,
+    //    Max
+    //};
 
     public enum ToolActionType
     {

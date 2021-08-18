@@ -29,7 +29,7 @@ namespace Clowd.UI
         private ScreenRect _selection;
         private IVideoCapturer _capturer;
         private readonly IPageManager _pages;
-        private static VideoCapturerSettings _settings => ClowdSettings.Current.Video;
+        private static VideoSettings _settings => ClowdSettings.Current.Video;
         private UIAudioMonitor _monitor;
         private string _fileName;
         private ClowdWin64.BorderWindow _border;

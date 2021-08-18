@@ -1,4 +1,5 @@
-﻿using Clowd.PlatformUtil;
+﻿using Clowd.Config;
+using Clowd.PlatformUtil;
 using Clowd.Video.FFmpeg;
 using System;
 using System.IO;
@@ -11,7 +12,7 @@ namespace Clowd.Video
         private LiveScreenRecording _recorder;
         private Task _process;
 
-        public override Task<string> StartAsync(ScreenRect captureRect, VideoCapturerSettings settings)
+        public override Task<string> StartAsync(ScreenRect captureRect, VideoSettings settings)
         {
             BusyStatus = "Starting...";
             _recorder = new LiveScreenRecording(captureRect, settings);

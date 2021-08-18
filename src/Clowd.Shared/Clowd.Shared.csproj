@@ -1,8 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net5.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
     <RootNamespace>Clowd</RootNamespace>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="default-provider-icon.png" />

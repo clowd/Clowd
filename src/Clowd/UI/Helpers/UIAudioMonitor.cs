@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows.Controls;
 using System.Windows.Data;
+using Clowd.Config;
 using Clowd.Util;
 using Clowd.Video;
 
@@ -111,11 +112,11 @@ namespace Clowd.UI.Helpers
         public event PropertyChangedEventHandler PropertyChanged;
 
         private bool _disposed;
-        private VideoCapturerSettings _settings;
+        private VideoSettings _settings;
         private IDisposable _timer;
         private Thread _thread;
 
-        public UIAudioMonitor(VideoCapturerSettings settings, int refreshDelayMs)
+        public UIAudioMonitor(VideoSettings settings, int refreshDelayMs)
         {
             _thread = Thread.CurrentThread;
             _settings = settings;

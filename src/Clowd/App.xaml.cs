@@ -52,11 +52,6 @@ namespace Clowd
                 // initialize GDI+ (our native lib depends on it, but does not initialize it)
                 new System.Drawing.Region().Dispose();
 
-                // default classify settings
-                Classify.DefaultOptions = new ClassifyOptions();
-                Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
-                Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
-
                 DefaultLog = new DefaultScopedLog("Clowd");
                 if (!Constants.Debugging)
                     DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");

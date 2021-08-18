@@ -1,249 +1,11 @@
-﻿using Clowd.PlatformUtil;
+﻿using Clowd.Config;
+using Clowd.PlatformUtil;
 using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
 
 namespace Clowd
 {
-    public class VideoCapturerSettings : INotifyPropertyChanged
-    {
-        private string _outputDirectory;
-        private int _fps = 30;
-        private int _maxResolutionWidth = 0;
-        private int _maxResolutionHeight = 0;
-        private VideoQuality _quality = VideoQuality.Medium;
-        private VideoPerformance _performance = VideoPerformance.Medium;
-        private VideoSubsamplingMode _subsamplingMode = VideoSubsamplingMode.yuv420;
-        private bool _captureSpeaker = false;
-        private IAudioSpeakerDevice _captureSpeakerDevice;
-        private bool _captureMicrophone = false;
-        private IAudioMicrophoneDevice _captureMicrophoneDevice;
-        private bool _hardwareAccelerated = true;
-        private bool _trackMouseClicks = true;
-
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        public string OutputDirectory
-        {
-            get => _outputDirectory;
-            set
-            {
-                if (value == _outputDirectory)
-                {
-                    return;
-                }
-
-                _outputDirectory = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public int Fps
-        {
-            get => _fps;
-            set
-            {
-                if (value == _fps)
-                {
-                    return;
-                }
-
-                _fps = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public int MaxResolutionWidth
-        {
-            get => _maxResolutionWidth;
-            set
-            {
-                if (value == _maxResolutionWidth)
-                {
-                    return;
-                }
-
-                _maxResolutionWidth = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public int MaxResolutionHeight
-        {
-            get => _maxResolutionHeight;
-            set
-            {
-                if (value == _maxResolutionHeight)
-                {
-                    return;
-                }
-
-                _maxResolutionHeight = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public VideoQuality Quality
-        {
-            get => _quality;
-            set
-            {
-                if (value == _quality)
-                {
-                    return;
-                }
-
-                _quality = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public VideoPerformance Performance
-        {
-            get => _performance;
-            set
-            {
-                if (value == _performance)
-                {
-                    return;
-                }
-
-                _performance = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public VideoSubsamplingMode SubsamplingMode
-        {
-            get => _subsamplingMode;
-            set
-            {
-                if (value == _subsamplingMode)
-                {
-                    return;
-                }
-
-                _subsamplingMode = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public bool CaptureSpeaker
-        {
-            get => _captureSpeaker;
-            set
-            {
-                if (value == _captureSpeaker)
-                {
-                    return;
-                }
-
-                _captureSpeaker = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public IAudioSpeakerDevice CaptureSpeakerDevice
-        {
-            get => _captureSpeakerDevice;
-            set
-            {
-                if (ReferenceEquals(value, _captureSpeakerDevice))
-                {
-                    return;
-                }
-
-                _captureSpeakerDevice = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public bool CaptureMicrophone
-        {
-            get => _captureMicrophone;
-            set
-            {
-                if (value == _captureMicrophone)
-                {
-                    return;
-                }
-
-                _captureMicrophone = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public IAudioMicrophoneDevice CaptureMicrophoneDevice
-        {
-            get => _captureMicrophoneDevice;
-            set
-            {
-                if (ReferenceEquals(value, _captureMicrophoneDevice))
-                {
-                    return;
-                }
-
-                _captureMicrophoneDevice = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public bool HardwareAccelerated
-        {
-            get => _hardwareAccelerated;
-            set
-            {
-                if (value == _hardwareAccelerated)
-                {
-                    return;
-                }
-
-                _hardwareAccelerated = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public bool TrackMouseClicks
-        {
-            get => _trackMouseClicks;
-            set
-            {
-                if (value == _trackMouseClicks)
-                {
-                    return;
-                }
-
-                _trackMouseClicks = value;
-                OnPropertyChanged();
-            }
-        }
-
-        protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-    }
-
-    public enum VideoQuality
-    {
-        Low = 29,
-        Medium = 24,
-        High = 19,
-    }
-
-    public enum VideoPerformance
-    {
-        Slow,
-        Medium,
-        Fast,
-    }
-
-    public enum VideoSubsamplingMode
-    {
-        yuv420,
-        yuv444,
-    }
-
     public interface IVideoCapturer : IDisposable, INotifyPropertyChanged
     {
         event EventHandler<VideoCriticalErrorEventArgs> CriticalError;
@@ -251,7 +13,7 @@ namespace Clowd
         string BusyStatus { get; }
         bool IsRecording { get; }
         Task Initialize();
-        Task<string> StartAsync(ScreenRect captureRect, VideoCapturerSettings settings);
+        Task<string> StartAsync(ScreenRect captureRect, VideoSettings settings);
         Task StopAsync();
         void WriteLogToFile(string fileName);
     }
@@ -307,7 +69,7 @@ namespace Clowd
 
         public abstract void Dispose();
 
-        public abstract Task<string> StartAsync(ScreenRect captureRect, VideoCapturerSettings settings);
+        public abstract Task<string> StartAsync(ScreenRect captureRect, VideoSettings settings);
 
         public abstract Task StopAsync();
 
