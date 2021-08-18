@@ -61,6 +61,8 @@ namespace Clowd.Config
             {
                 npcRemove.PropertyChanged -= Item_PropertyChanged;
                 _subscriptions.Remove(npcRemove);
+                if (storage is IDisposable disp)
+                    disp.Dispose();
             }
 
             // subscribe the new object value
