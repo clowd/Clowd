@@ -6,64 +6,94 @@ using RT.Serialization;
 
 namespace Clowd.Config
 {
+    public class GlobalKeyGesture : IEquatable<GlobalKeyGesture>
+    {
+        public Key Key { get; set; }
+        public ModifierKeys Modifiers { get; set; }
+
+        public GlobalKeyGesture()
+        {
+
+        }
+
+        public GlobalKeyGesture(Key key)
+        {
+            Key = key;
+        }
+
+        public GlobalKeyGesture(Key key, ModifierKeys modifiers)
+        {
+            Key = key;
+            Modifiers = modifiers;
+        }
+
+        public override int GetHashCode()
+        {
+            return unchecked(Key.GetHashCode() + Modifiers.GetHashCode());
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is GlobalKeyGesture kg) return Equals(kg);
+            return false;
+        }
+
+        public bool Equals(GlobalKeyGesture other)
+        {
+            if (other == null) return false;
+            return other.Key == Key && other.Modifiers == Modifiers;
+        }
+    }
+
     /// <summary>
     /// A serializable manager for global hotkeys
     /// </summary>
-    public class GlobalTrigger : IClassifyObjectProcessor, IDisposable, INotifyPropertyChanged
+    public sealed class GlobalTrigger : SimpleNotifyObject, IClassifyObjectProcessor, IDisposable
     {
-        [ClassifyIgnore]
-        public KeyGesture Gesture
+        public GlobalKeyGesture KeyGesture
         {
-            get
-            {
-                return _gesture;
-            }
+            get => _keyGesture;
             set
             {
                 ThrowIfDisposed();
-                if (GestureEqualsCurrent(value))
-                    return;
-                this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Gesture)));
-                _gesture = value;
-                RefreshHotkey();
+                if (Set(ref _keyGesture, value))
+                    RefreshHotkey();
             }
+        }
+
+        public bool IsRegistered
+        {
+            get => _isRegistered;
+            private set => Set(ref _isRegistered, value);
+        }
+
+        public string Error
+        {
+            get => _error;
+            private set => Set(ref _error, value);
         }
 
         public event EventHandler TriggerExecuted;
 
-        [ClassifyIgnore]
-        public bool IsRegistered { get; private set; }
-
-        [ClassifyIgnore]
-        public string Error { get; private set; }
-
-        // the only value that actually gets serialized.
-        private StorableKeyGesture _storable;
-
-        [ClassifyIgnore]
-        private bool _disposed = false;
-
-        [ClassifyIgnore]
-        private HotKey _hotKey = null;
-
-        [ClassifyIgnore]
-        private KeyGesture _gesture;
-
-        public event PropertyChangedEventHandler PropertyChanged;
+        private GlobalKeyGesture _keyGesture; // only persisted value
+        [ClassifyIgnore] private bool _isRegistered;
+        [ClassifyIgnore] private string _error;
+        [ClassifyIgnore] private bool _disposed = false;
+        [ClassifyIgnore] private HotKey _hotKey = null;
 
         public GlobalTrigger(Key key, ModifierKeys modifier)
-            : this(new KeyGesture(key, modifier))
+            : this(new GlobalKeyGesture(key, modifier))
         {
         }
 
         public GlobalTrigger(Key key)
-            : this(new KeyGesture(key, ModifierKeys.None))
+            : this(new GlobalKeyGesture(key, ModifierKeys.None))
         {
         }
 
-        public GlobalTrigger(KeyGesture gesture)
+        public GlobalTrigger(GlobalKeyGesture gesture)
         {
-            _gesture = gesture;
+            _keyGesture = gesture;
             Initialize();
         }
 
@@ -74,7 +104,7 @@ namespace Clowd.Config
 
         private void Initialize()
         {
-            if (_gesture == null)
+            if (_keyGesture == null)
             {
                 IsRegistered = false;
                 Error = "Gesture is empty.";
@@ -83,7 +113,7 @@ namespace Clowd.Config
 
             try
             {
-                _hotKey = new HotKey(Gesture.Key, Gesture.Modifiers, OnExecuted, false);
+                _hotKey = new HotKey(_keyGesture.Key, _keyGesture.Modifiers, OnExecuted, false);
             }
             catch (InvalidOperationException)
             {
@@ -125,32 +155,21 @@ namespace Clowd.Config
             Initialize();
         }
 
-        private bool GestureEqualsCurrent(KeyGesture other)
-        {
-            if (other == null && _gesture == null)
-                return true;
-            if (other == null || _gesture == null)
-                return false;
-            return other.Key == _gesture.Key && other.Modifiers == _gesture.Modifiers;
-        }
-
         public void BeforeSerialize()
         {
-            if (_gesture != null)
-                _storable = new StorableKeyGesture() { Key = _gesture.Key, Modifiers = _gesture.Modifiers };
         }
+
         public void AfterDeserialize()
         {
-            if (_storable != null)
-                _gesture = new KeyGesture(_storable.Key, _storable.Modifiers);
             RefreshHotkey();
         }
 
         private void ThrowIfDisposed()
         {
             if (_disposed)
-                throw new ObjectDisposedException("KeyBinding");
+                throw new ObjectDisposedException("GlobalTrigger");
         }
+
         public void Dispose()
         {
             if (_disposed)
@@ -162,31 +181,10 @@ namespace Clowd.Config
 
         public override string ToString()
         {
-            if (_gesture == null)
+            if (_keyGesture == null)
                 return "Trigger:{null/false}";
 
-            return $"Trigger:{{{_gesture.GetDisplayStringForCulture(CultureInfo.CurrentUICulture)}:{IsRegistered}}}";
-        }
-    }
-    public class StorableKeyGesture
-    {
-        public Key Key { get; set; }
-        public ModifierKeys Modifiers { get; set; }
-
-        public StorableKeyGesture()
-        {
-
-        }
-
-        public StorableKeyGesture(Key key)
-        {
-            Key = key;
-        }
-
-        public StorableKeyGesture(Key key, ModifierKeys modifiers)
-        {
-            Key = key;
-            Modifiers = modifiers;
+            return $"Trigger:{{{_keyGesture?.Key}:{IsRegistered}}}";
         }
     }
 }
