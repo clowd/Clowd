@@ -170,8 +170,7 @@ namespace Clowd
             private void CheckForUpdateTimer()
             {
                 if (_newVersion != null) return;
-                using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-                CheckForUpdatesUnattended(mgr).ContinueWith(t =>
+                CheckForUpdatesUnattended().ContinueWith(t =>
                 {
                     if (t.Exception != null)
                     {
@@ -181,7 +180,7 @@ namespace Clowd
                 });
             }
 
-            public async Task CheckForUpdatesUnattended(UpdateManager mgr)
+            public async Task CheckForUpdatesUnattended()
             {
                 lock (_lock)
                 {
@@ -193,6 +192,7 @@ namespace Clowd
                 CommandManager.InvalidateRequerySuggested();
 
                 ClickCommandText = "Checking...";
+                using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
                 _newVersion = await mgr.UpdateApp(OnProgress);
 
                 if (_newVersion != null)
@@ -214,14 +214,14 @@ namespace Clowd
 
             private async void OnClick(object parameter)
             {
-                using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
                 if (_newVersion == null)
                 {
                     // no update downloaded, lets check
-                    await CheckForUpdatesUnattended(mgr);
+                    await CheckForUpdatesUnattended();
                 }
                 else
                 {
+                    using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
                     var newAppPath = Path.Combine(mgr.RootAppDirectory, "app-" + _newVersion.Version.ToString(), "Clowd.exe");
                     UpdateManager.RestartApp(newAppPath);
                 }
