@@ -233,6 +233,9 @@ namespace Clowd.UI
         private RenderTargetBitmap GetRenderedBitmap()
         {
             var bounds = drawingCanvas.GetArtworkBounds();
+            if (bounds.IsEmpty)
+                return null;
+
             var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
 
             RenderTargetBitmap bmp = new RenderTargetBitmap(
@@ -491,6 +494,9 @@ namespace Clowd.UI
 
         private void drawingCanvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
+            if (drawingCanvas.GraphicsList.Count == 0)
+                return;
+
             SyncToolState();
 
             // persist editor state to session file
@@ -505,11 +511,14 @@ namespace Clowd.UI
                 // save new preview image to file
                 var newpreview = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
                 var preview = GetRenderedBitmap();
-                preview.Save(newpreview, System.Drawing.Imaging.ImageFormat.Png);
-                var oldpreview = _session.PreviewImgPath;
-                _session.PreviewImgPath = newpreview;
-                if (File.Exists(oldpreview))
-                    File.Delete(oldpreview);
+                if (preview != null)
+                {
+                    preview.Save(newpreview, System.Drawing.Imaging.ImageFormat.Png);
+                    var oldpreview = _session.PreviewImgPath;
+                    _session.PreviewImgPath = newpreview;
+                    if (File.Exists(oldpreview))
+                        File.Delete(oldpreview);
+                }
             }
         }
 
