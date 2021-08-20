@@ -56,7 +56,7 @@ namespace Clowd.Video
                 var appdata = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
                 string obspath = null;
                 if (Debugger.IsAttached &&
-                    Directory.Exists(appdata) && 
+                    Directory.Exists(appdata) &&
                     ((obspath = Directory.EnumerateFiles(appdata, "obs-express.exe", SearchOption.AllDirectories).FirstOrDefault()) != null))
                 {
                     libraryPath = Path.GetDirectoryName(obspath);
@@ -285,14 +285,10 @@ namespace Clowd.Video
         {
             lock (_lock)
             {
-                try
-                {
-                    _instance = null;
-                    _log.Info("Disposing ObsCapturer Instance");
-                    _source.Cancel();
-                    _watch.ForceExit();
-                }
-                catch { }
+                _instance = null;
+                _log.Info("Disposing ObsCapturer Instance");
+                _source.Cancel();
+                _watch.ForceExit();
             }
         }
 
