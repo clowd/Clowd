@@ -64,19 +64,19 @@ namespace Clowd
                 p.OutputDataReceived += (s, e) =>
                 {
                     var useName = _namecache.TryGetValue(p.Id, out var pname) ? pname : ("pid." + p.Id.ToString());
-                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, useName, e.Data, false));
+                    RaiseOutputRecieved(new WatchLogEventArgs(p, useName, e.Data, false));
                 };
 
                 p.ErrorDataReceived += (s, e) =>
                 {
                     var useName = _namecache.TryGetValue(p.Id, out var pname) ? pname : ("pid." + p.Id.ToString());
-                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, useName, e.Data, true));
+                    RaiseOutputRecieved(new WatchLogEventArgs(p, useName, e.Data, true));
                 };
 
                 p.Exited += (s, e) =>
                 {
                     var useName = _namecache.TryGetValue(p.Id, out var pname) ? pname : ("pid." + p.Id.ToString());
-                    OutputReceived?.Invoke(this, new WatchLogEventArgs(p, useName, $"Process exited - code: {p.ExitCode}", true));
+                    RaiseOutputRecieved(new WatchLogEventArgs(p, useName, $"Process exited - code: {p.ExitCode}", true));
                 };
 
                 p.BeginOutputReadLine();
@@ -86,6 +86,11 @@ namespace Clowd
             startlog(watcher);
             foreach (var p in other)
                 startlog(p);
+        }
+
+        private void RaiseOutputRecieved(WatchLogEventArgs args)
+        {
+            OutputReceived?.Invoke(this, args);
         }
 
         public static WatchProcess StartAndWatch(params ProcessStartInfo[] psis)
@@ -147,7 +152,7 @@ namespace Clowd
         {
             var watchExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "clowdaot.exe");
             if (!File.Exists(watchExePath))
-                throw new FileNotFoundException("Could not find 'watch.exe', ensure it's in the application directory.");
+                throw new FileNotFoundException("Could not find 'clowdaot.exe', ensure it's in the application directory.");
 
             var me = Process.GetCurrentProcess();
 

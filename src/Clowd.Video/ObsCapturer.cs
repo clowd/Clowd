@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,6 +39,34 @@ namespace Clowd.Video
                 _instance = this;
             }
 
+            try
+            {
+                if (!Directory.Exists(libraryPath))
+                    throw new ArgumentException("OBS does not exist at the path: " + libraryPath);
+
+                if (!File.Exists(Path.Combine(libraryPath, "obs-express.exe")))
+                    throw new ArgumentException("OBS does not exist at the path: " + libraryPath);
+
+                if (!File.Exists(Path.Combine(_libraryPath, "lib", "obs64.exe")))
+                    throw new ArgumentException("OBS does not exist at the path: " + libraryPath);
+            }
+            catch
+            {
+                // if obs does not exist, and we're debugging, lets check local app data
+                var appdata = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
+                string obspath = null;
+                if (Debugger.IsAttached &&
+                    Directory.Exists(appdata) && 
+                    ((obspath = Directory.EnumerateFiles(appdata, "obs-express.exe", SearchOption.AllDirectories).FirstOrDefault()) != null))
+                {
+                    libraryPath = Path.GetDirectoryName(obspath);
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
             _source = new CancellationTokenSource();
             _token = _source.Token;
             _log = log;
@@ -58,7 +87,7 @@ namespace Clowd.Video
                     if (String.IsNullOrWhiteSpace(pjson.osnVersion))
                         throw new Exception("osnVersion null or empty");
 
-                    string pipeName = $"clowd-{Guid.NewGuid().ToString()}";
+                    string pipeName = $"clowd-{Guid.NewGuid()}";
 
                     var obs64 = new ProcessStartInfo()
                     {
@@ -256,10 +285,14 @@ namespace Clowd.Video
         {
             lock (_lock)
             {
-                _log.Info("Disposing ObsCapturer Instance");
-                _source.Cancel();
-                _watch.ForceExit();
-                _instance = null;
+                try
+                {
+                    _instance = null;
+                    _log.Info("Disposing ObsCapturer Instance");
+                    _source.Cancel();
+                    _watch.ForceExit();
+                }
+                catch { }
             }
         }
 
