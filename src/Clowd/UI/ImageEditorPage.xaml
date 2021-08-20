@@ -498,8 +498,7 @@
             Grid.Column="1"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
-            ClipToBounds="True"
-            UseLayoutRounding="True">
+            ClipToBounds="True">
             <Rectangle
                 Width="{Binding ActualWidth, ElementName=objectCanvas}"
                 Height="{Binding ActualHeight, ElementName=objectCanvas}"
