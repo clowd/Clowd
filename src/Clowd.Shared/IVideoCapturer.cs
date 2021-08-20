@@ -32,6 +32,7 @@ namespace Clowd
                 }
             }
         }
+
         public virtual bool IsRecording
         {
             get => _isRecording;
@@ -74,6 +75,7 @@ namespace Clowd
         public abstract Task StopAsync();
 
         public abstract void WriteLogToFile(string fileName);
+
         public virtual Task Initialize() { return Task.CompletedTask; }
     }
 
