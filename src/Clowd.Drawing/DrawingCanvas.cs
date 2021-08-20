@@ -1275,12 +1275,12 @@ namespace Clowd.Drawing
         {
             if (index == 0)
             {
-                if (_clickable != null && ActualWidth > 0 && _scaleTransform.ScaleX > 0)
+                if (_clickable != null && ActualWidth > 0 && ContentScale > 0)
                 {
-                    Canvas.SetLeft(_clickable, -_translateTransform.X / _scaleTransform.ScaleX);
-                    Canvas.SetTop(_clickable, -_translateTransform.Y / _scaleTransform.ScaleY);
-                    _clickable.Width = ActualWidth / _scaleTransform.ScaleX;
-                    _clickable.Height = ActualHeight / _scaleTransform.ScaleY;
+                    Canvas.SetLeft(_clickable, -_translateTransform.X / _scaleTransform2.ScaleX);
+                    Canvas.SetTop(_clickable, -_translateTransform.Y / _scaleTransform2.ScaleY);
+                    _clickable.Width = ActualWidth / _scaleTransform2.ScaleX;
+                    _clickable.Height = ActualHeight / _scaleTransform2.ScaleY;
                 }
                 return _clickable;
             }
@@ -1414,20 +1414,18 @@ namespace Clowd.Drawing
                 return;
 
             double zoom = e.Delta > 0 ? .2 : -.2;
-            if (!(e.Delta > 0) && (_scaleTransform.ScaleX < .3 || _scaleTransform.ScaleY < .3))
-                return;
-            if (e.Delta > 0 && (_scaleTransform.ScaleX > 2.9 || _scaleTransform.ScaleY > 2.9))
+            if (!(e.Delta > 0) && (ContentScale < .3 || ContentScale < .3))
                 return;
 
-            Point relative = e.GetPosition(this);
+            Point relativeMouse = e.GetPosition(this);
             double absoluteX;
             double absoluteY;
 
-            absoluteX = relative.X * _scaleTransform.ScaleX + _translateTransform.X;
-            absoluteY = relative.Y * _scaleTransform.ScaleY + _translateTransform.Y;
+            absoluteX = relativeMouse.X * ContentScale + _translateTransform.X;
+            absoluteY = relativeMouse.Y * ContentScale + _translateTransform.Y;
 
             ContentScale += zoom;
-            ContentOffset = new Point(absoluteX - relative.X * _scaleTransform.ScaleX, absoluteY - relative.Y * _scaleTransform.ScaleY);
+            ContentOffset = new Point(absoluteX - relativeMouse.X * ContentScale, absoluteY - relativeMouse.Y * ContentScale);
         }
 
         #endregion Mouse Event Handlers
@@ -1924,18 +1922,16 @@ namespace Clowd.Drawing
 
         private static void ContentScaleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var me = (DrawingCanvas)d;
             var scale = (double)e.NewValue;
-            me._scaleTransform.ScaleX = scale;
-            me._scaleTransform.ScaleY = scale;
 
-            var worldCX = (me.ActualWidth / 2 - me.ContentOffset.X) / (double)e.OldValue;
-            var worldCY = (me.ActualHeight / 2 - me.ContentOffset.Y) / (double)e.OldValue;
-            me.ContentOffset = new Point(me.ActualWidth / 2 - worldCX * (double)e.NewValue, me.ActualHeight / 2 - worldCY * (double)e.NewValue);
+            var me = (DrawingCanvas)d;
+            PresentationSource source = PresentationSource.FromVisual(me);
 
-            // Set cursor - in the cases of brushes this makes sure the cursor accurately represents the brush size
-            var curTool = me.tools[(int)me.Tool];
-            curTool.SetCursor(me);
+            double dpiZoom = source.CompositionTarget.TransformToDevice.M11;
+            double adjustment = 1 / dpiZoom; // undo the current dpi zoom so screenshots appear sharp
+
+            me._scaleTransform2.ScaleX = scale * adjustment;
+            me._scaleTransform2.ScaleY = scale * adjustment;
         }
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -1952,14 +1948,14 @@ namespace Clowd.Drawing
                 ContentOffset.Y + sizeInfo.NewSize.Height / 2 - sizeInfo.PreviousSize.Height / 2);
         }
 
-        private ScaleTransform _scaleTransform;
+        private ScaleTransform _scaleTransform2;
         private TranslateTransform _translateTransform;
 
         private void InitializeZoom()
         {
             TransformGroup group = new TransformGroup();
-            _scaleTransform = new ScaleTransform();
-            group.Children.Add(_scaleTransform);
+            _scaleTransform2 = new ScaleTransform();
+            group.Children.Add(_scaleTransform2);
             _translateTransform = new TranslateTransform();
             group.Children.Add(_translateTransform);
             RenderTransform = group;
