@@ -1,12 +1,9 @@
-﻿using CsWin32;
-using CsWin32.Foundation;
-using CsWin32.UI.WindowsAndMessaging;
-using CsWin32.Graphics.Gdi;
-using CsWin32.Storage.Xps;
-using static CsWin32.Constants;
-using static CsWin32.PInvoke;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.ComponentModel;
+using Vanara.PInvoke;
+using static Vanara.PInvoke.User32;
+using static Vanara.PInvoke.Gdi32;
 
 namespace Clowd.PlatformUtil.Windows
 {
@@ -16,20 +13,16 @@ namespace Clowd.PlatformUtil.Windows
         {
             CURSORINFO cursorInfo = default;
             cursorInfo.cbSize = (uint)Marshal.SizeOf(typeof(CURSORINFO));
-            if (GetCursorInfo(ref cursorInfo) && cursorInfo.flags == CURSORINFO_FLAGS.CURSOR_SHOWING)
+            if (GetCursorInfo(ref cursorInfo) && cursorInfo.flags == CursorState.CURSOR_SHOWING)
             {
-                using (var hIcon = new DestroyIconSafeHandle(CopyIcon(cursorInfo.hCursor)))
+                using (var hIcon = CopyIcon((IntPtr)cursorInfo.hCursor))
                 {
-                    if (GetIconInfo(hIcon, out var iconInfo))
+                    using var icoInfo = new ICONINFO();
+                    if (GetIconInfo(hIcon, icoInfo))
                     {
-                        // we are responsible for disposing these when we're done
-                        using (var hbmColor = new DeleteObjectSafeHandle(iconInfo.hbmColor))
-                        using (var hbmMask = new DeleteObjectSafeHandle(iconInfo.hbmMask))
-                        {
-                            var iconX = cursorInfo.ptScreenPos.x - (int)iconInfo.xHotspot - captureArea.Left;
-                            var iconY = cursorInfo.ptScreenPos.y - (int)iconInfo.yHotspot - captureArea.Top;
-                            DrawIconEx(hdc, iconX, iconY, (HICON)hIcon.DangerousGetHandle(), 0, 0, 0, default, DI_FLAGS.DI_NORMAL | DI_FLAGS.DI_DEFAULTSIZE);
-                        }
+                        var iconX = cursorInfo.ptScreenPos.X - (int)icoInfo.xHotspot - captureArea.Left;
+                        var iconY = cursorInfo.ptScreenPos.Y - (int)icoInfo.yHotspot - captureArea.Top;
+                        DrawIconEx(hdc, iconX, iconY, hIcon.DangerousGetHandle(), 0, 0, 0, default, DrawIconExFlags.DI_NORMAL | DrawIconExFlags.DI_DEFAULTSIZE);
                     }
                 }
             }
@@ -40,13 +33,13 @@ namespace Clowd.PlatformUtil.Windows
             int x = captureArea.X, y = captureArea.Y, width = captureArea.Width, height = captureArea.Height;
             GdiCompatibleBitmap bitmap = null;
 
-            HDC screenDC = GetDC(HWND_DESKTOP);
+            HDC screenDC = GetDC(HWND.NULL);
 
             try
             {
                 bitmap = new GdiCompatibleBitmap(width, height);
 
-                if (!BitBlt(bitmap.hdcBitmap, 0, 0, width, height, screenDC, x, y, ROP_CODE.SRCCOPY | ROP_CODE.CAPTUREBLT))
+                if (!BitBlt(bitmap.hdcBitmap, 0, 0, width, height, screenDC, x, y, RasterOperationMode.SRCCOPY | RasterOperationMode.CAPTUREBLT))
                     throw new Win32Exception();
 
                 if (drawCursor)
@@ -61,7 +54,7 @@ namespace Clowd.PlatformUtil.Windows
             }
             finally
             {
-                ReleaseDC(HWND_DESKTOP, screenDC);
+                ReleaseDC(HWND.NULL, screenDC);
             }
         }
 
@@ -72,13 +65,13 @@ namespace Clowd.PlatformUtil.Windows
             GdiCompatibleBitmap b1 = null;
             GdiCompatibleBitmap b2 = null;
 
-            HDC screenDC = GetDC(HWND_DESKTOP);
+            HDC screenDC = GetDC(HWND.NULL);
 
             try
             {
                 // first we copy the window to b1
                 b1 = new GdiCompatibleBitmap(r1.Width, r1.Height);
-                if (!PrintWindow(new HWND(nWin.Handle), b1.hdcBitmap, (PRINT_WINDOW_FLAGS)PW_RENDERFULLCONTENT))
+                if (!PrintWindow(new HWND(nWin.Handle), b1.hdcBitmap, PW.PW_RENDERFULLCONTENT))
                     throw new Win32Exception();
 
                 if (b1.Equals(b2))
@@ -106,7 +99,7 @@ namespace Clowd.PlatformUtil.Windows
             }
             finally
             {
-                ReleaseDC(HWND_DESKTOP, screenDC);
+                ReleaseDC(HWND.NULL, screenDC);
             }
         }
     }

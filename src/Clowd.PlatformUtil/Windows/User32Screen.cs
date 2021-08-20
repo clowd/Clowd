@@ -3,10 +3,9 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
-using CsWin32.Graphics.Gdi;
-using CsWin32.UI.WindowsAndMessaging;
-using CsWin32.Foundation;
-using static CsWin32.PInvoke;
+using Vanara.PInvoke;
+using static Vanara.PInvoke.User32;
+using static Vanara.PInvoke.SHCore;
 
 namespace Clowd.PlatformUtil.Windows
 {
@@ -43,10 +42,10 @@ namespace Clowd.PlatformUtil.Windows
 
         private static RECT GetVirtualBounds()
         {
-            var x = GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_XVIRTUALSCREEN);
-            var y = GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_YVIRTUALSCREEN);
-            var cx = GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_CXVIRTUALSCREEN);
-            var cy = GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_CYVIRTUALSCREEN);
+            var x = GetSystemMetrics(SystemMetric.SM_XVIRTUALSCREEN);
+            var y = GetSystemMetrics(SystemMetric.SM_YVIRTUALSCREEN);
+            var cx = GetSystemMetrics(SystemMetric.SM_CXVIRTUALSCREEN);
+            var cy = GetSystemMetrics(SystemMetric.SM_CYVIRTUALSCREEN);
             return new RECT
             {
                 left = x,
@@ -59,7 +58,7 @@ namespace Clowd.PlatformUtil.Windows
         private unsafe static RECT GetVirtualWorkArea()
         {
             RECT rect;
-            SystemParametersInfo(SYSTEM_PARAMETERS_INFO_ACTION.SPI_GETWORKAREA, 0, &rect, 0);
+            SystemParametersInfo(SPI.SPI_GETWORKAREA, 0, (IntPtr)(&rect), 0);
             return rect;
         }
 
@@ -69,7 +68,7 @@ namespace Clowd.PlatformUtil.Windows
                 throw new ArgumentNullException(nameof(hMonitor));
 
             MONITORINFO mfo = GetInfo(hMonitor);
-            this.IsPrimary = ((mfo.dwFlags & MONITORINFOF_PRIMARY) != 0);
+            this.IsPrimary = ((mfo.dwFlags & MonitorInfoFlags.MONITORINFOF_PRIMARY) != 0);
             _hMonitor = hMonitor;
         }
 
@@ -92,13 +91,13 @@ namespace Clowd.PlatformUtil.Windows
             get
             {
                 List<HMONITOR> displays = new List<HMONITOR>();
-                MONITORENUMPROC callback = (HMONITOR hMon, HDC hdc, RECT* rect, LPARAM lp) =>
+                MonitorEnumProc callback = (IntPtr hMon, IntPtr hdc, PRECT rect, IntPtr lp) =>
                 {
                     displays.Add(hMon);
                     return true;
                 };
 
-                if (!EnumDisplayMonitors(null, null, callback, new LPARAM(0)))
+                if (!EnumDisplayMonitors(IntPtr.Zero, null, callback, IntPtr.Zero))
                     throw new Win32Exception();
 
                 return displays.Select(d => new User32Screen(d));
@@ -108,12 +107,12 @@ namespace Clowd.PlatformUtil.Windows
         /// <summary>
         /// Retrieves a <see cref="User32Screen"/> for the display that contains the specified point.
         /// </summary>
-        public static User32Screen FromPoint(ScreenPoint point) => new User32Screen(MonitorFromPoint(point, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST));
+        public static User32Screen FromPoint(ScreenPoint point) => new User32Screen(MonitorFromPoint((System.Drawing.Point)point, MonitorFlags.MONITOR_DEFAULTTONEAREST));
 
         /// <summary>
         /// Retrieves a <see cref="User32Screen"/> for the display that contains the center point of the specified rect.
         /// </summary>
-        public static User32Screen FromRect(ScreenRect rect) => new User32Screen(MonitorFromRect(rect, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST));
+        public static User32Screen FromRect(ScreenRect rect) => new User32Screen(MonitorFromRect(rect, MonitorFlags.MONITOR_DEFAULTTONEAREST));
 
         /// <summary>
         /// Retrieves a <see cref="User32Screen"/> for the display that contains the center point of the specified window.
@@ -125,12 +124,12 @@ namespace Clowd.PlatformUtil.Windows
         /// </summary>
         public static User32Screen FromWindow(IntPtr hWnd) => FromWindow(new HWND(hWnd));
 
-        internal static User32Screen FromWindow(HWND hWnd) => new User32Screen(MonitorFromWindow(hWnd, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST));
+        internal static User32Screen FromWindow(HWND hWnd) => new User32Screen(MonitorFromWindow(hWnd, MonitorFlags.MONITOR_DEFAULTTONEAREST));
 
         /// <summary>
         /// Gets the native monitor handle to use when executing interop with user32.dll functions
         /// </summary>
-        public IntPtr Handle => _hMonitor;
+        public IntPtr Handle => (IntPtr)_hMonitor;
 
         /// <summary>
         /// Gets a value indicating whether a particular display is the primary device.
@@ -164,8 +163,7 @@ namespace Clowd.PlatformUtil.Windows
                     throw new InvalidOperationException("The virtual desktop (which encompasses all displays) does not have a single DPI, " +
                         "it is made up of the DPI of each individual display.");
 
-                uint dpiX = 0, dpiY = 0;
-                if (0 == GetDpiForMonitor(Handle, CsWin32.MONITOR_DPI_TYPE.MDT_DEFAULT, ref dpiX, ref dpiY))
+                if (0 == GetDpiForMonitor(Handle, MONITOR_DPI_TYPE.MDT_DEFAULT, out var dpiX, out var dpiY))
                     return dpiX / 96.0;
 
                 throw new Win32Exception("Unspecified error occurred.");

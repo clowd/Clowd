@@ -1,25 +1,27 @@
 ﻿using System;
-using CsWin32.Graphics.Gdi;
-using static CsWin32.Constants;
-using static CsWin32.PInvoke;
 using System.Runtime.InteropServices;
 using System.ComponentModel;
+using Vanara.PInvoke;
+using static Vanara.PInvoke.User32;
+using static Vanara.PInvoke.DwmApi;
+using static Vanara.PInvoke.Shell32;
+using static Vanara.PInvoke.Gdi32;
 
 namespace Clowd.PlatformUtil.Windows
 {
     public unsafe class GdiCompatibleBitmap : BitmapBase
     {
-        public nint Handle => hBitmap;
+        public nint Handle => (IntPtr)hBitmap;
         //public nint HdcHandle => hdcBitmap;
 
-        internal readonly CreatedHDC hdcBitmap;
+        internal readonly HDC hdcBitmap;
         internal readonly HBITMAP hBitmap;
         readonly HDC hdcScreen;
         readonly HGDIOBJ hOld;
 
         public GdiCompatibleBitmap(int width, int height) : base(width, height, BitmapPixelFormat.Rgb24)
         {
-            hdcScreen = GetDC(HWND_DESKTOP);
+            hdcScreen = GetDC(HWND.NULL);
             hdcBitmap = CreateCompatibleDC(hdcScreen);
             hBitmap = CreateCompatibleBitmap(hdcScreen, width, height);
             hOld = SelectObject(hdcBitmap, hBitmap);
@@ -33,13 +35,13 @@ namespace Clowd.PlatformUtil.Windows
         {
             // get bitmap size
             var info = new BITMAP();
-            GetObject(bmp, sizeof(BITMAP), &info);
+            GetObject(bmp, sizeof(BITMAP), (IntPtr)(&info));
             Width = info.bmWidth;
             Height = info.bmHeight;
             SourcePixelFormat = GetPixelFormatForBpp(info.bmBitsPixel);
 
             // setup
-            hdcScreen = GetDC(HWND_DESKTOP);
+            hdcScreen = GetDC(HWND.NULL);
             hdcBitmap = CreateCompatibleDC(hdcScreen);
             hBitmap = bmp;
             hOld = SelectObject(hdcBitmap, hBitmap);
@@ -55,7 +57,7 @@ namespace Clowd.PlatformUtil.Windows
                 biBitCount = bpp,
                 biClrImportant = 0,
                 biClrUsed = 0,
-                biCompression = BI_RGB,
+                biCompression = BitmapCompressionMode .BI_RGB,
                 // For RGB DIBs, the image orientation is indicated by the biHeight member of the BITMAPINFOHEADER structure.
                 // If biHeight is positive, the image is bottom-up. If biHeight is negative, the image is top-down.
                 biHeight = -Height,
@@ -66,13 +68,10 @@ namespace Clowd.PlatformUtil.Windows
                 biSizeImage = (uint)(Stride * Height),
             };
 
-            var bmp = new BITMAPINFO
-            {
-                bmiHeader = bmi,
-            };
+            using var info = new SafeBITMAPINFO(bmi);
 
             // copy pixels
-            var hr = GetDIBits(hdcBitmap, hBitmap, 0, (uint)Height, buffer0, &bmp, DIB_USAGE.DIB_RGB_COLORS);
+            var hr = GetDIBits(hdcBitmap, hBitmap, 0, (uint)Height, (IntPtr)buffer0, info, DIBColorMode.DIB_RGB_COLORS);
             if (hr == 0) // If the function fails, the return value is zero.
                 throw new Exception("Unable to copy pixels to bitmap buffer");
         }
@@ -82,7 +81,7 @@ namespace Clowd.PlatformUtil.Windows
             SelectObject(hdcBitmap, hOld);
             DeleteObject(hBitmap);
             DeleteDC(hdcBitmap);
-            ReleaseDC(HWND_DESKTOP, hdcScreen);
+            ReleaseDC(HWND.NULL, hdcScreen);
         }
 
         public GdiCompatibleBitmap Crop(ScreenRect croppedRect)
@@ -91,7 +90,7 @@ namespace Clowd.PlatformUtil.Windows
 
             var dest = new GdiCompatibleBitmap(width, height);
 
-            if (BitBlt(dest.hdcBitmap, 0, 0, width, height, hdcBitmap, x, y, ROP_CODE.SRCCOPY))
+            if (BitBlt(dest.hdcBitmap, 0, 0, width, height, hdcBitmap, x, y, RasterOperationMode.SRCCOPY))
             {
                 return dest;
             }
@@ -116,7 +115,7 @@ namespace Clowd.PlatformUtil.Windows
                 biBitCount = 8,
                 biClrImportant = NUM_COLORS,
                 biClrUsed = NUM_COLORS,
-                biCompression = BI_RGB,
+                biCompression = BitmapCompressionMode.BI_RGB,
                 biHeight = Height,
                 biWidth = Width,
                 biPlanes = 1,
@@ -141,13 +140,14 @@ namespace Clowd.PlatformUtil.Windows
                     if (i == byte.MaxValue) break;
                 }
 
-                void* pixels;
-                var hbitmap = CreateDIBSection(hdcScreen, (BITMAPINFO*)bmp, DIB_USAGE.DIB_RGB_COLORS, &pixels, default, 0);
-                var pinb = new GdiCompatibleBitmap(hbitmap);
+                throw new NotImplementedException();
+                //void* pixels;
+                //var hbitmap = CreateDIBSection(hdcScreen, (BITMAPINFO*)bmp, DIBColorMode.DIB_RGB_COLORS, &pixels, default, 0);
+                //var pinb = new GdiCompatibleBitmap(hbitmap);
 
-                BitBlt(pinb.hdcBitmap, 0, 0, Width, Height, hdcBitmap, 0, 0, ROP_CODE.SRCCOPY);
+                //BitBlt(pinb.hdcBitmap, 0, 0, Width, Height, hdcBitmap, 0, 0, ROP_CODE.SRCCOPY);
 
-                return pinb;
+                //return pinb;
             }
             finally
             {

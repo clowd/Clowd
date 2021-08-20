@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using CsWin32.Foundation;
-using static CsWin32.PInvoke;
 using System.ComponentModel;
+using static Vanara.PInvoke.User32;
 
 namespace Clowd.PlatformUtil.Windows
 {
@@ -41,14 +40,14 @@ namespace Clowd.PlatformUtil.Windows
 
         public override IWindow GetForegroundWindow()
         {
-            return GetWindowFromHandle(CsWin32.PInvoke.GetForegroundWindow());
+            return GetWindowFromHandle((IntPtr)Vanara.PInvoke.User32.GetForegroundWindow());
         }
 
         public override ScreenPoint GetMousePosition()
         {
-            if (!GetCursorPos(out POINT pt))
+            if (!GetCursorPos(out var pt))
                 throw new Win32Exception();
-            return pt;
+            return (ScreenPoint)pt;
         }
 
         public override IScreen GetScreenFromPoint(ScreenPoint pt)
