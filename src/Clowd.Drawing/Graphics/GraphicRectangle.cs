@@ -118,6 +118,9 @@ namespace Clowd.Drawing.Graphics
         {
             get
             {
+                if (Angle == 0)
+                    return UnrotatedBounds;
+
                 var points = new[] { new Point(Left, Top), new Point(Right, Top), new Point(Left, Bottom), new Point(Right, Bottom) };
                 var rotated = points.Select(ApplyRotation).ToArray();
                 var l = rotated.Min(p => p.X);
