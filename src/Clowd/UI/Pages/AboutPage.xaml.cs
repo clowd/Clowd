@@ -100,7 +100,15 @@ Microsoft.SourceLink.GitHub       https://licenses.nuget.org/Apache-2.0
 SharpCompress                     https://github.com/adamhathcock/sharpcompress/blob/master/LICENSE.txt                                                                      
 NETStandard.Library               https://github.com/dotnet/standard/blob/master/LICENSE.TXT            
 Nerdbank.GitVersioning            https://licenses.nuget.org/MIT                                        
-Mono.Cecil                        https://licenses.nuget.org/MIT  
+Mono.Cecil                        https://licenses.nuget.org/MIT
+Vanara.PInvoke.Kernel32           https://licenses.nuget.org/MIT                                        
+Vanara.PInvoke.Shell32            https://licenses.nuget.org/MIT                                        
+Nerdbank.GitVersioning            https://licenses.nuget.org/MIT                                        
+Vanara.PInvoke.User32             https://licenses.nuget.org/MIT                                        
+Microsoft.Win32.Registry          https://licenses.nuget.org/MIT                                        
+Vanara.PInvoke.Gdi32              https://licenses.nuget.org/MIT                                        
+Vanara.PInvoke.SHCore             https://licenses.nuget.org/MIT                                        
+Vanara.PInvoke.DwmApi             https://licenses.nuget.org/MIT 
 ";
 
         public AboutPage()
