@@ -1903,7 +1903,7 @@ namespace Clowd.Drawing
             var me = (DrawingCanvas)d;
             PresentationSource source = PresentationSource.FromVisual(me);
 
-            double dpiZoom = source.CompositionTarget.TransformToDevice.M11;
+            double dpiZoom = source?.CompositionTarget?.TransformToDevice.M11 ?? 1;
             double adjustment = 1 / dpiZoom; // undo the current dpi zoom so screenshots appear sharp
 
             me._scaleTransform2.ScaleX = scale * adjustment;
