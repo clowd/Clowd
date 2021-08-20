@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Runtime.InteropServices;
+using static Vanara.PInvoke.User32;
 
 namespace Clowd.PlatformUtil.Windows
 {

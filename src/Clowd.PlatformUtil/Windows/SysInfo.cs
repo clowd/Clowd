@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Security.Principal;
-using static CsWin32.PInvoke;
+using static Vanara.PInvoke.DwmApi;
 
 namespace Clowd.PlatformUtil.Windows
 {

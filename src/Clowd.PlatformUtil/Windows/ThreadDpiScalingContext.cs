@@ -2,9 +2,9 @@
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using CsWin32.System.SystemServices;
-using CsWin32.UI.HiDpi;
-using static CsWin32.PInvoke;
+using Vanara.PInvoke;
+using static Vanara.PInvoke.User32;
+using static Vanara.PInvoke.SHCore;
 
 namespace Clowd.PlatformUtil.Windows
 {
@@ -19,11 +19,11 @@ namespace Clowd.PlatformUtil.Windows
 
     public static class ThreadDpiScalingContext
     {
-        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_UNAWARE = new DPI_AWARENESS_CONTEXT(-1);
-        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_SYSTEM_AWARE = new DPI_AWARENESS_CONTEXT(-2);
-        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = new DPI_AWARENESS_CONTEXT(-3);
-        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new DPI_AWARENESS_CONTEXT(-4);
-        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED = new DPI_AWARENESS_CONTEXT(-5);
+        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_UNAWARE = new DPI_AWARENESS_CONTEXT((IntPtr)(-1));
+        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_SYSTEM_AWARE = new DPI_AWARENESS_CONTEXT((IntPtr)(-2));
+        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = new DPI_AWARENESS_CONTEXT((IntPtr)(-3));
+        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new DPI_AWARENESS_CONTEXT((IntPtr)(-4));
+        private static readonly DPI_AWARENESS_CONTEXT DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED = new DPI_AWARENESS_CONTEXT((IntPtr)(-5));
 
         private static ThreadScalingMode Get1607ThreadAwarenessContext()
         {
@@ -68,7 +68,7 @@ namespace Clowd.PlatformUtil.Windows
             };
 
             var ctxOld = SetThreadDpiAwarenessContext(ctx);
-            if (ctxOld.Value == 0)
+            if (((IntPtr)ctxOld) == IntPtr.Zero)
                 throw new Exception("Failed to update thread awareness context");
         }
 
@@ -76,26 +76,25 @@ namespace Clowd.PlatformUtil.Windows
         {
             var aw = mode switch
             {
-                ThreadScalingMode.Unaware => DPI_AWARENESS.DPI_AWARENESS_UNAWARE,
-                ThreadScalingMode.SystemAware => DPI_AWARENESS.DPI_AWARENESS_SYSTEM_AWARE,
-                ThreadScalingMode.PerMonitorAware => DPI_AWARENESS.DPI_AWARENESS_PER_MONITOR_AWARE,
-                ThreadScalingMode.PerMonitorV2Aware => DPI_AWARENESS.DPI_AWARENESS_PER_MONITOR_AWARE,
-                ThreadScalingMode.UnawareGdiScaled => DPI_AWARENESS.DPI_AWARENESS_UNAWARE,
+                ThreadScalingMode.Unaware => PROCESS_DPI_AWARENESS.PROCESS_DPI_UNAWARE,
+                ThreadScalingMode.SystemAware => PROCESS_DPI_AWARENESS.PROCESS_SYSTEM_DPI_AWARE,
+                ThreadScalingMode.PerMonitorAware => PROCESS_DPI_AWARENESS.PROCESS_PER_MONITOR_DPI_AWARE,
+                ThreadScalingMode.PerMonitorV2Aware => PROCESS_DPI_AWARENESS.PROCESS_PER_MONITOR_DPI_AWARE,
+                ThreadScalingMode.UnawareGdiScaled => PROCESS_DPI_AWARENESS.PROCESS_DPI_UNAWARE,
                 _ => throw new ArgumentOutOfRangeException("mode"),
             };
 
-            Marshal.ThrowExceptionForHR(SetProcessDpiAwareness(aw));
+            Marshal.ThrowExceptionForHR((int)SetProcessDpiAwareness(aw));
         }
 
         private static ThreadScalingMode GetShcoreAwareness()
         {
-            DPI_AWARENESS aw = default;
-            Marshal.ThrowExceptionForHR(GetProcessDpiAwareness(0, ref aw));
+            Marshal.ThrowExceptionForHR((int)GetProcessDpiAwareness(default, out var aw));
             return aw switch
             {
-                DPI_AWARENESS.DPI_AWARENESS_UNAWARE => ThreadScalingMode.Unaware,
-                DPI_AWARENESS.DPI_AWARENESS_SYSTEM_AWARE => ThreadScalingMode.SystemAware,
-                DPI_AWARENESS.DPI_AWARENESS_PER_MONITOR_AWARE => ThreadScalingMode.PerMonitorAware,
+                PROCESS_DPI_AWARENESS.PROCESS_DPI_UNAWARE => ThreadScalingMode.Unaware,
+                PROCESS_DPI_AWARENESS.PROCESS_SYSTEM_DPI_AWARE => ThreadScalingMode.SystemAware,
+                PROCESS_DPI_AWARENESS.PROCESS_PER_MONITOR_DPI_AWARE => ThreadScalingMode.PerMonitorAware,
                 _ => throw new ArgumentOutOfRangeException("DPI_AWARENESS"),
             };
         }
