@@ -32,7 +32,7 @@ namespace Clowd.UI
 
         protected override IntPtr WndProc(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            if (msg == (int)WindowMessage.WM_SETTINGCHANGE)
+            if (msg == (int)Vanara.PInvoke.User32.WindowMessage.WM_SETTINGCHANGE)
                 UpdateDarkModeState(hWnd);
             return base.WndProc(hWnd, msg, wParam, lParam, ref handled);
         }

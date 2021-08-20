@@ -1,15 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text;
 using System.Linq;
 using System.Runtime.InteropServices;
-using CsWin32;
-using CsWin32.Foundation;
-using CsWin32.UI.WindowsAndMessaging;
-using CsWin32.UI.Shell;
-using CsWin32.Graphics.Dwm;
-using static CsWin32.Constants;
-using static CsWin32.PInvoke;
+using Vanara.PInvoke;
+using static Vanara.PInvoke.User32;
+using static Vanara.PInvoke.DwmApi;
+using static Vanara.PInvoke.Shell32;
 
 namespace Clowd.PlatformUtil.Windows
 {
@@ -23,9 +21,9 @@ namespace Clowd.PlatformUtil.Windows
         {
             get
             {
-                char* caption = stackalloc char[MAX_STRING_LENGTH];
-                GetWindowText(Handle, caption, MAX_STRING_LENGTH);
-                return new string(caption);
+                var sb = new StringBuilder(MAX_STRING_LENGTH);
+                GetWindowText(Handle, sb, MAX_STRING_LENGTH);
+                return sb.ToString().Trim();
             }
         }
 
@@ -33,9 +31,9 @@ namespace Clowd.PlatformUtil.Windows
         {
             get
             {
-                char* className = stackalloc char[MAX_STRING_LENGTH];
-                GetClassName(Handle, className, MAX_STRING_LENGTH);
-                return new string(className);
+                var sb = new StringBuilder(MAX_STRING_LENGTH);
+                GetClassName(Handle, sb, MAX_STRING_LENGTH);
+                return sb.ToString().Trim();
             }
         }
 
@@ -46,8 +44,8 @@ namespace Clowd.PlatformUtil.Windows
                 GetWindowRect(Handle, out var rect);
                 return ScreenRect.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
             }
-            set => SetWindowPos(Handle, HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height,
-                SET_WINDOW_POS_FLAGS.SWP_NOOWNERZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER);
+            set => SetWindowPos(Handle, HWND.HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height,
+                SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER);
         }
 
         public ScreenRect DwmRenderBounds
@@ -66,7 +64,7 @@ namespace Clowd.PlatformUtil.Windows
                 {
                     RECT trueRect;
                     if (0 == DwmIsCompositionEnabled(out var dwmIsEnabled) && dwmIsEnabled)
-                        if (0 == DwmGetWindowAttribute(Handle, (uint)DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, &trueRect, (uint)Marshal.SizeOf<RECT>()))
+                        if (0 == DwmGetWindowAttribute(Handle, DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS, (IntPtr)(&trueRect), Marshal.SizeOf<RECT>()))
                             btrue = ScreenRect.FromLTRB(trueRect.left, trueRect.top, trueRect.right, trueRect.bottom);
                 }
                 catch (DllNotFoundException) { }
@@ -84,9 +82,9 @@ namespace Clowd.PlatformUtil.Windows
         {
             get
             {
-                var hwndZero = new HWND(0);
+                var hwndZero = new HWND(IntPtr.Zero);
                 var z = 0;
-                for (var h = Handle; !h.Equals(hwndZero); h = GetWindow(h, GET_WINDOW_CMD.GW_HWNDPREV)) z++;
+                for (var h = Handle; !h.Equals(hwndZero); h = GetWindow(h, GetWindowCmd.GW_HWNDPREV)) z++;
                 return z;
             }
         }
@@ -95,9 +93,9 @@ namespace Clowd.PlatformUtil.Windows
         {
             get
             {
-                int wndStyle = GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_STYLE);
-                bool hsVisible = (wndStyle & (int)WINDOW_STYLE.WS_HSCROLL) > 0;
-                bool vsVisible = (wndStyle & (int)WINDOW_STYLE.WS_VSCROLL) > 0;
+                int wndStyle = GetWindowLong(Handle, WindowLongFlags.GWL_STYLE);
+                bool hsVisible = (wndStyle & (int)WindowStyles.WS_HSCROLL) > 0;
+                bool vsVisible = (wndStyle & (int)WindowStyles.WS_VSCROLL) > 0;
 
                 if (hsVisible)
                     return vsVisible ? ScrollVisibility.Both : ScrollVisibility.Horizontal;
@@ -108,14 +106,14 @@ namespace Clowd.PlatformUtil.Windows
 
         public bool IsTopmost
         {
-            get => HasStyle(WINDOW_EX_STYLE.WS_EX_TOPMOST);
-            set => SetStyle(WINDOW_EX_STYLE.WS_EX_TOPMOST, value);
+            get => HasStyle(WindowStylesEx.WS_EX_TOPMOST);
+            set => SetStyle(WindowStylesEx.WS_EX_TOPMOST, value);
         }
 
         public bool IsDisabled
         {
-            get => HasStyle(WINDOW_STYLE.WS_DISABLED);
-            set => SetStyle(WINDOW_STYLE.WS_DISABLED, value);
+            get => HasStyle(WindowStyles.WS_DISABLED);
+            set => SetStyle(WindowStyles.WS_DISABLED, value);
         }
 
         public bool IsMaximized => IsZoomed(Handle);
@@ -126,8 +124,7 @@ namespace Clowd.PlatformUtil.Windows
         {
             get
             {
-                _desktopManager.IsWindowOnCurrentVirtualDesktop(Handle, out var iscurrent);
-                return iscurrent;
+                return _desktopManager.IsWindowOnCurrentVirtualDesktop(Handle);
             }
         }
 
@@ -152,7 +149,7 @@ namespace Clowd.PlatformUtil.Windows
             get
             {
                 List<HWND> children = new List<HWND>();
-                WNDENUMPROC childProc = (HWND hWnd, LPARAM _) =>
+                EnumWindowsProc childProc = (HWND hWnd, IntPtr _) =>
                 {
                     children.Add(hWnd);
                     return true;
@@ -184,15 +181,14 @@ namespace Clowd.PlatformUtil.Windows
 
         IEnumerable<IWindow> IWindow.Children => Children;
 
-        nint IWindow.Handle => Handle;
+        nint IWindow.Handle => (IntPtr)Handle;
 
         private void EnsureProcessId()
         {
             // this will never change and can be cached
             if (processId == 0)
             {
-                uint ppid;
-                threadId = (int)GetWindowThreadProcessId(Handle, &ppid);
+                threadId = (int)GetWindowThreadProcessId(Handle, out var ppid);
                 processId = (int)ppid;
             }
         }
@@ -227,7 +223,7 @@ namespace Clowd.PlatformUtil.Windows
         {
             // show window if minimized
             if (IsIconic(Handle))
-                ShowWindow(Handle, SHOW_WINDOW_CMD.SW_RESTORE);
+                ShowWindow(Handle, ShowWindowCommand.SW_RESTORE);
 
             SetForegroundWindow(Handle);
             SetActiveWindow(Handle);
@@ -236,23 +232,23 @@ namespace Clowd.PlatformUtil.Windows
 
         public bool Show()
         {
-            return Show(WindowShowCommand.Show);
+            return Show(ShowWindowCommand.SW_SHOW);
         }
 
         public bool Show(bool activate)
         {
-            return Show(WindowShowCommand.ShowNA);
+            return Show(ShowWindowCommand.SW_SHOWNA);
         }
 
-        public bool Show(WindowShowCommand cmd)
+        public bool Show(ShowWindowCommand cmd)
         {
-            return ShowWindow(Handle, (SHOW_WINDOW_CMD)(uint)cmd);
+            return ShowWindow(Handle, (ShowWindowCommand)(uint)cmd);
         }
 
         public bool Hide()
         {
-            SetWindowPos(Handle, HWND_BOTTOM, 0, 0, 0, 0, SET_WINDOW_POS_FLAGS.SWP_HIDEWINDOW | SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER);
-            return Show(WindowShowCommand.Hide);
+            SetWindowPos(Handle, HWND.HWND_BOTTOM, 0, 0, 0, 0, SetWindowPosFlags.SWP_HIDEWINDOW | SetWindowPosFlags.SWP_NOMOVE | SetWindowPosFlags.SWP_NOZORDER);
+            return Show(ShowWindowCommand.SW_HIDE);
         }
 
         public bool Minimize()
@@ -264,7 +260,7 @@ namespace Clowd.PlatformUtil.Windows
         public void Close()
         {
             // most reliable way I've found to close a window, could also try WM_DESTROY...
-            SendMessage(Handle, WM_CLOSE, default, default);
+            SendMessage(Handle, (uint)WindowMessage.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
         }
 
         public void KillProcess()
@@ -278,20 +274,20 @@ namespace Clowd.PlatformUtil.Windows
 
         public void SetNeverActivateStyle(bool neverActivate)
         {
-            var exs = GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+            var exs = GetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE);
 
             if (neverActivate)
-                exs |= (int)WINDOW_EX_STYLE.WS_EX_NOACTIVATE;
+                exs |= (int)WindowStylesEx.WS_EX_NOACTIVATE;
             else
-                exs &= ~(int)WINDOW_EX_STYLE.WS_EX_NOACTIVATE;
+                exs &= ~(int)WindowStylesEx.WS_EX_NOACTIVATE;
 
-            SetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, exs);
+            SetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE, exs);
         }
 
         public void DwmSetTransitionsDisabled(bool transitionsDisabled)
         {
             int disabled = transitionsDisabled ? 1 : 0;
-            DwmSetWindowAttribute(Handle, (uint)DWMWINDOWATTRIBUTE.DWMWA_TRANSITIONS_FORCEDISABLED, &disabled, sizeof(int));
+            DwmSetWindowAttribute(Handle, DWMWINDOWATTRIBUTE.DWMWA_TRANSITIONS_FORCEDISABLED, (IntPtr)(&disabled), sizeof(int));
         }
 
         public override string ToString()
@@ -299,10 +295,17 @@ namespace Clowd.PlatformUtil.Windows
             return $"Window {((nint)Handle).ToString("X8")} {{'{Caption}/{ClassName}', {WindowBounds}}}";
         }
 
-        private bool HasStyle(WINDOW_STYLE style) => (GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_STYLE) & (int)style) > 0;
-        private bool HasStyle(WINDOW_EX_STYLE style) => (GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE) & (int)style) > 0;
-        private void SetStyle(WINDOW_STYLE style, bool set) => SetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_STYLE, GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_STYLE) & ~((int)style) | (set ? ((int)style) : 0));
-        private void SetStyle(WINDOW_EX_STYLE style, bool set) => SetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, GetWindowLong(Handle, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE) & ~((int)style) | (set ? ((int)style) : 0));
+        private bool HasStyle(WindowStyles style) 
+            => (GetWindowLong(Handle, WindowLongFlags.GWL_STYLE) & (int)style) > 0;
+
+        private bool HasStyle(WindowStylesEx style) 
+            => (GetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE) & (int)style) > 0;
+
+        private void SetStyle(WindowStyles style, bool set) 
+            => SetWindowLong(Handle, WindowLongFlags.GWL_STYLE, GetWindowLong(Handle, WindowLongFlags.GWL_STYLE) & ~((int)style) | (set ? ((int)style) : 0));
+
+        private void SetStyle(WindowStylesEx style, bool set) 
+            => SetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE, GetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE) & ~((int)style) | (set ? ((int)style) : 0));
 
         public IScreen GetCurrentScreen()
         {

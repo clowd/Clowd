@@ -3,10 +3,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using CsWin32.UI.Shell;
-using CsWin32.Foundation;
-using static CsWin32.Constants;
-using static CsWin32.PInvoke;
+using Vanara.PInvoke;
+using static Vanara.PInvoke.User32;
+using static Vanara.PInvoke.SHCore;
+using static Vanara.PInvoke.Shell32;
 
 namespace Clowd.PlatformUtil.Windows
 {
@@ -14,37 +14,10 @@ namespace Clowd.PlatformUtil.Windows
     {
         private const string ERR_FNF = "The specified file or folder doesn't exist.";
 
-        private static IShellFolder GetDesktopFolder()
+        private static void SelectFolderItems(PIDL folder, IntPtr[] targets, bool edit)
         {
-            IShellFolder desktop;
-            Marshal.ThrowExceptionForHR(SHGetDesktopFolder(out desktop));
-            return desktop;
-        }
-
-        private static IShellFolder GetFolderFromPIDL(IShellFolder parent, ITEMIDLIST* pidl)
-        {
-            var guid = typeof(IShellFolder).GUID;
-            parent.BindToObject(pidl, null, &guid, out var ppv);
-            return (IShellFolder)ppv;
-
-            //void* folderPtr;
-            //parent.BindToObject(pidl, null, &guid, &folderPtr);
-            //return (IShellFolder)Marshal.GetObjectForIUnknown((IntPtr)folderPtr);
-        }
-
-        private static ITEMIDLIST* GetShellFolderChildrenRelativePIDL(IShellFolder parentFolder, string displayName)
-        {
-            uint pchEaten, pdwAttributes;
-            ITEMIDLIST* pList;
-            fixed (char* pName = displayName)
-                parentFolder.ParseDisplayName(new HWND(IntPtr.Zero), null, pName, &pchEaten, &pList, &pdwAttributes);
-            return pList;
-        }
-
-        private static void SelectFolderItems(ITEMIDLIST* folder, ITEMIDLIST*[] targets, bool edit)
-        {
-            fixed (ITEMIDLIST** pTargets = targets)
-                Marshal.ThrowExceptionForHR(SHOpenFolderAndSelectItems(folder, (uint)(targets?.Length ?? 0), pTargets, edit ? OFASI_EDIT : 0));
+            OFASI of = edit ? OFASI.OFASI_EDIT : OFASI.OFASI_NONE;
+            SHOpenFolderAndSelectItems(folder, (uint)(targets?.Length ?? 0), targets, of).ThrowIfFailed();
         }
 
         public static void SelectItems(string[] fileOrFolderPaths)
@@ -77,38 +50,20 @@ namespace Clowd.PlatformUtil.Windows
                 .GroupBy(p => Path.GetDirectoryName(p.FullName));
 
             // open one explorer window for each group
-            var desktop = GetDesktopFolder();
             foreach (var paths in explorerWindows)
             {
-                var pathArr = paths.ToArray();
-                var parentPidl = GetShellFolderChildrenRelativePIDL(desktop, paths.Key);
+                using var pidlParent = new PIDL(paths.Key);
+                var children = paths.ToArray().Select(p => new PIDL(p.FullName)).ToArray();
+
                 try
                 {
-                    var parent = GetFolderFromPIDL(desktop, parentPidl);
-                    ITEMIDLIST*[] itemArr = new ITEMIDLIST*[pathArr.Length];
-
-                    try
-                    {
-                        for (int i = 0; i < pathArr.Length; i++)
-                        {
-                            var name = pathArr[i].Name;
-                            itemArr[i] = GetShellFolderChildrenRelativePIDL(parent, name);
-                        }
-
-                        // show explorer window
-                        SelectFolderItems(parentPidl, itemArr, false);
-                    }
-                    finally
-                    {
-                        foreach (var pidl in itemArr)
-                        {
-                            ILFree(pidl);
-                        }
-                    }
+                    var childrenPtr = children.Select(p => (IntPtr)p).ToArray();
+                    SelectFolderItems(pidlParent, childrenPtr, false);
                 }
                 finally
                 {
-                    ILFree(parentPidl);
+                    foreach (var c in children)
+                        c.Dispose();
                 }
             }
         }
@@ -124,22 +79,8 @@ namespace Clowd.PlatformUtil.Windows
             if (!exists)
                 throw new ArgumentException(ERR_FNF, nameof(fullPath));
 
-            ITEMIDLIST* item = null;
-            try
-            {
-                var desktop = GetDesktopFolder();
-                item = GetShellFolderChildrenRelativePIDL(desktop, fullPath);
-                SelectFolderItems(item, null, edit);
-            }
-            catch
-            {
-                // fallback
-                Process.Start("explorer.exe", $"/select,\"{fullPath}\"");
-            }
-            finally
-            {
-                ILFree(item);
-            }
+            using var pidlParent = new PIDL(fullPath);
+            SelectFolderItems(pidlParent, null, edit);
         }
     }
 }

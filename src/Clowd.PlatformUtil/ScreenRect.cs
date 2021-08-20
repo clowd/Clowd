@@ -79,5 +79,11 @@ namespace Clowd.PlatformUtil
 
         public static explicit operator ScreenRect(System.Drawing.Rectangle rect)
           => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
+
+        public static implicit operator Vanara.PInvoke.RECT(ScreenRect rect)
+            => new Vanara.PInvoke.RECT(rect.X, rect.Y, rect.Width, rect.Height);
+
+        public static implicit operator ScreenRect(Vanara.PInvoke.RECT rect)
+          => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
     }
 }
