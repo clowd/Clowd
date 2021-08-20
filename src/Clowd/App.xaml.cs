@@ -43,6 +43,7 @@ namespace Clowd
 
         protected override async void OnStartup(StartupEventArgs e)
         {
+            DefaultLog = new DefaultScopedLog("Clowd");
             var appArgs = SquirrelUtil.Startup(e.Args);
 
             try
@@ -52,11 +53,9 @@ namespace Clowd
                 // initialize GDI+ (our native lib depends on it, but does not initialize it)
                 new System.Drawing.Region().Dispose();
 
-                DefaultLog = new DefaultScopedLog("Clowd");
                 if (!Constants.Debugging)
-                    DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
+                    SetupExceptionHandling();
 
-                SetupExceptionHandling();
                 await SetupMutex(appArgs);
                 await SetupSettings();
                 SetupDependencyInjection();
@@ -113,10 +112,10 @@ namespace Clowd
 
             void setTheme()
             {
-                ModernWpf.ThemeManager.Current.ApplicationTheme = SettingsRoot.Current.General.Theme switch
+                ThemeManager.Current.ApplicationTheme = SettingsRoot.Current.General.Theme switch
                 {
-                    AppTheme.Light => ModernWpf.ApplicationTheme.Light,
-                    AppTheme.Dark => ModernWpf.ApplicationTheme.Dark,
+                    AppTheme.Light => ApplicationTheme.Light,
+                    AppTheme.Dark => ApplicationTheme.Dark,
                     _ => null,
                 };
             }
@@ -132,71 +131,25 @@ namespace Clowd
 
         private void SetupExceptionHandling()
         {
+            DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
 
-#if false && DEBUG
-            if (Debugger.IsAttached)
-                return;
+            System.Windows.Forms.Application.ThreadException += (object sender, ThreadExceptionEventArgs e) =>
+            {
+                DefaultLog.Error("WindowsFormsApplicationThreadException", e.Exception);
+            };
 
-            Action<Exception> showError = (Exception e) => { MessageBox.Show($"Unhandled exception: {e.Message}\n{e.GetType()}\n\n{e.StackTrace}", "Unhandled exception", MessageBoxButton.OK, MessageBoxImage.Error); };
-
-            System.Windows.Forms.Application.ThreadException += (object sender, ThreadExceptionEventArgs e) => { showError(e.Exception); };
-            Application.Current.DispatcherUnhandledException += (object sender, DispatcherUnhandledExceptionEventArgs e) => { showError(e.Exception); };
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
-                if (e.ExceptionObject is Exception)
-                    showError((Exception)e.ExceptionObject);
-                else
-                    MessageBox.Show($"Unhandled exception: {e.ExceptionObject}");
-            };
-#else
-            // create event handlers for unhandled exceptions
-            //Sentry.Default.BeforeSend = (req) =>
-            //{
-            //    // here we should check if the event is Fatal, if it is, show dialog and attach user feedback to the message
-
-            //    if (!e.IsUnhandledError)
-            //        return;
-
-            //    // we want to show an error dialog, give the user a chance to add details, but we will want to 
-            //    // send the error regardless of what the users chooses to do.
-            //    if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
-            //    {
-            //        Application.Current.Dispatcher.Invoke(new Func<EventSubmittingEventArgs, bool>(ShowDialog), DispatcherPriority.Send, e);
-            //    }
-            //    else
-            //    {
-            //        ShowDialog(e);
-            //    }
-            //};
-
-            ThreadExceptionEventHandler OnApplicationThreadException = (sender, args) =>
-            {
-                DefaultLog.Error("ApplicationThreadException", args.Exception);
+                if (e.ExceptionObject is Exception ex)
+                    DefaultLog.Error("AppDomainUnhandledException", ex);
             };
 
-            DispatcherUnhandledExceptionEventHandler OnApplicationDispatcherUnhandledException = (sender, args) =>
+            Application.Current.DispatcherUnhandledException += (object sender, DispatcherUnhandledExceptionEventArgs e) =>
             {
-                DefaultLog.Error("DispatcherUnhandledException", args.Exception);
+                e.Handled = true;
+                DefaultLog.Error("DispatcherUnhandledException", e.Exception);
+                NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Exception.ToString(), "An unhandled error has occurred.");
             };
-
-            try
-            {
-                System.Windows.Forms.Application.ThreadException += OnApplicationThreadException;
-            }
-            catch (Exception ex)
-            {
-                DefaultLog.Error(ex);
-            }
-
-            try
-            {
-                Application.Current.DispatcherUnhandledException += OnApplicationDispatcherUnhandledException;
-            }
-            catch (Exception ex)
-            {
-                DefaultLog.Error(ex);
-            }
-#endif
         }
 
         private async Task SetupMutex(string[] args)
