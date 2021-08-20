@@ -14,8 +14,11 @@ namespace Clowd.UI.Converters
                 if (time.Date == DateTime.UtcNow.Date)
                     return "Today";
 
-                if (time.AddDays(1).Date == DateTime.UtcNow.Date)
+                if (time.Date == DateTime.UtcNow.Date.AddDays(-1))
                     return "Yesterday";
+
+                if (time.Date >= DateTime.UtcNow.Date.AddDays(-7))
+                    return "This week";
 
                 if (time == default)
                     return "Unknown";
