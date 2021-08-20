@@ -5,13 +5,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="clowdaot.exe" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="clowdaot.exe">
+    <Content Include="clowdaot.exe">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </EmbeddedResource>
+    </Content>
   </ItemGroup>
 
 </Project>

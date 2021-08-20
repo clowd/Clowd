@@ -53,8 +53,6 @@ namespace Clowd.Aot
   Monitor parent process, and kill any children if the parent exits
     watch <parentPid> <childPid> [otherChildPid...]
     
-  Attempts to connect to named-pipe server to recieve update instructions
-    runipc
 ");
         }
     }
