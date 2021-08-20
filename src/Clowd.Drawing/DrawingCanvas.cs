@@ -114,7 +114,6 @@ namespace Clowd.Drawing
             undoManager = new UndoManager(this);
             undoManager.StateChanged += new EventHandler(undoManager_StateChanged);
 
-
             this.FocusVisualStyle = null;
 
             this.Loaded += new RoutedEventHandler(DrawingCanvas_Loaded);
@@ -140,6 +139,9 @@ namespace Clowd.Drawing
             _artworkRectangle.SetBinding(Border.BackgroundProperty, binding);
 
             Children.Add(_artworkRectangle);
+
+            SnapsToDevicePixels = false;
+            UseLayoutRounding = false;
         }
 
 
@@ -1335,13 +1337,10 @@ namespace Clowd.Drawing
             }
             else if (e.ChangedButton == MouseButton.Right)
             {
-                if (tools[(int)Tool] is ToolPointer pointer && pointer.Selection != ToolPointer.SelectionMode.None)
-                {
-                    // fake a mouse up for left mouse button if user is in the middle of an operation
-                    var newArgs = new MouseButtonEventArgs(e.MouseDevice, e.Timestamp, MouseButton.Left, e.StylusDevice);
-                    DrawingCanvas_MouseUp(sender, newArgs);
-                }
-
+                // fake a mouse up for left mouse button if user is in the middle of an operation
+                var newArgs = new MouseButtonEventArgs(e.MouseDevice, e.Timestamp, MouseButton.Left, e.StylusDevice);
+                DrawingCanvas_MouseUp(sender, newArgs);
+                Tool = ToolType.Pointer;
                 ShowContextMenu(e);
             }
         }
@@ -1399,7 +1398,6 @@ namespace Clowd.Drawing
             if (e.ChangedButton == MouseButton.Left)
             {
                 tools[(int)Tool].OnMouseUp(this, e);
-
                 UpdateState();
             }
         }
@@ -1538,10 +1536,12 @@ namespace Clowd.Drawing
         /// </summary>
         void CreateContextMenu()
         {
-            MenuItem menuItem;
-
             contextMenu = new ContextMenu();
             contextMenu.PlacementTarget = this;
+            contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            this.ContextMenu = contextMenu;
+
+            MenuItem menuItem;
 
             menuItem = new MenuItem();
             menuItem.Header = "Select all";
@@ -1630,50 +1630,28 @@ namespace Clowd.Drawing
 
         }
 
-        /// <summary>
-        /// Show context menu.
-        /// </summary>
         void ShowContextMenu(MouseButtonEventArgs e)
         {
             // Change current selection if necessary
-
             Point point = e.GetPosition(this);
-
-            GraphicBase o = null;
-
-            for (int i = graphicsList.Count - 1; i >= 0; i--)
-            {
-                if (((GraphicBase)graphicsList[i]).MakeHitTest(point) == 0)
-                {
-                    o = (GraphicBase)graphicsList[i];
-                    break;
-                }
-            }
-
-            if (o != null)
-            {
-                if (!o.IsSelected)
-                {
-                    UnselectAll();
-                }
-
-                // Select clicked object
-                o.IsSelected = true;
-            }
-            else
+            var hitObject = GraphicsList.FirstOrDefault(g => g.MakeHitTest(point) >= 0);
+            if (hitObject == null)
             {
                 UnselectAll();
             }
+            else if (!hitObject.IsSelected)
+            {
+                UnselectAll();
+                hitObject.IsSelected = true;
+            }
 
+            // we must update the state as we may have changed the selection
             UpdateState();
 
-            MenuItem item;
-
-            /// Enable/disable menu items.
+            // Enable/disable menu items according to state.
             foreach (object obj in contextMenu.Items)
             {
-                item = obj as MenuItem;
-
+                MenuItem item = obj as MenuItem;
                 if (item != null && item.Tag is ContextMenuCommand command)
                 {
                     switch (command)
@@ -1708,8 +1686,6 @@ namespace Clowd.Drawing
                     }
                 }
             }
-
-            contextMenu.IsOpen = true;
         }
 
         /// <summary>
