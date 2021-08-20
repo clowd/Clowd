@@ -47,7 +47,7 @@ namespace Clowd.Video
                 if (!File.Exists(Path.Combine(libraryPath, "obs-express.exe")))
                     throw new ArgumentException("OBS does not exist at the path: " + libraryPath);
 
-                if (!File.Exists(Path.Combine(_libraryPath, "lib", "obs64.exe")))
+                if (!File.Exists(Path.Combine(libraryPath, "lib", "obs64.exe")))
                     throw new ArgumentException("OBS does not exist at the path: " + libraryPath);
             }
             catch
