@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Globalization;
+using System.Linq;
 using System.Windows.Input;
 using RT.Serialization;
 
@@ -63,7 +64,8 @@ namespace Clowd.Config
                 }
                 strBinding += strKey;
             }
-            return strBinding;
+
+            return String.Join("+", strBinding.Split('+', ',').Select(c => c.Trim()));
         }
     }
 
@@ -200,6 +202,7 @@ namespace Clowd.Config
             _hotKey?.Dispose();
             IsRegistered = false;
             TriggerExecuted = null;
+            Error = "Disposed";
         }
 
         public override string ToString()
