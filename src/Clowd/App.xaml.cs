@@ -73,15 +73,18 @@ namespace Clowd
             {
                 DefaultLog.Error(ex);
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.ToString(), "Error starting Clowd. The program will now exit.");
-                Environment.Exit(1);
+                ExitApp();
             }
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
-            _processor.Dispose();
-            _taskbarIcon.Dispose();
-            base.OnExit(e);
+            ExitApp();
+        }
+
+        protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+        {
+            ExitApp();
         }
 
         private async Task SetupSettings()
@@ -300,19 +303,16 @@ namespace Clowd
                         {
                             if (dialog.IsVerificationChecked == true)
                                 SettingsRoot.Current.General.ConfirmClose = false;
-                            SettingsRoot.Current.Save();
-                            Application.Current.Shutdown();
+                            ExitApp();
                         }
                     }
                 }
                 else
                 {
-                    SettingsRoot.Current.Save();
-                    Application.Current.Shutdown();
+                    ExitApp();
                 }
             };
             context.Items.Add(exit);
-
             _taskbarIcon.ContextMenu = context;
         }
 
@@ -357,6 +357,13 @@ namespace Clowd
                 var collection = data.GetFileDropList();
                 OnFilesReceived(collection);
             }
+        }
+
+        public void ExitApp()
+        {
+            try { SettingsRoot.Current.Save(); } catch { }
+            try { _taskbarIcon.Dispose(); } catch { }
+            Environment.Exit(0);
         }
 
         private async void OnFilesReceived(string[] filePaths)
