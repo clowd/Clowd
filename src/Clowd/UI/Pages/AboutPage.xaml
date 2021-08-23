@@ -28,7 +28,11 @@
         </TextBlock>
         <TextBlock Style="{StaticResource BodyTextBlockStyle}">
             From quick but powerful pixel-perfect screen selection and extremely fast 1-button screen recording, to editing/composing images and uploading to share.
-            Just hit [PrntScr] and see what I can do!
+        </TextBlock>
+
+        <TextBlock Style="{StaticResource BodyTextBlockStyle}">
+            My settings (this window) can be accessed from the tray icon.
+            Press the [PrntScr] key and explore to see what I can do!
         </TextBlock>
 
         <ui:HyperlinkButton Click="OnClowdUrlClick" Content="Read more online" />

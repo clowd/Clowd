@@ -273,11 +273,7 @@ namespace Clowd
             var settings = new MenuItem() { Header = "_Settings" };
             settings.Click += (s, e) =>
             {
-                var main = Windows.Cast<Window>().Select(w => w as MainWindow).Where(w => w != null).FirstOrDefault();
-                if (main != null)
-                    main.PlatformWindow.Activate();
-                else
-                    new MainWindow().Show();
+                UI.MainWindow.ShowWindow();
             };
             context.Items.Add(settings);
 
