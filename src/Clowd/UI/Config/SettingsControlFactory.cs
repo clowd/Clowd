@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -100,7 +101,7 @@ namespace Clowd.UI.Config
                     });
                     btn.Margin = new Thickness(10, 0, 0, 0);
                     btn.VerticalAlignment = VerticalAlignment.Center;
-                    return DockBinding(txt, btn, Dock.Right);
+                    return DockCtrl(txt, btn, Dock.Right);
                 }
                 else
                 {
@@ -153,6 +154,17 @@ namespace Clowd.UI.Config
                 });
             }
 
+            if (pd.Is(typeof(TimeOption)))
+            {
+                // TODO, make this easier to do.
+                var child = new SettingsControlFactory(wnd, pd.GetValue(obj));
+                var pdNum = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Number));
+                var pdUnit = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Unit));
+                var ctNum = child.SimpleControlBinding(new TextBox(), pdNum, TextBox.TextProperty);
+                var ctUnit = child.ComboSelectBinding(() => Enum.GetValues(pdUnit.PropertyType), pdUnit, null, false);
+                return StackCtrl(ctNum, ctUnit);
+            }
+
             //if (pd.Is(typeof(Setup.Features.IFeature)))
             //    return new FeatureInstallerControl((Setup.Features.IFeature)pd.GetValue(obj));
 
@@ -202,7 +214,20 @@ namespace Clowd.UI.Config
             return binding;
         }
 
-        FrameworkElement DockBinding(FrameworkElement fill, FrameworkElement dock, Dock position)
+        FrameworkElement StackCtrl(params FrameworkElement[] children)
+        {
+            var panel = new SimpleStackPanel();
+            panel.Spacing = 10;
+            panel.Orientation = Orientation.Horizontal;
+            panel.VerticalAlignment = VerticalAlignment.Stretch;
+            panel.HorizontalAlignment = HorizontalAlignment.Stretch;
+            foreach (var c in children)
+                panel.Children.Add(c);
+
+            return panel;
+        }
+
+        FrameworkElement DockCtrl(FrameworkElement fill, FrameworkElement dock, Dock position)
         {
             var panel = new DockPanel();
             panel.VerticalAlignment = VerticalAlignment.Stretch;
@@ -227,6 +252,7 @@ namespace Clowd.UI.Config
             var combo = new ComboBox();
             combo.DisplayMemberPath = displayPath;
             combo.ItemsSource = items();
+            combo.MinWidth = 160;
             combo.DropDownOpened += (s, e) => { combo.ItemsSource = items(); };
             //combo.SelectionChanged += (s, e) => { App.Current?.Settings?.SaveQuiet(); };
             combo.SetBinding(ComboBox.SelectedItemProperty, bind);

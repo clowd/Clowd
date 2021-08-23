@@ -123,10 +123,17 @@ namespace Clowd
                 set => Set(ref _tools, value);
             }
 
+            public TimeOption DeleteSessionsAfter
+            {
+                get => _deleteSessionsAfter;
+                set => Set(ref _deleteSessionsAfter, value);
+            }
+
             private Color _canvasBackground = Colors.White;
             private bool _tabsEnabled = true;
             private bool _askBeforeClosingMultipleTabs = true;
             private int _startupPadding = 30;
+            private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
             private AutoDictionary<ToolType, SavedToolSettings> _tools = new AutoDictionary<ToolType, SavedToolSettings>();
 
             public SettingsEditor()
