@@ -28,6 +28,7 @@ namespace Clowd.UI.Config
         public FrameworkElement GetSettingsPanel()
         {
             var scroll = new ScrollViewerEx();
+            scroll.Padding = new Thickness(24, 0, 24, 24);
 
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(0, GridUnitType.Auto) });
