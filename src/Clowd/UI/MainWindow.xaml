@@ -75,17 +75,14 @@
                 Icon="OutlineStar"
                 Tag="{x:Static local:MainWindowPage.About}" />
         </ui:NavigationView.FooterMenuItems>
-        <ui:ScrollViewerEx>
-            <ui:Frame
-                x:Name="ContentFrame"
-                Padding="24,0,24,24"
-                HorizontalAlignment="Stretch">
-                <ui:Frame.ContentTransitions>
-                    <ui:TransitionCollection>
-                        <ui:NavigationThemeTransition />
-                    </ui:TransitionCollection>
-                </ui:Frame.ContentTransitions>
-            </ui:Frame>
-        </ui:ScrollViewerEx>
+        <!--<ui:ScrollViewerEx Padding="24,0,24,24">-->
+        <ui:Frame x:Name="ContentFrame" HorizontalAlignment="Stretch">
+            <ui:Frame.ContentTransitions>
+                <ui:TransitionCollection>
+                    <ui:NavigationThemeTransition />
+                </ui:TransitionCollection>
+            </ui:Frame.ContentTransitions>
+        </ui:Frame>
+        <!--</ui:ScrollViewerEx>-->
     </ui:NavigationView>
 </local:SystemThemedWindow>

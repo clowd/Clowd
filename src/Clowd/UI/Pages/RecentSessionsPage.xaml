@@ -31,7 +31,7 @@
         </Grid.RowDefinitions>
         <ListView
             x:Name="listView"
-            Margin="0,0,0,0"
+            Margin="12,0,0,0"
             ItemsSource="{Binding Source={StaticResource viewSource}}"
             MouseDoubleClick="ViewDoubleClick"
             VirtualizingPanel.IsVirtualizingWhenGrouping="True"
