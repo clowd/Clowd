@@ -115,7 +115,7 @@ namespace Clowd.Video
 
         public static bool operator ==(NAudioDevice d1, NAudioDevice d2) => d1.Equals(d2);
 
-        public static bool operator !=(NAudioDevice d1, NAudioDevice d2) => d1.Equals(d2);
+        public static bool operator !=(NAudioDevice d1, NAudioDevice d2) => !d1.Equals(d2);
 
         public override bool Equals(object obj)
         {
