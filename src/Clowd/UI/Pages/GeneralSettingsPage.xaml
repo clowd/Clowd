@@ -24,28 +24,30 @@
             <Setter Property="Margin" Value="0,8,0,8" />
         </Style>
     </Page.Resources>
-    <ui:SimpleStackPanel>
-        <GroupBox x:Name="grpUpdates" Header="Updates">
-            <StackPanel>
-                <TextBlock Style="{StaticResource BodyTextBlockStyle}" Text="{Binding Description}" />
-                <Button Command="{Binding ClickCommand}" Content="{Binding ClickCommandText}" />
-            </StackPanel>
-        </GroupBox>
-        <GroupBox x:Name="grpBehavior" Header="Behavior">
-            <StackPanel>
-                <TextBlock Text="App color scheme" />
-                <ComboBox x:Name="comboTheme" SelectedValue="{Binding Theme}" />
-                <TextBlock Text="Ask/confirm before exiting" />
-                <ui:ToggleSwitch IsOn="{Binding ConfirmClose}" />
-            </StackPanel>
-        </GroupBox>
-        <GroupBox x:Name="grpShell" Header="Shell">
-            <StackPanel>
-                <TextBlock Text="Add context menu to Explorer" />
-                <ui:ToggleSwitch IsOn="{Binding ContextMenuRegistered}" />
-                <TextBlock Text="Start Clowd with Windows" />
-                <ui:ToggleSwitch IsOn="{Binding AutoRunRegistered}" />
-            </StackPanel>
-        </GroupBox>
-    </ui:SimpleStackPanel>
+    <ui:ScrollViewerEx Padding="24,0,24,24">
+        <ui:SimpleStackPanel>
+            <GroupBox x:Name="grpUpdates" Header="Updates">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource BodyTextBlockStyle}" Text="{Binding Description}" />
+                    <Button Command="{Binding ClickCommand}" Content="{Binding ClickCommandText}" />
+                </StackPanel>
+            </GroupBox>
+            <GroupBox x:Name="grpBehavior" Header="Behavior">
+                <StackPanel>
+                    <TextBlock Text="App color scheme" />
+                    <ComboBox x:Name="comboTheme" SelectedValue="{Binding Theme}" />
+                    <TextBlock Text="Ask/confirm before exiting" />
+                    <ui:ToggleSwitch IsOn="{Binding ConfirmClose}" />
+                </StackPanel>
+            </GroupBox>
+            <GroupBox x:Name="grpShell" Header="Shell">
+                <StackPanel>
+                    <TextBlock Text="Add context menu to Explorer" />
+                    <ui:ToggleSwitch IsOn="{Binding ContextMenuRegistered}" />
+                    <TextBlock Text="Start Clowd with Windows" />
+                    <ui:ToggleSwitch IsOn="{Binding AutoRunRegistered}" />
+                </StackPanel>
+            </GroupBox>
+        </ui:SimpleStackPanel>
+    </ui:ScrollViewerEx>
 </Page>
