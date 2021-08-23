@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -78,6 +78,8 @@ namespace Clowd
                 _srv.ExplorerDirectoryMenu = menu;
             if (_srv.AutoStartLaunchPath != null)
                 _srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
+
+            MessageBox.Show("thanks for updating clowd");
         }
 
         private static void OnUninstall(Version obj)
