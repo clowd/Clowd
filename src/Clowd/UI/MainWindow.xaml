@@ -32,48 +32,48 @@
                 Content="New"
                 Icon="Add"
                 IsEnabled="False"
-                Tag="NewItemPage" />
+                Tag="{x:Static local:MainWindowPage.NewItem}" />
             <ui:NavigationViewItem
                 Content="Recent"
                 Icon="BrowsePhotos"
                 IsSelected="True"
-                Tag="RecentSessionsPage" />
+                Tag="{x:Static local:MainWindowPage.RecentSessions}" />
             <ui:NavigationViewItem
                 Content="Uploads"
                 Icon="Upload"
                 IsEnabled="False"
-                Tag="UploadsPage" />
+                Tag="{x:Static local:MainWindowPage.Uploads}" />
             <ui:NavigationViewItemHeader Content="Settings" />
             <ui:NavigationViewItem
                 Content="General"
                 Icon="Setting"
-                Tag="GeneralSettings" />
+                Tag="{x:Static local:MainWindowPage.SettingsGeneral}" />
             <ui:NavigationViewItem
                 Content="Hotkeys"
                 Icon="Keyboard"
-                Tag="Hotkeys" />
+                Tag="{x:Static local:MainWindowPage.SettingsHotkeys}" />
             <ui:NavigationViewItem
                 Content="Capture"
                 Icon="Camera"
-                Tag="Capture" />
+                Tag="{x:Static local:MainWindowPage.SettingsCapture}" />
             <ui:NavigationViewItem
                 Content="Editor"
                 Icon="Edit"
-                Tag="Editor" />
+                Tag="{x:Static local:MainWindowPage.SettingsEditor}" />
             <ui:NavigationViewItem
                 Content="Uploads"
                 Icon="Globe"
-                Tag="Uploads" />
+                Tag="{x:Static local:MainWindowPage.SettingsUploads}" />
             <ui:NavigationViewItem
                 Content="Video"
                 Icon="Video"
-                Tag="Video" />
+                Tag="{x:Static local:MainWindowPage.SettingsVideo}" />
         </ui:NavigationView.MenuItems>
         <ui:NavigationView.FooterMenuItems>
             <ui:NavigationViewItem
                 Content="About"
                 Icon="OutlineStar"
-                Tag="AboutPage" />
+                Tag="{x:Static local:MainWindowPage.About}" />
         </ui:NavigationView.FooterMenuItems>
         <ui:ScrollViewerEx>
             <ui:Frame

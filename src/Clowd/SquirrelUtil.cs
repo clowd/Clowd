@@ -91,7 +91,7 @@ namespace Clowd
 
         private static void OnFirstRun()
         {
-            MessageBox.Show("Thanks for installing clowd, it is running in the system tray!");
+            UI.MainWindow.ShowWindow(UI.MainWindowPage.About);
         }
 
         private class SquirrelUpdateViewModelInst : SquirrelUpdateViewModel
