@@ -10,21 +10,26 @@
     <NoWarn>CS4014,CA1416</NoWarn>
     <ApplicationIcon>Images\default.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <OutputPath>..\..\bin\net5\$(Configuration)</OutputPath>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <OutputPath>..\..\bin\x64\Debug\</OutputPath>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <DebugType>none</DebugType>
-    <OutputPath>..\..\bin\x64\Release\</OutputPath>
   </PropertyGroup>
-  <ItemGroup>
-    <None Remove="UI\Dialogs\ColorPicker\ColorPicker.png" />
-    <None Remove="UI\Dialogs\ColorPicker\Hsv.png" />
-  </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\Raleway.ttf" />
-    <AppDesigner Include="Properties\" />
+    <Resource Include="Images\Checkmark-26.png" />
+    <Resource Include="Images\Clowd-250.png" />
+    <Resource Include="Images\Help-64.png" />
+    <Resource Include="Images\Visible-24.png" />
+    <Resource Include="Images\Settings-32.png" />
+    <Resource Include="Images\Help-25.png" />
+    <Resource Include="Images\Cross-26.png" />
+    <Resource Include="Images\default-white.ico" />
+    <Resource Include="Images\default.ico" />
+    <Resource Include="Images\cancel_24px.png" />
+    <Resource Include="Images\ok_48px.png" />
+    <Resource Include="UI\Dialogs\ColorPicker\ColorPicker.png" />
+    <Resource Include="UI\Dialogs\ColorPicker\Hsv.png" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\modules\Clowd.Squirrel\src\Squirrel\Squirrel.csproj" />
@@ -38,21 +43,6 @@
     <ProjectReference Include="..\..\third-party\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Images\Checkmark-26.png" />
-    <Resource Include="Images\Clowd-250.png" />
-    <Resource Include="Images\Help-64.png" />
-    <Resource Include="Images\Visible-24.png" />
-    <Resource Include="Images\Settings-32.png" />
-    <Resource Include="Images\Help-25.png" />
-    <Resource Include="Images\Cross-26.png" />
-    <Resource Include="UI\Dialogs\ColorPicker\ColorPicker.png" />
-    <Resource Include="UI\Dialogs\ColorPicker\Hsv.png" />
-    <Resource Include="Images\default-white.ico" />
-    <Resource Include="Images\default.ico" />
-    <Resource Include="Images\cancel_24px.png" />
-    <Resource Include="Images\ok_48px.png" />
-  </ItemGroup>
-  <ItemGroup>
     <PackageReference Include="DotNetZip" Version="1.15.0" />
     <PackageReference Include="Dragablz" Version="0.0.3.223" />
     <PackageReference Include="Fody" Version="6.5.2">
@@ -61,7 +51,6 @@
     </PackageReference>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
     <PackageReference Include="LightInject" Version="6.4.0" />
-    <PackageReference Include="Microsoft.VisualBasic" Version="10.4.0-preview.18571.3" />
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.31" />
     <PackageReference Include="ModernWpfUI" Version="0.9.4" />
     <PackageReference Include="PropertyChanged.Fody" Version="3.4.0" PrivateAssets="all" />
