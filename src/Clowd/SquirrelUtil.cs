@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -223,7 +223,8 @@ namespace Clowd
                 {
                     using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
                     var newAppPath = Path.Combine(mgr.RootAppDirectory, "app-" + _newVersion.Version.ToString(), "Clowd.exe");
-                    UpdateManager.RestartApp(newAppPath);
+                    await UpdateManager.RestartAppWhenExited(newAppPath);
+                    App.Current.ExitApp();
                 }
             }
 
