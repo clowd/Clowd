@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Windows.Media.Imaging;
+using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI;
 using Clowd.UI.Helpers;
@@ -101,6 +102,7 @@ namespace Clowd
         }
 
         private FileSystemWatcher _fsw;
+        private IDisposable _cleanupTimer;
 
         public SessionManager()
         {
@@ -117,6 +119,20 @@ namespace Clowd
             _fsw.EnableRaisingEvents = true;
             _fsw.Created += new FileSystemEventHandler(SynchronizationContextEventHandler.CreateDelegate<FileSystemEventArgs>(OnCreated));
             _fsw.Deleted += new FileSystemEventHandler(SynchronizationContextEventHandler.CreateDelegate<FileSystemEventArgs>(OnDeleted));
+
+            OnCleanUpTimerTick();
+            _cleanupTimer = DisposableTimer.Start(TimeSpan.FromDays(1), OnCleanUpTimerTick);
+        }
+
+        private void OnCleanUpTimerTick()
+        {
+            var deleteSessionsAfter = SettingsRoot.Current.Editor.DeleteSessionsAfter.ToTimeSpan();
+            foreach(var s in Sessions.ToArray())
+            {
+                var sAge = DateTime.UtcNow - s.LastModifiedUtc;
+                if (sAge > deleteSessionsAfter && s.ActiveWindowId == null)
+                    DeleteSession(s);
+            }    
         }
 
         ~SessionManager()
