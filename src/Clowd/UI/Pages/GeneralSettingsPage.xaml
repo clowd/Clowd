@@ -14,7 +14,7 @@
     <Page.Resources>
         <Style BasedOn="{StaticResource BodyTextBlockStyle}" TargetType="TextBlock" />
         <Style BasedOn="{StaticResource {x:Type ComboBox}}" TargetType="ComboBox">
-            <Setter Property="MinWidth" Value="180" />
+            <Setter Property="MinWidth" Value="160" />
             <Setter Property="Margin" Value="0,8,0,12" />
         </Style>
         <Style BasedOn="{StaticResource {x:Type ui:ToggleSwitch}}" TargetType="ui:ToggleSwitch">

@@ -12,7 +12,7 @@ namespace Clowd.Util
     [DoNotNotify]
     public class FileSyncObject : INotifyPropertyChanged, IDisposable
     {
-        public DateTime LastModifiedUtc { get; private set; }
+        public DateTime LastModifiedUtc { get; set; }
 
         [JsonIgnore]
         public string FilePath { get; }
