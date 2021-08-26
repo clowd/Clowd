@@ -57,27 +57,27 @@ namespace Clowd.Drawing
             _tools[(int)ToolType.Pointer] = ToolPointer;
 
             _tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
-                new Cursor(new MemoryStream(Properties.Resources.Rectangle)),
+                Resource.CursorRectangle,
                 point => new GraphicRectangle(this, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
             _tools[(int)ToolType.FilledRectangle] = new ToolDraggable<GraphicFilledRectangle>(
-                new Cursor(new MemoryStream(Properties.Resources.Rectangle)),
+                Resource.CursorRectangle,
                 point => new GraphicFilledRectangle(this, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
             _tools[(int)ToolType.Ellipse] = new ToolDraggable<GraphicEllipse>(
-                new Cursor(new MemoryStream(Properties.Resources.Ellipse)),
+                Resource.CursorEllipse,
                 point => new GraphicEllipse(this, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
             _tools[(int)ToolType.Line] = new ToolDraggable<GraphicLine>(
-                new Cursor(new MemoryStream(Properties.Resources.Line)),
+                Resource.CursorLine,
                 point => new GraphicLine(this, point, point),
                 (point, g) => g.MoveHandleTo(point, 2));
 
             _tools[(int)ToolType.Arrow] = new ToolDraggable<GraphicArrow>(
-                new Cursor(new MemoryStream(Properties.Resources.Arrow)),
+                Resource.CursorArrow,
                 point => new GraphicArrow(this, point, point),
                 (point, g) => g.MoveHandleTo(point, 2));
 

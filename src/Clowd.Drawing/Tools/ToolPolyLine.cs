@@ -12,7 +12,7 @@ namespace Clowd.Drawing.Tools
 
         private GraphicPolyLine newPolyLine;
 
-        public ToolPolyLine() : base(new Cursor(new MemoryStream(Properties.Resources.Pencil)))
+        public ToolPolyLine() : base(Resource.CursorPencil)
         {
         }
 

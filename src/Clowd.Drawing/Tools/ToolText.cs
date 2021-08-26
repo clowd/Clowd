@@ -19,8 +19,7 @@ namespace Clowd.Drawing.Tools
         GraphicText editedGraphicsText;
         DrawingCanvas drawingCanvas;
 
-        public ToolText(DrawingCanvas drawingCanvas)
-            : base(new Cursor(new MemoryStream(Properties.Resources.Text)))
+        public ToolText(DrawingCanvas drawingCanvas) : base(Resource.CursorText)
         {
             this.drawingCanvas = drawingCanvas;
         }
