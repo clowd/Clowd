@@ -1,11 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using Clowd.Drawing.Commands;
-
-/// Undo-Redo code is written using the article:
-/// http://www.codeproject.com/cs/design/commandpatterndemo.asp
-//  The Command Pattern and MVC Architecture
-//  By David Veeneman.
 
 namespace Clowd.Drawing
 {
@@ -16,7 +10,7 @@ namespace Clowd.Drawing
         public event EventHandler StateChanged;
 
         private readonly DrawingCanvas _drawingCanvas;
-        private List<CommandBase> _historyList;
+        private List<byte[]> _historyList;
         private int _nextUndo;
 
         public UndoManager(DrawingCanvas drawingCanvas)
@@ -27,37 +21,56 @@ namespace Clowd.Drawing
 
         public void ClearHistory()
         {
-            _historyList = new List<CommandBase>();
+            _historyList = new List<byte[]>();
             _nextUndo = -1;
-
-
             RaiseStateChangedEvent();
         }
-        public void AddCommandToHistory(CommandBase command)
+
+        public void AddCommandStep()
         {
             this.TrimHistoryList();
-            _historyList.Add(command);
+            var state = _drawingCanvas.GraphicsList.Serialize();
+            _historyList.Add(state);
             _nextUndo++;
             RaiseStateChangedEvent();
         }
+
         public void Undo()
         {
             if (!CanUndo)
                 return;
 
-            CommandBase command = _historyList[_nextUndo];
-            command.Undo(_drawingCanvas);
+            var nextState = _historyList[_nextUndo];
+            var nextGraphics = new GraphicCollection(_drawingCanvas);
+            nextGraphics.DeserializeObjectsInto(nextState);
+
+            // replace the current graphic set with the one from history
+            var old = _drawingCanvas.GraphicsList;
+            _drawingCanvas.GraphicsList = nextGraphics;
+            _drawingCanvas.InvalidateVisual();
+            old.Clear();
+
             _nextUndo--;
             RaiseStateChangedEvent();
         }
+
         public void Redo()
         {
             if (!CanRedo)
                 return;
 
             int itemToRedo = _nextUndo + 1;
-            CommandBase command = _historyList[itemToRedo];
-            command.Redo(_drawingCanvas);
+
+            var nextState = _historyList[itemToRedo];
+            var nextGraphics = new GraphicCollection(_drawingCanvas);
+            nextGraphics.DeserializeObjectsInto(nextState);
+
+            // replace the current graphic set with the one from history
+            var old = _drawingCanvas.GraphicsList;
+            _drawingCanvas.GraphicsList = nextGraphics;
+            _drawingCanvas.InvalidateVisual();
+            old.Clear();
+
             _nextUndo++;
             RaiseStateChangedEvent();
         }
@@ -78,6 +91,7 @@ namespace Clowd.Drawing
             for (int i = _historyList.Count - 1; i > _nextUndo; i--)
                 _historyList.RemoveAt(i);
         }
+
         private void RaiseStateChangedEvent()
         {
             StateChanged?.Invoke(this, EventArgs.Empty);

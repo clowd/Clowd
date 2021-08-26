@@ -4,19 +4,9 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
-    [Serializable]
     public class GraphicEllipse : GraphicRectangle
     {
         protected GraphicEllipse()
-        {
-        }
-        public GraphicEllipse(DrawingCanvas canvas, Rect rect)
-            : base(canvas, rect)
-        {
-        }
-
-        public GraphicEllipse(DrawingCanvas canvas, Rect rect, bool filled)
-            : base(canvas, rect, filled)
         {
         }
 
@@ -32,9 +22,6 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawRectangle(DrawingContext drawingContext)
         {
-            if (drawingContext == null)
-                throw new ArgumentNullException(nameof(drawingContext));
-
             Point center = new Point((Left + Right) / 2.0, (Top + Bottom) / 2.0);
             double radiusX = (Right - Left) / 2.0 - LineWidth / 2;
             double radiusY = (Bottom - Top) / 2.0 - LineWidth / 2;
@@ -74,11 +61,6 @@ namespace Clowd.Drawing.Graphics
 
             EllipseGeometry g = new EllipseGeometry(UnrotatedBounds);
             return g.FillContains(point) || g.StrokeContains(new Pen(Brushes.Black, LineWidth), point);
-        }
-
-        public override GraphicBase Clone()
-        {
-            return new GraphicEllipse(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
         }
     }
 }

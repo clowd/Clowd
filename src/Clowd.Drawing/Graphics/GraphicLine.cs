@@ -5,29 +5,19 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
-    [Serializable]
     public class GraphicLine : GraphicBase
     {
         public Point LineStart
         {
-            get { return _lineStart; }
-            set
-            {
-                if (value.Equals(_lineStart)) return;
-                _lineStart = value;
-                OnPropertyChanged(nameof(LineStart));
-            }
+            get => _lineStart;
+            set => Set(ref _lineStart, value);
+           
         }
 
         public Point LineEnd
         {
-            get { return _lineEnd; }
-            set
-            {
-                if (value.Equals(_lineEnd)) return;
-                _lineEnd = value;
-                OnPropertyChanged(nameof(LineEnd));
-            }
+            get => _lineEnd;
+            set => Set(ref _lineEnd, value);
         }
 
         private Point _lineStart;
@@ -36,11 +26,7 @@ namespace Clowd.Drawing.Graphics
         protected GraphicLine()
         {
         }
-        public GraphicLine(DrawingCanvas canvas, Point start, Point end) : base(canvas)
-        {
-            _lineStart = start;
-            _lineEnd = end;
-        }
+        
         public GraphicLine(Color objectColor, double lineWidth, Point start, Point end)
             : base(objectColor, lineWidth)
         {
@@ -55,32 +41,21 @@ namespace Clowd.Drawing.Graphics
         internal override bool Contains(Point point)
         {
             LineGeometry g = new LineGeometry(LineStart, LineEnd);
-            return g.StrokeContains(new Pen(Brushes.Black, LineHitTestWidth), point);
+            return g.StrokeContains(new Pen(Brushes.Black, Math.Max(LineWidth, 8)), point);
         }
+
         internal override Point GetHandle(int handleNumber)
         {
             return handleNumber == 1 ? LineStart : LineEnd;
         }
-        internal override int MakeHitTest(Point point)
-        {
-            if (IsSelected)
-            {
-                for (int i = 1; i <= HandleCount; i++)
-                {
-                    if (GetHandleRectangle(i).Contains(point))
-                        return i;
-                }
-            }
-            if (Contains(point))
-                return 0;
-            return -1;
-        }
+
         internal override void Move(double deltaX, double deltaY)
         {
             _lineStart = new Point(LineStart.X + deltaX, LineStart.Y + deltaY);
             _lineEnd = new Point(LineEnd.X + deltaX, LineEnd.Y + deltaY);
             OnPropertyChanged();
         }
+
         internal override void MoveHandleTo(Point point, int handleNumber)
         {
             if (handleNumber == 1)
@@ -88,26 +63,18 @@ namespace Clowd.Drawing.Graphics
             else
                 LineEnd = point;
         }
-        internal override Cursor GetHandleCursor(int handleNumber)
-        {
-            return Cursors.SizeAll;
-        }
-        internal override void Draw(DrawingContext drawingContext)
-        {
-            if (drawingContext == null)
-                throw new ArgumentNullException(nameof(drawingContext));
 
-            drawingContext.DrawGeometry(new SolidColorBrush(ObjectColor), null, GetLineGeometry());
-            base.Draw(drawingContext);
+        internal override Cursor GetHandleCursor(int handleNumber) => Cursors.SizeAll;
+
+        internal override void DrawObject(DrawingContext ctx)
+        {
+            ctx.DrawGeometry(new SolidColorBrush(ObjectColor), null, GetLineGeometry());
         }
+
         protected virtual Geometry GetLineGeometry()
         {
             var line = new LineGeometry(_lineStart, _lineEnd);
             return line.GetWidenedPathGeometry(new Pen(null, LineWidth));
-        }
-        public override GraphicBase Clone()
-        {
-            return new GraphicLine(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
         }
     }
 }

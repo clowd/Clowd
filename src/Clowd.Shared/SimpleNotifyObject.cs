@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
@@ -10,7 +11,7 @@ namespace Clowd
 
         protected virtual bool Set<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
         {
-            if (Equals(storage, value))
+            if (EqualityComparer<T>.Default.Equals(storage, value))
                 return false;
 
             storage = value;

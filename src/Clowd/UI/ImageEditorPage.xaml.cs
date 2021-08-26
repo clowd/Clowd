@@ -60,8 +60,8 @@ namespace Clowd.UI
             {
                 try
                 {
-                    var ms = new MemoryStream(Convert.FromBase64String(_session.GraphicsStream));
-                    drawingCanvas.AddGraphicsFromStream(ms);
+                    var state = Convert.FromBase64String(_session.GraphicsStream);
+                    drawingCanvas.GraphicsList.DeserializeObjectsInto(state);
                     drawingCanvas.UnselectAll();
                     loaded = true;
                 }
@@ -203,44 +203,54 @@ namespace Clowd.UI
 
         private DrawingVisual GetRenderedVisual()
         {
-            var bounds = drawingCanvas.GetArtworkBounds();
-            var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
-
-            DrawingVisual vs = new DrawingVisual();
-            using (DrawingContext dc = vs.RenderOpen())
-            {
-                dc.PushTransform(transform);
-                dc.DrawRectangle(new SolidColorBrush(_settings.Editor.CanvasBackground), null, bounds);
-                dc.Pop();
-                drawingCanvas.Draw(dc, null, transform, false);
-            }
-            return vs;
+            return drawingCanvas.GraphicsList.DrawGraphicsToVisual();
         }
 
-        private RenderTargetBitmap GetRenderedBitmap()
+        //private DrawingVisual GetRenderedVisual()
+        //{
+        //    var bounds = drawingCanvas.GetArtworkBounds();
+        //    var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+
+        //    DrawingVisual vs = new DrawingVisual();
+        //    using (DrawingContext dc = vs.RenderOpen())
+        //    {
+        //        dc.PushTransform(transform);
+        //        dc.DrawRectangle(new SolidColorBrush(_settings.Editor.CanvasBackground), null, bounds);
+        //        dc.Pop();
+        //        drawingCanvas.Draw(dc, null, transform, false);
+        //    }
+        //    return vs;
+        //}
+
+        private BitmapSource GetRenderedBitmap()
         {
-            var bounds = drawingCanvas.GetArtworkBounds();
-            if (bounds.IsEmpty)
-                return null;
-
-            var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
-
-            RenderTargetBitmap bmp = new RenderTargetBitmap(
-                (int)bounds.Width,
-                (int)bounds.Height,
-                96,
-                96,
-                PixelFormats.Pbgra32);
-            DrawingVisual background = new DrawingVisual();
-            using (DrawingContext dc = background.RenderOpen())
-            {
-                dc.PushTransform(transform);
-                dc.DrawRectangle(new SolidColorBrush(_settings.Editor.CanvasBackground), null, bounds);
-            }
-            bmp.Render(background);
-            drawingCanvas.Draw(null, bmp, transform, false);
-            return bmp;
+            return drawingCanvas.GraphicsList.DrawGraphicsToBitmap();
         }
+
+        //private RenderTargetBitmap GetRenderedBitmap()
+        //{
+        //    var bounds = drawingCanvas.GetArtworkBounds();
+        //    if (bounds.IsEmpty)
+        //        return null;
+
+        //    var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+
+        //    RenderTargetBitmap bmp = new RenderTargetBitmap(
+        //        (int)bounds.Width,
+        //        (int)bounds.Height,
+        //        96,
+        //        96,
+        //        PixelFormats.Pbgra32);
+        //    DrawingVisual background = new DrawingVisual();
+        //    using (DrawingContext dc = background.RenderOpen())
+        //    {
+        //        dc.PushTransform(transform);
+        //        dc.DrawRectangle(new SolidColorBrush(_settings.Editor.CanvasBackground), null, bounds);
+        //    }
+        //    bmp.Render(background);
+        //    drawingCanvas.Draw(null, bmp, transform, false);
+        //    return bmp;
+        //}
 
         private PngBitmapEncoder GetRenderedPng()
         {
@@ -339,9 +349,8 @@ namespace Clowd.UI
 
             var bitmap = GetRenderedBitmap();
 
-            var ms = new MemoryStream();
-            drawingCanvas.WriteGraphicsToStream(ms, true);
-
+            var ms = new MemoryStream(drawingCanvas.GraphicsList.SerializeSelected());
+            
             var data = new ClipboardDataObject();
             data.SetImage(bitmap);
             data.SetDataFormat(CANVAS_CLIPBOARD_FORMAT, ms);
@@ -395,7 +404,7 @@ namespace Clowd.UI
                 var ms = data.GetDataFormat<MemoryStream>(CANVAS_CLIPBOARD_FORMAT);
                 if (ms != null)
                 {
-                    drawingCanvas.AddGraphicsFromStream(ms);
+                    drawingCanvas.GraphicsList.DeserializeObjectsInto(ms.ToArray());
                     SyncToolState();
                     return;
                 }
@@ -486,10 +495,8 @@ namespace Clowd.UI
             SyncToolState();
 
             // persist editor state to session file
-            MemoryStream ms = new MemoryStream();
-            drawingCanvas.WriteGraphicsToStream(ms, false);
-            var newstream = Convert.ToBase64String(ms.ToArray());
-
+            var state = drawingCanvas.GraphicsList.Serialize();
+            var newstream = Convert.ToBase64String(state);
             if (newstream != _session.GraphicsStream)
             {
                 _session.GraphicsStream = newstream;

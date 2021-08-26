@@ -5,24 +5,15 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
-    [Serializable]
     public class GraphicFilledRectangle : GraphicRectangle
     {
         protected GraphicFilledRectangle()
         {
-            Effect = null;
         }
 
-        public GraphicFilledRectangle(DrawingCanvas canvas, Rect rect)
-            : base(canvas, rect)
+        public GraphicFilledRectangle(Color objectColor, Rect unrotatedBounds, double angle = 0)
+            : base(objectColor, 0, unrotatedBounds, false, angle, false)
         {
-            Effect = null;
-        }
-
-        public GraphicFilledRectangle(Color objectColor, Rect unrotatedBounds, double angle)
-            : base(objectColor, 0, unrotatedBounds, false, angle)
-        {
-            Effect = null;
         }
 
         internal override void DrawRectangle(DrawingContext drawingContext)
@@ -35,11 +26,6 @@ namespace Clowd.Drawing.Graphics
                     UnrotatedBounds.Top,
                     Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left),
                     Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top)));
-        }
-
-        public override GraphicBase Clone()
-        {
-            return new GraphicFilledRectangle(ObjectColor, UnrotatedBounds, Angle) { ObjectId = ObjectId };
         }
     }
 }

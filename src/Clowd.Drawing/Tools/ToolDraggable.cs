@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Windows;
 using System.Windows.Input;
-using Clowd.Drawing.Commands;
 using Clowd.Drawing.Graphics;
 
 namespace Clowd.Drawing.Tools
@@ -56,7 +55,7 @@ namespace Clowd.Drawing.Tools
                 _update?.Invoke(point, _instance);
                 _end?.Invoke(_instance);
                 _instance.Normalize();
-                canvas.AddCommandToHistory(new CommandAdd(_instance));
+                canvas.AddCommandToHistory();
                 _instance = null;
             }
         }

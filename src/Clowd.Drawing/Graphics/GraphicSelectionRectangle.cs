@@ -11,28 +11,24 @@ namespace Clowd.Drawing.Graphics
     /// </summary>
     internal class GraphicSelectionRectangle : GraphicRectangle
     {
-        public GraphicSelectionRectangle(DrawingCanvas canvas, Rect rect)
-            : base(canvas, rect, false)
+        public GraphicSelectionRectangle(Rect rect)
+            : base(Colors.Black, 0, rect, false, 0, false)
         {
-            Effect = null;
-        }
-        public GraphicSelectionRectangle(Color objectColor, double lineWidth, Rect rect)
-            : base(objectColor, lineWidth, rect, false)
-        {
-            Effect = null;
         }
 
-        internal override void Draw(DrawingContext drawingContext)
+        internal override void Draw(DrawingContext drawingContext, DpiScale uiscale)
         {
+            var lineWidth = 1 * uiscale.DpiScaleX;
+
             drawingContext.DrawRectangle(
                 null,
-                new Pen(Brushes.White, 1),
+                new Pen(Brushes.White, lineWidth),
                 Bounds);
 
             DashStyle dashStyle = new DashStyle();
             dashStyle.Dashes.Add(4);
 
-            Pen dashedPen = new Pen(Brushes.Black, 1);
+            Pen dashedPen = new Pen(Brushes.Black, lineWidth);
             dashedPen.DashStyle = dashStyle;
 
             drawingContext.DrawRectangle(
