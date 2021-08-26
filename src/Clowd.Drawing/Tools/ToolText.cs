@@ -13,8 +13,8 @@ namespace Clowd.Drawing.Tools
     {
         internal override ToolActionType ActionType => ToolActionType.Object;
 
-        TextBox _textBox;
-        string oldText;
+        public string OldText { get; private set; }
+        public TextBox TextBox { get; private set; }
 
         GraphicText editedGraphicsText;
         DrawingCanvas drawingCanvas;
@@ -25,19 +25,6 @@ namespace Clowd.Drawing.Tools
             this.drawingCanvas = drawingCanvas;
         }
 
-        /// <summary>
-        /// Textbox is exposed for DrawingCanvas Visual Children Overrides.
-        /// If it is not null, overrides should include this textbox.
-        /// </summary>
-        public TextBox TextBox
-        {
-            get { return _textBox; }
-            set { _textBox = value; }
-        }
-
-        /// <summary>
-        /// Create new text object
-        /// </summary>
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
             Point point = e.GetPosition(drawingCanvas);
@@ -48,24 +35,17 @@ namespace Clowd.Drawing.Tools
             drawingCanvas.CaptureMouse();
         }
 
-        /// <summary>
-        /// Left mouse is released.
-        /// New object is created and resized.
-        /// </summary>
         public override void OnMouseUp(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
             base.OnMouseUp(drawingCanvas, e);
-
             if (drawingCanvas.Count > 0)
             {
                 drawingCanvas[drawingCanvas.Count - 1].Normalize();
-
                 GraphicText t = drawingCanvas[drawingCanvas.Count - 1] as GraphicText;
-
                 if (t != null)
                 {
                     // Create textbox for editing of graphics object which is just created
-                    CreateTextBox(drawingCanvas[drawingCanvas.Count - 1] as GraphicText, drawingCanvas, true);
+                    CreateTextBox(t, drawingCanvas, true);
                 }
             }
 
@@ -90,71 +70,67 @@ namespace Clowd.Drawing.Tools
                         }
                     }
                 }
-
             }
         }
 
-        /// <summary>
-        /// Create textbox for in-place editing
-        /// </summary>
         public void CreateTextBox(GraphicText graphicsText, DrawingCanvas drawingCanvas, bool newGraphic = false)
         {
             graphicsText.IsSelected = false;  // selection marks don't look good with textbox
             graphicsText.Editing = true;
 
             // Keep old text in the case Esc is pressed while editing
-            oldText = graphicsText.Body;
+            OldText = graphicsText.Body;
 
             // Keep reference to edited object
             editedGraphicsText = graphicsText;
 
-            _textBox = new TextBox();
-            _textBox.RenderTransform = new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2, (graphicsText.Bottom - graphicsText.Top) / 2);
-            _textBox.FontFamily = new FontFamily(graphicsText.FontName);
-            _textBox.FontSize = graphicsText.FontSize;
-            _textBox.FontStretch = graphicsText.FontStretch;
-            _textBox.FontStyle = graphicsText.FontStyle;
-            _textBox.FontWeight = graphicsText.FontWeight;
-            _textBox.Width = Double.NaN;
-            _textBox.Height = Double.NaN;
-            _textBox.Background = Brushes.Transparent;
-            _textBox.Text = graphicsText.Body;
-            _textBox.BorderThickness = new Thickness(0, 0, 0, 1);
-            _textBox.BorderBrush = Brushes.Transparent;
-            _textBox.Tag = graphicsText;
-            _textBox.Style = null;
+            TextBox = new TextBox();
+            TextBox.RenderTransform = new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2, (graphicsText.Bottom - graphicsText.Top) / 2);
+            TextBox.FontFamily = new FontFamily(graphicsText.FontName);
+            TextBox.FontSize = graphicsText.FontSize;
+            TextBox.FontStretch = graphicsText.FontStretch;
+            TextBox.FontStyle = graphicsText.FontStyle;
+            TextBox.FontWeight = graphicsText.FontWeight;
+            TextBox.Width = Double.NaN;
+            TextBox.Height = Double.NaN;
+            TextBox.Background = Brushes.Transparent;
+            TextBox.Text = graphicsText.Body;
+            TextBox.BorderThickness = new Thickness(0, 0, 0, 1);
+            TextBox.BorderBrush = Brushes.Transparent;
+            TextBox.Tag = graphicsText;
+            TextBox.Style = null;
 
             if (newGraphic)
             {
-                _textBox.Text = graphicsText.Body = "Start typing your note.\r\nUse Shift+Enter for new lines.";
-                _textBox.SelectAll();
-                oldText = "";
+                TextBox.Text = graphicsText.Body = "Start typing your note.\r\nUse Shift+Enter for new lines.";
+                TextBox.SelectAll();
+                OldText = "";
             }
             else
             {
-                oldText = graphicsText.Body;
-                _textBox.CaretIndex = int.MaxValue;
+                OldText = graphicsText.Body;
+                TextBox.CaretIndex = int.MaxValue;
             }
 
-            _textBox.AcceptsReturn = true;
+            TextBox.AcceptsReturn = true;
 
-            drawingCanvas.Children.Add(_textBox);
+            drawingCanvas.Children.Add(TextBox);
 
-            Canvas.SetLeft(_textBox, graphicsText.Left + graphicsText.Padding);
-            Canvas.SetTop(_textBox, graphicsText.Top + graphicsText.Padding);
+            Canvas.SetLeft(TextBox, graphicsText.Left + graphicsText.Padding);
+            Canvas.SetTop(TextBox, graphicsText.Top + graphicsText.Padding);
 
-            _textBox.Focus();
+            TextBox.Focus();
 
-            _textBox.LostFocus += new RoutedEventHandler(textBox_LostFocus);
-            _textBox.LostKeyboardFocus += new KeyboardFocusChangedEventHandler(textBox_LostKeyboardFocus);
-            _textBox.PreviewKeyDown += new KeyEventHandler(textBox_PreviewKeyDown);
-            _textBox.ContextMenu = null;     // see notes in textBox_LostKeyboardFocus
-            _textBox.TextChanged += textBox_TextChanged;
+            TextBox.LostFocus += new RoutedEventHandler(textBox_LostFocus);
+            TextBox.LostKeyboardFocus += new KeyboardFocusChangedEventHandler(textBox_LostKeyboardFocus);
+            TextBox.PreviewKeyDown += new KeyEventHandler(textBox_PreviewKeyDown);
+            TextBox.ContextMenu = null;     // see notes in textBox_LostKeyboardFocus
+            TextBox.TextChanged += textBox_TextChanged;
 
             // Initially textbox is set to the same rectangle as graphicsText.
             // After textbox loading its template is available, and we can
             // correct textbox position - see details in the textBox_Loaded function.
-            _textBox.Loaded += new RoutedEventHandler(textBox_Loaded);
+            TextBox.Loaded += new RoutedEventHandler(textBox_Loaded);
         }
 
         private void HideTextbox(GraphicBase graphic, DrawingCanvas drawingCanvas)
@@ -230,34 +206,19 @@ namespace Clowd.Drawing.Tools
         }
 
 
-        /// <summary>
-        /// Correct textbox position.
-        /// Without this correction text shown in a textbox appears with some
-        /// horizontal and vertical offset relatively to textbox bounding rectangle.
-        /// We need to apply this correction, moving textbox in left-up direction.
-        /// 
-        /// Visually, text should not "jump" on the screen, when in-place editing
-        /// textbox is open and closed.
-        /// </summary>
         void textBox_Loaded(object sender, RoutedEventArgs e)
         {
             double xOffset, yOffset;
 
-            ComputeTextOffset(_textBox, out xOffset, out yOffset);
+            ComputeTextOffset(TextBox, out xOffset, out yOffset);
 
-            Canvas.SetLeft(_textBox, Canvas.GetLeft(_textBox) - xOffset);
-            Canvas.SetTop(_textBox, Canvas.GetTop(_textBox) - yOffset);
-            _textBox.Width = _textBox.Width + xOffset + xOffset;
-            _textBox.Height = _textBox.Height + yOffset + yOffset;
+            Canvas.SetLeft(TextBox, Canvas.GetLeft(TextBox) - xOffset);
+            Canvas.SetTop(TextBox, Canvas.GetTop(TextBox) - yOffset);
+            TextBox.Width = TextBox.Width + xOffset + xOffset;
+            TextBox.Height = TextBox.Height + yOffset + yOffset;
         }
 
 
-        /// <summary>
-        /// Compute distance between textbox top-left point and actual
-        /// text top-left point inside of textbox.
-        /// 
-        /// Thanks to Nick Holmes for showing this code in MSDN WPF Forum.
-        /// </summary>
         static void ComputeTextOffset(TextBox tb, out double xOffset, out double yOffset)
         {
             // Set hard-coded values initially
@@ -300,12 +261,11 @@ namespace Clowd.Drawing.Tools
         }
 
 
-        // Hide textbox when Enter or Esc is changed
         void textBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
             {
-                _textBox.Text = oldText;
+                TextBox.Text = OldText;
 
                 HideTextbox(editedGraphicsText, drawingCanvas);
 
@@ -340,8 +300,8 @@ namespace Clowd.Drawing.Tools
 
                 if (!String.IsNullOrWhiteSpace(str))
                 {
-                    var comp = new TextComposition(InputManager.Current, _textBox, str);
-                    _textBox.RaiseEvent(new TextCompositionEventArgs(InputManager.Current.PrimaryKeyboardDevice, comp)
+                    var comp = new TextComposition(InputManager.Current, TextBox, str);
+                    TextBox.RaiseEvent(new TextCompositionEventArgs(InputManager.Current.PrimaryKeyboardDevice, comp)
                     {
                         RoutedEvent = TextCompositionManager.TextInputEvent
                     });
@@ -351,18 +311,12 @@ namespace Clowd.Drawing.Tools
             }
         }
 
-        /// <summary>
-        /// Hide textbox when it looses focus.  
-        /// </summary>
         void textBox_LostFocus(object sender, RoutedEventArgs e)
         {
             HideTextbox(editedGraphicsText, drawingCanvas);
         }
 
 
-        /// <summary>
-        /// Hide textbox when it looses keyboard focus.  
-        /// </summary>
         void textBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
             HideTextbox(editedGraphicsText, drawingCanvas);
@@ -380,13 +334,7 @@ namespace Clowd.Drawing.Tools
             /// showing context menu.
         }
 
-        /// <summary>
-        /// Textbox text value before in-place editing.
-        /// </summary>
-        public string OldText
-        {
-            get { return oldText; }
-        }
+
 
     }
 }
