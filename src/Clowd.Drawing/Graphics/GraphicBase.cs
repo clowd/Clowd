@@ -52,6 +52,7 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
+        [XmlIgnore]
         public virtual bool IsSelected
         {
             get { return _isSelected; }
