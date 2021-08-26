@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.IO;
 using Clowd.Drawing.Graphics;
+using Clowd.Drawing.Commands;
 
 namespace Clowd.Drawing.Tools
 {
@@ -119,7 +120,9 @@ namespace Clowd.Drawing.Tools
             _textBox.Background = Brushes.Transparent;
             _textBox.Text = graphicsText.Body;
             _textBox.BorderThickness = new Thickness(0, 0, 0, 1);
+            _textBox.BorderBrush = Brushes.Transparent;
             _textBox.Tag = graphicsText;
+            _textBox.Style = null;
 
             if (newGraphic)
             {
@@ -130,6 +133,7 @@ namespace Clowd.Drawing.Tools
             else
             {
                 oldText = graphicsText.Body;
+                _textBox.CaretIndex = int.MaxValue;
             }
 
             _textBox.AcceptsReturn = true;
@@ -152,6 +156,70 @@ namespace Clowd.Drawing.Tools
             // correct textbox position - see details in the textBox_Loaded function.
             _textBox.Loaded += new RoutedEventHandler(textBox_Loaded);
         }
+
+        private void HideTextbox(GraphicBase graphic, DrawingCanvas drawingCanvas)
+        {
+            if (TextBox == null)
+            {
+                return;
+            }
+            var graphicsText = graphic as GraphicText;
+            if (graphicsText == null)
+                return;
+
+            graphicsText.IsSelected = true;   // restore selection which was removed for better textbox appearance
+            graphicsText.Editing = false;
+
+            if (TextBox.Text.Trim().Length == 0)
+            {
+                // Textbox is empty: remove text object.
+
+                if (!String.IsNullOrEmpty(OldText))  // existing text was edited
+                {
+                    // Since text object is removed now,
+                    // Add Delete command to the history
+                    drawingCanvas.AddCommandToHistory(new CommandDelete(drawingCanvas));
+                }
+
+                // Remove empty text object
+                drawingCanvas.GraphicsList.Remove(graphic);
+            }
+            else
+            {
+                if (!String.IsNullOrEmpty(OldText))  // existing text was edited
+                {
+                    if (TextBox.Text.Trim() != OldText)     // text was really changed
+                    {
+                        // Create command
+                        CommandChangeState command = new CommandChangeState(drawingCanvas);
+
+                        // Make change in the text object
+                        graphicsText.Body = TextBox.Text.Trim();
+
+                        // Keep state after change and add command to the history
+                        command.NewState(drawingCanvas);
+                        drawingCanvas.AddCommandToHistory(command);
+                    }
+                }
+                else                                          // new text was added
+                {
+                    // Make change in the text object
+                    graphicsText.Body = TextBox.Text.Trim();
+
+                    // Add command to the history
+                    drawingCanvas.AddCommandToHistory(new CommandAdd(graphic));
+                }
+            }
+
+            // Remove textbox and set it to null.
+            drawingCanvas.Children.Remove(TextBox);
+            TextBox = null;
+
+            // This enables back all ApplicationCommands,
+            // which are disabled while textbox is active.
+            drawingCanvas.Focus();
+        }
+
 
         private void textBox_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -239,7 +307,7 @@ namespace Clowd.Drawing.Tools
             {
                 _textBox.Text = oldText;
 
-                drawingCanvas.HideTextbox(editedGraphicsText);
+                HideTextbox(editedGraphicsText, drawingCanvas);
 
                 e.Handled = true;
                 return;
@@ -248,7 +316,7 @@ namespace Clowd.Drawing.Tools
             // Enter without modifiers - Shift+Enter should be available.
             if (e.Key == Key.Return && Keyboard.Modifiers == ModifierKeys.None)
             {
-                drawingCanvas.HideTextbox(editedGraphicsText);
+                HideTextbox(editedGraphicsText, drawingCanvas);
 
                 e.Handled = true;
                 return;
@@ -288,7 +356,7 @@ namespace Clowd.Drawing.Tools
         /// </summary>
         void textBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            drawingCanvas.HideTextbox(editedGraphicsText);
+            HideTextbox(editedGraphicsText, drawingCanvas);
         }
 
 
@@ -297,7 +365,7 @@ namespace Clowd.Drawing.Tools
         /// </summary>
         void textBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
-            drawingCanvas.HideTextbox(editedGraphicsText);
+            HideTextbox(editedGraphicsText, drawingCanvas);
 
             /// Notes:
             /// TextBox context menu is set to null in CreateTextBox function.
