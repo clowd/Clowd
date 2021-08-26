@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -14,105 +15,82 @@ using Clowd.Drawing.Commands;
 
 namespace Clowd.Drawing
 {
-    /// <summary>
-    /// Canvas used as host for DrawingVisual objects.
-    /// Allows to draw graphics objects using mouse.
-    /// </summary>
     public class DrawingCanvas : Canvas
     {
-        #region Class Members
+        public GraphicBase this[int index]
+        {
+            get
+            {
+                if (index >= 0 && index < Count)
+                    return GraphicsList[index];
+                return null;
+            }
+        }
 
-        // Collection contains instances of GraphicsBase-derived classes.
-        private GraphicCollection graphicsList;
+        public int SelectionCount => SelectedItems.Count();
 
-        // Dependency properties
-        public static readonly DependencyProperty ToolProperty;
-        public static readonly DependencyProperty ArtworkBackgroundProperty;
+        public GraphicCollection GraphicsList { get; }
 
-        public static readonly DependencyProperty LineWidthProperty;
-        public static readonly DependencyProperty ObjectColorProperty;
-        public static readonly DependencyProperty HandleColorProperty;
+        public int Count => GraphicsList.Count;
 
-        public static readonly DependencyProperty TextFontFamilyNameProperty;
-        public static readonly DependencyProperty TextFontStyleProperty;
-        public static readonly DependencyProperty TextFontWeightProperty;
-        public static readonly DependencyProperty TextFontStretchProperty;
-        public static readonly DependencyProperty TextFontSizeProperty;
-
-        public static readonly DependencyProperty CanUndoProperty;
-        public static readonly DependencyProperty CanRedoProperty;
-
-        public static readonly DependencyProperty CanSelectAllProperty;
-        public static readonly DependencyProperty CanUnselectAllProperty;
-        public static readonly DependencyProperty CanDeleteProperty;
-        public static readonly DependencyProperty CanDeleteAllProperty;
-        public static readonly DependencyProperty CanMoveToFrontProperty;
-        public static readonly DependencyProperty CanMoveToBackProperty;
-        public static readonly DependencyProperty CanSetPropertiesProperty;
-
-        private ToolBase[] tools;                   // Array of tools
+        public IEnumerable<GraphicBase> SelectedItems => GraphicsList.Where(g => g.IsSelected);
 
         internal ToolPointer ToolPointer;
 
-
+        private ToolBase[] _tools;
         private Border _clickable;
         private Border _artworkRectangle;
-        private ContextMenu contextMenu;
-        private UndoManager undoManager;
-
-        #endregion Class Members
-
-        #region Constructors
+        private ContextMenu _contextMenu;
+        private UndoManager _undoManager;
 
         public DrawingCanvas()
-            : base()
         {
-            graphicsList = new GraphicCollection(this);
+            GraphicsList = new GraphicCollection(this);
 
             CreateContextMenu();
 
             // create array of drawing tools
-            tools = new ToolBase[(int)ToolType.Max];
+            _tools = new ToolBase[(int)ToolType.Max];
 
             ToolPointer = new ToolPointer();
-            tools[(int)ToolType.None] = ToolPointer;
-            tools[(int)ToolType.Pointer] = ToolPointer;
+            _tools[(int)ToolType.None] = ToolPointer;
+            _tools[(int)ToolType.Pointer] = ToolPointer;
 
-            tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
+            _tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
                 new Cursor(new MemoryStream(Properties.Resources.Rectangle)),
                 point => new GraphicRectangle(this, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
-            tools[(int)ToolType.FilledRectangle] = new ToolDraggable<GraphicFilledRectangle>(
+            _tools[(int)ToolType.FilledRectangle] = new ToolDraggable<GraphicFilledRectangle>(
                 new Cursor(new MemoryStream(Properties.Resources.Rectangle)),
                 point => new GraphicFilledRectangle(this, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
-            tools[(int)ToolType.Ellipse] = new ToolDraggable<GraphicEllipse>(
+            _tools[(int)ToolType.Ellipse] = new ToolDraggable<GraphicEllipse>(
                 new Cursor(new MemoryStream(Properties.Resources.Ellipse)),
                 point => new GraphicEllipse(this, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
-            tools[(int)ToolType.Line] = new ToolDraggable<GraphicLine>(
+            _tools[(int)ToolType.Line] = new ToolDraggable<GraphicLine>(
                 new Cursor(new MemoryStream(Properties.Resources.Line)),
                 point => new GraphicLine(this, point, point),
                 (point, g) => g.MoveHandleTo(point, 2));
 
-            tools[(int)ToolType.Arrow] = new ToolDraggable<GraphicArrow>(
+            _tools[(int)ToolType.Arrow] = new ToolDraggable<GraphicArrow>(
                 new Cursor(new MemoryStream(Properties.Resources.Arrow)),
                 point => new GraphicArrow(this, point, point),
                 (point, g) => g.MoveHandleTo(point, 2));
 
-            tools[(int)ToolType.PolyLine] = new ToolPolyLine();
+            _tools[(int)ToolType.PolyLine] = new ToolPolyLine();
 
-            tools[(int)ToolType.Text] = new ToolText(this);
+            _tools[(int)ToolType.Text] = new ToolText(this);
 
             //tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>();
             //tools[(int)ToolType.Erase] = new ToolFilter<FilterEraser>();
 
             // Create undo manager
-            undoManager = new UndoManager(this);
-            undoManager.StateChanged += new EventHandler(undoManager_StateChanged);
+            _undoManager = new UndoManager(this);
+            _undoManager.StateChanged += new EventHandler(UndoManager_StateChanged);
 
             this.FocusVisualStyle = null;
 
@@ -143,7 +121,6 @@ namespace Clowd.Drawing
             SnapsToDevicePixels = false;
             UseLayoutRounding = false;
         }
-
 
         static DrawingCanvas()
         {
@@ -296,15 +273,28 @@ namespace Clowd.Drawing
                 metaData);
         }
 
-        #endregion Constructor
-
         #region Dependency Properties
 
-        #region Tool
+        public static readonly DependencyProperty ToolProperty;
+        public static readonly DependencyProperty ArtworkBackgroundProperty;
+        public static readonly DependencyProperty LineWidthProperty;
+        public static readonly DependencyProperty ObjectColorProperty;
+        public static readonly DependencyProperty HandleColorProperty;
+        public static readonly DependencyProperty TextFontFamilyNameProperty;
+        public static readonly DependencyProperty TextFontStyleProperty;
+        public static readonly DependencyProperty TextFontWeightProperty;
+        public static readonly DependencyProperty TextFontStretchProperty;
+        public static readonly DependencyProperty TextFontSizeProperty;
+        public static readonly DependencyProperty CanUndoProperty;
+        public static readonly DependencyProperty CanRedoProperty;
+        public static readonly DependencyProperty CanSelectAllProperty;
+        public static readonly DependencyProperty CanUnselectAllProperty;
+        public static readonly DependencyProperty CanDeleteProperty;
+        public static readonly DependencyProperty CanDeleteAllProperty;
+        public static readonly DependencyProperty CanMoveToFrontProperty;
+        public static readonly DependencyProperty CanMoveToBackProperty;
+        public static readonly DependencyProperty CanSetPropertiesProperty;
 
-        /// <summary>
-        /// Currently active drawing tool
-        /// </summary>
         public ToolType Tool
         {
             get
@@ -318,7 +308,7 @@ namespace Clowd.Drawing
                     SetValue(ToolProperty, value);
 
                     // Set cursor immediately - important when tool is selected from the menu
-                    var tmp = tools[(int)Tool];
+                    var tmp = _tools[(int)Tool];
                     if (tmp == null)
                         Cursor = Cursors.SizeAll;
                     else
@@ -326,8 +316,6 @@ namespace Clowd.Drawing
                 }
             }
         }
-
-        #endregion Tool
 
         public Brush ArtworkBackground
         {
@@ -341,12 +329,6 @@ namespace Clowd.Drawing
             }
         }
 
-
-        #region CanUndo
-
-        /// <summary>
-        /// Return True if Undo operation is possible
-        /// </summary>
         public bool CanUndo
         {
             get
@@ -359,13 +341,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanUndo
-
-        #region CanRedo
-
-        /// <summary>
-        /// Return True if Redo operation is possible
-        /// </summary>
         public bool CanRedo
         {
             get
@@ -378,13 +353,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanRedo
-
-        #region CanSelectAll
-
-        /// <summary>
-        /// Return true if Select All function is available
-        /// </summary>
         public bool CanSelectAll
         {
             get
@@ -397,13 +365,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanSelectAll
-
-        #region CanUnselectAll
-
-        /// <summary>
-        /// Return true if Unselect All function is available
-        /// </summary>
         public bool CanUnselectAll
         {
             get
@@ -416,13 +377,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanUnselectAll
-
-        #region CanDelete
-
-        /// <summary>
-        /// Return true if Delete function is available
-        /// </summary>
         public bool CanDelete
         {
             get
@@ -435,13 +389,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanDelete
-
-        #region CanDeleteAll
-
-        /// <summary>
-        /// Return true if Delete All function is available
-        /// </summary>
         public bool CanDeleteAll
         {
             get
@@ -454,13 +401,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanDeleteAll
-
-        #region CanMoveToFront
-
-        /// <summary>
-        /// Return true if Move to Front function is available
-        /// </summary>
         public bool CanMoveToFront
         {
             get
@@ -473,13 +413,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanMoveToFront
-
-        #region CanMoveToBack
-
-        /// <summary>
-        /// Return true if Move to Back function is available
-        /// </summary>
         public bool CanMoveToBack
         {
             get
@@ -492,14 +425,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanMoveToBack
-
-        #region CanSetProperties
-
-        /// <summary>
-        /// Return true if currently active properties (line width, color etc.)
-        /// can be applied to selected objects.
-        /// </summary>
         public bool CanSetProperties
         {
             get
@@ -512,14 +437,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion CanSetProperties
-
-        #region LineWidth
-
-        /// <summary>
-        /// Line width of new graphics object.
-        /// Setting this property is also applied to current selection.
-        /// </summary>
         public double LineWidth
         {
             get
@@ -533,9 +450,6 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Callback function called when LineWidth dependency property is changed
-        /// </summary>
         static void LineWidthChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
             DrawingCanvas d = property as DrawingCanvas;
@@ -543,7 +457,7 @@ namespace Clowd.Drawing
             CommandChangeState command = new CommandChangeState(d);
             bool wasChange = false;
 
-            foreach (GraphicBase g in d.Selection)
+            foreach (GraphicBase g in d.SelectedItems)
             {
                 if (g is GraphicText || g is GraphicSelectionRectangle)
                     continue;
@@ -561,14 +475,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion LineWidth
-
-        #region ObjectColor
-
-        /// <summary>
-        /// Color of new graphics object.
-        /// Setting this property is also applied to current selection.
-        /// </summary>
         public Color ObjectColor
         {
             get
@@ -582,9 +488,6 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Callback function called when ObjectColor dependency property is changed
-        /// </summary>
         static void ObjectColorChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
             DrawingCanvas d = property as DrawingCanvas;
@@ -593,7 +496,7 @@ namespace Clowd.Drawing
             bool wasChange = false;
             var value = d.ObjectColor;
 
-            foreach (GraphicBase g in d.Selection)
+            foreach (GraphicBase g in d.SelectedItems)
             {
                 if (g.ObjectColor != value)
                 {
@@ -609,9 +512,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion ObjectColor
-
-        #region HandleColor
         public Color HandleColor
         {
             get { return (Color)GetValue(HandleColorProperty); }
@@ -623,14 +523,7 @@ namespace Clowd.Drawing
             DrawingCanvas d = property as DrawingCanvas;
             GraphicBase.HandleBrush = new SolidColorBrush(d.HandleColor);
         }
-        #endregion
 
-        #region TextFontFamilyName
-
-        /// <summary>
-        /// Font Family name of new graphics object.
-        /// Setting this property is also applied to current selection.
-        /// </summary>
         public string TextFontFamilyName
         {
             get
@@ -644,9 +537,6 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Callback function called when TextFontFamilyName dependency property is changed
-        /// </summary>
         static void TextFontFamilyNameChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
             ApplyFontChange(property as DrawingCanvas, d => d.TextFontFamilyName, t => t.FontName, (t, v) => { t.FontName = v; });
@@ -658,7 +548,7 @@ namespace Clowd.Drawing
             bool wasChange = false;
             var value = getProp(d);
 
-            foreach (GraphicBase g in d.Selection)
+            foreach (GraphicBase g in d.SelectedItems)
             {
                 var t = g as GraphicText;
                 if (t == null)
@@ -677,14 +567,6 @@ namespace Clowd.Drawing
             }
         }
 
-        #endregion TextFontFamilyName
-
-        #region TextFontStyle
-
-        /// <summary>
-        /// Font style of new graphics object.
-        /// Setting this property is also applied to current selection.
-        /// </summary>
         public FontStyle TextFontStyle
         {
             get
@@ -698,22 +580,11 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Callback function called when TextFontStyle dependency property is changed
-        /// </summary>
         static void TextFontStyleChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
             ApplyFontChange(property as DrawingCanvas, d => d.TextFontStyle, t => t.FontStyle, (t, v) => { t.FontStyle = v; });
         }
 
-        #endregion TextFontStyle
-
-        #region TextFontWeight
-
-        /// <summary>
-        /// Font weight of new graphics object.
-        /// Setting this property is also applied to current selection.
-        /// </summary>
         public FontWeight TextFontWeight
         {
             get
@@ -727,22 +598,11 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Callback function called when TextFontWeight dependency property is changed
-        /// </summary>
         static void TextFontWeightChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
             ApplyFontChange(property as DrawingCanvas, d => d.TextFontWeight, t => t.FontWeight, (t, v) => { t.FontWeight = v; });
         }
 
-        #endregion TextFontWeight
-
-        #region TextFontStretch
-
-        /// <summary>
-        /// Font stretch of new graphics object.
-        /// Setting this property is also applied to current selection.
-        /// </summary>
         public FontStretch TextFontStretch
         {
             get
@@ -756,22 +616,11 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Callback function called when TextFontStretch dependency property is changed
-        /// </summary>
         static void TextFontStretchChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
             ApplyFontChange(property as DrawingCanvas, d => d.TextFontStretch, t => t.FontStretch, (t, v) => { t.FontStretch = v; });
         }
 
-        #endregion TextFontStretch
-
-        #region TextFontSize
-
-        /// <summary>
-        /// Font size of new graphics object.
-        /// Setting this property is also applied to current selection.
-        /// </summary>
         public double TextFontSize
         {
             get
@@ -785,33 +634,20 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Callback function called when TextFontSize dependency property is changed
-        /// </summary>
         static void TextFontSizeChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
             ApplyFontChange(property as DrawingCanvas, d => d.TextFontSize, t => t.FontSize, (t, v) => { t.FontSize = v; });
         }
 
-        #endregion TextFontSize
-
         #endregion Dependency Properties
 
         #region Public Functions
 
-        /// <summary>
-        /// Draw all graphics objects to DrawingContext supplied by client.
-        /// Can be used for printing or saving image together with graphics
-        /// as single bitmap. Don't use DrawingContext for rasterising as
-        /// the VisualBrush doesn't quite render properly in that scenario.
-        /// 
-        /// withSelection = true - draw selected objects with tracker.
-        /// </summary>
         public void Draw(DrawingContext drawingContext, RenderTargetBitmap bitmap, Transform transform, bool withSelection)
         {
             bool oldSelection = false;
 
-            foreach (GraphicBase b in graphicsList)
+            foreach (GraphicBase b in GraphicsList)
             {
                 if (!withSelection)
                 {
@@ -844,7 +680,7 @@ namespace Clowd.Drawing
         {
             try
             {
-                return this.tools[(int)type].ActionType;
+                return this._tools[(int)type].ActionType;
             }
             catch (IndexOutOfRangeException)
             {
@@ -852,10 +688,6 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Gets a bounding rectangle of all of the current graphics objects (selection handles not included)
-        /// </summary>
-        /// <returns></returns>
         public Rect GetArtworkBounds(bool selectedOnly = false)
         {
             var artwork = GraphicsList.Cast<GraphicBase>()
@@ -878,19 +710,13 @@ namespace Clowd.Drawing
             return result;
         }
 
-        /// <summary>
-        /// Clear graphics list
-        /// </summary>
         public void Clear()
         {
-            graphicsList.Clear();
+            GraphicsList.Clear();
             ClearHistory();
             UpdateState();
         }
 
-        /// <summary>
-        /// Add a graphic object to the canvas from its serialized companion class.
-        /// </summary>
         public void AddGraphic(GraphicBase g)
         {
             this.UnselectAll();
@@ -902,10 +728,6 @@ namespace Clowd.Drawing
             RefreshBounds();
         }
 
-        /// <summary>
-        /// Reads the provided stream, deserializes the data into Graphic objects and adds them to the canvas
-        /// </summary>
-        /// <param name="stream"></param>
         public void AddGraphicsFromStream(Stream stream)
         {
             SerializationHelper helper;
@@ -921,7 +743,7 @@ namespace Clowd.Drawing
             {
                 g.Move(transformX, transformY);
                 g.IsSelected = true;
-                graphicsList.Add(g);
+                GraphicsList.Add(g);
             }
 
             AddCommandToHistory(new CommandAdd(helper.Graphics));
@@ -930,14 +752,11 @@ namespace Clowd.Drawing
             RefreshBounds();
         }
 
-        /// <summary>
-        /// Serializes all graphics and writes them to the specified stream
-        /// </summary>
         public void WriteGraphicsToStream(Stream stream, bool selectedOnly)
         {
-            GraphicBase[] graphics = graphicsList.OfType<GraphicBase>().Where(g => g.IsSelected || !selectedOnly).ToArray();
+            GraphicBase[] graphics = GraphicsList.OfType<GraphicBase>().Where(g => g.IsSelected || !selectedOnly).ToArray();
             if (!graphics.Any())
-                graphics = graphicsList.OfType<GraphicBase>().ToArray();
+                graphics = GraphicsList.OfType<GraphicBase>().ToArray();
 
             var helper = new SerializationHelper(graphics.Select(g => g), GetArtworkBounds(true));
 
@@ -945,9 +764,6 @@ namespace Clowd.Drawing
             xml.Serialize(stream, helper);
         }
 
-        /// <summary>
-        /// Select all
-        /// </summary>
         public void SelectAll()
         {
             for (int i = 0; i < this.Count; i++)
@@ -957,9 +773,6 @@ namespace Clowd.Drawing
             UpdateState();
         }
 
-        /// <summary>
-        /// Unselect all
-        /// </summary>
         public void UnselectAll()
         {
             for (int i = 0; i < this.Count; i++)
@@ -971,16 +784,13 @@ namespace Clowd.Drawing
 
         public void UnselectAllExcept(params GraphicBase[] excluded)
         {
-            foreach (var ob in this.Selection.Except(excluded.Where(ex => ex != null)))
+            foreach (var ob in this.SelectedItems.Except(excluded.Where(ex => ex != null)))
             {
                 ob.IsSelected = false;
             }
             UpdateState();
         }
 
-        /// <summary>
-        /// Delete selection
-        /// </summary>
         public void Delete()
         {
             CommandDelete command = new CommandDelete(this);
@@ -1004,9 +814,6 @@ namespace Clowd.Drawing
             RefreshBounds();
         }
 
-        /// <summary>
-        /// Delete all
-        /// </summary>
         public void DeleteAll()
         {
             if (GraphicsList.Count > 0)
@@ -1019,9 +826,6 @@ namespace Clowd.Drawing
             RefreshBounds();
         }
 
-        /// <summary>
-        /// Move selection to the front of Z-order
-        /// </summary>
         public void MoveToFront()
         {
             List<GraphicBase> list = new List<GraphicBase>();
@@ -1052,9 +856,6 @@ namespace Clowd.Drawing
             UpdateState();
         }
 
-        /// <summary>
-        /// Move selection to the end of Z-order
-        /// </summary>
         public void MoveToBack()
         {
             List<GraphicBase> list = new List<GraphicBase>();
@@ -1085,9 +886,6 @@ namespace Clowd.Drawing
             UpdateState();
         }
 
-        /// <summary>
-        /// Reset angle of rotation to 0 for all selected elements
-        /// </summary>
         public void ResetRotation()
         {
             var changed = false;
@@ -1113,9 +911,6 @@ namespace Clowd.Drawing
             RefreshBounds();
         }
 
-        /// <summary>
-        /// Apply currently active properties to selected objects
-        /// </summary>
         public void SetProperties()
         {
             CommandChangeState command = new CommandChangeState(this);
@@ -1174,95 +969,23 @@ namespace Clowd.Drawing
             RefreshBounds();
         }
 
-
-        /// <summary>
-        /// Undo
-        /// </summary>
         public void Undo()
         {
-            undoManager.Undo();
+            _undoManager.Undo();
             UpdateState();
             RefreshBounds();
         }
 
-        /// <summary>
-        /// Redo
-        /// </summary>
         public void Redo()
         {
-            undoManager.Redo();
+            _undoManager.Redo();
             UpdateState();
             RefreshBounds();
         }
 
         #endregion Public Functions
 
-        #region Internal Properties
-
-        /// <summary>
-        /// Get graphic object by index
-        /// </summary>
-        internal GraphicBase this[int index]
-        {
-            get
-            {
-                if (index >= 0 && index < Count)
-                {
-                    return (GraphicBase)graphicsList[index];
-                }
-
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Get number of graphic objects
-        /// </summary>
-        internal int Count
-        {
-            get
-            {
-                return graphicsList.Count;
-            }
-        }
-
-        /// <summary>
-        /// Get number of selected graphic objects
-        /// </summary>
-		public int SelectionCount => Selection.Count();
-
-        /// <summary>
-        /// Return list of graphics
-        /// </summary>
-        public GraphicCollection GraphicsList => graphicsList;
-
-        /// <summary>
-        /// Returns INumerable which may be used for enumeration
-        /// of selected objects.
-        /// </summary>
-        public IEnumerable<GraphicBase> Selection
-        {
-            get
-            {
-                foreach (GraphicBase o in graphicsList)
-                {
-                    if (o.IsSelected)
-                    {
-                        yield return o;
-                    }
-                }
-            }
-        }
-
-        #endregion Internal Properties
-
-        internal ToolBase GetTool(ToolType type)
-        {
-            return tools[(int)type];
-        }
-
         #region Visual Children Overrides
-
 
         protected override int VisualChildrenCount => GraphicsList.VisualCount + Children.Count;
 
@@ -1286,14 +1009,14 @@ namespace Clowd.Drawing
             {
                 return _artworkRectangle;
             }
-            else if (index - 2 < graphicsList.VisualCount)
+            else if (index - 2 < GraphicsList.VisualCount)
             {
-                return graphicsList.GetVisual(index - 2);
+                return GraphicsList.GetVisual(index - 2);
             }
-            else if (index - 2 - graphicsList.VisualCount < Children.Count)
+            else if (index - 2 - GraphicsList.VisualCount < Children.Count)
             {
                 // any other children.
-                return Children[index - graphicsList.VisualCount];
+                return Children[index - GraphicsList.VisualCount];
             }
             //else if (index == 2 + graphicsList.VisualCount && toolText.TextBox != null)
             //{
@@ -1305,13 +1028,8 @@ namespace Clowd.Drawing
 
         #endregion Visual Children Overrides
 
-        #region Mouse Event Handlers
+        #region Event Handlers
 
-        /// <summary>
-        /// Mouse down.
-        /// Left button down event is passed to active tool.
-        /// Right button down event is handled in this class.
-        /// </summary>
         void DrawingCanvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (IsPanning)
@@ -1329,13 +1047,13 @@ namespace Clowd.Drawing
                     var clicked = ToolPointer.MakeHitTest(this, point, out var handleNum);
                     clicked.Activate(this);
                 }
-                else if (Tool == ToolType.None || tools[(int)Tool] == null)
+                else if (Tool == ToolType.None || _tools[(int)Tool] == null)
                 {
                     StartPanning(e);
                 }
                 else
                 {
-                    tools[(int)Tool].OnMouseDown(this, e);
+                    _tools[(int)Tool].OnMouseDown(this, e);
                 }
 
                 UpdateState();
@@ -1350,11 +1068,6 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Mouse move.
-        /// Moving without button pressed or with left button pressed
-        /// is passed to active tool.
-        /// </summary>
         void DrawingCanvas_MouseMove(object sender, MouseEventArgs e)
         {
             if (IsPanning)
@@ -1363,14 +1076,14 @@ namespace Clowd.Drawing
                 return;
             }
 
-            if (tools[(int)Tool] == null)
+            if (_tools[(int)Tool] == null)
             {
                 return;
             }
 
             if (e.MiddleButton == MouseButtonState.Released && e.RightButton == MouseButtonState.Released)
             {
-                tools[(int)Tool].OnMouseMove(this, e);
+                _tools[(int)Tool].OnMouseMove(this, e);
 
                 UpdateState();
             }
@@ -1383,10 +1096,6 @@ namespace Clowd.Drawing
                 RefreshBounds();
         }
 
-        /// <summary>
-        /// Mouse up event.
-        /// Left button up event is passed to active tool.
-        /// </summary>
         void DrawingCanvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
             if (IsPanning)
@@ -1395,22 +1104,18 @@ namespace Clowd.Drawing
                 return;
             }
 
-            if (tools[(int)Tool] == null)
+            if (_tools[(int)Tool] == null)
             {
                 return;
             }
 
             if (e.ChangedButton == MouseButton.Left)
             {
-                tools[(int)Tool].OnMouseUp(this, e);
+                _tools[(int)Tool].OnMouseUp(this, e);
                 UpdateState();
             }
         }
 
-        /// <summary>
-        /// Mouse wheel event.
-        /// Change zoom, except if panning.
-        /// </summary>
         void DrawingCanvas_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (IsPanning)
@@ -1431,22 +1136,12 @@ namespace Clowd.Drawing
             ContentOffset = new Point(absoluteX - relativeMouse.X * ContentScale, absoluteY - relativeMouse.Y * ContentScale);
         }
 
-        #endregion Mouse Event Handlers
-
-        #region Other Event Handlers
-
-        /// <summary>
-        /// Initialization after control is loaded
-        /// </summary>
         void DrawingCanvas_Loaded(object sender, RoutedEventArgs e)
         {
             this.Focusable = true;      // to handle keyboard messages
         }
 
-        /// <summary>
-        /// Context menu item is clicked
-        /// </summary>
-        void contextMenuItem_Click(object sender, RoutedEventArgs e)
+        void ContextMenuItem_Click(object sender, RoutedEventArgs e)
         {
             MenuItem item = sender as MenuItem;
 
@@ -1492,10 +1187,6 @@ namespace Clowd.Drawing
             }
         }
 
-
-        /// <summary>
-        /// Mouse capture is lost
-        /// </summary>
         void DrawingCanvas_LostMouseCapture(object sender, MouseEventArgs e)
         {
             if (this.IsMouseCaptured)
@@ -1505,9 +1196,6 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Handle keyboard input
-        /// </summary>
         void DrawingCanvas_KeyDown(object sender, KeyEventArgs e)
         {
             // Esc key stops currently active operation
@@ -1521,30 +1209,22 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// UndoManager state is changed.
-        /// Refresh CanUndo, CanRedo and IsDirty properties.
-        /// </summary>
-        void undoManager_StateChanged(object sender, EventArgs e)
+        void UndoManager_StateChanged(object sender, EventArgs e)
         {
-            this.CanUndo = undoManager.CanUndo;
-            this.CanRedo = undoManager.CanRedo;
+            this.CanUndo = _undoManager.CanUndo;
+            this.CanRedo = _undoManager.CanRedo;
         }
 
-
-        #endregion Other Event Handlers
+        #endregion Event Handlers
 
         #region Other Functions
 
-        /// <summary>
-        /// Create context menu
-        /// </summary>
         void CreateContextMenu()
         {
-            contextMenu = new ContextMenu();
-            contextMenu.PlacementTarget = this;
-            contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
-            this.ContextMenu = contextMenu;
+            _contextMenu = new ContextMenu();
+            _contextMenu.PlacementTarget = this;
+            _contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            this.ContextMenu = _contextMenu;
 
             MenuItem menuItem;
 
@@ -1552,86 +1232,86 @@ namespace Clowd.Drawing
             menuItem.Header = "Select all";
             menuItem.InputGestureText = "Ctrl+A";
             menuItem.Tag = ContextMenuCommand.SelectAll;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Unselect all";
             menuItem.InputGestureText = "Esc";
             menuItem.Tag = ContextMenuCommand.UnselectAll;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Delete";
             menuItem.InputGestureText = "Del";
             menuItem.Tag = ContextMenuCommand.Delete;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Delete all";
             menuItem.Tag = ContextMenuCommand.DeleteAll;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
-            contextMenu.Items.Add(new Separator());
+            _contextMenu.Items.Add(new Separator());
 
             menuItem = new MenuItem();
             menuItem.Header = "Move to front";
             menuItem.InputGestureText = "Home";
             menuItem.Tag = ContextMenuCommand.MoveToFront;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Move to back";
             menuItem.InputGestureText = "End";
             menuItem.Tag = ContextMenuCommand.MoveToBack;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
-            contextMenu.Items.Add(new Separator());
+            _contextMenu.Items.Add(new Separator());
 
             menuItem = new MenuItem();
             menuItem.Header = "Undo";
             menuItem.InputGestureText = "Ctrl+Z";
             menuItem.Tag = ContextMenuCommand.Undo;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Redo";
             menuItem.InputGestureText = "Ctrl+Y";
             menuItem.Tag = ContextMenuCommand.Redo;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Reset attributes";
             menuItem.Tag = ContextMenuCommand.SetProperties;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Reset rotation";
             menuItem.Tag = ContextMenuCommand.ResetRotation;
-            menuItem.Click += new RoutedEventHandler(contextMenuItem_Click);
-            contextMenu.Items.Add(menuItem);
+            menuItem.Click += new RoutedEventHandler(ContextMenuItem_Click);
+            _contextMenu.Items.Add(menuItem);
 
-            contextMenu.Items.Add(new Separator());
+            _contextMenu.Items.Add(new Separator());
 
             menuItem = new MenuItem();
             menuItem.Header = "Zoom to fit content";
             menuItem.InputGestureText = "Ctrl+0";
             menuItem.Click += (s, e) => this.ZoomPanFit();
-            contextMenu.Items.Add(menuItem);
+            _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
             menuItem.Header = "Zoom to actual size";
             menuItem.InputGestureText = "Ctrl+1";
             menuItem.Click += (s, e) => this.ZoomPanActualSize();
-            contextMenu.Items.Add(menuItem);
+            _contextMenu.Items.Add(menuItem);
 
         }
 
@@ -1654,7 +1334,7 @@ namespace Clowd.Drawing
             UpdateState();
 
             // Enable/disable menu items according to state.
-            foreach (object obj in contextMenu.Items)
+            foreach (object obj in _contextMenu.Items)
             {
                 MenuItem item = obj as MenuItem;
                 if (item != null && item.Tag is ContextMenuCommand command)
@@ -1693,22 +1373,16 @@ namespace Clowd.Drawing
             }
         }
 
-        /// <summary>
-        /// Cancel currently executed operation:
-        /// add new object or group selection.
-        /// 
-        /// Called when mouse capture is lost or Esc is pressed.
-        /// </summary>
         void CancelCurrentOperation()
         {
             if (Tool == ToolType.Pointer)
             {
-                if (graphicsList.Count > 0)
+                if (GraphicsList.Count > 0)
                 {
-                    if (graphicsList[graphicsList.Count - 1] is GraphicSelectionRectangle)
+                    if (GraphicsList[GraphicsList.Count - 1] is GraphicSelectionRectangle)
                     {
                         // Delete selection rectangle if it exists
-                        graphicsList.RemoveAt(graphicsList.Count - 1);
+                        GraphicsList.RemoveAt(GraphicsList.Count - 1);
                     }
                     else
                     {
@@ -1721,9 +1395,9 @@ namespace Clowd.Drawing
             else if (Tool > ToolType.Pointer && Tool < ToolType.Max)
             {
                 // Delete last graphics object which is currently drawn
-                if (graphicsList.Count > 0)
+                if (GraphicsList.Count > 0)
                 {
-                    graphicsList.RemoveAt(graphicsList.Count - 1);
+                    GraphicsList.RemoveAt(GraphicsList.Count - 1);
                 }
             }
 
@@ -1733,30 +1407,16 @@ namespace Clowd.Drawing
             this.Cursor = HelperFunctions.DefaultCursor;
         }
 
-        /// <summary>
-        /// Add command to history.
-        /// </summary>
         internal void AddCommandToHistory(CommandBase command)
         {
-            undoManager.AddCommandToHistory(command);
+            _undoManager.AddCommandToHistory(command);
         }
 
-        /// <summary>
-        /// Clear Undo history.
-        /// </summary>
         void ClearHistory()
         {
-            undoManager.ClearHistory();
+            _undoManager.ClearHistory();
         }
 
-        /// <summary>
-        /// Update state of Can* dependency properties
-        /// used for Edit commands.
-        /// This function calls after any change in drawing canvas state,
-        /// caused by user commands.
-        /// Helps to keep client controls state up-to-date, in the case
-        /// if Can* properties are used for binding.
-        /// </summary>
         void UpdateState()
         {
             bool hasObjects = (this.Count > 0);
@@ -1771,7 +1431,7 @@ namespace Clowd.Drawing
             CanSetProperties = hasSelectedObjects;
         }
 
-        private void RefreshBounds()
+        void RefreshBounds()
         {
             var bounds = GetArtworkBounds();
             Canvas.SetLeft(_artworkRectangle, bounds.Left);
@@ -1780,9 +1440,14 @@ namespace Clowd.Drawing
             _artworkRectangle.Height = bounds.Height;
         }
 
-        #endregion Other FunctionsS
+        internal ToolBase GetTool(ToolType type)
+        {
+            return _tools[(int)type];
+        }
 
-        #region Zooming and panning
+        #endregion Other Functions
+
+        #region Zooming and Panning
 
         public bool IsPanning { get; private set; }
 
@@ -1892,6 +1557,6 @@ namespace Clowd.Drawing
             ContentOffset = new Point(x, y);
         }
 
-        #endregion
+        #endregion Zooming and Panning
     }
 }
