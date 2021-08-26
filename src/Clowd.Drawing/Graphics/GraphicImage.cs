@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Xml.Serialization;
 using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
@@ -13,73 +11,41 @@ namespace Clowd.Drawing.Graphics
     {
         public string BitmapFilePath
         {
-            get { return _bitmapFilePath; }
+            get => _bitmapFilePath;
             set
             {
-                if (!EqualityComparer<string>.Default.Equals(_bitmapFilePath, value))
+                if (Set(ref _bitmapFilePath, value))
                 {
-                    _bitmapFilePath = value;
-
-                    // load this way so the file handle is not kept open
-                    BitmapImage bi = new BitmapImage();
-                    bi.BeginInit();
-                    bi.UriSource = new Uri(_bitmapFilePath);
-                    bi.CacheOption = BitmapCacheOption.OnLoad;
-                    bi.EndInit();
-
-                    _bitmap = bi;
-
+                    _bitmap = CachedBitmapLoader.LoadFromFile(value);
                     _cropped = new CroppedBitmap(_bitmap, Crop);
-                    OnPropertyChanged(nameof(BitmapFilePath));
                 }
             }
         }
 
         public Int32Rect Crop
         {
-            get { return _crop; }
-            set
-            {
-                if (!_crop.Equals(value))
-                {
-                    _crop = value;
-                    _cropped = new CroppedBitmap(_bitmap, value);
-                    OnPropertyChanged(nameof(Crop));
-                }
-            }
+            get => _crop;
+            set => Set(ref _crop, value);
         }
 
         public int FlipX
         {
             get => _scaleX;
-            set
-            {
-                _scaleX = value;
-                OnPropertyChanged(nameof(FlipX));
-            }
+            set => Set(ref _scaleX, value);
         }
 
         public int FlipY
         {
             get => _scaleY;
-            set
-            {
-                _scaleY = value;
-                OnPropertyChanged(nameof(FlipY));
-            }
+            set => Set(ref _scaleY, value);
         }
 
         public Size OriginalSize
         {
             get => _originalSize;
-            set
-            {
-                _originalSize = value;
-                OnPropertyChanged(nameof(OriginalSize));
-            }
+            set => Set(ref _originalSize, value);
         }
 
-        [ClassifyIgnore] public BitmapSource Bitmap => _bitmap;
         [ClassifyIgnore] private BitmapSource _bitmap;
         [ClassifyIgnore] private CroppedBitmap _cropped;
 
@@ -116,8 +82,15 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawRectangle(DrawingContext drawingContext)
         {
-            if (drawingContext == null)
-                throw new ArgumentNullException(nameof(drawingContext));
+            if (_bitmap == null)
+            {
+                _bitmap = CachedBitmapLoader.LoadFromFile(_bitmapFilePath);
+                _cropped = new CroppedBitmap(_bitmap, Crop);
+            }
+            else if (_cropped.SourceRect != Crop)
+            {
+                _cropped = new CroppedBitmap(_bitmap, Crop);
+            }
 
             Rect r = UnrotatedBounds;
 
