@@ -17,6 +17,7 @@ $MSBuildPath = $MSBuildPath.Trim();
 Write-Host "Get Clowd Version" -ForegroundColor Magenta
 $gitVerJson = (&nbgv get-version -f json) | ConvertFrom-Json
 $version = $gitVerJson.SimpleVersion
+Write-Host $version
 
 # publish Clowd project
 Write-Host "Build Clowd" -ForegroundColor Magenta
