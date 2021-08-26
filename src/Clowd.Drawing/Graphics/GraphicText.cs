@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Xml.Serialization;
+using Clowd.Drawing.Tools;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -169,6 +170,11 @@ namespace Clowd.Drawing.Graphics
             }
 
             context.Pop();
+        }
+
+        internal override void Activate(DrawingCanvas canvas)
+        {
+            (canvas.GetTool(ToolType.Text) as ToolText).CreateTextBox(this, canvas, false);
         }
 
         internal FormattedText CreateFormattedText()
