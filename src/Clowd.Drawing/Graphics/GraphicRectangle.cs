@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Xml.Serialization;
 using Clowd.Drawing.Properties;
 
 namespace Clowd.Drawing.Graphics
@@ -63,6 +64,7 @@ namespace Clowd.Drawing.Graphics
                 if (value == _angle) return;
                 _angle = value;
                 OnPropertyChanged(nameof(Angle));
+                OnPropertyChanged(nameof(Bounds));
             }
         }
 
@@ -81,11 +83,12 @@ namespace Clowd.Drawing.Graphics
         private double _top;
         private double _right;
         private double _bottom;
-        private double _angle = 0;
+        private double _angle;
         private bool _filled;
 
         // This is always the center of the rectangle except while the user is dragging a resizing handle.
-        private Point _centerOfRotation;
+        [XmlIgnore]
+        public Point CenterOfRotation { get; private set; }
 
         protected GraphicRectangle()
         {
@@ -109,9 +112,9 @@ namespace Clowd.Drawing.Graphics
             _top = rect.Top;
             _right = rect.Right;
             _bottom = rect.Bottom;
-            _centerOfRotation = new Point((_left + _right) / 2, (_top + _bottom) / 2);
             _filled = filled;
             _angle = angle;
+            Normalize(); // set CenterOfRotation
         }
 
         public override Rect Bounds
@@ -214,17 +217,17 @@ namespace Clowd.Drawing.Graphics
             Right += deltaX;
             Top += deltaY;
             Bottom += deltaY;
-            _centerOfRotation = new Point(
-                _centerOfRotation.X + deltaX,
-                _centerOfRotation.Y + deltaY);
+            CenterOfRotation = new Point(
+                CenterOfRotation.X + deltaX,
+                CenterOfRotation.Y + deltaY);
             OnPropertyChanged();
         }
 
         internal Point ApplyRotation(Point point)
         {
-            var d = point - _centerOfRotation;
+            var d = point - CenterOfRotation;
             var angleRad = Angle / 180 * Math.PI;
-            var newPoint = _centerOfRotation + new Vector(
+            var newPoint = CenterOfRotation + new Vector(
                 d.X * Math.Cos(angleRad) - d.Y * Math.Sin(angleRad),
                 d.Y * Math.Cos(angleRad) + d.X * Math.Sin(angleRad));
             return newPoint;
@@ -232,9 +235,9 @@ namespace Clowd.Drawing.Graphics
 
         internal Point UnapplyRotation(Point point)
         {
-            var d = point - _centerOfRotation;
+            var d = point - CenterOfRotation;
             var negAngleRad = -Angle / 180 * Math.PI;
-            var newPoint = _centerOfRotation + new Vector(
+            var newPoint = CenterOfRotation + new Vector(
                 d.X * Math.Cos(negAngleRad) - d.Y * Math.Sin(negAngleRad),
                 d.Y * Math.Cos(negAngleRad) + d.X * Math.Sin(negAngleRad));
             return newPoint;
@@ -318,8 +321,13 @@ namespace Clowd.Drawing.Graphics
             // Step 1: find the *rotated* positions of the top-left and bottom-right corners.
             var topLeft = ApplyRotation(new Point(Left, Top));
             var bottomRight = ApplyRotation(new Point(Right, Bottom));
+
             // The center of rotation is in the middle between the top-left and bottom-right, even when rotated.
-            _centerOfRotation = new Point((topLeft.X + bottomRight.X) / 2, (topLeft.Y + bottomRight.Y) / 2);
+            //CenterOfRotation = new Point((topLeft.X + bottomRight.X) / 2, (topLeft.Y + bottomRight.Y) / 2);
+            var x = (bottomRight.X - topLeft.X) / 2 + topLeft.X;
+            var y = (bottomRight.Y - topLeft.Y) / 2 + topLeft.Y;
+            CenterOfRotation = new Point(x, y);
+
             // Step 2: reverse the rotation, but about the *new* center of rotation.
             topLeft = UnapplyRotation(topLeft);
             bottomRight = UnapplyRotation(bottomRight);
@@ -335,7 +343,7 @@ namespace Clowd.Drawing.Graphics
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
-            drawingContext.PushTransform(new RotateTransform(Angle, _centerOfRotation.X, _centerOfRotation.Y));
+            drawingContext.PushTransform(new RotateTransform(Angle, CenterOfRotation.X, CenterOfRotation.Y));
             DrawRectangle(drawingContext);
 
             base.Draw(drawingContext);
