@@ -1,17 +1,12 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Xml.Serialization;
 using Clowd.Drawing.Tools;
 using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Commands;
 
 namespace Clowd.Drawing
 {
@@ -29,7 +24,7 @@ namespace Clowd.Drawing
 
         public int SelectionCount => SelectedItems.Count();
 
-        public GraphicCollection GraphicsList { get; }
+        public GraphicCollection GraphicsList { get; internal set; }
 
         public int Count => GraphicsList.Count;
 
@@ -58,27 +53,27 @@ namespace Clowd.Drawing
 
             _tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
                 Resource.CursorRectangle,
-                point => new GraphicRectangle(this, new Rect(point, new Size(1, 1))),
+                point => new GraphicRectangle(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
             _tools[(int)ToolType.FilledRectangle] = new ToolDraggable<GraphicFilledRectangle>(
                 Resource.CursorRectangle,
-                point => new GraphicFilledRectangle(this, new Rect(point, new Size(1, 1))),
+                point => new GraphicFilledRectangle(ObjectColor, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
             _tools[(int)ToolType.Ellipse] = new ToolDraggable<GraphicEllipse>(
                 Resource.CursorEllipse,
-                point => new GraphicEllipse(this, new Rect(point, new Size(1, 1))),
+                point => new GraphicEllipse(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5));
 
             _tools[(int)ToolType.Line] = new ToolDraggable<GraphicLine>(
                 Resource.CursorLine,
-                point => new GraphicLine(this, point, point),
+                point => new GraphicLine(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2));
 
             _tools[(int)ToolType.Arrow] = new ToolDraggable<GraphicArrow>(
                 Resource.CursorArrow,
-                point => new GraphicArrow(this, point, point),
+                point => new GraphicArrow(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2));
 
             _tools[(int)ToolType.PolyLine] = new ToolPolyLine();
@@ -453,8 +448,6 @@ namespace Clowd.Drawing
         static void LineWidthChanged(DependencyObject property, DependencyPropertyChangedEventArgs args)
         {
             DrawingCanvas d = property as DrawingCanvas;
-
-            CommandChangeState command = new CommandChangeState(d);
             bool wasChange = false;
 
             foreach (GraphicBase g in d.SelectedItems)
@@ -470,8 +463,7 @@ namespace Clowd.Drawing
 
             if (wasChange)
             {
-                command.NewState(d);
-                d.AddCommandToHistory(command);
+                d.AddCommandToHistory();
             }
         }
 
@@ -492,7 +484,6 @@ namespace Clowd.Drawing
         {
             DrawingCanvas d = property as DrawingCanvas;
 
-            CommandChangeState command = new CommandChangeState(d);
             bool wasChange = false;
             var value = d.ObjectColor;
 
@@ -507,8 +498,7 @@ namespace Clowd.Drawing
 
             if (wasChange)
             {
-                command.NewState(d);
-                d.AddCommandToHistory(command);
+                d.AddCommandToHistory();
             }
         }
 
@@ -544,7 +534,6 @@ namespace Clowd.Drawing
 
         private static void ApplyFontChange<TPropertyType>(DrawingCanvas d, Func<DrawingCanvas, TPropertyType> getProp, Func<GraphicText, TPropertyType> getTextProp, Action<GraphicText, TPropertyType> setTextProp)
         {
-            CommandChangeState command = new CommandChangeState(d);
             bool wasChange = false;
             var value = getProp(d);
 
@@ -562,8 +551,7 @@ namespace Clowd.Drawing
 
             if (wasChange)
             {
-                command.NewState(d);
-                d.AddCommandToHistory(command);
+                d.AddCommandToHistory();
             }
         }
 
@@ -643,39 +631,6 @@ namespace Clowd.Drawing
 
         #region Public Functions
 
-        public void Draw(DrawingContext drawingContext, RenderTargetBitmap bitmap, Transform transform, bool withSelection)
-        {
-            bool oldSelection = false;
-
-            foreach (GraphicBase b in GraphicsList)
-            {
-                if (!withSelection)
-                {
-                    // Keep selection state and unselect
-                    oldSelection = b.IsSelected;
-                    b.IsSelected = false;
-                }
-
-                DrawingVisual vis = new DrawingVisual();
-                vis.Effect = b.Effect;
-                using (var cx = vis.RenderOpen())
-                {
-                    cx.PushTransform(transform);
-                    b.Draw(cx);
-                }
-                if (drawingContext != null)
-                    drawingContext.DrawRectangle(new VisualBrush(vis), null, vis.ContentBounds);
-                if (bitmap != null)
-                    bitmap.Render(vis);
-
-                if (!withSelection)
-                {
-                    // Restore selection state
-                    b.IsSelected = oldSelection;
-                }
-            }
-        }
-
         public ToolActionType GetToolActionType(ToolType type)
         {
             try
@@ -731,47 +686,10 @@ namespace Clowd.Drawing
             g.Normalize();
             this.GraphicsList.Add(g);
 
-            AddCommandToHistory(new CommandAdd(g));
+            AddCommandToHistory();
             UpdateState();
             InvalidateVisual();
             RefreshBounds();
-        }
-
-        public void AddGraphicsFromStream(Stream stream)
-        {
-            SerializationHelper helper;
-            XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
-
-            helper = (SerializationHelper)xml.Deserialize(stream);
-
-            var transformX = (-helper.Left - helper.Width / 2) + ((ActualWidth / 2 - ContentOffset.X) / ContentScale);
-            var transformY = (-helper.Top - helper.Height / 2) + ((ActualHeight / 2 - ContentOffset.Y) / ContentScale);
-
-            this.UnselectAll();
-            foreach (var g in helper.Graphics)
-            {
-                g.Move(transformX, transformY);
-                g.IsSelected = true;
-                g.Normalize();
-                GraphicsList.Add(g);
-            }
-
-            AddCommandToHistory(new CommandAdd(helper.Graphics));
-            UpdateState();
-            InvalidateVisual();
-            RefreshBounds();
-        }
-
-        public void WriteGraphicsToStream(Stream stream, bool selectedOnly)
-        {
-            GraphicBase[] graphics = GraphicsList.OfType<GraphicBase>().Where(g => g.IsSelected || !selectedOnly).ToArray();
-            if (!graphics.Any())
-                graphics = GraphicsList.OfType<GraphicBase>().ToArray();
-
-            var helper = new SerializationHelper(graphics.Select(g => g), GetArtworkBounds(true));
-
-            XmlSerializer xml = new XmlSerializer(typeof(SerializationHelper));
-            xml.Serialize(stream, helper);
         }
 
         public void SelectAll()
@@ -803,7 +721,6 @@ namespace Clowd.Drawing
 
         public void Delete()
         {
-            CommandDelete command = new CommandDelete(this);
             bool wasChange = false;
 
             for (int i = this.Count - 1; i >= 0; i--)
@@ -817,7 +734,7 @@ namespace Clowd.Drawing
 
             if (wasChange)
             {
-                this.AddCommandToHistory(command);
+                AddCommandToHistory();
             }
 
             UpdateState();
@@ -828,8 +745,8 @@ namespace Clowd.Drawing
         {
             if (GraphicsList.Count > 0)
             {
-                AddCommandToHistory(new CommandDeleteAll(this));
                 GraphicsList.Clear();
+                AddCommandToHistory();
             }
 
             UpdateState();
@@ -839,8 +756,6 @@ namespace Clowd.Drawing
         public void MoveToFront()
         {
             List<GraphicBase> list = new List<GraphicBase>();
-
-            CommandChangeOrder command = new CommandChangeOrder(this);
 
             for (int i = this.Count - 1; i >= 0; i--)
             {
@@ -859,8 +774,7 @@ namespace Clowd.Drawing
 
             if (list.Count > 0)
             {
-                command.NewState(this);
-                this.AddCommandToHistory(command);
+                AddCommandToHistory();
             }
 
             UpdateState();
@@ -869,8 +783,6 @@ namespace Clowd.Drawing
         public void MoveToBack()
         {
             List<GraphicBase> list = new List<GraphicBase>();
-
-            CommandChangeOrder command = new CommandChangeOrder(this);
 
             for (int i = this.Count - 1; i >= 0; i--)
             {
@@ -889,8 +801,7 @@ namespace Clowd.Drawing
 
             if (list.Count > 0)
             {
-                command.NewState(this);
-                this.AddCommandToHistory(command);
+                AddCommandToHistory();
             }
 
             UpdateState();
@@ -912,9 +823,7 @@ namespace Clowd.Drawing
 
             if (changed)
             {
-                CommandChangeState command = new CommandChangeState(this);
-                command.NewState(this);
-                AddCommandToHistory(command);
+                AddCommandToHistory();
             }
 
             UpdateState();
@@ -923,7 +832,6 @@ namespace Clowd.Drawing
 
         public void SetProperties()
         {
-            CommandChangeState command = new CommandChangeState(this);
             bool changed = false;
 
             foreach (var v in GraphicsList.Cast<GraphicBase>())
@@ -971,8 +879,7 @@ namespace Clowd.Drawing
 
             if (changed)
             {
-                command.NewState(this);
-                AddCommandToHistory(command);
+                AddCommandToHistory();
             }
 
             UpdateState();
@@ -1328,8 +1235,10 @@ namespace Clowd.Drawing
         void ShowContextMenu(MouseButtonEventArgs e)
         {
             // Change current selection if necessary
+            var dpi = VisualTreeHelper.GetDpi(this);
+
             Point point = e.GetPosition(this);
-            var hitObject = GraphicsList.FirstOrDefault(g => g.MakeHitTest(point) >= 0);
+            var hitObject = GraphicsList.FirstOrDefault(g => g.MakeHitTest(point, dpi) >= 0);
             if (hitObject == null)
             {
                 UnselectAll();
@@ -1398,7 +1307,7 @@ namespace Clowd.Drawing
                     {
                         // Pointer tool moved or resized graphics object.
                         // Add this action to the history
-                        ToolPointer.AddChangeToHistory(this);
+                        AddCommandToHistory();
                     }
                 }
             }
@@ -1417,9 +1326,9 @@ namespace Clowd.Drawing
             this.Cursor = HelperFunctions.DefaultCursor;
         }
 
-        internal void AddCommandToHistory(CommandBase command)
+        internal void AddCommandToHistory()
         {
-            _undoManager.AddCommandToHistory(command);
+            _undoManager.AddCommandStep();
         }
 
         void ClearHistory()

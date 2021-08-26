@@ -1,81 +1,48 @@
 ﻿using System;
-using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Xml.Serialization;
+using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
-    [Serializable]
     public class GraphicRectangle : GraphicBase
     {
         public double Left
         {
-            get { return _left; }
-            set
-            {
-                if (value == _left) return;
-                _left = value;
-                OnPropertyChanged(nameof(Left));
-                OnPropertyChanged(nameof(Bounds));
-            }
+            get => _left;
+            set => Set(ref _left, value);
         }
+
         public double Top
         {
-            get { return _top; }
-            set
-            {
-                if (value == _top) return;
-                _top = value;
-                OnPropertyChanged(nameof(Top));
-                OnPropertyChanged(nameof(Bounds));
-            }
+            get => _top;
+            set => Set(ref _top, value);
         }
+
         public double Right
         {
-            get { return _right; }
-            set
-            {
-                if (value == _right) return;
-                _right = value;
-                OnPropertyChanged(nameof(Right));
-                OnPropertyChanged(nameof(Bounds));
-            }
+            get => _right;
+            set => Set(ref _right, value);
         }
+
         public double Bottom
         {
-            get { return _bottom; }
-            set
-            {
-                if (value == _bottom) return;
-                _bottom = value;
-                OnPropertyChanged(nameof(Bottom));
-                OnPropertyChanged(nameof(Bounds));
-            }
+            get => _bottom;
+            set => Set(ref _bottom, value);
         }
+
         public double Angle
         {
-            get { return _angle; }
-            set
-            {
-                if (value == _angle) return;
-                _angle = value;
-                OnPropertyChanged(nameof(Angle));
-                OnPropertyChanged(nameof(Bounds));
-            }
+            get => _angle;
+            set => Set(ref _angle, value);
         }
 
         public bool Filled
         {
-            get { return _filled; }
-            set
-            {
-                if (value == _filled) return;
-                _filled = value;
-                OnPropertyChanged(nameof(Filled));
-            }
+            get => _filled;
+            set => Set(ref _filled, value);
         }
 
         private double _left;
@@ -86,26 +53,20 @@ namespace Clowd.Drawing.Graphics
         private bool _filled;
 
         // This is always the center of the rectangle except while the user is dragging a resizing handle.
-        [XmlIgnore]
+        [ClassifyIgnore]
         public Point CenterOfRotation { get; private set; }
 
         protected GraphicRectangle()
         {
         }
-        public GraphicRectangle(DrawingCanvas canvas, Rect rect)
-            : this(canvas.ObjectColor, canvas.LineWidth, rect, false)
-        {
-        }
-        public GraphicRectangle(DrawingCanvas canvas, Rect rect, bool filled)
-            : this(canvas.ObjectColor, canvas.LineWidth, rect, filled)
-        {
-        }
+
         public GraphicRectangle(Color objectColor, double lineWidth, Rect rect)
             : this(objectColor, lineWidth, rect, false)
         {
         }
-        public GraphicRectangle(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0)
-            : base(objectColor, lineWidth)
+
+        public GraphicRectangle(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0, bool dropShadowEffect = true)
+            : base(objectColor, lineWidth, dropShadowEffect)
         {
             _left = rect.Left;
             _top = rect.Top;
@@ -192,14 +153,14 @@ namespace Clowd.Drawing.Graphics
             return new Point(x, y);
         }
 
-        internal override int MakeHitTest(Point point)
+        internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
             if (IsSelected)
             {
                 var rotated = UnapplyRotation(point);
                 for (int i = 1; i <= HandleCount; i++)
                 {
-                    if (GetHandleRectangle(i).Contains(rotated))
+                    if (GetHandleRectangle(i, uiscale).Contains(rotated))
                         return i;
                 }
             }
@@ -337,28 +298,25 @@ namespace Clowd.Drawing.Graphics
             Bottom = bottomRight.Y;
         }
 
-        internal override void Draw(DrawingContext drawingContext)
+        internal override void DrawObject(DrawingContext drawingContext)
         {
             if (drawingContext == null)
                 throw new ArgumentNullException(nameof(drawingContext));
 
             drawingContext.PushTransform(new RotateTransform(Angle, CenterOfRotation.X, CenterOfRotation.Y));
             DrawRectangle(drawingContext);
-
-            base.Draw(drawingContext);
         }
 
-        internal override void DrawSingleTracker(DrawingContext drawingContext, int handleNum)
+        protected override void DrawSingleTracker(DrawingContext drawingContext, int handleNum, DpiScale uiscale)
         {
-            // draw rotation handle differently
-            if (handleNum == 9)
+            if (handleNum == 9) // draw rotation handle differently
             {
-                DrawRotationTracker(drawingContext, GetHandle(4), GetHandleRectangle(9));
-                base.DrawSingleTracker(drawingContext, 4);
+                DrawRotationTracker(drawingContext, GetHandle(4), GetHandleRectangle(9, uiscale));
+                base.DrawSingleTracker(drawingContext, 4, uiscale);
             }
             else
             {
-                base.DrawSingleTracker(drawingContext, handleNum);
+                base.DrawSingleTracker(drawingContext, handleNum, uiscale);
             }
         }
 
@@ -386,11 +344,6 @@ namespace Clowd.Drawing.Graphics
                     Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left - LineWidth),
                     Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top - LineWidth)),
                 LineWidth, LineWidth);
-        }
-
-        public override GraphicBase Clone()
-        {
-            return new GraphicRectangle(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle) { ObjectId = ObjectId };
         }
     }
 }

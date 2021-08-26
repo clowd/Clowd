@@ -11,6 +11,7 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="RT.Serialization" Version="2.0.1693" />
+    <PackageReference Include="RT.Serialization.Binary" Version="2.0.1693" />
     <PackageReference Include="RT.Serialization.Xml" Version="2.0.1693" />
     <PackageReference Include="RT.Util.Core" Version="2.0.1693" />
   </ItemGroup>

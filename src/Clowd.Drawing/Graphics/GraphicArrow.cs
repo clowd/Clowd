@@ -4,14 +4,9 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
-    [Serializable]
     public class GraphicArrow : GraphicLine
     {
         protected GraphicArrow()
-        {
-        }
-        public GraphicArrow(DrawingCanvas canvas, Point start, Point end)
-            : base(canvas, start, end)
         {
         }
 
@@ -48,11 +43,6 @@ namespace Clowd.Drawing.Graphics
             var arrow = new PathGeometry(new[] { new PathFigure(LineEnd, new[] { new LineSegment(pt2, true), new LineSegment(pt1, true) }, true) });
 
             return line == null ? (Geometry)arrow : new CombinedGeometry(GeometryCombineMode.Union, line, arrow);
-        }
-
-        public override GraphicBase Clone()
-        {
-            return new GraphicArrow(ObjectColor, LineWidth, LineStart, LineEnd) { ObjectId = ObjectId };
         }
     }
 }

@@ -3,9 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.IO;
 using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Commands;
 
 namespace Clowd.Drawing.Tools
 {
@@ -74,7 +72,6 @@ namespace Clowd.Drawing.Tools
 
         public void CreateTextBox(GraphicText graphicsText, DrawingCanvas drawingCanvas, bool newGraphic = false)
         {
-            graphicsText.IsSelected = false;  // selection marks don't look good with textbox
             graphicsText.Editing = true;
 
             // Keep old text in the case Esc is pressed while editing
@@ -100,7 +97,7 @@ namespace Clowd.Drawing.Tools
             TextBox.AcceptsReturn = true;
 
             var finalTransform = new TransformGroup();
-            finalTransform.Children.Add(new TranslateTransform(graphicsText.Padding, graphicsText.Padding));
+            finalTransform.Children.Add(new TranslateTransform(GraphicText.TextPadding, GraphicText.TextPadding));
             finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2, (graphicsText.Bottom - graphicsText.Top) / 2));
             TextBox.RenderTransform = finalTransform;
 
@@ -138,29 +135,21 @@ namespace Clowd.Drawing.Tools
         private void HideTextbox(GraphicBase graphic, DrawingCanvas drawingCanvas)
         {
             if (TextBox == null)
-            {
                 return;
-            }
+
             var graphicsText = graphic as GraphicText;
             if (graphicsText == null)
                 return;
 
-            graphicsText.IsSelected = true;   // restore selection which was removed for better textbox appearance
             graphicsText.Editing = false;
 
             if (TextBox.Text.Trim().Length == 0)
             {
                 // Textbox is empty: remove text object.
+                drawingCanvas.GraphicsList.Remove(graphic);
 
                 if (!String.IsNullOrEmpty(OldText))  // existing text was edited
-                {
-                    // Since text object is removed now,
-                    // Add Delete command to the history
-                    drawingCanvas.AddCommandToHistory(new CommandDelete(drawingCanvas));
-                }
-
-                // Remove empty text object
-                drawingCanvas.GraphicsList.Remove(graphic);
+                    drawingCanvas.AddCommandToHistory();
             }
             else
             {
@@ -168,15 +157,11 @@ namespace Clowd.Drawing.Tools
                 {
                     if (TextBox.Text.Trim() != OldText)     // text was really changed
                     {
-                        // Create command
-                        CommandChangeState command = new CommandChangeState(drawingCanvas);
-
                         // Make change in the text object
                         graphicsText.Body = TextBox.Text.Trim();
 
                         // Keep state after change and add command to the history
-                        command.NewState(drawingCanvas);
-                        drawingCanvas.AddCommandToHistory(command);
+                        drawingCanvas.AddCommandToHistory();
                     }
                 }
                 else                                          // new text was added
@@ -185,7 +170,7 @@ namespace Clowd.Drawing.Tools
                     graphicsText.Body = TextBox.Text.Trim();
 
                     // Add command to the history
-                    drawingCanvas.AddCommandToHistory(new CommandAdd(graphic));
+                    drawingCanvas.AddCommandToHistory();
                 }
             }
 
