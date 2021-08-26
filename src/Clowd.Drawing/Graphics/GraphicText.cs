@@ -22,6 +22,7 @@ namespace Clowd.Drawing.Graphics
                 OnPropertyChanged(nameof(Editing));
             }
         }
+
         public string Body
         {
             get { return _body; }
@@ -29,14 +30,16 @@ namespace Clowd.Drawing.Graphics
             {
                 _body = value;
                 var form = CreateFormattedText();
-                Right = Left + form.Width;
-                Bottom = Top + form.Height;
+                Right = Left + form.Width + (Padding * 2);
+                Bottom = Top + form.Height + (Padding * 2);
+                Normalize();
                 OnPropertyChanged(nameof(Body));
                 OnPropertyChanged(nameof(Right));
                 OnPropertyChanged(nameof(Bottom));
                 OnPropertyChanged(nameof(Bounds));
             }
         }
+
         public string FontName
         {
             get { return _fontName; }
@@ -46,6 +49,7 @@ namespace Clowd.Drawing.Graphics
                 OnPropertyChanged(nameof(FontName));
             }
         }
+
         public double FontSize
         {
             get { return _fontSize; }
@@ -55,6 +59,7 @@ namespace Clowd.Drawing.Graphics
                 OnPropertyChanged(nameof(FontSize));
             }
         }
+
         public FontStyle FontStyle
         {
             get { return _fontStyle; }
@@ -64,6 +69,7 @@ namespace Clowd.Drawing.Graphics
                 OnPropertyChanged(nameof(FontStyle));
             }
         }
+
         public FontWeight FontWeight
         {
             get { return _fontWeight; }
@@ -73,6 +79,7 @@ namespace Clowd.Drawing.Graphics
                 OnPropertyChanged(nameof(FontWeight));
             }
         }
+
         public FontStretch FontStretch
         {
             get { return _fontStretch; }
@@ -113,12 +120,13 @@ namespace Clowd.Drawing.Graphics
             FontStyle = canvas.TextFontStyle;
             FontWeight = canvas.TextFontWeight;
         }
+
         public GraphicText(Color objectColor, double lineWidth, Point point, double angle = 0, string body = null)
-            : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)))
+            : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)), false, angle)
         {
-            Angle = angle;
             Body = body ?? "Double-click to edit note.";
         }
+
         protected GraphicText()
         {
         }
@@ -151,10 +159,7 @@ namespace Clowd.Drawing.Graphics
 
             var form = CreateFormattedText();
 
-            Right = Left + form.Width + (Padding * 2);
-            Bottom = Top + form.Height + (Padding * 2);
-
-            context.PushTransform(new RotateTransform(Angle, (Left + Right) / 2, (Top + Bottom) / 2));
+            context.PushTransform(new RotateTransform(Angle, CenterOfRotation.X, CenterOfRotation.Y));
             context.DrawRectangle(new SolidColorBrush(ObjectColor), null, UnrotatedBounds);
 
             // don't draw border / rotation controls or text if the textbox is visible
@@ -185,15 +190,19 @@ namespace Clowd.Drawing.Graphics
             if (Editing && (Body.EndsWith('\r') || Body.EndsWith('\n')))
                 txt += "_";
 
+            // should we use VisualTreeHelper.GetDpi(this).PixelsPerDip ?
+            var pixelsPerDip = new DpiScale(1, 1).PixelsPerDip;
+
             return new FormattedText(
                 txt,
                 System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
                 new Typeface(new FontFamily(FontName), FontStyle, FontWeight, FontStretch),
                 FontSize,
-                new SolidColorBrush(Color.FromArgb(220, 0, 0, 0)),
+                new SolidColorBrush(Color.FromArgb(255, 0, 0, 0)),
                 null,
-                TextFormattingMode.Display);
+                TextFormattingMode.Ideal,
+                pixelsPerDip);
         }
 
         public override GraphicBase Clone()

@@ -85,7 +85,6 @@ namespace Clowd.Drawing.Tools
             editedGraphicsText = graphicsText;
 
             TextBox = new TextBox();
-            TextBox.RenderTransform = new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2, (graphicsText.Bottom - graphicsText.Top) / 2);
             TextBox.FontFamily = new FontFamily(graphicsText.FontName);
             TextBox.FontSize = graphicsText.FontSize;
             TextBox.FontStretch = graphicsText.FontStretch;
@@ -95,10 +94,16 @@ namespace Clowd.Drawing.Tools
             TextBox.Height = Double.NaN;
             TextBox.Background = Brushes.Transparent;
             TextBox.Text = graphicsText.Body;
-            TextBox.BorderThickness = new Thickness(0, 0, 0, 1);
+            TextBox.BorderThickness = new Thickness(0, 0, 0, 0);
             TextBox.BorderBrush = Brushes.Transparent;
             TextBox.Tag = graphicsText;
             TextBox.Style = null;
+            TextBox.AcceptsReturn = true;
+
+            var finalTransform = new TransformGroup();
+            finalTransform.Children.Add(new TranslateTransform(graphicsText.Padding, graphicsText.Padding));
+            finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2, (graphicsText.Bottom - graphicsText.Top) / 2));
+            TextBox.RenderTransform = finalTransform;
 
             if (newGraphic)
             {
@@ -112,12 +117,10 @@ namespace Clowd.Drawing.Tools
                 TextBox.CaretIndex = int.MaxValue;
             }
 
-            TextBox.AcceptsReturn = true;
-
             drawingCanvas.Children.Add(TextBox);
 
-            Canvas.SetLeft(TextBox, graphicsText.Left + graphicsText.Padding);
-            Canvas.SetTop(TextBox, graphicsText.Top + graphicsText.Padding);
+            Canvas.SetLeft(TextBox, graphicsText.Left);
+            Canvas.SetTop(TextBox, graphicsText.Top);
 
             TextBox.Focus();
 
