@@ -196,7 +196,6 @@ namespace Clowd.Drawing.Tools
             drawingCanvas.Focus();
         }
 
-
         private void textBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             var grap = (sender as TextBox)?.Tag as GraphicText;
@@ -205,28 +204,19 @@ namespace Clowd.Drawing.Tools
             grap.Body = ((TextBox)sender).Text;
         }
 
-
-        void textBox_Loaded(object sender, RoutedEventArgs e)
+        private void textBox_Loaded(object sender, RoutedEventArgs e)
         {
             double xOffset, yOffset;
 
-            ComputeTextOffset(TextBox, out xOffset, out yOffset);
+            // compute text offset
 
-            Canvas.SetLeft(TextBox, Canvas.GetLeft(TextBox) - xOffset);
-            Canvas.SetTop(TextBox, Canvas.GetTop(TextBox) - yOffset);
-            TextBox.Width = TextBox.Width + xOffset + xOffset;
-            TextBox.Height = TextBox.Height + yOffset + yOffset;
-        }
-
-
-        static void ComputeTextOffset(TextBox tb, out double xOffset, out double yOffset)
-        {
             // Set hard-coded values initially
             xOffset = 5;
             yOffset = 3;
 
             try
             {
+                var tb = TextBox;
                 ContentControl cc = (ContentControl)tb.Template.FindName("PART_ContentHost", tb);
 
                 /*
@@ -250,18 +240,25 @@ namespace Clowd.Drawing.Tools
                 xOffset = offset.X;
                 yOffset = offset.Y;
             }
-            catch (ArgumentException e)
+            catch (ArgumentException ex)
             {
-                System.Diagnostics.Trace.WriteLine("ComputeTextOffset: " + e.Message);
+                System.Diagnostics.Trace.WriteLine("ComputeTextOffset: " + ex.Message);
             }
-            catch (InvalidOperationException e)
+            catch (InvalidOperationException ex)
             {
-                System.Diagnostics.Trace.WriteLine("ComputeTextOffset: " + e.Message);
+                System.Diagnostics.Trace.WriteLine("ComputeTextOffset: " + ex.Message);
             }
+
+            // end compute text offset
+
+
+            Canvas.SetLeft(TextBox, Canvas.GetLeft(TextBox) - xOffset);
+            Canvas.SetTop(TextBox, Canvas.GetTop(TextBox) - yOffset);
+            TextBox.Width = TextBox.Width + xOffset + xOffset;
+            TextBox.Height = TextBox.Height + yOffset + yOffset;
         }
 
-
-        void textBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        private void textBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
             {
@@ -311,30 +308,26 @@ namespace Clowd.Drawing.Tools
             }
         }
 
-        void textBox_LostFocus(object sender, RoutedEventArgs e)
+        private void textBox_LostFocus(object sender, RoutedEventArgs e)
         {
             HideTextbox(editedGraphicsText, drawingCanvas);
         }
 
-
-        void textBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        private void textBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
             HideTextbox(editedGraphicsText, drawingCanvas);
 
-            /// Notes:
-            /// TextBox context menu is set to null in CreateTextBox function.
-            /// The reason I did this is the following:
-            /// I must hide textbox when user clicks anywhere
-            /// outside of textbox, outside of this program window,
-            /// or any other window pops up and steals focus.
-            /// The only function which works for all these cases for 100%
-            /// is LostKeyboardFocus handler. However, LostKeyboardFocus
-            /// is raised also when textbox context menu is shown, and this
-            /// breaks all logic. To keep things consistent, I don't allow
-            /// showing context menu.
+            // Notes:
+            // TextBox context menu is set to null in CreateTextBox function.
+            // The reason I did this is the following:
+            // I must hide textbox when user clicks anywhere
+            // outside of textbox, outside of this program window,
+            // or any other window pops up and steals focus.
+            // The only function which works for all these cases for 100%
+            // is LostKeyboardFocus handler. However, LostKeyboardFocus
+            // is raised also when textbox context menu is shown, and this
+            // breaks all logic. To keep things consistent, I don't allow
+            // showing context menu.
         }
-
-
-
     }
 }

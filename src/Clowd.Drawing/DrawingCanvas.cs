@@ -52,11 +52,12 @@ namespace Clowd.Drawing
 
         private ToolBase[] tools;                   // Array of tools
 
-        ToolText toolText;
         internal ToolPointer ToolPointer;
 
-        private ContextMenu contextMenu;
 
+        private Border _clickable;
+        private Border _artworkRectangle;
+        private ContextMenu contextMenu;
         private UndoManager undoManager;
 
         #endregion Class Members
@@ -104,8 +105,7 @@ namespace Clowd.Drawing
 
             tools[(int)ToolType.PolyLine] = new ToolPolyLine();
 
-            toolText = new ToolText(this);
-            tools[(int)ToolType.Text] = toolText;   // kept as class member for in-place editing
+            tools[(int)ToolType.Text] = new ToolText(this);
 
             //tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>();
             //tools[(int)ToolType.Erase] = new ToolFilter<FilterEraser>();
@@ -1256,25 +1256,21 @@ namespace Clowd.Drawing
 
         #endregion Internal Properties
 
+        internal ToolBase GetTool(ToolType type)
+        {
+            return tools[(int)type];
+        }
+
         #region Visual Children Overrides
 
-        private Border _clickable;
-        private Border _artworkRectangle;
-        private const int _extraVisualsCount = 2; // only includes the permanent extra visuals
 
-        protected override int VisualChildrenCount
-        {
-            get
-            {
-                int n = _extraVisualsCount + graphicsList.VisualCount;
-                if (toolText.TextBox != null)
-                    n++;
-                return n;
-            }
-        }
+        protected override int VisualChildrenCount => GraphicsList.VisualCount + Children.Count;
 
         protected override Visual GetVisualChild(int index)
         {
+            // _clickable and _artworkbounds come first, 
+            // any other children come after.
+
             if (index == 0)
             {
                 if (_clickable != null && ActualWidth > 0 && ContentScale > 0)
@@ -1290,14 +1286,19 @@ namespace Clowd.Drawing
             {
                 return _artworkRectangle;
             }
-            else if (index - _extraVisualsCount < graphicsList.VisualCount)
+            else if (index - 2 < graphicsList.VisualCount)
             {
-                return graphicsList.GetVisual(index - _extraVisualsCount);
+                return graphicsList.GetVisual(index - 2);
             }
-            else if (index == _extraVisualsCount + graphicsList.VisualCount && toolText.TextBox != null)
+            else if (index - 2 - graphicsList.VisualCount < Children.Count)
             {
-                return toolText.TextBox;
+                // any other children.
+                return Children[index - graphicsList.VisualCount];
             }
+            //else if (index == 2 + graphicsList.VisualCount && toolText.TextBox != null)
+            //{
+            //    return toolText.TextBox;
+            //}
 
             throw new ArgumentOutOfRangeException("index");
         }
@@ -1322,7 +1323,11 @@ namespace Clowd.Drawing
             {
                 if (e.ClickCount == 2)
                 {
-                    HandleDoubleClick(e);        // special case for GraphicsText
+                    // on double click, execute GraphicBase.Activate().
+                    // this allows GraphicText to launch an editor etc.
+                    Point point = e.GetPosition(this);
+                    var clicked = ToolPointer.MakeHitTest(this, point, out var handleNum);
+                    clicked.Activate(this);
                 }
                 else if (Tool == ToolType.None || tools[(int)Tool] == null)
                 {
@@ -1726,21 +1731,6 @@ namespace Clowd.Drawing
 
             this.ReleaseMouseCapture();
             this.Cursor = HelperFunctions.DefaultCursor;
-        }
-
-        /// <summary>
-        /// Open in-place edit box if GraphicsText is clicked
-        /// </summary>
-        void HandleDoubleClick(MouseButtonEventArgs e)
-        {
-            Point point = e.GetPosition(this);
-            var clicked = ToolPointer.MakeHitTest(this, point, out var handleNum);
-
-            if (clicked is GraphicText)
-            {
-                GraphicText t = clicked as GraphicText;
-                toolText.CreateTextBox(t, this);
-            }
         }
 
         /// <summary>

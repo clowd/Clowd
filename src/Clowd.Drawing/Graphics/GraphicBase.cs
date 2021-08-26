@@ -122,6 +122,9 @@ namespace Clowd.Drawing.Graphics
         internal abstract void MoveHandleTo(Point point, int handleNumber);
         internal abstract Cursor GetHandleCursor(int handleNumber);
 
+        internal virtual void Activate(DrawingCanvas canvas)
+        {
+        }
         internal virtual void Normalize()
         {
             // Empty implementation is OK for classes which don't require normalization, like line.
