@@ -5,7 +5,6 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Xml.Serialization;
-using Clowd.Drawing.Properties;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -293,11 +292,11 @@ namespace Clowd.Drawing.Graphics
                 return HelperFunctions.DefaultCursor;
 
             if (handleNumber == 9)
-                return new Cursor(new MemoryStream(Resources.Rotate));
+                return Resource.CursorRotate;
 
             var cursorNum = (int)((45 * handleNumber + Angle + 272.5) / 5) % 36;
             if (_resizeCursors[cursorNum] == null)
-                _resizeCursors[cursorNum] = new Cursor(new MemoryStream((byte[])Resources.ResourceManager.GetObject($"Resize{cursorNum}")));
+                _resizeCursors[cursorNum] = Resource.GetResizeCursor(cursorNum);
             return _resizeCursors[cursorNum];
         }
 
