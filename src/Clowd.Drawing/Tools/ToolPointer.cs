@@ -2,7 +2,7 @@
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
-using Clowd.Drawing.Commands;
+using System.Windows.Media;
 using Clowd.Drawing.Graphics;
 
 
@@ -32,7 +32,6 @@ namespace Clowd.Drawing.Tools
         // Keep state about last and current point (used to edit objects via dragging, e.g. move and resize)
         private Point _lastPoint = new Point(0, 0);
 
-        private CommandChangeState _commandChangeState;
         bool _wasEdit;
 
         public ToolPointer() : base(HelperFunctions.DefaultCursor)
@@ -41,7 +40,8 @@ namespace Clowd.Drawing.Tools
 
         public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
         {
-            var controls = drawingCanvas.GraphicsList.Select(gv => new { gv, gv.IsSelected, HitTest = gv.MakeHitTest(point) }).Reverse().ToArray();
+            var dpi = VisualTreeHelper.GetDpi(drawingCanvas);
+            var controls = drawingCanvas.GraphicsList.Select(gv => new { gv, gv.IsSelected, HitTest = gv.MakeHitTest(point, dpi) }).Reverse().ToArray();
 
             // Test if we start dragging a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
             var grabHandle = controls.FirstOrDefault(g => g.IsSelected && g.HitTest > 0);
@@ -115,17 +115,15 @@ namespace Clowd.Drawing.Tools
                 }
 
                 graphic.IsSelected = true;
-                _commandChangeState = new CommandChangeState(drawingCanvas);
             }
             else
             {
                 // Click on background — start a selection rectangle for group selection.
                 var rect = HelperFunctions.CreateRectSafe(_lastPoint.X, _lastPoint.Y, _lastPoint.X + 1, _lastPoint.Y + 1);
-                var gsr = new GraphicSelectionRectangle(drawingCanvas, rect);
+                var gsr = new GraphicSelectionRectangle(rect);
                 drawingCanvas.GraphicsList.Add(gsr);
 
                 _selectMode = SelectionMode.GroupSelection;
-                _commandChangeState = null;
             }
         }
 
@@ -240,7 +238,7 @@ namespace Clowd.Drawing.Tools
 
                 foreach (var g in drawingCanvas.GraphicsList)
                 {
-                    if (g.ContainedIn(rect))
+                    if (rect.Contains(g.Bounds))
                     {
                         g.IsSelected = true;
                     }
@@ -248,35 +246,14 @@ namespace Clowd.Drawing.Tools
             }
 
             drawingCanvas.ReleaseMouseCapture();
-
             drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
-
             _selectMode = SelectionMode.None;
-
-            AddChangeToHistory(drawingCanvas);
+            drawingCanvas.AddCommandToHistory();
         }
 
-        /// <summary>
-        /// Set cursor
-        /// </summary>
         public override void SetCursor(DrawingCanvas drawingCanvas)
         {
             drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
-        }
-
-        /// <summary>
-        /// Add change to history.
-        /// Called after finishing moving/resizing.
-        /// </summary>
-        public void AddChangeToHistory(DrawingCanvas drawingCanvas)
-        {
-            if (_commandChangeState != null && _wasEdit)
-            {
-                // Keep state after moving/resizing and add command to history
-                _commandChangeState.NewState(drawingCanvas);
-                drawingCanvas.AddCommandToHistory(_commandChangeState);
-                _commandChangeState = null;
-            }
         }
 
         private Rect GetTransformedRect(Rect source, int handleNumber, Point point)

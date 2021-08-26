@@ -20,7 +20,6 @@ using Clowd.Drawing.Curves;
 
 namespace Clowd.Drawing.Graphics
 {
-    [Serializable]
     public class GraphicPolyLine : GraphicRectangle
     {
         public Point[] Points
@@ -48,11 +47,6 @@ namespace Clowd.Drawing.Graphics
         private Rect _vectorBounds;
 
         protected GraphicPolyLine() // serializer constructor
-        {
-        }
-
-        public GraphicPolyLine(DrawingCanvas canvas, Point start)
-            : this(canvas.ObjectColor, canvas.LineWidth, start)
         {
         }
 
@@ -85,41 +79,26 @@ namespace Clowd.Drawing.Graphics
             context.DrawGeometry(null, pen, _geometry);
         }
 
-        internal override void MoveHandleTo(Point point, int handleNumber)
-        {
-            base.MoveHandleTo(point, handleNumber);
-        }
-
-        internal override void Move(double deltaX, double deltaY)
-        {
-            base.Move(deltaX, deltaY);
-        }
-
-        internal override int MakeHitTest(Point point)
+        internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
             var rotatedPt = UnapplyRotation(point);
             if (IsSelected)
             {
                 for (int i = 1; i <= HandleCount; i++)
                 {
-                    if (GetHandleRectangle(i).Contains(rotatedPt))
+                    if (GetHandleRectangle(i, uiscale).Contains(rotatedPt))
                         return i;
                 }
             }
 
-            var widened = _geometry.GetWidenedPathGeometry(new Pen(Brushes.Black, HitTestWidth));
+            var widened = _geometry.GetWidenedPathGeometry(new Pen(Brushes.Black, 8));
             var hit = widened.FillContains(rotatedPt);
             return hit ? 0 : -1;
         }
 
-        public void AddPoint(Point p)
+        internal void AddPoint(Point p)
         {
             AddPointInternal(p, true);
-        }
-
-        public override GraphicBase Clone()
-        {
-            return new GraphicPolyLine(ObjectColor, LineWidth, UnrotatedBounds, Filled, Angle, Points) { ObjectId = ObjectId };
         }
 
         private void AddPointInternal(Point p, bool updateGeometry)
@@ -168,8 +147,7 @@ namespace Clowd.Drawing.Graphics
 
             _vectorBounds = new Rect(new Point(xmin, ymin), new Point(xmax, ymax));
 
-            InvalidateVisual();
+            OnPropertyChanged(nameof(Points)); // causes re-render
         }
-
     }
 }

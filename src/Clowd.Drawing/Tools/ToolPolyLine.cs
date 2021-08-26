@@ -1,8 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Input;
-using System.IO;
 using Clowd.Drawing.Graphics;
-using Clowd.Drawing.Commands;
 
 namespace Clowd.Drawing.Tools
 {
@@ -21,7 +19,7 @@ namespace Clowd.Drawing.Tools
             base.OnMouseDown(drawingCanvas, e);
 
             Point p = e.GetPosition(drawingCanvas);
-            newPolyLine = new GraphicPolyLine(drawingCanvas, new Point(p.X + 1, p.Y + 1));
+            newPolyLine = new GraphicPolyLine(drawingCanvas.ObjectColor, drawingCanvas.LineWidth, new Point(p.X + 1, p.Y + 1));
             drawingCanvas.GraphicsList.Add(newPolyLine);
         }
 
@@ -44,7 +42,7 @@ namespace Clowd.Drawing.Tools
             newPolyLine.IsSelected = true;
             newPolyLine.Normalize();
 
-            drawingCanvas.AddCommandToHistory(new CommandAdd(newPolyLine));
+            drawingCanvas.AddCommandToHistory();
             newPolyLine = null;
         }
     }

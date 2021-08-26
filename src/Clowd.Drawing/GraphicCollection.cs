@@ -4,23 +4,28 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using Clowd.Drawing.Graphics;
+using RT.Serialization;
 
 namespace Clowd.Drawing
 {
-    public class GraphicCollection : ICollection<GraphicBase>
+    public class GraphicCollection : SimpleNotifyObject, ICollection<GraphicBase>
     {
         public int VisualCount => _visuals.Count;
         public int Count => _graphics.Count;
         public bool IsReadOnly => false;
         public Rect ContentBounds { get; private set; }
-        
+
+        private readonly DrawingCanvas _parent;
         private readonly List<GraphicBase> _graphics;
         private readonly VisualCollection _visuals;
         private readonly object _lock = new object();
 
         public GraphicCollection(DrawingCanvas parent)
         {
+            _parent = parent;
             _visuals = new VisualCollection(parent);
             _graphics = new List<GraphicBase>();
         }
@@ -32,7 +37,7 @@ namespace Clowd.Drawing
                 var vis = new DrawingVisual();
                 _graphics.Add(graphic);
                 _visuals.Add(vis);
-                graphic.Invalidated += (sender, args) => DrawGraphic(graphic, vis);
+                graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
                 DrawGraphic(graphic, vis);
             }
         }
@@ -44,7 +49,7 @@ namespace Clowd.Drawing
                 var vis = new DrawingVisual();
                 _graphics.Insert(index, graphic);
                 _visuals.Insert(index, vis);
-                graphic.Invalidated += (sender, args) => DrawGraphic(graphic, vis);
+                graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
                 DrawGraphic(graphic, vis);
             }
         }
@@ -64,7 +69,8 @@ namespace Clowd.Drawing
         {
             lock (_lock)
             {
-                _graphics[index]?.ResetInvalidatedEvent();
+                var g = _graphics[index];
+                g.DisconnectFromParent();
                 _graphics.RemoveAt(index);
                 _visuals.RemoveAt(index);
                 InvalidateBounds();
@@ -75,10 +81,68 @@ namespace Clowd.Drawing
         {
             lock (_lock)
             {
-                _graphics.ForEach(g => g.ResetInvalidatedEvent());
+                _graphics.ForEach(g => g?.DisconnectFromParent());
                 _graphics.Clear();
                 _visuals.Clear();
                 InvalidateBounds();
+            }
+        }
+
+        public byte[] Serialize()
+        {
+            return ClassifyBinary.Serialize(_graphics);
+        }
+
+        public byte[] SerializeSelected()
+        {
+            var lst = _graphics.Where(g => g.IsSelected).ToList();
+            return ClassifyBinary.Serialize(lst);
+        }
+
+        public void DeserializeObjectsInto(byte[] bytes)
+        {
+            lock (_lock)
+            {
+                var list = ClassifyBinary.Deserialize<List<GraphicBase>>(bytes);
+                foreach (var g in list)
+                    Add(g);
+            }
+        }
+
+        public DrawingVisual DrawGraphicsToVisual()
+        {
+            lock (_lock)
+            {
+                var bounds = ContentBounds;
+                var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+
+                DrawingVisual vs = new DrawingVisual();
+                using (DrawingContext dc = vs.RenderOpen())
+                {
+                    dc.PushTransform(transform);
+                    foreach (var v in _graphics)
+                        v.DrawObject(dc);
+                }
+
+                return vs;
+            }
+        }
+
+        public BitmapSource DrawGraphicsToBitmap()
+        {
+            lock (_lock)
+            {
+                var bounds = ContentBounds;
+                RenderTargetBitmap bmp = new RenderTargetBitmap(
+                    (int)bounds.Width,
+                    (int)bounds.Height,
+                    96,
+                    96,
+                    PixelFormats.Pbgra32);
+
+                var vis = DrawGraphicsToVisual();
+                bmp.Render(vis);
+                return bmp;
             }
         }
 
@@ -95,15 +159,24 @@ namespace Clowd.Drawing
 
         private void DrawGraphic(GraphicBase g, DrawingVisual v)
         {
-            v.Effect = g.Effect;
+            // update drop shadow effect
+            if (g.DropShadowEffect && v.Effect == null)
+                v.Effect = new DropShadowEffect() { Opacity = 0.5, ShadowDepth = 2, RenderingBias = RenderingBias.Performance };
+            else if (!g.DropShadowEffect && v.Effect != null)
+                v.Effect = null;
+
+            // get dpi of editor window
+            var dpi = VisualTreeHelper.GetDpi(_parent);
             using (var c = v.RenderOpen())
-                g.Draw(c);
+                g.Draw(c, dpi);
+
             InvalidateBounds();
         }
 
         private void InvalidateBounds()
         {
             ContentBounds = GetArtworkBounds();
+            OnPropertyChanged(nameof(ContentBounds));
         }
 
         private Rect GetArtworkBounds()

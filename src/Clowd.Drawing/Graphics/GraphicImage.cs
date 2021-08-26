@@ -5,10 +5,10 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Xml.Serialization;
+using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
-    [Serializable]
     public class GraphicImage : GraphicRectangle
     {
         public string BitmapFilePath
@@ -79,11 +79,10 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
-        [XmlIgnore]
-        public BitmapSource Bitmap => _bitmap;
+        [ClassifyIgnore] public BitmapSource Bitmap => _bitmap;
+        [ClassifyIgnore] private BitmapSource _bitmap;
+        [ClassifyIgnore] private CroppedBitmap _cropped;
 
-        private BitmapSource _bitmap;
-        private CroppedBitmap _cropped;
         private string _bitmapFilePath;
         private int _scaleX = 1;
         private int _scaleY = 1;
@@ -92,28 +91,24 @@ namespace Clowd.Drawing.Graphics
 
         protected GraphicImage()
         {
-            Effect = null;
         }
 
         public GraphicImage(string imageFilePath, Size imageSize)
             : this(imageFilePath, new Rect(new Point(0, 0), imageSize), new Int32Rect())
-        { }
-
+        {
+        }
 
         public GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle = 0, int flipX = 1, int flipY = 1)
             : this(imageFilePath, displayRect, crop, angle, flipX, flipY, displayRect.Size)
         {
-            Effect = null;
         }
 
         protected GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle, int flipX, int flipY, Size originalSize)
-            : base(Colors.Transparent, 0, displayRect)
+            : base(Colors.Transparent, 0, displayRect, false, angle, false)
         {
             _originalSize = originalSize;
             _crop = crop; // must set crop before bitmap due to property setters
-            Effect = null;
             BitmapFilePath = imageFilePath;
-            Angle = angle;
             Crop = crop;
             _scaleX = flipX;
             _scaleY = flipY;
@@ -149,11 +144,6 @@ namespace Clowd.Drawing.Graphics
             if (Right <= Left) _scaleX /= -1;
             if (Bottom <= Top) _scaleY /= -1;
             base.Normalize();
-        }
-
-        public override GraphicBase Clone()
-        {
-            return new GraphicImage(BitmapFilePath, UnrotatedBounds, Crop, Angle, FlipX, FlipY, OriginalSize) { ObjectId = ObjectId };
         }
     }
 }
