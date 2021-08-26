@@ -61,12 +61,6 @@ namespace Clowd.PlatformUtil.Windows
         [DllImport("user32.dll")]
         private static extern void SetWindowCompositionAttribute(nint hWnd, ref WINDOWCOMPOSITIONATTRIBDATA data);
 
-        [DllImport("user32.dll")]
-        private static extern void SetPropW(nint hWnd, [MarshalAs(UnmanagedType.LPWStr)] string lpString, void* hData);
-
-        [DllImport("user32.dll", ExactSpelling = true, EntryPoint = "SendMessageW", SetLastError = true)]
-        private static extern int SendMessage(nint hWnd, WindowMessage msg, nuint wParam, nint lParam);
-
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
@@ -101,6 +95,7 @@ namespace Clowd.PlatformUtil.Windows
 
             return false;
         }
+
         private static bool IsWindows10OrGreater(int build = -1)
         {
             return Environment.OSVersion.Version.Major >= 10 && Environment.OSVersion.Version.Build >= build;
@@ -121,7 +116,7 @@ namespace Clowd.PlatformUtil.Windows
 
             if (build < 18362)
             {
-                SetPropW(hWnd, "UseImmersiveDarkModeColors", &dark);
+                SetProp(hWnd, "UseImmersiveDarkModeColors", (IntPtr)(&dark));
             }
             else
             {
@@ -136,7 +131,7 @@ namespace Clowd.PlatformUtil.Windows
             DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref dwma, sizeof(int));
             DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dwma, sizeof(int));
 
-            SendMessage(hWnd, WindowMessage.WM_THEMECHANGED, 0, 0);
+            SendMessage(hWnd, WindowMessage.WM_THEMECHANGED, IntPtr.Zero, IntPtr.Zero);
         }
     }
 }
