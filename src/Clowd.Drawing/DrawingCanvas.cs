@@ -719,9 +719,18 @@ namespace Clowd.Drawing
 
         public void AddGraphic(GraphicBase g)
         {
+            // center the object in the current viewport
+            var itemBounds = g.Bounds;
+            var transformX = (-itemBounds.Left - itemBounds.Width / 2) + ((ActualWidth / 2 - ContentOffset.X) / ContentScale);
+            var transformY = (-itemBounds.Top - itemBounds.Height / 2) + ((ActualHeight / 2 - ContentOffset.Y) / ContentScale);
+            g.Move(transformX, transformY);
+
+            // only the newly added item should be selected
             this.UnselectAll();
             g.IsSelected = true;
+            g.Normalize();
             this.GraphicsList.Add(g);
+
             AddCommandToHistory(new CommandAdd(g));
             UpdateState();
             InvalidateVisual();

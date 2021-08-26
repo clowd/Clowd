@@ -47,14 +47,8 @@ namespace Clowd.UI
             toolNotifier.ValueChanged += drawingCanvas_ToolChanged;
 
             this.Loaded += ImageEditorPage2_Loaded;
-            //this.KeyDown += ImageEditorPage_KeyDown;
             SyncToolState();
         }
-
-        //private void ImageEditorPage_KeyDown(object sender, KeyEventArgs e)
-        //{
-        //    Console.WriteLine(e.Key + " - " + e.Handled);
-        //}
 
         private void ImageEditorPage2_Loaded(object sender, RoutedEventArgs e)
         {
@@ -80,16 +74,9 @@ namespace Clowd.UI
                 var sel = _session.CroppedRect;
                 var crop = new Int32Rect(sel.X, sel.Y, sel.Width, sel.Height);
 
-                double width = crop.Width;
-                double height = crop.Height;
-
                 var graphic = new GraphicImage(
                     _session.DesktopImgPath,
-                    new Rect(
-                        0, 0, //Math.Floor(drawingCanvas.WorldOffset.X - (width / 2)),
-                              //Math.Floor(drawingCanvas.WorldOffset.Y - (height / 2)),
-                        width,
-                        height),
+                    new Rect(0, 0, crop.Width, crop.Height),
                     crop);
 
                 // add image
@@ -239,10 +226,6 @@ namespace Clowd.UI
             var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
 
             RenderTargetBitmap bmp = new RenderTargetBitmap(
-                //ScreenTools.WpfToScreen(bounds.Width),
-                //ScreenTools.WpfToScreen(bounds.Height),
-                //ScreenTools.WpfToScreen(96),
-                //ScreenTools.WpfToScreen(96),
                 (int)bounds.Width,
                 (int)bounds.Height,
                 96,
@@ -422,7 +405,10 @@ namespace Clowd.UI
                 var img = data.GetImage();
                 if (img != null)
                 {
-                    //AddImage(img);
+                    // save pasted image into session folder + add to canvas
+                    var imgPath = SaveImageToSessionDir(img);
+                    var graphic = new GraphicImage(imgPath, new Size(img.PixelWidth, img.PixelHeight));
+                    drawingCanvas.AddGraphic(graphic);
                     SyncToolState();
                     return;
                 }
@@ -509,17 +495,23 @@ namespace Clowd.UI
                 _session.GraphicsStream = newstream;
 
                 // save new preview image to file
-                var newpreview = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
                 var preview = GetRenderedBitmap();
                 if (preview != null)
                 {
-                    preview.Save(newpreview, System.Drawing.Imaging.ImageFormat.Png);
+                    var newpreview = SaveImageToSessionDir(preview);
                     var oldpreview = _session.PreviewImgPath;
                     _session.PreviewImgPath = newpreview;
                     if (File.Exists(oldpreview))
                         File.Delete(oldpreview);
                 }
             }
+        }
+
+        private string SaveImageToSessionDir(BitmapSource src)
+        {
+            var path = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
+            src.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            return path;
         }
 
         private async void objectColor_Click(object sender, MouseButtonEventArgs e)
