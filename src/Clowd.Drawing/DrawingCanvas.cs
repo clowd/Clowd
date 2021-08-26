@@ -743,6 +743,7 @@ namespace Clowd.Drawing
             {
                 g.Move(transformX, transformY);
                 g.IsSelected = true;
+                g.Normalize();
                 GraphicsList.Add(g);
             }
 
