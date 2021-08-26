@@ -1729,96 +1729,17 @@ namespace Clowd.Drawing
         }
 
         /// <summary>
-        /// Hide in-place editing textbox.
-        /// Called from TextTool, when user pressed Enter or Esc,
-        /// or from this class, when user clicks on the canvas.
-        /// 
-        /// graphicsText passed to this function can be new text added by
-        /// ToolText, or existing text opened for editing.
-        /// If ToolText.OldText is empty, this is new object.
-        /// If not, this is existing object.
-        /// </summary>
-        internal void HideTextbox(GraphicBase graphic)
-        {
-            if (toolText.TextBox == null)
-            {
-                return;
-            }
-            var graphicsText = graphic as GraphicText;
-            if (graphicsText == null)
-                return;
-
-            graphicsText.IsSelected = true;   // restore selection which was removed for better textbox appearance
-            graphicsText.Editing = false;
-
-            if (toolText.TextBox.Text.Trim().Length == 0)
-            {
-                // Textbox is empty: remove text object.
-
-                if (!String.IsNullOrEmpty(toolText.OldText))  // existing text was edited
-                {
-                    // Since text object is removed now,
-                    // Add Delete command to the history
-                    undoManager.AddCommandToHistory(new CommandDelete(this));
-                }
-
-                // Remove empty text object
-                graphicsList.Remove(graphic);
-            }
-            else
-            {
-                if (!String.IsNullOrEmpty(toolText.OldText))  // existing text was edited
-                {
-                    if (toolText.TextBox.Text.Trim() != toolText.OldText)     // text was really changed
-                    {
-                        // Create command
-                        CommandChangeState command = new CommandChangeState(this);
-
-                        // Make change in the text object
-                        graphicsText.Body = toolText.TextBox.Text.Trim();
-
-                        // Keep state after change and add command to the history
-                        command.NewState(this);
-                        undoManager.AddCommandToHistory(command);
-                    }
-                }
-                else                                          // new text was added
-                {
-                    // Make change in the text object
-                    graphicsText.Body = toolText.TextBox.Text.Trim();
-
-                    // Add command to the history
-                    undoManager.AddCommandToHistory(new CommandAdd(graphic));
-                }
-            }
-
-            // Remove textbox and set it to null.
-            this.Children.Remove(toolText.TextBox);
-            toolText.TextBox = null;
-
-            // This enables back all ApplicationCommands,
-            // which are disabled while textbox is active.
-            this.Focus();
-        }
-
-        /// <summary>
         /// Open in-place edit box if GraphicsText is clicked
         /// </summary>
         void HandleDoubleClick(MouseButtonEventArgs e)
         {
             Point point = e.GetPosition(this);
-
-            int handleNum;
-            var clicked = ToolPointer.MakeHitTest(this, point, out handleNum);
+            var clicked = ToolPointer.MakeHitTest(this, point, out var handleNum);
 
             if (clicked is GraphicText)
             {
                 GraphicText t = clicked as GraphicText;
                 toolText.CreateTextBox(t, this);
-            }
-            else
-            {
-                (clicked as IActivatableGraphic)?.Activate(this);
             }
         }
 

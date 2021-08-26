@@ -156,20 +156,31 @@ namespace Clowd.Drawing.Graphics
             context.PushTransform(new RotateTransform(Angle, (Left + Right) / 2, (Top + Bottom) / 2));
             context.DrawRectangle(new SolidColorBrush(ObjectColor), null, UnrotatedBounds);
 
-            if (IsSelected)
+            // don't draw border / rotation controls or text if the textbox is visible
+            if (!Editing)
             {
-                DrawRotationTracker(context, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1));
-                DrawDashedBorder(context, UnrotatedBounds);
+                if (IsSelected)
+                {
+                    DrawRotationTracker(context, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1));
+                    DrawDashedBorder(context, UnrotatedBounds);
+                }
+
+                context.DrawText(form, new Point(Left + Padding, Top + Padding));
             }
 
-            if (!Editing)
-                context.DrawText(form, new Point(Left + Padding, Top + Padding));
+            context.Pop();
         }
 
         internal FormattedText CreateFormattedText()
         {
+            // trailing whitespace is truncated from height measurements. 
+            // this '_' won't get rendered while Editing=true, but it will allow us to calculate the correct rectangle bounds
+            string txt = Body;
+            if (Editing && (Body.EndsWith('\r') || Body.EndsWith('\n')))
+                txt += "_";
+
             return new FormattedText(
-                Body,
+                txt,
                 System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
                 new Typeface(new FontFamily(FontName), FontStyle, FontWeight, FontStretch),
