@@ -185,7 +185,7 @@ namespace Clowd.Drawing.Graphics
             Invalidated?.Invoke(this, new EventArgs());
         }
 
-        internal void ResetInvalidateEvent()
+        internal void ResetInvalidatedEvent()
         {
             Invalidated = null;
         }
