@@ -96,6 +96,7 @@ namespace Clowd.Drawing
             this.MouseWheel += DrawingCanvas_MouseWheel;
             this.KeyDown += new KeyEventHandler(DrawingCanvas_KeyDown);
             this.LostMouseCapture += new MouseEventHandler(DrawingCanvas_LostMouseCapture);
+            this.Unloaded += DrawingCanvas_Unloaded;
 
             InitializeZoom();
 
@@ -1056,6 +1057,11 @@ namespace Clowd.Drawing
         void DrawingCanvas_Loaded(object sender, RoutedEventArgs e)
         {
             this.Focusable = true;      // to handle keyboard messages
+        }
+
+        void DrawingCanvas_Unloaded(object sender, RoutedEventArgs e)
+        {
+            CachedBitmapLoader.InvalidateCache();
         }
 
         void ContextMenuItem_Click(object sender, RoutedEventArgs e)
