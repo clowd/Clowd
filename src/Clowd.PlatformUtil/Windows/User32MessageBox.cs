@@ -1,21 +1,11 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using static Vanara.PInvoke.User32;
 
 namespace Clowd.PlatformUtil.Windows
 {
     public static class User32MessageBox
     {
-        [DllImport("User32", EntryPoint = "MessageBox", SetLastError = true, CharSet = CharSet.Auto, BestFitMapping = false)]
-        private static extern int MessageBoxShow(IntPtr hWnd, string text, string caption, int type);
-
-        private const int IDOK = 1;
-        private const int IDCANCEL = 2;
-        private const int IDYES = 6;
-        private const int IDNO = 7;
-        private const int DEFAULT_BUTTON1 = 0x00000000;
-        private const int DEFAULT_BUTTON2 = 0x00000100;
-        private const int DEFAULT_BUTTON3 = 0x00000200;
-
         public static MessageBoxResult Show(
             IntPtr owner,
             string messageBoxText,
@@ -90,31 +80,35 @@ namespace Clowd.PlatformUtil.Windows
                 }
             }
 
-            int style = (int)button | (int)icon | (int)DefaultResultToButtonNumber(defaultResult, button) | (int)options;
-
-            return (MessageBoxResult)(MessageBoxShow(owner, messageBoxText, caption, style));
+            MB_FLAGS style = (MB_FLAGS)button | (MB_FLAGS)icon | DefaultResultToButtonNumber(defaultResult, button) | (MB_FLAGS)options;
+            return (MessageBoxResult)MessageBox(owner, messageBoxText, caption, style);
         }
 
-        private static int DefaultResultToButtonNumber(MessageBoxResult result, MessageBoxButtons button)
+        private static MB_FLAGS DefaultResultToButtonNumber(MessageBoxResult result, MessageBoxButtons button)
         {
-            if (result == 0) return DEFAULT_BUTTON1;
+            if (result == 0)
+                return MB_FLAGS.MB_DEFBUTTON1;
 
             switch (button)
             {
                 case MessageBoxButtons.OK:
-                    return DEFAULT_BUTTON1;
+                    return MB_FLAGS.MB_DEFBUTTON1;
                 case MessageBoxButtons.OKCancel:
-                    if (result == MessageBoxResult.Cancel) return DEFAULT_BUTTON2;
-                    return DEFAULT_BUTTON1;
+                    if (result == MessageBoxResult.Cancel)
+                        return MB_FLAGS.MB_DEFBUTTON2;
+                    return MB_FLAGS.MB_DEFBUTTON1;
                 case MessageBoxButtons.YesNo:
-                    if (result == MessageBoxResult.No) return DEFAULT_BUTTON2;
-                    return DEFAULT_BUTTON1;
+                    if (result == MessageBoxResult.No)
+                        return MB_FLAGS.MB_DEFBUTTON2;
+                    return MB_FLAGS.MB_DEFBUTTON1;
                 case MessageBoxButtons.YesNoCancel:
-                    if (result == MessageBoxResult.No) return DEFAULT_BUTTON2;
-                    if (result == MessageBoxResult.Cancel) return DEFAULT_BUTTON3;
-                    return DEFAULT_BUTTON1;
+                    if (result == MessageBoxResult.No)
+                        return MB_FLAGS.MB_DEFBUTTON2;
+                    if (result == MessageBoxResult.Cancel)
+                        return MB_FLAGS.MB_DEFBUTTON3;
+                    return MB_FLAGS.MB_DEFBUTTON1;
                 default:
-                    return DEFAULT_BUTTON1;
+                    return MB_FLAGS.MB_DEFBUTTON1;
             }
         }
     }
