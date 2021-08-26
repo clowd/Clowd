@@ -268,7 +268,7 @@ namespace Clowd.UI
 
         private void SyncToolState()
         {
-            var selection = drawingCanvas.Selection.ToArray();
+            var selection = drawingCanvas.SelectedItems.ToArray();
             object newStateObj;
             if (selection.Length == 0)
             {

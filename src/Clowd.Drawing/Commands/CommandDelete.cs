@@ -19,7 +19,7 @@ namespace Clowd.Drawing.Commands
 
             int currentIndex = 0;
 
-            foreach (GraphicBase g in drawingCanvas.Selection)
+            foreach (GraphicBase g in drawingCanvas.SelectedItems)
             {
                 cloneList.Add(g);
                 indexes.Add(currentIndex);
