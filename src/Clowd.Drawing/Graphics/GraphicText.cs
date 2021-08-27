@@ -155,9 +155,12 @@ namespace Clowd.Drawing.Graphics
         internal override void Normalize()
         {
             base.Normalize();
-            var form = CreateFormattedText();
-            Right = Left + form.Width + (TextPadding * 2);
-            Bottom = Top + form.Height + (TextPadding * 2);
+            if (!String.IsNullOrEmpty(Body))
+            {
+                var form = CreateFormattedText();
+                Right = Left + form.Width + (TextPadding * 2);
+                Bottom = Top + form.Height + (TextPadding * 2);
+            }
         }
 
         internal FormattedText CreateFormattedText()
