@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
@@ -248,7 +248,8 @@ namespace Clowd.Drawing.Tools
             drawingCanvas.ReleaseMouseCapture();
             drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
             _selectMode = SelectionMode.None;
-            drawingCanvas.AddCommandToHistory();
+            if (_wasEdit)
+                drawingCanvas.AddCommandToHistory();
         }
 
         public override void SetCursor(DrawingCanvas drawingCanvas)
