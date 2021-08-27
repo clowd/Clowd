@@ -963,7 +963,8 @@ namespace Clowd.Drawing
                     // this allows GraphicText to launch an editor etc.
                     Point point = e.GetPosition(this);
                     var clicked = ToolPointer.MakeHitTest(this, point, out var handleNum);
-                    clicked.Activate(this);
+                    if (clicked != null)
+                        clicked.Activate(this);
                 }
                 else if (Tool == ToolType.None || _tools[(int)Tool] == null)
                 {
@@ -1062,6 +1063,8 @@ namespace Clowd.Drawing
         void DrawingCanvas_Unloaded(object sender, RoutedEventArgs e)
         {
             CachedBitmapLoader.InvalidateCache();
+            GraphicsList.Clear();
+            _undoManager.ClearHistory();
         }
 
         void ContextMenuItem_Click(object sender, RoutedEventArgs e)
