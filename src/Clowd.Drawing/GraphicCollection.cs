@@ -90,29 +90,34 @@ namespace Clowd.Drawing
 
         public byte[] Serialize()
         {
-            return ClassifyBinary.Serialize(_graphics);
+            var gl = GetGraphicList(false);
+            return ClassifyBinary.Serialize(gl);
         }
 
         public byte[] SerializeSelected()
         {
-            var lst = _graphics.Where(g => g.IsSelected).ToList();
-            return ClassifyBinary.Serialize(lst);
+            var gl = GetGraphicList(true);
+            return ClassifyBinary.Serialize(gl);
         }
 
         public void DeserializeObjectsInto(byte[] bytes)
         {
             lock (_lock)
             {
-                var list = ClassifyBinary.Deserialize<List<GraphicBase>>(bytes);
-                foreach (var g in list)
+                foreach (var g in ClassifyBinary.Deserialize<GraphicBase[]>(bytes))
                     Add(g);
             }
         }
 
         public DrawingVisual DrawGraphicsToVisual()
         {
+            // note, this method loses all bitmap effects,
+            // but the alternative requires recursive painting with VisualBrush and produces really poor text rendering
+            // it might be preferrable to flatten a bitmap first with DrawGraphicsToBitmap and then paint this on a visual
+
             lock (_lock)
             {
+                var gl = GetGraphicList(false);
                 var bounds = ContentBounds;
                 var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
 
@@ -120,8 +125,8 @@ namespace Clowd.Drawing
                 using (DrawingContext dc = vs.RenderOpen())
                 {
                     dc.PushTransform(transform);
-                    foreach (var v in _graphics)
-                        v.DrawObject(dc);
+                    foreach (var g in gl)
+                        g.DrawObject(dc);
                 }
 
                 return vs;
@@ -132,7 +137,10 @@ namespace Clowd.Drawing
         {
             lock (_lock)
             {
+                var gl = GetGraphicList(false);
                 var bounds = ContentBounds;
+                var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+
                 RenderTargetBitmap bmp = new RenderTargetBitmap(
                     (int)bounds.Width,
                     (int)bounds.Height,
@@ -140,8 +148,13 @@ namespace Clowd.Drawing
                     96,
                     PixelFormats.Pbgra32);
 
-                var vis = DrawGraphicsToVisual();
-                bmp.Render(vis);
+                foreach (var g in gl)
+                {
+                    DrawingVisual v = new DrawingVisual();
+                    DrawGraphic(g, v, true, false, transform);
+                    bmp.Render(v);
+                }
+
                 return bmp;
             }
         }
@@ -157,7 +170,7 @@ namespace Clowd.Drawing
         public IEnumerator<GraphicBase> GetEnumerator() => _graphics.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => _graphics.GetEnumerator();
 
-        private void DrawGraphic(GraphicBase g, DrawingVisual v)
+        private void DrawGraphic(GraphicBase g, DrawingVisual v, bool objectOnly = false, bool invalidate = true, Transform transform = null)
         {
             // update drop shadow effect
             if (g.DropShadowEffect && v.Effect == null)
@@ -165,12 +178,28 @@ namespace Clowd.Drawing
             else if (!g.DropShadowEffect && v.Effect != null)
                 v.Effect = null;
 
-            // get dpi of editor window
-            var dpi = VisualTreeHelper.GetDpi(_parent);
             using (var c = v.RenderOpen())
-                g.Draw(c, dpi);
+            {
+                if (transform != null)
+                    c.PushTransform(transform);
 
-            InvalidateBounds();
+                if (objectOnly)
+                {
+                    g.DrawObject(c);
+                }
+                else
+                {
+                    // get dpi of editor window so resize handles can be scaled
+                    var dpi = VisualTreeHelper.GetDpi(_parent);
+                    g.Draw(c, dpi);
+                }
+
+                if (transform != null)
+                    c.Pop();
+            }
+
+            if (invalidate)
+                InvalidateBounds();
         }
 
         private void InvalidateBounds()
@@ -204,6 +233,23 @@ namespace Clowd.Drawing
                 result.Union(rect);
             }
             return result;
+        }
+
+        private GraphicBase[] GetGraphicList(bool selectedOnly)
+        {
+            if (selectedOnly)
+            {
+                return _graphics
+                    .Where(g => !(g is GraphicSelectionRectangle))
+                    .Where(g => g.IsSelected)
+                    .ToArray();
+            }
+            else
+            {
+                return _graphics
+                    .Where(g => !(g is GraphicSelectionRectangle))
+                    .ToArray();
+            }
         }
     }
 }
