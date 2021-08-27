@@ -5,13 +5,13 @@ namespace Clowd.Drawing
 {
     internal class UndoManager
     {
-        public bool CanUndo => _nextUndo >= 0 && _nextUndo <= _historyList.Count - 1;
-        public bool CanRedo => _nextUndo < _historyList.Count - 1;
+        public bool CanUndo => _position >= 0 && _position <= _historyList.Count - 1;
+        public bool CanRedo => _position < _historyList.Count - 1;
         public event EventHandler StateChanged;
 
         private readonly DrawingCanvas _drawingCanvas;
         private List<byte[]> _historyList;
-        private int _nextUndo;
+        private int _position;
 
         public UndoManager(DrawingCanvas drawingCanvas)
         {
@@ -22,16 +22,32 @@ namespace Clowd.Drawing
         public void ClearHistory()
         {
             _historyList = new List<byte[]>();
-            _nextUndo = -1;
+            _position = -1;
             RaiseStateChangedEvent();
+        }
+
+        static bool ByteArrayCompare(ReadOnlySpan<byte> a1, ReadOnlySpan<byte> a2)
+        {
+            // fastest way to compare two arrays without a p/invoke to memcmp
+            return a1.SequenceEqual(a2);
+        }
+
+        public void SetFirstStep()
+        {
+            ClearHistory();
+            AddCommandStep();
         }
 
         public void AddCommandStep()
         {
-            this.TrimHistoryList();
             var state = _drawingCanvas.GraphicsList.Serialize();
+            // skip duplicates
+            if (_position >= 0 && ByteArrayCompare(_historyList[_position], state))
+                return;
+
+            this.TrimHistoryList();
             _historyList.Add(state);
-            _nextUndo++;
+            _position++;
             RaiseStateChangedEvent();
         }
 
@@ -40,7 +56,7 @@ namespace Clowd.Drawing
             if (!CanUndo)
                 return;
 
-            var nextState = _historyList[_nextUndo];
+            var nextState = _historyList[_position--];
             var nextGraphics = new GraphicCollection(_drawingCanvas);
             nextGraphics.DeserializeObjectsInto(nextState);
 
@@ -50,7 +66,6 @@ namespace Clowd.Drawing
             _drawingCanvas.InvalidateVisual();
             old.Clear();
 
-            _nextUndo--;
             RaiseStateChangedEvent();
         }
 
@@ -59,7 +74,7 @@ namespace Clowd.Drawing
             if (!CanRedo)
                 return;
 
-            int itemToRedo = _nextUndo + 1;
+            int itemToRedo = _position + 1;
 
             var nextState = _historyList[itemToRedo];
             var nextGraphics = new GraphicCollection(_drawingCanvas);
@@ -71,7 +86,7 @@ namespace Clowd.Drawing
             _drawingCanvas.InvalidateVisual();
             old.Clear();
 
-            _nextUndo++;
+            _position++;
             RaiseStateChangedEvent();
         }
 
@@ -84,11 +99,11 @@ namespace Clowd.Drawing
 
             if (_historyList.Count == 0)
                 return;
-            if (_nextUndo == _historyList.Count - 1)
+            if (_position == _historyList.Count - 1)
                 return;
 
             // Purge all items below the NextUndo pointer
-            for (int i = _historyList.Count - 1; i > _nextUndo; i--)
+            for (int i = _historyList.Count - 1; i > _position; i--)
                 _historyList.RemoveAt(i);
         }
 
