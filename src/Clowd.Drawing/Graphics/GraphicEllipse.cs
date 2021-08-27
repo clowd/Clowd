@@ -15,8 +15,8 @@ namespace Clowd.Drawing.Graphics
         {
         }
 
-        public GraphicEllipse(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0)
-            : base(objectColor, lineWidth, rect, filled, angle)
+        public GraphicEllipse(Color objectColor, double lineWidth, Rect rect, double angle = 0)
+            : base(objectColor, lineWidth, rect, angle)
         {
         }
 
@@ -28,7 +28,7 @@ namespace Clowd.Drawing.Graphics
 
             var brush = new SolidColorBrush(ObjectColor);
             drawingContext.DrawEllipse(
-                Filled ? brush : null,
+                null,
                 new Pen(brush, LineWidth),
                 center,
                 radiusX,

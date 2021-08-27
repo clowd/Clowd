@@ -60,7 +60,7 @@ namespace Clowd.Drawing.Graphics
         }
 
         protected GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle, int flipX, int flipY, Size originalSize)
-            : base(Colors.Transparent, 0, displayRect, false, angle, false)
+            : base(Colors.Transparent, 0, displayRect, angle, false)
         {
             _originalSize = originalSize;
             _crop = crop; // must set crop before bitmap due to property setters

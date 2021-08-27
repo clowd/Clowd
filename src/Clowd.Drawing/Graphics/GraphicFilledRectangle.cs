@@ -11,7 +11,7 @@ namespace Clowd.Drawing.Graphics
         }
 
         public GraphicFilledRectangle(Color objectColor, Rect unrotatedBounds, double angle = 0)
-            : base(objectColor, 0, unrotatedBounds, false, angle, false)
+            : base(objectColor, 0, unrotatedBounds, angle, false)
         {
         }
 

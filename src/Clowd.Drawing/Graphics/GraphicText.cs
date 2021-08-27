@@ -93,7 +93,7 @@ namespace Clowd.Drawing.Graphics
         }
 
         public GraphicText(Color objectColor, double lineWidth, Point point, double angle = 0, string body = null)
-            : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)), false, angle)
+            : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)), angle)
         {
             Body = body ?? "Double-click to edit note.";
         }

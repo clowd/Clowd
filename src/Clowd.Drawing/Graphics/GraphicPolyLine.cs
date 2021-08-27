@@ -56,8 +56,8 @@ namespace Clowd.Drawing.Graphics
             this.Points = new[] { start };
         }
 
-        public GraphicPolyLine(Color objectColor, double lineWidth, Rect rect, bool filled, double angle, Point[] points) // clone constructor
-            : base(objectColor, lineWidth, rect, filled, angle)
+        public GraphicPolyLine(Color objectColor, double lineWidth, Rect rect, double angle, Point[] points) // clone constructor
+            : base(objectColor, lineWidth, rect, angle)
         {
             this.Points = points;
         }
