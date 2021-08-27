@@ -100,12 +100,12 @@ namespace Clowd.Drawing.Graphics
 
         internal override int HandleCount => 1;
 
-        internal override Point GetHandle(int handleNumber)
+        internal override Point GetHandle(int handleNumber, DpiScale uiscale)
         {
             // In this class, handle #1 is the rotation handle. In the base class, this is handle #9 because #1–8 are used for resizing.
             if (handleNumber == 1)
-                return base.GetHandle(9);
-            return base.GetHandle(0);
+                return base.GetHandle(9, uiscale);
+            return base.GetHandle(0, uiscale);
         }
 
         internal override Cursor GetHandleCursor(int handleNumber)
@@ -125,7 +125,7 @@ namespace Clowd.Drawing.Graphics
             DrawObjectImpl(context, !Editing);
             if (IsSelected && !Editing)
             {
-                DrawRotationTracker(context, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1, uiscale));
+                DrawRotationTracker(context, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1, uiscale), uiscale);
                 DrawDashedBorder(context, UnrotatedBounds);
             }
         }

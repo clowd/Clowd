@@ -1244,10 +1244,8 @@ namespace Clowd.Drawing
         void ShowContextMenu(MouseButtonEventArgs e)
         {
             // Change current selection if necessary
-            var dpi = VisualTreeHelper.GetDpi(this);
-
             Point point = e.GetPosition(this);
-            var hitObject = GraphicsList.FirstOrDefault(g => g.MakeHitTest(point, dpi) >= 0);
+            var hitObject = GraphicsList.FirstOrDefault(g => g.MakeHitTest(point, CanvasUiElementScale) >= 0);
             if (hitObject == null)
             {
                 UnselectAll();
@@ -1400,6 +1398,15 @@ namespace Clowd.Drawing
         public Point WorldOffset => new Point((ActualWidth / 2 - ContentOffset.X) / ContentScale,
            (ActualHeight / 2 - ContentOffset.Y) / ContentScale);
 
+        public DpiScale CanvasUiElementScale
+        {
+            get
+            {
+                var dpi = VisualTreeHelper.GetDpi(this);
+                return new DpiScale(dpi.DpiScaleX * (1 / ContentScale), dpi.DpiScaleY * (1 / ContentScale));
+            }
+        }
+
         private static void ContentScaleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var scale = (double)e.NewValue;
@@ -1412,6 +1419,9 @@ namespace Clowd.Drawing
 
             me._scaleTransform2.ScaleX = scale * adjustment;
             me._scaleTransform2.ScaleY = scale * adjustment;
+
+            // ui controls (resize handles) scale with canvas zoom + dpi
+            me.GraphicsList.InvalidateSelectedUI();
         }
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {

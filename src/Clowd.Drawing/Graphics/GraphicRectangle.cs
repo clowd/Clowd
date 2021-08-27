@@ -3,7 +3,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -99,7 +98,7 @@ namespace Clowd.Drawing.Graphics
             return UnrotatedBounds.Contains(UnapplyRotation(point));
         }
 
-        internal override Point GetHandle(int handleNumber)
+        internal override Point GetHandle(int handleNumber, DpiScale uiscale)
         {
             var xCenter = (Right + Left) / 2;
             var yCenter = (Bottom + Top) / 2;
@@ -142,7 +141,7 @@ namespace Clowd.Drawing.Graphics
                     break;
 
                 case 9: // handle for rotation
-                    x = Right + 32;
+                    x = Right + (32 * uiscale.DpiScaleX);
                     y = yCenter;
                     break;
             }
@@ -307,7 +306,7 @@ namespace Clowd.Drawing.Graphics
         {
             if (handleNum == 9) // draw rotation handle differently
             {
-                DrawRotationTracker(drawingContext, GetHandle(4), GetHandleRectangle(9, uiscale));
+                DrawRotationTracker(drawingContext, GetHandle(4, uiscale), GetHandleRectangle(9, uiscale), uiscale);
                 base.DrawSingleTracker(drawingContext, 4, uiscale);
             }
             else
@@ -316,17 +315,22 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
-        internal virtual void DrawRotationTracker(DrawingContext drawingContext, Point anchor, Rect rectangle)
+        internal virtual void DrawRotationTracker(DrawingContext drawingContext, Point anchor, Rect rectangle, DpiScale uiscale)
         {
-            Point center = new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2);
-            DashStyle dashStyle = new DashStyle();
-            dashStyle.Dashes.Add(4);
-            var dashedPen = new Pen(Brushes.White, 1);
-            dashedPen.DashStyle = dashStyle;
-            var basePen = new Pen(Brushes.Black, 1);
-            drawingContext.DrawLine(basePen, anchor, center);
-            drawingContext.DrawLine(dashedPen, anchor, center);
-            drawingContext.DrawEllipse(Brushes.Green, null, center, rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
+            var radius = rectangle.Width / 2;
+            Point center = new Point(rectangle.Left + radius, rectangle.Top + radius);
+            var scaledline = 1 * uiscale.DpiScaleX;
+            radius -= scaledline;
+
+            //DashStyle dashStyle = new DashStyle();
+            //dashStyle.Dashes.Add(4);
+            //var dashedPen = new Pen(Brushes.White, scaledline);
+            //dashedPen.DashStyle = dashStyle;
+            //var basePen = new Pen(Brushes.Black, scaledline);
+
+            var basePen2 = new Pen(Brushes.Green, scaledline);
+            drawingContext.DrawLine(basePen2, anchor, center);
+            drawingContext.DrawEllipse(Brushes.Green, null, center, radius, radius);
         }
 
         internal virtual void DrawRectangle(DrawingContext drawingContext)
