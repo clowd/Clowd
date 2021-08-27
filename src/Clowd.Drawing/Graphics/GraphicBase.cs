@@ -60,7 +60,7 @@ namespace Clowd.Drawing.Graphics
         internal abstract void Move(double deltaX, double deltaY);
         internal abstract void MoveHandleTo(Point point, int handleNumber);
         internal abstract Cursor GetHandleCursor(int handleNumber);
-        internal abstract Point GetHandle(int handleNumber);
+        internal abstract Point GetHandle(int handleNumber, DpiScale uiscale);
 
         internal void DisconnectFromParent() => ClearPropertyChangedHandlers();
 
@@ -111,15 +111,21 @@ namespace Clowd.Drawing.Graphics
         protected virtual void DrawSingleTracker(DrawingContext ctx, int handleNum, DpiScale uiscale)
         {
             var rectangle = GetHandleRectangle(handleNum, uiscale);
-            ctx.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 1, rectangle.Height / 2 - 1);
-            ctx.DrawEllipse(HandleBrush2, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 2, rectangle.Height / 2 - 2);
-            ctx.DrawEllipse(HandleBrush, null, new Point(rectangle.Left + rectangle.Width / 2, rectangle.Top + rectangle.Width / 2), rectangle.Width / 2 - 3, rectangle.Height / 2 - 3);
+            var scaledline = 1 * uiscale.DpiScaleX;
+            var ellRadius = rectangle.Width / 2;
+            var ellCenter = new Point(rectangle.Left + ellRadius, rectangle.Top + ellRadius);
+
+            ctx.DrawEllipse(HandleBrush, null, ellCenter, ellRadius, ellRadius);
+            ellRadius -= scaledline;
+            ctx.DrawEllipse(HandleBrush2, null, ellCenter, ellRadius, ellRadius);
+            ellRadius -= (scaledline * 2);
+            ctx.DrawEllipse(HandleBrush, null, ellCenter, ellRadius, ellRadius);
         }
 
         protected virtual Rect GetHandleRectangle(int handleNumber, DpiScale uiscale)
         {
             // Handle rectangle should scale with window DPI
-            Point point = GetHandle(handleNumber);
+            Point point = GetHandle(handleNumber, uiscale);
             double size = UnscaledControlSize * uiscale.DpiScaleX;
             return new Rect(point.X - size / 2, point.Y - size / 2, size, size);
         }

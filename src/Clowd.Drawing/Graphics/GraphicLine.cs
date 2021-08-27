@@ -44,7 +44,7 @@ namespace Clowd.Drawing.Graphics
             return g.StrokeContains(new Pen(Brushes.Black, Math.Max(LineWidth, 8)), point);
         }
 
-        internal override Point GetHandle(int handleNumber)
+        internal override Point GetHandle(int handleNumber, DpiScale uiscale)
         {
             return handleNumber == 1 ? LineStart : LineEnd;
         }

@@ -88,6 +88,18 @@ namespace Clowd.Drawing
             }
         }
 
+        internal void InvalidateSelectedUI()
+        {
+            // if the zoom has changed, selected items need to be re-rendered as ui controls are scaled
+            for (int i = 0; i < _graphics.Count; i++)
+            {
+                var g = _graphics[i];
+                var v = _visuals[i] as DrawingVisual;
+                if (g?.IsSelected == true && v != null)
+                    DrawGraphic(g, v);
+            }
+        }
+
         public byte[] Serialize()
         {
             var gl = GetGraphicList(false);
@@ -190,8 +202,7 @@ namespace Clowd.Drawing
                 else
                 {
                     // get dpi of editor window so resize handles can be scaled
-                    var dpi = VisualTreeHelper.GetDpi(_parent);
-                    g.Draw(c, dpi);
+                    g.Draw(c, _parent.CanvasUiElementScale);
                 }
 
                 if (transform != null)

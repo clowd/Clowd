@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
@@ -40,7 +40,7 @@ namespace Clowd.Drawing.Tools
 
         public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
         {
-            var dpi = VisualTreeHelper.GetDpi(drawingCanvas);
+            var dpi = drawingCanvas.CanvasUiElementScale;
             var controls = drawingCanvas.GraphicsList.Select(gv => new { gv, gv.IsSelected, HitTest = gv.MakeHitTest(point, dpi) }).Reverse().ToArray();
 
             // Test if we start dragging a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
