@@ -39,40 +39,36 @@ namespace Clowd.Drawing.Graphics
             set => Set(ref _angle, value);
         }
 
-        public bool Filled
+        public Point CenterOfRotation
         {
-            get => _filled;
-            set => Set(ref _filled, value);
+            get => _centerOfRotation;
+            protected set => Set(ref _centerOfRotation, value);
         }
 
+        // This is always the center of the rectangle except while the user is dragging a resizing handle.
+        private Point _centerOfRotation;
         private double _left;
         private double _top;
         private double _right;
         private double _bottom;
         private double _angle;
-        private bool _filled;
-
-        // This is always the center of the rectangle except while the user is dragging a resizing handle.
-        [ClassifyIgnore]
-        public Point CenterOfRotation { get; private set; }
 
         protected GraphicRectangle()
         {
         }
 
         public GraphicRectangle(Color objectColor, double lineWidth, Rect rect)
-            : this(objectColor, lineWidth, rect, false)
+            : this(objectColor, lineWidth, rect, 0)
         {
         }
 
-        public GraphicRectangle(Color objectColor, double lineWidth, Rect rect, bool filled, double angle = 0, bool dropShadowEffect = true)
+        public GraphicRectangle(Color objectColor, double lineWidth, Rect rect, double angle = 0, bool dropShadowEffect = true)
             : base(objectColor, lineWidth, dropShadowEffect)
         {
             _left = rect.Left;
             _top = rect.Top;
             _right = rect.Right;
             _bottom = rect.Bottom;
-            _filled = filled;
             _angle = angle;
             Normalize(); // set CenterOfRotation
         }
@@ -337,7 +333,7 @@ namespace Clowd.Drawing.Graphics
         {
             var brush = new SolidColorBrush(ObjectColor);
             drawingContext.DrawRoundedRectangle(
-                _filled ? brush : null,
+                null,
                 new Pen(brush, LineWidth),
                 new Rect(UnrotatedBounds.Left + (LineWidth / 2),
                     UnrotatedBounds.Top + (LineWidth / 2),
