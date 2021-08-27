@@ -12,14 +12,7 @@ namespace Clowd.Drawing.Graphics
         public string BitmapFilePath
         {
             get => _bitmapFilePath;
-            set
-            {
-                if (Set(ref _bitmapFilePath, value))
-                {
-                    _bitmap = CachedBitmapLoader.LoadFromFile(value);
-                    _cropped = new CroppedBitmap(_bitmap, Crop);
-                }
-            }
+            set => Set(ref _bitmapFilePath, value);
         }
 
         public Int32Rect Crop
@@ -45,9 +38,6 @@ namespace Clowd.Drawing.Graphics
             get => _originalSize;
             set => Set(ref _originalSize, value);
         }
-
-        [ClassifyIgnore] private BitmapSource _bitmap;
-        [ClassifyIgnore] private CroppedBitmap _cropped;
 
         private string _bitmapFilePath;
         private int _scaleX = 1;
@@ -82,15 +72,8 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawRectangle(DrawingContext drawingContext)
         {
-            if (_bitmap == null)
-            {
-                _bitmap = CachedBitmapLoader.LoadFromFile(_bitmapFilePath);
-                _cropped = new CroppedBitmap(_bitmap, Crop);
-            }
-            else if (_cropped.SourceRect != Crop)
-            {
-                _cropped = new CroppedBitmap(_bitmap, Crop);
-            }
+            var bmp = CachedBitmapLoader.LoadFromFile(_bitmapFilePath);
+            var crop = new CroppedBitmap(bmp, Crop);
 
             Rect r = UnrotatedBounds;
 
@@ -104,7 +87,7 @@ namespace Clowd.Drawing.Graphics
             if (Right <= Left || Bottom <= Top)
                 drawingContext.PushTransform(new ScaleTransform(Right <= Left ? -1 : 1, Bottom <= Top ? -1 : 1, centerX, centerY));
 
-            drawingContext.DrawImage(_cropped, r);
+            drawingContext.DrawImage(crop, r);
 
             if (Right <= Left || Bottom <= Top)
                 drawingContext.Pop();
