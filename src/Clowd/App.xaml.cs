@@ -230,6 +230,7 @@ namespace Clowd
                 _taskbarIcon = new TaskbarIcon();
                 //_taskbarIcon.WndProcMessageReceived += OnWndProcMessageReceived;
                 _taskbarIcon.ToolTipText = "Clowd\nRight click me or drop something on me\nto see what I can do!";
+                _taskbarIcon.TrayMouseDoubleClick += (s, e) => UI.MainWindow.ShowWindow();
             }
 
             // force/refresh the correct icon size
