@@ -69,11 +69,13 @@ namespace Clowd
 
                 if (SquirrelUtil.IsFirstRun)
                 {
-                    UI.MainWindow.ShowWindow(UI.MainWindowPage.About);
+                    UI.MainWindow.ShowWindow(MainWindowPage.About);
                 }
                 else
                 {
                     EditorWindow.ShowAllPreviouslyActiveSessions();
+                    if (SquirrelUtil.JustRestarted)
+                        UI.MainWindow.ShowWindow(MainWindowPage.SettingsGeneral);
                 }
             }
             catch (Exception ex)
