@@ -23,7 +23,8 @@ namespace Clowd
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             .InformationalVersion;
 
-        public static bool IsFirstRun { private set; get; }
+        public static bool IsFirstRun { get; private set; }
+        public static bool JustRestarted { get; private set; }
 
         private static string UniqueAppKey => "Clowd";
         private static readonly object _lock = new object();
@@ -44,6 +45,9 @@ namespace Clowd
                 onAppUninstall: OnUninstall,
                 onFirstRun: OnFirstRun,
                 arguments: args);
+
+            if (args.Contains("--squirrel-restarted", StringComparer.OrdinalIgnoreCase))
+                JustRestarted = true;
 
             // if app is still running, filter out squirrel args and continue
             return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -223,9 +227,7 @@ namespace Clowd
                 }
                 else
                 {
-                    using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-                    var newAppPath = Path.Combine(mgr.RootAppDirectory, "app-" + _newVersion.Version.ToString(), "Clowd.exe");
-                    await UpdateManager.RestartAppWhenExited(newAppPath);
+                    await UpdateManager.RestartAppWhenExited(arguments: "--squirrel-restarted");
                     App.Current.ExitApp();
                 }
             }
