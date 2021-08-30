@@ -31,14 +31,10 @@ namespace Clowd
         private static SquirrelUpdateViewModel _model;
         private static InstallerServices _srv;
 
-        static SquirrelUtil()
-        {
-            _model = new SquirrelUpdateViewModelInst();
-            _srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
-        }
-
         public static string[] Startup(string[] args)
         {
+            _srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
+
             SquirrelAwareApp.HandleEvents(
                 onInitialInstall: OnInstall,
                 onAppUpdate: OnUpdate,
@@ -46,8 +42,8 @@ namespace Clowd
                 onFirstRun: OnFirstRun,
                 arguments: args);
 
-            if (args.Contains("--squirrel-restarted", StringComparer.OrdinalIgnoreCase))
-                JustRestarted = true;
+            JustRestarted = args.Contains("--squirrel-restarted", StringComparer.OrdinalIgnoreCase);
+            _model = new SquirrelUpdateViewModelInst(JustRestarted);
 
             // if app is still running, filter out squirrel args and continue
             return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -55,6 +51,8 @@ namespace Clowd
 
         public static SquirrelUpdateViewModel GetUpdateViewModel()
         {
+            if (_model == null)
+                throw new InvalidOperationException("Can't update before app has been initialized");
             return _model;
         }
 
@@ -102,7 +100,7 @@ namespace Clowd
 
         private class SquirrelUpdateViewModelInst : SquirrelUpdateViewModel
         {
-            public SquirrelUpdateViewModelInst() : base()
+            public SquirrelUpdateViewModelInst(bool justUpdated) : base(justUpdated)
             {
                 // hide constructor
             }
@@ -152,7 +150,7 @@ namespace Clowd
             private ReleaseEntry _newVersion;
             private IDisposable _timer;
 
-            protected SquirrelUpdateViewModel()
+            protected SquirrelUpdateViewModel(bool justUpdated)
             {
                 using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
 
@@ -164,6 +162,9 @@ namespace Clowd
                         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
                         .InformationalVersion;
                     _timer = DisposableTimer.Start(TimeSpan.FromHours(1), CheckForUpdateTimer);
+
+                    if (justUpdated)
+                        Description += ", just updated!";
                 }
                 else
                 {
