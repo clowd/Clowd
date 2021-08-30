@@ -23,6 +23,8 @@ namespace Clowd
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             .InformationalVersion;
 
+        public static bool IsFirstRun { private set; get; }
+
         private static string UniqueAppKey => "Clowd";
         private static readonly object _lock = new object();
         private static SquirrelUpdateViewModel _model;
@@ -91,7 +93,7 @@ namespace Clowd
 
         private static void OnFirstRun()
         {
-            UI.MainWindow.ShowWindow(UI.MainWindowPage.About);
+            IsFirstRun = true;
         }
 
         private class SquirrelUpdateViewModelInst : SquirrelUpdateViewModel
