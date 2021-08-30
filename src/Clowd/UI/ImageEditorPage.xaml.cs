@@ -61,7 +61,7 @@ namespace Clowd.UI
                 try
                 {
                     var state = Convert.FromBase64String(_session.GraphicsStream);
-                    drawingCanvas.GraphicsList.DeserializeObjectsInto(state);
+                    drawingCanvas.DeserializeGraphics(state);
                     drawingCanvas.UnselectAll();
                     loaded = true;
                 }
@@ -203,7 +203,7 @@ namespace Clowd.UI
 
         private DrawingVisual GetRenderedVisual()
         {
-            return drawingCanvas.GraphicsList.DrawGraphicsToVisual();
+            return drawingCanvas.DrawGraphicsToVisual();
         }
 
         //private DrawingVisual GetRenderedVisual()
@@ -224,7 +224,7 @@ namespace Clowd.UI
 
         private BitmapSource GetRenderedBitmap()
         {
-            return drawingCanvas.GraphicsList.DrawGraphicsToBitmap();
+            return drawingCanvas.DrawGraphicsToBitmap();
         }
 
         //private RenderTargetBitmap GetRenderedBitmap()
@@ -349,7 +349,7 @@ namespace Clowd.UI
 
             var bitmap = GetRenderedBitmap();
 
-            var ms = new MemoryStream(drawingCanvas.GraphicsList.SerializeSelected());
+            var ms = new MemoryStream(drawingCanvas.SerializeGraphics(true));
             
             var data = new ClipboardDataObject();
             data.SetImage(bitmap);
@@ -404,7 +404,7 @@ namespace Clowd.UI
                 var ms = data.GetDataFormat<MemoryStream>(CANVAS_CLIPBOARD_FORMAT);
                 if (ms != null)
                 {
-                    drawingCanvas.GraphicsList.DeserializeObjectsInto(ms.ToArray());
+                    drawingCanvas.DeserializeGraphics(ms.ToArray());
                     SyncToolState();
                     return;
                 }
@@ -495,7 +495,7 @@ namespace Clowd.UI
             SyncToolState();
 
             // persist editor state to session file
-            var state = drawingCanvas.GraphicsList.Serialize();
+            var state = drawingCanvas.SerializeGraphics(false);
             var newstream = Convert.ToBase64String(state);
             if (newstream != _session.GraphicsStream)
             {

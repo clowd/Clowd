@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Drawing.Tools;
 using Clowd.Drawing.Graphics;
+using System.Windows.Media.Imaging;
 
 namespace Clowd.Drawing
 {
@@ -40,7 +41,7 @@ namespace Clowd.Drawing
 
         public DrawingCanvas()
         {
-            GraphicsList = new GraphicCollection(this);
+            GraphicsList = new GraphicCollection(this, CanvasUiElementScale);
 
             CreateContextMenu();
 
@@ -631,6 +632,16 @@ namespace Clowd.Drawing
         #endregion Dependency Properties
 
         #region Public Functions
+
+        public BitmapSource DrawGraphicsToBitmap() => GraphicsList.DrawGraphicsToBitmap(ArtworkBackground);
+        public DrawingVisual DrawGraphicsToVisual() => GraphicsList.DrawGraphicsToVisual(ArtworkBackground);
+        public byte[] SerializeGraphics(bool selectedOnly) => GraphicsList.SerializeObjects(selectedOnly);
+
+        public void DeserializeGraphics(byte[] graphics)
+        {
+            GraphicsList.DeserializeObjectsInto(graphics);
+            _undoManager.AddCommandStep();
+        }
 
         public ToolActionType GetToolActionType(ToolType type)
         {
@@ -1421,7 +1432,7 @@ namespace Clowd.Drawing
             me._scaleTransform2.ScaleY = scale * adjustment;
 
             // ui controls (resize handles) scale with canvas zoom + dpi
-            me.GraphicsList.InvalidateSelectedUI();
+            me.GraphicsList.Dpi = me.CanvasUiElementScale;
         }
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {

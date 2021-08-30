@@ -40,7 +40,8 @@ namespace Clowd.Drawing
 
         public void AddCommandStep()
         {
-            var state = _drawingCanvas.GraphicsList.Serialize();
+            var state = _drawingCanvas.GraphicsList.SerializeObjects(false);
+
             // skip duplicates
             if (_position >= 0 && ByteArrayCompare(_historyList[_position], state))
                 return;
@@ -57,7 +58,7 @@ namespace Clowd.Drawing
                 return;
 
             var nextState = _historyList[_position--];
-            var nextGraphics = new GraphicCollection(_drawingCanvas);
+            var nextGraphics = new GraphicCollection(_drawingCanvas, _drawingCanvas.CanvasUiElementScale);
             nextGraphics.DeserializeObjectsInto(nextState);
 
             // replace the current graphic set with the one from history
@@ -77,7 +78,7 @@ namespace Clowd.Drawing
             int itemToRedo = _position + 1;
 
             var nextState = _historyList[itemToRedo];
-            var nextGraphics = new GraphicCollection(_drawingCanvas);
+            var nextGraphics = new GraphicCollection(_drawingCanvas, _drawingCanvas.CanvasUiElementScale);
             nextGraphics.DeserializeObjectsInto(nextState);
 
             // replace the current graphic set with the one from history
