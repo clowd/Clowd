@@ -11,164 +11,158 @@ using RT.Serialization;
 
 namespace Clowd.Drawing
 {
-    public class GraphicCollection : SimpleNotifyObject, ICollection<GraphicBase>
+    public sealed class GraphicCollection : SimpleNotifyObject, ICollection<GraphicBase>
     {
         public int VisualCount => _visuals.Count;
         public int Count => _graphics.Count;
         public bool IsReadOnly => false;
-        public Rect ContentBounds { get; private set; }
 
-        private readonly DrawingCanvas _parent;
+        public Rect ContentBounds
+        {
+            get => _contentBounds;
+            private set => Set(ref _contentBounds, value);
+        }
+
+        internal DpiScale Dpi
+        {
+            get => _dpi;
+            set
+            {
+                // if the DPI has changed, the selected elements need to be re-drawn
+                if (Set(ref _dpi, value))
+                    InvalidateDpi();
+            }
+        }
+
+        private DpiScale _dpi;
+        private Rect _contentBounds;
         private readonly List<GraphicBase> _graphics;
         private readonly VisualCollection _visuals;
-        private readonly object _lock = new object();
 
-        public GraphicCollection(DrawingCanvas parent)
+        internal GraphicCollection(DrawingCanvas parent, DpiScale dpi)
         {
-            _parent = parent;
             _visuals = new VisualCollection(parent);
             _graphics = new List<GraphicBase>();
+            _dpi = dpi;
         }
 
         public void Add(GraphicBase graphic)
         {
-            lock (_lock)
-            {
-                var vis = new DrawingVisual();
-                _graphics.Add(graphic);
-                _visuals.Add(vis);
-                graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
-                DrawGraphic(graphic, vis);
-            }
+            var vis = new DrawingVisual();
+            _graphics.Add(graphic);
+            _visuals.Add(vis);
+            graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
+            DrawGraphic(graphic, vis);
         }
 
         public void Insert(int index, GraphicBase graphic)
         {
-            lock (_lock)
-            {
-                var vis = new DrawingVisual();
-                _graphics.Insert(index, graphic);
-                _visuals.Insert(index, vis);
-                graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
-                DrawGraphic(graphic, vis);
-            }
+            var vis = new DrawingVisual();
+            _graphics.Insert(index, graphic);
+            _visuals.Insert(index, vis);
+            graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
+            DrawGraphic(graphic, vis);
         }
 
         public bool Remove(GraphicBase graphic)
         {
-            lock (_lock)
-            {
-                var index = _graphics.IndexOf(graphic);
-                if (index < 0) return false;
-                RemoveAt(index);
-                return true;
-            }
+            var index = _graphics.IndexOf(graphic);
+            if (index < 0) return false;
+            RemoveAt(index);
+            return true;
         }
 
         public void RemoveAt(int index)
         {
-            lock (_lock)
-            {
-                var g = _graphics[index];
-                g.DisconnectFromParent();
-                _graphics.RemoveAt(index);
-                _visuals.RemoveAt(index);
-                InvalidateBounds();
-            }
+            var g = _graphics[index];
+            g.DisconnectFromParent();
+            _graphics.RemoveAt(index);
+            _visuals.RemoveAt(index);
+            InvalidateBounds();
         }
 
         public void Clear()
         {
-            lock (_lock)
-            {
-                _graphics.ForEach(g => g?.DisconnectFromParent());
-                _graphics.Clear();
-                _visuals.Clear();
-                InvalidateBounds();
-            }
+            _graphics.ForEach(g => g?.DisconnectFromParent());
+            _graphics.Clear();
+            _visuals.Clear();
+            InvalidateBounds();
         }
 
-        internal void InvalidateSelectedUI()
+        internal byte[] SerializeObjects(bool selectedOnly)
         {
-            // if the zoom has changed, selected items need to be re-rendered as ui controls are scaled
-            for (int i = 0; i < _graphics.Count; i++)
-            {
-                var g = _graphics[i];
-                var v = _visuals[i] as DrawingVisual;
-                if (g?.IsSelected == true && v != null)
-                    DrawGraphic(g, v);
-            }
-        }
-
-        public byte[] Serialize()
-        {
-            var gl = GetGraphicList(false);
+            var gl = GetGraphicList(selectedOnly);
             return ClassifyBinary.Serialize(gl);
         }
 
-        public byte[] SerializeSelected()
+        internal void DeserializeObjectsInto(byte[] bytes)
         {
-            var gl = GetGraphicList(true);
-            return ClassifyBinary.Serialize(gl);
+            foreach (var g in ClassifyBinary.Deserialize<GraphicBase[]>(bytes))
+                Add(g);
         }
 
-        public void DeserializeObjectsInto(byte[] bytes)
-        {
-            lock (_lock)
-            {
-                foreach (var g in ClassifyBinary.Deserialize<GraphicBase[]>(bytes))
-                    Add(g);
-            }
-        }
-
-        public DrawingVisual DrawGraphicsToVisual()
+        internal DrawingVisual DrawGraphicsToVisual(Brush backgroundBrush = null)
         {
             // note, this method loses all bitmap effects,
             // but the alternative requires recursive painting with VisualBrush and produces really poor text rendering
             // it might be preferrable to flatten a bitmap first with DrawGraphicsToBitmap and then paint this on a visual
+            // if the bitmap effects are required. Since this function is only used for printing, I think it's fine for now.
 
-            lock (_lock)
+            var gl = GetGraphicList(false);
+            var bounds = ContentBounds;
+            var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+
+            DrawingVisual vs = new DrawingVisual();
+            using (DrawingContext dc = vs.RenderOpen())
             {
-                var gl = GetGraphicList(false);
-                var bounds = ContentBounds;
-                var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+                dc.PushTransform(transform);
 
-                DrawingVisual vs = new DrawingVisual();
-                using (DrawingContext dc = vs.RenderOpen())
-                {
-                    dc.PushTransform(transform);
-                    foreach (var g in gl)
-                        g.DrawObject(dc);
-                }
+                // draw background
+                if (backgroundBrush != null)
+                    dc.DrawRectangle(backgroundBrush, null, bounds);
 
-                return vs;
+                // draw all graphics (without any selection handles etc)
+                foreach (var g in gl)
+                    g.DrawObject(dc);
             }
+
+            return vs;
         }
 
-        public BitmapSource DrawGraphicsToBitmap()
+        internal BitmapSource DrawGraphicsToBitmap(Brush backgroundBrush = null)
         {
-            lock (_lock)
+            var gl = GetGraphicList(false);
+            var bounds = ContentBounds;
+            var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+
+            RenderTargetBitmap bmp = new RenderTargetBitmap(
+                (int)bounds.Width,
+                (int)bounds.Height,
+                96,
+                96,
+                PixelFormats.Pbgra32);
+
+            // draw background
+            if (backgroundBrush != null)
             {
-                var gl = GetGraphicList(false);
-                var bounds = ContentBounds;
-                var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
-
-                RenderTargetBitmap bmp = new RenderTargetBitmap(
-                    (int)bounds.Width,
-                    (int)bounds.Height,
-                    96,
-                    96,
-                    PixelFormats.Pbgra32);
-
-                foreach (var g in gl)
+                DrawingVisual background = new DrawingVisual();
+                using (DrawingContext dc = background.RenderOpen())
                 {
-                    DrawingVisual v = new DrawingVisual();
-                    DrawGraphic(g, v, true, false, transform);
-                    bmp.Render(v);
+                    dc.PushTransform(transform);
+                    dc.DrawRectangle(backgroundBrush, null, bounds);
                 }
-
-                return bmp;
+                bmp.Render(background);
             }
+
+            // draw all graphics (without any selection handles etc)
+            foreach (var g in gl)
+            {
+                DrawingVisual v = new DrawingVisual();
+                DrawGraphic(g, v, true, false, transform);
+                bmp.Render(v);
+            }
+
+            return bmp;
         }
 
         // indexers
@@ -202,7 +196,7 @@ namespace Clowd.Drawing
                 else
                 {
                     // get dpi of editor window so resize handles can be scaled
-                    g.Draw(c, _parent.CanvasUiElementScale);
+                    g.Draw(c, Dpi);
                 }
 
                 if (transform != null)
@@ -217,6 +211,18 @@ namespace Clowd.Drawing
         {
             ContentBounds = GetArtworkBounds();
             OnPropertyChanged(nameof(ContentBounds));
+        }
+
+        private void InvalidateDpi()
+        {
+            // if the zoom has changed, selected items need to be re-rendered as ui controls are scaled
+            for (int i = 0; i < _graphics.Count; i++)
+            {
+                var g = _graphics[i];
+                var v = _visuals[i] as DrawingVisual;
+                if (g?.IsSelected == true && v != null)
+                    DrawGraphic(g, v);
+            }
         }
 
         private Rect GetArtworkBounds()
