@@ -67,7 +67,14 @@ namespace Clowd
                 // start receiving command line arguments
                 _processor.Ready();
 
-                EditorWindow.ShowAllPreviouslyActiveSessions();
+                if (SquirrelUtil.IsFirstRun)
+                {
+                    UI.MainWindow.ShowWindow(UI.MainWindowPage.About);
+                }
+                else
+                {
+                    EditorWindow.ShowAllPreviouslyActiveSessions();
+                }
             }
             catch (Exception ex)
             {
