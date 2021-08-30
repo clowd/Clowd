@@ -25,7 +25,7 @@ Write-Host "Build Clowd" -ForegroundColor Magenta
 /t:Restore,Rebuild,Publish `
 /v:minimal `
 /p:PublishSingleFile=False `
-/p:SelfContained=False `
+/p:SelfContained=True `
 /p:PublishProtocol=FileSystem `
 /p:Configuration=Release `
 /p:Platform=x64 `
