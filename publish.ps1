@@ -50,7 +50,7 @@ Set-Location "$PSScriptRoot"
 # build packaging tools
 Write-Host "Build Packaging Tools" -ForegroundColor Magenta
 Set-Location "$PSScriptRoot\modules\Clowd.Squirrel"
-Copy-Item "$PSScriptRoot\default-setup.ico" "src\Update\ins-update.ico"
+Copy-Item "$PSScriptRoot\default-setup.ico" "src\Update\update.ico"
 & ".\build.cmd"
 Set-Location "$PSScriptRoot"
 
@@ -80,6 +80,8 @@ Write-Host "Releasify Nuget Package" -ForegroundColor Magenta
 & $PSScriptRoot\modules\Clowd.Squirrel\build\publish\Squirrel --releasify "$PSScriptRoot\publish\Clowd.$($version).nupkg" `
 --setupIcon="$PSScriptRoot\default-setup.ico" `
 --no-msi `
+--splashImage="$PSScriptRoot\splash.png" `
+--selfContained `
 --releaseDir="$PSScriptRoot\releases"
 
 Write-Host "Done. Run .\upload.cmd to release" -ForegroundColor Magenta
