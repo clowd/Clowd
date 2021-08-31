@@ -52,6 +52,7 @@ Write-Host "Build Packaging Tools" -ForegroundColor Magenta
 Set-Location "$PSScriptRoot\modules\Clowd.Squirrel"
 Copy-Item "$PSScriptRoot\default-setup.ico" "src\Update\update.ico"
 & ".\build.cmd"
+Remove-Item "src\Update\update.ico"
 Set-Location "$PSScriptRoot"
 
 # create nuget package
