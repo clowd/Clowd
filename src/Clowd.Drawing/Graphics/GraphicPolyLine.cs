@@ -17,6 +17,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Linq;
 using Clowd.Drawing.Curves;
+using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -42,9 +43,9 @@ namespace Clowd.Drawing.Graphics
         }
 
         private List<Point> _points;
-        private CurveBuilder _builder;
-        private Geometry _geometry;
         private Rect _vectorBounds;
+        [ClassifyIgnore] private CurveBuilder _builder;
+        [ClassifyIgnore] private Geometry _geometry;
 
         protected GraphicPolyLine() // serializer constructor
         {
@@ -64,6 +65,14 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawRectangle(DrawingContext context)
         {
+            if (_geometry == null)
+            {
+                if (_points == null || !_points.Any())
+                    return;
+                else
+                    Points = _points.ToArray(); // causes geometry to be updated.
+            }
+
             var desiredBounds = UnrotatedBounds;
             double offsetX = desiredBounds.Left - _vectorBounds.Left;
             double offsetY = desiredBounds.Top - _vectorBounds.Top;
@@ -147,7 +156,7 @@ namespace Clowd.Drawing.Graphics
 
             _vectorBounds = new Rect(new Point(xmin, ymin), new Point(xmax, ymax));
 
-            OnPropertyChanged(nameof(Points)); // causes re-render
+            //OnPropertyChanged(nameof(Points)); // causes re-render
         }
     }
 }
