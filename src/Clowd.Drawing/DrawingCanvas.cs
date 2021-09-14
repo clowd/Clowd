@@ -1437,9 +1437,12 @@ namespace Clowd.Drawing
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var me = (DrawingCanvas)d;
+            PresentationSource source = PresentationSource.FromVisual(me);
+
+            double dpiZoom = source?.CompositionTarget?.TransformToDevice.M11 ?? 1;
             var pt = (Point)e.NewValue;
-            me._translateTransform.X = Math.Floor(pt.X);
-            me._translateTransform.Y = Math.Floor(pt.Y);
+            me._translateTransform.X = Math.Floor(pt.X * dpiZoom) / dpiZoom;
+            me._translateTransform.Y = Math.Floor(pt.Y * dpiZoom) / dpiZoom;
         }
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
