@@ -97,6 +97,12 @@ namespace Clowd.UI
             SyncToolState();
         }
 
+        protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+        {
+            base.OnDpiChanged(oldDpi, newDpi);
+            drawingCanvas.UpdateScaleTransform();
+        }
+
         //public static void ShowFromSession(SessionInfo info)
         //{
         //    var w = new ImageEditorPage();
@@ -350,7 +356,7 @@ namespace Clowd.UI
             var bitmap = GetRenderedBitmap();
 
             var ms = new MemoryStream(drawingCanvas.SerializeGraphics(true));
-            
+
             var data = new ClipboardDataObject();
             data.SetImage(bitmap);
             data.SetDataFormat(CANVAS_CLIPBOARD_FORMAT, ms);
