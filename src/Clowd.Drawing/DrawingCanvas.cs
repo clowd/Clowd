@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -1069,6 +1069,7 @@ namespace Clowd.Drawing
         void DrawingCanvas_Loaded(object sender, RoutedEventArgs e)
         {
             this.Focusable = true;      // to handle keyboard messages
+            UpdateScaleTransform();
         }
 
         void DrawingCanvas_Unloaded(object sender, RoutedEventArgs e)
@@ -1420,19 +1421,8 @@ namespace Clowd.Drawing
 
         private static void ContentScaleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var scale = (double)e.NewValue;
-
             var me = (DrawingCanvas)d;
-            PresentationSource source = PresentationSource.FromVisual(me);
-
-            double dpiZoom = source?.CompositionTarget?.TransformToDevice.M11 ?? 1;
-            double adjustment = 1 / dpiZoom; // undo the current dpi zoom so screenshots appear sharp
-
-            me._scaleTransform2.ScaleX = scale * adjustment;
-            me._scaleTransform2.ScaleY = scale * adjustment;
-
-            // ui controls (resize handles) scale with canvas zoom + dpi
-            me.GraphicsList.Dpi = me.CanvasUiElementScale;
+            me.UpdateScaleTransform();
         }
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -1450,6 +1440,19 @@ namespace Clowd.Drawing
             ContentOffset = new Point(
                 ContentOffset.X + sizeInfo.NewSize.Width / 2 - sizeInfo.PreviousSize.Width / 2,
                 ContentOffset.Y + sizeInfo.NewSize.Height / 2 - sizeInfo.PreviousSize.Height / 2);
+        }
+        public void UpdateScaleTransform()
+        {
+            PresentationSource source = PresentationSource.FromVisual(this);
+
+            double dpiZoom = source?.CompositionTarget?.TransformToDevice.M11 ?? 1;
+            double adjustment = 1 / dpiZoom; // undo the current dpi zoom so screenshots appear sharp
+
+            _scaleTransform2.ScaleX = ContentScale * adjustment;
+            _scaleTransform2.ScaleY = ContentScale * adjustment;
+
+            // ui controls (resize handles) scale with canvas zoom + dpi
+            GraphicsList.Dpi = CanvasUiElementScale;
         }
 
         private ScaleTransform _scaleTransform2;
