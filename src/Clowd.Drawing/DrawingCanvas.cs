@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -1069,6 +1069,7 @@ namespace Clowd.Drawing
         void DrawingCanvas_Loaded(object sender, RoutedEventArgs e)
         {
             this.Focusable = true;      // to handle keyboard messages
+            UpdateScaleTransform();
         }
 
         void DrawingCanvas_Unloaded(object sender, RoutedEventArgs e)
@@ -1418,28 +1419,20 @@ namespace Clowd.Drawing
             }
         }
 
+        private double DpiZoom => PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M11 ?? 1;
+
         private static void ContentScaleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            var scale = (double)e.NewValue;
-
             var me = (DrawingCanvas)d;
-            PresentationSource source = PresentationSource.FromVisual(me);
-
-            double dpiZoom = source?.CompositionTarget?.TransformToDevice.M11 ?? 1;
-            double adjustment = 1 / dpiZoom; // undo the current dpi zoom so screenshots appear sharp
-
-            me._scaleTransform2.ScaleX = scale * adjustment;
-            me._scaleTransform2.ScaleY = scale * adjustment;
-
-            // ui controls (resize handles) scale with canvas zoom + dpi
-            me.GraphicsList.Dpi = me.CanvasUiElementScale;
+            me.UpdateScaleTransform();
         }
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var me = (DrawingCanvas)d;
+            double dpiZoom = me.DpiZoom;
             var pt = (Point)e.NewValue;
-            me._translateTransform.X = Math.Floor(pt.X);
-            me._translateTransform.Y = Math.Floor(pt.Y);
+            me._translateTransform.X = Math.Floor(pt.X * dpiZoom) / dpiZoom;
+            me._translateTransform.Y = Math.Floor(pt.Y * dpiZoom) / dpiZoom;
         }
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
@@ -1447,6 +1440,16 @@ namespace Clowd.Drawing
             ContentOffset = new Point(
                 ContentOffset.X + sizeInfo.NewSize.Width / 2 - sizeInfo.PreviousSize.Width / 2,
                 ContentOffset.Y + sizeInfo.NewSize.Height / 2 - sizeInfo.PreviousSize.Height / 2);
+        }
+        public void UpdateScaleTransform()
+        {
+            double adjustment = 1 / DpiZoom; // undo the current dpi zoom so screenshots appear sharp
+
+            _scaleTransform2.ScaleX = ContentScale * adjustment;
+            _scaleTransform2.ScaleY = ContentScale * adjustment;
+
+            // ui controls (resize handles) scale with canvas zoom + dpi
+            GraphicsList.Dpi = CanvasUiElementScale;
         }
 
         private ScaleTransform _scaleTransform2;
@@ -1487,13 +1490,13 @@ namespace Clowd.Drawing
         public void ZoomPanFit(double? widthOverride = null)
         {
             var rect = GetArtworkBounds();
-            ContentScale = Math.Min((widthOverride ?? ActualWidth) / rect.Width, ActualHeight / rect.Height);
+            var dpiZoom = DpiZoom;
+            ContentScale = Math.Min((widthOverride ?? ActualWidth) / rect.Width * dpiZoom, ActualHeight / rect.Height * dpiZoom);
             ZoomPanCenter(widthOverride);
         }
 
         public void ZoomPanActualSize(double? widthOverride = null)
         {
-            var rect = GetArtworkBounds();
             ContentScale = 1;
             ZoomPanCenter(widthOverride);
         }
@@ -1501,8 +1504,9 @@ namespace Clowd.Drawing
         public void ZoomPanCenter(double? widthOverride = null)
         {
             var rect = GetArtworkBounds();
-            var x = (widthOverride ?? ActualWidth) / 2 - rect.Width * ContentScale / 2 - rect.Left * ContentScale;
-            var y = ActualHeight / 2 - rect.Height * ContentScale / 2 - rect.Top * ContentScale;
+            var scale = ContentScale / DpiZoom;
+            var x = (widthOverride ?? ActualWidth) / 2 - rect.Width * scale / 2 - rect.Left * scale;
+            var y = ActualHeight / 2 - rect.Height * scale / 2 - rect.Top * scale;
             ContentOffset = new Point(x, y);
         }
 
