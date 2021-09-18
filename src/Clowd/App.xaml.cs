@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -212,7 +212,7 @@ namespace Clowd
 
             // ui
             container.Register<IPageManager, PageManager>();
-            container.Register<IScreenCapturePage, ScreenCaptureWindow>(new PerScopeLifetime());
+            //container.Register<IScreenCapturePage, ScreenCaptureWindow>(new PerScopeLifetime());
             container.Register<ILiveDrawPage, AntFu7.LiveDraw.LiveDrawWindow>(new PerScopeLifetime());
             container.Register<IVideoCapturePage, VideoCaptureWindow>(new PerScopeLifetime());
 
@@ -330,16 +330,19 @@ namespace Clowd
 
         public void StartCapture(ScreenRect region = null)
         {
-            Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
+            //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
+            ScreenCaptureWindow.Open();
         }
         public void QuickCaptureFullScreen()
         {
-            Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
+            ScreenCaptureWindow.Open();
+            //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
         }
         public void QuickCaptureCurrentWindow()
         {
-            var window = Platform.Current.GetForegroundWindow();
-            Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open(window.Handle);
+            ScreenCaptureWindow.Open();
+            //var window = Platform.Current.GetForegroundWindow();
+            //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open(window.Handle);
         }
         public async void UploadFile(Window owner = null)
         {

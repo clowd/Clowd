@@ -30,17 +30,17 @@ namespace Clowd
         void Open();
     }
 
-    public interface IScreenCapturePage : IPage
-    {
-        void Open();
-        void Open(ScreenRect captureArea);
-        void Open(IntPtr captureWindow);
-    }
+    //public interface IScreenCapturePage : IPage
+    //{
+    //    void Open();
+    //    void Open(ScreenRect captureArea);
+    //    void Open(IntPtr captureWindow);
+    //}
 
     public interface IPageManager
     {
         IVideoCapturePage CreateVideoCapturePage();
-        IScreenCapturePage CreateScreenCapturePage();
+        //IScreenCapturePage CreateScreenCapturePage();
         ILiveDrawPage CreateLiveDrawPage();
     }
 }

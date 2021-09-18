@@ -8,20 +8,18 @@ using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
+using Clowd.UI.Unmanaged;
 using Clowd.Util;
 using Rectangle = System.Drawing.Rectangle;
 
 namespace Clowd.UI
 {
-    internal sealed class ScreenCaptureWindow : IScreenCapturePage
+    internal static class ScreenCaptureWindow
     {
-        static ClowdWin64.DxScreenCapture _wdxc;
         static FloatingButtonWindow _floating;
         static SettingsRoot _settings => SettingsRoot.Current;
 
         static readonly object _lock = new object();
-
-        public event EventHandler Closed;
 
         internal static void PrepareFloatingWindow()
         {
@@ -128,6 +126,14 @@ namespace Clowd.UI
             }
         }
 
+        static ScreenCaptureWindow()
+        {
+            CaptureWindow.Disposed += SynchronizationContextEventHandler.CreateDelegate<DxDisposedEventArgs>(CaptureDisposed);
+            CaptureWindow.LayoutUpdated += SynchronizationContextEventHandler.CreateDelegate<DxLayoutUpdatedEventArgs>(CaptureLayoutUpdated);
+            CaptureWindow.KeyDown += SynchronizationContextEventHandler.CreateDelegate<DxKeyDownEventArgs>(CaptureKeyDown);
+            CaptureWindow.ColorCaptured += SynchronizationContextEventHandler.CreateDelegate<DxColorCapturedEventArgs>(CaptureColorCaptured);
+        }
+
         static void OnUpload(object sender, EventArgs e)
         {
             var session = GetSessionAndDispose();
@@ -144,23 +150,23 @@ namespace Clowd.UI
 
         static void OnVideo(object sender, EventArgs e)
         {
-            var sel = _wdxc?.Selection;
-            if (sel == null) return;
+            var sel = CaptureWindow.GetSelection();
+            if (sel == null || sel.IsEmpty()) return;
 
             DisposeInternal();
             var manager = App.GetService<IPageManager>();
             var video = manager.CreateVideoCapturePage();
-            video.Open((ScreenRect)sel.Value);
+            video.Open(sel);
         }
 
         static void OnReset(object sender, EventArgs e)
         {
-            _wdxc?.Reset();
+            CaptureWindow.Reset();
         }
 
         static void OnCopy(object sender, EventArgs e)
         {
-            _wdxc?.WriteToClipboard();
+            CaptureWindow.WriteToClipboard();
             DisposeInternal();
         }
 
@@ -181,59 +187,27 @@ namespace Clowd.UI
             DisposeInternal();
         }
 
-        public void Open()
-        {
-            OpenInternal();
-        }
-
-        public void Open(ScreenRect captureArea)
-        {
-            OpenInternal(rect: (Rectangle)captureArea);
-        }
-
-        public void Open(IntPtr captureWindow)
-        {
-            OpenInternal(wnd: captureWindow);
-        }
-
-        private void OpenInternal(System.Drawing.Rectangle? rect = null, IntPtr? wnd = null)
+        public static void Open()
         {
             lock (_lock)
             {
-                if (_wdxc != null)
-                    return;
-
                 if (_floating == null)
                 {
                     PrepareFloatingWindow();
-                    //throw new InvalidOperationException("Floating window does not exist. Please create it first.");
                 }
 
-                var wpfclr = AppStyles.AccentColor;
-                var clr = System.Drawing.Color.FromArgb(wpfclr.A, wpfclr.R, wpfclr.G, wpfclr.B);
-
                 // create new capture
-                var options = new ClowdWin64.ScreenCaptureOptions()
+                var options = new CaptureWindowOptions()
                 {
-                    AccentColor = clr,
+                    AccentColor = AppStyles.AccentColor,
                     TipsDisabled = _settings.Capture.HideTipsPanel,
                 };
 
-                var dx = new ClowdWin64.DxScreenCapture(options);
-                dx.Disposed += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxDisposedEventArgs>(CaptureDisposed);
-                dx.LayoutUpdated += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxLayoutUpdatedEventArgs>(CaptureLayoutUpdated);
-                dx.KeyDown += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxKeyDownEventArgs>(CaptureKeyDown);
-                dx.ColorCaptured += SynchronizationContextEventHandler.CreateDelegate<ClowdWin64.DxColorCapturedEventArgs>(CaptureColorCaptured);
-                _wdxc = dx;
+                CaptureWindow.Show(options);
             }
         }
 
-        public void Close()
-        {
-            Dispose();
-        }
-
-        public void Dispose()
+        public static void Close()
         {
             lock (_lock)
             {
@@ -244,7 +218,7 @@ namespace Clowd.UI
         private static SessionInfo GetSessionAndDispose()
         {
             var dir = SessionManager.Current.CreateNewSessionDirectory();
-            _wdxc?.SaveSession(dir);
+            CaptureWindow.SaveSession(dir);
 
             var session = SessionManager.Current.GetSessionFromPath(dir);
             if (session != null)
@@ -260,29 +234,29 @@ namespace Clowd.UI
         private static void DisposeInternal()
         {
             _floating.HidePanel();
-            _wdxc?.Close();
+            CaptureWindow.Close();
         }
 
-        private void CaptureKeyDown(object sender, ClowdWin64.DxKeyDownEventArgs e)
+        private static void CaptureKeyDown(object sender, DxKeyDownEventArgs e)
         {
             _floating?.ProcessKey(KeyInterop.KeyFromVirtualKey(e.KeyCode));
         }
 
-        private void CaptureDisposed(object sender, ClowdWin64.DxDisposedEventArgs e)
+        private static void CaptureDisposed(object sender, DxDisposedEventArgs e)
         {
-            _wdxc = null;
-            Closed?.Invoke(this, new EventArgs());
+            //_wdxc = null;
+            //Closed?.Invoke(this, new EventArgs());
 
             if (e.Error != null)
             {
                 _floating.Dispatcher.Invoke(() =>
                 {
-                    NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Error.ToString(), "An unhandled error occurred while showing screen capture window");
+                    NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Error.ToString(), "An error occurred while showing screen capture window");
                 });
             }
         }
 
-        private void CaptureLayoutUpdated(object sender, ClowdWin64.DxLayoutUpdatedEventArgs e)
+        private static void CaptureLayoutUpdated(object sender, DxLayoutUpdatedEventArgs e)
         {
             if (e.Captured)
             {
@@ -294,7 +268,7 @@ namespace Clowd.UI
             }
         }
 
-        private void CaptureColorCaptured(object sender, ClowdWin64.DxColorCapturedEventArgs e)
+        private static void CaptureColorCaptured(object sender, DxColorCapturedEventArgs e)
         {
             DisposeInternal();
             _floating?.HidePanel();
