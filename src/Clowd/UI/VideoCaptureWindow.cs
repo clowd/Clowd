@@ -7,6 +7,7 @@ using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
+using Clowd.UI.Unmanaged;
 using Clowd.Util;
 
 namespace Clowd.UI
@@ -32,7 +33,6 @@ namespace Clowd.UI
         private static SettingsVideo _settings => SettingsRoot.Current.Video;
         private UIAudioMonitor _monitor;
         private string _fileName;
-        private ClowdWin64.BorderWindow _border;
         private FloatingButtonWindow _floating;
         private bool _isCancelled = false;
 
@@ -150,7 +150,6 @@ namespace Clowd.UI
             _selection = captureArea;
 
             var wpfclr = AppStyles.AccentColor;
-            var clr = System.Drawing.Color.FromArgb(wpfclr.A, wpfclr.R, wpfclr.G, wpfclr.B);
 
             _monitor = new UIAudioMonitor(_settings, 20);
             _btnMicrophone.Overlay = _monitor.GetMicrophoneVisual();
@@ -158,8 +157,9 @@ namespace Clowd.UI
             _btnSpeaker.Overlay = _monitor.GetSpeakerVisual();
             _btnSpeaker.SetBinding(CaptureToolButton.ShowAlternateIconProperty, _monitor.GetSpeakerEnabledBinding());
 
-            _border = new ClowdWin64.BorderWindow(clr, (System.Drawing.Rectangle)captureArea);
-            _border.OverlayText = "Press Start";
+            BorderWindow.Show(wpfclr, captureArea);
+            BorderWindow.SetText("Press Start");
+
             _floating.ShowPanel(captureArea);
         }
 
@@ -169,7 +169,7 @@ namespace Clowd.UI
 
             for (int i = 4; i >= 1; i--)
             {
-                _border.OverlayText = i.ToString();
+                BorderWindow.SetText(i.ToString());
                 //labelCountdown.FontSize = 120;
                 _btnClowd.Text = "REC in " + i.ToString();
                 await Task.Delay(1000);
@@ -177,7 +177,7 @@ namespace Clowd.UI
                     return;
             }
 
-            _border.OverlayText = null;
+            BorderWindow.SetText(null);
             _btnClowd.Text = "Starting";
 
             try
@@ -239,7 +239,7 @@ namespace Clowd.UI
         private async void OnCancel(object sender, EventArgs e)
         {
             _isCancelled = true;
-            _border.Dispose();
+            BorderWindow.Hide();
             _floating.Hide();
             if (IsRecording)
             {
@@ -258,7 +258,7 @@ namespace Clowd.UI
             if (_disposed)
                 return;
             _disposed = true;
-            _border.Dispose();
+            BorderWindow.Hide();
             _floating.Close();
             _monitor.Dispose();
             Closed?.Invoke(this, new EventArgs());
