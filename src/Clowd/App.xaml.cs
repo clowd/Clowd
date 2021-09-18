@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -148,19 +148,21 @@ namespace Clowd
             System.Windows.Forms.Application.ThreadException += (object sender, ThreadExceptionEventArgs e) =>
             {
                 DefaultLog.Error("WindowsFormsApplicationThreadException", e.Exception);
+                MessageBox.Show("An unrecoverable error has occurred. The application will now exit.", "WindowsFormsApplicationThreadException");
             };
 
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
                 if (e.ExceptionObject is Exception ex)
                     DefaultLog.Error("AppDomainUnhandledException", ex);
+                MessageBox.Show("An unrecoverable error has occurred. The application will now exit.", "AppDomainUnhandledException");
             };
 
             Application.Current.DispatcherUnhandledException += (object sender, DispatcherUnhandledExceptionEventArgs e) =>
             {
                 e.Handled = true;
                 DefaultLog.Error("DispatcherUnhandledException", e.Exception);
-                NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Exception.ToString(), "An unhandled error has occurred.");
+                NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Exception.ToString(), "An error has occurred.");
             };
         }
 
