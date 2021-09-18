@@ -21,6 +21,12 @@ Write-Host $version
 
 # publish Clowd project
 Write-Host "Build Clowd" -ForegroundColor Magenta
+&$MSBuildPath "$PSScriptRoot\modules\Clowd.Win64\Clowd.Win64.vcxproj" `
+/v:minimal `
+/p:Configuration=Release `
+/p:Platform=x64 `
+/p:SolutionDir=$PSScriptRoot\
+
 &$MSBuildPath "$PSScriptRoot\src\Clowd\Clowd.csproj" `
 /t:Restore,Rebuild,Publish `
 /v:minimal `
@@ -33,7 +39,7 @@ Write-Host "Build Clowd" -ForegroundColor Magenta
 /p:RuntimeIdentifier=win-x64 `
 /p:PublishReadyToRun=False `
 /p:PublishTrimmed=False `
-/p:SolutionDir=$PSScriptRoot 
+/p:SolutionDir=$PSScriptRoot\ 
 
 # build obs-express
 Write-Host "Build obs-express" -ForegroundColor Magenta
