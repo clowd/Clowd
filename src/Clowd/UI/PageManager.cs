@@ -15,10 +15,10 @@ namespace Clowd.Util
             _factory = factory;
         }
 
-        public IScreenCapturePage CreateScreenCapturePage()
-        {
-            return CreatePage<IScreenCapturePage>();
-        }
+        //public IScreenCapturePage CreateScreenCapturePage()
+        //{
+        //    return CreatePage<IScreenCapturePage>();
+        //}
 
         public IVideoCapturePage CreateVideoCapturePage()
         {

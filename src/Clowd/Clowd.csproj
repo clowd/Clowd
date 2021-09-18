@@ -33,7 +33,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\modules\Clowd.Squirrel\src\Squirrel\Squirrel.csproj" />
-    <ProjectReference Include="..\..\modules\Clowd.Win64\Clowd.Win64.vcxproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
     <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
@@ -56,6 +55,11 @@
     <PackageReference Include="PropertyChanged.Fody" Version="3.4.0" PrivateAssets="all" />
     <PackageReference Include="SharpRaven" Version="2.4.0" />
     <PackageReference Include="ThomasLevesque.WeakEvent" Version="4.1.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Clowd.Win64.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Page Update="UI\Dialogs\ColorPicker\Generic.xaml">

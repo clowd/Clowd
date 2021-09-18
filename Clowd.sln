@@ -4,6 +4,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 16.0.29806.167
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd", "src\Clowd\Clowd.csproj", "{24FDFCC0-C491-412E-8EFA-E6CC352523DA}"
+	ProjectSection(ProjectDependencies) = postProject
+		{847EFAFA-F061-4350-81A8-A1D211AAC62B} = {847EFAFA-F061-4350-81A8-A1D211AAC62B}
+	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Drawing", "src\Clowd.Drawing\Clowd.Drawing.csproj", "{04456DDE-AF72-4B83-9132-5AFC5F89CC76}"
 EndProject
