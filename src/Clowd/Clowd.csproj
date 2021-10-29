@@ -50,7 +50,7 @@
     </PackageReference>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
     <PackageReference Include="LightInject" Version="6.4.0" />
-    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.31" />
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.37" />
     <PackageReference Include="ModernWpfUI" Version="0.9.4" />
     <PackageReference Include="PropertyChanged.Fody" Version="3.4.0" PrivateAssets="all" />
     <PackageReference Include="SharpRaven" Version="2.4.0" />
