@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Clowd": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

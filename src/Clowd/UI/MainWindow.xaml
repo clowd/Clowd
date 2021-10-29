@@ -2,6 +2,7 @@
     x:Class="Clowd.UI.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -10,7 +11,8 @@
     Width="800"
     Height="600"
     mc:Ignorable="d">
-    <ui:NavigationView
+    <controls:NonVirtualizingNavigationView
+        x:Name="NavView"
         IsBackButtonVisible="Collapsed"
         IsPaneOpen="True"
         IsPaneToggleButtonVisible="False"
@@ -84,5 +86,5 @@
             </ui:Frame.ContentTransitions>
         </ui:Frame>
         <!--</ui:ScrollViewerEx>-->
-    </ui:NavigationView>
+    </controls:NonVirtualizingNavigationView>
 </local:SystemThemedWindow>
