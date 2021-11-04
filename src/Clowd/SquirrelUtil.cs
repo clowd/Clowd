@@ -46,6 +46,8 @@ namespace Clowd
             _model = new SquirrelUpdateViewModelInst(JustRestarted);
 
             // if app is still running, filter out squirrel args and continue
+            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+            mgr.SetProcessAppUserModelId();
             return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
