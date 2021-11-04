@@ -10,6 +10,8 @@ if (Test-Path '.\clowd_secrets.json') {
 }
 
 Write-Host "Upload latest releases" -ForegroundColor Magenta
-& $PSScriptRoot\modules\Clowd.Squirrel\build\publish\SyncReleases.exe -r "$PSScriptRoot\releases\" `
--p b2 --bucketId $secrets.b2bucket --b2keyid $secrets.b2keyid `
---b2key $secrets.b2key --upload
+& $PSScriptRoot\modules\Clowd.Squirrel\build\publish\Squirrel.exe b2-up `
+-r "$PSScriptRoot\releases" `
+--b2BucketId $secrets.b2bucket `
+--b2keyid $secrets.b2keyid `
+--b2key $secrets.b2key
