@@ -44,6 +44,14 @@ namespace Clowd
         protected override async void OnStartup(StartupEventArgs e)
         {
             DefaultLog = new DefaultScopedLog("Clowd");
+
+            // fast exit for "watch" command
+            if (e.Args.Length > 0 && e.Args[0].Equals("watch", StringComparison.InvariantCulture))
+            {
+                ProcessWatcher.Run(e.Args.Skip(1).ToArray());
+                return;
+            }
+
             var appArgs = SquirrelUtil.Startup(e.Args);
 
             try

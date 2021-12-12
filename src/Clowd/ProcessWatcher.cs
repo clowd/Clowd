@@ -4,9 +4,9 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
-namespace Clowd.Aot
+namespace Clowd
 {
-    static class Watch
+    static class ProcessWatcher
     {
         static Process GetProcessByIdSafe(int id)
         {
