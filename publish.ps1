@@ -31,7 +31,7 @@ Write-Host "Build Clowd" -ForegroundColor Magenta
 /t:Restore,Rebuild,Publish `
 /v:minimal `
 /p:PublishSingleFile=False `
-/p:SelfContained=True `
+/p:SelfContained=False `
 /p:PublishProtocol=FileSystem `
 /p:Configuration=Release `
 /p:Platform=x64 `
@@ -80,6 +80,7 @@ Write-Host "Download latest release" -ForegroundColor Magenta
 # releasify
 Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
 & $PSScriptRoot\modules\Clowd.Squirrel\build\publish\Squirrel.exe pack `
+-f net6 `
 -r "$PSScriptRoot\releases" `
 --packName=Clowd `
 --packVersion=$version `
