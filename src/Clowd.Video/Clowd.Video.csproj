@@ -4,7 +4,6 @@
     <OutputType>Library</OutputType>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.AotLib\Clowd.AotLib.csproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>

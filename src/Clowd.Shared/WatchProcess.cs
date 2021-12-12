@@ -150,9 +150,9 @@ namespace Clowd
 
         public static Process Watch(params int[] watchIds)
         {
-            var watchExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "clowdaot.exe");
+            var watchExePath = Path.Combine(AppContext.BaseDirectory, "clowd.exe");
             if (!File.Exists(watchExePath))
-                throw new FileNotFoundException("Could not find 'clowdaot.exe', ensure it's in the application directory.");
+                throw new FileNotFoundException("Could not find 'clowd.exe', ensure it's in the application directory.");
 
             var me = Process.GetCurrentProcess();
 
