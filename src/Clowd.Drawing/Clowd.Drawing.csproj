@@ -59,7 +59,7 @@
     <EmbeddedResource Include="Images\Text.cur" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="5.0.2" />
+    <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
