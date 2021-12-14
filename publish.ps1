@@ -84,7 +84,7 @@ Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
 -r "$PSScriptRoot\releases" `
 --packName=Clowd `
 --packVersion=$version `
---packAuthors=Caelan Sayler `
+--packAuthors="Caelan Sayler" `
 --packDirectory="$PSScriptRoot\publish\Clowd" `
 --splashImage="$PSScriptRoot\splash.gif" `
 --setupIcon="$PSScriptRoot\default-setup.ico" `
