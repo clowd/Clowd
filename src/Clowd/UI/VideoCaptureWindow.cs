@@ -151,7 +151,7 @@ namespace Clowd.UI
 
             var wpfclr = AppStyles.AccentColor;
 
-            _monitor = new UIAudioMonitor(_settings, 20);
+            _monitor = new UIAudioMonitor(_capturer, _settings, 20);
             _btnMicrophone.Overlay = _monitor.GetMicrophoneVisual();
             _btnMicrophone.SetBinding(CaptureToolButton.ShowAlternateIconProperty, _monitor.GetMicrophoneEnabledBinding());
             _btnSpeaker.Overlay = _monitor.GetSpeakerVisual();
