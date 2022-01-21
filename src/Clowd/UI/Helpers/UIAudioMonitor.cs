@@ -31,7 +31,7 @@ namespace Clowd.UI.Helpers
                 tmp?.Dispose();
 
                 var newv = value ?? AudioDeviceManager.GetDefaultMicrophone();
-                _lvlMic = newv.GetLevelListener();
+                _lvlMic = _capturer.CreateListener(newv);
                 _microphoneDevice = newv;
 
                 OnPropertyChanged();
@@ -57,7 +57,7 @@ namespace Clowd.UI.Helpers
                 tmp?.Dispose();
 
                 var newv = value ?? AudioDeviceManager.GetDefaultSpeaker();
-                _lvlSpeaker = newv.GetLevelListener();
+                _lvlSpeaker = _capturer.CreateListener(newv);
                 _speakerDevice = newv;
 
                 OnPropertyChanged();
@@ -112,13 +112,15 @@ namespace Clowd.UI.Helpers
         public event PropertyChangedEventHandler PropertyChanged;
 
         private bool _disposed;
+        private readonly IVideoCapturer _capturer;
         private SettingsVideo _settings;
         private IDisposable _timer;
         private Thread _thread;
 
-        public UIAudioMonitor(SettingsVideo settings, int refreshDelayMs)
+        public UIAudioMonitor(IVideoCapturer capturer, SettingsVideo settings, int refreshDelayMs)
         {
             _thread = Thread.CurrentThread;
+            _capturer = capturer;
             _settings = settings;
 
             ThrowIfStateInvalid();
@@ -128,7 +130,7 @@ namespace Clowd.UI.Helpers
             if (_settings.CaptureSpeakerDevice == null)
                 _settings.CaptureSpeakerDevice = AudioDeviceManager.GetDefaultSpeaker();
 
-            _timer = DisposableTimer.Start(TimeSpan.FromMilliseconds(20), AudioTimer_Elapsed);
+            _timer = DisposableTimer.Start(TimeSpan.FromMilliseconds(refreshDelayMs), AudioTimer_Elapsed);
 
             _settings.PropertyChanged += settings_PropertyChanged;
             settings_PropertyChanged(null, null);
@@ -156,8 +158,8 @@ namespace Clowd.UI.Helpers
         {
             try
             {
-                double spk = ConvertLevelToDb(_lvlSpeaker);
-                double mic = ConvertLevelToDb(_lvlMic);
+                double spk = ConvertLevelToUI(_lvlSpeaker);
+                double mic = ConvertLevelToUI(_lvlMic);
 
                 if (spk != SpeakerLevel || MicrophoneLevel != MicrophoneLevel)
                 {
@@ -169,17 +171,17 @@ namespace Clowd.UI.Helpers
             { }
         }
 
-        private double ConvertLevelToDb(IAudioLevelListener item)
+        private double ConvertLevelToUI(IAudioLevelListener item)
         {
             if (item == null)
                 return 0;
 
             double level = item.GetPeakLevel();
 
-            if (level > 0 && level <= 1)
-                return (20 * Math.Log10(level)) / 60 * 100 + 100;
+            if (Double.IsNaN(level) || level < -60d)
+                return 0;
 
-            return 0;
+            return level / 60 * 100 + 100;
         }
 
         public ProgressBar GetSpeakerVisual()

@@ -82,6 +82,22 @@ namespace Clowd.Video
             }
         }
 
+        public string DeviceType
+        {
+            get
+            {
+                var mm = GetMM();
+                try
+                {
+                    return mm.device.DataFlow == DataFlow.Capture ? "microphone" : "speaker";
+                }
+                finally
+                {
+                    mm.device.Dispose();
+                }
+            }
+        }
+
         const string DEFAULT_CAPTURE = "default-capture";
         const string DEFAULT_RENDER = "default-render";
 
@@ -111,8 +127,6 @@ namespace Clowd.Video
                 return (false, enumerator.GetDevice(_deviceId));
         }
 
-        public IAudioLevelListener GetLevelListener() => new LevelListener(GetMM().device);
-
         public static bool operator ==(NAudioDevice d1, NAudioDevice d2) => d1.Equals(d2);
 
         public static bool operator !=(NAudioDevice d1, NAudioDevice d2) => !d1.Equals(d2);
@@ -125,55 +139,5 @@ namespace Clowd.Video
 
         public bool Equals(NAudioDevice other) => _deviceId == other._deviceId;
         public override int GetHashCode() => _deviceId?.GetHashCode() ?? 0;
-    }
-
-    internal class LevelListener : IAudioLevelListener
-    {
-        private readonly MMDevice _device;
-        private readonly AudioClient _audioClient;
-        private bool _disposed = false;
-        private Thread _thread;
-
-        ~LevelListener()
-        {
-            Dispose();
-        }
-
-        public LevelListener(MMDevice device)
-        {
-            _thread = Thread.CurrentThread;
-            _device = device;
-            _audioClient = device.AudioClient; // this property creates a new audio client that must be disposed
-            _audioClient.Initialize(AudioClientShareMode.Shared,
-               AudioClientStreamFlags.None,
-               100,
-               100,
-               _audioClient.MixFormat,
-               Guid.Empty);
-            _audioClient.Start();
-        }
-
-        public double GetPeakLevel()
-        {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(LevelListener));
-            if (Thread.CurrentThread != _thread)
-                throw new InvalidOperationException("This object can only be accessed from the thread which created it.");
-            return _device.AudioMeterInformation.MasterPeakValue;
-        }
-
-        public void Dispose()
-        {
-            if (!_disposed)
-            {
-                if (Thread.CurrentThread != _thread)
-                    throw new InvalidOperationException("This object can only be accessed from the thread which created it.");
-                _audioClient.Stop();
-                _audioClient.Dispose();
-                _device.Dispose();
-                _disposed = true;
-            }
-            GC.SuppressFinalize(this);
-        }
     }
 }

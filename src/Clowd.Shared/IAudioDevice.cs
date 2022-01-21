@@ -5,8 +5,8 @@ namespace Clowd
     public interface IAudioDevice
     {
         string DeviceId { get; }
+        string DeviceType { get; }
         string FriendlyName { get; }
-        IAudioLevelListener GetLevelListener();
     }
 
     public interface IAudioSpeakerDevice : IAudioDevice { }
