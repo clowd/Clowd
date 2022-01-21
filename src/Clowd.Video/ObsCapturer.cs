@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,7 +20,10 @@ namespace Clowd.Video
         Task _status;
         WatchProcess _watch;
 
-        private readonly string obsUrl = "http://127.0.0.1:21889";
+        private const string obsHost = "127.0.0.1";
+        private const string obsPort = "21889";
+        private static readonly string obsUrl = $"http://{obsHost}:{obsPort}";
+        private static readonly string obsSocket = $"ws://{obsHost}:{obsPort}/volmeter";
 
         private CancellationTokenSource _source;
         private CancellationToken _token;
@@ -52,11 +56,16 @@ namespace Clowd.Video
             }
             catch
             {
-                // if obs does not exist, and we're debugging, lets check local app data
+                // if obs does not exist, and we're debugging, lets search for a nearby submodule or appdata obs
+                var submoduledir = Path.Combine(AppContext.BaseDirectory, "..\\..\\..\\modules\\obs-express\\bin");
                 var appdata = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
                 string obspath = null;
-                if (Debugger.IsAttached &&
-                    Directory.Exists(appdata) &&
+
+                if (Debugger.IsAttached && File.Exists(Path.Combine(submoduledir, "obs-express.exe")))
+                {
+                    libraryPath = submoduledir;
+                }
+                else if (Debugger.IsAttached && Directory.Exists(appdata) &&
                     ((obspath = Directory.EnumerateFiles(appdata, "obs-express.exe", SearchOption.AllDirectories).FirstOrDefault()) != null))
                 {
                     libraryPath = Path.GetDirectoryName(obspath);
@@ -243,6 +252,13 @@ namespace Clowd.Video
             }
         }
 
+        public override IAudioLevelListener CreateListener(IAudioDevice device)
+        {
+            _setup.Wait();
+
+            return new ObsAudioListener(device);
+        }
+
         public Task<string> WatchForNewFile(string directory, string extension)
         {
             TaskCompletionSource<string> tsc = new TaskCompletionSource<string>();
@@ -297,6 +313,93 @@ namespace Clowd.Video
             File.WriteAllText(fileName, _output.ToString());
         }
 
+        private class ObsAudioListener : IAudioLevelListener
+        {
+            public IAudioDevice Device { get; }
+            public ClientWebSocket WebSocket { get; }
+            public CancellationTokenSource TokenSource { get; }
+
+            private readonly object _lock = new object();
+
+            private double _peak;
+
+            public ObsAudioListener(IAudioDevice device)
+            {
+                Device = device;
+                TokenSource = new CancellationTokenSource();
+                WebSocket = new ClientWebSocket();
+                WebSocket.ConnectAsync(new Uri(obsSocket + $"?device_type={device.DeviceType}&device_id={device.DeviceId}"),
+                    new CancellationTokenSource(10000).Token).ConfigureAwait(false).GetAwaiter().GetResult();
+
+                Task.Factory.StartNew(ThreadProc, TokenSource.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            }
+
+            private void ThreadProc()
+            {
+                try
+                {
+                    ReceiveLoop();
+                }
+                finally
+                {
+                    try
+                    {
+                        WebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None)
+                            .ConfigureAwait(false).GetAwaiter().GetResult();
+                        WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None)
+                            .ConfigureAwait(false).GetAwaiter().GetResult();
+                    }
+                    catch { }
+                    WebSocket.Dispose();
+                }
+            }
+
+            private void ReceiveLoop()
+            {
+                var buffer = new byte[8192];
+                StringBuilder sb = new StringBuilder();
+                WebSocketReceiveResult receiveResult;
+
+                while (!TokenSource.IsCancellationRequested)
+                {
+                    do
+                    {
+                        receiveResult = WebSocket.ReceiveAsync(buffer, TokenSource.Token)
+                            .ConfigureAwait(false).GetAwaiter().GetResult();
+
+                        if (receiveResult.MessageType != WebSocketMessageType.Close)
+                            sb.Append(Encoding.UTF8.GetString(buffer, 0, receiveResult.Count));
+                    }
+                    while (!receiveResult.EndOfMessage);
+
+                    ReceiveMessage(sb.ToString());
+                    sb.Clear();
+                }
+            }
+
+            private void ReceiveMessage(string message)
+            {
+                var obj = JsonConvert.DeserializeObject<ObsVolmeter>(message);
+                lock (_lock)
+                {
+                    _peak = obj.peak;
+                }
+            }
+
+            public void Dispose()
+            {
+                TokenSource.Cancel();
+            }
+
+            public double GetPeakLevel()
+            {
+                lock (_lock)
+                {
+                    return _peak;
+                }
+            }
+        }
+
 #pragma warning disable CS0649 // is never assigned to
 
         private class PJsonVersion
@@ -309,6 +412,12 @@ namespace Clowd.Video
         {
             public string status;
             public string message;
+        }
+
+        private class ObsVolmeter : ObsResponse
+        {
+            public double peak;
+            public double magnitude;
         }
 
         private class ObsStartRequest
