@@ -82,13 +82,15 @@ Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
 & $PSScriptRoot\modules\Clowd.Squirrel\build\publish\Squirrel.exe pack `
 -f net6 `
 -r "$PSScriptRoot\releases" `
+-i="$PSScriptRoot\default-setup.ico" `
+--appIcon="$PSScriptRoot\default.ico" `
+--splashImage="$PSScriptRoot\splash.gif" `
 --packName=Clowd `
 --packVersion=$version `
 --packAuthors="Caelan Sayler" `
---packDirectory="$PSScriptRoot\publish\Clowd" `
---splashImage="$PSScriptRoot\splash.gif" `
---setupIcon="$PSScriptRoot\default-setup.ico" `
---updateIcon="$PSScriptRoot\default-setup.ico"
+--packDirectory="$PSScriptRoot\publish\Clowd"
+
+
 
 Write-Host "Done. Run .\upload.cmd to release" -ForegroundColor Magenta
 
