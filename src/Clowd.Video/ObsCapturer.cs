@@ -254,9 +254,7 @@ namespace Clowd.Video
 
         public override IAudioLevelListener CreateListener(IAudioDevice device)
         {
-            _setup.Wait();
-
-            return new ObsAudioListener(device);
+            return new ObsAudioListener(_setup, device);
         }
 
         public Task<string> WatchForNewFile(string directory, string extension)
@@ -320,22 +318,29 @@ namespace Clowd.Video
             public CancellationTokenSource TokenSource { get; }
 
             private readonly object _lock = new object();
+            private readonly Task _initThread;
 
             private double _peak;
 
-            public ObsAudioListener(IAudioDevice device)
+            public ObsAudioListener(Task init, IAudioDevice device)
             {
+                _initThread = init;
+                _peak = short.MinValue;
                 Device = device;
                 TokenSource = new CancellationTokenSource();
                 WebSocket = new ClientWebSocket();
-                WebSocket.ConnectAsync(new Uri(obsSocket + $"?device_type={device.DeviceType}&device_id={device.DeviceId}"),
-                    new CancellationTokenSource(10000).Token).ConfigureAwait(false).GetAwaiter().GetResult();
-
                 Task.Factory.StartNew(ThreadProc, TokenSource.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             }
 
             private void ThreadProc()
             {
+                // wait for OBS to start
+                _initThread.Wait();
+
+                // connect to websocket
+                WebSocket.ConnectAsync(new Uri(obsSocket + $"?device_type={Device.DeviceType}&device_id={Device.DeviceId}"),
+                    new CancellationTokenSource(10000).Token).ConfigureAwait(false).GetAwaiter().GetResult();
+
                 try
                 {
                     ReceiveLoop();
