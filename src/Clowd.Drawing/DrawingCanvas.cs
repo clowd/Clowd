@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -1257,7 +1257,7 @@ namespace Clowd.Drawing
         {
             // Change current selection if necessary
             Point point = e.GetPosition(this);
-            var hitObject = GraphicsList.FirstOrDefault(g => g.MakeHitTest(point, CanvasUiElementScale) >= 0);
+            var hitObject = ToolPointer.MakeHitTest(this, point, out var _hn);
             if (hitObject == null)
             {
                 UnselectAll();
