@@ -76,9 +76,11 @@ namespace Clowd
                 if (parent.HasExited)
                 {
                     Write("Parent has exited watched processes still exist, killing...");
+                    Thread.Sleep(2000); // maybe they will exit on their own!
                     foreach (var p in children)
                         if (!p.HasExited)
                             p.Kill();
+                    return;
                 }
             }
         }
