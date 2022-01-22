@@ -11,6 +11,7 @@
     <ApplicationIcon>Images\default.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <OutputPath>..\..\bin\net5\$(Configuration)</OutputPath>
+    <StartupObject>Clowd.Program</StartupObject>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <DebugType>none</DebugType>
