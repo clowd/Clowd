@@ -39,15 +39,13 @@ namespace Clowd
                 onInitialInstall: OnInstall,
                 onAppUpdate: OnUpdate,
                 onAppUninstall: OnUninstall,
-                onFirstRun: OnFirstRun,
+                onEveryRun: OnEveryRun,
                 arguments: args);
 
             JustRestarted = args.Contains("--squirrel-restarted", StringComparer.OrdinalIgnoreCase);
             _model = new SquirrelUpdateViewModelInst(JustRestarted);
 
             // if app is still running, filter out squirrel args and continue
-            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-            mgr.SetProcessAppUserModelId();
             return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
@@ -58,35 +56,35 @@ namespace Clowd
             return _model;
         }
 
-        private static void OnInstall(Version obj)
+        private static void OnInstall(SemanticVersion ver, IAppTools tools)
         {
             using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
             mgr.CreateUninstallerRegistryEntry();
             mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
-            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath);
+            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
             _srv.ExplorerAllFilesMenu = menu;
             _srv.ExplorerDirectoryMenu = menu;
-            _srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
+            _srv.AutoStartLaunchPath = SquirrelRuntimeInfo.EntryExePath;
         }
 
-        private static void OnUpdate(Version obj)
+        private static void OnUpdate(SemanticVersion ver, IAppTools tools)
         {
             using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
             mgr.CreateUninstallerRegistryEntry();
             mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
             // only update registry during update if they have not been removed by user
-            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath);
+            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
             if (_srv.ExplorerAllFilesMenu != null)
                 _srv.ExplorerAllFilesMenu = menu;
             if (_srv.ExplorerDirectoryMenu != null)
                 _srv.ExplorerDirectoryMenu = menu;
             if (_srv.AutoStartLaunchPath != null)
-                _srv.AutoStartLaunchPath = AssemblyRuntimeInfo.EntryExePath;
+                _srv.AutoStartLaunchPath = SquirrelRuntimeInfo.EntryExePath;
         }
 
-        private static void OnUninstall(Version obj)
+        private static void OnUninstall(SemanticVersion ver, IAppTools tools)
         {
             _srv.RemoveAll();
 
@@ -95,9 +93,10 @@ namespace Clowd
             mgr.RemoveUninstallerRegistryEntry();
         }
 
-        private static void OnFirstRun()
+        private static void OnEveryRun(SemanticVersion ver, IAppTools tools, bool firstRun)
         {
-            IsFirstRun = true;
+            IsFirstRun = firstRun;
+            tools.SetProcessAppUserModelId();
         }
 
         private class SquirrelUpdateViewModelInst : SquirrelUpdateViewModel
@@ -124,7 +123,7 @@ namespace Clowd
                 {
                     if (value)
                     {
-                        var menu = new ExplorerMenuLaunchItem("Upload with Clowd", AssemblyRuntimeInfo.EntryExePath, AssemblyRuntimeInfo.EntryExePath);
+                        var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
                         _srv.ExplorerAllFilesMenu = menu;
                         _srv.ExplorerDirectoryMenu = menu;
                     }
@@ -139,7 +138,7 @@ namespace Clowd
             public bool AutoRunRegistered
             {
                 get => _srv.AutoStartLaunchPath != null;
-                set => _srv.AutoStartLaunchPath = value ? AssemblyRuntimeInfo.EntryExePath : null;
+                set => _srv.AutoStartLaunchPath = value ? SquirrelRuntimeInfo.EntryExePath : null;
             }
 
             public RelayUICommand ClickCommand { get; protected set; }
