@@ -1,0 +1,220 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\OutlineText">
+      <UniqueIdentifier>{bd8b0a18-47fe-42e6-b861-1c63bc6b7fbc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\OutlineText">
+      <UniqueIdentifier>{50ca0e8c-7bbf-4aed-afe4-82927152b5ab}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="winmsg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="WindowWalker.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="rectex.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="NativeBitmap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DxScreenCapture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DxOutputDevice.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BorderWindow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="json.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="exports.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\TextOutlineStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\BmpOutlineText.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\Canvas.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\DiffusedShadowStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\DrawGradient.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\ExtrudeStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\GDIPath.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\IOutlineText.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\ITextStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\MaskColor.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\NonSystemFontLoader.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\OutlineText.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\PngOutlineText.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\TextDblGlowStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\TextDblOutlineStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\TextGlowStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\TextGradOutlineStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\TextImplGetHeight.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\TextNoOutlineStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+    <ClInclude Include="outline-text\TextOnlyOutlineStrategy.h">
+      <Filter>Header Files\OutlineText</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="WindowWalker.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="NativeBitmap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="winmsg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DxScreenCapture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DxOutputDevice.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BorderWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="exports.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextOutlineStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\BmpOutlineText.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\Canvas.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\DiffusedShadowStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\DrawGradient.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\ExtrudeStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\GDIPath.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\IOutlineText.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\ITextStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\MaskColor.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\NonSystemFontLoader.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\OutlineText.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\PngOutlineText.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextDblGlowStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextDblOutlineStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextGlowStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextGradOutlineStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextImplGetHeight.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextNoOutlineStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextOnlyOutlineStrategy.cpp">
+      <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="app.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="app.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <ProjectGuid>{847EFAFA-F061-4350-81A8-A1D211AAC62B}</ProjectGuid>
+    <!--<TargetFramework>net5.0</TargetFramework>
+    <CLRSupport>NetCore</CLRSupport>-->
+    <Keyword>ManagedCProj</Keyword>
+    <RootNamespace>Clowd.Win64</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>Clowd.WinNative</ProjectName>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!--<AdditionalIncludeDirectories>$(ProjectDir)third-party\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>-->
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <DisableSpecificWarnings>4244;4267;4838;4305;4996</DisableSpecificWarnings>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <!--<Link>
+      <AdditionalDependencies>$(ProjectDir)third-party\lib\opencv_world452d.lib;$(ProjectDir)third-party\lib\outline_textd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>-->
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!--<AdditionalIncludeDirectories>$(ProjectDir)third-party\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>-->
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <DisableSpecificWarnings>4244;4267;4838;4305;4996</DisableSpecificWarnings>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <!--<Link>
+      <AdditionalDependencies>$(ProjectDir)third-party\lib\opencv_world452.lib;$(ProjectDir)third-party\lib\outline_text.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>-->
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="BorderWindow.h" />
+    <ClInclude Include="DxOutputDevice.h" />
+    <ClInclude Include="DxScreenCapture.h" />
+    <ClInclude Include="exports.h" />
+    <ClInclude Include="json.hpp" />
+    <ClInclude Include="NativeBitmap.h" />
+    <ClInclude Include="outline-text\BmpOutlineText.h" />
+    <ClInclude Include="outline-text\Canvas.h" />
+    <ClInclude Include="outline-text\DiffusedShadowStrategy.h" />
+    <ClInclude Include="outline-text\DrawGradient.h" />
+    <ClInclude Include="outline-text\ExtrudeStrategy.h" />
+    <ClInclude Include="outline-text\GDIPath.h" />
+    <ClInclude Include="outline-text\IOutlineText.h" />
+    <ClInclude Include="outline-text\ITextStrategy.h" />
+    <ClInclude Include="outline-text\MaskColor.h" />
+    <ClInclude Include="outline-text\NonSystemFontLoader.h" />
+    <ClInclude Include="outline-text\OutlineText.h" />
+    <ClInclude Include="outline-text\PngOutlineText.h" />
+    <ClInclude Include="outline-text\TextDblGlowStrategy.h" />
+    <ClInclude Include="outline-text\TextDblOutlineStrategy.h" />
+    <ClInclude Include="outline-text\TextGlowStrategy.h" />
+    <ClInclude Include="outline-text\TextGradOutlineStrategy.h" />
+    <ClInclude Include="outline-text\TextImplGetHeight.h" />
+    <ClInclude Include="outline-text\TextNoOutlineStrategy.h" />
+    <ClInclude Include="outline-text\TextOnlyOutlineStrategy.h" />
+    <ClInclude Include="outline-text\TextOutlineStrategy.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="rectex.h" />
+    <ClInclude Include="Resource.h" />
+    <ClInclude Include="Screens.h" />
+    <ClInclude Include="WindowWalker.h" />
+    <ClInclude Include="winmsg.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="BorderWindow.cpp" />
+    <ClCompile Include="DxOutputDevice.cpp" />
+    <ClCompile Include="DxScreenCapture.cpp" />
+    <ClCompile Include="exports.cpp" />
+    <ClCompile Include="NativeBitmap.cpp" />
+    <ClCompile Include="outline-text\BmpOutlineText.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\Canvas.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\DiffusedShadowStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\DrawGradient.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\ExtrudeStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\GDIPath.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\IOutlineText.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\ITextStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\MaskColor.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\NonSystemFontLoader.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\OutlineText.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\PngOutlineText.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextDblGlowStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextDblOutlineStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextGlowStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextGradOutlineStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextImplGetHeight.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextNoOutlineStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextOnlyOutlineStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="outline-text\TextOutlineStrategy.cpp">
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Screens.cpp" />
+    <ClCompile Include="WindowWalker.cpp" />
+    <ClCompile Include="winmsg.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="app.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="app.ico" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <!-- Disable the .NET SDK error that prevents using SelfContained=true -->
+  <!--<Target Name="_CheckForLanguageAndFeatureCombinationSupport">
+  </Target>-->
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+  <Target Name="AfterBuild">
+    <!-- Copy opencv dll to bin -->
+    <!--<Copy Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" SourceFiles="$(ProjectDir)third-party\lib\opencv_world452d.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" />
+    <Copy Condition="'$(Configuration)|$(Platform)'=='Release|x64'" SourceFiles="$(ProjectDir)third-party\lib\opencv_world452.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" />-->
+    <!-- Copy opencv pdb to bin -->
+    <!--<Copy Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" SourceFiles="$(ProjectDir)third-party\lib\opencv_world452d.pdb" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" />
+    <Copy Condition="'$(Configuration)|$(Platform)'=='Release|x64'" SourceFiles="$(ProjectDir)third-party\lib\opencv_world452.pdb" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" />-->
+    <!-- <Copy SourceFiles="$(OutDir)Clowd.Win64.dll" DestinationFolder="$(SolutionDir)src\Clowd" SkipUnchangedFiles="false" /> -->
+  </Target>
+</Project>
