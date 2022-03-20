@@ -1,0 +1,7 @@
+{
+  "solution": "Clowd.sln",
+  "mappings": {
+    "Clowd.Squirrel": "../Clowd.Squirrel/src/Squirrel/Squirrel.csproj"
+  },
+  "removeProjects": true
+}
