@@ -1,3 +1,0 @@
-[submodule "modules/obs-express"]
-	path = modules/obs-express
-	url = https://github.com/clowd/obs-express
