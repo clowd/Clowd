@@ -10,7 +10,7 @@
     <NoWarn>CS4014,CA1416</NoWarn>
     <ApplicationIcon>Images\default.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <OutputPath>..\..\bin\net5\$(Configuration)</OutputPath>
+    <OutputPath>..\..\bin\$(Configuration)</OutputPath>
     <StartupObject>Clowd.Program</StartupObject>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
