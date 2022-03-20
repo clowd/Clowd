@@ -16,7 +16,7 @@
     <!--<TargetFramework>net5.0</TargetFramework>
     <CLRSupport>NetCore</CLRSupport>-->
     <Keyword>ManagedCProj</Keyword>
-    <RootNamespace>Clowd.Win64</RootNamespace>
+    <RootNamespace>Clowd.WinNative</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <ProjectName>Clowd.WinNative</ProjectName>
     <CharacterSet>Unicode</CharacterSet>
@@ -43,10 +43,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)bin\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)bin\$(Configuration)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>

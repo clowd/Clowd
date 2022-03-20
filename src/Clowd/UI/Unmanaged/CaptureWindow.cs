@@ -100,22 +100,24 @@ namespace Clowd.UI.Unmanaged
         //    fnDisposed lpfnDisposed;
         //};
 
-        [DllImport("Clowd.Win64")]
+        private const string ClowdWinNativeLib = "Clowd.WinNative";
+
+        [DllImport(ClowdWinNativeLib)]
         private static extern void CaptureShow(captureArgs args);
 
-        [DllImport("Clowd.Win64")]
+        [DllImport(ClowdWinNativeLib)]
         private static extern void CaptureReset();
 
-        [DllImport("Clowd.Win64")]
+        [DllImport(ClowdWinNativeLib)]
         private static extern RECT CaptureGetSelectedArea();
 
-        [DllImport("Clowd.Win64")]
+        [DllImport(ClowdWinNativeLib)]
         private static extern void CaptureClose();
 
-        [DllImport("Clowd.Win64")]
+        [DllImport(ClowdWinNativeLib)]
         private static extern void CaptureWriteSessionToFile([MarshalAs(UnmanagedType.LPWStr)] string sessionDir, [MarshalAs(UnmanagedType.LPWStr)] string createdUtc);
 
-        [DllImport("Clowd.Win64")]
+        [DllImport(ClowdWinNativeLib)]
         private static extern void CaptureWriteSessionToClipboard();
 
         private static fnKeyPressed delKeyPressed;
