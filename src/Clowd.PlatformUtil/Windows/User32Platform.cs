@@ -47,7 +47,7 @@ namespace Clowd.PlatformUtil.Windows
         {
             if (!GetCursorPos(out var pt))
                 throw new Win32Exception();
-            return (ScreenPoint)pt;
+            return new ScreenPoint(pt.X, pt.Y);
         }
 
         public override IScreen GetScreenFromPoint(ScreenPoint pt)

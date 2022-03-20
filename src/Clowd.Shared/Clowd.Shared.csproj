@@ -10,10 +10,10 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="RT.Serialization" Version="2.0.1702" />
-    <PackageReference Include="RT.Serialization.Binary" Version="2.0.1702" />
-    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1702" />
-    <PackageReference Include="RT.Util.Core" Version="2.0.1702" />
+    <PackageReference Include="RT.Serialization" Version="2.0.1706" />
+    <PackageReference Include="RT.Serialization.Binary" Version="2.0.1706" />
+    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1706" />
+    <PackageReference Include="RT.Util.Core" Version="2.0.1706" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.PlatformUtil\Clowd.PlatformUtil.csproj" />
