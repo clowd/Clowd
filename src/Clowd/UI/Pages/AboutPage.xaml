@@ -2,18 +2,18 @@
     x:Class="Clowd.UI.Pages.AboutPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:ui="http://schemas.modernwpf.com/2019"
+    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
     Title="AboutPage"
     d:Background="White"
     d:DesignHeight="450"
     d:DesignWidth="400"
     mc:Ignorable="d">
-    <ui:ScrollViewerEx Padding="24,0,24,24">
-
-        <ui:SimpleStackPanel Spacing="8">
+    <ScrollViewer Padding="24,0,24,24">
+        <controls:SimpleStackPanel Spacing="8">
             <Viewbox Width="60" HorizontalAlignment="Left">
                 <Path
                     Width="16"
@@ -36,7 +36,7 @@
                 Press the [PrntScr] key and explore to see what I can do!
             </TextBlock>
 
-            <ui:HyperlinkButton Click="OnClowdUrlClick" Content="Read more online" />
+            <wpfui:Hyperlink Content="Read more online" NavigateUri="https://github.com/clowd" />
 
             <TextBlock Style="{StaticResource BodyTextBlockStyle}">
                 Clowd is made possible in part by each of the following open source projects -
@@ -45,8 +45,15 @@
             <ListView
                 x:Name="listLibraries"
                 Margin="12,0,0,0"
+                Background="Transparent"
                 ItemsSource="{Binding Dependencies}"
+                BorderThickness="0"
                 ScrollViewer.CanContentScroll="False">
+                <ListView.Template>
+                    <ControlTemplate>
+                        <ItemsPresenter />
+                    </ControlTemplate>
+                </ListView.Template>
                 <ListView.ItemContainerStyle>
                     <Style TargetType="{x:Type ListViewItem}">
                         <Setter Property="Focusable" Value="false" />
@@ -67,7 +74,7 @@
                                 HorizontalAlignment="Center"
                                 Style="{StaticResource BodyTextBlockStyle}"
                                 Text="{Binding LibraryName}" />
-                            <ui:HyperlinkButton
+                            <wpfui:Hyperlink
                                 Margin="12,0,0,0"
                                 Padding="0"
                                 HorizontalAlignment="Center"
@@ -81,6 +88,6 @@
             <TextBlock Style="{StaticResource BodyTextBlockStyle}">
                 Missed your project in this list? Feel free to reach out through our GitHub.
             </TextBlock>
-        </ui:SimpleStackPanel>
-    </ui:ScrollViewerEx>
+        </controls:SimpleStackPanel>
+    </ScrollViewer>
 </Page>

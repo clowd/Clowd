@@ -224,7 +224,7 @@ namespace Clowd.UI
             if (session != null)
             {
                 session.Name = "Capture";
-                session.Icon = ModernWpf.Controls.Symbol.Camera;
+                //session.Icon = ModernWpf.Controls.Symbol.Camera;
             }
 
             DisposeInternal();

@@ -9,7 +9,6 @@ using Clowd.PlatformUtil;
 using Clowd.UI;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using ModernWpf.Controls;
 using Newtonsoft.Json;
 using WeakEvent;
 
@@ -70,12 +69,6 @@ namespace Clowd
         public string Name
         {
             get => Get<string>();
-            set => Set(value);
-        }
-
-        public Symbol Icon
-        {
-            get => Get<Symbol>();
             set => Set(value);
         }
 
@@ -230,7 +223,6 @@ namespace Clowd
             var jsonPath = Path.Combine(CreateNewSessionDirectory(), "session.json");
             var session = new SessionInfo(jsonPath);
             session.Name = "Document";
-            session.Icon = Symbol.Document;
             session.CreatedUtc = DateTime.UtcNow;
             Sessions.Add(session);
             return session;

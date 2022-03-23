@@ -11,13 +11,6 @@ using RT.Util;
 
 namespace Clowd.Config
 {
-    public enum AppTheme
-    {
-        System = 0,
-        Light = 1,
-        Dark = 2,
-    }
-
     public class SettingsGeneral : CategoryBase
     {
         [Browsable(false)]
@@ -42,15 +35,8 @@ namespace Clowd.Config
             set => Set(ref _confirmClose, value);
         }
 
-        public AppTheme Theme
-        {
-            get => _theme;
-            set => Set(ref _theme, value);
-        }
-
         private string _lastUploadPath;
         private string _lastSavePath;
-        private AppTheme _theme;
         private bool _confirmClose = true;
     }
 }

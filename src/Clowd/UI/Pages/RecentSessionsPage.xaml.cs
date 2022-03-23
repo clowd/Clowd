@@ -33,13 +33,13 @@ namespace Clowd.UI
 
         private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            multiCommandBar.Visibility = listView.SelectedItems.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            //multiCommandBar.Visibility = listView.SelectedItems.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private async void DeleteSelectedFlyoutClicked(object sender, RoutedEventArgs e)
         {
-            var f = ModernWpf.Controls.FlyoutService.GetFlyout(cmdBtnDeleteSelected) as ModernWpf.Controls.Flyout;
-            f?.Hide();
+            //var f = ModernWpf.Controls.FlyoutService.GetFlyout(cmdBtnDeleteSelected) as ModernWpf.Controls.Flyout;
+            //f?.Hide();
 
             bool itemOpen = false;
             foreach (SessionInfo session in listView.SelectedItems.OfType<SessionInfo>().ToArray())

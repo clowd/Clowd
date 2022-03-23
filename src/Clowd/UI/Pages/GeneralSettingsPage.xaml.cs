@@ -24,7 +24,6 @@ namespace Clowd.UI.Pages
             InitializeComponent();
             grpUpdates.DataContext = grpShell.DataContext = SquirrelUtil.GetUpdateViewModel();
             grpBehavior.DataContext = SettingsRoot.Current.General;
-            comboTheme.ItemsSource = Enum.GetValues(typeof(AppTheme)).Cast<AppTheme>();
         }
     }
 }
