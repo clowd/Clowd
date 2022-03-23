@@ -4,7 +4,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using ModernWpf;
 using Icon = System.Drawing.Icon;
 
 namespace Clowd
@@ -57,7 +56,7 @@ namespace Clowd
         public static Brush IdealBackgroundBrush => new SolidColorBrush(Color.FromRgb(55, 55, 55));
         public static Brush IdealForegroundBrush => Brushes.White;
 
-        public static bool IsDarkTheme => ThemeManager.Current.ActualApplicationTheme == ApplicationTheme.Dark;
+        public static bool IsDarkTheme => WPFUI.Appearance.Theme.GetAppTheme() == WPFUI.Appearance.ThemeType.Dark;
 
         public static Stream AppIconDarkThemeStream => Application.GetResourceStream(new Uri("pack://application:,,,/Images/default-white.ico")).Stream;
         public static Stream AppIconLightThemeStream => Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico")).Stream;

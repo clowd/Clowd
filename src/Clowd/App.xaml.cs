@@ -44,7 +44,7 @@ namespace Clowd
         protected override async void OnStartup(StartupEventArgs e)
         {
             DefaultLog = new DefaultScopedLog("Clowd");
-
+            
             var appArgs = SquirrelUtil.Startup(e.Args);
 
             try
@@ -85,6 +85,8 @@ namespace Clowd
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.ToString(), "Error starting Clowd. The program will now exit.");
                 ExitApp();
             }
+
+            Clowd.UI.MainWindow.ShowWindow();
         }
 
         protected override void OnExit(ExitEventArgs e)
