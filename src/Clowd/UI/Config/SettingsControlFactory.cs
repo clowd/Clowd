@@ -26,11 +26,8 @@ namespace Clowd.UI.Config
             this.wnd = wnd;
         }
 
-        public FrameworkElement GetSettingsPanel()
+        public System.Windows.Controls.Page GetSettingsPanel()
         {
-            var scroll = new ScrollViewerEx();
-            scroll.Padding = new Thickness(24, 0, 24, 24);
-
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(0, GridUnitType.Auto) });
             grid.ColumnDefinitions.Add(new ColumnDefinition());
@@ -77,8 +74,14 @@ namespace Clowd.UI.Config
 
             grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(56) });
 
+            var scroll = new ScrollViewerEx();
+            scroll.Padding = new Thickness(24, 0, 24, 24);
             scroll.Content = grid;
-            return scroll;
+
+            var page = new System.Windows.Controls.Page();
+            page.Content = scroll;
+
+            return page;
         }
 
         public FrameworkElement GetRowForProperty(PropertyDescriptor pd)

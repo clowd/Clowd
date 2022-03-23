@@ -11,21 +11,34 @@ namespace Clowd.UI
         private bool? _isDark;
         public SystemThemedWindow()
         {
-            ThemeManager.SetIsThemeAware(this, true);
-            ThemeManager.Current.ActualApplicationThemeChanged += ThemeChanged;
-            this.SetResourceReference(Window.BackgroundProperty, "SystemControlPageBackgroundAltHighBrush");
-            this.SetResourceReference(Window.ForegroundProperty, "SystemControlPageTextBaseHighBrush");
+            //ThemeManager.SetIsThemeAware(this, true);
+            //ThemeManager.Current.ActualApplicationThemeChanged += ThemeChanged;
+            //this.SetResourceReference(Window.BackgroundProperty, "SystemControlPageBackgroundAltHighBrush");
+            //this.SetResourceReference(Window.ForegroundProperty, "SystemControlPageTextBaseHighBrush");
             this.SourceInitialized += SystemThemedWindow_SourceInitialized;
+            //this.Loaded += SystemThemedWindow_Loaded;
+            WPFUI.Appearance.Theme.Changed += Theme_Changed;
         }
 
-        private void ThemeChanged(ThemeManager sender, object args)
+        private void Theme_Changed(WPFUI.Appearance.ThemeType currentTheme, System.Windows.Media.Color systemAccent)
         {
             var hWnd = new WindowInteropHelper(this).Handle;
             UpdateDarkModeState(hWnd);
         }
 
+        //private void SystemThemedWindow_Loaded(object sender, RoutedEventArgs e)
+        //{
+        //}
+
+        //private void ThemeChanged(ThemeManager sender, object args)
+        //{
+        //    var hWnd = new WindowInteropHelper(this).Handle;
+        //    UpdateDarkModeState(hWnd);
+        //}
+
         private void SystemThemedWindow_SourceInitialized(object sender, EventArgs e)
         {
+            WPFUI.Appearance.Watcher.Watch(this, WPFUI.Appearance.BackgroundType.Mica, true);
             var hWnd = new WindowInteropHelper(this).Handle;
             UpdateDarkModeState(hWnd);
         }

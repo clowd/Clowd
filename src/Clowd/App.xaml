@@ -4,27 +4,17 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:conv="clr-namespace:Clowd.UI.Converters"
-    xmlns:ui="http://schemas.modernwpf.com/2019"
     ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/WPFUI;component/Styles/Theme/Light.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/WPFUI;component/Styles/WPFUI.xaml" />
                 <ResourceDictionary Source="Assets/ProgressRingControl.xaml" />
                 <ResourceDictionary Source="Assets/VectorGeometries.xaml" />
                 <ResourceDictionary Source="Assets/VectorIcons.xaml" />
                 <ResourceDictionary Source="Assets/DragablzStyles.xaml" />
-                <ui:ThemeResources>
-                    <ui:ThemeResources.ThemeDictionaries>
-                        <ResourceDictionary x:Key="Light" ui:ThemeDictionary.Key="Light">
-                            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource SystemBaseMediumColor}" />
-                        </ResourceDictionary>
-                        <ResourceDictionary x:Key="Dark" ui:ThemeDictionary.Key="Dark">
-                            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{StaticResource SystemBaseMediumColor}" />
-                        </ResourceDictionary>
-                    </ui:ThemeResources.ThemeDictionaries>
-                </ui:ThemeResources>
-                <ui:XamlControlsResources />
-                <ResourceDictionary Source="Assets/ModernWpfPreFluent.xaml" />
+                <ResourceDictionary Source="Assets/WpfUICustomStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <conv:BoolToVisibilityConverter2 x:Key="Bool2Vis" />
