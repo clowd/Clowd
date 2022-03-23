@@ -1,7 +1,8 @@
 {
   "solution": "Clowd.sln",
   "mappings": {
-    "Clowd.Squirrel": "../Clowd.Squirrel/src/Squirrel/Squirrel.csproj"
+    "Clowd.Squirrel": "../Clowd.Squirrel/src/Squirrel/Squirrel.csproj",
+    "WPF-UI": "../wpfui/WPFUI/WPFUI.csproj"
   },
   "removeProjects": true
 }
