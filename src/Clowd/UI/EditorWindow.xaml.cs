@@ -6,8 +6,6 @@ using System.Windows.Input;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Dragablz;
-using ModernWpf.Controls;
-using ModernWpf.Controls.Primitives;
 
 namespace Clowd.UI
 {
@@ -99,9 +97,9 @@ namespace Clowd.UI
             newItem.DataContext = info;
 
             // bind icon
-            var icon = new SymbolIcon();
-            icon.SetBinding(SymbolIcon.SymbolProperty, new Binding(nameof(SessionInfo.Icon)) { Source = info });
-            TabItemHelper.SetIcon(newItem, icon);
+            //var icon = new SymbolIcon();
+            //icon.SetBinding(SymbolIcon.SymbolProperty, new Binding(nameof(SessionInfo.Icon)) { Source = info });
+            //TabItemHelper.SetIcon(newItem, icon);
 
             // bind tab name
             newItem.SetBinding(TabItem.HeaderProperty, new Binding(nameof(SessionInfo.Name)));

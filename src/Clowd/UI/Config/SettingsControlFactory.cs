@@ -9,9 +9,9 @@ using System.Windows.Data;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Clowd.Config;
+using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using ModernWpf.Controls;
 
 namespace Clowd.UI.Config
 {
@@ -74,7 +74,7 @@ namespace Clowd.UI.Config
 
             grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(56) });
 
-            var scroll = new ScrollViewerEx();
+            var scroll = new WPFUI.Controls.DynamicScrollViewer();
             scroll.Padding = new Thickness(24, 0, 24, 24);
             scroll.Content = grid;
 
@@ -113,17 +113,17 @@ namespace Clowd.UI.Config
             }
 
             if (pd.Is(typeof(bool)))
-                return SimpleControlBinding(new ToggleSwitch(), pd, ToggleSwitch.IsOnProperty);
+                return SimpleControlBinding(new CheckBox(), pd, CheckBox.IsCheckedProperty);
 
             if (pd.PropertyType.IsEnum)
                 return ComboSelectBinding(() => Enum.GetValues(type), pd, null, false);
 
             if ((int)tcode >= (int)TypeCode.Char && (int)tcode <= (int)TypeCode.Decimal)
             {
-                return SimpleControlBinding(new NumberBox()
+                return SimpleControlBinding(new WPFUI.Controls.NumberBox()
                 {
-                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline
-                }, pd, NumberBox.ValueProperty);
+                    // properties?
+                }, pd, WPFUI.Controls.NumberBox.ValueProperty);
             }
 
             if (pd.Is(typeof(Color)))

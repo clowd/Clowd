@@ -2,7 +2,6 @@
 using System.Windows;
 using System.Windows.Interop;
 using Clowd.PlatformUtil.Windows;
-using ModernWpf;
 
 namespace Clowd.UI
 {
