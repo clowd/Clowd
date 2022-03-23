@@ -7,7 +7,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:ui="http://schemas.modernwpf.com/2019"
     Title="RecentSessionsPage"
     d:Background="White"
     d:DesignHeight="450"
@@ -82,7 +81,7 @@
                             Margin="12,0,0,6"
                             Style="{StaticResource BodyTextBlockStyle}"
                             Text="{Binding CreatedUtc, Mode=OneTime, StringFormat={x:Static local:AppStyles.UiDateTimePattern}}" />
-                        <ui:CommandBar
+                        <!--<ui:CommandBar
                             x:Name="cmdBar"
                             Grid.RowSpan="2"
                             Grid.Column="2"
@@ -105,9 +104,9 @@
                                 Icon="Delete"
                                 Label="Delete"
                                 ToolTip="Delete" />
-                        </ui:CommandBar>
+                        </ui:CommandBar>-->
                     </Grid>
-                    <DataTemplate.Triggers>
+                    <!--<DataTemplate.Triggers>
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
                                 <Condition Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListViewItem}}, Path=IsSelected}" Value="True" />
@@ -118,11 +117,11 @@
                         <DataTrigger Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListViewItem}}, Path=IsSelected}" Value="True">
                             <Setter TargetName="imgBorder" Property="Background" Value="Transparent" />
                         </DataTrigger>
-                    </DataTemplate.Triggers>
+                    </DataTemplate.Triggers>-->
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-        <ui:CommandBar
+        <!--<ui:CommandBar
             Name="multiCommandBar"
             Grid.Row="1"
             HorizontalAlignment="Right"
@@ -144,6 +143,6 @@
                     </ui:Flyout>
                 </ui:FlyoutService.Flyout>
             </ui:AppBarButton>
-        </ui:CommandBar>
+        </ui:CommandBar>-->
     </Grid>
 </Page>

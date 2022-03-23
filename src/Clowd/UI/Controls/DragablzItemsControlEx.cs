@@ -2,7 +2,6 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Dragablz;
-using ModernWpf.Controls.Primitives;
 using System;
 using System.Collections.Specialized;
 using System.Windows;
@@ -96,8 +95,8 @@ namespace Clowd.UI.Controls
 
             if (element is DragablzItem dragablzItem && item is TabItem tabItem)
             {
-                dragablzItem.SetBinding(DragablzItemHelper.IconProperty,
-                    new Binding { Path = new PropertyPath(TabItemHelper.IconProperty), Source = tabItem });
+                //dragablzItem.SetBinding(DragablzItemHelper.IconProperty,
+                //    new Binding { Path = new PropertyPath(TabItemHelper.IconProperty), Source = tabItem });
             }
         }
 

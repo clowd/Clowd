@@ -149,14 +149,5 @@ Vanara.PInvoke.DwmApi             https://licenses.nuget.org/MIT
 
             DataContext = model;
         }
-
-        private void OnClowdUrlClick(object sender, RoutedEventArgs e)
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://github.com/clowd",
-                UseShellExecute = true
-            });
-        }
     }
 }
