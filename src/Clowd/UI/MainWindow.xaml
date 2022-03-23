@@ -6,12 +6,118 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:ui="http://schemas.modernwpf.com/2019"
+    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
+    xmlns:wpfuiCommon="clr-namespace:WPFUI.Common;assembly=WPFUI"
     Title="Clowd"
     Width="800"
     Height="600"
+    Style="{StaticResource CustomUiWindow}"
     mc:Ignorable="d">
-    <controls:NonVirtualizingNavigationView
+
+    <Grid
+        x:Name="RootGrid"
+        Grid.Row="1"
+        Margin="12,6,0,12"
+        Visibility="Visible">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Row="0" Margin="6,0,0,24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border
+                Grid.Column="0"
+                Width="40"
+                Height="40"
+                CornerRadius="20">
+                <!--<Border.Background>
+                    <ImageBrush ImageSource="pack://application:,,,/Assets/mwpf_icon_full.png" />
+                </Border.Background>-->
+            </Border>
+            <StackPanel
+                Grid.Column="1"
+                Margin="12,0,0,0"
+                VerticalAlignment="Center">
+                <TextBlock FontWeight="Medium" Text="WPF UI" />
+                <TextBlock Foreground="{DynamicResource TextFillColorTertiaryBrush}" Text="Fluent Design System" />
+            </StackPanel>
+        </Grid>
+
+        <wpfui:NavigationFluent
+            x:Name="RootNavigation"
+            Grid.Row="1"
+            Grid.Column="0"
+            Margin="0,0,12,0"
+            Frame="{Binding ElementName=RootFrame}"
+            SelectedPageIndex="0">
+            <wpfui:NavigationFluent.Items>
+                <local:MainWindowNavigationItem
+                    Content="Recent"
+                    Icon="PhotoFilter24"
+                    PageType="RecentSessions" />
+                <local:MainWindowNavigationItem
+                    Content="General"
+                    Icon="Settings24"
+                    PageType="SettingsGeneral" />
+                <local:MainWindowNavigationItem
+                    Content="Hotkeys"
+                    Icon="Keyboard24"
+                    PageType="SettingsHotkeys" />
+                <local:MainWindowNavigationItem
+                    Content="Capture"
+                    Icon="Camera24"
+                    PageType="SettingsCapture" />
+                <local:MainWindowNavigationItem
+                    Content="Editor"
+                    Icon="Edit24"
+                    PageType="SettingsEditor" />
+                <local:MainWindowNavigationItem
+                    Content="Uploads"
+                    Icon="Globe24"
+                    PageType="SettingsUploads" />
+                <local:MainWindowNavigationItem
+                    Content="Video"
+                    Icon="Video24"
+                    PageType="SettingsVideo" />
+            </wpfui:NavigationFluent.Items>
+            <wpfui:NavigationFluent.Footer>
+                <local:MainWindowNavigationItem
+                    Content="About"
+                    Icon="Info24"
+                    PageType="About" />
+            </wpfui:NavigationFluent.Footer>
+        </wpfui:NavigationFluent>
+
+        <Grid
+            Grid.Row="0"
+            Grid.RowSpan="2"
+            Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <wpfui:Breadcrumb
+                Grid.Row="0"
+                Margin="0,0,0,18"
+                Navigation="{Binding ElementName=RootNavigation}" />
+            <Frame x:Name="RootFrame" Grid.Row="1" />
+        </Grid>
+
+        <!--<Label>Hello</Label>-->
+    </Grid>
+
+
+
+    <!--<controls:NonVirtualizingNavigationView
         x:Name="NavView"
         IsBackButtonVisible="Collapsed"
         IsPaneOpen="True"
@@ -77,7 +183,9 @@
                 Icon="OutlineStar"
                 Tag="{x:Static local:MainWindowPage.About}" />
         </ui:NavigationView.FooterMenuItems>
-        <!--<ui:ScrollViewerEx Padding="24,0,24,24">-->
+    -->
+    <!--<ui:ScrollViewerEx Padding="24,0,24,24">-->
+    <!--
         <ui:Frame x:Name="ContentFrame" HorizontalAlignment="Stretch">
             <ui:Frame.ContentTransitions>
                 <ui:TransitionCollection>
@@ -85,6 +193,8 @@
                 </ui:TransitionCollection>
             </ui:Frame.ContentTransitions>
         </ui:Frame>
-        <!--</ui:ScrollViewerEx>-->
-    </controls:NonVirtualizingNavigationView>
+    -->
+    <!--</ui:ScrollViewerEx>-->
+    <!--
+    </controls:NonVirtualizingNavigationView>-->
 </local:SystemThemedWindow>
