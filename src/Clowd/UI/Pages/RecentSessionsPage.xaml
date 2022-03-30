@@ -8,6 +8,7 @@
     xmlns:local="clr-namespace:Clowd"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
+    xmlns:wpfuiCommon="clr-namespace:WPFUI.Common;assembly=WPFUI"
     Title="RecentSessionsPage"
     d:Background="White"
     d:DesignHeight="450"
@@ -37,6 +38,31 @@
             MouseDoubleClick="ViewDoubleClick"
             VirtualizingPanel.IsVirtualizingWhenGrouping="True"
             VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListView.ContextMenu>
+                <ContextMenu>
+                    <MenuItem
+                        x:Name="ctxOpenItem"
+                        Click="OpenItemClicked"
+                        Header="Open"
+                        Icon="{x:Static wpfuiCommon:Icon.Edit24}"
+                        IsEnabled="False"
+                        ToolTip="Open in Editor" />
+                    <MenuItem
+                        x:Name="ctxCopyItem"
+                        Click="CopyItemClicked"
+                        Header="Copy"
+                        Icon="{x:Static wpfuiCommon:Icon.Copy24}"
+                        IsEnabled="False"
+                        ToolTip="Copy to Clipboard" />
+                    <MenuItem
+                        x:Name="ctxDeleteItem"
+                        Click="DeleteItemClicked"
+                        Header="Delete"
+                        Icon="{x:Static wpfuiCommon:Icon.Delete24}"
+                        IsEnabled="False"
+                        ToolTip="Delete" />
+                </ContextMenu>
+            </ListView.ContextMenu>
             <ListView.GroupStyle>
                 <GroupStyle>
                     <GroupStyle.HeaderTemplate>
@@ -120,8 +146,8 @@
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition />
                         </Grid.ColumnDefinitions>
                         <Border
                             x:Name="imgBorder"
@@ -135,76 +161,19 @@
                         <TextBlock
                             Grid.Column="1"
                             Margin="12,6,0,0"
+                            VerticalAlignment="Center"
                             Style="{StaticResource BaseTextBlockStyle}"
                             Text="{Binding Name}" />
                         <TextBlock
                             Grid.Row="1"
                             Grid.Column="1"
                             Margin="12,0,0,6"
+                            VerticalAlignment="Top"
                             Style="{StaticResource BodyTextBlockStyle}"
                             Text="{Binding CreatedUtc, Mode=OneTime, StringFormat={x:Static local:AppStyles.UiDateTimePattern}}" />
-                        <!--<ui:CommandBar
-                            x:Name="cmdBar"
-                            Grid.RowSpan="2"
-                            Grid.Column="2"
-                            VerticalAlignment="Center"
-                            Background="Transparent"
-                            DefaultLabelPosition="Collapsed"
-                            Visibility="Hidden">
-                            <ui:AppBarButton
-                                Click="OpenItemClicked"
-                                Icon="Edit"
-                                Label="Open"
-                                ToolTip="Open in Editor" />
-                            <ui:AppBarButton
-                                Click="CopyItemClicked"
-                                Icon="Copy"
-                                Label="Copy"
-                                ToolTip="Copy to Clipboard" />
-                            <ui:AppBarButton
-                                Click="DeleteItemClicked"
-                                Icon="Delete"
-                                Label="Delete"
-                                ToolTip="Delete" />
-                        </ui:CommandBar>-->
                     </Grid>
-                    <!--<DataTemplate.Triggers>
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListViewItem}}, Path=IsSelected}" Value="True" />
-                                <Condition Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListView}}, Path=SelectedItems.Count}" Value="1" />
-                            </MultiDataTrigger.Conditions>
-                            <Setter TargetName="cmdBar" Property="Visibility" Value="Visible" />
-                        </MultiDataTrigger>
-                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type ListViewItem}}, Path=IsSelected}" Value="True">
-                            <Setter TargetName="imgBorder" Property="Background" Value="Transparent" />
-                        </DataTrigger>
-                    </DataTemplate.Triggers>-->
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-        <!--<ui:CommandBar
-            Name="multiCommandBar"
-            Grid.Row="1"
-            HorizontalAlignment="Right"
-            DefaultLabelPosition="Right"
-            Visibility="Collapsed">
-            <ui:AppBarButton
-                Name="cmdBtnDeleteSelected"
-                Icon="Delete"
-                Label="Delete Selected">
-                <ui:FlyoutService.Flyout>
-                    <ui:Flyout Placement="TopEdgeAlignedRight">
-                        <StackPanel>
-                            <TextBlock
-                                Margin="0,0,0,12"
-                                Style="{StaticResource BaseTextBlockStyle}"
-                                Text="All selected items will be deleted, this can not be un-done.&#x0a;Do you want to continue?" />
-                            <Button Click="DeleteSelectedFlyoutClicked" Content="Yes, delete all selected items" />
-                        </StackPanel>
-                    </ui:Flyout>
-                </ui:FlyoutService.Flyout>
-            </ui:AppBarButton>
-        </ui:CommandBar>-->
     </Grid>
 </Page>
