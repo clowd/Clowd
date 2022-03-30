@@ -82,13 +82,12 @@ namespace Clowd.Util
 
         private void SendArgsToRemote(string[] args)
         {
-            using (new SynchronizationContextChange()) // don't attempt top re-join the existing async context
-            {
-                var req = new SendArgsRequestModel(Process.GetCurrentProcess().Id, args);
-                using var http = new ClowdHttpClient();
-                http.PostJsonAsync<SendArgsRequestModel, object>(new Uri(_httpRoot + "args"), req, true)
-                    .GetAwaiter().GetResult();
-            }
+            var req = new SendArgsRequestModel(Process.GetCurrentProcess().Id, args);
+            using var http = new ClowdHttpClient();
+            http.PostJsonAsync<SendArgsRequestModel, object>(new Uri(_httpRoot + "args"), req, true)
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
         }
 
         private void StartServiceHost()
@@ -115,7 +114,8 @@ namespace Clowd.Util
                         var context = cb as HttpListenerContext;
                         ProcessHttpRequest(context.Request, context.Response);
                     }, request);
-                } catch { }
+                }
+                catch { }
             }
         }
 
