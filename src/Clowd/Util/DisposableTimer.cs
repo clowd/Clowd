@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Windows.Threading;
 using Timer = System.Timers.Timer;
 
 namespace Clowd.Util
@@ -11,12 +12,22 @@ namespace Clowd.Util
         }
         public static IDisposable Start(TimeSpan interval, Action action, bool synchronized)
         {
+            var dispatcher = Dispatcher.CurrentDispatcher;
+
             var timer = new Timer();
-            if (synchronized)
-                timer.SynchronizingObject = new SynchronizationContextProxy();
             timer.AutoReset = true;
             timer.Interval = interval.TotalMilliseconds;
-            timer.Elapsed += (sender, args) => action();
+            timer.Elapsed += (sender, args) =>
+            {
+                if (synchronized && dispatcher != null)
+                {
+                    dispatcher.Invoke(action);
+                }
+                else
+                {
+                    action();
+                }
+            };
             timer.Start();
 
             return new timerDisposer(timer);
