@@ -84,8 +84,6 @@ namespace Clowd
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.ToString(), "Error starting Clowd. The program will now exit.");
                 ExitApp();
             }
-
-            Clowd.UI.MainWindow.ShowWindow();
         }
 
         protected override void OnExit(ExitEventArgs e)
