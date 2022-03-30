@@ -162,7 +162,7 @@ namespace Clowd
                     Description = "Version: " + Assembly.GetExecutingAssembly()
                         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
                         .InformationalVersion;
-                    _timer = DisposableTimer.Start(TimeSpan.FromHours(1), CheckForUpdateTimer);
+                    _timer = DisposableTimer.Start(TimeSpan.FromMinutes(5), CheckForUpdateTimer);
 
                     if (justUpdated)
                         Description += ", just updated!";
