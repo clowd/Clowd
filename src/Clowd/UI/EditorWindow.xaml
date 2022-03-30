@@ -11,15 +11,9 @@
     Title="Edit - Clowd"
     Width="1050"
     Height="750"
+    Style="{StaticResource CustomUiWindow}"
     UseLayoutRounding="True"
     WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
-    <controls:TabablzControlEx
-        x:Name="TabView"
-        ShowDefaultAddButton="True"
-        ShowDefaultCloseButton="True">
-        <controls:TabablzControlEx.InterTabController>
-            <dragablz:InterTabController />
-        </controls:TabablzControlEx.InterTabController>
-    </controls:TabablzControlEx>
+    <TabControl x:Name="TabView" />
 </local:SystemThemedWindow>

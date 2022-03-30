@@ -6,25 +6,26 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
     Title="GeneralSettingsPage"
     d:Background="White"
     d:DesignHeight="450"
     d:DesignWidth="400"
     mc:Ignorable="d">
-    <!--<Page.Resources>
+    <Page.Resources>
         <Style BasedOn="{StaticResource BodyTextBlockStyle}" TargetType="TextBlock" />
         <Style BasedOn="{StaticResource {x:Type ComboBox}}" TargetType="ComboBox">
             <Setter Property="MinWidth" Value="160" />
             <Setter Property="Margin" Value="0,8,0,12" />
         </Style>
-        <Style BasedOn="{StaticResource {x:Type ui:ToggleSwitch}}" TargetType="ui:ToggleSwitch">
+        <Style BasedOn="{StaticResource {x:Type CheckBox}}" TargetType="CheckBox">
             <Setter Property="Margin" Value="0,4,0,8" />
         </Style>
-        <Style BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+        <!--<Style BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
             <Setter Property="Margin" Value="0,8,0,8" />
-        </Style>
-    </Page.Resources>-->
-    <ScrollViewer Padding="24,0,24,24">
+        </Style>-->
+    </Page.Resources>
+    <wpfui:DynamicScrollViewer Padding="0,0,24,24">
         <controls:SimpleStackPanel>
             <GroupBox x:Name="grpUpdates" Header="Updates">
                 <StackPanel>
@@ -47,5 +48,5 @@
                 </StackPanel>
             </GroupBox>
         </controls:SimpleStackPanel>
-    </ScrollViewer>
+    </wpfui:DynamicScrollViewer>
 </Page>

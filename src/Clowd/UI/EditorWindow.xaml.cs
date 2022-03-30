@@ -5,7 +5,6 @@ using System.Windows.Data;
 using System.Windows.Input;
 using Clowd.Config;
 using Clowd.PlatformUtil;
-using Dragablz;
 
 namespace Clowd.UI
 {
@@ -19,18 +18,19 @@ namespace Clowd.UI
         {
             InitializeComponent();
 
-            var b = new Binding(nameof(SettingsEditor.TabsEnabled));
-            b.Source = SettingsRoot.Current.Editor;
-            b.Mode = BindingMode.TwoWay;
-            TabView.SetBinding(TabablzControl.IsHeaderPanelVisibleProperty, b);
+            //var b = new Binding(nameof(SettingsEditor.TabsEnabled));
+            //b.Source = SettingsRoot.Current.Editor;
+            //b.Mode = BindingMode.TwoWay;
+            //TabView.SetBinding(TabablzControl.IsHeaderPanelVisibleProperty, b);
 
-            TabView.NewItemFactory = () =>
-            {
-                return GetTabFromSession(SessionManager.Current.CreateNewSession());
-            };
+            //TabView.NewItemFactory = () =>
+            //{
+            //    return GetTabFromSession(SessionManager.Current.CreateNewSession());
+            //};
 
-            TabView.ItemsChanged += TabView_ItemsChanged;
-            TabView.ClosingItemCallback = TabClosing;
+
+            //TabView.ItemsChanged += TabView_ItemsChanged;
+            //TabView.ClosingItemCallback = TabClosing;
             Closing += EditorWindow_Closing;
         }
 
@@ -55,12 +55,12 @@ namespace Clowd.UI
             }
         }
 
-        private void TabClosing(ItemActionCallbackArgs<TabablzControl> args)
-        {
-            // reset session window id to null for closing tab
-            var session = GetSessionFromTab(args.DragablzItem);
-            session.ActiveWindowId = null;
-        }
+        //private void TabClosing(ItemActionCallbackArgs<TabablzControl> args)
+        //{
+        //    // reset session window id to null for closing tab
+        //    var session = GetSessionFromTab(args.DragablzItem);
+        //    session.ActiveWindowId = null;
+        //}
 
         protected override void OnActivated(EventArgs e)
         {
@@ -76,8 +76,8 @@ namespace Clowd.UI
 
         private static SessionInfo GetSessionFromTab(object tabObj)
         {
-            if (tabObj is DragablzItem drag)
-                return GetSessionFromTab(drag.Content);
+            //if (tabObj is DragablzItem drag)
+            //    return GetSessionFromTab(drag.Content);
 
             if (tabObj is TabItem tab)
                 return GetSessionFromTab(tab.DataContext);
@@ -160,7 +160,7 @@ namespace Clowd.UI
             // look for a candidate window to open this tab in, or open a new window if one can't be found
             var query = from w in App.Current.Windows.OfType<EditorWindow>()
                         where w.PlatformWindow.IsCurrentVirtualDesktop
-                        where w.TabView.IsHeaderPanelVisible
+                        //where w.TabView.IsHeaderPanelVisible
                         orderby w.LastTouched descending
                         select w;
 

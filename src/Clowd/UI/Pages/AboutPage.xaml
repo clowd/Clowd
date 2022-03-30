@@ -12,7 +12,7 @@
     d:DesignHeight="450"
     d:DesignWidth="400"
     mc:Ignorable="d">
-    <ScrollViewer Padding="24,0,24,24">
+    <wpfui:DynamicScrollViewer Padding="0,0,24,24">
         <controls:SimpleStackPanel Spacing="8">
             <Viewbox Width="60" HorizontalAlignment="Left">
                 <Path
@@ -46,8 +46,8 @@
                 x:Name="listLibraries"
                 Margin="12,0,0,0"
                 Background="Transparent"
-                ItemsSource="{Binding Dependencies}"
                 BorderThickness="0"
+                ItemsSource="{Binding Dependencies}"
                 ScrollViewer.CanContentScroll="False">
                 <ListView.Template>
                     <ControlTemplate>
@@ -89,5 +89,5 @@
                 Missed your project in this list? Feel free to reach out through our GitHub.
             </TextBlock>
         </controls:SimpleStackPanel>
-    </ScrollViewer>
+    </wpfui:DynamicScrollViewer>
 </Page>
