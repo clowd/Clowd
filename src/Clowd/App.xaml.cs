@@ -20,7 +20,6 @@ using Clowd.Util;
 using Clowd.Video;
 using Hardcodet.Wpf.TaskbarNotification;
 using LightInject;
-using ModernWpf;
 using Ookii.Dialogs.Wpf;
 using RT.Serialization;
 using RT.Util.ExtensionMethods;
@@ -44,7 +43,7 @@ namespace Clowd
         protected override async void OnStartup(StartupEventArgs e)
         {
             DefaultLog = new DefaultScopedLog("Clowd");
-            
+
             var appArgs = SquirrelUtil.Startup(e.Args);
 
             try
@@ -63,7 +62,7 @@ namespace Clowd
 
                 // theme
                 SetupTrayIconAndTheme();
-                ThemeManager.Current.ActualApplicationThemeChanged += (s, e) => SetupTrayIconAndTheme();
+                WPFUI.Appearance.Theme.Changed += (s, e) => SetupTrayIconAndTheme();
 
                 // start receiving command line arguments
                 _processor.Ready();
@@ -125,23 +124,23 @@ namespace Clowd
             SettingsRoot.Current.Hotkeys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
             SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
 
-            void setTheme()
-            {
-                ThemeManager.Current.ApplicationTheme = SettingsRoot.Current.General.Theme switch
-                {
-                    AppTheme.Light => ApplicationTheme.Light,
-                    AppTheme.Dark => ApplicationTheme.Dark,
-                    _ => null,
-                };
-            }
-            SettingsRoot.Current.General.PropertyChanged += (s, e) =>
-            {
-                if (e.PropertyName == nameof(SettingsGeneral.Theme))
-                {
-                    setTheme();
-                }
-            };
-            setTheme();
+            //void setTheme()
+            //{
+            //    WPFUI.Appearance.Theme.Set(SettingsRoot.Current.General.Theme switch
+            //    {
+            //        AppTheme.Light => WPFUI.Appearance.ThemeType.Light,
+            //        AppTheme.Dark => WPFUI.Appearance.ThemeType.Dark,
+            //        _ => WPFUI.Appearance.ThemeType.Unknown,
+            //    });
+            //}
+            //SettingsRoot.Current.General.PropertyChanged += (s, e) =>
+            //{
+            //    if (e.PropertyName == nameof(SettingsGeneral.Theme))
+            //    {
+            //        setTheme();
+            //    }
+            //};
+            //setTheme();
         }
 
         private void SetupExceptionHandling()

@@ -49,11 +49,11 @@ namespace Clowd.UI
                 //    return new NewItemPage();
                 //    break;
                 case MainWindowPage.RecentSessions:
-                    //return new RecentSessionsPage();
+                    return new RecentSessionsPage();
                 //case MainWindowPage.Uploads:
                 //    break;
                 case MainWindowPage.SettingsGeneral:
-                    //return new GeneralSettingsPage();
+                    return new GeneralSettingsPage();
                 case MainWindowPage.SettingsHotkeys:
                     return new SettingsControlFactory(null, SettingsRoot.Current.Hotkeys).GetSettingsPanel();
                 case MainWindowPage.SettingsCapture:

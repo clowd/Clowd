@@ -56,7 +56,7 @@
             <wpfui:NavigationFluent.Items>
                 <local:MainWindowNavigationItem
                     Content="Recent"
-                    Icon="PhotoFilter24"
+                    Icon="AppsListDetail24"
                     PageType="RecentSessions" />
                 <local:MainWindowNavigationItem
                     Content="General"
