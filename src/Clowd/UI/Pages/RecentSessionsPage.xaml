@@ -7,6 +7,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
     Title="RecentSessionsPage"
     d:Background="White"
     d:DesignHeight="450"
@@ -30,7 +31,8 @@
         </Grid.RowDefinitions>
         <ListView
             x:Name="listView"
-            Margin="12,0,0,0"
+            Background="Transparent"
+            BorderThickness="0"
             ItemsSource="{Binding Source={StaticResource viewSource}}"
             MouseDoubleClick="ViewDoubleClick"
             VirtualizingPanel.IsVirtualizingWhenGrouping="True"
@@ -39,14 +41,74 @@
                 <GroupStyle>
                     <GroupStyle.HeaderTemplate>
                         <DataTemplate>
-                            <TextBlock Style="{DynamicResource SubTitleTextBlockStyle}" Text="{Binding Name, Mode=OneTime}" />
+                            <TextBlock
+                                Margin="0,8"
+                                Style="{DynamicResource SubTitleTextBlockStyle}"
+                                Text="{Binding Name, Mode=OneTime}">
+                                <TextBlock.Foreground>
+                                    <SolidColorBrush Color="{DynamicResource TextFillColorPrimary}" />
+                                </TextBlock.Foreground>
+                            </TextBlock>
                         </DataTemplate>
                     </GroupStyle.HeaderTemplate>
                 </GroupStyle>
             </ListView.GroupStyle>
+            <ListView.Style>
+                <Style TargetType="ListView">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListView">
+                                <wpfui:DynamicScrollViewer>
+                                    <ItemsPresenter />
+                                </wpfui:DynamicScrollViewer>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListView.Style>
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListViewItem">
+                                <Border
+                                    x:Name="Border"
+                                    Background="Transparent"
+                                    SnapsToDevicePixels="true">
+                                    <ContentPresenter
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                    <VisualStateManager.VisualStateGroups>
+                                        <VisualStateGroup x:Name="CommonStates">
+                                            <VisualState x:Name="Normal" />
+                                            <VisualState x:Name="MouseOver" />
+                                            <VisualState x:Name="Disabled" />
+                                        </VisualStateGroup>
+                                        <VisualStateGroup x:Name="SelectionStates">
+                                            <VisualState x:Name="Unselected" />
+                                            <VisualState x:Name="Selected">
+                                                <Storyboard>
+                                                    <ColorAnimationUsingKeyFrames Storyboard.TargetName="Border" Storyboard.TargetProperty="(Panel.Background).(SolidColorBrush.Color)">
+                                                        <EasingColorKeyFrame KeyTime="0" Value="{DynamicResource SystemAccentColor}" />
+                                                    </ColorAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </VisualState>
+                                            <VisualState x:Name="SelectedUnfocused">
+                                                <Storyboard>
+                                                    <ColorAnimationUsingKeyFrames Storyboard.TargetName="Border" Storyboard.TargetProperty="(Panel.Background).(SolidColorBrush.Color)">
+                                                        <EasingColorKeyFrame KeyTime="0" Value="{DynamicResource SystemAccentColorLight1}" />
+                                                    </ColorAnimationUsingKeyFrames>
+                                                </Storyboard>
+                                            </VisualState>
+                                        </VisualStateGroup>
+                                    </VisualStateManager.VisualStateGroups>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
