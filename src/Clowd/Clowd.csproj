@@ -44,6 +44,7 @@
   <ItemGroup>
     <PackageReference Include="Clowd.Squirrel" Version="2.9.3-g5eac3d" />
     <PackageReference Include="DotNetZip" Version="1.16.0" />
+    <PackageReference Include="Dragablz" Version="0.0.3.223" />
     <PackageReference Include="Fody" Version="6.6.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
