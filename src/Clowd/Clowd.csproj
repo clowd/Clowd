@@ -42,7 +42,7 @@
     <ProjectReference Include="..\..\third-party\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Clowd.Squirrel" Version="2.9.3-g5eac3d" />
+    <PackageReference Include="Clowd.Squirrel" Version="2.9.23-gc8da1a" />
     <PackageReference Include="DotNetZip" Version="1.16.0" />
     <PackageReference Include="Dragablz" Version="0.0.3.223" />
     <PackageReference Include="Fody" Version="6.6.0">
