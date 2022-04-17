@@ -92,7 +92,7 @@ if ($LocalProjectMode) {
 } else {
     $projdeps = dotnet list "$PSScriptRoot\src\Clowd\Clowd.csproj" package
     $projstring = $projdeps -join "`r`n"
-    $squirrelVersion = $projstring -match "(?m)Clowd\.Squirrel.*\s(\d\.\d\.\d.*?)$"
+    $squirrelVersion = $projstring -match "(?m)Clowd\.Squirrel.*\s(\d{1,3}\.\d{1,3}\.\d.*?)$"
     $squirrelVersion = $Matches[1].Trim()
     Write-Host "Using Squirrel '$squirrelVersion' from local NuGet cache" -ForegroundColor Magenta
     Set-Alias Squirrel ($env:USERPROFILE + "\.nuget\packages\clowd.squirrel\$squirrelVersion\tools\Squirrel.exe");
