@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RT.Util.ExtensionMethods;
 
@@ -46,7 +47,7 @@ namespace Clowd.Util
         /// <summary>
         /// If this method returns true, app should continue startup. If false, the args have been forwarded to another already running instance, and you should exit.
         /// </summary>
-        public bool Startup(string[] args)
+        public async Task<bool> Startup(string[] args)
         {
             Dispose();
 
@@ -55,7 +56,7 @@ namespace Clowd.Util
             if (!created)
             {
                 if (args != null || args.Length > 0)
-                    SendArgsToRemote(args);
+                    await SendArgsToRemote(args);
 
                 // Can't call dispose here, we don't own the mutex and Dispose will try to release the mutex
                 _mutex.Dispose();
@@ -80,14 +81,12 @@ namespace Clowd.Util
             OnCommandLineBatchTimerTick(this, new EventArgs());
         }
 
-        private void SendArgsToRemote(string[] args)
+        private async Task SendArgsToRemote(string[] args)
         {
             var req = new SendArgsRequestModel(Process.GetCurrentProcess().Id, args);
             using var http = new ClowdHttpClient();
-            http.PostJsonAsync<SendArgsRequestModel, object>(new Uri(_httpRoot + "args"), req, true)
-                .ConfigureAwait(false)
-                .GetAwaiter()
-                .GetResult();
+            http.Timeout = TimeSpan.FromSeconds(3);
+            await http.PostJsonAsync<SendArgsRequestModel, object>(new Uri(_httpRoot + "args"), req, true);
         }
 
         private void StartServiceHost()
@@ -218,6 +217,6 @@ namespace Clowd.Util
             }
         }
 
-        private record SendArgsRequestModel(int pid, string[] args);
+        public record SendArgsRequestModel(int pid, string[] args);
     }
 }
