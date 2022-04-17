@@ -73,7 +73,7 @@ if ($mode -eq "compile") {
         Copy-Item "bin" -Destination "$PSScriptRoot\publish\obs-express" -Recurse
     } else {
         Write-Host "Downloading obs-express from GitHub" -ForegroundColor Magenta
-        wget "https://github.com/clowd/obs-express/releases/latest/download/obs-express.zip" -OutFile "$PSScriptRoot\bin\obs-express.zip"
+        Invoke-WebRequest "https://github.com/clowd/obs-express/releases/latest/download/obs-express.zip" -OutFile "$PSScriptRoot\bin\obs-express.zip"
         Write-Host "Extracting obs-express archive" -ForegroundColor Magenta
         Expand-Archive "$PSScriptRoot\bin\obs-express.zip" -DestinationPath "$PSScriptRoot\publish\obs-express"
     }
