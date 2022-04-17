@@ -1,0 +1,26 @@
+name: Build Squirrel (Windows)
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: 6.0.*
+      - name: "Install NGBV"
+        run: dotnet tool install --tool-path . nbgv
+      - name: Build Clowd
+        shell: pwsh
+        run: .\build.ps1 -mode compile -keyId ${{ secrets.B2_KEY_ID }} -keySecret ${{ secrets.B2_KEY_SECRET }}
+      - name: Upload Release to B2
+        shell: pwsh
+        run: .\build.ps1 -mode upload -keyId ${{ secrets.B2_KEY_ID }} -keySecret ${{ secrets.B2_KEY_SECRET }}
+      - name: "Upload Artifacts"
+        uses: actions/upload-artifact@v3
+        with:
+          path: .\releases\*
+          if-no-files-found: error

@@ -1,1 +1,1 @@
-powershell -ExecutionPolicy Bypass -File %0\..\upload.ps1
+powershell -ExecutionPolicy Bypass -File %0\..\build.ps1 -mode upload
