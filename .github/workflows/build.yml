@@ -1,4 +1,4 @@
-name: Build Squirrel (Windows)
+name: Build Clowd
 on: [push, pull_request]
 jobs:
   build:
