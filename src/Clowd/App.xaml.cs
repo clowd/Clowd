@@ -176,8 +176,7 @@ namespace Clowd
 
             try
             {
-                bool mutexCreated = _processor.Startup(args);
-                if (!mutexCreated)
+                if (await _processor.Startup(args) == false)
                 {
                     if (Constants.Debugging && await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Warning,
                         "There is already an instance of clowd running. Would you like to kill it before continuing?",
@@ -185,7 +184,7 @@ namespace Clowd
                         "Kill Clowd", "Exit"))
                     {
                         KillOtherClowdProcess();
-                        if (!_processor.Startup(args))
+                        if (await _processor.Startup(args) == false)
                             throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Clowd instance? Uninstaller?");
                     }
                     else
@@ -199,7 +198,7 @@ namespace Clowd
             {
                 // there is an unresponsive clowd process, try to kill it and re-start
                 KillOtherClowdProcess();
-                if (!_processor.Startup(args))
+                if (await _processor.Startup(args) == false)
                     throw new Exception("Unable to create new startup mutex, a mutex already exists. Another Clowd instance? Uninstaller?");
             }
         }
