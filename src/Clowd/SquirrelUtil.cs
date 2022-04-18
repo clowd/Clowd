@@ -190,34 +190,36 @@ namespace Clowd
 
             public async Task CheckForUpdatesUnattended()
             {
-                lock (_lock)
+                try
                 {
-                    if (_newVersion != null) return;
-                    if (IsWorking) return;
-                    IsWorking = true;
+                    lock (_lock)
+                    {
+                        if (_newVersion != null) return;
+                        if (IsWorking) return;
+                        IsWorking = true;
+                    }
+
+                    CommandManager.InvalidateRequerySuggested();
+                    ClickCommandText = "Checking...";
+                    using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+                    _newVersion = await mgr.UpdateApp(OnProgress);
                 }
-
-                CommandManager.InvalidateRequerySuggested();
-
-                ClickCommandText = "Checking...";
-                using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-                _newVersion = await mgr.UpdateApp(OnProgress);
-
-                if (_newVersion != null)
+                finally
                 {
-                    ClickCommandText = "Restart Clowd";
-                    Description = $"Version {_newVersion.Version} has been downloaded";
-                }
-                else
-                {
-                    ClickCommandText = "Check for Updates";
-                    Description = "Version: " + CurrentVersion + ", no update available";
-                }
+                    if (_newVersion != null)
+                    {
+                        ClickCommandText = "Restart Clowd";
+                        Description = $"Version {_newVersion.Version} has been downloaded";
+                    }
+                    else
+                    {
+                        ClickCommandText = "Check for Updates";
+                        Description = "Version: " + CurrentVersion + ", no update available";
+                    }
 
-                lock (_lock)
-                    IsWorking = false;
-
-                CommandManager.InvalidateRequerySuggested();
+                    lock (_lock) IsWorking = false;
+                    CommandManager.InvalidateRequerySuggested();
+                }
             }
 
             private async void OnClick(object parameter)
