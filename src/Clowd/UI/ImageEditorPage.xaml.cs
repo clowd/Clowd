@@ -14,23 +14,33 @@ using Clowd.UI.Helpers;
 using Clowd.Util;
 using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
-using PropertyChanged;
-using System.Text;
+using System.ComponentModel;
 
 namespace Clowd.UI
 {
-    [AddINotifyPropertyChangedInterface]
-    public partial class ImageEditorPage : UserControl
+    public partial class ImageEditorPage : UserControl, INotifyPropertyChanged
     {
-        public StateCapabilities Capabilities { get; set; } = ToolStateManager.Empty();
-
+        public StateCapabilities Capabilities
+        {
+            get => _capabilities;
+            set
+            {
+                if (_capabilities != value)
+                {
+                    _capabilities = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Capabilities)));
+                }
+            }
+        }
         private ToolStateManager _manager = new ToolStateManager();
         private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private PropertyChangeNotifier toolNotifier;
         private SettingsRoot _settings => SettingsRoot.Current;
         private SessionInfo _session;
-
+        private StateCapabilities _capabilities = ToolStateManager.Empty();
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
+
+        public event PropertyChangedEventHandler PropertyChanged;
 
         public ImageEditorPage(SessionInfo info)
         {

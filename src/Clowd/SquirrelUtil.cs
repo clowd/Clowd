@@ -121,13 +121,18 @@ namespace Clowd
                         _srv.ExplorerAllFilesMenu = null;
                         _srv.ExplorerDirectoryMenu = null;
                     }
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ContextMenuRegistered)));
                 }
             }
 
             public bool AutoRunRegistered
             {
                 get => _srv.AutoStartLaunchPath != null;
-                set => _srv.AutoStartLaunchPath = value ? SquirrelRuntimeInfo.EntryExePath : null;
+                set
+                {
+                    _srv.AutoStartLaunchPath = value ? SquirrelRuntimeInfo.EntryExePath : null;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AutoRunRegistered)));
+                }
             }
 
             public RelayUICommand ClickCommand { get; protected set; }

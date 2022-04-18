@@ -45,14 +45,9 @@
     <PackageReference Include="Clowd.Squirrel" Version="2.9.26-g7e1dae" />
     <PackageReference Include="DotNetZip" Version="1.16.0" />
     <PackageReference Include="Dragablz" Version="0.0.3.223" />
-    <PackageReference Include="Fody" Version="6.6.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
     <PackageReference Include="LightInject" Version="6.4.1" />
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.39" />
-    <PackageReference Include="PropertyChanged.Fody" Version="3.4.0" PrivateAssets="all" />
     <PackageReference Include="SharpRaven" Version="2.4.0" />
     <PackageReference Include="ThomasLevesque.WeakEvent" Version="4.1.0" />
     <PackageReference Include="WPF-UI" Version="1.2.2" />
