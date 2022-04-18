@@ -79,11 +79,13 @@ namespace Clowd
         }
     }
 
-    public class SessionManager : IDisposable, INotifyPropertyChanged
+    public class SessionManager : SimpleNotifyObject, IDisposable
     {
-        public TrulyObservableCollection<SessionInfo> Sessions { get; set; }
-
-        public event PropertyChangedEventHandler PropertyChanged;
+        public TrulyObservableCollection<SessionInfo> Sessions
+        {
+            get => _sessions;
+            set => Set(ref _sessions, value);
+        }
 
         public static SessionManager Current { get; }
 
@@ -96,6 +98,7 @@ namespace Clowd
 
         private FileSystemWatcher _fsw;
         private IDisposable _cleanupTimer;
+        private TrulyObservableCollection<SessionInfo> _sessions;
 
         public SessionManager()
         {
@@ -120,12 +123,12 @@ namespace Clowd
         private void OnCleanUpTimerTick()
         {
             var deleteSessionsAfter = SettingsRoot.Current.Editor.DeleteSessionsAfter.ToTimeSpan();
-            foreach(var s in Sessions.ToArray())
+            foreach (var s in Sessions.ToArray())
             {
                 var sAge = DateTime.UtcNow - s.LastModifiedUtc;
                 if (sAge > deleteSessionsAfter && s.ActiveWindowId == null)
                     DeleteSession(s);
-            }    
+            }
         }
 
         ~SessionManager()

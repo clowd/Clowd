@@ -20,7 +20,20 @@ namespace Clowd.UI
 {
     public partial class RecentSessionsPage : Page, INotifyPropertyChanged
     {
-        public TrulyObservableCollection<SessionInfo> Sessions { get; set; }
+        private TrulyObservableCollection<SessionInfo> _sessions;
+
+        public TrulyObservableCollection<SessionInfo> Sessions
+        {
+            get => _sessions;
+            set
+            {
+                if (_sessions != value)
+                {
+                    _sessions = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Sessions)));
+                }
+            }
+        }
 
         public RecentSessionsPage()
         {
