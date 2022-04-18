@@ -16,7 +16,8 @@ namespace Clowd
         public const string RunRegistryPath = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
         public const string UninstallRegistryPath = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
         public const string ServiceDomain = "caesay.com";
-        public const string ReleaseFeedUrl = "https://caesay.com/clowd-updates";
+        public const string StableReleaseFeedUrl = "https://clowd-releases.s3.eu-central-003.backblazeb2.com/stable/";
+        public const string ExperimentalReleaseFeedUrl = "https://clowd-releases.s3.eu-central-003.backblazeb2.com/experimental/";
         public const string InstallerExeName = "ClowdCLI.exe";
         public const string UpdateProcessName = "ClowdUpdate";
         public static bool Debugging => System.Diagnostics.Debugger.IsAttached;
