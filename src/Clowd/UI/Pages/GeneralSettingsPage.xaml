@@ -30,7 +30,10 @@
             <GroupBox x:Name="grpUpdates" Header="Updates">
                 <StackPanel>
                     <TextBlock Style="{StaticResource BodyTextBlockStyle}" Text="{Binding Description}" />
-                    <Button Command="{Binding ClickCommand}" Content="{Binding ClickCommandText}" />
+                    <Button
+                        HorizontalAlignment="Left"
+                        Command="{Binding ClickCommand}"
+                        Content="{Binding ClickCommandText}" />
                 </StackPanel>
             </GroupBox>
             <GroupBox x:Name="grpBehavior" Header="Behavior">
