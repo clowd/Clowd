@@ -43,7 +43,6 @@ namespace Clowd
                 arguments: args);
 
             JustRestarted = args.Contains("--squirrel-restarted", StringComparer.OrdinalIgnoreCase);
-            _model = new SquirrelUpdateViewModelInst(JustRestarted);
 
             // if app is still running, filter out squirrel args and continue
             return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -58,9 +57,8 @@ namespace Clowd
 
         private static void OnInstall(SemanticVersion ver, IAppTools tools)
         {
-            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-            mgr.CreateUninstallerRegistryEntry();
-            mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
+            tools.CreateUninstallerRegistryEntry();
+            tools.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
             var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
             _srv.ExplorerAllFilesMenu = menu;
@@ -70,9 +68,8 @@ namespace Clowd
 
         private static void OnUpdate(SemanticVersion ver, IAppTools tools)
         {
-            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-            mgr.CreateUninstallerRegistryEntry();
-            mgr.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
+            tools.CreateUninstallerRegistryEntry();
+            tools.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
 
             // only update registry during update if they have not been removed by user
             var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
@@ -88,23 +85,15 @@ namespace Clowd
         {
             _srv.RemoveAll();
 
-            using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-            mgr.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
-            mgr.RemoveUninstallerRegistryEntry();
+            tools.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
+            tools.RemoveUninstallerRegistryEntry();
         }
 
         private static void OnEveryRun(SemanticVersion ver, IAppTools tools, bool firstRun)
         {
             IsFirstRun = firstRun;
             tools.SetProcessAppUserModelId();
-        }
-
-        private class SquirrelUpdateViewModelInst : SquirrelUpdateViewModel
-        {
-            public SquirrelUpdateViewModelInst(bool justUpdated) : base(justUpdated)
-            {
-                // hide constructor
-            }
+            _model = new SquirrelUpdateViewModel(JustRestarted, tools.CurrentlyInstalledVersion() != null);
         }
 
         public class SquirrelUpdateViewModel : INotifyPropertyChanged
@@ -151,12 +140,10 @@ namespace Clowd
             private ReleaseEntry _newVersion;
             private IDisposable _timer;
 
-            protected SquirrelUpdateViewModel(bool justUpdated)
+            public SquirrelUpdateViewModel(bool justUpdated, bool isInstalled)
             {
-                using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
-
                 ClickCommand = new RelayUICommand(OnClick, CanExecute);
-                if (mgr.IsInstalledApp)
+                if (isInstalled)
                 {
                     ClickCommandText = "Check for updates";
                     Description = "Version: " + Assembly.GetExecutingAssembly()
@@ -201,7 +188,7 @@ namespace Clowd
 
                     CommandManager.InvalidateRequerySuggested();
                     ClickCommandText = "Checking...";
-                    using var mgr = new UpdateManager(Constants.ReleaseFeedUrl, UniqueAppKey);
+                    using var mgr = new UpdateManager(Config.SettingsRoot.Current.General.UpdateReleaseUrl);
                     _newVersion = await mgr.UpdateApp(OnProgress);
                 }
                 finally
@@ -238,7 +225,10 @@ namespace Clowd
 
             private void OnProgress(int obj)
             {
-                Description = $"Checking for updates: {obj}%";
+                if (obj < 33)
+                    Description = $"Checking for updates: {obj}%";
+                else
+                    Description = $"Downloading updates: {obj}%";
             }
 
             private bool CanExecute(object parameter)
