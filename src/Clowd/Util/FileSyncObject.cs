@@ -5,11 +5,9 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using Newtonsoft.Json;
-using PropertyChanged;
 
 namespace Clowd.Util
 {
-    [DoNotNotify]
     public class FileSyncObject : INotifyPropertyChanged, IDisposable
     {
         public DateTime LastModifiedUtc { get; set; }

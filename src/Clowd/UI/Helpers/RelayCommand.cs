@@ -2,11 +2,10 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
-using PropertyChanged;
 
 namespace Clowd.UI.Helpers
 {
-    public class RelayCommand : ICommand
+    public class RelayCommand : SimpleNotifyObject, ICommand
     {
         readonly Action<object> _execute;
         readonly Predicate<object> _canExecute;
@@ -33,11 +32,21 @@ namespace Clowd.UI.Helpers
         public void Execute(object parameter) { _execute(parameter); }
     }
 
-    [AddINotifyPropertyChangedInterface]
     public class RelayUICommand : RelayCommand
     {
-        public DataTemplate IconTemplate { get; set; }
-        public string Text { get; set; }
+        public DataTemplate IconTemplate
+        {
+            get => _iconTemplate;
+            set => Set(ref _iconTemplate, value);
+        }
+        public string Text
+        {
+            get => _text;
+            set => Set(ref _text, value);
+        }
+
+        private DataTemplate _iconTemplate;
+        private string _text;
 
         public RelayUICommand(Action<object> execute)
             : this(execute, null)

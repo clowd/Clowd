@@ -216,8 +216,8 @@ namespace Clowd
             container.Register<IVideoCapturePage, VideoCaptureWindow>(new PerScopeLifetime());
 
             // we create this TasksView here in main thread so there won't be issues with MTA threads requesting this object in the future
-            var tasksView = new TasksView();
-            container.Register<ITasksView>(_ => tasksView);
+            //var tasksView = new TasksView();
+            //container.Register<ITasksView>(_ => tasksView);
 
             // video
             container.Register<IVideoCapturer>(f => new ObsCapturer(DefaultLog, Path.Combine(AppContext.BaseDirectory, "obs-express")), new PerScopeLifetime());
