@@ -13,6 +13,17 @@ namespace Clowd.Config
 {
     public class SettingsGeneral : CategoryBase
     {
+        public bool ExperimentalUpdateChannel
+        {
+            get => _experimentalUpdateChannel;
+            set => Set(ref _experimentalUpdateChannel, value);
+        }
+
+        [Browsable(false)]
+        public string UpdateReleaseUrl => ExperimentalUpdateChannel
+            ? Constants.ExperimentalReleaseFeedUrl
+            : Constants.StableReleaseFeedUrl;
+
         [Browsable(false)]
         public string LastUploadPath
         {
@@ -38,5 +49,6 @@ namespace Clowd.Config
         private string _lastUploadPath;
         private string _lastSavePath;
         private bool _confirmClose = true;
+        private bool _experimentalUpdateChannel;
     }
 }

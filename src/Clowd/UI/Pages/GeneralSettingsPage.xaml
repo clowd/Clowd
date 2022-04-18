@@ -38,6 +38,8 @@
             </GroupBox>
             <GroupBox x:Name="grpBehavior" Header="Behavior">
                 <StackPanel>
+                    <TextBlock Text="Download experimental updates (things may break)" />
+                    <CheckBox IsChecked="{Binding ExperimentalUpdateChannel}" />
                     <TextBlock Text="Ask/confirm before exiting" />
                     <CheckBox IsChecked="{Binding ConfirmClose}" />
                 </StackPanel>
