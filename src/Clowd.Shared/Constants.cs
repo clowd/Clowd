@@ -10,6 +10,7 @@ namespace Clowd
         public const string ClowdNamedPipe = "ClowdRunningPipe";
         public const string ClowdMutex = "ClowdMutex000";
         public const string DirectShowAppName = "ClowdDirectShow";
+        public const string ClowdWinNativeLib = "Clowd.WinNative";
         public const string ShortcutName = "Clowd.lnk";
         public const string PublishingCompany = "Caelan Sayler";
         public const string ContextMenuShellName = "Upload with Clowd";

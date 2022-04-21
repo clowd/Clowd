@@ -50,12 +50,10 @@ namespace Clowd.UI.Unmanaged
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string createdUtc;
         };
 
-        private const string ClowdWinNativeLib = "Clowd.WinNative";
-
-        [DllImport(ClowdWinNativeLib)]
+        [DllImport(Constants.ClowdWinNativeLib)]
         private static extern void CaptureShow(ref captureArgs args);
 
-        [DllImport(ClowdWinNativeLib)]
+        [DllImport(Constants.ClowdWinNativeLib)]
         private static extern void CaptureClose();
 
         private static fnColorCapture delColorCapture;
