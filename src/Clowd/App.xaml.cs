@@ -306,21 +306,24 @@ namespace Clowd
         {
             PageManager.Current.GetScreenCapturePage().Open(region);
         }
+
         public void QuickCaptureFullScreen()
         {
             PageManager.Current.GetScreenCapturePage().Open();
-        
         }
+
         public void QuickCaptureCurrentWindow()
         {
             PageManager.Current.GetScreenCapturePage().Open();
         }
+
         public async void UploadFile(Window owner = null)
         {
             var result = await NiceDialog.ShowSelectFilesDialog(owner, "Select files to upload", SettingsRoot.Current.General.LastUploadPath, true);
             if (result != null)
                 OnFilesReceived(result);
         }
+
         public async void Paste()
         {
             var data = await ClipboardDataObject.GetClipboardData();

@@ -169,15 +169,26 @@ namespace Clowd
 
             private void CheckForUpdateTimer()
             {
-                if (_newVersion != null) return;
-                CheckForUpdatesUnattended().ContinueWith(t =>
+                if (_newVersion != null)
                 {
-                    if (t.Exception != null)
+                    // restart automatically if update waiting to install and system is idle
+                    var idleTime = PlatformUtil.Platform.Current.GetSystemIdleTime();
+                    if (idleTime > TimeSpan.FromMinutes(30))
                     {
-                        Description = t.Exception.Message;
-                        // log this
+                        RestartApp();
                     }
-                });
+                }
+                else
+                {
+                    CheckForUpdatesUnattended().ContinueWith(t =>
+                    {
+                        if (t.Exception != null)
+                        {
+                            Description = t.Exception.Message;
+                            // log this
+                        }
+                    });
+                }
             }
 
             public async Task CheckForUpdatesUnattended()
@@ -223,9 +234,16 @@ namespace Clowd
                 }
                 else
                 {
-                    await UpdateManager.RestartAppWhenExited(arguments: "--squirrel-restarted");
-                    App.Current.ExitApp();
+                    RestartApp();
                 }
+            }
+
+            private void RestartApp()
+            {
+                UpdateManager.RestartAppWhenExited(arguments: "--squirrel-restarted").ContinueWith(t =>
+                {
+                    App.Current.ExitApp();
+                });
             }
 
             private void OnProgress(int obj)

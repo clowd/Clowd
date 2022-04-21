@@ -40,9 +40,10 @@ namespace Clowd.PlatformUtil
         public abstract IScreen GetScreenFromPoint(ScreenPoint pt);
         public abstract IScreen GetScreenFromRect(ScreenRect rect);
 
-        // window
+        // window / general
         public abstract IWindow GetWindowFromHandle(nint handle);
         public abstract IWindow GetForegroundWindow();
+        public abstract TimeSpan GetSystemIdleTime();
 
         // screen capture
         public abstract IBitmap CaptureDesktop(bool drawCursor);

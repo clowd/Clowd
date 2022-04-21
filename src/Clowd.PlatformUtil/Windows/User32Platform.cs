@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using static Vanara.PInvoke.User32;
+using static Vanara.PInvoke.Kernel32;
 
 namespace Clowd.PlatformUtil.Windows
 {
@@ -58,6 +60,20 @@ namespace Clowd.PlatformUtil.Windows
         public override IScreen GetScreenFromRect(ScreenRect rect)
         {
             return User32Screen.FromRect(rect);
+        }
+
+        public override TimeSpan GetSystemIdleTime()
+        {
+            var info = new LASTINPUTINFO();
+            info.cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>();
+            if (!GetLastInputInfo(ref info))
+            {
+                var err = GetLastError();
+                err.ThrowIfFailed();
+            }
+            long now = GetTickCount();
+            long idleTime = now - info.dwTime;
+            return idleTime > 0 ? TimeSpan.FromMilliseconds(idleTime) : TimeSpan.FromMilliseconds(1);
         }
 
         public override IWindow GetWindowFromHandle(nint handle)
