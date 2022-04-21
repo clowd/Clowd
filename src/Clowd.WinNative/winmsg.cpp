@@ -423,8 +423,6 @@ XMSGITEM xhittestlist[] =
 #define NUM_XWEXTENDEDSTYLES (sizeof(xwstylesextendedlist) / sizeof(XMSGITEM))
 #define NUM_XHITTEST (sizeof(xhittestlist) / sizeof(XMSGITEM))
 
-
-
 wstring GetHitTestText(DWORD nchittest)
 {
 	wstring outp;

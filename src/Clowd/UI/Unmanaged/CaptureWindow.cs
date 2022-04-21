@@ -1,12 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Media;
+using Clowd.Config;
 using Clowd.PlatformUtil;
+using Clowd.UI.Helpers;
 using Vanara.PInvoke;
 
 namespace Clowd.UI.Unmanaged
@@ -17,61 +16,24 @@ namespace Clowd.UI.Unmanaged
         public bool AnimationDisabled { get; set; }
         public bool ObstructedWindowDisabled { get; set; }
         public bool TipsDisabled { get; set; }
+        public string SessionDirectory { get; set; }
     }
 
-    public class DxKeyDownEventArgs : EventArgs
+    enum CaptureType
     {
-        public DxKeyDownEventArgs(int keyCode)
-        {
-            KeyCode = keyCode;
-        }
-
-        public int KeyCode { get; }
-    }
-
-    public class DxColorCapturedEventArgs : EventArgs
-    {
-        public DxColorCapturedEventArgs(Color color)
-        {
-            Color = color;
-        }
-
-        public Color Color { get; }
-    }
-
-    public class DxLayoutUpdatedEventArgs : EventArgs
-    {
-        public DxLayoutUpdatedEventArgs(bool captured, ScreenRect selection)
-        {
-            Selection = selection;
-            Captured = captured;
-        }
-
-        public ScreenRect Selection { get; }
-        public bool Captured { get; }
-    }
-
-    public class DxDisposedEventArgs : EventArgs
-    {
-
-        public DxDisposedEventArgs(string error) : this(error == null ? null : new Exception(error))
-        { }
-
-        public DxDisposedEventArgs(Exception error)
-        {
-            Error = error;
-        }
-
-        public Exception Error { get; }
+        Upload = 1,
+        Photo = 2,
+        Save = 3,
     }
 
     public static class CaptureWindow
     {
-        private delegate void fnKeyPressed(uint keyCode);
-        private delegate void fnColorCaptured([MarshalAs(UnmanagedType.U1)] byte r, [MarshalAs(UnmanagedType.U1)] byte g, [MarshalAs(UnmanagedType.U1)] byte b);
-        private delegate void fnLayoutUpdated([MarshalAs(UnmanagedType.Bool)] bool captured, RECT area);
+        private delegate void fnColorCapture([MarshalAs(UnmanagedType.U1)] byte r, [MarshalAs(UnmanagedType.U1)] byte g, [MarshalAs(UnmanagedType.U1)] byte b);
+        private delegate void fnVideoCapture(RECT captureRegion);
+        private delegate void fnSessionCapture([MarshalAs(UnmanagedType.LPWStr)] string sessionJsonPath, CaptureType captureType);
         private delegate void fnDisposed([MarshalAs(UnmanagedType.LPWStr)] string errorMessage);
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private struct captureArgs
         {
             [MarshalAs(UnmanagedType.U1)] public byte colorR;
@@ -80,63 +42,34 @@ namespace Clowd.UI.Unmanaged
             [MarshalAs(UnmanagedType.Bool)] public bool animationDisabled;
             [MarshalAs(UnmanagedType.Bool)] public bool obstructedWindowDisabled;
             [MarshalAs(UnmanagedType.Bool)] public bool tipsDisabled;
-            [MarshalAs(UnmanagedType.FunctionPtr)] public fnKeyPressed lpfnKeyPressed;
-            [MarshalAs(UnmanagedType.FunctionPtr)] public fnColorCaptured lpfnColorCaptured;
-            [MarshalAs(UnmanagedType.FunctionPtr)] public fnLayoutUpdated lpfnLayoutUpdated;
+            [MarshalAs(UnmanagedType.FunctionPtr)] public fnColorCapture lpfnColorCapture;
+            [MarshalAs(UnmanagedType.FunctionPtr)] public fnVideoCapture lpfnVideoCapture;
+            [MarshalAs(UnmanagedType.FunctionPtr)] public fnSessionCapture lpfnSessionCapture;
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnDisposed lpfnDisposed;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)] public string sessionDirectory;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string createdUtc;
         };
-
-        //typedef struct captureArgs
-        //{
-        //    BYTE colorR;
-        //    BYTE colorG;
-        //    BYTE colorB;
-        //    BOOL animationDisabled;
-        //    BOOL obstructedWindowDisabled;
-        //    BOOL tipsDisabled;
-        //    fnKeyPressed lpfnKeyPressed;
-        //    fnColorCaptured lpfnColorCaptured;
-        //    fnLayoutUpdated lpfnLayoutUpdated;
-        //    fnDisposed lpfnDisposed;
-        //};
 
         private const string ClowdWinNativeLib = "Clowd.WinNative";
 
         [DllImport(ClowdWinNativeLib)]
-        private static extern void CaptureShow(captureArgs args);
-
-        [DllImport(ClowdWinNativeLib)]
-        private static extern void CaptureReset();
-
-        [DllImport(ClowdWinNativeLib)]
-        private static extern RECT CaptureGetSelectedArea();
+        private static extern void CaptureShow(ref captureArgs args);
 
         [DllImport(ClowdWinNativeLib)]
         private static extern void CaptureClose();
 
-        [DllImport(ClowdWinNativeLib)]
-        private static extern void CaptureWriteSessionToFile([MarshalAs(UnmanagedType.LPWStr)] string sessionDir, [MarshalAs(UnmanagedType.LPWStr)] string createdUtc);
-
-        [DllImport(ClowdWinNativeLib)]
-        private static extern void CaptureWriteSessionToClipboard();
-
-        private static fnKeyPressed delKeyPressed;
-        private static fnColorCaptured delColorCaptured;
-        private static fnLayoutUpdated delLayoutUpdated;
+        private static fnColorCapture delColorCapture;
+        private static fnVideoCapture delVideoCapture;
+        private static fnSessionCapture delSessionCapture;
         private static fnDisposed delDisposed;
 
         static CaptureWindow()
         {
-            delKeyPressed = new fnKeyPressed(KeyPressedImpl);
-            delColorCaptured = new fnColorCaptured(ColorCapturedImpl);
-            delLayoutUpdated = new fnLayoutUpdated(LayoutUpdatedImpl);
+            delColorCapture = new fnColorCapture(ColorCaptureImpl);
+            delVideoCapture = new fnVideoCapture(VideoCaptureImpl);
+            delSessionCapture = new fnSessionCapture(SessionCaptureImpl);
             delDisposed = new fnDisposed(DisposedImpl);
         }
-
-        public static event EventHandler<DxKeyDownEventArgs> KeyDown;
-        public static event EventHandler<DxDisposedEventArgs> Disposed;
-        public static event EventHandler<DxLayoutUpdatedEventArgs> LayoutUpdated;
-        public static event EventHandler<DxColorCapturedEventArgs> ColorCaptured;
 
         public static void Show(CaptureWindowOptions options)
         {
@@ -148,24 +81,15 @@ namespace Clowd.UI.Unmanaged
                 animationDisabled = options.AnimationDisabled,
                 obstructedWindowDisabled = options.ObstructedWindowDisabled,
                 tipsDisabled = options.TipsDisabled,
-                lpfnKeyPressed = delKeyPressed,
-                lpfnColorCaptured = delColorCaptured,
-                lpfnLayoutUpdated = delLayoutUpdated,
+                sessionDirectory = SessionManager.Current.GetNextSessionDirectory(),
+                createdUtc = DateTime.UtcNow.ToString("o"),
+                lpfnColorCapture = delColorCapture,
+                lpfnVideoCapture = delVideoCapture,
+                lpfnSessionCapture = delSessionCapture,
                 lpfnDisposed = delDisposed,
             };
 
-            CaptureShow(args);
-        }
-
-        public static void Reset()
-        {
-            CaptureReset();
-        }
-
-        public static ScreenRect GetSelection()
-        {
-            var area = CaptureGetSelectedArea();
-            return ScreenRect.FromLTRB(area.left, area.top, area.right, area.bottom);
+            CaptureShow(ref args);
         }
 
         public static void Close()
@@ -173,38 +97,68 @@ namespace Clowd.UI.Unmanaged
             CaptureClose();
         }
 
-        public static void SaveSession(string sessionDir)
+        private static void ColorCaptureImpl(byte r, byte g, byte b)
         {
-            if (!Directory.Exists(sessionDir))
-                throw new InvalidOperationException("Session directory must exist");
-
-            var created = DateTime.UtcNow.ToString("o");
-            CaptureWriteSessionToFile(sessionDir, created);
+            App.Current.Dispatcher.InvokeAsync(() =>
+            {
+                NiceDialog.ShowColorDialogAsync(null, Color.FromRgb(r, g, b));
+            });
         }
 
-        public static void WriteToClipboard()
+        private static void VideoCaptureImpl(RECT captureRegion)
         {
-            CaptureWriteSessionToClipboard();
+            var rect = ScreenRect.FromLTRB(captureRegion.Left, captureRegion.Top, captureRegion.Right, captureRegion.Bottom);
+            if (!rect.IsEmpty())
+            {
+                App.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var manager = App.GetService<IPageManager>();
+                    var video = manager.CreateVideoCapturePage();
+                    video.Open(rect);
+                });
+            }
         }
 
-        private static void KeyPressedImpl(uint keyCode)
+        private static void SessionCaptureImpl(string sessionJsonPath, CaptureType captureType)
         {
-            KeyDown?.Invoke(null, new DxKeyDownEventArgs((int)keyCode));
+            App.Current.Dispatcher.InvokeAsync(() =>
+            {
+                var session = SessionManager.Current.GetSessionFromPath(sessionJsonPath);
+                if (session != null)
+                {
+                    if (captureType == CaptureType.Save)
+                    {
+                        NiceDialog.ShowSelectSaveFileDialog(null, "Save Screenshot", SettingsRoot.Current.General.LastSavePath, "screenshot", "png").ContinueWith(t =>
+                        {
+                            var filename = t.Result;
+                            if (filename != null)
+                            {
+                                File.Copy(session.PreviewImgPath, filename);
+                                Platform.Current.RevealFileOrFolder(filename);
+                                SettingsRoot.Current.General.LastSavePath = Path.GetDirectoryName(filename);
+                                // delete only if saved as recovery is no longer needed
+                                SessionManager.Current.DeleteSession(session); 
+                            }
+                        }, TaskScheduler.FromCurrentSynchronizationContext());
+                    }
+                    else
+                    {
+                        session.Name = "Capture";
+                        EditorWindow.ShowSession(session);
+                    }
+                }
+            });
         }
 
-        private static void ColorCapturedImpl(byte r, byte g, byte b)
+        private static void DisposedImpl(string errMessage)
         {
-            ColorCaptured?.Invoke(null, new DxColorCapturedEventArgs(Color.FromRgb(r, g, b)));
-        }
-
-        private static void LayoutUpdatedImpl(bool captured, RECT area)
-        {
-            LayoutUpdated?.Invoke(null, new DxLayoutUpdatedEventArgs(captured, ScreenRect.FromLTRB(area.left, area.top, area.right, area.bottom)));
-        }
-
-        private static void DisposedImpl(string error)
-        {
-            Disposed?.Invoke(null, new DxDisposedEventArgs(error));
+            if (!String.IsNullOrEmpty(errMessage))
+            {
+                App.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, errMessage, "An error occurred while showing screen capture window");
+                });
+            }
         }
     }
 }

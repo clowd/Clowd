@@ -13,6 +13,13 @@ inline int CalcStride(unsigned short bpp, int width)
 	return (bpp * width + 31) / 32 * 4;
 }
 
+inline POINT RectCenterPt(const RECT* rect) 
+{
+    auto w = PRECT_WIDTH(rect);
+    auto h = PRECT_WIDTH(rect);
+    return POINT{ rect->left + (w / 2), rect->top + (h / 2) };
+}
+
 inline void Gdi2Rect(System::Drawing::Rectangle& gdi, RECT* rect)
 {
 	rect->left = gdi.GetLeft();
