@@ -19,10 +19,7 @@ namespace Clowd
 {
     internal static class SquirrelUtil
     {
-        public static string CurrentVersion { get; } = Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            .InformationalVersion;
-
+        public static string CurrentVersion { get; } = ThisAssembly.AssemblyInformationalVersion;
         public static bool IsFirstRun { get; private set; }
         public static bool JustRestarted { get; private set; }
 
@@ -172,9 +169,7 @@ namespace Clowd
                 if (isInstalled)
                 {
                     ClickCommandText = "Check for updates";
-                    Description = "Version: " + Assembly.GetExecutingAssembly()
-                        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                        .InformationalVersion;
+                    Description = "Version: " + ThisAssembly.AssemblyInformationalVersion;
                     _timer = DisposableTimer.Start(TimeSpan.FromMinutes(5), CheckForUpdateTimer);
 
                     if (justUpdated)
