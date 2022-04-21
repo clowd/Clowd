@@ -236,6 +236,8 @@
     <None Include="img\video_camera.svg">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="img\clowd-white.svg" />
+    <None Include="img\clowd-white.svg">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
