@@ -19,7 +19,6 @@ using Clowd.UI.Helpers;
 using Clowd.Util;
 using Clowd.Video;
 using Hardcodet.Wpf.TaskbarNotification;
-using LightInject;
 using Ookii.Dialogs.Wpf;
 using RT.Serialization;
 using RT.Util.ExtensionMethods;
@@ -29,13 +28,10 @@ namespace Clowd
 {
     public partial class App : Application
     {
-        public static T GetService<T>() => Container.GetInstance<T>();
-
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
         public static bool CanUpload => !IsDesignMode;
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
         public static IScopedLog DefaultLog { get; private set; }
-        public static ServiceContainer Container { get; private set; }
 
         private TaskbarIcon _taskbarIcon;
         private MutexArgsForwarder _processor;
@@ -58,7 +54,6 @@ namespace Clowd
 
                 await SetupMutex(appArgs);
                 await SetupSettings();
-                SetupDependencyInjection();
 
                 // theme
                 WPFUI.Appearance.Theme.Set(WPFUI.Appearance.Theme.GetSystemTheme() == WPFUI.Appearance.SystemThemeType.Light
@@ -71,13 +66,13 @@ namespace Clowd
 
                 if (SquirrelUtil.IsFirstRun)
                 {
-                    UI.MainWindow.ShowWindow(MainWindowPage.About);
+                    PageManager.Current.GetSettingsPage().Open(SettingsPageTab.About);
                 }
                 else
                 {
                     EditorWindow.ShowAllPreviouslyActiveSessions();
                     if (SquirrelUtil.JustRestarted)
-                        UI.MainWindow.ShowWindow(MainWindowPage.SettingsGeneral);
+                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
                 }
             }
             catch (Exception ex)
@@ -205,28 +200,6 @@ namespace Clowd
             }
         }
 
-        private void SetupDependencyInjection()
-        {
-            var container = new ServiceContainer();
-            container.Register<IScopedLog>(_ => new DefaultScopedLog(Constants.ClowdAppName), new PerContainerLifetime());
-            container.Register<IServiceFactory>(_ => container);
-
-            // ui
-            container.Register<IPageManager, PageManager>();
-            //container.Register<IScreenCapturePage, ScreenCaptureWindow>(new PerScopeLifetime());
-            container.Register<ILiveDrawPage, AntFu7.LiveDraw.LiveDrawWindow>(new PerScopeLifetime());
-            container.Register<IVideoCapturePage, VideoCaptureWindow>(new PerScopeLifetime());
-
-            // we create this TasksView here in main thread so there won't be issues with MTA threads requesting this object in the future
-            //var tasksView = new TasksView();
-            //container.Register<ITasksView>(_ => tasksView);
-
-            // video
-            container.Register<IVideoCapturer>(f => new ObsCapturer(DefaultLog, Path.Combine(AppContext.BaseDirectory, "obs-express")), new PerScopeLifetime());
-
-            Container = container;
-        }
-
         private void SetupTrayIconAndTheme()
         {
             // tray icon
@@ -235,7 +208,7 @@ namespace Clowd
                 _taskbarIcon = new TaskbarIcon();
                 //_taskbarIcon.WndProcMessageReceived += OnWndProcMessageReceived;
                 _taskbarIcon.ToolTipText = "Clowd\nRight click me or drop something on me\nto see what I can do!";
-                _taskbarIcon.TrayMouseDoubleClick += (s, e) => UI.MainWindow.ShowWindow();
+                _taskbarIcon.TrayMouseDoubleClick += (s, e) => PageManager.Current.GetSettingsPage().Open();
             }
 
             // force/refresh the correct icon size
@@ -263,7 +236,7 @@ namespace Clowd
                 context.Items.Add(uploadFile);
 
                 var uploads = new MenuItem() { Header = "Show _Uploads" };
-                uploads.Click += (s, e) => GetService<ITasksView>().Show();
+                //uploads.Click += (s, e) => GetService<ITasksView>().Show();
                 context.Items.Add(uploads);
             }
 
@@ -276,7 +249,7 @@ namespace Clowd
             var screend = new MenuItem() { Header = "_Draw on Screen" };
             screend.Click += (s, e) =>
             {
-                Container.GetInstance<IPageManager>().CreateLiveDrawPage().Open();
+                PageManager.Current.GetLiveDrawPage().Open();
             };
             context.Items.Add(screend);
 
@@ -289,7 +262,7 @@ namespace Clowd
             var settings = new MenuItem() { Header = "_Settings" };
             settings.Click += (s, e) =>
             {
-                UI.MainWindow.ShowWindow();
+                PageManager.Current.GetSettingsPage().Open();
             };
             context.Items.Add(settings);
 
@@ -331,34 +304,16 @@ namespace Clowd
 
         public void StartCapture(ScreenRect region = null)
         {
-            //ScreenCaptureWindow.Open();
-            //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
-            UI.Unmanaged.CaptureWindow.Show(new UI.Unmanaged.CaptureWindowOptions
-            {
-                AccentColor = AppStyles.AccentColor,
-                TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
-            });
+            PageManager.Current.GetScreenCapturePage().Open(region);
         }
         public void QuickCaptureFullScreen()
         {
-            //ScreenCaptureWindow.Open();
-            //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
-            UI.Unmanaged.CaptureWindow.Show(new UI.Unmanaged.CaptureWindowOptions
-            {
-                AccentColor = AppStyles.AccentColor,
-                TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
-            });
+            PageManager.Current.GetScreenCapturePage().Open();
+        
         }
         public void QuickCaptureCurrentWindow()
         {
-            //ScreenCaptureWindow.Open();
-            //var window = Platform.Current.GetForegroundWindow();
-            //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open(window.Handle);
-            UI.Unmanaged.CaptureWindow.Show(new UI.Unmanaged.CaptureWindowOptions
-            {
-                AccentColor = AppStyles.AccentColor,
-                TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
-            });
+            PageManager.Current.GetScreenCapturePage().Open();
         }
         public async void UploadFile(Window owner = null)
         {

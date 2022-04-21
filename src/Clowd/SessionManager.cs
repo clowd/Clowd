@@ -100,7 +100,7 @@ namespace Clowd
         private IDisposable _cleanupTimer;
         private TrulyObservableCollection<SessionInfo> _sessions;
 
-        public SessionManager()
+        private SessionManager()
         {
             Sessions = new TrulyObservableCollection<SessionInfo>();
             foreach (var d in Directory.EnumerateDirectories(PathConstants.SessionData))

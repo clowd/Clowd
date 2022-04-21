@@ -56,11 +56,11 @@ namespace Clowd.UI.Helpers
             return ShowPromptAsync(parent, icon, content, mainInstruction, "Yes", "No");
         }
 
-        public static async Task ShowSettingsPromptAsync(FrameworkElement parent, SettingsCategory category, string content)
+        public static async Task ShowSettingsPromptAsync(FrameworkElement parent, SettingsPageTab category, string content)
         {
-            if (await ShowPromptAsync(parent, NiceDialogIcon.Warning, content, category.ToString() + " configuration required", "Open Settings", "Close"))
+            if (await ShowPromptAsync(parent, NiceDialogIcon.Warning, content, "Settings configuration required", "Open Settings", "Close"))
             {
-                //pages.CreateSettingsPage().Open(category);
+                PageManager.Current.GetSettingsPage().Open(category);
             }
         }
 

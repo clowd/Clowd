@@ -110,9 +110,7 @@ namespace Clowd.UI.Unmanaged
             {
                 App.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    var manager = App.GetService<IPageManager>();
-                    var video = manager.CreateVideoCapturePage();
-                    video.Open(rect);
+                    PageManager.Current.CreateVideoCapturePage().Open(rect);
                 });
             }
         }

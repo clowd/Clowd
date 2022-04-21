@@ -46,7 +46,6 @@
     <PackageReference Include="DotNetZip" Version="1.16.0" />
     <PackageReference Include="Dragablz" Version="0.0.3.223" />
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
-    <PackageReference Include="LightInject" Version="6.4.1" />
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.39" />
     <PackageReference Include="SharpRaven" Version="2.4.0" />
     <PackageReference Include="ThomasLevesque.WeakEvent" Version="4.1.0" />
