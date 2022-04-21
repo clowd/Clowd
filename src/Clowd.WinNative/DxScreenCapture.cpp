@@ -109,16 +109,17 @@ D2D1_RECT_F TranslateFromWorkspaceToScreen(int vx, int vy, const RECT& bounds, c
     return TranslateFromWorkspaceToScreen(vx, vy, bounds, ret);
 }
 
-void SetButtonPanelPositions(const double dpiZoom, const ScreenInfo& screen, const RECT* selectionRect, buttonPositionsArr& buttonPos)
+void SetButtonPanelPositions(const ScreenInfo& screen, const RECT* selectionRect, buttonPositionsArr& buttonPos)
 {
-    auto centerPt = RectCenterPt(selectionRect);
-    BOOL vert;
+    double dpiZoom = screen.dpi / BASE_DPI;
 
+    BOOL vert;
     auto screenBounds = Rect2Gdiplus(&screen.workspaceBounds);
 
     // padding / button measurements
     int minDistance = (int)ceil(2 * dpiZoom);
     int maxDistance = (int)ceil(15 * dpiZoom);
+    int buttonSpacing = (int)ceil(3 * dpiZoom);
     int svgButtonSize = (int)floor(UNSCALED_BUTTON_SIZE * dpiZoom);
     int longEdgePx = svgButtonSize * NUM_SVG_BUTTONS + 3;
     int shortEdgePx = svgButtonSize;
@@ -181,7 +182,7 @@ void SetButtonPanelPositions(const double dpiZoom, const ScreenInfo& screen, con
         buttonPos[i].right = desiredRect.left + svgButtonSize;
         buttonPos[i].bottom = desiredRect.top + svgButtonSize;
         *vchange += svgButtonSize;
-        if (i == 0) *vchange += 3;
+        if (i == 0) *vchange += buttonSpacing;
     }
 }
 
@@ -1470,9 +1471,8 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 
                 if (updateButtonPos)
                 {
-                    const ScreenInfo& screen = native->screens->ScreenFromWorkspacePt(data.mouse);
-                    double dpizoom = screen.dpi / BASE_DPI;
-                    SetButtonPanelPositions(dpizoom, screen, &data.selection, data.buttonPositions);
+                    const ScreenInfo& screen = native->screens->ScreenFromWorkspaceRect(data.selection);
+                    SetButtonPanelPositions(screen, &data.selection, data.buttonPositions);
                 }
             }
             else
@@ -1832,9 +1832,9 @@ void DxScreenCapture::FrameMakeSelection(mc_frame_data& data, const RECT& sel, b
             native->walker->ResetHitResult(&data.windowSelection);
 
         // update "capture button" positions
-        const ScreenInfo& screen = native->screens->ScreenFromWorkspacePt(data.mouse);
-        double dpizoom = screen.dpi / BASE_DPI;
-        SetButtonPanelPositions(dpizoom, screen, &data.selection, data.buttonPositions);
+
+        const ScreenInfo& screen = native->screens->ScreenFromWorkspaceRect(data.selection);
+        SetButtonPanelPositions(screen, &data.selection, data.buttonPositions);
     }
     else
     {

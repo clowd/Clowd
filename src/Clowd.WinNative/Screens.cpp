@@ -185,11 +185,23 @@ const RECT& Screens::WorkspaceBounds()
 	return _workspace;
 }
 
+const ScreenInfo& Screens::ScreenFromWorkspaceRect(RECT& rect)
+{
+    RECT scrRect = rect;
+    TranslateToSystem(scrRect);
+    return ScreenFromSystemRect(scrRect);
+}
+
+const ScreenInfo& Screens::ScreenFromSystemRect(RECT& rect)
+{
+    HMONITOR hMon = MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
+    return ScreenFromHMONITOR(hMon);
+}
+
 const ScreenInfo& Screens::ScreenFromWorkspacePt(POINTFF& pt)
 {
 	POINT scrPt = { (int)floor(pt.x) + _virtX, (int)floor(pt.y) + _virtY };
-	HMONITOR hMon = MonitorFromPoint(scrPt, MONITOR_DEFAULTTONEAREST);
-	return ScreenFromHMONITOR(hMon);
+    return ScreenFromSystemPt(scrPt);
 }
 
 const ScreenInfo& Screens::ScreenFromSystemPt(POINT& pt)

@@ -51,7 +51,9 @@ public:
 	void TranslateToSystem(RECT& rect);
 
 	const RECT& WorkspaceBounds();
-	const ScreenInfo& ScreenFromWorkspacePt(POINTFF& pt);
+    const ScreenInfo& ScreenFromWorkspaceRect(RECT& rect);
+    const ScreenInfo& ScreenFromSystemRect(RECT& rect);
+    const ScreenInfo& ScreenFromWorkspacePt(POINTFF& pt);
 	const ScreenInfo& ScreenFromSystemPt(POINT& pt);
 	const ScreenInfo& ScreenFromHMONITOR(HMONITOR hMon);
 	void GetDebugDetail(std::vector<ScreenDebugDisplay>& details, RECT& primaryDebugRect);
