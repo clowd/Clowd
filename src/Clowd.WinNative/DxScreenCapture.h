@@ -7,7 +7,7 @@
 #include "exports.h"
 
 #define NUM_SVG_BUTTONS 7
-typedef RECT buttonPositionsArr[NUM_SVG_BUTTONS];
+typedef RECT buttonPositionsArr[NUM_SVG_BUTTONS + 1]; // last item (+1) is the sizing indicator
 
 struct mc_frame_data
 {
