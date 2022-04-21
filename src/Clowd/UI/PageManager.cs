@@ -1,67 +1,117 @@
 ﻿using System;
 using System.Collections.Generic;
-using LightInject;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Clowd.Config;
+using Clowd.PlatformUtil;
+using Clowd.UI.Unmanaged;
+using Clowd.Util;
+using Clowd.Video;
 
-namespace Clowd.Util
+namespace Clowd.UI
 {
-    public class PageManager : IPageManager
+    internal class PageManager
     {
-        private readonly IServiceFactory _factory;
-        private Dictionary<Type, Scope> _cache = new Dictionary<Type, Scope>();
-        private readonly object _lock = new object();
+        public static PageManager Current { get; private set; }
 
-        public PageManager(IServiceFactory factory)
+        private readonly Dictionary<Type, object> _singletons = new Dictionary<Type, object>();
+
+        private readonly IScopedLog _log = new DefaultScopedLog(Constants.ClowdAppName);
+
+        static PageManager()
         {
-            _factory = factory;
+            Current = new PageManager();
         }
 
-        //public IScreenCapturePage CreateScreenCapturePage()
-        //{
-        //    return CreatePage<IScreenCapturePage>();
-        //}
+        private PageManager()
+        { }
 
         public IVideoCapturePage CreateVideoCapturePage()
         {
-            return CreatePage<IVideoCapturePage>();
+            if (_singletons.ContainsKey(typeof(VideoCaptureWindow)))
+                throw new InvalidOperationException("Not allowed retrieve open video pages, and only one can be open at a time.");
+
+            var obsPath = Path.Combine(AppContext.BaseDirectory, "obs-express");
+            var obs = new ObsCapturer(_log, obsPath);
+            var inst = new VideoCaptureWindow(obs);
+            HandleClosing(inst);
+            
+            _singletons[typeof(VideoCaptureWindow)] = inst;
+            return inst;
         }
 
-        public ILiveDrawPage CreateLiveDrawPage()
+        public ILiveDrawPage GetLiveDrawPage()
         {
-            return CreatePage<ILiveDrawPage>();
+            return GetOrCreate<AntFu7.LiveDraw.LiveDrawWindow>();
         }
 
-        protected T CreatePage<T>() where T : IPage
+        public ISettingsPage GetSettingsPage()
         {
-            lock (_lock)
+            return GetOrCreate<MainWindow>();
+        }
+
+        public IScreenCapturePage GetScreenCapturePage()
+        {
+            return new StaticCaptureWrapper();
+        }
+
+        private T GetOrCreate<T>() where T : IPage
+        {
+            if (_singletons.ContainsKey(typeof(T)))
+                return (T)_singletons[typeof(T)];
+
+            var inst = Activator.CreateInstance<T>();
+            HandleClosing(inst);
+
+            _singletons[typeof(T)] = inst;
+            return inst;
+        }
+
+        private void HandleClosing<T>(T instance) where T : IPage
+        {
+            EventHandler handler = null;
+            handler = new EventHandler((s, ev) =>
             {
-                if (_cache.TryGetValue(typeof(T), out Scope existing))
+                instance.Closed -= handler;
+                if (_singletons.ContainsKey(typeof(T)))
+                    _singletons.Remove(typeof(T));
+            });
+            instance.Closed += handler;
+        }
+
+        private class StaticCaptureWrapper : IScreenCapturePage
+        {
+            public event EventHandler Closed; // TODO
+
+            public void Close()
+            {
+                CaptureWindow.Close();
+            }
+
+            public void Dispose()
+            {
+                Close();
+            }
+
+            public void Open()
+            {
+                CaptureWindow.Show(new CaptureWindowOptions
                 {
-                    var page = _factory.GetInstance<T>();
-                    return page;
-                }
-                else
-                {
-                    var scope = _factory.BeginScope();
-                    try
-                    {
-                        var page = _factory.GetInstance<T>();
-                        page.Closed += (s, e) =>
-                        {
-                            lock (_lock)
-                            {
-                                _cache.Remove(typeof(T));
-                                scope.Dispose();
-                            }
-                        };
-                        _cache[typeof(T)] = scope;
-                        return page;
-                    }
-                    catch
-                    {
-                        scope.Dispose();
-                        throw;
-                    }
-                }
+                    AccentColor = AppStyles.AccentColor,
+                    TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
+                });
+            }
+
+            public void Open(ScreenRect captureArea)
+            {
+                Open();
+            }
+
+            public void Open(IntPtr captureWindow)
+            {
+                Open();
             }
         }
     }
