@@ -217,4 +217,25 @@
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="img\copy_to_clipboard.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="img\delete.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="img\edit_image.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="img\refresh.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="img\save.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="img\video_camera.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="img\clowd-white.svg" />
+  </ItemGroup>
 </Project>

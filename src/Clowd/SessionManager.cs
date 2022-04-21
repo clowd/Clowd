@@ -214,16 +214,16 @@ namespace Clowd
             data.SetClipboardData();
         }
 
-        public string CreateNewSessionDirectory()
+        public string GetNextSessionDirectory()
         {
-            var dir = PathConstants.GetDatedFilePath("session", "0", PathConstants.SessionData);
-            Directory.CreateDirectory(dir);
-            return dir;
+            return PathConstants.GetDatedFilePath("session", "0", PathConstants.SessionData);
         }
 
         public SessionInfo CreateNewSession()
         {
-            var jsonPath = Path.Combine(CreateNewSessionDirectory(), "session.json");
+            var dir = GetNextSessionDirectory();
+            Directory.CreateDirectory(dir);
+            var jsonPath = Path.Combine(dir, "session.json");
             var session = new SessionInfo(jsonPath);
             session.Name = "Document";
             session.CreatedUtc = DateTime.UtcNow;

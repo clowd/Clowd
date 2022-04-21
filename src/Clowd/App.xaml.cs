@@ -329,19 +329,34 @@ namespace Clowd
 
         public void StartCapture(ScreenRect region = null)
         {
+            //ScreenCaptureWindow.Open();
             //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
-            ScreenCaptureWindow.Open();
+            UI.Unmanaged.CaptureWindow.Show(new UI.Unmanaged.CaptureWindowOptions
+            {
+                AccentColor = AppStyles.AccentColor,
+                TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
+            });
         }
         public void QuickCaptureFullScreen()
         {
-            ScreenCaptureWindow.Open();
+            //ScreenCaptureWindow.Open();
             //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open();
+            UI.Unmanaged.CaptureWindow.Show(new UI.Unmanaged.CaptureWindowOptions
+            {
+                AccentColor = AppStyles.AccentColor,
+                TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
+            });
         }
         public void QuickCaptureCurrentWindow()
         {
-            ScreenCaptureWindow.Open();
+            //ScreenCaptureWindow.Open();
             //var window = Platform.Current.GetForegroundWindow();
             //Container.GetInstance<IPageManager>().CreateScreenCapturePage().Open(window.Handle);
+            UI.Unmanaged.CaptureWindow.Show(new UI.Unmanaged.CaptureWindowOptions
+            {
+                AccentColor = AppStyles.AccentColor,
+                TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
+            });
         }
         public async void UploadFile(Window owner = null)
         {
