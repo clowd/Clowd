@@ -9,6 +9,7 @@ using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.UI.Unmanaged;
 using Clowd.Util;
+using Clowd.Video;
 
 namespace Clowd.UI
 {
@@ -36,9 +37,12 @@ namespace Clowd.UI
         private FloatingButtonWindow _floating;
         private bool _isCancelled = false;
 
-        public VideoCaptureWindow(IVideoCapturer capturer)
+        private static readonly IScopedLog _log = new DefaultScopedLog(Constants.ClowdAppName);
+
+        public VideoCaptureWindow()
         {
-            _capturer = capturer;
+            var obsPath = Path.Combine(AppContext.BaseDirectory, "obs-express");
+            _capturer = new ObsCapturer(_log, obsPath);
             _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
             _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
 
@@ -261,6 +265,7 @@ namespace Clowd.UI
                 return;
             _disposed = true;
             BorderWindow.Hide();
+            _capturer?.Dispose();
             _floating.Close();
             _monitor.Dispose();
             Closed?.Invoke(this, new EventArgs());
