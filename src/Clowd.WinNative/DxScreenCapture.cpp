@@ -1,9 +1,12 @@
 #include "pch.h"
 #include "DxScreenCapture.h"
 #include "rectex.h"
+#include "Resource.h"
 #include "winmsg.h"
-
 #include "json.hpp"
+#include <filesystem>
+
+namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 #define WAIT_FOR_INIT (6000)
@@ -18,6 +21,8 @@ using json = nlohmann::json;
 #define UNSCALED_DRAG_THRESHOLD ((int)6)
 #define UNSCALED_CURSOR_PART_LENGTH ((int)50)
 #define UNSCALED_DRAG_HANDLE_SIZE ((int)10)
+#define UNSCALED_BUTTON_SIZE ((int)50)
+#define UNSCALED_BUTTON_ICON_SIZE ((int) 26)
 
 using namespace std;
 
@@ -29,9 +34,30 @@ struct PPAIR
 
 typedef struct
 {
-    LONG  hit;
+    LONG hit;
     RECT pt;
 } RECTHT;
+
+typedef struct
+{
+    DWORD resourceId;
+    wchar_t* text;
+    unsigned int underlineIndex;
+    DWORD vKeyCode;
+    BOOL primary;
+    ID2D1SvgDocument* svg;
+
+} SVG_BUTTON_DESCRIPTION;
+
+SVG_BUTTON_DESCRIPTION captureButtonDetails[NUM_SVG_BUTTONS] = {
+    { IDR_SVG7, L"UPLOAD", 0, 0x55, true },
+    { IDR_SVG3, L"PHOTO", 0, 0x50, true },
+    { IDR_SVG6, L"VIDEO", 0, 0x56, true },
+    { IDR_SVG1, L"COPY", 0, 0x43, true },
+    { IDR_SVG5, L"SAVE", 0, 0x53, true },
+    { IDR_SVG4, L"RESET", 0, 0x52, false },
+    { IDR_SVG2, L"EXIT", 1, 0x58, false },
+};
 
 inline int _RoundPixel(double px, double preferDown)
 {
@@ -83,10 +109,89 @@ D2D1_RECT_F TranslateFromWorkspaceToScreen(int vx, int vy, const RECT& bounds, c
     return TranslateFromWorkspaceToScreen(vx, vy, bounds, ret);
 }
 
-DxScreenCapture::DxScreenCapture(captureArgs options)
+void SetButtonPanelPositions(const double dpiZoom, const ScreenInfo& screen, const RECT* selectionRect, buttonPositionsArr& buttonPos)
+{
+    auto centerPt = RectCenterPt(selectionRect);
+    BOOL vert;
+
+    auto screenBounds = Rect2Gdiplus(&screen.workspaceBounds);
+
+    // padding / button measurements
+    int minDistance = (int)ceil(2 * dpiZoom);
+    int maxDistance = (int)ceil(15 * dpiZoom);
+    int svgButtonSize = (int)floor(UNSCALED_BUTTON_SIZE * dpiZoom);
+    int longEdgePx = svgButtonSize * NUM_SVG_BUTTONS + 3;
+    int shortEdgePx = svgButtonSize;
+
+    // clip selection to monitor
+    Gdiplus::Rect selection;
+    Gdiplus::Rect::Intersect(selection, screenBounds, Rect2Gdiplus(selectionRect));
+
+    int bottomSpace = max(screenBounds.GetBottom() - selection.GetBottom(), 0) - minDistance;
+    int rightSpace = max(screenBounds.GetRight() - selection.GetRight(), 0) - minDistance;
+    int leftSpace = max(selection.GetLeft() - screenBounds.GetLeft(), 0) - minDistance;
+
+    int indTop, indLeft;
+
+    if (bottomSpace >= shortEdgePx)
+    {
+        vert = TRUE;
+        indLeft = selection.GetLeft() + selection.Width / 2 - longEdgePx / 2;
+        indTop = min(screenBounds.GetBottom(), selection.GetBottom() + maxDistance + shortEdgePx) - shortEdgePx;
+    }
+    else if (rightSpace >= shortEdgePx)
+    {
+        vert = FALSE;
+        indLeft = min(screenBounds.GetRight(), selection.GetRight() + maxDistance + shortEdgePx) - shortEdgePx;
+        indTop = selection.GetBottom() - longEdgePx;
+    }
+    else if (leftSpace >= shortEdgePx)
+    {
+        vert = FALSE;
+        indLeft = max(selection.GetLeft() - maxDistance - shortEdgePx, 0);
+        indTop = selection.GetBottom() - longEdgePx;
+    }
+    else // inside capture rect
+    {
+        vert = TRUE;
+        indLeft = selection.GetLeft() + selection.Width / 2 - longEdgePx / 2;
+        indTop = selection.GetBottom() - shortEdgePx - (maxDistance * 2);
+    }
+
+    int horizontalSize = (vert) ? longEdgePx : shortEdgePx;
+    int verticalSize = (vert) ? shortEdgePx : longEdgePx;
+
+    if (indLeft < screenBounds.GetLeft())
+        indLeft = screenBounds.GetLeft();
+    else if (indLeft + horizontalSize > screenBounds.GetRight())
+        indLeft = screenBounds.GetRight() - horizontalSize;
+
+    RECT desiredRect;
+    desiredRect.left = indLeft;
+    desiredRect.top = indTop;
+    desiredRect.right = indLeft + horizontalSize;
+    desiredRect.bottom = indTop + verticalSize;
+
+    LONG* vchange = vert ? &desiredRect.left : &desiredRect.top;
+
+    for (int i = 0; i < NUM_SVG_BUTTONS; i++)
+    {
+        buttonPos[i].left = desiredRect.left;
+        buttonPos[i].top = desiredRect.top;
+        buttonPos[i].right = desiredRect.left + svgButtonSize;
+        buttonPos[i].bottom = desiredRect.top + svgButtonSize;
+        *vchange += svgButtonSize;
+        if (i == 0) *vchange += 3;
+    }
+}
+
+
+DxScreenCapture::DxScreenCapture(captureArgs* options)
 {
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-    _options = options;
+    memcpy(&_options, options, sizeof(captureArgs));
+
+    //_options = options;
     //windows = gcnew System::Collections::Generic::List<render_info>();
     //errors = gcnew System::Collections::Generic::List<System::Exception^>();
     //winmsgs = gcnew System::Collections::Generic::List<System::String^>();
@@ -359,22 +464,25 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
     auto defaultMatrix = D2D1::Matrix3x2F::Identity();
 
     // text formats
-    DxRef<IDWriteTextFormat> txtFmtSize, txtFmtDebug, txtInfo, txtInfoTitle;
-    output->CreateFontFormat(txtInfoTitle, 14 * myzoom, true, false);
-    output->CreateFontFormat(txtInfo, 12 * myzoom, false, true);
-    output->CreateFontFormat(txtFmtSize, 14 * myzoom, true, false);
-    output->CreateFontFormat(txtFmtDebug, 12 * myzoom, false, true);
+    DxRef<IDWriteTextFormat> txtFmtSize, txtFmtDebug, txtInfo, txtInfoTitle, txtButtonLabel;
+    output->CreateFontFormat(txtInfoTitle, 14 * myzoom, DWRITE_FONT_WEIGHT_BOLD, false);
+    output->CreateFontFormat(txtInfo, 12 * myzoom, DWRITE_FONT_WEIGHT_NORMAL, true);
+    output->CreateFontFormat(txtFmtSize, 14 * myzoom, DWRITE_FONT_WEIGHT_BOLD, false);
+    output->CreateFontFormat(txtFmtDebug, 12 * myzoom, DWRITE_FONT_WEIGHT_NORMAL, true);
+    output->CreateFontFormat(txtButtonLabel, 10 * myzoom, DWRITE_FONT_WEIGHT_DEMI_BOLD, false);
 
     // brushes
-    DxRef<ID2D1SolidColorBrush> brushWhite, brushWhite70, brushBlack, brushAccent, brushAccent70, brushOverlay30, brushOverlay50, brushOverlay70, brushCursorHovered;
+    DxRef<ID2D1SolidColorBrush> brushWhite, brushWhite70, brushWhite30, brushBlack, brushAccent, brushAccent70, brushOverlay30, brushOverlay50, brushOverlay70, brushCursorHovered, brushGray;
     output->CreateSolidBrush(brushWhite, 1, 1, 1);
     output->CreateSolidBrush(brushWhite70, 1, 1, 1, 0.7);
+    output->CreateSolidBrush(brushWhite30, 1, 1, 1, 0.3);
     output->CreateSolidBrush(brushBlack, 0, 0, 0);
     output->CreateSolidBrush(brushAccent, _options.colorR / 255.0, _options.colorG / 255.0, _options.colorB / 255.0);
     output->CreateSolidBrush(brushAccent70, _options.colorR / 255.0, _options.colorG / 255.0, _options.colorB / 255.0, 0.7);
     output->CreateSolidBrush(brushOverlay30, 0, 0, 0, 0.3);
     output->CreateSolidBrush(brushOverlay50, 0, 0, 0, 0.5);
     output->CreateSolidBrush(brushOverlay70, 0, 0, 0, 0.7);
+    output->CreateSolidBrush(brushGray, 0.216, 0.216, 0.216, 1);
 
     // strokes
     DxRef<ID2D1StrokeStyle> stroke8;
@@ -388,22 +496,29 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
     DxRef<ID2D1Effect> bitmapGray, bitmapBlurred;
     output->CreateEffect(bitmapGray, CLSID_D2D1Grayscale, bitmapColor);
     output->CreateEffect(bitmapBlurred, CLSID_D2D1GaussianBlur);
-
     bitmapBlurred->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, 2.0f);
     bitmapBlurred->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION, D2D1_DIRECTIONALBLUR_OPTIMIZATION_QUALITY);
     bitmapBlurred->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
     bitmapBlurred->SetInputEffect(0, bitmapGray);
 
+    // svg
+    FLOAT svgIconSize = floor(UNSCALED_BUTTON_ICON_SIZE * myzoom);
+    D2D1_SIZE_F svgSize{ svgIconSize, svgIconSize };
+    auto buttonSvgs = make_unique<DxRef<ID2D1SvgDocument>[]>(NUM_SVG_BUTTONS);
+    for (int i = 0; i < NUM_SVG_BUTTONS; i++)
+    {
+        auto& detail = captureButtonDetails[i];
+        output->CreateSvgDocumentFromResource(buttonSvgs[i], svgSize, MAKEINTRESOURCE(detail.resourceId), L"SVG");
+    }
+
     // other
     auto windowBitmaps = make_unique<DxRef<ID2D1Bitmap>[]>(native->walker->List()->size());
     auto windowBlended = make_unique<DxRef<ID2D1Bitmap1>[]>(native->walker->List()->size());
     auto colorCarousel = make_unique<DxRef<ID2D1SolidColorBrush>[]>(3);
-
     output->CreateSolidBrush(colorCarousel[0], 1, 0, 0);
     output->CreateSolidBrush(colorCarousel[1], 0, 1, 0);
     output->CreateSolidBrush(colorCarousel[2], 0, 0, 1);
 
-    mc_frame_data previous_data{};
     mc_frame_data data{};
 
     while (native->disposed < 1)
@@ -416,25 +531,11 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
             WaitForSingleObject(wi.eventSignal, 1000);
         }
 
-        ID2D1DeviceContext* dc;
+        ID2D1DeviceContext5* dc;
         output->BeginDraw(&dc);
 
         // BeginDraw can also wait, so get the latest frame data
         GetFrame(&data);
-
-        // if something noteworthy has changed since last draw, lets update dependent layouts. we put it here so we at most send one update per frame.
-        if (myscreen.primary)
-        {
-            bool captureChanged = previous_data.captured != data.captured;
-            bool posChanged = 0 != memcmp(&data.selection, &previous_data.selection, sizeof(RECT));
-            if (captureChanged || (data.captured && posChanged))
-            {
-                RECT r = data.selection;
-                native->screens->TranslateToSystem(r);
-                _options.lpfnLayoutUpdated(data.captured, r);
-            }
-            previous_data = data;
-        }
 
         // update hovered color
         auto hoveredColor = GetFrameHoveredColor(&data);
@@ -758,6 +859,51 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
                 // draw txtTitle
                 dc->DrawTextLayout(D2D1::Point2F(tr.left + (RECT_WIDTH(tr) / 2) - (metricsTitle.width / 2), tr.top + (padding / 2)), layoutTitle, brushWhite70);
             }
+
+            // draw button panel if image is captured
+            if (data.captured)
+            {
+                for (int i = 0; i < NUM_SVG_BUTTONS; i++)
+                {
+                    dc->SetTransform(defaultMatrix);
+                    auto& detail = captureButtonDetails[i];
+                    auto& svg = buttonSvgs[i];
+                    auto& position = data.buttonPositions[i];
+
+                    auto br = TranslateFromWorkspaceToScreen(_vx, _vy, mon.DesktopCoordinates, position);
+                    auto bw = RECT_WIDTH(br);
+                    auto bh = RECT_WIDTH(br);
+
+                    if (detail.primary)
+                    {
+                        dc->FillRectangle(br, brushAccent);
+                    }
+                    else
+                    {
+                        dc->FillRectangle(br, brushGray);
+                    }
+
+                    // draw hover color if mouse is inside
+                    if (mx > br.left && my > br.top && mx < br.right && my < br.bottom) {
+                        dc->FillRectangle(br, brushWhite30);
+                    }
+
+                    // draw text
+                    DWRITE_TEXT_METRICS metricsText;
+                    DxRef<IDWriteTextLayout> layoutText;
+                    output->CreateFontLayout(layoutText, txtButtonLabel, detail.text, &metricsText, bw, bh);
+                    layoutText->SetUnderline(TRUE, DWRITE_TEXT_RANGE{ detail.underlineIndex, 1 });
+                    dc->DrawTextLayout(D2D1::Point2F(br.left + (bw / 2) - (metricsText.width / 2), br.bottom - metricsText.height - (5 * myzoom)), layoutText, brushWhite);
+
+                    // draw svg
+                    dc->SetTransform(D2D1::Matrix3x2F::Translation(
+                        br.left + (bw / 2) - (svgIconSize / 2),
+                        br.top + ((bh - metricsText.height) / 2) - (svgIconSize / 2)));
+                    dc->DrawSvgDocument(svg);
+                    dc->SetTransform(defaultMatrix);
+                }
+            }
+
         }
         // if crosshair is off, forget everything else we just only draw a color image
         else
@@ -1005,13 +1151,6 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
         switch (wParam)
         {
 
-        case VK_ESCAPE:
-        case VK_F4:
-        {
-            Close();
-            break;
-        }
-
         case VK_LEFT:
         {
             int modifier = (GetKeyState(VK_SHIFT) & 0x8000) ? 10 : 1;
@@ -1055,6 +1194,17 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             break;
         }
 
+        case VK_INSERT:
+        case 0x43: // C
+        {
+            if (data.captured)
+            {
+                WriteToClipboard();
+                Close();
+            }
+            break;
+        }
+
         case 0x44: // D
         {
             data.debugging = data.debugging ? false : true;
@@ -1071,10 +1221,11 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 
         case 0x48: // H
         {
-            if (!data.captured && _options.lpfnColorCaptured)
+            if (!data.captured && _options.lpfnColorCapture)
             {
                 auto color = GetFrameHoveredColor(&data);
-                _options.lpfnColorCaptured(color.GetR(), color.GetG(), color.GetB());
+                _options.lpfnColorCapture(color.GetR(), color.GetG(), color.GetB());
+                Close();
             }
             break;
         }
@@ -1100,10 +1251,50 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             break;
         }
 
+        case VK_RETURN:
+        case 0x45: // E
+        case 0x50: // P
+        case 0x53: // S
+        case 0x55: // U
+        {
+            if (data.captured && _options.lpfnSessionCapture)
+            {
+                CaptureType type;
+                if (wParam == 0x55) type = CaptureType::Upload;
+                else if (wParam == 0x53) type = CaptureType::Save;
+                else type = CaptureType::Photo;
+
+                auto sessionJson = SaveSession(_options.sessionDirectory, _options.createdUtc);
+                _options.lpfnSessionCapture(sessionJson.c_str(), type);
+                Close();
+            }
+            break;
+        }
+
+        case 0x56: // V
+        {
+            if (data.captured && _options.lpfnVideoCapture)
+            {
+                RECT sel;
+                GetSelectionRect(sel);
+                _options.lpfnVideoCapture(sel);
+                Close();
+            }
+            break;
+        }
+
         case 0x57: // W
         {
             if (!data.captured && data.windowSelection.window != nullptr)
                 FrameMakeSelection(data, data.windowSelection.window->rcWorkspace, true);
+            break;
+        }
+
+        case 0x58: // X
+        case VK_ESCAPE:
+        case VK_F4:
+        {
+            Close();
             break;
         }
 
@@ -1119,9 +1310,6 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
         {
             SetFrame(&data);
         }
-
-        if (_options.lpfnKeyPressed)
-            _options.lpfnKeyPressed(wParam);
 
         return 0;
     }
@@ -1147,6 +1335,14 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 
         if (!data.crosshair)
             return 0; // short-circuit if no cursor
+
+        // we're clicking a button?
+        if (data.captured && data.hittestBtn >= 0)
+        {
+            auto& detail = captureButtonDetails[data.hittestBtn];
+            WndProcImpl(hWnd, WM_KEYDOWN, detail.vKeyCode, 0);
+            return 0;
+        }
 
         SetCapture(hWnd);
 
@@ -1207,6 +1403,8 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     native->walker->ResetHitResult(&data.windowSelection);
                 }
 
+                bool updateButtonPos = true;
+
                 switch (data.hittest)
                 {
 
@@ -1262,6 +1460,19 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     break;
                 }
 
+                default:
+                {
+                    updateButtonPos = false;
+                    break;
+                }
+
+                }
+
+                if (updateButtonPos)
+                {
+                    const ScreenInfo& screen = native->screens->ScreenFromWorkspacePt(data.mouse);
+                    double dpizoom = screen.dpi / BASE_DPI;
+                    SetButtonPanelPositions(dpizoom, screen, &data.selection, data.buttonPositions);
                 }
             }
             else
@@ -1442,12 +1653,29 @@ System::Drawing::Color DxScreenCapture::GetFrameHoveredColor(mc_frame_data* data
 
 void DxScreenCapture::FrameUpdateHitTest(mc_frame_data& data)
 {
-    double dpizoom = native->screens->ScreenFromWorkspacePt(data.mouse).dpi / BASE_DPI;
+    const ScreenInfo& screen = native->screens->ScreenFromWorkspacePt(data.mouse);
+    double dpizoom = screen.dpi / BASE_DPI;
     POINT mpt = { (int)floor(data.mouse.x), (int)floor(data.mouse.y) };
     RECT& sel = data.selection;
     const int radius = (int)floor(UNSCALED_DRAG_HANDLE_SIZE * dpizoom);
 
-    RECTHT handles[8];
+    // hit test the capture buttons
+    for (int i = 0; i < NUM_SVG_BUTTONS; i++)
+    {
+        if (PtInRect(&data.buttonPositions[i], mpt))
+        {
+            data.hittest = HTMENU;
+            data.hittestBtn = i;
+            return;
+        }
+    }
+
+    // we were not hovering a button
+    data.hittestBtn = -1;
+
+    // hit test the selection rectangle / resize handles
+    const int numHandles = 8;
+    RECTHT handles[numHandles];
     handles[0].hit = HTTOPLEFT;
     handles[0].pt = PtToWidenedRect(radius, sel.left, sel.top);
     handles[1].hit = HTTOPRIGHT;
@@ -1467,7 +1695,7 @@ void DxScreenCapture::FrameUpdateHitTest(mc_frame_data& data)
 
     int ht = 0;
 
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < numHandles; i++)
     {
         const auto& item = handles[i];
         if (PtInRect(&item.pt, mpt))
@@ -1523,6 +1751,12 @@ void DxScreenCapture::FrameSetCursor(mc_frame_data& data)
         case HTBOTTOMRIGHT:
         {
             SetCursor(LoadCursor(0, IDC_SIZENWSE));
+            break;
+        }
+
+        case HTMENU:
+        {
+            SetCursor(LoadCursor(0, IDC_HAND));
             break;
         }
 
@@ -1596,6 +1830,11 @@ void DxScreenCapture::FrameMakeSelection(mc_frame_data& data, const RECT& sel, b
         FrameUpdateHitTest(data);
         if (!preserveWindow)
             native->walker->ResetHitResult(&data.windowSelection);
+
+        // update "capture button" positions
+        const ScreenInfo& screen = native->screens->ScreenFromWorkspacePt(data.mouse);
+        double dpizoom = screen.dpi / BASE_DPI;
+        SetButtonPanelPositions(dpizoom, screen, &data.selection, data.buttonPositions);
     }
     else
     {
@@ -1737,6 +1976,11 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
     // write screenshot to file
     //auto sessionDir = msclr::interop::marshal_as<wstring>(sessionDirectory);
     auto& sessionDir = sessionDirectory;
+
+    fs::path stdDir{ sessionDir };
+    if (!fs::exists(stdDir))
+        fs::create_directory(stdDir);
+
     auto ssPath = sessionDir + L"\\desktop.png";
     auto merged = GetMergedBitmap(true, false);
     merged->WriteToFilePNG(ssPath);

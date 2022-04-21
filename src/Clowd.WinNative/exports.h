@@ -1,8 +1,15 @@
 #pragma once
 
-typedef void(__cdecl* fnKeyPressed)(const DWORD keyCode);
-typedef void(__cdecl* fnColorCaptured)(const BYTE r, const BYTE g, const BYTE b);
-typedef void(__cdecl* fnLayoutUpdated)(const BOOL captured, const RECT area);
+enum CaptureType
+{
+    Upload = 1,
+    Photo = 2,
+    Save = 3,
+};
+
+typedef void(__cdecl* fnColorCapture)(const BYTE r, const BYTE g, const BYTE b);
+typedef void(__cdecl* fnVideoCapture)(const RECT captureRegion);
+typedef void(__cdecl* fnSessionCapture)(const wchar_t* sessionJsonPath, CaptureType captureType);
 typedef void(__cdecl* fnDisposed)(const wchar_t* errorMsg);
 
 typedef struct captureArgs
@@ -13,10 +20,12 @@ typedef struct captureArgs
     BOOL animationDisabled;
     BOOL obstructedWindowDisabled;
     BOOL tipsDisabled;
-    fnKeyPressed lpfnKeyPressed;
-    fnColorCaptured lpfnColorCaptured;
-    fnLayoutUpdated lpfnLayoutUpdated;
+    fnColorCapture lpfnColorCapture;
+    fnVideoCapture lpfnVideoCapture;
+    fnSessionCapture lpfnSessionCapture;
     fnDisposed lpfnDisposed;
+    wchar_t sessionDirectory[512];
+    wchar_t createdUtc[128];
 };
 
 extern "C"
@@ -27,10 +36,10 @@ extern "C"
     __declspec(dllexport) void __cdecl BorderClose();
 
     // DxScreenCapture
-    __declspec(dllexport) void __cdecl CaptureShow(captureArgs args);
-    __declspec(dllexport) void __cdecl CaptureReset();
-    __declspec(dllexport) RECT __cdecl CaptureGetSelectedArea();
+    __declspec(dllexport) void __cdecl CaptureShow(captureArgs* args);
     __declspec(dllexport) void __cdecl CaptureClose();
-    __declspec(dllexport) void __cdecl CaptureWriteSessionToFile(wchar_t* sessionDirectory, wchar_t* createdUtc);
-    __declspec(dllexport) void __cdecl CaptureWriteSessionToClipboard();
+    //__declspec(dllexport) void __cdecl CaptureReset();
+    //__declspec(dllexport) RECT __cdecl CaptureGetSelectedArea();
+    //__declspec(dllexport) void __cdecl CaptureWriteSessionToFile(wchar_t* sessionDirectory, wchar_t* createdUtc);
+    //__declspec(dllexport) void __cdecl CaptureWriteSessionToClipboard();
 }

@@ -6,9 +6,13 @@
 #include "DxOutputDevice.h"
 #include "exports.h"
 
+#define NUM_SVG_BUTTONS 7
+typedef RECT buttonPositionsArr[NUM_SVG_BUTTONS];
+
 struct mc_frame_data
 {
     int hittest;
+    int hittestBtn;
     double zoom;
     bool animated;
     bool debugging;
@@ -23,6 +27,7 @@ struct mc_frame_data
 
     RECT selection;
     HitV2Result windowSelection;
+    buttonPositionsArr buttonPositions;
 };
 
 struct mc_window_native
@@ -173,7 +178,7 @@ public:
     //fnColorCaptured lpfnColorCaptured;
     //fnLayoutUpdated lpfnLayoutUpdated;
     //fnDisposed lpfnDisposed;
-    DxScreenCapture(captureArgs options);
+    DxScreenCapture(captureArgs* options);
     ~DxScreenCapture();
     void Reset();
     void Close(bool waitForExit = false);

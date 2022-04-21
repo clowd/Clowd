@@ -214,6 +214,15 @@
   <ItemGroup>
     <Image Include="app.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="img\clowd-white.svg" />
+    <None Include="img\copy_to_clipboard.svg" />
+    <None Include="img\delete.svg" />
+    <None Include="img\edit_image.svg" />
+    <None Include="img\refresh.svg" />
+    <None Include="img\save.svg" />
+    <None Include="img\video_camera.svg" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <!-- Disable the .NET SDK error that prevents using SelfContained=true -->
   <!--<Target Name="_CheckForLanguageAndFeatureCombinationSupport">
