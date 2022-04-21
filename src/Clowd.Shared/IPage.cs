@@ -3,21 +3,29 @@ using System;
 
 namespace Clowd
 {
-    public enum SettingsCategory
+    public enum SettingsPageTab
     {
-        General,
-        Hotkeys,
-        Capture,
-        Editor,
+        NewItem,
+        RecentSessions,
         Uploads,
-        Windows,
-        Video,
+        SettingsGeneral,
+        SettingsHotkeys,
+        SettingsCapture,
+        SettingsEditor,
+        SettingsUploads,
+        SettingsVideo,
+        About,
     }
 
-    public interface IPage : IDisposable
+    public interface IPage
     {
         event EventHandler Closed;
-        //void Close();
+        void Close();
+    }
+
+    public interface ISettingsPage : IPage
+    {
+        void Open(SettingsPageTab? selectedTab = null);
     }
 
     public interface IVideoCapturePage : IPage
@@ -30,17 +38,10 @@ namespace Clowd
         void Open();
     }
 
-    //public interface IScreenCapturePage : IPage
-    //{
-    //    void Open();
-    //    void Open(ScreenRect captureArea);
-    //    void Open(IntPtr captureWindow);
-    //}
-
-    public interface IPageManager
+    public interface IScreenCapturePage : IPage
     {
-        IVideoCapturePage CreateVideoCapturePage();
-        //IScreenCapturePage CreateScreenCapturePage();
-        ILiveDrawPage CreateLiveDrawPage();
+        void Open();
+        void Open(ScreenRect captureArea);
+        void Open(IntPtr captureWindow);
     }
 }

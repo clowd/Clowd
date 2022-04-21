@@ -19,7 +19,7 @@ namespace Clowd.Capture
 
         private delegate Task<UploadResult> DoUploadDelegate(IUploadProvider provider, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
 
-        private static readonly ITasksView _view = App.GetService<ITasksView>();
+        private static readonly ITasksView _view = null;// App.GetService<ITasksView>();
 
         public static Task<UploadViewState> UploadImage(Stream fileStream, string extension, string name = null, string viewName = null)
         {
@@ -292,7 +292,7 @@ namespace Clowd.Capture
             }
             else
             {
-                await NiceDialog.ShowSettingsPromptAsync(null, SettingsCategory.Uploads,
+                await NiceDialog.ShowSettingsPromptAsync(null, SettingsPageTab.Uploads,
                     $"There is no upload provider configured/enabled for '{type}'. Please visit settings to configure before uploading.");
 
                 return null;

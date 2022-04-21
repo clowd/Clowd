@@ -9,25 +9,11 @@ using WPFUI.Controls;
 
 namespace Clowd.UI
 {
-    public enum MainWindowPage
-    {
-        NewItem,
-        RecentSessions,
-        Uploads,
-        SettingsGeneral,
-        SettingsHotkeys,
-        SettingsCapture,
-        SettingsEditor,
-        SettingsUploads,
-        SettingsVideo,
-        About,
-    }
-
-    public class FakePage : Page { }
-
     public class MainWindowNavigationItem : NavigationItem
     {
-        public MainWindowPage PageType
+        private class FakePage : Page { }
+
+        public SettingsPageTab PageType
         {
             get { return _pageType; }
             set
@@ -45,9 +31,9 @@ namespace Clowd.UI
             }
         }
 
-        private MainWindowPage _pageType;
+        private SettingsPageTab _pageType;
 
-        private Page GetPanelForTag(MainWindowPage tag)
+        private Page GetPanelForTag(SettingsPageTab tag)
         {
             Func<Window> getWindow = () => Window.GetWindow(this);
 
@@ -56,23 +42,23 @@ namespace Clowd.UI
                 //case MainWindowPage.NewItem:
                 //    return new NewItemPage();
                 //    break;
-                case MainWindowPage.RecentSessions:
+                case SettingsPageTab.RecentSessions:
                     return new RecentSessionsPage();
                 //case MainWindowPage.Uploads:
                 //    break;
-                case MainWindowPage.SettingsGeneral:
+                case SettingsPageTab.SettingsGeneral:
                     return new GeneralSettingsPage();
-                case MainWindowPage.SettingsHotkeys:
+                case SettingsPageTab.SettingsHotkeys:
                     return new SettingsControlFactory(getWindow, SettingsRoot.Current.Hotkeys).GetSettingsPanel();
-                case MainWindowPage.SettingsCapture:
+                case SettingsPageTab.SettingsCapture:
                     return new SettingsControlFactory(getWindow, SettingsRoot.Current.Capture).GetSettingsPanel();
-                case MainWindowPage.SettingsEditor:
+                case SettingsPageTab.SettingsEditor:
                     return new SettingsControlFactory(getWindow, SettingsRoot.Current.Editor).GetSettingsPanel();
-                case MainWindowPage.SettingsUploads:
+                case SettingsPageTab.SettingsUploads:
                     return new SettingsControlFactory(getWindow, SettingsRoot.Current.Uploads).GetSettingsPanel();
-                case MainWindowPage.SettingsVideo:
+                case SettingsPageTab.SettingsVideo:
                     return new SettingsControlFactory(getWindow, SettingsRoot.Current.Video).GetSettingsPanel();
-                case MainWindowPage.About:
+                case SettingsPageTab.About:
                     return new AboutPage();
                 default:
                     return null;
@@ -80,30 +66,20 @@ namespace Clowd.UI
         }
     }
 
-    public partial class MainWindow : SystemThemedWindow
+    public partial class MainWindow : SystemThemedWindow, ISettingsPage
     {
         public MainWindow()
         {
             InitializeComponent();
         }
 
-        public static void ShowWindow(MainWindowPage? focusedPage = null)
+        public void Open(SettingsPageTab? selectedTab)
         {
-            var main = App.Current.Windows.Cast<Window>().Select(w => w as MainWindow).Where(w => w != null).FirstOrDefault();
-            if (main != null)
+            Show();
+            PlatformWindow.Activate();
+            if (selectedTab != null)
             {
-                main.PlatformWindow.Activate();
-            }
-            else
-            {
-                main = new MainWindow();
-                main.Show();
-                main.PlatformWindow.Activate();
-            }
-
-            if (focusedPage != null)
-            {
-                main.RootNavigation.Navigate(focusedPage.ToString());
+                RootNavigation.Navigate(selectedTab.ToString());
             }
         }
     }

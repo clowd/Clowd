@@ -26,20 +26,18 @@ namespace Clowd.UI
         private CaptureToolButton _btnDraw;
         private CaptureToolButton _btnCancel;
 
+        private bool _opened;
         private bool _disposed;
         private ScreenRect _selection;
         private IVideoCapturer _capturer;
-        private readonly IPageManager _pages;
         private static SettingsVideo _settings => SettingsRoot.Current.Video;
         private UIAudioMonitor _monitor;
         private string _fileName;
         private FloatingButtonWindow _floating;
         private bool _isCancelled = false;
 
-        public VideoCaptureWindow(IVideoCapturer capturer, IPageManager pages)
+        public VideoCaptureWindow(IVideoCapturer capturer)
         {
-            _pages = pages;
-
             _capturer = capturer;
             _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
             _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
@@ -116,7 +114,7 @@ namespace Clowd.UI
 
         private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
         {
-            this.Dispose();
+            this.Close();
 
             var filename = "capture_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
             filename = Path.Combine(Path.GetFullPath(_settings.OutputDirectory), filename);
@@ -147,6 +145,10 @@ namespace Clowd.UI
 
         public void Open(ScreenRect captureArea)
         {
+            if (_opened || _disposed)
+                throw new InvalidOperationException("Video capture can only be opened once");
+
+            _opened = true;
             _selection = captureArea;
 
             var wpfclr = AppStyles.AccentColor;
@@ -203,7 +205,7 @@ namespace Clowd.UI
                 IsRecording = false;
                 await _capturer.StopAsync();
             }
-            this.Dispose();
+            this.Close();
 
             if (wasRecording)
             {
@@ -228,12 +230,12 @@ namespace Clowd.UI
 
         private void OnSettings(object sender, EventArgs e)
         {
-            MainWindow.ShowWindow(MainWindowPage.SettingsVideo);
+            PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsVideo);
         }
 
         private void OnDraw(object sender, EventArgs e)
         {
-            _pages.CreateLiveDrawPage().Open();
+            PageManager.Current.GetLiveDrawPage().Open();
         }
 
         private async void OnCancel(object sender, EventArgs e)
@@ -246,14 +248,14 @@ namespace Clowd.UI
                 IsRecording = false;
                 await _capturer.StopAsync();
             }
-            this.Dispose();
+            this.Close();
 
             await Task.Delay(10 * 1000);
             if (File.Exists(_fileName))
                 File.Delete(_fileName);
         }
 
-        public void Dispose()
+        public void Close()
         {
             if (_disposed)
                 return;

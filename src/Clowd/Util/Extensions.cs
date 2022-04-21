@@ -11,7 +11,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using LightInject;
 
 namespace Clowd.Util
 {
@@ -234,22 +233,6 @@ namespace Clowd.Util
             }, tcs, timeout, executeOnlyOnce: true);
             tcs.Task.ContinueWith((_, state) => ((RegisteredWaitHandle)state).Unregister(null), registration, TaskScheduler.Default);
             return tcs.Task;
-        }
-
-        public static T CreatePage<T>(this IServiceFactory factory) where T : IPage
-        {
-            var scope = factory.BeginScope();
-            try
-            {
-                var page = factory.GetInstance<T>();
-                page.Closed += (s, e) => scope.Dispose();
-                return page;
-            }
-            catch
-            {
-                scope.Dispose();
-                throw;
-            }
         }
 
         /// <summary>
