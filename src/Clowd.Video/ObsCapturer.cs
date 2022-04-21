@@ -365,21 +365,26 @@ namespace Clowd.Video
                 StringBuilder sb = new StringBuilder();
                 WebSocketReceiveResult receiveResult;
 
-                while (!TokenSource.IsCancellationRequested)
+                try
                 {
-                    do
+                    while (!TokenSource.IsCancellationRequested)
                     {
-                        receiveResult = WebSocket.ReceiveAsync(buffer, TokenSource.Token)
-                            .ConfigureAwait(false).GetAwaiter().GetResult();
+                        do
+                        {
+                            receiveResult = WebSocket.ReceiveAsync(buffer, TokenSource.Token)
+                                .ConfigureAwait(false).GetAwaiter().GetResult();
 
-                        if (receiveResult.MessageType != WebSocketMessageType.Close)
-                            sb.Append(Encoding.UTF8.GetString(buffer, 0, receiveResult.Count));
+                            if (receiveResult.MessageType != WebSocketMessageType.Close)
+                                sb.Append(Encoding.UTF8.GetString(buffer, 0, receiveResult.Count));
+                        }
+                        while (!receiveResult.EndOfMessage);
+
+                        ReceiveMessage(sb.ToString());
+                        sb.Clear();
                     }
-                    while (!receiveResult.EndOfMessage);
-
-                    ReceiveMessage(sb.ToString());
-                    sb.Clear();
                 }
+                catch (OperationCanceledException)
+                { }
             }
 
             private void ReceiveMessage(string message)
