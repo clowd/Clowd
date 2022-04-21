@@ -26,6 +26,7 @@ $gitVerJson = (&nbgv get-version -f json) | ConvertFrom-Json
 $version = $gitVerJson.SimpleVersion
 Write-Host $version
 
+
 if ($mode -eq "compile") {
 
     # Ensure a clean state by removing build/package folders
@@ -36,23 +37,10 @@ if ($mode -eq "compile") {
         }
     }
 
+
     # publish clowd main project
     Write-Host "Build Clowd.csproj" -ForegroundColor Magenta
-
-    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --no-self-contained -o "$PSScriptRoot\publish"
-    # &$MSBuildPath "$PSScriptRoot\src\Clowd\Clowd.csproj" `
-    # /t:Restore,Rebuild,Publish `
-    # /v:minimal `
-    # /p:PublishSingleFile=False `
-    # /p:SelfContained=False `
-    # /p:PublishProtocol=FileSystem `
-    # /p:Configuration=Release `
-    # /p:Platform=x64 `
-    # /p:PublishDir="$PSScriptRoot\publish" `
-    # /p:RuntimeIdentifier=win-x64 `
-    # /p:PublishReadyToRun=False `
-    # /p:PublishTrimmed=False `
-    # /p:SolutionDir=$PSScriptRoot\
+    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --no-self-contained `-o "$PSScriptRoot\publish"
 
 
     # build clowd native and copy to publish directory
@@ -82,6 +70,7 @@ if ($mode -eq "compile") {
     Set-Location $PSScriptRoot
 
 }
+
 
 # build packaging tools only if in local mode
 if ($LocalProjectMode) {
