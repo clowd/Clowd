@@ -44,21 +44,21 @@
                         x:Name="ctxOpenItem"
                         Click="OpenItemClicked"
                         Header="Open"
-                        Icon="{x:Static wpfuiCommon:Icon.Edit24}"
+                        Icon="{x:Static wpfuiCommon:SymbolFilled.Edit24}"
                         IsEnabled="False"
                         ToolTip="Open in Editor" />
                     <MenuItem
                         x:Name="ctxCopyItem"
                         Click="CopyItemClicked"
                         Header="Copy"
-                        Icon="{x:Static wpfuiCommon:Icon.Copy24}"
+                        Icon="{x:Static wpfuiCommon:SymbolFilled.Copy24}"
                         IsEnabled="False"
                         ToolTip="Copy to Clipboard" />
                     <MenuItem
                         x:Name="ctxDeleteItem"
                         Click="DeleteItemClicked"
                         Header="Delete"
-                        Icon="{x:Static wpfuiCommon:Icon.Delete24}"
+                        Icon="{x:Static wpfuiCommon:SymbolFilled.Delete24}"
                         IsEnabled="False"
                         ToolTip="Delete" />
                 </ContextMenu>
