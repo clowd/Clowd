@@ -96,7 +96,7 @@ namespace Clowd
             _model = new SquirrelUpdateViewModel(JustRestarted, tools.CurrentlyInstalledVersion() != null);
         }
 
-        public class SquirrelUpdateViewModel : INotifyPropertyChanged
+        public class SquirrelUpdateViewModel : SimpleNotifyObject
         {
             public bool ContextMenuRegistered
             {
@@ -121,7 +121,7 @@ namespace Clowd
                         _srv.ExplorerAllFilesMenu = null;
                         _srv.ExplorerDirectoryMenu = null;
                     }
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ContextMenuRegistered)));
+                    OnPropertyChanged();
                 }
             }
 
@@ -131,19 +131,40 @@ namespace Clowd
                 set
                 {
                     _srv.AutoStartLaunchPath = value ? SquirrelRuntimeInfo.EntryExePath : null;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AutoRunRegistered)));
+                    OnPropertyChanged();
                 }
             }
 
-            public RelayUICommand ClickCommand { get; protected set; }
-            public string ClickCommandText { get; protected set; }
-            public string Description { get; protected set; }
-            public bool IsWorking { get; protected set; }
+            public RelayUICommand ClickCommand
+            {
+                get => _clickCommand;
+                protected set => Set(ref _clickCommand, value);
+            }
 
-            public event PropertyChangedEventHandler PropertyChanged;
+            public string ClickCommandText
+            {
+                get => _clickCommandText;
+                protected set => Set(ref _clickCommandText, value);
+            }
+
+            public string Description
+            {
+                get => _description;
+                protected set => Set(ref _description, value);
+            }
+
+            public bool IsWorking
+            {
+                get => _isWorking;
+                protected set => Set(ref _isWorking, value);
+            }
 
             private ReleaseEntry _newVersion;
             private IDisposable _timer;
+            private RelayUICommand _clickCommand;
+            private string _clickCommandText;
+            private string _description;
+            private bool _isWorking;
 
             public SquirrelUpdateViewModel(bool justUpdated, bool isInstalled)
             {
