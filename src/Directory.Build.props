@@ -15,6 +15,6 @@
     <RepositoryUrl>https://github.com/clowd</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Nerdbank.GitVersioning" Version="3.4.255" PrivateAssets="all" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.5.86-alpha" PrivateAssets="all" />
   </ItemGroup>
 </Project>

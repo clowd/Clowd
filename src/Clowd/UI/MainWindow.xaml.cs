@@ -26,7 +26,7 @@ namespace Clowd.UI
 
                     // this has to be a non-null class that derives from 'Page'
                     // but it won't be used, because we've also set 'Instance'
-                    Type = typeof(FakePage); 
+                    Page = typeof(FakePage); 
                 }
             }
         }
