@@ -228,7 +228,7 @@ namespace Clowd.UI
 
         private void OnSettings(object sender, EventArgs e)
         {
-            //_pages.CreateSettingsPage().Open(SettingsCategory.Video);
+            MainWindow.ShowWindow(MainWindowPage.SettingsVideo);
         }
 
         private void OnDraw(object sender, EventArgs e)
