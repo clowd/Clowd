@@ -12,13 +12,13 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <OutputPath>..\..\bin\$(Configuration)</OutputPath>
     <StartupObject>Clowd.Program</StartupObject>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!--<GenerateAssemblyInfo>false</GenerateAssemblyInfo>-->
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <DebugType>none</DebugType>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(IntermediateOutputPath)Clowd.Version.cs" />
+    <!--<Compile Include="$(IntermediateOutputPath)Clowd.Version.cs" />-->
     <Resource Include="Assets\Raleway.ttf" />
     <Resource Include="Images\Checkmark-26.png" />
     <Resource Include="Images\Clowd-250.png" />
