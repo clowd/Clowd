@@ -1,14 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Unmanaged;
-using Clowd.Util;
-using Clowd.Video;
 
 namespace Clowd.UI
 {
@@ -17,8 +11,6 @@ namespace Clowd.UI
         public static PageManager Current { get; private set; }
 
         private readonly Dictionary<Type, object> _singletons = new Dictionary<Type, object>();
-
-        private readonly IScopedLog _log = new DefaultScopedLog(Constants.ClowdAppName);
 
         static PageManager()
         {
@@ -32,14 +24,7 @@ namespace Clowd.UI
         {
             if (_singletons.ContainsKey(typeof(VideoCaptureWindow)))
                 throw new InvalidOperationException("Not allowed retrieve open video pages, and only one can be open at a time.");
-
-            var obsPath = Path.Combine(AppContext.BaseDirectory, "obs-express");
-            var obs = new ObsCapturer(_log, obsPath);
-            var inst = new VideoCaptureWindow(obs);
-            HandleClosing(inst);
-            
-            _singletons[typeof(VideoCaptureWindow)] = inst;
-            return inst;
+            return GetOrCreate<VideoCaptureWindow>();
         }
 
         public ILiveDrawPage GetLiveDrawPage()
