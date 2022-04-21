@@ -38,19 +38,21 @@ if ($mode -eq "compile") {
 
     # publish clowd main project
     Write-Host "Build Clowd.csproj" -ForegroundColor Magenta
-    &$MSBuildPath "$PSScriptRoot\src\Clowd\Clowd.csproj" `
-    /t:Restore,Rebuild,Publish `
-    /v:minimal `
-    /p:PublishSingleFile=False `
-    /p:SelfContained=False `
-    /p:PublishProtocol=FileSystem `
-    /p:Configuration=Release `
-    /p:Platform=x64 `
-    /p:PublishDir="$PSScriptRoot\publish" `
-    /p:RuntimeIdentifier=win-x64 `
-    /p:PublishReadyToRun=False `
-    /p:PublishTrimmed=False `
-    /p:SolutionDir=$PSScriptRoot\
+
+    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --no-self-contained -o "$PSScriptRoot\publish"
+    # &$MSBuildPath "$PSScriptRoot\src\Clowd\Clowd.csproj" `
+    # /t:Restore,Rebuild,Publish `
+    # /v:minimal `
+    # /p:PublishSingleFile=False `
+    # /p:SelfContained=False `
+    # /p:PublishProtocol=FileSystem `
+    # /p:Configuration=Release `
+    # /p:Platform=x64 `
+    # /p:PublishDir="$PSScriptRoot\publish" `
+    # /p:RuntimeIdentifier=win-x64 `
+    # /p:PublishReadyToRun=False `
+    # /p:PublishTrimmed=False `
+    # /p:SolutionDir=$PSScriptRoot\
 
 
     # build clowd native and copy to publish directory
