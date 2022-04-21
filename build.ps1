@@ -40,7 +40,7 @@ if ($mode -eq "compile") {
 
     # publish clowd main project
     Write-Host "Build Clowd.csproj" -ForegroundColor Magenta
-    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --no-self-contained `-o "$PSScriptRoot\publish"
+    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --no-self-contained -o "$PSScriptRoot\publish"
 
 
     # build clowd native and copy to publish directory
