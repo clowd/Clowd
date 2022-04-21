@@ -61,6 +61,8 @@ namespace Clowd
                 SetupDependencyInjection();
 
                 // theme
+                WPFUI.Appearance.Theme.Set(WPFUI.Appearance.Theme.GetSystemTheme() == WPFUI.Appearance.SystemThemeType.Light
+                    ? WPFUI.Appearance.ThemeType.Light : WPFUI.Appearance.ThemeType.Dark);
                 SetupTrayIconAndTheme();
                 WPFUI.Appearance.Theme.Changed += (s, e) => SetupTrayIconAndTheme();
 
