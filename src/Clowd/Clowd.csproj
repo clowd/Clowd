@@ -17,6 +17,7 @@
     <DebugType>none</DebugType>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)Clowd.Version.cs" />
     <Resource Include="Assets\Raleway.ttf" />
     <Resource Include="Images\Checkmark-26.png" />
     <Resource Include="Images\Clowd-250.png" />
