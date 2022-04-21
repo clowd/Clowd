@@ -18,12 +18,12 @@ namespace Clowd.UI.Config
     public class SettingsControlFactory
     {
         private readonly object obj;
-        private readonly Window wnd;
+        private readonly Func<Window> wndFn;
 
-        public SettingsControlFactory(Window wnd, object obj)
+        public SettingsControlFactory(Func<Window> wndFn, object obj)
         {
             this.obj = obj;
-            this.wnd = wnd;
+            this.wndFn = wndFn;
         }
 
         public System.Windows.Controls.Page GetSettingsPanel()
@@ -96,7 +96,7 @@ namespace Clowd.UI.Config
                 {
                     var btn = ButtonControl("Browse", (s, e) =>
                     {
-                        var whwnd = new WindowInteropHelper(wnd).Handle;
+                        var whwnd = new WindowInteropHelper(wndFn()).Handle;
                         var dlg = new PlatformUtil.Windows.FolderBrowserDialog();
                         dlg.Title = "Pick a folder";
                         if (dlg.ShowDialog(whwnd))
@@ -160,7 +160,7 @@ namespace Clowd.UI.Config
             if (pd.Is(typeof(TimeOption)))
             {
                 // TODO, make this easier to do.
-                var child = new SettingsControlFactory(wnd, pd.GetValue(obj));
+                var child = new SettingsControlFactory(wndFn, pd.GetValue(obj));
                 var pdNum = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Number));
                 var pdUnit = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Unit));
                 var ctNum = child.SimpleControlBinding(new TextBox(), pdNum, TextBox.TextProperty);
