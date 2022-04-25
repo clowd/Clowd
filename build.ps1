@@ -4,7 +4,8 @@ param (
     [string]$keySecret,
     [string]$bucket = "clowd-releases",
     [string]$channel = "experimental",
-    [switch]$skipSquirrel = $false
+    [switch]$skipSquirrel = $false,
+    [switch]$skipDelta = $false
 )
 
 # Basic Setup
@@ -109,17 +110,18 @@ if ([string]::IsNullOrEmpty($keyId) -Or [string]::IsNullOrEmpty($keySecret)) {
 
 if ($mode -eq "compile" -Or $mode -eq "pack") {
 
-    # download recent packages
-    New-Item -ItemType "directory" -Path "$PSScriptRoot\releases"
-    Write-Host "Download latest release" -ForegroundColor Magenta
-    Squirrel s3-down `
-    -r "$PSScriptRoot\releases" `
-    --bucket $bucket `
-    --keyId $keyId `
-    --secret $keySecret `
-    --endpoint "https://s3.eu-central-003.backblazeb2.com" `
-    --pathPrefix $channel
-
+    if ($skipDelta -eq $false) {
+        # download recent packages
+        New-Item -ItemType "directory" -Path "$PSScriptRoot\releases"
+        Write-Host "Download latest release" -ForegroundColor Magenta
+        Squirrel s3-down `
+        -r "$PSScriptRoot\releases" `
+        --bucket $bucket `
+        --keyId $keyId `
+        --secret $keySecret `
+        --endpoint "https://s3.eu-central-003.backblazeb2.com" `
+        --pathPrefix $channel
+    }
 
     # releasify
     Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
