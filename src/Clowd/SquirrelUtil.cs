@@ -89,9 +89,29 @@ namespace Clowd
 
         private static void OnEveryRun(SemanticVersion ver, IAppTools tools, bool firstRun)
         {
+            var logDir = tools.IsInstalledApp ? tools.AppDirectory : SquirrelRuntimeInfo.BaseDirectory;
+            var logFile = Path.Combine(logDir, "Clowd.log");
+            var logArchiveFile = Path.Combine(logDir, "Clowd.archive{###}.log");
+
+            NLog.Config.SimpleConfigurator.ConfigureForTargetLogging(
+                new NLog.Targets.FileTarget()
+                {
+                    FileName = logFile,
+                    Layout = new NLog.Layouts.SimpleLayout("${longdate} [${level:uppercase=true}] - ${message}"),
+                    ConcurrentWrites = true, // should allow multiple processes to use the same file
+                    KeepFileOpen = true,
+                    ArchiveFileName = logArchiveFile,
+                    ArchiveNumbering = NLog.Targets.ArchiveNumberingMode.Sequence,
+                    ArchiveAboveSize = 1_000_000,
+                    MaxArchiveFiles = 1,
+                },
+                NLog.LogLevel.Debug
+            );
+
+            SquirrelLogger.Register();
+
             IsFirstRun = firstRun;
-            //tools.SetProcessAppUserModelId();
-            _model = new SquirrelUpdateViewModel(JustRestarted, tools.CurrentlyInstalledVersion() != null);
+            _model = new SquirrelUpdateViewModel(JustRestarted, tools.IsInstalledApp);
         }
 
         public class SquirrelUpdateViewModel : SimpleNotifyObject
@@ -167,7 +187,7 @@ namespace Clowd
             public SquirrelUpdateViewModel(bool justUpdated, bool isInstalled)
             {
                 ClickCommand = new RelayUICommand(OnClick, CanExecute);
-                if (isInstalled)
+                if (true || isInstalled)
                 {
                     ClickCommandText = "Check for updates";
                     Description = "Version: " + ThisAssembly.AssemblyInformationalVersion;
@@ -276,6 +296,83 @@ namespace Clowd
             private bool CanExecute(object parameter)
             {
                 return !IsWorking;
+            }
+        }
+    }
+
+    //internal class NLogWrapper : ILog
+    //{
+    //    private readonly NLog.Logger _log;
+
+    //    public NLogWrapper(string logName)
+    //    {
+    //        _log = NLog.LogManager.GetLogger(logName);
+    //    }
+
+    //    public void Debug(string message)
+    //    {
+    //        _log.Debug(message);
+    //    }
+
+    //    public void Error(string message)
+    //    {
+    //        _log.Error(message);
+    //    }
+
+    //    public void Error(string message, Exception ex)
+    //    {
+    //        _log.Error(ex, message);
+    //    }
+
+    //    public void Error(Exception ex)
+    //    {
+    //        _log.Error(ex);
+    //    }
+
+    //    public void Info(string message)
+    //    {
+    //        _log.Info(message);
+    //    }
+    //}
+
+    internal class SquirrelLogger : Squirrel.SimpleSplat.ILogger
+    {
+        private readonly NLog.Logger _log;
+
+        protected SquirrelLogger()
+        {
+            _log = NLog.LogManager.GetLogger("SquirrelLogger");
+        }
+
+        public Squirrel.SimpleSplat.LogLevel Level { get; set; }
+
+        public static void Register()
+        {
+            Squirrel.SimpleSplat.SquirrelLocator.CurrentMutable.Register(() => new SquirrelLogger(), typeof(Squirrel.SimpleSplat.ILogger));
+        }
+
+        public void Write(string message, Squirrel.SimpleSplat.LogLevel logLevel)
+        {
+            switch (logLevel)
+            {
+                case Squirrel.SimpleSplat.LogLevel.Debug:
+                    _log.Debug(message);
+                    break;
+                case Squirrel.SimpleSplat.LogLevel.Info:
+                    _log.Info(message);
+                    break;
+                case Squirrel.SimpleSplat.LogLevel.Warn:
+                    _log.Warn(message);
+                    break;
+                case Squirrel.SimpleSplat.LogLevel.Error:
+                    _log.Error(message);
+                    break;
+                case Squirrel.SimpleSplat.LogLevel.Fatal:
+                    _log.Fatal(message);
+                    break;
+                default:
+                    _log.Info(message);
+                    break;
             }
         }
     }
