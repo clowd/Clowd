@@ -83,14 +83,14 @@ namespace Clowd
         {
             _srv.RemoveAll();
 
-            tools.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
-            tools.RemoveUninstallerRegistryEntry();
+            //tools.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
+            //tools.RemoveUninstallerRegistryEntry();
         }
 
         private static void OnEveryRun(SemanticVersion ver, IAppTools tools, bool firstRun)
         {
             IsFirstRun = firstRun;
-            tools.SetProcessAppUserModelId();
+            //tools.SetProcessAppUserModelId();
             _model = new SquirrelUpdateViewModel(JustRestarted, tools.CurrentlyInstalledVersion() != null);
         }
 
@@ -197,19 +197,13 @@ namespace Clowd
                 }
                 else
                 {
-                    CheckForUpdatesUnattended().ContinueWith(t =>
-                    {
-                        if (t.Exception != null)
-                        {
-                            Description = t.Exception.Message;
-                            // log this
-                        }
-                    });
+                    CheckForUpdatesUnattended();
                 }
             }
 
             public async Task CheckForUpdatesUnattended()
             {
+                Exception ex = null;
                 try
                 {
                     lock (_lock)
@@ -224,6 +218,10 @@ namespace Clowd
                     using var mgr = new UpdateManager(Config.SettingsRoot.Current.General.UpdateReleaseUrl);
                     _newVersion = await mgr.UpdateApp(OnProgress);
                 }
+                catch (Exception e)
+                {
+                    ex = e;
+                }
                 finally
                 {
                     if (_newVersion != null)
@@ -235,6 +233,12 @@ namespace Clowd
                     {
                         ClickCommandText = "Check for Updates";
                         Description = "Version: " + CurrentVersion + ", no update available";
+                    }
+
+                    if (ex != null)
+                    {
+                        Description = ex.Message;
+                        // log this
                     }
 
                     lock (_lock) IsWorking = false;
@@ -257,10 +261,8 @@ namespace Clowd
 
             private void RestartApp()
             {
-                UpdateManager.RestartAppWhenExited(arguments: "--squirrel-restarted").ContinueWith(t =>
-                {
-                    App.Current.ExitApp();
-                });
+                UpdateManager.RestartAppWhenExited(arguments: "--squirrel-restarted");
+                App.Current.ExitApp();
             }
 
             private void OnProgress(int obj)
