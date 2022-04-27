@@ -231,8 +231,11 @@ namespace Clowd.Util
         {
         }
 
+        private readonly NLog.Logger _log;
+
         public DefaultScopedLog(string name)
         {
+            _log = NLog.LogManager.GetLogger(name);
             Name = name;
         }
 
@@ -269,7 +272,10 @@ namespace Clowd.Util
         protected override void WriteLine(string message, LogSeverity level)
         {
             if (level >= MinLogLevel)
+            {
+                _log.Info(message);
                 Console.WriteLine(message);
+            }
         }
     }
 

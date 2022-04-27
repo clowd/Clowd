@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
@@ -50,6 +50,7 @@
     <PackageReference Include="SharpRaven" Version="2.4.0" />
     <PackageReference Include="ThomasLevesque.WeakEvent" Version="4.1.0" />
     <PackageReference Include="WPF-UI" Version="1.2.4" />
+    <PackageReference Include="NLog" Version="5.0.0-rc2" />
   </ItemGroup>
   <ItemGroup>
     <Page Update="UI\Dialogs\ColorPicker\Generic.xaml">
