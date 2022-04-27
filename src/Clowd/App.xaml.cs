@@ -49,8 +49,7 @@ namespace Clowd
                 // initialize GDI+ (our native lib depends on it, but does not initialize it)
                 new System.Drawing.Region().Dispose();
 
-                if (!Constants.Debugging)
-                    SetupExceptionHandling();
+                SetupExceptionHandling();
 
                 await SetupMutex(appArgs);
                 await SetupSettings();
@@ -140,16 +139,20 @@ namespace Clowd
 
         private void SetupExceptionHandling()
         {
+#if !DEBUG
             DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
+#endif
 
             System.Windows.Forms.Application.ThreadException += (object sender, ThreadExceptionEventArgs e) =>
             {
+                if (Debugger.IsAttached) Debugger.Break();
                 DefaultLog.Error("WindowsFormsApplicationThreadException", e.Exception);
                 MessageBox.Show("An unrecoverable error has occurred. The application will now exit.", "WindowsFormsApplicationThreadException");
             };
 
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
             {
+                if (Debugger.IsAttached) Debugger.Break();
                 if (e.ExceptionObject is Exception ex)
                     DefaultLog.Error("AppDomainUnhandledException", ex);
                 MessageBox.Show("An unrecoverable error has occurred. The application will now exit.", "AppDomainUnhandledException");
@@ -157,6 +160,7 @@ namespace Clowd
 
             Application.Current.DispatcherUnhandledException += (object sender, DispatcherUnhandledExceptionEventArgs e) =>
             {
+                if (Debugger.IsAttached) Debugger.Break();
                 e.Handled = true;
                 DefaultLog.Error("DispatcherUnhandledException", e.Exception);
                 NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Exception.ToString(), "An error has occurred.");
