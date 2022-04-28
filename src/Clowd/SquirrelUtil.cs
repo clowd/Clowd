@@ -11,7 +11,6 @@ using System.Windows.Input;
 using Clowd.PlatformUtil.Windows;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using NuGet.Versioning;
 using Squirrel;
 
 [assembly: AssemblyMetadata("SquirrelAwareVersion", "1")]
