@@ -4,7 +4,8 @@ param (
     [string]$keySecret,
     [string]$bucket = "clowd-releases",
     [string]$channel = "experimental",
-    [switch]$skipSquirrel = $false
+    [switch]$skipSquirrel = $false,
+    [switch]$skipObs = $false
 )
 
 # Basic Setup
@@ -55,7 +56,7 @@ if ($mode -eq "compile") {
 
     # build obs-express only if we are in local mode, otherwise download
     $HasObsBuildFolder = Test-Path -Path "$PSScriptRoot\..\obs-express"
-    if ($LocalProjectMode -And $HasObsBuildFolder) {
+    if ($LocalProjectMode -And $HasObsBuildFolder -And ($skipObs -eq $false)) {
         Write-Host "Build obs-express (local mode)" -ForegroundColor Magenta
         Set-Location "$PSScriptRoot\..\obs-express"
         &npm install
