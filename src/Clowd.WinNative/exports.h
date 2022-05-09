@@ -12,7 +12,7 @@ typedef void(__cdecl* fnVideoCapture)(const RECT captureRegion);
 typedef void(__cdecl* fnSessionCapture)(const wchar_t* sessionJsonPath, CaptureType captureType);
 typedef void(__cdecl* fnDisposed)(const wchar_t* errorMsg);
 
-typedef struct captureArgs
+typedef struct 
 {
     BYTE colorR;
     BYTE colorG;
@@ -26,7 +26,7 @@ typedef struct captureArgs
     fnDisposed lpfnDisposed;
     wchar_t sessionDirectory[512];
     wchar_t createdUtc[128];
-};
+} captureArgs;
 
 extern "C"
 {
