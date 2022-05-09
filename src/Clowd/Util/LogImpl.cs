@@ -10,7 +10,7 @@ namespace Clowd.Util
 {
     public abstract class ScopedLog<T> : IScopedLog where T : ScopedLog<T>, new()
     {
-        public string Name { get; protected set; }
+        public virtual string Name { get; protected set; }
         public DateTime CreatedUtc { get; }
         public DateTime? LastMessageUtc { get; protected set; }
         public ScopedLog<T> ProfilerRoot { get; protected set; }
@@ -223,6 +223,16 @@ namespace Clowd.Util
     {
         public LogSeverity MinLogLevel { get; set; } = LogSeverity.Info;
 
+        public override string Name
+        {
+            get => _name;
+            protected set
+            {
+                _name = value;
+                _log = NLog.LogManager.GetLogger(value);
+            }
+        }
+
         public static IRavenClient Sentry { get; private set; }
         private List<Breadcrumb> _breadcrumbs = new List<Breadcrumb>();
 
@@ -231,11 +241,11 @@ namespace Clowd.Util
         {
         }
 
-        private readonly NLog.Logger _log;
+        private NLog.Logger _log;
+        private string _name;
 
         public DefaultScopedLog(string name)
         {
-            _log = NLog.LogManager.GetLogger(name);
             Name = name;
         }
 
@@ -266,6 +276,7 @@ namespace Clowd.Util
                 SentryEvent evt = ex == null ? new SentryEvent(new SentryMessage(message)) : new SentryEvent(ex);
                 Sentry.Capture(evt);
             }
+
             base.LogBase(message, level, ex);
         }
 
@@ -273,7 +284,7 @@ namespace Clowd.Util
         {
             if (level >= MinLogLevel)
             {
-                _log.Info(message);
+                (_log ?? NLog.LogManager.GetLogger("Default")).Info(message);
                 Console.WriteLine(message);
             }
         }
@@ -431,6 +442,7 @@ namespace Clowd.Util
             }
 
             public bool Enabled { get; set; }
+
             public string SubmitLog(string message, ErrorLevel level = ErrorLevel.Info)
             {
                 if (IsDisabled())
