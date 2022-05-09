@@ -130,13 +130,13 @@ namespace Clowd.Util
                     return;
                 }
 
-                if (!request.Url.AbsolutePath.EqualsNoCase("/args"))
+                if (!request.Url.AbsolutePath.EqualsIgnoreCase("/args"))
                 {
                     response.StatusCode = 404;
                     return;
                 }
 
-                if (!(request.ContentType ?? "").Split(';').FirstOrDefault().EqualsNoCase("application/json"))
+                if (!(request.ContentType ?? "").Split(';').FirstOrDefault().EqualsIgnoreCase("application/json"))
                 {
                     response.StatusCode = 415;
                     return;

@@ -62,8 +62,8 @@ namespace Clowd.UI.Controls
                 FlowDirection.LeftToRight,
                 new Typeface(Font, fontStyle, fontWeight, FontStretches.Normal),
                 FontSize,
-                Brushes.Black // This brush does not matter since we use the geometry of the text. 
-                );
+                Brushes.Black, // This brush does not matter since we use the geometry of the text. 
+                VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
             // Build the geometry object that represents the text.
             _textGeometry = formattedText.BuildGeometry(new Point(0, 0));
