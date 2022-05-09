@@ -17,7 +17,7 @@ namespace Clowd.UI.Dialogs.Font
             {
                 return double.Parse(value.ToString());
             }
-            catch (FormatException ex)
+            catch (FormatException)
             {
                 return 0;
             }

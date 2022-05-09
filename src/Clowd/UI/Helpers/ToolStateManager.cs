@@ -50,7 +50,6 @@ namespace Clowd.UI.Helpers
         }
     }
 
-
     public abstract class StateCapabilities : INotifyPropertyChanged
     {
         public abstract string Description { get; }

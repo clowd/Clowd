@@ -304,7 +304,7 @@ namespace Clowd.UI.Helpers
                     return dyn.RunDialog(owner);
                 }, parent);
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 // only viable fallback for Microsoft.Win32.CommonDialog is synchronous execution.
                 // dialog.ShowDialog() checks that it is being called on the same thread that created the class

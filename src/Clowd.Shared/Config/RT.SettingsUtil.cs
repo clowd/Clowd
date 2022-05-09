@@ -269,60 +269,60 @@ namespace RT.Util
             });
         }
 
-        /// <summary>
-        ///     Encrypts a password using AES. The result is encoded into base 64 for easy storage.</summary>
-        /// <param name="plain">
-        ///     Plaintext password to encrypt.</param>
-        /// <param name="key">
-        ///     The key to use for encryption. Must be exactly 32 bytes long.</param>
-        /// <returns>
-        ///     The encrypted password as a base64-encoded string.</returns>
-        public static string EncryptPassword(string plain, byte[] key)
-        {
-            if (plain == null) return null;
-            var aes = new RijndaelManaged() { Mode = CipherMode.CBC };
-            byte[] iv = RndCrypto.NextBytes(16);
-            var encryptor = aes.CreateEncryptor(key, iv);
-
-            var memoryStream = new MemoryStream();
-            memoryStream.Write(iv);
-            var cryptoStream = new CryptoStream(memoryStream, encryptor, CryptoStreamMode.Write);
-
-            var plainBytes = Encoding.UTF8.GetBytes(plain);
-            cryptoStream.Write(plainBytes, 0, plainBytes.Length);
-            cryptoStream.FlushFinalBlock();
-            cryptoStream.Close();
-
-            return memoryStream.ToArray().Base64UrlEncode();
-        }
-
-        /// <summary>
-        ///     Decrypts a password encrypted with <see cref="EncryptPassword"/>.</summary>
-        /// <param name="cipher">
-        ///     The output of <see cref="EncryptPassword"/>.</param>
-        /// <param name="key">
-        ///     The key used to encrypt the password.</param>
-        /// <returns>
-        ///     The decrypted password.</returns>
-        public static string DecryptPassword(string cipher, byte[] key)
-        {
-            if (cipher == null) return null;
-
-            var cipherBytes = cipher.Base64UrlDecode();
-            var memoryStream = new MemoryStream(cipherBytes);
-            byte[] iv = memoryStream.Read(16);
-
-            var aes = new RijndaelManaged() { Mode = CipherMode.CBC };
-            var decryptor = aes.CreateDecryptor(key, iv);
-
-            var cryptoStream = new CryptoStream(memoryStream, decryptor, CryptoStreamMode.Read);
-
-            var plainBytes = new byte[cipherBytes.Length];
-            int plainByteCount = cryptoStream.Read(plainBytes, 0, plainBytes.Length);
-            cryptoStream.Close();
-
-            return Encoding.UTF8.GetString(plainBytes, 0, plainByteCount);
-        }
+        // /// <summary>
+        // ///     Encrypts a password using AES. The result is encoded into base 64 for easy storage.</summary>
+        // /// <param name="plain">
+        // ///     Plaintext password to encrypt.</param>
+        // /// <param name="key">
+        // ///     The key to use for encryption. Must be exactly 32 bytes long.</param>
+        // /// <returns>
+        // ///     The encrypted password as a base64-encoded string.</returns>
+        // public static string EncryptPassword(string plain, byte[] key)
+        // {
+        //     if (plain == null) return null;
+        //     var aes = new RijndaelManaged() { Mode = CipherMode.CBC };
+        //     byte[] iv = RndCrypto.NextBytes(16);
+        //     var encryptor = aes.CreateEncryptor(key, iv);
+        //
+        //     var memoryStream = new MemoryStream();
+        //     memoryStream.Write(iv);
+        //     var cryptoStream = new CryptoStream(memoryStream, encryptor, CryptoStreamMode.Write);
+        //
+        //     var plainBytes = Encoding.UTF8.GetBytes(plain);
+        //     cryptoStream.Write(plainBytes, 0, plainBytes.Length);
+        //     cryptoStream.FlushFinalBlock();
+        //     cryptoStream.Close();
+        //
+        //     return memoryStream.ToArray().Base64UrlEncode();
+        // }
+        //
+        // /// <summary>
+        // ///     Decrypts a password encrypted with <see cref="EncryptPassword"/>.</summary>
+        // /// <param name="cipher">
+        // ///     The output of <see cref="EncryptPassword"/>.</param>
+        // /// <param name="key">
+        // ///     The key used to encrypt the password.</param>
+        // /// <returns>
+        // ///     The decrypted password.</returns>
+        // public static string DecryptPassword(string cipher, byte[] key)
+        // {
+        //     if (cipher == null) return null;
+        //
+        //     var cipherBytes = cipher.Base64UrlDecode();
+        //     var memoryStream = new MemoryStream(cipherBytes);
+        //     byte[] iv = memoryStream.Read(16);
+        //
+        //     var aes = new RijndaelManaged() { Mode = CipherMode.CBC };
+        //     var decryptor = aes.CreateDecryptor(key, iv);
+        //
+        //     var cryptoStream = new CryptoStream(memoryStream, decryptor, CryptoStreamMode.Read);
+        //
+        //     var plainBytes = new byte[cipherBytes.Length];
+        //     int plainByteCount = cryptoStream.Read(plainBytes, 0, plainBytes.Length);
+        //     cryptoStream.Close();
+        //
+        //     return Encoding.UTF8.GetString(plainBytes, 0, plainByteCount);
+        // }
     }
 
     /// <summary>

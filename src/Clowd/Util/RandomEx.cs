@@ -135,7 +135,7 @@ namespace Clowd.Util
             // Guid.NewGuid and System.Random are not particularly random. By using a
             // cryptographically-secure random number generator, the caller is always
             // protected, regardless of use.
-            using (var rng = new RNGCryptoServiceProvider())
+            using (var rng = RandomNumberGenerator.Create())
             {
                 var result = new StringBuilder();
                 var buf = new byte[128];
