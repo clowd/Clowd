@@ -11,7 +11,6 @@ using System.Windows.Input;
 using Clowd.PlatformUtil.Windows;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using NuGet.Versioning;
 using Squirrel;
 
 [assembly: AssemblyMetadata("SquirrelAwareVersion", "1")]
@@ -89,7 +88,10 @@ namespace Clowd
 
         private static void OnEveryRun(SemanticVersion ver, IAppTools tools, bool firstRun)
         {
-            var logDir = tools.IsInstalledApp ? tools.AppDirectory : SquirrelRuntimeInfo.BaseDirectory;
+            bool isInstalled = tools.CurrentlyInstalledVersion() != null;
+            var logDir = isInstalled ? (tools as UpdateManager)?.AppDirectory : null;
+            logDir = logDir ?? SquirrelRuntimeInfo.BaseDirectory;
+
             var logFile = Path.Combine(logDir, "Clowd.log");
             var logArchiveFile = Path.Combine(logDir, "Clowd.archive{###}.log");
 
@@ -111,7 +113,7 @@ namespace Clowd
             SquirrelLogger.Register();
 
             IsFirstRun = firstRun;
-            _model = new SquirrelUpdateViewModel(JustRestarted, tools.IsInstalledApp);
+            _model = new SquirrelUpdateViewModel(JustRestarted, isInstalled);
         }
 
         public class SquirrelUpdateViewModel : SimpleNotifyObject
@@ -139,6 +141,7 @@ namespace Clowd
                         _srv.ExplorerAllFilesMenu = null;
                         _srv.ExplorerDirectoryMenu = null;
                     }
+
                     OnPropertyChanged();
                 }
             }
