@@ -34,6 +34,7 @@ namespace Clowd.UI
             ResizeMode = ResizeMode.NoResize;
             WindowStyle = WindowStyle.None;
             ShowActivated = false;
+            Background = AppStyles.IdealBackgroundBrush;
             ShowInTaskbar = false;
             ScreenPosition = new ScreenRect(Platform.Current.VirtualScreen.Bounds.TopLeft - new ScreenPoint(100, 100), new ScreenSize(5, 5));
             KeyDown += FloatingButtonWindow_KeyDown;
@@ -48,7 +49,6 @@ namespace Clowd.UI
 
             var sp = new StackPanel();
             sp.Orientation = Orientation.Horizontal;
-            sp.Background = AppStyles.IdealBackgroundBrush;
 
             if (!_buttons.Any())
                 throw new ArgumentException("Can not create a FloatingButtonWindow with no buttons.");
