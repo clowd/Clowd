@@ -121,7 +121,7 @@ void SetButtonPanelPositions(const ScreenInfo& screen, const RECT* selectionRect
     int maxDistance = (int)ceil(15 * dpiZoom);
     int buttonSpacing = (int)ceil(3 * dpiZoom);
     int svgButtonSize = (int)floor(UNSCALED_BUTTON_SIZE * dpiZoom);
-    int areaSize = (int)floor(svgButtonSize * 0.75);
+    int areaSize = (int)floor(svgButtonSize);// * 0.75);
     int longEdgePx = svgButtonSize * NUM_SVG_BUTTONS + (buttonSpacing * 2) + areaSize;
     int shortEdgePx = svgButtonSize;
 
@@ -922,23 +922,23 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
 
                 DWRITE_TEXT_METRICS metricsWidth, metricsHeight, metricsX;
                 DxRef<IDWriteTextLayout> layoutWidth, layoutHeight, layoutX;
-                output->CreateFontLayout(layoutWidth, txtButtonLabel, to_wstring(RECT_WIDTH(data.selection)), &metricsWidth, bw, bh);
-                output->CreateFontLayout(layoutHeight, txtButtonLabel, to_wstring(RECT_HEIGHT(data.selection)), &metricsHeight, bw, bh);
-                output->CreateFontLayout(layoutX, txtButtonLabel, L"\x00D7", &metricsX, bw, bh);
+                output->CreateFontLayout(layoutWidth, txtInfo, to_wstring(RECT_WIDTH(data.selection)), &metricsWidth, bw, bh);
+                output->CreateFontLayout(layoutHeight, txtInfo, to_wstring(RECT_HEIGHT(data.selection)), &metricsHeight, bw, bh);
+                output->CreateFontLayout(layoutX, txtInfo, L"\x00D7", &metricsX, bw, bh);
                 dc->DrawTextLayout(D2D1::Point2F(br.left + (bw / 2) - (metricsWidth.width / 2), br.top + (bh / 4) - (metricsWidth.height / 2)), layoutWidth, brushWhite);
                 dc->DrawTextLayout(D2D1::Point2F(br.left + (bw / 2) - (metricsHeight.width / 2), br.top + (bh / 1.34) - (metricsHeight.height / 2)), layoutHeight, brushWhite);
                 dc->DrawTextLayout(D2D1::Point2F(br.left + (bw / 2) - (metricsX.width / 2), br.top + (bh / 2) - (metricsX.height / 2)), layoutX, brushWhite70);
 
                 float line = 2;
                 float edge = floor(bw / 3);
-                dc->FillRectangle(D2D1_RECT_F{ br.left, br.top, br.left + edge, br.top + line }, brushWhite70);
-                dc->FillRectangle(D2D1_RECT_F{ br.left, br.top, br.left + line, br.top + edge }, brushWhite70);
-                dc->FillRectangle(D2D1_RECT_F{ br.right - edge, br.top, br.right, br.top + line }, brushWhite70);
-                dc->FillRectangle(D2D1_RECT_F{ br.right - line, br.top, br.right, br.top + edge }, brushWhite70);
-                dc->FillRectangle(D2D1_RECT_F{ br.left, br.bottom - line, br.left + edge, br.bottom }, brushWhite70);
-                dc->FillRectangle(D2D1_RECT_F{ br.left, br.bottom - edge, br.left + line, br.bottom }, brushWhite70);
-                dc->FillRectangle(D2D1_RECT_F{ br.right - edge, br.bottom - line, br.right, br.bottom }, brushWhite70);
-                dc->FillRectangle(D2D1_RECT_F{ br.right - line, br.bottom - edge, br.right, br.bottom }, brushWhite70);
+                dc->FillRectangle(D2D1_RECT_F{ br.left, br.top, br.left + edge, br.top + line }, brushWhite);
+                dc->FillRectangle(D2D1_RECT_F{ br.left, br.top, br.left + line, br.top + edge }, brushWhite);
+                dc->FillRectangle(D2D1_RECT_F{ br.right - edge, br.top, br.right, br.top + line }, brushWhite);
+                dc->FillRectangle(D2D1_RECT_F{ br.right - line, br.top, br.right, br.top + edge }, brushWhite);
+                dc->FillRectangle(D2D1_RECT_F{ br.left, br.bottom - line, br.left + edge, br.bottom }, brushWhite);
+                dc->FillRectangle(D2D1_RECT_F{ br.left, br.bottom - edge, br.left + line, br.bottom }, brushWhite);
+                dc->FillRectangle(D2D1_RECT_F{ br.right - edge, br.bottom - line, br.right, br.bottom }, brushWhite);
+                dc->FillRectangle(D2D1_RECT_F{ br.right - line, br.bottom - edge, br.right, br.bottom }, brushWhite);
             }
 
         }
