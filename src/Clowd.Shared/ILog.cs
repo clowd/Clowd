@@ -29,8 +29,6 @@ namespace Clowd
         //void WriteToFile(string directory);
     }
 
-
-
     public enum LogSeverity
     {
         Debug = 1,
