@@ -87,6 +87,6 @@ namespace Clowd.Video
             OnStatusRecieved((int)Convert.ToDouble(fps), 0, ts);
         }
 
-        public override IAudioLevelListener CreateListener(IAudioDevice device) => null;
+        public override IAudioLevelListener CreateListener(AudioDeviceInfo device) => null;
     }
 }

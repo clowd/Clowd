@@ -81,7 +81,7 @@ namespace Clowd.Config
             set => Set(ref _captureSpeaker, value);
         }
 
-        public IAudioSpeakerDevice CaptureSpeakerDevice
+        public AudioDeviceInfo CaptureSpeakerDevice
         {
             get => _captureSpeakerDevice;
             set => Set(ref _captureSpeakerDevice, value);
@@ -93,7 +93,7 @@ namespace Clowd.Config
             set => Set(ref _captureMicrophone, value);
         }
 
-        public IAudioMicrophoneDevice CaptureMicrophoneDevice
+        public AudioDeviceInfo CaptureMicrophoneDevice
         {
             get => _captureMicrophoneDevice;
             set => Set(ref _captureMicrophoneDevice, value);
@@ -119,9 +119,9 @@ namespace Clowd.Config
         private VideoPerformance _performance = VideoPerformance.Medium;
         private VideoSubsamplingMode _subsamplingMode = VideoSubsamplingMode.yuv420;
         private bool _captureSpeaker = false;
-        private IAudioSpeakerDevice _captureSpeakerDevice;
+        private AudioDeviceInfo _captureSpeakerDevice;
         private bool _captureMicrophone = false;
-        private IAudioMicrophoneDevice _captureMicrophoneDevice;
+        private AudioDeviceInfo _captureMicrophoneDevice;
         private bool _hardwareAccelerated = true;
         private bool _trackMouseClicks = true;
     }

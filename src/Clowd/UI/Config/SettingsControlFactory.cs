@@ -12,6 +12,7 @@ using Clowd.Config;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
+using Clowd.Video;
 
 namespace Clowd.UI.Config
 {
@@ -129,18 +130,27 @@ namespace Clowd.UI.Config
             if (pd.Is(typeof(Color)))
                 return SimpleControlBinding(new Dialogs.ColorPicker.ColorPicker(), pd, Dialogs.ColorPicker.ColorPicker.SelectedColorProperty);
 
-            if (pd.Is(typeof(IAudioMicrophoneDevice)))
-                return ComboSelectBinding(Video.AudioDeviceManager.GetMicrophones, pd, nameof(IAudioDevice.FriendlyName), false);
+            if (pd.Is(typeof(AudioDeviceInfo)))
+            {
+                var templ = new ComboDisplayTemplateSelector<AudioDeviceInfo>((a) => AudioDeviceManager.GetFriendlyName(a));
 
-            if (pd.Is(typeof(IAudioSpeakerDevice)))
-                return ComboSelectBinding(Video.AudioDeviceManager.GetSpeakers, pd, nameof(IAudioDevice.FriendlyName), false);
+                // TODO: This is a super big hack. Do this better.
+                if (pd.Name.Contains("Microphone"))
+                {
+                    return ComboSelectBinding(AudioDeviceManager.GetMicrophones, pd, templ, false);
+                }
+                else
+                {
+                    return ComboSelectBinding(AudioDeviceManager.GetSpeakers, pd, templ, false);
+                }
+            }
 
             if (pd.Is(typeof(GlobalTrigger)))
                 return SimpleControlBinding(new GlobalTriggerEditor(), pd, GlobalTriggerEditor.TriggerProperty);
 
             if (pd.Is(typeof(FrameworkElement)))
             {
-                var val = (FrameworkElement)pd.GetValue(obj);// GetPropertyValue<FrameworkElement>();
+                var val = (FrameworkElement)pd.GetValue(obj); // GetPropertyValue<FrameworkElement>();
                 // if the control was used elsewhere prior, we need to reset the logical tree before using it again
                 val.DisconnectFromLogicalParent();
                 return val;
@@ -150,7 +160,8 @@ namespace Clowd.UI.Config
             {
                 return ButtonControl("Reset", async (s, e) =>
                 {
-                    if (await NiceDialog.ShowYesNoPromptAsync(s as FrameworkElement, NiceDialogIcon.Warning, "Are you sure you wish to reset these settings to defaults?"))
+                    if (await NiceDialog.ShowYesNoPromptAsync(s as FrameworkElement, NiceDialogIcon.Warning,
+                            "Are you sure you wish to reset these settings to defaults?"))
                     {
                         pd.SetValue(obj, Activator.CreateInstance(pd.PropertyType));
                     }
@@ -248,16 +259,60 @@ namespace Clowd.UI.Config
             return control;
         }
 
-        FrameworkElement ComboSelectBinding(Func<System.Collections.IEnumerable> items, PropertyDescriptor pd, string displayPath, bool canClear = true)
+        class ComboDisplayTemplateSelector<T> : DataTemplateSelector
+        {
+            private readonly Func<T, string> _factory;
+
+            public ComboDisplayTemplateSelector(Func<T, string> factory)
+            {
+                _factory = factory;
+            }
+            
+            public override DataTemplate SelectTemplate(object item, DependencyObject container)
+            {
+                var template = new DataTemplate();
+                FrameworkElementFactory text = new FrameworkElementFactory(typeof(TextBlock));
+                Binding binding = new Binding();
+                binding.Source = item;
+                binding.Converter = new ComboDisplayConverter<T>(_factory);
+                text.SetBinding(TextBlock.TextProperty, binding);
+                template.VisualTree = text;
+                template.Seal();
+                return template;
+            }
+        }
+
+        class ComboDisplayConverter<T> : IValueConverter
+        {
+            private readonly Func<T, string> _factory;
+
+            public ComboDisplayConverter(Func<T, string> factory)
+            {
+                _factory = factory;
+            }
+            
+            public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+            {
+                return _factory((T)value);
+            }
+
+            public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            {
+                throw new NotSupportedException();
+            }
+        }
+
+        FrameworkElement ComboSelectBinding(Func<System.Collections.IEnumerable> items, PropertyDescriptor pd, DataTemplateSelector template = null,
+            bool canClear = true)
         {
             var bind = CreateBinding(pd.Name);
 
             var combo = new ComboBox();
-            combo.DisplayMemberPath = displayPath;
+            if (template != null)
+                combo.ItemTemplateSelector = template;
             combo.ItemsSource = items();
             combo.MinWidth = 160;
             combo.DropDownOpened += (s, e) => { combo.ItemsSource = items(); };
-            //combo.SelectionChanged += (s, e) => { App.Current?.Settings?.SaveQuiet(); };
             combo.SetBinding(ComboBox.SelectedItemProperty, bind);
 
             if (canClear)
@@ -279,7 +334,8 @@ namespace Clowd.UI.Config
             }
         }
 
-        FrameworkElement ButtonControl(string buttonText, RoutedEventHandler buttonClick, FrameworkElement top = null, FrameworkElement right = null, FrameworkElement bottom = null)
+        FrameworkElement ButtonControl(string buttonText, RoutedEventHandler buttonClick, FrameworkElement top = null, FrameworkElement right = null,
+            FrameworkElement bottom = null)
         {
             StackPanel panel = new StackPanel();
             panel.Orientation = Orientation.Vertical;
