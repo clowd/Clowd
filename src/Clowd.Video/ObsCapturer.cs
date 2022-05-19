@@ -11,6 +11,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using NLog;
 
 namespace Clowd.Video
 {
@@ -30,11 +31,11 @@ namespace Clowd.Video
         private StringBuilder _output = new StringBuilder();
 
         private static ObsCapturer _instance;
-        private readonly static object _lock = new object();
-        private readonly IScopedLog _log;
+        private static readonly object _lock = new object();
+        private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
         private readonly string _libraryPath;
 
-        public ObsCapturer(IScopedLog log, string libraryPath)
+        public ObsCapturer(string libraryPath)
         {
             lock (_lock)
             {
@@ -78,7 +79,6 @@ namespace Clowd.Video
 
             _source = new CancellationTokenSource();
             _token = _source.Token;
-            _log = log;
             _libraryPath = libraryPath;
             _setup = Task.Run(Initialize);
         }
@@ -127,7 +127,7 @@ namespace Clowd.Video
                 }
                 catch (Exception ex)
                 {
-                    scoped.Error("Unable to parse osn version from package.json. Falling back to legacy OBS hosting", ex);
+                    scoped.Error(ex, "Unable to parse osn version from package.json. Falling back to legacy OBS hosting");
                     var obsexpress = new ProcessStartInfo()
                     {
                         FileName = Path.Combine(_libraryPath, "obs-express.exe"),
@@ -182,7 +182,7 @@ namespace Clowd.Video
                             {
                                 errorCount++;
                                 if (errorCount % 10 == 0)
-                                    _log.Error("STATUS CHECK FAILING - Count: " + errorCount, ex);
+                                    _log.Warn(ex, "STATUS CHECK FAILING - Count: " + errorCount);
                             }
                         }
                     }

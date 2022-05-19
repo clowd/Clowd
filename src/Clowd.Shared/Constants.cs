@@ -21,8 +21,6 @@ namespace Clowd
         public const string ExperimentalReleaseFeedUrl = "https://clowd-releases.s3.eu-central-003.backblazeb2.com/experimental/";
         public const string InstallerExeName = "ClowdCLI.exe";
         public const string UpdateProcessName = "ClowdUpdate";
-        public static bool Debugging => System.Diagnostics.Debugger.IsAttached;
-        public static string CurrentExePath => System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
     }
 
     public static class PathConstants
@@ -37,6 +35,7 @@ namespace Clowd
         public static string SessionData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "sessions");
         public static string PluginData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "plugins");
         public static string SettingsData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
+        public static string AppRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
 
         public static string GetFolderPath(string name, string parentDirectory)
         {
