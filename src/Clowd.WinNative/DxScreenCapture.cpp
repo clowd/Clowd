@@ -41,7 +41,7 @@ typedef struct
 typedef struct
 {
     DWORD resourceId;
-    wchar_t* text;
+    const wchar_t* text;
     unsigned int underlineIndex;
     DWORD vKeyCode;
     BOOL primary;
@@ -50,16 +50,16 @@ typedef struct
 } SVG_BUTTON_DESCRIPTION;
 
 SVG_BUTTON_DESCRIPTION captureButtonDetails[NUM_SVG_BUTTONS] = {
-    { IDR_SVG7, L"UPLOAD", 0, 0x55, true },
-    { IDR_SVG3, L"PHOTO", 0, 0x50, true },
-    { IDR_SVG6, L"VIDEO", 0, 0x56, true },
-    { IDR_SVG1, L"COPY", 0, 0x43, true },
-    { IDR_SVG5, L"SAVE", 0, 0x53, true },
-    { IDR_SVG4, L"RESET", 0, 0x52, false },
-    { IDR_SVG2, L"EXIT", 1, 0x58, false },
+    { IDR_SVG7, L"UPLOAD", 0, 0x55, true, nullptr },
+    { IDR_SVG3, L"EDIT", 0, 0x50, true, nullptr },
+    { IDR_SVG6, L"VIDEO", 0, 0x56, true, nullptr },
+    { IDR_SVG1, L"COPY", 0, 0x43, true, nullptr },
+    { IDR_SVG5, L"SAVE", 0, 0x53, true, nullptr },
+    { IDR_SVG4, L"RESET", 0, 0x52, false, nullptr },
+    { IDR_SVG2, L"EXIT", 1, 0x58, false, nullptr },
 };
 
-inline int _RoundPixel(double px, double preferDown)
+inline int _RoundPixel(double px, bool preferDown)
 {
     int pfloor = (int)floor(px);
     double position = px - pfloor;
