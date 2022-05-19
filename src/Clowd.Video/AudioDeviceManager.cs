@@ -2,142 +2,76 @@
 using NAudio.Wave;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd.Video
 {
-    public class AudioDeviceManager
+    public static class AudioDeviceManager
     {
-        public static IEnumerable<IAudioSpeakerDevice> GetSpeakers()
+        private const string TYPE_MICROPHONE = "microphone";
+        private const string TYPE_SPEAKER = "speaker";
+        private const string DEVICE_DEFAULT = "default";
+
+        public static IEnumerable<AudioDeviceInfo> GetSpeakers()
         {
             yield return GetDefaultSpeaker();
-            foreach (var d in GetDevices(DataFlow.Render).Select(m => new NAudioDevice(m.ID)))
+            foreach (var d in GetDevices(DataFlow.Render, TYPE_SPEAKER))
                 yield return d;
         }
 
-        public static IEnumerable<IAudioMicrophoneDevice> GetMicrophones()
+        public static IEnumerable<AudioDeviceInfo> GetMicrophones()
         {
             yield return GetDefaultMicrophone();
-            foreach (var d in GetDevices(DataFlow.Capture).Select(m => new NAudioDevice(m.ID)))
+            foreach (var d in GetDevices(DataFlow.Capture, TYPE_MICROPHONE))
                 yield return d;
         }
 
-        public static IAudioMicrophoneDevice GetDefaultMicrophone()
+        public static AudioDeviceInfo GetDefaultMicrophone()
         {
-            return new NAudioDevice(DataFlow.Capture);
+            return new() { DeviceId = DEVICE_DEFAULT, DeviceType = TYPE_MICROPHONE };
         }
 
-        public static IAudioSpeakerDevice GetDefaultSpeaker()
+        public static AudioDeviceInfo GetDefaultSpeaker()
         {
-            return new NAudioDevice(DataFlow.Render);
+            return new() { DeviceId = DEVICE_DEFAULT, DeviceType = TYPE_SPEAKER };
         }
 
-        protected static IEnumerable<MMDevice> GetDevices(DataFlow flow)
+        public static string GetFriendlyName(AudioDeviceInfo info)
+        {
+            if (info.DeviceId.EqualsIgnoreCase(DEVICE_DEFAULT))
+            {
+                if (info.DeviceType.EqualsIgnoreCase(TYPE_SPEAKER))
+                {
+                    using var def = WasapiLoopbackCapture.GetDefaultLoopbackCaptureDevice();
+                    return "Default - " + def.FriendlyName;
+                }
+
+                if (info.DeviceType.EqualsIgnoreCase(TYPE_MICROPHONE))
+                {
+                    using var def = WasapiCapture.GetDefaultCaptureDevice();
+                    return "Default - " + def.FriendlyName;
+                }
+
+                throw new ArgumentException("If DeviceId is 'default', DeviceType must be 'speaker' or 'microphone'.");
+            }
+
+            using var enumerator = new MMDeviceEnumerator();
+            using var dev = enumerator.GetDevice(info.DeviceId);
+            return dev.FriendlyName;
+        }
+
+        private static IEnumerable<AudioDeviceInfo> GetDevices(DataFlow flow, string type)
         {
             using (MMDeviceEnumerator enumerator = new MMDeviceEnumerator())
             {
                 foreach (MMDevice device in enumerator.EnumerateAudioEndPoints(flow, DeviceState.Active))
                 {
-                    yield return device;
+                    using (device)
+                    {
+                        yield return new() { DeviceId = device.ID, DeviceType = type };
+                    }
                 }
             }
         }
-    }
-
-    internal class NAudioDevice : IAudioMicrophoneDevice, IAudioSpeakerDevice, IEquatable<NAudioDevice>
-    {
-        public string DeviceId
-        {
-            get
-            {
-                if (_deviceId == DEFAULT_CAPTURE || _deviceId == DEFAULT_RENDER)
-                    return "default";
-
-                var mm = GetMM();
-                try
-                {
-                    return mm.device.ID;
-                }
-                finally
-                {
-                    mm.device.Dispose();
-                }
-            }
-        }
-
-        public string FriendlyName
-        {
-            get
-            {
-                var mm = GetMM();
-                try
-                {
-                    return mm.isDefault ? "Default - " + mm.device.FriendlyName : mm.device.FriendlyName;
-                }
-                finally
-                {
-                    mm.device.Dispose();
-                }
-            }
-        }
-
-        public string DeviceType
-        {
-            get
-            {
-                var mm = GetMM();
-                try
-                {
-                    return mm.device.DataFlow == DataFlow.Capture ? "microphone" : "speaker";
-                }
-                finally
-                {
-                    mm.device.Dispose();
-                }
-            }
-        }
-
-        const string DEFAULT_CAPTURE = "default-capture";
-        const string DEFAULT_RENDER = "default-render";
-
-        private string _deviceId;
-
-        private NAudioDevice() { } // serialization
-
-        public NAudioDevice(DataFlow flow)
-        {
-            _deviceId = flow == DataFlow.Capture ? DEFAULT_CAPTURE : DEFAULT_RENDER;
-        }
-
-        public NAudioDevice(string deviceId)
-        {
-            _deviceId = deviceId;
-        }
-
-        private (bool isDefault, MMDevice device) GetMM()
-        {
-            if (_deviceId == DEFAULT_CAPTURE)
-                return (true, WasapiCapture.GetDefaultCaptureDevice());
-
-            if (_deviceId == DEFAULT_RENDER)
-                return (true, WasapiLoopbackCapture.GetDefaultLoopbackCaptureDevice());
-
-            using (var enumerator = new MMDeviceEnumerator())
-                return (false, enumerator.GetDevice(_deviceId));
-        }
-
-        public static bool operator ==(NAudioDevice d1, NAudioDevice d2) => d1.Equals(d2);
-
-        public static bool operator !=(NAudioDevice d1, NAudioDevice d2) => !d1.Equals(d2);
-
-        public override bool Equals(object obj)
-        {
-            if (obj is NAudioDevice dev) return Equals(dev);
-            return false;
-        }
-
-        public bool Equals(NAudioDevice other) => _deviceId == other._deviceId;
-        public override int GetHashCode() => _deviceId?.GetHashCode() ?? 0;
     }
 }

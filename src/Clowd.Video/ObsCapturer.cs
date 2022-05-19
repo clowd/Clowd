@@ -252,7 +252,7 @@ namespace Clowd.Video
             }
         }
 
-        public override IAudioLevelListener CreateListener(IAudioDevice device)
+        public override IAudioLevelListener CreateListener(AudioDeviceInfo device)
         {
             return new ObsAudioListener(_setup, device);
         }
@@ -313,7 +313,7 @@ namespace Clowd.Video
 
         private class ObsAudioListener : IAudioLevelListener
         {
-            public IAudioDevice Device { get; }
+            public AudioDeviceInfo Device { get; }
             public ClientWebSocket WebSocket { get; }
             public CancellationTokenSource TokenSource { get; }
 
@@ -322,7 +322,7 @@ namespace Clowd.Video
 
             private double _peak;
 
-            public ObsAudioListener(Task init, IAudioDevice device)
+            public ObsAudioListener(Task init, AudioDeviceInfo device)
             {
                 _initThread = init;
                 _peak = short.MinValue;
