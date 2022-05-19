@@ -10,6 +10,7 @@ using Clowd.UI.Helpers;
 using Clowd.UI.Unmanaged;
 using Clowd.Util;
 using Clowd.Video;
+using NLog;
 
 namespace Clowd.UI
 {
@@ -37,12 +38,12 @@ namespace Clowd.UI
         private FloatingButtonWindow _floating;
         private bool _isCancelled = false;
 
-        private static readonly IScopedLog _log = new DefaultScopedLog(Constants.ClowdAppName);
+        private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
         public VideoCaptureWindow()
         {
             var obsPath = Path.Combine(AppContext.BaseDirectory, "obs-express");
-            _capturer = new ObsCapturer(_log, obsPath);
+            _capturer = new ObsCapturer(obsPath);
             _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
             _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
 
@@ -124,6 +125,7 @@ namespace Clowd.UI
             filename = Path.Combine(Path.GetFullPath(_settings.OutputDirectory), filename);
 
             _capturer.WriteLogToFile(filename);
+            _log.Error("CapturerCriticalError: " + File.ReadAllText(filename));
             File.AppendAllText(filename, Environment.NewLine + Environment.NewLine + e.Error);
 
             if (await NiceDialog.ShowPromptAsync(null,

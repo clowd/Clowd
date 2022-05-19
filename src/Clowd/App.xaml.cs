@@ -19,9 +19,13 @@ using Clowd.UI.Helpers;
 using Clowd.Util;
 using Clowd.Video;
 using Hardcodet.Wpf.TaskbarNotification;
+using NLog;
+using NLog.Config;
+using NLog.Targets;
 using Ookii.Dialogs.Wpf;
 using RT.Serialization;
 using RT.Util.ExtensionMethods;
+using Squirrel;
 using Color = System.Windows.Media.Color;
 
 namespace Clowd
@@ -31,16 +35,14 @@ namespace Clowd
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
         public static bool CanUpload => !IsDesignMode;
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
-        public static IScopedLog DefaultLog { get; private set; }
 
         private TaskbarIcon _taskbarIcon;
         private MutexArgsForwarder _processor;
 
         protected override async void OnStartup(StartupEventArgs e)
         {
-            DefaultLog = new DefaultScopedLog("Clowd");
-
             var appArgs = SquirrelUtil.Startup(e.Args);
+            var log = SetupExceptionHandling(SquirrelUtil.IsInstalled);
 
             try
             {
@@ -49,14 +51,13 @@ namespace Clowd
                 // initialize GDI+ (our native lib depends on it, but does not initialize it)
                 new System.Drawing.Region().Dispose();
 
-                SetupExceptionHandling();
-
                 await SetupMutex(appArgs);
                 await SetupSettings();
 
                 // theme
                 WPFUI.Appearance.Theme.Set(WPFUI.Appearance.Theme.GetSystemTheme() == WPFUI.Appearance.SystemThemeType.Light
-                    ? WPFUI.Appearance.ThemeType.Light : WPFUI.Appearance.ThemeType.Dark);
+                    ? WPFUI.Appearance.ThemeType.Light
+                    : WPFUI.Appearance.ThemeType.Dark);
                 SetupTrayIconAndTheme();
                 WPFUI.Appearance.Theme.Changed += (s, e) => SetupTrayIconAndTheme();
 
@@ -76,7 +77,7 @@ namespace Clowd
             }
             catch (Exception ex)
             {
-                DefaultLog.Error(ex);
+                log.Fatal(ex);
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.ToString(), "Error starting Clowd. The program will now exit.");
                 ExitApp();
             }
@@ -101,8 +102,8 @@ namespace Clowd
             catch (Exception ex)
             {
                 if (await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Error,
-                    "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
-                    "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
+                        "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
+                        "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
                 {
                     SettingsRoot.CreateNew();
                     SettingsRoot.Current.Save();
@@ -137,16 +138,59 @@ namespace Clowd
             //setTheme();
         }
 
-        private void SetupExceptionHandling()
+        private Logger SetupExceptionHandling(bool isInstalled)
         {
+            string sentryDsn = null;
+
 #if !DEBUG
-            DefaultScopedLog.EnableSentry("https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666");
+            sentryDsn = "https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666";
 #endif
+
+            var config = new LoggingConfiguration();
+
+            config.AddSentry(o =>
+            {
+                o.Layout = "${message}";
+                o.BreadcrumbLayout = "${logger}: ${message}";
+                o.Dsn = sentryDsn;
+                o.AttachStacktrace = true;
+                o.SendDefaultPii = true;
+                o.IncludeEventDataOnBreadcrumbs = true;
+                o.ShutdownTimeoutSeconds = 5;
+                o.AddTag("logger", "${logger}");
+            });
+
+            config.AddTarget(new DebuggerTarget("debugger"));
+            config.AddTarget(new ColoredConsoleTarget("console"));
+            config.AddRuleForAllLevels("console");
+            config.AddRuleForAllLevels("debugger");
+
+            var logDir = isInstalled ? Path.Combine(SquirrelRuntimeInfo.BaseDirectory, "..") : SquirrelRuntimeInfo.BaseDirectory;
+            var logFile = Path.Combine(logDir, "Clowd.log");
+            var logArchiveFile = Path.Combine(logDir, "Clowd.archive{###}.log");
+
+            config.AddTarget(new FileTarget("file")
+            {
+                FileName = logFile,
+                Layout = new NLog.Layouts.SimpleLayout("${longdate} [${level:uppercase=true}] - ${message}"),
+                ConcurrentWrites = true, // should allow multiple processes to use the same file
+                KeepFileOpen = true,
+                ArchiveFileName = logArchiveFile,
+                ArchiveNumbering = ArchiveNumberingMode.Sequence,
+                ArchiveAboveSize = 1_000_000,
+                MaxArchiveFiles = 2,
+            });
+
+            config.AddRule(LogLevel.Debug, LogLevel.Fatal, "file");
+            SquirrelLogger.Register();
+            LogManager.Configuration = config;
+
+            var log = LogManager.GetLogger("GlobalHandler");
 
             System.Windows.Forms.Application.ThreadException += (object sender, ThreadExceptionEventArgs e) =>
             {
                 if (Debugger.IsAttached) Debugger.Break();
-                DefaultLog.Error("WindowsFormsApplicationThreadException", e.Exception);
+                log.Fatal(e.Exception, "WindowsFormsApplicationThreadException");
                 MessageBox.Show("An unrecoverable error has occurred. The application will now exit.", "WindowsFormsApplicationThreadException");
             };
 
@@ -154,7 +198,7 @@ namespace Clowd
             {
                 if (Debugger.IsAttached) Debugger.Break();
                 if (e.ExceptionObject is Exception ex)
-                    DefaultLog.Error("AppDomainUnhandledException", ex);
+                    log.Fatal(ex, "AppDomainUnhandledException");
                 MessageBox.Show("An unrecoverable error has occurred. The application will now exit.", "AppDomainUnhandledException");
             };
 
@@ -162,9 +206,11 @@ namespace Clowd
             {
                 if (Debugger.IsAttached) Debugger.Break();
                 e.Handled = true;
-                DefaultLog.Error("DispatcherUnhandledException", e.Exception);
+                log.Error(e.Exception, "DispatcherUnhandledException");
                 NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Exception.ToString(), "An error has occurred.");
             };
+
+            return log;
         }
 
         private async Task SetupMutex(string[] args)
@@ -179,10 +225,10 @@ namespace Clowd
             {
                 if (await _processor.Startup(args) == false)
                 {
-                    if (Constants.Debugging && await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Warning,
-                        "There is already an instance of clowd running. Would you like to kill it before continuing?",
-                        "Debugger attached; Clowd already running",
-                        "Kill Clowd", "Exit"))
+                    if (Debugger.IsAttached && await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Warning,
+                            "There is already an instance of clowd running. Would you like to kill it before continuing?",
+                            "Debugger attached; Clowd already running",
+                            "Kill Clowd", "Exit"))
                     {
                         KillOtherClowdProcess();
                         if (await _processor.Startup(args) == false)
@@ -354,8 +400,15 @@ namespace Clowd
 
         public void ExitApp()
         {
-            try { SettingsRoot.Current.Save(); } catch { }
-            try { _taskbarIcon.Dispose(); } catch { }
+            try { SettingsRoot.Current.Save(); }
+            catch { }
+
+            try { _taskbarIcon.Dispose(); }
+            catch { }
+
+            try { LogManager.Flush(); }
+            catch { }
+
             Environment.Exit(0);
         }
 
