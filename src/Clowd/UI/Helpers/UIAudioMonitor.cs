@@ -12,7 +12,7 @@ namespace Clowd.UI.Helpers
 {
     public class UIAudioMonitor : IDisposable, INotifyPropertyChanged
     {
-        public IAudioMicrophoneDevice MicrophoneDevice
+        public AudioDeviceInfo MicrophoneDevice
         {
             get
             {
@@ -38,7 +38,7 @@ namespace Clowd.UI.Helpers
             }
         }
 
-        public IAudioSpeakerDevice SpeakerDevice
+        public AudioDeviceInfo SpeakerDevice
         {
             get
             {
@@ -102,8 +102,8 @@ namespace Clowd.UI.Helpers
             set => _settings.CaptureSpeaker = value;
         }
 
-        private IAudioMicrophoneDevice _microphoneDevice;
-        private IAudioSpeakerDevice _speakerDevice;
+        private AudioDeviceInfo _microphoneDevice;
+        private AudioDeviceInfo _speakerDevice;
         private IAudioLevelListener _lvlSpeaker;
         private IAudioLevelListener _lvlMic;
         private double _microphoneLevel;
