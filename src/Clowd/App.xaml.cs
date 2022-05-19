@@ -63,7 +63,6 @@ namespace Clowd
 
                 // start receiving command line arguments
                 _processor.Ready();
-
                 if (SquirrelUtil.IsFirstRun)
                 {
                     PageManager.Current.GetSettingsPage().Open(SettingsPageTab.About);
@@ -140,25 +139,22 @@ namespace Clowd
 
         private Logger SetupExceptionHandling(bool isInstalled)
         {
-            string sentryDsn = null;
-
-#if !DEBUG
-            sentryDsn = "https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666";
-#endif
-
+            
             var config = new LoggingConfiguration();
 
+#if !DEBUG
             config.AddSentry(o =>
             {
                 o.Layout = "${message}";
                 o.BreadcrumbLayout = "${logger}: ${message}";
-                o.Dsn = sentryDsn;
+                o.Dsn = "https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666";
                 o.AttachStacktrace = true;
                 o.SendDefaultPii = true;
                 o.IncludeEventDataOnBreadcrumbs = true;
                 o.ShutdownTimeoutSeconds = 5;
                 o.AddTag("logger", "${logger}");
             });
+#endif
 
             config.AddTarget(new DebuggerTarget("debugger"));
             config.AddTarget(new ColoredConsoleTarget("console"));
