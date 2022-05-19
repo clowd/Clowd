@@ -22,6 +22,7 @@ namespace Clowd
         public static string CurrentVersion { get; } = ThisAssembly.AssemblyInformationalVersion;
         public static bool IsFirstRun { get; private set; }
         public static bool JustRestarted { get; private set; }
+        public static bool IsInstalled { get; private set; }
 
         private static string UniqueAppKey => "Clowd";
         private static readonly object _lock = new object();
@@ -88,32 +89,9 @@ namespace Clowd
 
         private static void OnEveryRun(SemanticVersion ver, IAppTools tools, bool firstRun)
         {
-            bool isInstalled = tools.CurrentlyInstalledVersion() != null;
-            var logDir = isInstalled ? (tools as UpdateManager)?.AppDirectory : null;
-            logDir = logDir ?? SquirrelRuntimeInfo.BaseDirectory;
-
-            var logFile = Path.Combine(logDir, "Clowd.log");
-            var logArchiveFile = Path.Combine(logDir, "Clowd.archive{###}.log");
-
-            NLog.Config.SimpleConfigurator.ConfigureForTargetLogging(
-                new NLog.Targets.FileTarget()
-                {
-                    FileName = logFile,
-                    Layout = new NLog.Layouts.SimpleLayout("${longdate} [${level:uppercase=true}] - ${message}"),
-                    ConcurrentWrites = true, // should allow multiple processes to use the same file
-                    KeepFileOpen = true,
-                    ArchiveFileName = logArchiveFile,
-                    ArchiveNumbering = NLog.Targets.ArchiveNumberingMode.Sequence,
-                    ArchiveAboveSize = 1_000_000,
-                    MaxArchiveFiles = 1,
-                },
-                NLog.LogLevel.Debug
-            );
-
-            SquirrelLogger.Register();
-
             IsFirstRun = firstRun;
-            _model = new SquirrelUpdateViewModel(JustRestarted, isInstalled);
+            IsInstalled = tools.CurrentlyInstalledVersion() != null;
+            _model = new SquirrelUpdateViewModel(JustRestarted, IsInstalled);
         }
 
         public class SquirrelUpdateViewModel : SimpleNotifyObject
@@ -303,48 +281,13 @@ namespace Clowd
         }
     }
 
-    //internal class NLogWrapper : ILog
-    //{
-    //    private readonly NLog.Logger _log;
-
-    //    public NLogWrapper(string logName)
-    //    {
-    //        _log = NLog.LogManager.GetLogger(logName);
-    //    }
-
-    //    public void Debug(string message)
-    //    {
-    //        _log.Debug(message);
-    //    }
-
-    //    public void Error(string message)
-    //    {
-    //        _log.Error(message);
-    //    }
-
-    //    public void Error(string message, Exception ex)
-    //    {
-    //        _log.Error(ex, message);
-    //    }
-
-    //    public void Error(Exception ex)
-    //    {
-    //        _log.Error(ex);
-    //    }
-
-    //    public void Info(string message)
-    //    {
-    //        _log.Info(message);
-    //    }
-    //}
-
     internal class SquirrelLogger : Squirrel.SimpleSplat.ILogger
     {
         private readonly NLog.Logger _log;
 
         protected SquirrelLogger()
         {
-            _log = NLog.LogManager.GetLogger("SquirrelLogger");
+            _log = NLog.LogManager.GetLogger("Squirrel");
         }
 
         public Squirrel.SimpleSplat.LogLevel Level { get; set; }
