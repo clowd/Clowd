@@ -17,7 +17,7 @@
   <PropertyGroup>
     <DebugType>embedded</DebugType>
     <DebugSymbols>true</DebugSymbols>
-    <PathMap>$(SolutionDir)=./</PathMap>
+    <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))=./</PathMap>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Nerdbank.GitVersioning" Version="3.5.104" PrivateAssets="all"/>
