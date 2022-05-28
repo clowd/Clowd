@@ -4,9 +4,19 @@ param (
     [string]$keySecret,
     [string]$bucket = "clowd-releases",
     [string]$channel = "experimental",
+    [switch]$noDelta = $false,
     [switch]$skipSquirrel = $false,
     [switch]$skipObs = $false
 )
+
+function Global:Get-ByteHash ($file) {
+    $hasher = [System.Security.Cryptography.MD5]::Create()
+    $inputStream = New-Object System.IO.StreamReader ($file)
+    $hashBytes = $hasher.ComputeHash($inputStream.BaseStream)
+    $inputStream.Close()
+    return [System.Convert]::ToBase64String($hashBytes)
+}
+
 
 # Basic Setup
 $PSVersionTable.PSVersion
@@ -14,6 +24,22 @@ Set-Location $PSScriptRoot
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue" # progress bar in powershell is slow af
 $LocalProjectMode = Test-Path -Path "$PSScriptRoot\.usingproj" -PathType Leaf
+
+
+# locate s3 credentials
+if (Test-Path '.\clowd_secrets.json') {
+    $secrets = Get-Content '.\clowd_secrets.json' | Out-String | ConvertFrom-Json
+    $keyId = $secrets.keyId;
+    $keySecret = $secrets.keySecret;
+} elseif (Test-Path '..\clowd_secrets.json') {
+    $secrets = Get-Content '..\clowd_secrets.json' | Out-String | ConvertFrom-Json
+    $keyId = $secrets.keyId;
+    $keySecret = $secrets.keySecret;
+}
+
+if (($noDelta -eq $false) -And ([string]::IsNullOrEmpty($keyId) -Or [string]::IsNullOrEmpty($keySecret))) {
+    throw "Unable to find clowd_secrets.json, cannot create release / upload. Specify -noDelta option if you intend to skip this step."
+}
 
 
 # Get msbuild location
@@ -63,10 +89,32 @@ if ($mode -eq "compile") {
         &npm run build
         Copy-Item "bin" -Destination "$PSScriptRoot\publish\obs-express" -Recurse
     } else {
-        Write-Host "Downloading obs-express from GitHub" -ForegroundColor Magenta
-        Invoke-WebRequest "https://github.com/clowd/obs-express/releases/latest/download/obs-express.zip" -OutFile "$PSScriptRoot\bin\obs-express.zip"
-        Write-Host "Extracting obs-express archive" -ForegroundColor Magenta
-        Expand-Archive "$PSScriptRoot\bin\obs-express.zip" -DestinationPath "$PSScriptRoot\publish\obs-express"
+
+        $obsUrl = "https://github.com/clowd/obs-express/releases/latest/download/obs-express.zip"
+        $obsLocalPath = "$PSScriptRoot/.cache/obs-express.zip"
+
+        md "$PSScriptRoot/.cache" -Force
+
+        if (Test-Path $obsLocalPath) {
+            Write-Host "obs-express exists in cache; checking..." -ForegroundColor Magenta
+            $obsRemoteMd5 = (Invoke-WebRequest $obsUrl -Method Head -UseBasicParsing).Headers.'content-md5'
+            $obsLocalMd5 = Get-ByteHash $obsLocalPath
+
+            if ($obsLocalMd5 -eq $obsRemoteMd5) {
+                Write-Host "obs-express is up to date." -ForegroundColor Magenta
+            } else {
+                Write-Host "obs-express is no longer valid, deleting cache..." -ForegroundColor Magenta
+                Remove-Item $obsLocalPath
+            }
+        }
+
+        if (-Not (Test-Path $obsLocalPath)) {
+            Write-Host "Downloading obs-express from GitHub" -ForegroundColor Magenta
+            Invoke-WebRequest $obsUrl -OutFile $obsLocalPath
+        }
+
+        Write-Host "Extracting obs-express archive to build dir" -ForegroundColor Magenta
+        Expand-Archive $obsLocalPath -DestinationPath "$PSScriptRoot\publish\obs-express"
     }
     Set-Location $PSScriptRoot
 
@@ -91,35 +139,20 @@ if ($LocalProjectMode) {
 }
 Set-Location $PSScriptRoot
 
-
-# locate s3 credentials
-if (Test-Path '.\clowd_secrets.json') {
-    $secrets = Get-Content '.\clowd_secrets.json' | Out-String | ConvertFrom-Json
-    $keyId = $secrets.keyId;
-    $keySecret = $secrets.keySecret;
-} elseif (Test-Path '..\clowd_secrets.json') {
-    $secrets = Get-Content '..\clowd_secrets.json' | Out-String | ConvertFrom-Json
-    $keyId = $secrets.keyId;
-    $keySecret = $secrets.keySecret;
-}
-
-if ([string]::IsNullOrEmpty($keyId) -Or [string]::IsNullOrEmpty($keySecret)) {
-    throw "Unable to find clowd_secrets.json, cannot create release / upload"
-}
-
-
 if ($mode -eq "compile" -Or $mode -eq "pack") {
 
-    # download recent packages
-    New-Item -ItemType "directory" -Path "$PSScriptRoot\releases"
-    Write-Host "Download latest release" -ForegroundColor Magenta
-    Squirrel s3-down `
-    -r "$PSScriptRoot\releases" `
-    --bucket $bucket `
-    --keyId $keyId `
-    --secret $keySecret `
-    --endpoint "https://s3.eu-central-003.backblazeb2.com" `
-    --pathPrefix $channel
+    if ($noDelta -eq $false) {
+        # download recent packages
+        New-Item -ItemType "directory" -Path "$PSScriptRoot\releases"
+        Write-Host "Download latest release" -ForegroundColor Magenta
+        Squirrel s3-down `
+        -r "$PSScriptRoot\releases" `
+        --bucket $bucket `
+        --keyId $keyId `
+        --secret $keySecret `
+        --endpoint "https://s3.eu-central-003.backblazeb2.com" `
+        --pathPrefix $channel
+    }
 
 
     # releasify
