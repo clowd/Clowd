@@ -3,6 +3,7 @@
 
 Clowd.Win64.dll
 .idea
+.cache/*
 
 # User-specific files
 *.suo
