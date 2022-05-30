@@ -55,6 +55,19 @@ namespace Clowd.UI.Unmanaged
         [DllImport(Constants.ClowdWinNativeLib)]
         private static extern void CaptureClose();
 
+        private static fnColorCapture delColorCapture;
+        private static fnVideoCapture delVideoCapture;
+        private static fnSessionCapture delSessionCapture;
+        private static fnDisposed delDisposed;
+
+        static CaptureWindow()
+        {
+            delColorCapture = new fnColorCapture(ColorCaptureImpl);
+            delVideoCapture = new fnVideoCapture(VideoCaptureImpl);
+            delSessionCapture = new fnSessionCapture(SessionCaptureImpl);
+            delDisposed = new fnDisposed(DisposedImpl);
+        }
+
         public static void Show(CaptureWindowOptions options)
         {
             captureArgs args = new captureArgs
@@ -67,10 +80,10 @@ namespace Clowd.UI.Unmanaged
                 tipsDisabled = options.TipsDisabled,
                 sessionDirectory = SessionManager.Current.GetNextSessionDirectory(),
                 createdUtc = DateTime.UtcNow.ToString("o"),
-                lpfnColorCapture = ColorCaptureImpl,
-                lpfnVideoCapture = VideoCaptureImpl,
-                lpfnSessionCapture = SessionCaptureImpl,
-                lpfnDisposed = DisposedImpl,
+                lpfnColorCapture = delColorCapture,
+                lpfnVideoCapture = delVideoCapture,
+                lpfnSessionCapture = delSessionCapture,
+                lpfnDisposed = delDisposed,
             };
 
             CaptureShow(ref args);
