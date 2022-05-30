@@ -69,6 +69,7 @@ namespace Clowd.UI.Controls
 
         public string Text
         {
+            get => _lastText;
             set => UpdateText(value);
         }
 
@@ -122,8 +123,11 @@ namespace Clowd.UI.Controls
             return false;
         }
 
+        private string _lastText;
+        
         public void UpdateText(string setTxt)
         {
+            _lastText = setTxt;
             var tb = new TextBlock();
             tb.HorizontalAlignment = HorizontalAlignment.Center;
             tb.VerticalAlignment = VerticalAlignment.Bottom;
