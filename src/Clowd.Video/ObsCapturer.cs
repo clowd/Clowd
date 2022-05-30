@@ -213,7 +213,7 @@ namespace Clowd.Video
                         performanceMode = settings.Performance.ToString(),
                         subsamplingMode = settings.SubsamplingMode.ToString(),
                         outputDirectory = dir,
-                        maxOutputHeight = settings.MaxResolutionWidth,
+                        maxOutputHeight = settings.MaxResolutionHeight,
                         maxOutputWidth = settings.MaxResolutionWidth,
                         trackMouseClicks = settings.TrackMouseClicks,
                     };
