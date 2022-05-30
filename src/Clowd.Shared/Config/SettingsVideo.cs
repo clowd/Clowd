@@ -110,6 +110,12 @@ namespace Clowd.Config
             get => _trackMouseClicks;
             set => Set(ref _trackMouseClicks, value);
         }
+        
+        public bool OpenFinishedInExplorer
+        {
+            get => _openFinishedInExplorer;
+            set => Set(ref _openFinishedInExplorer, value);
+        }
 
         private string _outputDirectory;
         private int _fps = 30;
@@ -124,5 +130,6 @@ namespace Clowd.Config
         private AudioDeviceInfo _captureMicrophoneDevice;
         private bool _hardwareAccelerated = true;
         private bool _trackMouseClicks = true;
+        private bool _openFinishedInExplorer = true;
     }
 }

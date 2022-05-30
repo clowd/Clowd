@@ -228,7 +228,7 @@ namespace Clowd.UI
             }
             this.Close();
 
-            if (wasRecording)
+            if (wasRecording && SettingsRoot.Current.Video.OpenFinishedInExplorer)
             {
                 await Task.Delay(1000);
                 // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
@@ -271,7 +271,7 @@ namespace Clowd.UI
             }
             this.Close();
 
-            await Task.Delay(10 * 1000);
+            await Task.Delay(4 * 1000);
             if (File.Exists(_fileName))
                 File.Delete(_fileName);
         }

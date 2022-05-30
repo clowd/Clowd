@@ -116,7 +116,8 @@ namespace Clowd.UI.Unmanaged
                             if (filename != null)
                             {
                                 File.Copy(session.PreviewImgPath, filename);
-                                Platform.Current.RevealFileOrFolder(filename);
+                                if (SettingsRoot.Current.Capture.OpenSavedInExplorer)
+                                    Platform.Current.RevealFileOrFolder(filename);
                                 SettingsRoot.Current.General.LastSavePath = Path.GetDirectoryName(filename);
                                 // delete only if saved as recovery is no longer needed
                                 SessionManager.Current.DeleteSession(session); 

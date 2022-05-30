@@ -33,9 +33,16 @@ namespace Clowd.Config
             get => _hideTipsPanel;
             set => Set(ref _hideTipsPanel, value);
         }
+        
+        public bool OpenSavedInExplorer
+        {
+            get => _openSavedInExplorer;
+            set => Set(ref _openSavedInExplorer, value);
+        }
 
         private bool _screenshotWithCursor;
         private bool _detectWindows = true;
         private bool _hideTipsPanel;
+        private bool _openSavedInExplorer = true;
     }
 }
