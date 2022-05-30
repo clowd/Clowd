@@ -53,10 +53,18 @@ namespace Clowd.UI
             _btnClowd = new CaptureToolButton
             {
                 Primary = true,
-                Text = "CLOWD",
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconClowd),
+                Text = "LOADING",
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconToolNone),
                 IsDragHandle = true,
             };
+
+            _capturer.Initialize().ContinueWith(
+                _ =>
+                {
+                    if (_btnClowd.Text == "LOADING")
+                        _btnClowd.Text = "READY";
+                }, 
+                TaskScheduler.FromCurrentSynchronizationContext());
 
             _btnStart = new CaptureToolButton
             {
@@ -174,6 +182,8 @@ namespace Clowd.UI
         private async void OnStart(object sender, EventArgs e)
         {
             _btnStart.IsEnabled = false;
+            _btnMicrophone.IsEnabled = false;
+            _btnSpeaker.IsEnabled = false;
 
             for (int i = 4; i >= 1; i--)
             {
@@ -198,6 +208,8 @@ namespace Clowd.UI
                 CapturerCriticalError(this, new VideoCriticalErrorEventArgs(ex.Message));
             }
 
+            _btnClowd.Text = "Started";
+            _btnClowd.IconPath = AppStyles.GetIconElement(ResourceIcon.IconClowd);
             _btnStart.Visibility = Visibility.Collapsed;
             _btnStop.Visibility = Visibility.Visible;
         }

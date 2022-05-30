@@ -80,10 +80,15 @@ namespace Clowd.Video
             _source = new CancellationTokenSource();
             _token = _source.Token;
             _libraryPath = libraryPath;
-            _setup = Task.Run(Initialize);
+            _setup = Task.Run(StartObs);
         }
 
-        public async override Task Initialize()
+        public override Task Initialize()
+        {
+            return _setup;
+        }
+
+        private async Task StartObs()
         {
             using (var scoped = _log.CreateProfiledScope("InitOBS"))
             {
