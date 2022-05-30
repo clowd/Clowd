@@ -19,7 +19,7 @@
             <!--<ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/FlatSlider.xaml" />
             </ResourceDictionary.MergedDictionaries>-->
-            <!-- <RoutedUICommand x:Key="Commands.Upload" /> -->
+            <RoutedUICommand x:Key="Commands.Upload" />
             <RoutedUICommand x:Key="Commands.SelectTool" />
             <RoutedUICommand x:Key="Commands.ZoomFit" />
             <RoutedUICommand x:Key="Commands.ZoomActual" />
@@ -90,10 +90,10 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <UserControl.InputBindings>
-        <!-- <KeyBinding -->
-        <!--     Key="U" -->
-        <!--     Command="{StaticResource Commands.Upload}" -->
-        <!--     Modifiers="Ctrl" /> -->
+        <KeyBinding
+            Key="U"
+            Command="{StaticResource Commands.Upload}"
+            Modifiers="Ctrl" />
         <KeyBinding
             Key="Esc"
             Command="{StaticResource Commands.SelectTool}"
@@ -172,7 +172,7 @@
         <CommandBinding Command="ApplicationCommands.Delete" Executed="DeleteCommand" />
         <CommandBinding Command="ApplicationCommands.Paste" Executed="PasteCommand" />
         <CommandBinding Command="ApplicationCommands.SelectAll" Executed="SelectAllCommand" />
-        <!-- <CommandBinding Command="{StaticResource Commands.Upload}" Executed="UploadCommand" /> -->
+        <CommandBinding Command="{StaticResource Commands.Upload}" Executed="UploadCommand" />
         <CommandBinding Command="{StaticResource Commands.SelectTool}" Executed="SelectToolCommand" />
         <CommandBinding Command="{StaticResource Commands.ZoomActual}" Executed="ZoomActualCommand" />
         <CommandBinding Command="{StaticResource Commands.ZoomFit}" Executed="ZoomFitCommand" />
@@ -461,12 +461,12 @@
                     DefaultValue="0" />
             </StackPanel>
 
-            <!-- <controls:ToolButton -->
-            <!--     Padding="5" -->
-            <!--     controls:DockAndWrapPanel.DockToEnd="True" -->
-            <!--     Command="{StaticResource Commands.Upload}" -->
-            <!--     IconPath="{StaticResource IconClowd}" -->
-            <!--     ToolTip="Upload" /> -->
+            <controls:ToolButton
+                Padding="5"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{StaticResource Commands.Upload}"
+                IconPath="{StaticResource IconClowd}"
+                ToolTip="Upload" />
 
             <controls:ToolButton
                 Padding="5"
