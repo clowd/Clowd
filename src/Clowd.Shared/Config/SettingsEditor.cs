@@ -97,12 +97,14 @@ namespace Clowd
                 set => Set(ref _canvasBackground, value);
             }
 
+            [Browsable(false)]
             public bool TabsEnabled
             {
                 get => _tabsEnabled;
                 set => Set(ref _tabsEnabled, value);
             }
 
+            [Browsable(false)]
             public bool AskBeforeClosingMultipleTabs
             {
                 get => _askBeforeClosingMultipleTabs;
