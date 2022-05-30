@@ -33,10 +33,13 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Viewbox
-                Width="40"
-                Height="40"
-                Child="{StaticResource IconClowd}" />
+            <Viewbox Width="40" Height="40" HorizontalAlignment="Left">
+                <Path
+                    Width="16"
+                    Height="16"
+                    Data="{StaticResource PathLogoSmall16}"
+                    Fill="#00AFF0" />
+            </Viewbox>
 
             <StackPanel
                 Grid.Column="1"

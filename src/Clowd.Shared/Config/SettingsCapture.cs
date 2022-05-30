@@ -13,6 +13,7 @@ namespace Clowd.Config
 {
     public class SettingsCapture : CategoryBase
     {
+        [Browsable(false)]
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]
         public bool ScreenshotWithCursor
@@ -21,6 +22,7 @@ namespace Clowd.Config
             set => Set(ref _screenshotWithCursor, value);
         }
 
+        [Browsable(false)]
         [Description("If this is true, the Capture window will try to detect and highlight different windows as you hover over them.")]
         public bool DetectWindows
         {
