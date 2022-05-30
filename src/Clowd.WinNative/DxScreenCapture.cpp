@@ -49,16 +49,14 @@ typedef struct
 
 } SVG_BUTTON_DESCRIPTION;
 
-// when these buttons are clicked they will simulate a key press
-// the logic is then handled by the WM_KEYDOWN
 SVG_BUTTON_DESCRIPTION captureButtonDetails[NUM_SVG_BUTTONS] = {
-    // { IDR_SVG7, L"UPLOAD", 0, 0x55 /*U*/, true, nullptr },
-    { IDR_SVG3, L"EDIT",   0, 0x50 /*P*/, true, nullptr },
-    { IDR_SVG6, L"VIDEO",  0, 0x56 /*V*/, true, nullptr },
-    { IDR_SVG1, L"COPY",   0, 0x43 /*C*/, true, nullptr },
-    { IDR_SVG5, L"SAVE",   0, 0x53 /*S*/, true, nullptr },
-    { IDR_SVG4, L"RESET",  0, 0x52 /*R*/, false, nullptr },
-    { IDR_SVG2, L"EXIT",   1, 0x58 /*X*/, false, nullptr },
+    { IDR_SVG7, L"UPLOAD", 0, 0x55, true, nullptr },
+    { IDR_SVG3, L"EDIT", 0, 0x50, true, nullptr },
+    { IDR_SVG6, L"VIDEO", 0, 0x56, true, nullptr },
+    { IDR_SVG1, L"COPY", 0, 0x43, true, nullptr },
+    { IDR_SVG5, L"SAVE", 0, 0x53, true, nullptr },
+    { IDR_SVG4, L"RESET", 0, 0x52, false, nullptr },
+    { IDR_SVG2, L"EXIT", 1, 0x58, false, nullptr },
 };
 
 inline int _RoundPixel(double px, bool preferDown)
@@ -124,7 +122,7 @@ void SetButtonPanelPositions(const ScreenInfo& screen, const RECT* selectionRect
     int buttonSpacing = (int)ceil(3 * dpiZoom);
     int svgButtonSize = (int)floor(UNSCALED_BUTTON_SIZE * dpiZoom);
     int areaSize = (int)floor(svgButtonSize);// * 0.75);
-    int longEdgePx = svgButtonSize * NUM_SVG_BUTTONS + (buttonSpacing * 1) + areaSize;
+    int longEdgePx = svgButtonSize * NUM_SVG_BUTTONS + (buttonSpacing * 2) + areaSize;
     int shortEdgePx = svgButtonSize;
 
     // clip selection to monitor
@@ -192,7 +190,7 @@ void SetButtonPanelPositions(const ScreenInfo& screen, const RECT* selectionRect
         buttonPos[i].right = desiredRect.left + svgButtonSize;
         buttonPos[i].bottom = desiredRect.top + svgButtonSize;
         *vchange += svgButtonSize;
-        // if (i == 0) *vchange += buttonSpacing;
+        if (i == 0) *vchange += buttonSpacing;
     }
 }
 
