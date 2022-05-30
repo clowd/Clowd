@@ -267,19 +267,19 @@
                 IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Text}"
                 ToolTip="Text (T)" />
 
-            <controls:ToolButton
-                Command="{StaticResource Commands.SelectTool}"
-                CommandParameter="Pixelate"
-                IconPath="{StaticResource IconToolPixelate}"
-                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pixelate}"
-                ToolTip="Obscure (O)" />
+            <!-- <controls:ToolButton -->
+            <!--     Command="{StaticResource Commands.SelectTool}" -->
+            <!--     CommandParameter="Pixelate" -->
+            <!--     IconPath="{StaticResource IconToolPixelate}" -->
+            <!--     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pixelate}" -->
+            <!--     ToolTip="Obscure (O)" /> -->
 
-            <controls:ToolButton
-                Command="{StaticResource Commands.SelectTool}"
-                CommandParameter="Erase"
-                IconPath="{StaticResource IconToolErase}"
-                IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Erase}"
-                ToolTip="Erase (E)" />
+            <!-- <controls:ToolButton -->
+            <!--     Command="{StaticResource Commands.SelectTool}" -->
+            <!--     CommandParameter="Erase" -->
+            <!--     IconPath="{StaticResource IconToolErase}" -->
+            <!--     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Erase}" -->
+            <!--     ToolTip="Erase (E)" /> -->
 
             <controls:ToolButton
                 Command="ApplicationCommands.Undo"
