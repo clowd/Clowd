@@ -33,7 +33,7 @@ namespace Clowd.Video
         private static ObsCapturer _instance;
         private static readonly object _lock = new object();
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
-        private readonly string _libraryPath;
+        private string _libraryPath;
 
         public ObsCapturer(string libraryPath)
         {
@@ -42,39 +42,6 @@ namespace Clowd.Video
                 if (_instance != null)
                     throw new InvalidOperationException("There can only be one instance of ObsCapturer at once. Please dispose of the existing instance before creating another.");
                 _instance = this;
-            }
-
-            try
-            {
-                if (!Directory.Exists(libraryPath))
-                    throw new ArgumentException("OBS does not exist at the path: " + libraryPath);
-
-                if (!File.Exists(Path.Combine(libraryPath, "obs-express.exe")))
-                    throw new ArgumentException("OBS does not exist at the path: " + libraryPath);
-
-                if (!File.Exists(Path.Combine(libraryPath, "lib", "obs64.exe")))
-                    throw new ArgumentException("OBS does not exist at the path: " + libraryPath);
-            }
-            catch
-            {
-                // if obs does not exist, and we're debugging, lets search for a nearby submodule or appdata obs
-                var submoduledir = Path.Combine(AppContext.BaseDirectory, "..\\..\\..\\modules\\obs-express\\bin");
-                var appdata = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
-                string obspath = null;
-
-                if (Debugger.IsAttached && File.Exists(Path.Combine(submoduledir, "obs-express.exe")))
-                {
-                    libraryPath = submoduledir;
-                }
-                else if (Debugger.IsAttached && Directory.Exists(appdata) &&
-                    ((obspath = Directory.EnumerateFiles(appdata, "obs-express.exe", SearchOption.AllDirectories).FirstOrDefault()) != null))
-                {
-                    libraryPath = Path.GetDirectoryName(obspath);
-                }
-                else
-                {
-                    throw;
-                }
             }
 
             _source = new CancellationTokenSource();
@@ -90,6 +57,29 @@ namespace Clowd.Video
 
         private async Task StartObs()
         {
+            // if obs is missing, try to find obs in app data, only if we're debugging.
+            if (!Directory.Exists(_libraryPath) && Debugger.IsAttached)
+            {
+                var appdata = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
+                if (Directory.Exists(appdata))
+                {
+                    string obspath = Directory.EnumerateFiles(appdata, "obs-express.exe", SearchOption.AllDirectories).FirstOrDefault();
+                    if (obspath != null)
+                    {
+                        _libraryPath = Path.GetDirectoryName(obspath);
+                    }
+                }
+            }
+
+            if (!Directory.Exists(_libraryPath))
+                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
+
+            if (!File.Exists(Path.Combine(_libraryPath, "obs-express.exe")))
+                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
+
+            if (!File.Exists(Path.Combine(_libraryPath, "lib", "obs64.exe")))
+                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
+
             using (var scoped = _log.CreateProfiledScope("InitOBS"))
             {
                 List<ProcessStartInfo> psis = new List<ProcessStartInfo>();
@@ -306,8 +296,8 @@ namespace Clowd.Video
             {
                 _instance = null;
                 _log.Info("Disposing ObsCapturer Instance");
-                _source.Cancel();
-                _watch.ForceExit();
+                _source?.Cancel();
+                _watch?.ForceExit();
             }
         }
 
@@ -340,7 +330,15 @@ namespace Clowd.Video
             private void ThreadProc()
             {
                 // wait for OBS to start
-                _initThread.Wait();
+                try
+                {
+                    _initThread.Wait();
+                }
+                catch
+                {
+                    // if OBS failed to start, we should just exit.
+                    return;
+                }
 
                 // connect to websocket
                 WebSocket.ConnectAsync(new Uri(obsSocket + $"?device_type={Device.DeviceType}&device_id={Device.DeviceId}"),
