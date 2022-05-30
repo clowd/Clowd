@@ -58,14 +58,6 @@ namespace Clowd.UI
                 IsDragHandle = true,
             };
 
-            _capturer.Initialize().ContinueWith(
-                _ =>
-                {
-                    if (_btnClowd.Text == "LOADING")
-                        _btnClowd.Text = "READY";
-                }, 
-                TaskScheduler.FromCurrentSynchronizationContext());
-
             _btnStart = new CaptureToolButton
             {
                 Primary = true,
@@ -123,6 +115,17 @@ namespace Clowd.UI
 
             _floating = FloatingButtonWindow.Create(
                 new[] { _btnClowd, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnSettings, _btnDraw, _btnCancel });
+
+            _capturer.Initialize().ContinueWith(
+                t =>
+                {
+                    if (t.Exception != null)
+                        CapturerCriticalError(this, new VideoCriticalErrorEventArgs(t.Exception.ToString()));
+                    
+                    if (_btnClowd.Text == "LOADING")
+                        _btnClowd.Text = "READY";
+                },
+                TaskScheduler.FromCurrentSynchronizationContext());
         }
 
         private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
@@ -205,7 +208,7 @@ namespace Clowd.UI
             }
             catch (Exception ex)
             {
-                CapturerCriticalError(this, new VideoCriticalErrorEventArgs(ex.Message));
+                CapturerCriticalError(this, new VideoCriticalErrorEventArgs(ex.ToString()));
             }
 
             _btnClowd.Text = "Started";
