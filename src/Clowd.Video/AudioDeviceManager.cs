@@ -40,16 +40,23 @@ namespace Clowd.Video
         {
             if (info.DeviceId.EqualsIgnoreCase(DEVICE_DEFAULT))
             {
-                if (info.DeviceType.EqualsIgnoreCase(TYPE_SPEAKER))
+                try
                 {
-                    using var def = WasapiLoopbackCapture.GetDefaultLoopbackCaptureDevice();
-                    return "Default - " + def.FriendlyName;
-                }
+                    if (info.DeviceType.EqualsIgnoreCase(TYPE_SPEAKER))
+                    {
+                        using var def = WasapiLoopbackCapture.GetDefaultLoopbackCaptureDevice();
+                        return "Default - " + def.FriendlyName;
+                    }
 
-                if (info.DeviceType.EqualsIgnoreCase(TYPE_MICROPHONE))
+                    if (info.DeviceType.EqualsIgnoreCase(TYPE_MICROPHONE))
+                    {
+                        using var def = WasapiCapture.GetDefaultCaptureDevice();
+                        return "Default - " + def.FriendlyName;
+                    }
+                }
+                catch
                 {
-                    using var def = WasapiCapture.GetDefaultCaptureDevice();
-                    return "Default - " + def.FriendlyName;
+                    return "(none)";
                 }
 
                 throw new ArgumentException("If DeviceId is 'default', DeviceType must be 'speaker' or 'microphone'.");
