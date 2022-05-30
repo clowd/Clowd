@@ -22,11 +22,11 @@ namespace Clowd.UI
                 if (!App.IsDesignMode)
                 {
                     Instance = GetPanelForTag(value);
-                    Tag = value.ToString();
+                    Tag = PageTag = value.ToString();
 
                     // this has to be a non-null class that derives from 'Page'
                     // but it won't be used, because we've also set 'Instance'
-                    Page = typeof(FakePage); 
+                    Page = typeof(FakePage);
                 }
             }
         }
