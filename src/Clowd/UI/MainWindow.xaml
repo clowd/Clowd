@@ -80,10 +80,10 @@
                     Content="Editor"
                     Icon="Edit24"
                     PageType="SettingsEditor" />
-                <!-- <local:MainWindowNavigationItem -->
-                <!--     Content="Uploads" -->
-                <!--     Icon="Globe24" -->
-                <!--     PageType="SettingsUploads" /> -->
+                <local:MainWindowNavigationItem
+                    Content="Uploads"
+                    Icon="Globe24"
+                    PageType="SettingsUploads" />
                 <local:MainWindowNavigationItem
                     Content="Video"
                     Icon="Video24"
