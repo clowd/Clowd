@@ -296,7 +296,15 @@ void DxScreenCapture::RunMessagePump()
 
         // capture desktop windows
         native->walker->ShapshotTopLevel();
-        FrameUpdateHoveredWindow(native->frame);
+
+        if (IsRectEmpty(&_options.initialRect))
+        {
+            FrameUpdateHoveredWindow(native->frame);
+        }
+        else
+        {
+            FrameMakeSelection(native->frame, _options.initialRect, false);    
+        }
 
         native->t2 = std::chrono::high_resolution_clock::now();
 

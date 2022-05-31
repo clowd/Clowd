@@ -16,6 +16,7 @@ namespace Clowd.UI.Unmanaged
         public bool AnimationDisabled { get; set; }
         public bool ObstructedWindowDisabled { get; set; }
         public bool TipsDisabled { get; set; }
+        public ScreenRect InitialRect { get; set; }
     }
 
     enum CaptureType
@@ -47,6 +48,7 @@ namespace Clowd.UI.Unmanaged
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnDisposed lpfnDisposed;
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)] public string sessionDirectory;
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string createdUtc;
+            [MarshalAs(UnmanagedType.Struct)] public RECT initialRect;
         };
 
         [DllImport(Constants.ClowdWinNativeLib)]
@@ -84,8 +86,9 @@ namespace Clowd.UI.Unmanaged
                 lpfnVideoCapture = delVideoCapture,
                 lpfnSessionCapture = delSessionCapture,
                 lpfnDisposed = delDisposed,
+                initialRect = options.InitialRect,
             };
-
+            
             CaptureShow(ref args);
         }
 

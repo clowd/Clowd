@@ -356,12 +356,15 @@ namespace Clowd
 
         public void QuickCaptureFullScreen()
         {
-            PageManager.Current.GetScreenCapturePage().Open();
+            var curs = Platform.Current.GetMousePosition();
+            var scre = Platform.Current.GetScreenFromPoint(curs);
+            StartCapture(scre.Bounds);
         }
 
         public void QuickCaptureCurrentWindow()
         {
-            PageManager.Current.GetScreenCapturePage().Open();
+            var wnd = Platform.Current.GetForegroundWindow();
+            StartCapture(wnd.DwmRenderBounds);
         }
 
         public async void UploadFile(Window owner = null)

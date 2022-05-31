@@ -26,6 +26,7 @@ typedef struct
     fnDisposed lpfnDisposed;
     wchar_t sessionDirectory[512];
     wchar_t createdUtc[128];
+    RECT initialRect;
 } captureArgs;
 
 extern "C"
