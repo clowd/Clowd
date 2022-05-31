@@ -12,6 +12,7 @@
     UseLayoutRounding="True"
     WindowStartupLocation="CenterScreen"
     WindowState="Maximized"
+    Topmost="True"
     WindowStyle="None"
     mc:Ignorable="d">
     <Window.Resources>
@@ -225,47 +226,16 @@
                                             Foreground="Black" />
                                     </Border>
                                 </Border>
-                                <!--<Button
-                                    x:Name="DetailToggler"
-                                    VerticalAlignment="Center"
-                                    Background="#FF86C91F"
-                                    Click="DetailToggler_Click"
-                                    Style="{StaticResource ResponseButton}"
-                                    ToolTip="展开/收起">
-                                    <Path
-                                        Width="10"
-                                        Margin="0,1,0,0"
-                                        Data="{DynamicResource IconArrow}">
-                                        <Path.RenderTransform>
-                                            <RotateTransform x:Name="DetailTogglerRotate" />
-                                        </Path.RenderTransform>
-                                    </Path>
-                                </Button>-->
-                                <!--<Button
-                                    x:Name="MinimizeButton"
-                                    VerticalAlignment="Center"
-                                    Background="#FF0F9DE4"
-                                    Click="MinimizeButton_Click"
-                                    Style="{StaticResource SpinningButton}"
-                                    ToolTip="最小化">
-                                    <Button.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="12.5" CenterY="12.5" />
-                                    </Button.RenderTransform>
-                                    <Path
-                                        Width="12"
-                                        Margin="1,1,0,0"
-                                        Data="{DynamicResource IconMinimize}" />
-                                </Button>-->
-                                <local:ActivableButton
+                                <local:ActivatableButton
                                     x:Name="HideButton"
                                     Click="HideButton_Click"
                                     ToolTip="Hide Drawing">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconCloseEye}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="OrientationButton"
                                     Click="OrientationButton_Click"
                                     ToolTip="Rotate This Window">
@@ -274,7 +244,7 @@
                                             <RotateTransform Angle="90" />
                                         </Path.RenderTransform>
                                     </Path>
-                                </local:ActivableButton>
+                                </local:ActivatableButton>
                                 <Button
                                     x:Name="CloseButton"
                                     VerticalAlignment="Center"
@@ -375,86 +345,6 @@
                                 </local:ColorPicker>
                             </WrapPanel>
                         </Grid>
-                        <StackPanel
-                            x:Name="ExtraToolPanel"
-                            Width="{StaticResource HorizontalModeFlowPanel}"
-                            Margin="0,4,0,0">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
-                                    <Style.Triggers>
-                                        <Trigger Property="Opacity" Value="0">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </StackPanel.Style>
-                            <Slider
-                                Height="20"
-                                Background="{DynamicResource FakeTransparent}"
-                                Focusable="False"
-                                Foreground="#FFBC1919"
-                                IsMoveToPointEnabled="True"
-                                IsSelectionRangeEnabled="True"
-                                Maximum="5"
-                                Minimum="1"
-                                Template="{StaticResource SliderHorizontal}"
-                                ValueChanged="Slider_ValueChanged"
-                                Visibility="Visible"
-                                Value="2" />
-                            <!--<WrapPanel
-                                x:Name="ExtraToolsPanel"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                Orientation="Horizontal">
-                                <WrapPanel.Resources>
-                                    <Style BasedOn="{StaticResource FunctionalButton}" TargetType="local:ActivableButton">
-                                        <Setter Property="Padding" Value="0" />
-                                        <Setter Property="Width" Value="32" />
-                                        <Setter Property="Height" Value="32" />
-                                    </Style>
-                                </WrapPanel.Resources>
-                                <local:ActivableButton
-                                    x:Name="PinButton"
-                                    Click="PinButton_Click"
-                                    ToolTip="置顶/取消置顶">
-                                    <local:ActivableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
-                                    <Path Width="13" Data="{DynamicResource IconPin}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
-                                    x:Name="SaveButton"
-                                    Click="SaveButton_Click"
-                                    PreviewMouseRightButtonDown="SaveButton_RightClick"
-                                    ToolTip="快速保存 / 右键点击保存至文件">
-                                    <local:ActivableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
-                                    <Path Width="13" Data="{DynamicResource IconSave}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
-                                    x:Name="LoadButton"
-                                    Click="LoadButton_Click"
-                                    ToolTip="加载画板">
-                                    <local:ActivableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
-                                    <Path Width="14" Data="{DynamicResource IconLoad}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
-                                    x:Name="ExportButton"
-                                    Click="ExportButton_Click"
-                                    PreviewMouseRightButtonDown="ExportButton_RightClick"
-                                    ToolTip="导出画板为PNG / 右键点击导出画板和屏幕为PNG">
-                                    <local:ActivableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
-                                    <Path Data="{DynamicResource IconExport}" />
-                                </local:ActivableButton>
-
-
-                            </WrapPanel>-->
-                        </StackPanel>
                         <Grid
                             x:Name="ButtonGrid"
                             Width="{StaticResource HorizontalModeFlowPanel}"
@@ -464,33 +354,33 @@
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center">
                                 <WrapPanel.Resources>
-                                    <Style BasedOn="{StaticResource FunctionalButton}" TargetType="local:ActivableButton">
+                                    <Style BasedOn="{StaticResource FunctionalButton}" TargetType="local:ActivatableButton">
                                         <Setter Property="Padding" Value="0" />
                                         <Setter Property="Width" Value="32" />
                                         <Setter Property="Height" Value="32" />
                                     </Style>
                                 </WrapPanel.Resources>
-                                <local:ActivableButton
+                                <local:ActivatableButton
                                     x:Name="FontReduceButton"
                                     Click="FontReduceButton_Click"
                                     Focusable="False"
                                     ToolTip="Reduce Font Size">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconFontReduce}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="FontIncreaseButton"
                                     Click="FontIncreaseButton_Click"
                                     Focusable="False"
                                     ToolTip="Increase Font Size">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconFontIncrease}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="BrushSwitchButton"
                                     Click="BrushSwitchButton_Click"
                                     ToolTip="Change Brush Size">
@@ -502,128 +392,110 @@
                                         VerticalAlignment="Center"
                                         Background="#FFD6D6D6"
                                         CornerRadius="10" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="EnableButton"
                                     Click="EnableButton_Click"
                                     ToolTip="Mouse Cursor">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconMouse}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="SelectButton"
                                     Click="SelectButton_Click"
                                     ToolTip="Move Drawing">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconSelect}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="PenButton"
                                     Click="PenButton_Click"
                                     ToolTip="Pen">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconPen}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="TextButton"
                                     Click="TextButton_Click"
                                     ToolTip="Text">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconText}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="LineButton"
                                     Click="LineButton_Click"
                                     ToolTip="Line">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconLine}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="ArrowButton"
                                     Click="ArrowButton_Click"
                                     ToolTip="Arrow">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconArrow1}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="RectangleButton"
                                     Click="RectangleButton_Click"
                                     ToolTip="Rectangle">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconRectangle}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="CircleButton"
                                     Click="CircleButton_Click"
                                     ToolTip="Circle">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconCircle}" />
-                                </local:ActivableButton>
-                                <!--<local:ActivableButton
-                                    x:Name="RayButton"
-                                    Click="RayButton_Click"
-                                    ToolTip="激光笔">
-                                    <local:ActivableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
-                                    <Path Data="{DynamicResource IconRayPen}" />
-                                </local:ActivableButton>-->
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="EraserButton"
                                     Click="EraserButton_Click"
                                     ToolTip="Eraser">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconEraser}" />
-                                </local:ActivableButton>
-                                <!--<local:ActivableButton
-                                    x:Name="ClearButton"
-                                    Click="ClearButton_Click"
-                                    ToolTip="Clear All">
-                                    <local:ActivableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
-                                    <Path Width="13" Data="{DynamicResource IconTrashBox}" />
-                                </local:ActivableButton>-->
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="UndoButton"
                                     Click="UndoButton_Click"
                                     ToolTip="Undo">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconUndo}" />
-                                </local:ActivableButton>
-                                <local:ActivableButton
+                                </local:ActivatableButton>
+                                <local:ActivatableButton
                                     x:Name="RedoButton"
                                     Click="RedoButton_Click"
                                     ToolTip="Undo">
-                                    <local:ActivableButton.RenderTransform>
+                                    <local:ActivatableButton.RenderTransform>
                                         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
-                                    </local:ActivableButton.RenderTransform>
+                                    </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconUndo}" RenderTransformOrigin="0.5,0.5">
                                         <Path.RenderTransform>
                                             <ScaleTransform ScaleX="-1" />
                                         </Path.RenderTransform>
                                     </Path>
-                                </local:ActivableButton>
+                                </local:ActivatableButton>
                             </WrapPanel>
                         </Grid>
                     </WrapPanel>
