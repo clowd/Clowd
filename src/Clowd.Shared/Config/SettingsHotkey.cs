@@ -49,7 +49,7 @@ namespace Clowd.Config
 
         public SettingsHotkey()
         {
-            Subscribe(FileUploadShortcut, CaptureRegionShortcut, CaptureFullscreenShortcut, CaptureActiveShortcut);
+            Subscribe(FileUploadShortcut, CaptureRegionShortcut, CaptureFullscreenShortcut, CaptureActiveShortcut, DrawOnScreenShortcut);
         }
 
         protected override void DisposeInternal()
