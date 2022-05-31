@@ -3,25 +3,9 @@
     <TargetFramework>net6.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
     <RootNamespace>AntFu7.LiveDraw</RootNamespace>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>Rescoures\Icon.ico</ApplicationIcon>
-    <StartupObject />
-  </PropertyGroup>
-  <ItemGroup>
-    <AppDesigner Include="Properties\" />
-  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Clowd.Shared\Clowd.Shared.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Rescoures\Icon.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Rescoures\save29.png" />
-    <Resource Include="Rescoures\undo6.png" />
   </ItemGroup>
 </Project>
