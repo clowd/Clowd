@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Clowd.Capture;
@@ -117,6 +118,7 @@ namespace Clowd
             SettingsRoot.Current.Hotkeys.CaptureActiveShortcut.TriggerExecuted += (s, e) => QuickCaptureCurrentWindow();
             SettingsRoot.Current.Hotkeys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
             SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
+            SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
 
             //void setTheme()
             //{
@@ -139,7 +141,6 @@ namespace Clowd
 
         private Logger SetupExceptionHandling(bool isInstalled)
         {
-            
             var config = new LoggingConfiguration();
 
 #if !DEBUG
@@ -317,26 +318,24 @@ namespace Clowd
             {
                 if (SettingsRoot.Current.General.ConfirmClose)
                 {
-                    using (TaskDialog dialog = new TaskDialog())
+                    using TaskDialog dialog = new TaskDialog();
+                    dialog.WindowTitle = "Clowd";
+                    dialog.MainInstruction = "Are you sure you wish to close Clowd?";
+                    dialog.Content = "If you close Clowd, it will stop any in-progress uploads and you will be unable to upload anything new.";
+                    dialog.VerificationText = "&Don’t ask me this again";
+                    dialog.MainIcon = TaskDialogIcon.Warning;
+
+                    TaskDialogButton okButton = new TaskDialogButton(ButtonType.Yes);
+                    TaskDialogButton cancelButton = new TaskDialogButton(ButtonType.No);
+                    dialog.Buttons.Add(okButton);
+                    dialog.Buttons.Add(cancelButton);
+
+                    var clicked = await dialog.ShowAsNiceDialogAsync(null);
+                    if (clicked == okButton)
                     {
-                        dialog.WindowTitle = "Clowd";
-                        dialog.MainInstruction = "Are you sure you wish to close Clowd?";
-                        dialog.Content = "If you close clowd, it will stop any in-progress uploads and you will be unable to upload anything new.";
-                        dialog.VerificationText = "Don't ask me this again";
-                        dialog.MainIcon = TaskDialogIcon.Warning;
-
-                        TaskDialogButton okButton = new TaskDialogButton(ButtonType.Yes);
-                        TaskDialogButton cancelButton = new TaskDialogButton(ButtonType.No);
-                        dialog.Buttons.Add(okButton);
-                        dialog.Buttons.Add(cancelButton);
-
-                        var clicked = await dialog.ShowAsNiceDialogAsync(null);
-                        if (clicked == okButton)
-                        {
-                            if (dialog.IsVerificationChecked == true)
-                                SettingsRoot.Current.General.ConfirmClose = false;
-                            ExitApp();
-                        }
+                        if (dialog.IsVerificationChecked == true)
+                            SettingsRoot.Current.General.ConfirmClose = false;
+                        ExitApp();
                     }
                 }
                 else
