@@ -265,7 +265,7 @@ namespace AntFu7.LiveDraw
                     Push(_history, new StrokesHistoryNode(collection, StrokesHistoryNodeType.Added));
                 }
 
-                if (_drawerLastStroke != null &&  _mode == DrawMode.Text)
+                if (_drawerLastStroke != null && _mode == DrawMode.Text)
                 {
                     MainInkCanvas.Strokes.Remove(_drawerLastStroke);
                 }
