@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Ink;
 
-namespace AntFu7.LiveDraw
+namespace Clowd.UI
 {
     public enum StrokesHistoryNodeType
     {

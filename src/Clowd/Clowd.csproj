@@ -38,7 +38,6 @@
     <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
     <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj" />
-    <ProjectReference Include="..\..\third-party\LiveDraw\LiveDraw.csproj" />
     <ProjectReference Include="..\..\third-party\Ookii.Dialogs.Wpf\Ookii.Dialogs.Wpf.csproj" />
   </ItemGroup>
   <ItemGroup>
