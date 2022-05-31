@@ -27,7 +27,7 @@ namespace Clowd.UI.Config
             this.wndFn = wndFn;
         }
 
-        public System.Windows.Controls.Page GetSettingsPanel()
+        public Page GetSettingsPanel()
         {
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(0, GridUnitType.Auto) });
@@ -75,14 +75,14 @@ namespace Clowd.UI.Config
 
             grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(56) });
 
-            var scroll = new WPFUI.Controls.DynamicScrollViewer();
-            scroll.Padding = new Thickness(24, 0, 24, 24);
-            scroll.Content = grid;
-
-            var page = new System.Windows.Controls.Page();
-            page.Content = scroll;
-
-            return page;
+            return new Page
+            {
+                Content = new WPFUI.Controls.DynamicScrollViewer
+                {
+                    Padding = new Thickness(24, 0, 24, 24),
+                    Content = grid
+                }
+            };
         }
 
         public FrameworkElement GetRowForProperty(PropertyDescriptor pd)
@@ -267,7 +267,7 @@ namespace Clowd.UI.Config
             {
                 _factory = factory;
             }
-            
+
             public override DataTemplate SelectTemplate(object item, DependencyObject container)
             {
                 var template = new DataTemplate();
@@ -290,7 +290,7 @@ namespace Clowd.UI.Config
             {
                 _factory = factory;
             }
-            
+
             public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
             {
                 return _factory((T)value);
