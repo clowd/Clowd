@@ -1,5 +1,6 @@
 ﻿using System;
 using System.ComponentModel;
+using Vanara.PInvoke;
 
 namespace Clowd.PlatformUtil
 {
@@ -81,7 +82,7 @@ namespace Clowd.PlatformUtil
           => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
 
         public static implicit operator Vanara.PInvoke.RECT(ScreenRect rect)
-            => new Vanara.PInvoke.RECT(rect.X, rect.Y, rect.Width, rect.Height);
+            => rect != null ? new Vanara.PInvoke.RECT(rect.X, rect.Y, rect.Right, rect.Bottom) : RECT.Empty;
 
         public static implicit operator ScreenRect(Vanara.PInvoke.RECT rect)
           => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);

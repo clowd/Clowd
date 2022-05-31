@@ -80,23 +80,14 @@ namespace Clowd.UI
                 Close();
             }
 
-            public void Open()
+            public void Open(ScreenRect captureArea)
             {
                 CaptureWindow.Show(new CaptureWindowOptions
                 {
                     AccentColor = AppStyles.AccentColor,
                     TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
+                    InitialRect = captureArea,
                 });
-            }
-
-            public void Open(ScreenRect captureArea)
-            {
-                Open();
-            }
-
-            public void Open(IntPtr captureWindow)
-            {
-                Open();
             }
         }
     }

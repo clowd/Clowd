@@ -70,8 +70,8 @@ namespace Clowd.PlatformUtil.Windows
                 catch (DllNotFoundException) { }
 
                 // only return btrue if it is smaller, and fully contained within bnormal
-                // this is an attmept to fix misbehaving windows like VS
-                if (btrue.Left > bnormal.Left && btrue.Top > bnormal.Top && btrue.Right < bnormal.Right && btrue.Bottom < bnormal.Bottom)
+                // this is an attempt to fix misbehaving windows like VS
+                if (btrue.Left >= bnormal.Left && btrue.Top >= bnormal.Top && btrue.Right <= bnormal.Right && btrue.Bottom <= bnormal.Bottom)
                     return btrue;
 
                 return bnormal;
