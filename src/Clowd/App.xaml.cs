@@ -189,6 +189,7 @@ namespace Clowd
                 if (Debugger.IsAttached) Debugger.Break();
                 log.Fatal(e.Exception, "WindowsFormsApplicationThreadException");
                 MessageBox.Show("An unrecoverable error has occurred. The application will now exit.", "WindowsFormsApplicationThreadException");
+                ExitApp();
             };
 
             AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
@@ -197,6 +198,7 @@ namespace Clowd
                 if (e.ExceptionObject is Exception ex)
                     log.Fatal(ex, "AppDomainUnhandledException");
                 MessageBox.Show("An unrecoverable error has occurred. The application will now exit.", "AppDomainUnhandledException");
+                ExitApp();
             };
 
             Application.Current.DispatcherUnhandledException += (object sender, DispatcherUnhandledExceptionEventArgs e) =>
