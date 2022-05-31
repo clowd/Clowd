@@ -18,7 +18,7 @@
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="LiveDrawAppDictionary.xaml" />
+                <ResourceDictionary Source="LiveDrawDictionary.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <SolidColorBrush x:Key="PaintingColor1" Color="#FF86E238" />
@@ -231,7 +231,8 @@
                                     Click="HideButton_Click"
                                     ToolTip="Hide Drawing">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconCloseEye}" />
                                 </local:ActivatableButton>
@@ -272,41 +273,54 @@
                             <WrapPanel Margin="0" HorizontalAlignment="Right">
                                 <WrapPanel.Resources>
                                     <Style BasedOn="{StaticResource ColorPicker}" TargetType="local:ColorPicker">
-                                        <Setter Property="Size" Value="{Binding ElementName=DefaultColorPicker, Path=Size}" />
+                                        <Setter Property="Size"
+                                                Value="{Binding ElementName=DefaultColorPicker, Path=Size}" />
                                         <Setter Property="Focusable" Value="False" />
                                     </Style>
                                     <Style TargetType="StackPanel">
                                         <Setter Property="Orientation" Value="Horizontal" />
                                     </Style>
                                 </WrapPanel.Resources>
-                                <local:ColorPicker Background="{StaticResource PaintingColor6}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor6}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor3}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor3}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor2}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor2}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor1}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor1}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor5}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor5}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor9}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor9}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
                                 <local:ColorPicker
@@ -315,32 +329,43 @@
                                     Click="ColorPickers_Click"
                                     Size="Small">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor11}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor11}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor7}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor7}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor8}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor8}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor4}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor4}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
-                                <local:ColorPicker Background="{StaticResource PaintingColor12}" Click="ColorPickers_Click">
+                                <local:ColorPicker Background="{StaticResource PaintingColor12}"
+                                                   Click="ColorPickers_Click">
                                     <local:ColorPicker.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5" CenterY="17.5" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="17.5"
+                                                         CenterY="17.5" />
                                     </local:ColorPicker.RenderTransform>
                                 </local:ColorPicker>
                             </WrapPanel>
@@ -354,7 +379,8 @@
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center">
                                 <WrapPanel.Resources>
-                                    <Style BasedOn="{StaticResource FunctionalButton}" TargetType="local:ActivatableButton">
+                                    <Style BasedOn="{StaticResource FunctionalButton}"
+                                           TargetType="local:ActivatableButton">
                                         <Setter Property="Padding" Value="0" />
                                         <Setter Property="Width" Value="32" />
                                         <Setter Property="Height" Value="32" />
@@ -366,7 +392,8 @@
                                     Focusable="False"
                                     ToolTip="Reduce Font Size">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconFontReduce}" />
                                 </local:ActivatableButton>
@@ -376,7 +403,8 @@
                                     Focusable="False"
                                     ToolTip="Increase Font Size">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconFontIncrease}" />
                                 </local:ActivatableButton>
@@ -398,7 +426,8 @@
                                     Click="EnableButton_Click"
                                     ToolTip="Mouse Cursor">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconMouse}" />
                                 </local:ActivatableButton>
@@ -407,7 +436,8 @@
                                     Click="SelectButton_Click"
                                     ToolTip="Move Drawing">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconSelect}" />
                                 </local:ActivatableButton>
@@ -416,7 +446,8 @@
                                     Click="PenButton_Click"
                                     ToolTip="Pen">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconPen}" />
                                 </local:ActivatableButton>
@@ -425,7 +456,8 @@
                                     Click="TextButton_Click"
                                     ToolTip="Text">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconText}" />
                                 </local:ActivatableButton>
@@ -434,7 +466,8 @@
                                     Click="LineButton_Click"
                                     ToolTip="Line">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconLine}" />
                                 </local:ActivatableButton>
@@ -443,7 +476,8 @@
                                     Click="ArrowButton_Click"
                                     ToolTip="Arrow">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconArrow1}" />
                                 </local:ActivatableButton>
@@ -452,7 +486,8 @@
                                     Click="RectangleButton_Click"
                                     ToolTip="Rectangle">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconRectangle}" />
                                 </local:ActivatableButton>
@@ -461,7 +496,8 @@
                                     Click="CircleButton_Click"
                                     ToolTip="Circle">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconCircle}" />
                                 </local:ActivatableButton>
@@ -470,7 +506,8 @@
                                     Click="EraserButton_Click"
                                     ToolTip="Eraser">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconEraser}" />
                                 </local:ActivatableButton>
@@ -479,7 +516,8 @@
                                     Click="UndoButton_Click"
                                     ToolTip="Undo">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconUndo}" />
                                 </local:ActivatableButton>
@@ -488,7 +526,8 @@
                                     Click="RedoButton_Click"
                                     ToolTip="Undo">
                                     <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" CenterY="16" />
+                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
+                                                         CenterY="16" />
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconUndo}" RenderTransformOrigin="0.5,0.5">
                                         <Path.RenderTransform>

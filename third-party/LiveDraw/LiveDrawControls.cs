@@ -1,14 +1,41 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media.Animation;
+using System.Windows.Ink;
 
 namespace AntFu7.LiveDraw
 {
+    public enum StrokesHistoryNodeType
+    {
+        Removed,
+        Added
+    }
+
+    internal class StrokesHistoryNode
+    {
+        public StrokeCollection Strokes { get; private set; }
+        public StrokesHistoryNodeType Type { get; private set; }
+
+        public StrokesHistoryNode(StrokeCollection strokes, StrokesHistoryNodeType type)
+        {
+            Strokes = strokes;
+            Type = type;
+        }
+    }
+
+    public enum DrawMode
+    {
+        None = 0,
+        Select,
+        Pen,
+        Text,
+        Line,
+        Arrow,
+        Rectangle,
+        Circle,
+        Erase
+    }
+
     class ActivatableButton : Button
     {
         public static readonly DependencyProperty IsActivatedProperty = DependencyProperty.Register(
