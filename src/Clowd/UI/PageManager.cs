@@ -29,7 +29,7 @@ namespace Clowd.UI
 
         public ILiveDrawPage GetLiveDrawPage()
         {
-            return GetOrCreate<AntFu7.LiveDraw.LiveDrawWindow>();
+            return GetOrCreate<LiveDrawWindow>();
         }
 
         public ISettingsPage GetSettingsPage()
