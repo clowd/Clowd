@@ -1,17 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Reflection;
-using System.Windows;
+﻿using System.ComponentModel;
 using System.Windows.Input;
-using System.Windows.Media;
 using RT.Serialization;
-using RT.Util;
 
 namespace Clowd.Config
 {
-
     public class SettingsHotkey : CategoryBase
     {
         [DisplayName("General - File Upload"), ClassifyIgnoreIfDefault]
@@ -42,10 +34,18 @@ namespace Clowd.Config
             set => Set(ref _captureActiveShortcut, value);
         }
 
-        private GlobalTrigger _fileUploadShortcut = new GlobalTrigger();
-        private GlobalTrigger _captureRegionShortcut = new GlobalTrigger(Key.PrintScreen);
-        private GlobalTrigger _captureFullscreenShortcut = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Control);
-        private GlobalTrigger _captureActiveShortcut = new GlobalTrigger(Key.PrintScreen, ModifierKeys.Alt);
+        [DisplayName("Draw on Screen"), ClassifyIgnoreIfDefault]
+        public GlobalTrigger DrawOnScreenShortcut
+        {
+            get => _drawOnScreenShortcut;
+            set => Set(ref _drawOnScreenShortcut, value);
+        }
+
+        private GlobalTrigger _fileUploadShortcut = new();
+        private GlobalTrigger _captureRegionShortcut = new(Key.PrintScreen);
+        private GlobalTrigger _captureFullscreenShortcut = new(Key.PrintScreen, ModifierKeys.Control);
+        private GlobalTrigger _captureActiveShortcut = new(Key.PrintScreen, ModifierKeys.Alt);
+        private GlobalTrigger _drawOnScreenShortcut = new(Key.PrintScreen, ModifierKeys.Control | ModifierKeys.Shift);
 
         public SettingsHotkey()
         {
@@ -58,6 +58,7 @@ namespace Clowd.Config
             CaptureRegionShortcut?.Dispose();
             CaptureFullscreenShortcut?.Dispose();
             CaptureActiveShortcut?.Dispose();
+            DrawOnScreenShortcut?.Dispose();
         }
     }
 }

@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Clowd.Capture;
@@ -117,6 +118,7 @@ namespace Clowd
             SettingsRoot.Current.Hotkeys.CaptureActiveShortcut.TriggerExecuted += (s, e) => QuickCaptureCurrentWindow();
             SettingsRoot.Current.Hotkeys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
             SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
+            SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
 
             //void setTheme()
             //{
