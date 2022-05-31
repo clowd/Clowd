@@ -9,15 +9,15 @@ using System.Windows.Media.Animation;
 
 namespace AntFu7.LiveDraw
 {
-    class ActivableButton : Button
+    class ActivatableButton : Button
     {
-        public static readonly DependencyProperty IsActivedProperty = DependencyProperty.Register(
-            "IsActived", typeof(bool), typeof(ActivableButton), new PropertyMetadata(default(bool)));
+        public static readonly DependencyProperty IsActivatedProperty = DependencyProperty.Register(
+            "IsActivated", typeof(bool), typeof(ActivatableButton), new PropertyMetadata(default(bool)));
 
-        public bool IsActived
+        public bool IsActivated
         {
-            get { return (bool)GetValue(IsActivedProperty); }
-            set { SetValue(IsActivedProperty, value); }
+            get { return (bool)GetValue(IsActivatedProperty); }
+            set { SetValue(IsActivatedProperty, value); }
         }
     }
 
@@ -28,7 +28,7 @@ namespace AntFu7.LiveDraw
         Large
     }
 
-    internal class ColorPicker : ActivableButton
+    internal class ColorPicker : ActivatableButton
     {
         public static readonly DependencyProperty SizeProperty = DependencyProperty.Register(
             "Size", typeof(ColorPickerButtonSize), typeof(ColorPicker),
@@ -59,7 +59,8 @@ namespace AntFu7.LiveDraw
                     w = (double)Application.Current.Resources["ColorPickerLarge"];
                     break;
             }
-            obj.BeginAnimation(WidthProperty, new DoubleAnimation(w, (Duration)Application.Current.Resources["Duration3"]));
+
+            obj.Width = w;
         }
     }
 }

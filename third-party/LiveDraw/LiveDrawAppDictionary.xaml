@@ -120,12 +120,12 @@
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <Style x:Key="FunctionalButton" TargetType="LiveDraw:ActivableButton">
+    <Style x:Key="FunctionalButton" TargetType="LiveDraw:ActivatableButton">
         <Setter Property="Background" Value="{StaticResource FunctionalButtonBackground}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="LiveDraw:ActivableButton">
+                <ControlTemplate TargetType="LiveDraw:ActivatableButton">
                     <Grid Background="{StaticResource FakeTransparent}">
                         <Border
                             Margin="{StaticResource ElementMarginSmall}"
@@ -160,7 +160,7 @@
                     </BeginStoryboard>
                 </Trigger.ExitActions>
             </Trigger>
-            <Trigger Property="IsActived" Value="True">
+            <Trigger Property="IsActivated" Value="True">
                 <Trigger.EnterActions>
                     <BeginStoryboard>
                         <Storyboard>
@@ -224,7 +224,7 @@
                                 </BeginStoryboard>
                             </Trigger.ExitActions>
                         </Trigger>
-                        <Trigger Property="IsActived" Value="True">
+                        <Trigger Property="IsActivated" Value="True">
                             <Trigger.EnterActions>
                                 <BeginStoryboard>
                                     <Storyboard TargetProperty="Height" TargetName="CheckedIcon">
