@@ -131,7 +131,7 @@ namespace Clowd
                 set => Set(ref _deleteSessionsAfter, value);
             }
 
-            private Color _canvasBackground = Colors.White;
+            private Color _canvasBackground = Colors.Transparent;
             private bool _tabsEnabled = true;
             private bool _askBeforeClosingMultipleTabs = true;
             private int _startupPadding = 30;
