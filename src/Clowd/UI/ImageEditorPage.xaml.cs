@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -95,7 +95,7 @@ namespace Clowd.UI
 
             // if window is bigger than image, show at actual size. else, zoom to fit
             var artBounds = drawingCanvas.GetArtworkBounds(false);
-            if (this.ActualHeight > artBounds.Height && this.ActualWidth > artBounds.Width)
+            if (this.ActualHeight * drawingCanvas.CanvasUiElementScale.DpiScaleY > artBounds.Height && this.ActualWidth * drawingCanvas.CanvasUiElementScale.DpiScaleX > artBounds.Width)
             {
                 drawingCanvas.ZoomPanActualSize();
             }
