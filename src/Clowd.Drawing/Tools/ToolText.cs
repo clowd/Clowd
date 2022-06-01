@@ -208,7 +208,7 @@ namespace Clowd.Drawing.Tools
 
                 /*
                 // Way to see control template (Charles Petzold, Applications = Code + Markup, part 25).
-                
+
                 System.Xml.XmlWriterSettings settings = new System.Xml.XmlWriterSettings();
                 settings.Indent = true;
                 settings.IndentChars = new string(' ', 4);
@@ -264,34 +264,6 @@ namespace Clowd.Drawing.Tools
 
                 e.Handled = true;
                 return;
-            }
-
-            // Handle A-Z here, so that keybindings to those keys will not be handled later on.
-            if ((int)e.Key >= 44 && (int)e.Key <= 69)
-            {
-                var key = (char)KeyInterop.VirtualKeyFromKey(e.Key);
-                string str = "";
-                if (Keyboard.Modifiers == ModifierKeys.None)
-                {
-                    if (Console.CapsLock) str = key.ToString();
-                    else str = key.ToString().ToLower();
-                }
-                else if (Keyboard.Modifiers == ModifierKeys.Shift)
-                {
-                    if (Console.CapsLock) str = key.ToString().ToLower();
-                    else str = key.ToString();
-                }
-
-                if (!String.IsNullOrWhiteSpace(str))
-                {
-                    var comp = new TextComposition(InputManager.Current, TextBox, str);
-                    TextBox.RaiseEvent(new TextCompositionEventArgs(InputManager.Current.PrimaryKeyboardDevice, comp)
-                    {
-                        RoutedEvent = TextCompositionManager.TextInputEvent
-                    });
-                    e.Handled = true;
-                    return;
-                }
             }
         }
 
