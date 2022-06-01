@@ -454,16 +454,16 @@
                                     </local:ActivatableButton.RenderTransform>
                                     <Path Data="{DynamicResource IconPen}" />
                                 </local:ActivatableButton>
-                                <local:ActivatableButton
-                                    x:Name="TextButton"
-                                    Click="TextButton_Click"
-                                    ToolTip="Text">
-                                    <local:ActivatableButton.RenderTransform>
-                                        <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16"
-                                                         CenterY="16" />
-                                    </local:ActivatableButton.RenderTransform>
-                                    <Path Data="{DynamicResource IconText}" />
-                                </local:ActivatableButton>
+                                <!-- <local:ActivatableButton -->
+                                <!--     x:Name="TextButton" -->
+                                <!--     Click="TextButton_Click" -->
+                                <!--     ToolTip="Text"> -->
+                                <!--     <local:ActivatableButton.RenderTransform> -->
+                                <!--         <RotateTransform Angle="{Binding MinWidth, ElementName=Palette}" CenterX="16" -->
+                                <!--                          CenterY="16" /> -->
+                                <!--     </local:ActivatableButton.RenderTransform> -->
+                                <!--     <Path Data="{DynamicResource IconText}" /> -->
+                                <!-- </local:ActivatableButton> -->
                                 <local:ActivatableButton
                                     x:Name="LineButton"
                                     Click="LineButton_Click"
