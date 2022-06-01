@@ -55,7 +55,7 @@ namespace Clowd.UI
                 case SettingsPageTab.SettingsEditor:
                     return new SettingsControlFactory(getWindow, SettingsRoot.Current.Editor).GetSettingsPanel();
                 case SettingsPageTab.SettingsUploads:
-                    return new SettingsControlFactory(getWindow, SettingsRoot.Current.Uploads).GetSettingsPanel();
+                    return new UploadSettingsPage();
                 case SettingsPageTab.SettingsVideo:
                     return new SettingsControlFactory(getWindow, SettingsRoot.Current.Video).GetSettingsPanel();
                 case SettingsPageTab.About:

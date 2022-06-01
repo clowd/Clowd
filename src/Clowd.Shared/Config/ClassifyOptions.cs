@@ -8,7 +8,7 @@ namespace Clowd.Config
     /// <summary>
     /// Enables <see cref="Classify"/> to save color properties as strings of a human-editable form.
     /// </summary>
-    sealed class ClassifyColorTypeOptions : IClassifyXmlTypeProcessor, IClassifySubstitute<Color, string>
+    public sealed class ClassifyColorTypeOptions : IClassifyXmlTypeProcessor, IClassifySubstitute<Color, string>
     {
         public void AfterDeserialize(object obj, XElement element)
         {

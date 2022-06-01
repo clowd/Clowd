@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Clowd.Config;
 using Clowd.UI.Helpers;
+using Clowd.UI.Pages;
 using Clowd.Upload;
 using Clowd.Util;
 using Ionic.Zip;
@@ -19,7 +20,7 @@ namespace Clowd.Capture
 
         private delegate Task<UploadResult> DoUploadDelegate(IUploadProvider provider, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
 
-        private static readonly ITasksView _view = null;// App.GetService<ITasksView>();
+        private static readonly ITasksView _view = new TasksViewManager();
 
         public static Task<UploadViewState> UploadImage(Stream fileStream, string extension, string name = null, string viewName = null)
         {
@@ -214,7 +215,7 @@ namespace Clowd.Capture
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
         {
             var settings = _settings.Uploads;
-            IUploadProvider provider;
+            UploadProviderInfo provider;
 
             switch (type)
             {
@@ -235,7 +236,7 @@ namespace Clowd.Capture
             }
 
             if (provider != null && provider.IsEnabled)
-                return provider;
+                return provider.Provider;
 
             var enabled = settings.GetEnabledProviders(type).ToArray();
 
@@ -243,23 +244,23 @@ namespace Clowd.Capture
             {
                 using (TaskDialog dialog = new TaskDialog())
                 {
-                    dialog.WindowTitle = type.ToString() + " Upload";
+                    dialog.WindowTitle = $"{type} Upload";
                     dialog.MainInstruction = $"Select an upload destination:";
                     dialog.Content = $"You have not selected a default upload provider for '{type}', where would you like to send your file?";
                     dialog.ButtonStyle = TaskDialogButtonStyle.CommandLinks;
 
-                    Dictionary<TaskDialogButton, IUploadProvider> providerLookup = new Dictionary<TaskDialogButton, IUploadProvider>();
+                    Dictionary<TaskDialogButton, UploadProviderInfo> providerLookup = new Dictionary<TaskDialogButton, UploadProviderInfo>();
 
                     foreach (var p in enabled)
                     {
-                        TaskDialogButton btn = new TaskDialogButton(p.Name);
-                        btn.CommandLinkNote = p.Description;
+                        TaskDialogButton btn = new TaskDialogButton(p.Provider.Name);
+                        btn.CommandLinkNote = p.Provider.Description;
                         dialog.Buttons.Add(btn);
                         providerLookup[btn] = p;
                     }
 
                     dialog.AllowDialogCancellation = true;
-                    dialog.VerificationText = "Set choice as default for " + type;
+                    dialog.VerificationText = $"Set choice as default for {type}";
 
                     var dialogResult = await dialog.ShowAsNiceDialogAsync(null);
 
@@ -284,7 +285,7 @@ namespace Clowd.Capture
                                     break;
                             }
                         }
-                        return lookup;
+                        return lookup.Provider;
                     }
 
                     return null;

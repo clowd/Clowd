@@ -31,13 +31,6 @@ namespace Clowd.Config
 
         private CategoryBase[] All => new CategoryBase[] { General, Hotkeys, Capture, Editor, Uploads, Video };
 
-        static SettingsRoot()
-        {
-            Classify.DefaultOptions = new ClassifyOptions();
-            Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
-            Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
-        }
-
         public SettingsRoot()
         {
             if (Current != null)
