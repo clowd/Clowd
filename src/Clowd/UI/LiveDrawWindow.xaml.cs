@@ -134,7 +134,7 @@ namespace Clowd.UI
 
             SelectButton.IsActivated = _enable == true && _mode == DrawMode.Select;
             PenButton.IsActivated = _enable == true && _mode == DrawMode.Pen;
-            TextButton.IsActivated = _enable == true && _mode == DrawMode.Text;
+            // TextButton.IsActivated = _enable == true && _mode == DrawMode.Text;
             LineButton.IsActivated = _enable == true && _mode == DrawMode.Line;
             ArrowButton.IsActivated = _enable == true && _mode == DrawMode.Arrow;
             RectangleButton.IsActivated = _enable == true && _mode == DrawMode.Rectangle;
