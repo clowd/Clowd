@@ -271,7 +271,7 @@ namespace Clowd
             {
                 _taskbarIcon = new TaskbarIcon();
                 //_taskbarIcon.WndProcMessageReceived += OnWndProcMessageReceived;
-                _taskbarIcon.ToolTipText = "Clowd\nRight click me or drop something on me\nto see what I can do!";
+                _taskbarIcon.ToolTipText = "Clowd\nRight click me to see what I can do!";
                 _taskbarIcon.TrayMouseDoubleClick += (s, e) => PageManager.Current.GetSettingsPage().Open();
             }
 
@@ -300,7 +300,7 @@ namespace Clowd
                 context.Items.Add(uploadFile);
 
                 var uploads = new MenuItem() { Header = "Show _Uploads" };
-                //uploads.Click += (s, e) => GetService<ITasksView>().Show();
+                uploads.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
                 context.Items.Add(uploads);
             }
 
@@ -326,7 +326,7 @@ namespace Clowd
             var settings = new MenuItem() { Header = "_Settings" };
             settings.Click += (s, e) =>
             {
-                PageManager.Current.GetSettingsPage().Open();
+                PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
             };
             context.Items.Add(settings);
 
