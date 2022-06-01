@@ -134,14 +134,14 @@
             Key="T"
             Command="{StaticResource Commands.SelectTool}"
             CommandParameter="Text" />
-        <KeyBinding
-            Key="O"
-            Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Pixelate" />
-        <KeyBinding
-            Key="X"
-            Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Erase" />
+        <!-- <KeyBinding -->
+        <!--     Key="O" -->
+        <!--     Command="{StaticResource Commands.SelectTool}" -->
+        <!--     CommandParameter="Pixelate" /> -->
+        <!-- <KeyBinding -->
+        <!--     Key="X" -->
+        <!--     Command="{StaticResource Commands.SelectTool}" -->
+        <!--     CommandParameter="Erase" /> -->
         <KeyBinding
             Key="D0"
             Command="{StaticResource Commands.ZoomFit}"
