@@ -22,6 +22,7 @@ using Clowd.Upload;
 using Clowd.Util;
 using Clowd.Video;
 using Hardcodet.Wpf.TaskbarNotification;
+using Microsoft.Toolkit.Uwp.Notifications;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
@@ -101,13 +102,13 @@ namespace Clowd
             {
                 Assembly.Load(assy);
             }
-            
+
             Classify.DefaultOptions = new ClassifyOptions();
             Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
             Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
-            
+
             // TODO add upload providers, and graphics objects to classify "friendly classes" when it exists
-            
+
             try
             {
                 SettingsRoot.LoadDefault();
@@ -134,7 +135,7 @@ namespace Clowd
             SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
 
 
-         //void setTheme()
+            //void setTheme()
             //{
             //    WPFUI.Appearance.Theme.Set(SettingsRoot.Current.General.Theme switch
             //    {
@@ -363,11 +364,6 @@ namespace Clowd
             _taskbarIcon.ContextMenu = context;
         }
 
-        public void ShowBallonTip(string title, string content)
-        {
-            _taskbarIcon.ShowBalloonTip(title, content, BalloonIcon.Info);
-        }
-        
         public void StartCapture(ScreenRect region = null)
         {
             PageManager.Current.GetScreenCapturePage().Open(region);
@@ -428,6 +424,8 @@ namespace Clowd
             try { LogManager.Flush(); }
             catch { }
 
+            ToastNotificationManagerCompat.Uninstall();
+            
             Environment.Exit(0);
         }
 
