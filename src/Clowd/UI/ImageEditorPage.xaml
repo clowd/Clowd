@@ -9,6 +9,7 @@
     xmlns:helpers="clr-namespace:Clowd.UI.Helpers"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:clowd="clr-namespace:Clowd;assembly=Clowd.Shared"
     d:DesignHeight="450"
     d:DesignWidth="800"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
@@ -98,47 +99,74 @@
             Key="Esc"
             Command="{StaticResource Commands.SelectTool}"
             CommandParameter="Pointer" />
-        <KeyBinding
-            Key="D"
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="None" />
-        <KeyBinding
-            Key="S"
+            CommandParameter="None">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="D" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Pointer" />
-        <KeyBinding
-            Key="R"
+            CommandParameter="Pointer">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="S" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Rectangle" />
-        <KeyBinding
-            Key="F"
+            CommandParameter="Rectangle">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="R" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="FilledRectangle" />
-        <KeyBinding
-            Key="E"
+            CommandParameter="FilledRectangle">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="F" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Ellipse" />
-        <KeyBinding
-            Key="L"
+            CommandParameter="Ellipse">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="E" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Line" />
-        <KeyBinding
-            Key="A"
+            CommandParameter="Line">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="L" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Arrow" />
-        <KeyBinding
-            Key="P"
+            CommandParameter="Arrow">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="A" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="PolyLine" />
-        <KeyBinding
-            Key="T"
+            CommandParameter="PolyLine">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="P" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <InputBinding
             Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Text" />
-        <!-- <KeyBinding -->
+            CommandParameter="Text">
+            <InputBinding.Gesture>
+                <clowd:BareKeyGesture Key="T" />
+            </InputBinding.Gesture>
+        </InputBinding>
+        <!-- <InputBinding -->
         <!--     Key="O" -->
         <!--     Command="{StaticResource Commands.SelectTool}" -->
         <!--     CommandParameter="Pixelate" /> -->
-        <!-- <KeyBinding -->
+        <!-- <InputBinding -->
         <!--     Key="X" -->
         <!--     Command="{StaticResource Commands.SelectTool}" -->
         <!--     CommandParameter="Erase" /> -->
