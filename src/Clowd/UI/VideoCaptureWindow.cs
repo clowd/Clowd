@@ -197,7 +197,7 @@ namespace Clowd.UI
             _btnMicrophone.IsEnabled = false;
             _btnSpeaker.IsEnabled = false;
 
-            for (int i = 4; i >= 1; i--)
+            for (int i = 3; i >= 1; i--)
             {
                 BorderWindow.SetText(i.ToString());
                 //labelCountdown.FontSize = 120;
