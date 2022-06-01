@@ -133,6 +133,7 @@ namespace Clowd
             SettingsRoot.Current.Hotkeys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
             SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
             SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
+            SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut.TriggerExecuted += (s, e) => ToggleScreenRecording();
 
 
             //void setTheme()
@@ -364,6 +365,25 @@ namespace Clowd
             _taskbarIcon.ContextMenu = context;
         }
 
+        public void ToggleScreenRecording()
+        {
+            var vid = PageManager.Current.GetExistingVideoCapturePage();
+            if (vid == null) return;
+
+            try
+            {
+                if (vid.IsRecording)
+                {
+                    vid.StopRecording();
+                }
+                else
+                {
+                    vid.StartRecording();
+                }
+            }
+            catch { ; } // don't really care if recorder is in a bad state.
+        }
+
         public void StartCapture(ScreenRect region = null)
         {
             PageManager.Current.GetScreenCapturePage().Open(region);
@@ -425,7 +445,7 @@ namespace Clowd
             catch { }
 
             ToastNotificationManagerCompat.Uninstall();
-            
+
             Environment.Exit(0);
         }
 

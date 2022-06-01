@@ -20,11 +20,16 @@ namespace Clowd.UI
         private PageManager()
         { }
 
-        public IVideoCapturePage CreateVideoCapturePage()
+        public void CreateNewVideoCapturePage(ScreenRect region = null)
         {
-            if (_singletons.ContainsKey(typeof(VideoCaptureWindow)))
-                throw new InvalidOperationException("Not allowed retrieve open video pages, and only one can be open at a time.");
-            return GetOrCreate<VideoCaptureWindow>();
+            // if there is already an open video window, just ignore.
+            if (_singletons.ContainsKey(typeof(VideoCaptureWindow))) return;
+            GetOrCreate<VideoCaptureWindow>().Open(region);
+        }
+        
+        public IVideoCapturePage GetExistingVideoCapturePage()
+        {
+            return GetOrCreate<VideoCaptureWindow>(false);
         }
 
         public ILiveDrawPage GetLiveDrawPage()
@@ -42,11 +47,13 @@ namespace Clowd.UI
             return new StaticCaptureWrapper();
         }
 
-        private T GetOrCreate<T>() where T : IPage
+        private T GetOrCreate<T>(bool canCreate = true) where T : IPage
         {
             if (_singletons.ContainsKey(typeof(T)))
                 return (T)_singletons[typeof(T)];
 
+            if (!canCreate) return default;
+            
             var inst = Activator.CreateInstance<T>();
             HandleClosing(inst);
 

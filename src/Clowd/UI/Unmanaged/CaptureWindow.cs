@@ -112,7 +112,7 @@ namespace Clowd.UI.Unmanaged
             {
                 App.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    PageManager.Current.CreateVideoCapturePage().Open(rect);
+                    PageManager.Current.CreateNewVideoCapturePage(rect);
                 });
             }
         }

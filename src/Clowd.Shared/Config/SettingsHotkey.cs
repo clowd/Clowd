@@ -6,28 +6,28 @@ namespace Clowd.Config
 {
     public class SettingsHotkey : CategoryBase
     {
-        [DisplayName("General - File Upload"), ClassifyIgnoreIfDefault]
+        [DisplayName("Upload a File"), ClassifyIgnoreIfDefault]
         public GlobalTrigger FileUploadShortcut
         {
             get => _fileUploadShortcut;
             set => Set(ref _fileUploadShortcut, value);
         }
 
-        [DisplayName("Capture - Region"), ClassifyIgnoreIfDefault]
+        [DisplayName("Capture Region"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureRegionShortcut
         {
             get => _captureRegionShortcut;
             set => Set(ref _captureRegionShortcut, value);
         }
 
-        [DisplayName("Capture - Fullscreen"), ClassifyIgnoreIfDefault]
+        [DisplayName("Capture Active Screen"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureFullscreenShortcut
         {
             get => _captureFullscreenShortcut;
             set => Set(ref _captureFullscreenShortcut, value);
         }
 
-        [DisplayName("Capture - Active Window"), ClassifyIgnoreIfDefault]
+        [DisplayName("Capture Active Window"), ClassifyIgnoreIfDefault]
         public GlobalTrigger CaptureActiveShortcut
         {
             get => _captureActiveShortcut;
@@ -40,16 +40,26 @@ namespace Clowd.Config
             get => _drawOnScreenShortcut;
             set => Set(ref _drawOnScreenShortcut, value);
         }
+        
+        [DisplayName("Start / Stop Screen Recording"), ClassifyIgnoreIfDefault]
+        public GlobalTrigger StartStopRecordingShortcut
+        {
+            get => _startStopRecordingShortcut;
+            set => Set(ref _startStopRecordingShortcut, value);
+        }
 
         private GlobalTrigger _fileUploadShortcut = new();
         private GlobalTrigger _captureRegionShortcut = new(Key.PrintScreen);
         private GlobalTrigger _captureFullscreenShortcut = new(Key.PrintScreen, ModifierKeys.Control);
         private GlobalTrigger _captureActiveShortcut = new(Key.PrintScreen, ModifierKeys.Alt);
         private GlobalTrigger _drawOnScreenShortcut = new(Key.PrintScreen, ModifierKeys.Control | ModifierKeys.Shift);
+        private GlobalTrigger _startStopRecordingShortcut = new(Key.PrintScreen, ModifierKeys.Shift);
 
         public SettingsHotkey()
         {
-            Subscribe(FileUploadShortcut, CaptureRegionShortcut, CaptureFullscreenShortcut, CaptureActiveShortcut, DrawOnScreenShortcut);
+            Subscribe(
+                FileUploadShortcut, CaptureRegionShortcut, CaptureFullscreenShortcut, CaptureActiveShortcut, DrawOnScreenShortcut,
+                StartStopRecordingShortcut);
         }
 
         protected override void DisposeInternal()

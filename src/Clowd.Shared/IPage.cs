@@ -1,5 +1,6 @@
 ﻿using Clowd.PlatformUtil;
 using System;
+using System.Threading.Tasks;
 
 namespace Clowd
 {
@@ -30,7 +31,10 @@ namespace Clowd
 
     public interface IVideoCapturePage : IPage
     {
+        bool IsRecording { get; }
         void Open(ScreenRect captureArea);
+        Task StartRecording();
+        Task StopRecording();
     }
 
     public interface ILiveDrawPage : IPage

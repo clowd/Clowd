@@ -30,13 +30,15 @@ namespace Clowd.UI
 
         private bool _opened;
         private bool _disposed;
+        private bool _hasStarted;
+        private bool _isCancelled;
+
         private ScreenRect _selection;
         private IVideoCapturer _capturer;
         private static SettingsVideo _settings => SettingsRoot.Current.Video;
         private UIAudioMonitor _monitor;
         private string _fileName;
         private FloatingButtonWindow _floating;
-        private bool _isCancelled = false;
 
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
@@ -64,7 +66,7 @@ namespace Clowd.UI
                 Text = "Start",
                 IconPath = AppStyles.GetIconElement(ResourceIcon.IconPlay),
                 PulseBackground = true,
-                Executed = OnStart,
+                Executed = (s, e) => StartRecording(),
             };
 
             _btnStop = new CaptureToolButton
@@ -72,7 +74,7 @@ namespace Clowd.UI
                 Primary = true,
                 Text = "Finish",
                 IconPath = AppStyles.GetIconElement(ResourceIcon.IconStop),
-                Executed = OnStop,
+                Executed = (s, e) => StopRecording(),
                 Visibility = Visibility.Collapsed,
             };
 
@@ -182,8 +184,15 @@ namespace Clowd.UI
             _floating.ShowPanel(captureArea);
         }
 
-        private async void OnStart(object sender, EventArgs e)
+        public async Task StartRecording()
         {
+            if (_disposed)
+                throw new ObjectDisposedException("This object is disposed.");
+
+            if (_hasStarted)
+                throw new InvalidOperationException("StartRecording can only be called once");
+
+            _hasStarted = true;
             _btnStart.IsEnabled = false;
             _btnMicrophone.IsEnabled = false;
             _btnSpeaker.IsEnabled = false;
@@ -217,8 +226,11 @@ namespace Clowd.UI
             _btnStop.Visibility = Visibility.Visible;
         }
 
-        private async void OnStop(object sender, EventArgs e)
+        public async Task StopRecording()
         {
+            if (_disposed)
+                throw new ObjectDisposedException("This object is disposed.");
+            
             var wasRecording = IsRecording;
             _isCancelled = true;
             if (IsRecording)
