@@ -40,12 +40,8 @@ namespace Clowd
 
         SupportedUploadType SupportedUpload { get; }
 
-        [Browsable(false)]
-        bool IsEnabled { get; set; }
-
-        //Task<UploadResult> UploadAsync(string filePath, UploadProgressHandler progress, string uploadName);
         Task<UploadResult> UploadAsync(string filePath, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
-        //Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName);
+        
         Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
     }
 

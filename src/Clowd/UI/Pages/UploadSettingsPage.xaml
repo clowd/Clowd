@@ -1,0 +1,76 @@
+﻿<Page
+    x:Class="Clowd.UI.Pages.UploadSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd.UI.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
+    xmlns:config="clr-namespace:Clowd.Config;assembly=Clowd.Shared"
+    Title="GeneralSettingsPage"
+    d:Background="White"
+    d:DesignHeight="450"
+    d:DataContext="{d:DesignInstance Type=config:SettingsUpload}"
+    d:DesignWidth="400"
+    mc:Ignorable="d">
+    <Page.Resources>
+        <Style BasedOn="{StaticResource BodyTextBlockStyle}" TargetType="TextBlock" />
+        <Style BasedOn="{StaticResource {x:Type ComboBox}}" TargetType="ComboBox">
+            <Setter Property="MinWidth" Value="160" />
+            <Setter Property="Margin" Value="0,8,0,12" />
+        </Style>
+        <Style BasedOn="{StaticResource {x:Type CheckBox}}" TargetType="CheckBox">
+            <Setter Property="Margin" Value="0,4,0,8" />
+        </Style>
+    </Page.Resources>
+    <wpfui:DynamicScrollViewer Padding="0,0,24,24">
+        <controls:SimpleStackPanel>
+            <TextBlock>Image</TextBlock>
+            <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Image}"></ComboBox>
+            
+            <TextBlock>Video</TextBlock>
+            <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Video}"></ComboBox>
+            
+            <TextBlock>Binary</TextBlock>
+            <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Binary}"></ComboBox>
+            
+            <TextBlock>Text</TextBlock>
+            <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Text}"></ComboBox>
+            
+            <ListView ItemsSource="{Binding Providers}">
+                <ListView.Style>
+                    <Style TargetType="ListView">
+                        <Style.Triggers>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListView">
+                                            <TextBlock Text="No upload providers available."/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListView.Style>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid HorizontalAlignment="Stretch">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="1" IsChecked="{Binding IsEnabled}"><TextBlock Text="{Binding Provider.Name}" /></CheckBox>
+                            <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding Provider.Description}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </controls:SimpleStackPanel>
+    </wpfui:DynamicScrollViewer>
+</Page>

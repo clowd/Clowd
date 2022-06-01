@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -17,6 +18,7 @@ using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI;
 using Clowd.UI.Helpers;
+using Clowd.Upload;
 using Clowd.Util;
 using Clowd.Video;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -95,6 +97,17 @@ namespace Clowd
 
         private async Task SetupSettings()
         {
+            foreach (var assy in Assembly.GetExecutingAssembly().GetReferencedAssemblies())
+            {
+                Assembly.Load(assy);
+            }
+            
+            Classify.DefaultOptions = new ClassifyOptions();
+            Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
+            Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
+            
+            // TODO add upload providers, and graphics objects to classify "friendly classes" when it exists
+            
             try
             {
                 SettingsRoot.LoadDefault();
@@ -120,7 +133,8 @@ namespace Clowd
             SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
             SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
 
-            //void setTheme()
+
+         //void setTheme()
             //{
             //    WPFUI.Appearance.Theme.Set(SettingsRoot.Current.General.Theme switch
             //    {
@@ -349,6 +363,11 @@ namespace Clowd
             _taskbarIcon.ContextMenu = context;
         }
 
+        public void ShowBallonTip(string title, string content)
+        {
+            _taskbarIcon.ShowBalloonTip(title, content, BalloonIcon.Info);
+        }
+        
         public void StartCapture(ScreenRect region = null)
         {
             PageManager.Current.GetScreenCapturePage().Open(region);
