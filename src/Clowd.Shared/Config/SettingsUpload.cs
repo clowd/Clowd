@@ -13,20 +13,21 @@ namespace Clowd.Config
 {
     public class UploadProviderInfo : SimpleNotifyObject
     {
-        public IUploadProvider Provider
-        {
-            get => _provider;
-            set => Set(ref _provider, value);
-        }
-        
         public bool IsEnabled
         {
             get => _isEnabled;
             set => Set(ref _isEnabled, value);
         }
         
-        private IUploadProvider _provider;
+        [FlattenSettingsObject]
+        public IUploadProvider Provider
+        {
+            get => _provider;
+            set => Set(ref _provider, value);
+        }
+        
         private bool _isEnabled;
+        private IUploadProvider _provider;
     }
     
     public class SettingsUpload : CategoryBase
