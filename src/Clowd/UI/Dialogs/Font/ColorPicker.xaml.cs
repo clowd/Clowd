@@ -34,12 +34,14 @@ namespace Clowd.UI.Dialogs.Font
             ColorPicker.ColorChangedEvent = EventManager.RegisterRoutedEvent("ColorChanged", RoutingStrategy.Bubble, typeof(RoutedEventHandler), typeof(ColorPicker));
             ColorPicker.SelectedColorProperty = DependencyProperty.Register("SelectedColor", typeof(FontColor), typeof(ColorPicker), new UIPropertyMetadata(null));
         }
+
         public ColorPicker()
         {
             InitializeComponent();
             this.viewModel = new ColorPickerViewModel();
             base.DataContext = this.viewModel;
         }
+
         private void RaiseColorChangedEvent()
         {
             base.RaiseEvent(new RoutedEventArgs(ColorPicker.ColorChangedEvent));

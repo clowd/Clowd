@@ -8,6 +8,7 @@ namespace Clowd.UI
     public class SystemThemedWindow : InteropWindow
     {
         private bool? _isDark;
+
         public SystemThemedWindow()
         {
             //ThemeManager.SetIsThemeAware(this, true);

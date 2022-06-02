@@ -3,6 +3,7 @@
  * ivan [at] ikriv.com
  * They are distributed under the Apache License http://www.apache.org/licenses/LICENSE-2.0.html
  */
+
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -154,10 +155,18 @@ namespace Clowd.UI.Converters
                 _right = right;
                 switch (operation)
                 {
-                    case '+': _operation = (a, b) => (a + b); break;
-                    case '-': _operation = (a, b) => (a - b); break;
-                    case '*': _operation = (a, b) => (a * b); break;
-                    case '/': _operation = (a, b) => (a / b); break;
+                    case '+':
+                        _operation = (a, b) => (a + b);
+                        break;
+                    case '-':
+                        _operation = (a, b) => (a - b);
+                        break;
+                    case '*':
+                        _operation = (a, b) => (a * b);
+                        break;
+                    case '/':
+                        _operation = (a, b) => (a / b);
+                        break;
                     default: throw new ArgumentException("Invalid operation " + operation);
                 }
             }
@@ -291,8 +300,14 @@ namespace Clowd.UI.Converters
                 {
                     ++pos;
                     var end = text.IndexOf('}', pos);
-                    if (end < 0) { --pos; throw new ArgumentException("Unmatched '{'"); }
+                    if (end < 0)
+                    {
+                        --pos;
+                        throw new ArgumentException("Unmatched '{'");
+                    }
+
                     if (end == pos) { throw new ArgumentException("Missing parameter index after '{'"); }
+
                     var result = new Variable(text.Substring(pos, end - pos).Trim());
                     pos = end + 1;
                     SkipWhiteSpace();

@@ -15,9 +15,12 @@ namespace Clowd.Util
 {
     public class ClipboardDataObject
     {
-        private static string[] _knownImageExt = new[] {
-            ".png", ".jpg", ".jpeg",".jpe", ".bmp",
-            ".gif", ".tif", ".tiff", ".ico" };
+        private static string[] _knownImageExt = new[]
+        {
+            ".png", ".jpg", ".jpeg", ".jpe", ".bmp",
+            ".gif", ".tif", ".tiff", ".ico"
+        };
+
         private readonly IDataObject _data;
         private static readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
@@ -341,6 +344,7 @@ namespace Clowd.Util
                     bitmap.Dispose();
                 handle.Free();
             }
+
             return bsource;
         }
 
@@ -360,6 +364,7 @@ namespace Clowd.Util
                     Int32 offs = startIndex + (littleEndian ? index : lastByte - index);
                     value += (UInt32)(data[offs] << (8 * index));
                 }
+
                 return value;
             }
 
@@ -393,8 +398,10 @@ namespace Clowd.Util
                         else
                             break;
                     }
+
                     newImage.Palette = pal;
                 }
+
                 return newImage;
             }
 
@@ -435,6 +442,7 @@ namespace Clowd.Util
                     default:
                         return null;
                 }
+
                 if (compression == 3)
                     imageIndex += 12;
                 if (dibBytes.Length < imageIndex)
@@ -470,6 +478,7 @@ namespace Clowd.Util
                         // but I don't think the clipboard ever uses these anyway.
                         return null;
                 }
+
                 using (Bitmap bitmap = BuildImage(image, width, height, stride, fmt, null, null))
                 {
                     // This is bmp; reverse image lines.

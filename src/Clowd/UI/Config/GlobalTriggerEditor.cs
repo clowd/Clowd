@@ -108,6 +108,7 @@ namespace Clowd.UI.Config
                     // invalid keygesture
                 }
             }
+
             UpdateControls();
         }
 
@@ -121,6 +122,7 @@ namespace Clowd.UI.Config
 
             return false;
         }
+
         private void UpdateControls()
         {
             if (IsEditing)
@@ -132,6 +134,7 @@ namespace Clowd.UI.Config
                     key.Append((ModifierKeys)en);
                     key.Append('+');
                 }
+
                 key.Append(" ...");
                 _button.Content = key.ToString();
             }

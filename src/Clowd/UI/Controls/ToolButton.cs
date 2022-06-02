@@ -45,8 +45,7 @@ namespace Clowd.UI.Controls
         }
 
         public ToolButton()
-        {
-        }
+        { }
 
         protected override void OnToggle()
         {

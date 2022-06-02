@@ -27,6 +27,7 @@ namespace Clowd.UI.Config
                     o.PropertyChanged -= ProviderPropertyChanged;
                 }
             }
+
             var newv = e.NewValue as List<IUploadProvider>;
             if (newv != null)
             {

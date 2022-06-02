@@ -10,6 +10,7 @@ namespace Clowd.Util
         {
             return Start(interval, action, true);
         }
+
         public static IDisposable Start(TimeSpan interval, Action action, bool synchronized)
         {
             var dispatcher = Dispatcher.CurrentDispatcher;

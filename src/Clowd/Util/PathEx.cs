@@ -45,6 +45,7 @@ namespace Clowd.Util
 
             return FindCommonRoot(pathList, forward > backward ? '/' : '\\');
         }
+
         public static string FindCommonRoot(IEnumerable<string> paths, char separator)
         {
             var pathList = paths.Where(p => !String.IsNullOrEmpty(p)).ToList();
@@ -85,6 +86,7 @@ namespace Clowd.Util
 
             return common;
         }
+
         public static IEnumerable<string> EnumeratePathPattern(string pattern)
         {
             char separator = Path.DirectorySeparatorChar;
@@ -136,6 +138,7 @@ namespace Clowd.Util
         {
             return new TempFile(GetTempFilePath(Path.GetTempPath(), extension));
         }
+
         internal static string GetTempFilePath(string root, string extension)
         {
             if (!extension.StartsWith("."))
@@ -193,7 +196,10 @@ namespace Clowd.Util
                 {
                     Directory.Delete(Path, true);
                 }
-                catch { /* we don't care about exceptions. */ }
+                catch
+                {
+                    /* we don't care about exceptions. */
+                }
             }
         }
     }
@@ -220,7 +226,10 @@ namespace Clowd.Util
                 {
                     File.Delete(Path);
                 }
-                catch { /* we don't care about exceptions. */ }
+                catch
+                {
+                    /* we don't care about exceptions. */
+                }
             }
         }
     }

@@ -14,14 +14,15 @@ namespace Clowd.UI.Helpers
         #endregion // Member Variables
 
         #region Constructor
+
         public PropertyChangeNotifier(DependencyObject propertySource, string path)
             : this(propertySource, new PropertyPath(path))
-        {
-        }
+        { }
+
         public PropertyChangeNotifier(DependencyObject propertySource, DependencyProperty property)
             : this(propertySource, new PropertyPath(property))
-        {
-        }
+        { }
+
         public PropertyChangeNotifier(DependencyObject propertySource, PropertyPath property)
         {
             if (null == propertySource)
@@ -37,9 +38,11 @@ namespace Clowd.UI.Helpers
             };
             BindingOperations.SetBinding(this, ValueProperty, binding);
         }
+
         #endregion // Constructor
 
         #region PropertySource
+
         public DependencyObject PropertySource
         {
             get
@@ -50,8 +53,8 @@ namespace Clowd.UI.Helpers
                     // will result in an exception so i’ve wrapped this check
                     // in a try catch
                     return _propertySource.IsAlive
-                    ? _propertySource.Target as DependencyObject
-                    : null;
+                        ? _propertySource.Target as DependencyObject
+                        : null;
                 }
                 catch
                 {
@@ -59,14 +62,16 @@ namespace Clowd.UI.Helpers
                 }
             }
         }
+
         #endregion // PropertySource
 
         #region Value
+
         /// <summary>
         /// Identifies the <see cref="Value"/> dependency property
         /// </summary>
         public static readonly DependencyProperty ValueProperty = DependencyProperty.Register("Value",
-        typeof(object), typeof(PropertyChangeNotifier), new FrameworkPropertyMetadata(null, OnPropertyChanged));
+            typeof(object), typeof(PropertyChangeNotifier), new FrameworkPropertyMetadata(null, OnPropertyChanged));
 
         private static void OnPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -93,10 +98,13 @@ namespace Clowd.UI.Helpers
                 SetValue(ValueProperty, value);
             }
         }
+
         #endregion //Value
 
         #region Events
+
         public event EventHandler ValueChanged;
+
         #endregion // Events
 
         #region IDisposable Members

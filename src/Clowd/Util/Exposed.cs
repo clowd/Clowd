@@ -180,8 +180,7 @@ namespace Clowd.Util
                         member = field;
                     }
                 }
-            }
-            while (member == null && (declaringType = declaringType.BaseType) != null);
+            } while (member == null && (declaringType = declaringType.BaseType) != null);
 
             if (member == null)
                 throw new MissingMemberException(SubjectType.Name, memberName);
@@ -279,8 +278,7 @@ namespace Clowd.Util
                 do
                 {
                     method = declaringType.GetMethod(binder.Name, GetBindingFlags(), null, argTypes, null);
-                }
-                while (method == null && (declaringType = declaringType.BaseType) != null);
+                } while (method == null && (declaringType = declaringType.BaseType) != null);
 
                 if (method == null)
                 {
@@ -288,8 +286,8 @@ namespace Clowd.Util
                 }
 
                 var @this = isStatic
-                                ? null
-                                : Expression.Convert(Expression.Field(Expression.Convert(self, typeof(Exposed)), "value"), type);
+                    ? null
+                    : Expression.Convert(Expression.Field(Expression.Convert(self, typeof(Exposed)), "value"), type);
 
                 var target = Expression.Call(@this, method, argExps);
                 var restrictions = BindingRestrictions.GetTypeRestriction(self, typeof(Exposed));
@@ -364,8 +362,8 @@ namespace Clowd.Util
                 MemberExpression memberExpression = null;
                 var type = ((Exposed)Value).SubjectType;
                 var @this = isStatic
-                                ? null
-                                : Expression.Convert(Expression.Field(Expression.Convert(self, typeof(Exposed)), "value"), type);
+                    ? null
+                    : Expression.Convert(Expression.Field(Expression.Convert(self, typeof(Exposed)), "value"), type);
                 var declaringType = type;
 
                 do
@@ -383,8 +381,7 @@ namespace Clowd.Util
                             memberExpression = Expression.Field(@this, field);
                         }
                     }
-                }
-                while (memberExpression == null && (declaringType = declaringType.BaseType) != null);
+                } while (memberExpression == null && (declaringType = declaringType.BaseType) != null);
 
                 if (memberExpression == null)
                 {
@@ -407,14 +404,17 @@ namespace Clowd.Util
                 {
                     return target;
                 }
+
                 if (target.Type == typeof(void))
                 {
                     return Expression.Block(target, Expression.Default(expectedType));
                 }
+
                 if (expectedType == typeof(void))
                 {
                     return Expression.Block(target, Expression.Empty());
                 }
+
                 return Expression.Convert(target, expectedType);
             }
 
@@ -427,8 +427,8 @@ namespace Clowd.Util
             private BindingFlags GetBindingFlags()
             {
                 return isStatic
-                           ? BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
-                           : BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                    ? BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+                    : BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             }
         }
     }

@@ -22,6 +22,7 @@ namespace Clowd.UI.Dialogs.Font
 
         private int[] _defaultFontSizes = { 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72, 96 };
         private int[] _fontSizes = null;
+
         public int[] FontSizes
         {
             get
@@ -33,6 +34,7 @@ namespace Clowd.UI.Dialogs.Font
                 _fontSizes = value;
             }
         }
+
         public ColorFontDialog(bool previewFontInFontList = true, bool allowArbitraryFontSizes = true, bool showColorPicker = true)
         {
             InitializeComponent();
@@ -67,12 +69,15 @@ namespace Clowd.UI.Dialogs.Font
                     foundMatch = true;
                     break;
                 }
+
                 idx++;
             }
+
             if (!foundMatch)
             {
                 idx = 0;
             }
+
             this.colorFontChooser.lstFamily.SelectedIndex = idx;
             this.colorFontChooser.lstFamily.ScrollIntoView(this.colorFontChooser.lstFamily.Items[idx]);
         }
@@ -94,8 +99,10 @@ namespace Clowd.UI.Dialogs.Font
                 {
                     break;
                 }
+
                 idx++;
             }
+
             this.colorFontChooser.lstTypefaces.SelectedIndex = idx;
             this.colorFontChooser.lstTypefaces.ScrollIntoView(this.colorFontChooser.lstTypefaces.SelectedItem);
         }

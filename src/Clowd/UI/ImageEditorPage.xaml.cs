@@ -32,6 +32,7 @@ namespace Clowd.UI
                 }
             }
         }
+
         private ToolStateManager _manager = new ToolStateManager();
         private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private PropertyChangeNotifier toolNotifier;
@@ -206,6 +207,7 @@ namespace Clowd.UI
                 NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "This operation could not be completed because there are no objects on the canvas.", "Canvas Empty");
                 return false;
             }
+
             return true;
         }
 
@@ -309,6 +311,7 @@ namespace Clowd.UI
             {
                 return;
             }
+
             dlg.PrintVisual(image, "Graphics");
         }
 
@@ -586,9 +589,6 @@ namespace Clowd.UI
             //var image = selection[0] as GraphicImage;
             //if (image == null)
             //    return;
-
-
-
 
 
             //CaptureWindow2.ShowNewCapture(_initialBounds, (img) =>

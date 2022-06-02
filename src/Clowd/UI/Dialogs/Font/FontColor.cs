@@ -28,15 +28,18 @@ namespace Clowd.UI.Dialogs.Font
             {
                 return false;
             }
+
             FontColor p = obj as FontColor;
             if (p == null)
             {
                 return false;
             }
+
             if (this.Name != p.Name)
             {
                 return false;
             }
+
             return this.Brush.Equals(p.Brush);
         }
 
@@ -46,10 +49,12 @@ namespace Clowd.UI.Dialogs.Font
             {
                 return false;
             }
+
             if (this.Name != p.Name)
             {
                 return false;
             }
+
             return this.Brush.Equals(p.Brush);
         }
 
