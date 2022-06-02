@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Media;
+using Clowd.Capture;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Helpers;
@@ -119,26 +120,28 @@ namespace Clowd.UI.Unmanaged
 
         private static void SessionCaptureImpl(string sessionJsonPath, CaptureType captureType)
         {
-            App.Current.Dispatcher.InvokeAsync(() =>
+            App.Current.Dispatcher.InvokeAsync(async () =>
             {
                 var session = SessionManager.Current.GetSessionFromPath(sessionJsonPath);
                 if (session != null)
                 {
                     if (captureType == CaptureType.Save)
                     {
-                        NiceDialog.ShowSelectSaveFileDialog(null, "Save Screenshot", SettingsRoot.Current.General.LastSavePath, "screenshot", "png").ContinueWith(t =>
+                        var filename = await NiceDialog.ShowSelectSaveFileDialog(null, "Save Screenshot", SettingsRoot.Current.General.LastSavePath, "screenshot", "png");
+                        if (filename != null)
                         {
-                            var filename = t.Result;
-                            if (filename != null)
-                            {
-                                File.Copy(session.PreviewImgPath, filename);
-                                if (SettingsRoot.Current.Capture.OpenSavedInExplorer)
-                                    Platform.Current.RevealFileOrFolder(filename);
-                                SettingsRoot.Current.General.LastSavePath = Path.GetDirectoryName(filename);
-                                // delete only if saved as recovery is no longer needed
-                                SessionManager.Current.DeleteSession(session); 
-                            }
-                        }, TaskScheduler.FromCurrentSynchronizationContext());
+                            File.Copy(session.PreviewImgPath, filename);
+                            if (SettingsRoot.Current.Capture.OpenSavedInExplorer)
+                                Platform.Current.RevealFileOrFolder(filename);
+                            SettingsRoot.Current.General.LastSavePath = Path.GetDirectoryName(filename);
+                            // delete only if saved as recovery is no longer needed
+                            SessionManager.Current.DeleteSession(session); 
+                        }
+                    }
+                    else if (captureType == CaptureType.Upload)
+                    {
+                        await using var fs = File.OpenRead(session.PreviewImgPath);
+                        await UploadManager.UploadImage(fs, ".png", "Screenshot");
                     }
                     else
                     {

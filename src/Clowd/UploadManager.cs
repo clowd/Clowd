@@ -293,7 +293,7 @@ namespace Clowd.Capture
             }
             else
             {
-                await NiceDialog.ShowSettingsPromptAsync(null, SettingsPageTab.Uploads,
+                await NiceDialog.ShowSettingsPromptAsync(null, SettingsPageTab.SettingsUploads,
                     $"There is no upload provider configured/enabled for '{type}'. Please visit settings to configure before uploading.");
 
                 return null;
