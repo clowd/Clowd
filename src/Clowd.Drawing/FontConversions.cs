@@ -141,6 +141,5 @@ namespace Clowd.Drawing
 
             return result;
         }
-
     }
 }

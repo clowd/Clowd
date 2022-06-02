@@ -7,13 +7,11 @@ namespace Clowd.Drawing.Graphics
     public class GraphicFilledRectangle : GraphicRectangle
     {
         protected GraphicFilledRectangle()
-        {
-        }
+        { }
 
         public GraphicFilledRectangle(Color objectColor, Rect unrotatedBounds, double angle = 0)
             : base(objectColor, 0, unrotatedBounds, angle, false)
-        {
-        }
+        { }
 
         internal override void DrawRectangle(DrawingContext drawingContext)
         {

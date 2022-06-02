@@ -151,6 +151,7 @@ namespace Clowd.Drawing
                     dc.PushTransform(transform);
                     dc.DrawRectangle(backgroundBrush, null, bounds);
                 }
+
                 bmp.Render(background);
             }
 
@@ -180,7 +181,12 @@ namespace Clowd.Drawing
         {
             // update drop shadow effect
             if (g.DropShadowEffect && v.Effect == null)
-                v.Effect = new DropShadowEffect() { Opacity = 0.5, ShadowDepth = 2, RenderingBias = RenderingBias.Performance };
+                v.Effect = new DropShadowEffect()
+                {
+                    Opacity = 0.5,
+                    ShadowDepth = 2,
+                    RenderingBias = RenderingBias.Performance
+                };
             else if (!g.DropShadowEffect && v.Effect != null)
                 v.Effect = null;
 
@@ -247,8 +253,10 @@ namespace Clowd.Drawing
                     first = false;
                     continue;
                 }
+
                 result.Union(rect);
             }
+
             return result;
         }
 

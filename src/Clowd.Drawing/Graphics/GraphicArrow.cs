@@ -7,13 +7,11 @@ namespace Clowd.Drawing.Graphics
     public class GraphicArrow : GraphicLine
     {
         protected GraphicArrow()
-        {
-        }
+        { }
 
         public GraphicArrow(Color objectColor, double lineWidth, Point start, Point end)
             : base(objectColor, lineWidth, start, end)
-        {
-        }
+        { }
 
         protected override Geometry GetLineGeometry()
         {

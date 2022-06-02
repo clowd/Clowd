@@ -98,7 +98,8 @@ namespace Clowd.Drawing.Tools
 
             var finalTransform = new TransformGroup();
             finalTransform.Children.Add(new TranslateTransform(GraphicText.TextPadding, GraphicText.TextPadding));
-            finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2, (graphicsText.Bottom - graphicsText.Top) / 2));
+            finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2,
+                (graphicsText.Bottom - graphicsText.Top) / 2));
             TextBox.RenderTransform = finalTransform;
 
             if (newGraphic)
@@ -123,7 +124,7 @@ namespace Clowd.Drawing.Tools
             TextBox.LostFocus += new RoutedEventHandler(textBox_LostFocus);
             TextBox.LostKeyboardFocus += new KeyboardFocusChangedEventHandler(textBox_LostKeyboardFocus);
             TextBox.PreviewKeyDown += new KeyEventHandler(textBox_PreviewKeyDown);
-            TextBox.ContextMenu = null;     // see notes in textBox_LostKeyboardFocus
+            TextBox.ContextMenu = null; // see notes in textBox_LostKeyboardFocus
             TextBox.TextChanged += textBox_TextChanged;
 
             // Initially textbox is set to the same rectangle as graphicsText.
@@ -148,14 +149,14 @@ namespace Clowd.Drawing.Tools
                 // Textbox is empty: remove text object.
                 drawingCanvas.GraphicsList.Remove(graphic);
 
-                if (!String.IsNullOrEmpty(OldText))  // existing text was edited
+                if (!String.IsNullOrEmpty(OldText)) // existing text was edited
                     drawingCanvas.AddCommandToHistory();
             }
             else
             {
-                if (!String.IsNullOrEmpty(OldText))  // existing text was edited
+                if (!String.IsNullOrEmpty(OldText)) // existing text was edited
                 {
-                    if (TextBox.Text.Trim() != OldText)     // text was really changed
+                    if (TextBox.Text.Trim() != OldText) // text was really changed
                     {
                         // Make change in the text object
                         graphicsText.Body = TextBox.Text.Trim();
@@ -164,7 +165,7 @@ namespace Clowd.Drawing.Tools
                         drawingCanvas.AddCommandToHistory();
                     }
                 }
-                else                                          // new text was added
+                else // new text was added
                 {
                     // Make change in the text object
                     graphicsText.Body = TextBox.Text.Trim();

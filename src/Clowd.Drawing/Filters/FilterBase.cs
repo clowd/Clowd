@@ -29,6 +29,7 @@ namespace Clowd.Drawing.Filters
             {
                 HandleInternal(brush, p);
             }
+
             _lastPoint = p;
         }
 
@@ -53,6 +54,7 @@ namespace Clowd.Drawing.Filters
                     for (var ye = min + 1; ye <= max; ye++)
                         yield return new Point(p1.X, ye);
                 }
+
                 yield break;
             }
 

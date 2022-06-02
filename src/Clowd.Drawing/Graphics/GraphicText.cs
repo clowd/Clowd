@@ -66,18 +66,17 @@ namespace Clowd.Drawing.Graphics
         [ClassifyIgnore] private bool _editing;
 
         private static Random _rnd = new Random();
+
         private static Color[] _colors = new Color[]
         {
             // Color.FromRgb(210,210,210),
-            Color.FromRgb(255, 255, 203),
-            Color.FromRgb(229, 203, 228),
-            Color.FromRgb(203, 228, 222),
+            Color.FromRgb(255, 255, 203), Color.FromRgb(229, 203, 228), Color.FromRgb(203, 228, 222),
         };
+
         private static int _nextColor = 0;
 
         protected GraphicText()
-        {
-        }
+        { }
 
         public GraphicText(DrawingCanvas canvas, Point point)
             : this(_colors[_nextColor], canvas.LineWidth, point, _rnd.NextDouble() * 8 - 4)

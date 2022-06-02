@@ -16,8 +16,7 @@ namespace Clowd.Drawing.Tools
 
         public ToolDraggable(Cursor cursor, Func<Point, T> create, Action<Point, T> update)
             : this(cursor, create, update, null)
-        {
-        }
+        { }
 
         public ToolDraggable(Cursor cursor, Func<Point, T> create, Action<Point, T> update, Action<T> end)
             : base(cursor)

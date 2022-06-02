@@ -443,7 +443,6 @@ namespace Clowd.Drawing
             set
             {
                 SetValue(LineWidthProperty, value);
-
             }
         }
 
@@ -478,7 +477,6 @@ namespace Clowd.Drawing
             set
             {
                 SetValue(ObjectColorProperty, value);
-
             }
         }
 
@@ -525,7 +523,6 @@ namespace Clowd.Drawing
             set
             {
                 SetValue(TextFontFamilyNameProperty, value);
-
             }
         }
 
@@ -534,7 +531,8 @@ namespace Clowd.Drawing
             ApplyFontChange(property as DrawingCanvas, d => d.TextFontFamilyName, t => t.FontName, (t, v) => { t.FontName = v; });
         }
 
-        private static void ApplyFontChange<TPropertyType>(DrawingCanvas d, Func<DrawingCanvas, TPropertyType> getProp, Func<GraphicText, TPropertyType> getTextProp, Action<GraphicText, TPropertyType> setTextProp)
+        private static void ApplyFontChange<TPropertyType>(DrawingCanvas d, Func<DrawingCanvas, TPropertyType> getProp,
+            Func<GraphicText, TPropertyType> getTextProp, Action<GraphicText, TPropertyType> setTextProp)
         {
             bool wasChange = false;
             var value = getProp(d);
@@ -566,7 +564,6 @@ namespace Clowd.Drawing
             set
             {
                 SetValue(TextFontStyleProperty, value);
-
             }
         }
 
@@ -584,7 +581,6 @@ namespace Clowd.Drawing
             set
             {
                 SetValue(TextFontWeightProperty, value);
-
             }
         }
 
@@ -602,7 +598,6 @@ namespace Clowd.Drawing
             set
             {
                 SetValue(TextFontStretchProperty, value);
-
             }
         }
 
@@ -620,7 +615,6 @@ namespace Clowd.Drawing
             set
             {
                 SetValue(TextFontSizeProperty, value);
-
             }
         }
 
@@ -673,8 +667,10 @@ namespace Clowd.Drawing
                     first = false;
                     continue;
                 }
+
                 result.Union(rect);
             }
+
             return result;
         }
 
@@ -711,6 +707,7 @@ namespace Clowd.Drawing
             {
                 this[i].IsSelected = true;
             }
+
             UpdateState();
         }
 
@@ -720,6 +717,7 @@ namespace Clowd.Drawing
             {
                 this[i].IsSelected = false;
             }
+
             UpdateState();
         }
 
@@ -729,6 +727,7 @@ namespace Clowd.Drawing
             {
                 ob.IsSelected = false;
             }
+
             UpdateState();
         }
 
@@ -854,11 +853,13 @@ namespace Clowd.Drawing
                     changed = true;
                     v.LineWidth = LineWidth;
                 }
+
                 if (v.ObjectColor != ObjectColor)
                 {
                     changed = true;
                     v.ObjectColor = ObjectColor;
                 }
+
                 var t = v as GraphicText;
                 if (t != null)
                 {
@@ -867,21 +868,25 @@ namespace Clowd.Drawing
                         changed = true;
                         t.FontName = TextFontFamilyName;
                     }
+
                     if (t.FontSize != TextFontSize)
                     {
                         changed = true;
                         t.FontSize = TextFontSize;
                     }
+
                     if (t.FontStretch != TextFontStretch)
                     {
                         changed = true;
                         t.FontStretch = TextFontStretch;
                     }
+
                     if (t.FontStyle != TextFontStyle)
                     {
                         changed = true;
                         t.FontStyle = TextFontStyle;
                     }
+
                     if (t.FontWeight != TextFontWeight)
                     {
                         changed = true;
@@ -933,6 +938,7 @@ namespace Clowd.Drawing
                     _clickable.Width = ActualWidth / _scaleTransform2.ScaleX;
                     _clickable.Height = ActualHeight / _scaleTransform2.ScaleY;
                 }
+
                 return _clickable;
             }
             else if (index == 1)
@@ -1069,7 +1075,7 @@ namespace Clowd.Drawing
 
         void DrawingCanvas_Loaded(object sender, RoutedEventArgs e)
         {
-            this.Focusable = true;      // to handle keyboard messages
+            this.Focusable = true; // to handle keyboard messages
             UpdateScaleTransform();
         }
 
@@ -1251,7 +1257,6 @@ namespace Clowd.Drawing
             menuItem.InputGestureText = "Ctrl+1";
             menuItem.Click += (s, e) => this.ZoomPanActualSize();
             _contextMenu.Items.Add(menuItem);
-
         }
 
         void ShowContextMenu(MouseButtonEventArgs e)
@@ -1419,7 +1424,7 @@ namespace Clowd.Drawing
                 new PropertyMetadata(1d, ContentScaleChanged));
 
         public Point WorldOffset => new Point((ActualWidth / 2 - ContentOffset.X) / ContentScale,
-           (ActualHeight / 2 - ContentOffset.Y) / ContentScale);
+            (ActualHeight / 2 - ContentOffset.Y) / ContentScale);
 
         public DpiScale CanvasUiElementScale
         {
@@ -1437,6 +1442,7 @@ namespace Clowd.Drawing
             var me = (DrawingCanvas)d;
             me.UpdateScaleTransform();
         }
+
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var me = (DrawingCanvas)d;
@@ -1445,6 +1451,7 @@ namespace Clowd.Drawing
             me._translateTransform.X = Math.Floor(pt.X * dpiZoom) / dpiZoom;
             me._translateTransform.Y = Math.Floor(pt.Y * dpiZoom) / dpiZoom;
         }
+
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
             base.OnRenderSizeChanged(sizeInfo);
@@ -1455,6 +1462,7 @@ namespace Clowd.Drawing
             if (isAutoFit)
                 ZoomPanAuto();
         }
+
         public void UpdateScaleTransform()
         {
             double adjustment = 1 / DpiZoom; // undo the current dpi zoom so screenshots appear sharp

@@ -27,8 +27,7 @@ namespace Clowd.Drawing.Tools
         }
 
         public virtual void OnMouseMove(DrawingCanvas canvas, MouseEventArgs e)
-        {
-        }
+        { }
 
         public virtual void SetCursor(DrawingCanvas canvas)
         {

@@ -94,7 +94,7 @@ csharp_new_line_before_open_brace = all
 csharp_new_line_before_else = true
 csharp_new_line_before_catch = true
 csharp_new_line_before_finally = true
-csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_object_initializers = false
 csharp_new_line_before_members_in_anonymous_types = true
 csharp_new_line_between_query_expression_clauses = true
 # Indentation preferences 
@@ -119,7 +119,9 @@ csharp_preserve_single_line_blocks = true
 
 # ReSharper properties
 resharper_csharp_empty_block_style = together
+resharper_csharp_wrap_lines = false
 resharper_max_initializer_elements_on_line = 1
+resharper_wrap_array_initializer_style = chop_if_long
 resharper_wrap_object_and_collection_initializer_style = chop_if_long
 
 # Microsoft .NET properties
