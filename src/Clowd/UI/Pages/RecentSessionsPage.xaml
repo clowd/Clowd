@@ -67,9 +67,7 @@
                 <GroupStyle>
                     <GroupStyle.HeaderTemplate>
                         <DataTemplate>
-                            <TextBlock
-                                Margin="0,8"
-                                Text="{Binding Name, Mode=OneTime}">
+                            <TextBlock Margin="0,8" Text="{Binding Name, Mode=OneTime}">
                                 <TextBlock.Foreground>
                                     <SolidColorBrush Color="{DynamicResource TextFillColorPrimary}" />
                                 </TextBlock.Foreground>

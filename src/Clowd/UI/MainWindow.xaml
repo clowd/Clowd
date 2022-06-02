@@ -33,7 +33,10 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Viewbox Width="40" Height="40" HorizontalAlignment="Left">
+            <Viewbox
+                Width="40"
+                Height="40"
+                HorizontalAlignment="Left">
                 <Path
                     Width="16"
                     Height="16"
