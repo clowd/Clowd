@@ -17,8 +17,8 @@ namespace Clowd.Drawing.Tools
         public enum SelectionMode
         {
             None,
-            Move,               // object(s) are moved
-            HandleDrag,         // object is edited via dragging a handle (e.g. resize, rotate)
+            Move, // object(s) are moved
+            HandleDrag, // object is edited via dragging a handle (e.g. resize, rotate)
             GroupSelection
         }
 
@@ -35,13 +35,17 @@ namespace Clowd.Drawing.Tools
         bool _wasEdit;
 
         public ToolPointer() : base(HelperFunctions.DefaultCursor)
-        {
-        }
+        { }
 
         public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
         {
             var dpi = drawingCanvas.CanvasUiElementScale;
-            var controls = drawingCanvas.GraphicsList.Select(gv => new { gv, gv.IsSelected, HitTest = gv.MakeHitTest(point, dpi) }).Reverse().ToArray();
+            var controls = drawingCanvas.GraphicsList.Select(gv => new
+            {
+                gv,
+                gv.IsSelected,
+                HitTest = gv.MakeHitTest(point, dpi)
+            }).Reverse().ToArray();
 
             // Test if we start dragging a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
             var grabHandle = controls.FirstOrDefault(g => g.IsSelected && g.HitTest > 0);
@@ -82,8 +86,8 @@ namespace Clowd.Drawing.Tools
                 handleNumber > 0 ||
                 // ... dragging an unselected object or creating a selection rectangle,
                 ((graphic == null || !graphic.IsSelected) &&
-                    // ... and the user didn’t press Ctrl or Shift.
-                    Keyboard.Modifiers != ModifierKeys.Control && Keyboard.Modifiers != ModifierKeys.Shift))
+                 // ... and the user didn’t press Ctrl or Shift.
+                 Keyboard.Modifiers != ModifierKeys.Control && Keyboard.Modifiers != ModifierKeys.Shift))
             {
                 drawingCanvas.UnselectAllExcept(graphic);
             }
@@ -135,7 +139,7 @@ namespace Clowd.Drawing.Tools
         {
             // Exclude all cases except left button on/off.
             if (e.MiddleButton == MouseButtonState.Pressed ||
-                 e.RightButton == MouseButtonState.Pressed)
+                e.RightButton == MouseButtonState.Pressed)
             {
                 drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
                 return;
@@ -199,6 +203,7 @@ namespace Clowd.Drawing.Tools
                             drawingCanvas.Cursor = _handleGrabbedObject.GetHandleCursor(_handleGrabbed);
                         }
                     }
+
                     break;
 
                 case SelectionMode.GroupSelection:
@@ -276,6 +281,7 @@ namespace Clowd.Drawing.Tools
                     return Rect.Empty;
             }
         }
+
         private Rect TranslateDestAroundHandle(Rect source, Rect dest, int handleNumber)
         {
             switch (handleNumber)
@@ -296,6 +302,7 @@ namespace Clowd.Drawing.Tools
                     return Rect.Empty;
             }
         }
+
         private Rect ScaleRectToAspect(Rect dest, double sourceAspect, bool keepWidth = true, bool keepHeight = true)
         {
             Rect destRect = new Rect();
@@ -327,8 +334,8 @@ namespace Clowd.Drawing.Tools
                     destRect.Width = dest.Width;
                     destRect.Height = dest.Height * resizePerc;
                 }
-
             }
+
             return destRect;
         }
     }

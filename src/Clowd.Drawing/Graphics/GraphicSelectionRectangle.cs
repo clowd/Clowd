@@ -14,8 +14,7 @@ namespace Clowd.Drawing.Graphics
     {
         public GraphicSelectionRectangle(Rect rect)
             : base(Colors.Black, 0, rect, 0, false)
-        {
-        }
+        { }
 
         internal override void Draw(DrawingContext drawingContext, DpiScale uiscale)
         {

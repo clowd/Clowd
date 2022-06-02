@@ -53,13 +53,11 @@ namespace Clowd.Drawing.Graphics
         private double _angle;
 
         protected GraphicRectangle()
-        {
-        }
+        { }
 
         public GraphicRectangle(Color objectColor, double lineWidth, Rect rect)
             : this(objectColor, lineWidth, rect, 0)
-        {
-        }
+        { }
 
         public GraphicRectangle(Color objectColor, double lineWidth, Rect rect, double angle = 0, bool dropShadowEffect = true)
             : base(objectColor, lineWidth, dropShadowEffect)
@@ -145,6 +143,7 @@ namespace Clowd.Drawing.Graphics
                     y = yCenter;
                     break;
             }
+
             return new Point(x, y);
         }
 
@@ -237,6 +236,7 @@ namespace Clowd.Drawing.Graphics
                     Angle = Math.Atan2(point.Y - unrotatedMid.Y, point.X - unrotatedMid.X) / Math.PI * 180;
                     break;
             }
+
             OnPropertyChanged();
         }
 
