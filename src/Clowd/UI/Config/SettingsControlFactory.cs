@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
@@ -7,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Interop;
+using System.Windows.Markup;
 using System.Windows.Media;
 using Clowd.Config;
 using Clowd.UI.Controls;
@@ -27,18 +30,11 @@ namespace Clowd.UI.Config
             this.wndFn = wndFn;
         }
 
-        public Page GetSettingsPanel()
+        private IEnumerable<PropertyDescriptor> GetPropertyRows(object obj)
         {
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(0, GridUnitType.Auto) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition());
-
             var instanceType = obj.GetType();
 
-            var props = TypeDescriptor.GetProperties(obj);
-            int row = 0;
-
-            foreach (PropertyDescriptor pd in props)
+            foreach (PropertyDescriptor pd in TypeDescriptor.GetProperties(obj))
             {
                 if (pd.ComponentType != instanceType)
                     continue;
@@ -48,7 +44,35 @@ namespace Clowd.UI.Config
 
                 if (pd.IsReadOnly())
                     continue;
+                
+                if (pd.GetFirstAttributeOrDefault<FlattenSettingsObjectAttribute>() != null)
+                {
+                    foreach (var p2 in GetPropertyRows(pd.GetValue(obj)))
+                    {
+                        yield return p2;
+                    }
+                }
+                else
+                {
+                    yield return pd;
+                }
+            }
+        }
 
+        public Page GetSettingsPanel()
+        {
+            return GetSettingsPanel<Page>();
+        }
+        
+        public T GetSettingsPanel<T>() where T : IAddChild, new()
+        {
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(0, GridUnitType.Auto) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+
+            int row = 0;
+            foreach (PropertyDescriptor pd in GetPropertyRows(obj))
+            {
                 grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(0, GridUnitType.Auto) });
 
                 var rowLabel = new Label();
@@ -63,7 +87,7 @@ namespace Clowd.UI.Config
                 rowContent.VerticalAlignment = VerticalAlignment.Center;
                 rowContent.HorizontalAlignment = HorizontalAlignment.Stretch;
                 rowContent.Child = GetRowForProperty(pd);
-                rowContent.Margin = new Thickness(24, 4, 56, 4);
+                rowContent.Margin = new Thickness(24, 4, 4, 4);
                 Grid.SetRow(rowContent, row);
                 Grid.SetColumn(rowContent, 1);
 
@@ -73,16 +97,17 @@ namespace Clowd.UI.Config
                 row++;
             }
 
-            grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(56) });
+            grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(10) });
 
-            return new Page
+            var root = Activator.CreateInstance<T>();
+            
+            root.AddChild(new WPFUI.Controls.DynamicScrollViewer
             {
-                Content = new WPFUI.Controls.DynamicScrollViewer
-                {
-                    Padding = new Thickness(24, 0, 24, 24),
-                    Content = grid
-                }
-            };
+                Padding = new Thickness(24, 10, 24, 24),
+                Content = grid
+            });
+
+            return root;
         }
 
         public FrameworkElement GetRowForProperty(PropertyDescriptor pd)
