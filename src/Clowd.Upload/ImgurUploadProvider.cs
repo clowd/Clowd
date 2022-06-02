@@ -15,7 +15,7 @@ namespace Clowd.Upload
         }
 
         public override string Name => "Imgur";
-        public override string Description => "Uploads an anonymous image to Imgur.com";
+        public override string Description => "Uploads an anonymous (but public) image or video to Imgur.com";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.Image | SupportedUploadType.Video;
         public override Stream Icon => new Resource().ImgurIcon;
 

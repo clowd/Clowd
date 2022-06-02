@@ -39,7 +39,7 @@ namespace Clowd.Capture
 
         public static Task<UploadViewState> UploadFiles(params string[] filePaths)
         {
-            IMimeProvider mimedb = new MimeDbMimeProvider();
+            IMimeProvider mimedb = new MimeProvider();
 
             if (filePaths.Length == 1 && File.Exists(filePaths[0]))
             {

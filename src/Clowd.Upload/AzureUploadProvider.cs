@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using RT.Serialization;
 
 namespace Clowd.Upload
 {
@@ -25,7 +26,7 @@ namespace Clowd.Upload
     public class AzureUploadProvider : UploadProviderBase
     {
         public override string Name => "Azure Storage";
-        public override string Description => "Uploads any file as a block blob for viewing online";
+        public override string Description => "Uploads any file as a block blob to a public container";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.All;
         public override Stream Icon => new Resource().AzureIcon;
 
@@ -68,15 +69,17 @@ namespace Clowd.Upload
             }
         }
 
-        const string AZURE_SERVICE_VERSION = "2019-12-12";
+        [ClassifyIgnore]
         private readonly IMimeProvider _mimeDb;
+        
+        const string AZURE_SERVICE_VERSION = "2019-12-12";
         private string _connectionString;
         private string _containerName;
         private string _customDomain;
 
         public AzureUploadProvider() : base()
         {
-            _mimeDb = new MimeDbMimeProvider();
+            _mimeDb = new MimeProvider();
         }
 
         public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken)

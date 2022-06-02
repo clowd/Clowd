@@ -56,12 +56,12 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="50" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Image Grid.RowSpan="2" VerticalAlignment="Center" MaxHeight="30" MaxWidth="30"
-                                   Stretch="Uniform" Margin="10"
+                            <Image Grid.RowSpan="2" MaxHeight="30" MaxWidth="30" Stretch="Uniform" 
+                                   Margin="10" VerticalAlignment="Center" HorizontalAlignment="Center"
                                    Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
                             <TextBlock Grid.Column="1" Grid.Row="0" VerticalAlignment="Bottom"
                                        Text="{Binding Provider.Name}" FontWeight="Bold" />
