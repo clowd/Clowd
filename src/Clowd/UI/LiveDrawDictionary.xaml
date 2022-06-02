@@ -234,14 +234,14 @@
                         <Trigger Property="IsActivated" Value="True">
                             <Trigger.EnterActions>
                                 <BeginStoryboard>
-                                    <Storyboard TargetName="CheckedIcon" TargetProperty="Height">
+                                    <Storyboard TargetProperty="Height" TargetName="CheckedIcon">
                                         <DoubleAnimation To="12" Duration="{StaticResource Duration1}" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.EnterActions>
                             <Trigger.ExitActions>
                                 <BeginStoryboard>
-                                    <Storyboard TargetName="CheckedIcon" TargetProperty="Height">
+                                    <Storyboard TargetProperty="Height" TargetName="CheckedIcon">
                                         <DoubleAnimation To="0" Duration="{StaticResource Duration3}" />
                                     </Storyboard>
                                 </BeginStoryboard>

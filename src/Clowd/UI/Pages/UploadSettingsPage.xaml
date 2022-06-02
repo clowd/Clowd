@@ -2,17 +2,17 @@
     x:Class="Clowd.UI.Pages.UploadSettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:config="clr-namespace:Clowd.Config;assembly=Clowd.Shared"
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
-    xmlns:config="clr-namespace:Clowd.Config;assembly=Clowd.Shared"
-    xmlns:conv="clr-namespace:Clowd.UI.Converters"
     Title="GeneralSettingsPage"
     d:Background="White"
-    d:DesignHeight="450"
     d:DataContext="{d:DesignInstance Type=config:SettingsUpload}"
+    d:DesignHeight="450"
     d:DesignWidth="400"
     mc:Ignorable="d">
     <Page.Resources>
@@ -32,7 +32,10 @@
     </Page.CommandBindings>
     <wpfui:DynamicScrollViewer Padding="0,0,24,24">
         <controls:SimpleStackPanel>
-            <ListView ItemsSource="{Binding Providers}" BorderThickness="0" Background="Transparent">
+            <ListView
+                Background="Transparent"
+                BorderThickness="0"
+                ItemsSource="{Binding Providers}">
                 <ListView.Style>
                     <Style TargetType="ListView">
                         <Style.Triggers>
@@ -60,17 +63,35 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Image Grid.RowSpan="2" MaxHeight="30" MaxWidth="30" Stretch="Uniform" 
-                                   Margin="10" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                   Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
-                            <TextBlock Grid.Column="1" Grid.Row="0" VerticalAlignment="Bottom"
-                                       Text="{Binding Provider.Name}" FontWeight="Bold" />
-                            <TextBlock Grid.Column="1" Grid.Row="1" VerticalAlignment="Top"
-                                       Text="{Binding Provider.Description}" />
-                            <Button VerticalAlignment="Center" Grid.Column="2" Grid.Row="0" Grid.RowSpan="2"
-                                    Margin="10" Command="{StaticResource Commands.ProviderSettings}"
-                                    CommandParameter="{Binding}">
-                                <wpfui:SymbolIcon Symbol="Settings20" Foreground="White"></wpfui:SymbolIcon>
+                            <Image
+                                Grid.RowSpan="2"
+                                MaxWidth="30"
+                                MaxHeight="30"
+                                Margin="10"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}"
+                                Stretch="Uniform" />
+                            <TextBlock
+                                Grid.Row="0"
+                                Grid.Column="1"
+                                VerticalAlignment="Bottom"
+                                FontWeight="Bold"
+                                Text="{Binding Provider.Name}" />
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                VerticalAlignment="Top"
+                                Text="{Binding Provider.Description}" />
+                            <Button
+                                Grid.Row="0"
+                                Grid.RowSpan="2"
+                                Grid.Column="2"
+                                Margin="10"
+                                VerticalAlignment="Center"
+                                Command="{StaticResource Commands.ProviderSettings}"
+                                CommandParameter="{Binding}">
+                                <wpfui:SymbolIcon Foreground="White" Symbol="Settings20" />
                             </Button>
                         </Grid>
                     </DataTemplate>
