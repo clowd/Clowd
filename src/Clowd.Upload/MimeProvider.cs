@@ -43,6 +43,7 @@ namespace Clowd.Upload
                     kvp.Value.ContentType = kvp.Key;
                     kvp.Value.Extensions = kvp.Value.Extensions ?? new string[0];
                 }
+
                 _database = mimedb;
             }
 
@@ -84,6 +85,7 @@ namespace Clowd.Upload
             bool starts(string value) => entry.ContentType.StartsWith(value, StringComparison.OrdinalIgnoreCase);
             bool ends(string value) => entry.ContentType.EndsWith(value, StringComparison.OrdinalIgnoreCase);
             bool contains(string value) => entry.ContentType.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+
             bool module(string value) => ends("+" + value) || contains("/" + value);
             //bool equals(string value) => entry.ContentType.Equals(value, StringComparison.OrdinalIgnoreCase);
 
@@ -106,7 +108,8 @@ namespace Clowd.Upload
             if (module("gzip")) return ContentCategory.Compressed;
             if (ends("-compressed")) return ContentCategory.Compressed;
 
-            var lang_match = _languages.Values.FirstOrDefault(l => l?.codemirror_mime_type?.Equals(entry.ContentType, StringComparison.OrdinalIgnoreCase) == true);
+            var lang_match =
+                _languages.Values.FirstOrDefault(l => l?.codemirror_mime_type?.Equals(entry.ContentType, StringComparison.OrdinalIgnoreCase) == true);
             if (lang_match != null)
                 return GetCategoryFromLanguage(lang_match);
 

@@ -11,15 +11,15 @@ namespace Clowd.Upload
     public class ImgurUploadProvider : UploadProviderBase
     {
         public ImgurUploadProvider() : base()
-        {
-        }
+        { }
 
         public override string Name => "Imgur";
         public override string Description => "Uploads an anonymous (but public) image or video to Imgur.com";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.Image | SupportedUploadType.Video;
         public override Stream Icon => new Resource().ImgurIcon;
 
-        public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken)
+        public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName,
+            CancellationToken cancelToken)
         {
             var len = fileStream.Length;
             progress(len / 3);
