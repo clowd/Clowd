@@ -8,6 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
     xmlns:config="clr-namespace:Clowd.Config;assembly=Clowd.Shared"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
     Title="GeneralSettingsPage"
     d:Background="White"
     d:DesignHeight="450"
@@ -15,6 +16,8 @@
     d:DesignWidth="400"
     mc:Ignorable="d">
     <Page.Resources>
+        <RoutedUICommand x:Key="Commands.ProviderSettings" />
+        <conv:StreamToBitmapSourceConverter x:Key="Stream2Bitmap" />
         <Style BasedOn="{StaticResource BodyTextBlockStyle}" TargetType="TextBlock" />
         <Style BasedOn="{StaticResource {x:Type ComboBox}}" TargetType="ComboBox">
             <Setter Property="MinWidth" Value="160" />
@@ -24,21 +27,12 @@
             <Setter Property="Margin" Value="0,4,0,8" />
         </Style>
     </Page.Resources>
+    <Page.CommandBindings>
+        <CommandBinding Command="{StaticResource Commands.ProviderSettings}" Executed="ProviderSettingsCommand" />
+    </Page.CommandBindings>
     <wpfui:DynamicScrollViewer Padding="0,0,24,24">
         <controls:SimpleStackPanel>
-            <TextBlock>Image</TextBlock>
-            <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Image}"></ComboBox>
-            
-            <TextBlock>Video</TextBlock>
-            <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Video}"></ComboBox>
-            
-            <TextBlock>Binary</TextBlock>
-            <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Binary}"></ComboBox>
-            
-            <TextBlock>Text</TextBlock>
-            <ComboBox ItemsSource="{Binding Providers}" SelectedItem="{Binding Text}"></ComboBox>
-            
-            <ListView ItemsSource="{Binding Providers}">
+            <ListView ItemsSource="{Binding Providers}" BorderThickness="0" Background="Transparent">
                 <ListView.Style>
                     <Style TargetType="ListView">
                         <Style.Triggers>
@@ -46,7 +40,7 @@
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="ListView">
-                                            <TextBlock Text="No upload providers available."/>
+                                            <TextBlock Text="No upload providers available." />
                                         </ControlTemplate>
                                     </Setter.Value>
                                 </Setter>
@@ -64,9 +58,20 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <CheckBox Grid.Column="1" IsChecked="{Binding IsEnabled}"><TextBlock Text="{Binding Provider.Name}" /></CheckBox>
-                            <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding Provider.Description}" />
+                            <Image Grid.RowSpan="2" VerticalAlignment="Center" MaxHeight="30" MaxWidth="30"
+                                   Stretch="Uniform" Margin="10"
+                                   Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
+                            <TextBlock Grid.Column="1" Grid.Row="0" VerticalAlignment="Bottom"
+                                       Text="{Binding Provider.Name}" FontWeight="Bold" />
+                            <TextBlock Grid.Column="1" Grid.Row="1" VerticalAlignment="Top"
+                                       Text="{Binding Provider.Description}" />
+                            <Button VerticalAlignment="Center" Grid.Column="2" Grid.Row="0" Grid.RowSpan="2"
+                                    Margin="10" Command="{StaticResource Commands.ProviderSettings}"
+                                    CommandParameter="{Binding}">
+                                <wpfui:SymbolIcon Symbol="Settings20" Foreground="White"></wpfui:SymbolIcon>
+                            </Button>
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>
