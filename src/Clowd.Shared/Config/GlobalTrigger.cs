@@ -9,12 +9,11 @@ namespace Clowd.Config
 {
     public class GlobalKeyGesture : IEquatable<GlobalKeyGesture>
     {
-        public Key Key { get; set; }
-        public ModifierKeys Modifiers { get; set; }
+        public Key Key { get; }
+        public ModifierKeys Modifiers { get; }
 
         public GlobalKeyGesture()
         {
-
         }
 
         public GlobalKeyGesture(Key key)
@@ -65,7 +64,10 @@ namespace Clowd.Config
                 strBinding += strKey;
             }
 
-            return String.Join("+", strBinding.Split('+', ',').Select(c => c.Trim()));
+            return String.Join("+", strBinding.Split('+', ',')
+                .Select(c => c.Trim()))
+                .Replace("Snapshot", "PrtScr")
+                .Replace("Control", "Ctrl");
         }
     }
 
@@ -74,13 +76,15 @@ namespace Clowd.Config
     /// </summary>
     public sealed class GlobalTrigger : SimpleNotifyObject, IClassifyObjectProcessor, IDisposable
     {
+        public string KeyGestureText => IsRegistered ? KeyGesture?.ToString() : null;
+        
         public GlobalKeyGesture KeyGesture
         {
             get => _keyGesture;
             set
             {
                 ThrowIfDisposed();
-                if (Set(ref _keyGesture, value))
+                if (Set(ref _keyGesture, value, nameof(KeyGesture), nameof(KeyGestureText)))
                     RefreshHotkey();
             }
         }
@@ -88,7 +92,7 @@ namespace Clowd.Config
         public bool IsRegistered
         {
             get => _isRegistered;
-            private set => Set(ref _isRegistered, value);
+            private set => Set(ref _isRegistered, value, nameof(IsRegistered), nameof(KeyGestureText));
         }
 
         public string Error

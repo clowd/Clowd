@@ -141,6 +141,10 @@ namespace Clowd.UI.Pages
         {
             _log.Error(ex, "Failed to upload file.");
             Hide();
+
+            if (ex is AggregateException agg && agg.InnerExceptions.Count == 1)
+                ex = agg.InnerException;
+            
             new ToastContentBuilder()
                 .SetToastScenario(ToastScenario.Reminder)
                 .AddText($"{Name} Failed")
