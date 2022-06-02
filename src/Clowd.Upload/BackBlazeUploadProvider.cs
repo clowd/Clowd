@@ -64,13 +64,13 @@ namespace Clowd.Upload
             };
 
             options = await B2Client.AuthorizeAsync(options);
-            
+
             var bucketId = await GetBucketId(options, _bucketName, cancelToken);
             var uploadUrlObject = await GetUploadUrl(options, bucketId, cancelToken);
             options.UploadAuthorizationToken = uploadUrlObject.AuthorizationToken;
 
             using var http = GetB2HttpClient(TimeSpan.FromMinutes(60), progress);
-            
+
             // https://www.backblaze.com/b2/docs/b2_upload_file.html
             var requestMessage = GetUploadReq(options, uploadUrlObject.UploadUrl, fileStream, uploadName);
             var response = await http.SendAsync(requestMessage, cancelToken);
@@ -97,7 +97,12 @@ namespace Clowd.Upload
             fileData.Position = 0;
 
             var uri = new Uri(uploadUrl);
-            var request = new HttpRequestMessage() { Method = HttpMethod.Post, RequestUri = uri, Content = new StreamContent(fileData) };
+            var request = new HttpRequestMessage()
+            {
+                Method = HttpMethod.Post,
+                RequestUri = uri,
+                Content = new StreamContent(fileData)
+            };
 
             request.Headers.TryAddWithoutValidation("Authorization", options.UploadAuthorizationToken);
             request.Headers.Add("X-Bz-File-Name", fileName.b2UrlEncode());
@@ -115,15 +120,19 @@ namespace Clowd.Upload
 
             return request;
         }
-        
+
         private async Task<string> GetBucketId(B2Options options, string bucketName, CancellationToken token)
         {
             if (String.IsNullOrWhiteSpace(bucketName))
                 throw new ArgumentNullException(nameof(bucketName));
-            
+
             using var http = GetB2HttpClient(TimeSpan.FromSeconds(10));
-            
-            var json = JsonConvert.SerializeObject(new { accountId = options.AccountId, bucketName });
+
+            var json = JsonConvert.SerializeObject(new
+            {
+                accountId = options.AccountId,
+                bucketName
+            });
             var req = BaseRequestGenerator.PostRequest("b2_list_buckets", json, options);
             var response = await http.SendAsync(req, token);
 
@@ -150,7 +159,7 @@ namespace Clowd.Upload
         {
             var handler = new HttpClientHandler() { AllowAutoRedirect = true };
             var ph = new ProgressMessageHandler(handler);
-            
+
             if (progress != null)
             {
                 ph.HttpSendProgress += (sender, args) =>
@@ -159,14 +168,14 @@ namespace Clowd.Upload
                     progress(args.BytesTransferred);
                 };
             }
-            
+
             var client = new HttpClient(ph);
             client.Timeout = timeout;
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             return client;
         }
-        
+
         private static string GetSHA1Hash(Stream fileData)
         {
             using (var sha1 = SHA1.Create())

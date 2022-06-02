@@ -17,6 +17,7 @@ namespace Clowd.Upload
         {
             this.func = func;
         }
+
         public void Report(StorageProgress value)
         {
             this.func(value);
@@ -69,9 +70,8 @@ namespace Clowd.Upload
             }
         }
 
-        [ClassifyIgnore]
-        private readonly IMimeProvider _mimeDb;
-        
+        [ClassifyIgnore] private readonly IMimeProvider _mimeDb;
+
         const string AZURE_SERVICE_VERSION = "2019-12-12";
         private string _connectionString;
         private string _containerName;
@@ -82,7 +82,8 @@ namespace Clowd.Upload
             _mimeDb = new MimeProvider();
         }
 
-        public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken)
+        public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName,
+            CancellationToken cancelToken)
         {
             var key = GetNewBlobKey();
             var blob = await CreateBlobAsync(key);
