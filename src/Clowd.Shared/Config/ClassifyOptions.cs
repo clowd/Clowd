@@ -11,12 +11,10 @@ namespace Clowd.Config
     public sealed class ClassifyColorTypeOptions : IClassifyXmlTypeProcessor, IClassifySubstitute<Color, string>
     {
         public void AfterDeserialize(object obj, XElement element)
-        {
-        }
+        { }
 
         public void AfterSerialize(object obj, XElement element)
-        {
-        }
+        { }
 
         public void BeforeDeserialize(XElement element)
         {
@@ -30,8 +28,7 @@ namespace Clowd.Config
         }
 
         public void BeforeSerialize(object obj)
-        {
-        }
+        { }
 
         private bool fromSubstitute(string instance, out Color color)
         {

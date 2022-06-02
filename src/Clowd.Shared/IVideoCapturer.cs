@@ -85,6 +85,7 @@ namespace Clowd
     public class VideoCriticalErrorEventArgs : EventArgs
     {
         public string Error { get; }
+
         public VideoCriticalErrorEventArgs(string error)
         {
             Error = error;
@@ -96,6 +97,7 @@ namespace Clowd
         public int AvgFps { get; }
         public int DroppedFrames { get; }
         public TimeSpan TotalTime { get; }
+
         public VideoStatusEventArgs(int avgFps, int droppedFrames, TimeSpan totalTime)
         {
             AvgFps = avgFps;

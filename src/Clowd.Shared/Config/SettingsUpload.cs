@@ -42,7 +42,7 @@ namespace Clowd.Config
     public class SettingsUpload : CategoryBase
     {
         public UploadProviderInfo[] Providers => _providers.ToArray();
-        
+
         private List<UploadProviderInfo> _providers = new();
 
         public UploadProviderInfo Image
@@ -75,8 +75,7 @@ namespace Clowd.Config
         private UploadProviderInfo _text;
 
         public SettingsUpload()
-        {
-        }
+        { }
 
         public IEnumerable<UploadProviderInfo> GetEnabledProviders(SupportedUploadType type)
         {

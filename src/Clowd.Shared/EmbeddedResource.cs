@@ -120,7 +120,8 @@ namespace Clowd
                 name = manifestResourceNames.SingleOrDefault(n => n.Equals(resourcePath + ".gz", StringComparison.OrdinalIgnoreCase));
 
             if (name == null)
-                throw new FileNotFoundException($"Unable to locate resource \"{resourcePath}\" in assembly \"{_resourceAssembly.GetName()}\". Please verify the file and namespace spelling, and check that the build action of file is set to Embedded Resource.");
+                throw new FileNotFoundException(
+                    $"Unable to locate resource \"{resourcePath}\" in assembly \"{_resourceAssembly.GetName()}\". Please verify the file and namespace spelling, and check that the build action of file is set to Embedded Resource.");
 
             var filename = name.Substring(_resourceNameSpace.Length);
             var stream = _resourceAssembly.GetManifestResourceStream(name);

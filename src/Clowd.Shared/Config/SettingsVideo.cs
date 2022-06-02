@@ -110,7 +110,7 @@ namespace Clowd.Config
             get => _trackMouseClicks;
             set => Set(ref _trackMouseClicks, value);
         }
-        
+
         public bool OpenFinishedInExplorer
         {
             get => _openFinishedInExplorer;

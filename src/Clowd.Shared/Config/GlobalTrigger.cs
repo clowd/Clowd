@@ -13,8 +13,7 @@ namespace Clowd.Config
         public ModifierKeys Modifiers { get; }
 
         public GlobalKeyGesture()
-        {
-        }
+        { }
 
         public GlobalKeyGesture(Key key)
         {
@@ -61,11 +60,11 @@ namespace Clowd.Config
                         strBinding += '+';
                     }
                 }
+
                 strBinding += strKey;
             }
 
-            return String.Join("+", strBinding.Split('+', ',')
-                .Select(c => c.Trim()))
+            return String.Join("+", strBinding.Split('+', ',').Select(c => c.Trim()))
                 .Replace("Snapshot", "PrtScr")
                 .Replace("Control", "Ctrl");
         }
@@ -77,7 +76,7 @@ namespace Clowd.Config
     public sealed class GlobalTrigger : SimpleNotifyObject, IClassifyObjectProcessor, IDisposable
     {
         public string KeyGestureText => IsRegistered ? KeyGesture?.ToString() : null;
-        
+
         public GlobalKeyGesture KeyGesture
         {
             get => _keyGesture;
@@ -111,13 +110,11 @@ namespace Clowd.Config
 
         public GlobalTrigger(Key key, ModifierKeys modifier)
             : this(new GlobalKeyGesture(key, modifier))
-        {
-        }
+        { }
 
         public GlobalTrigger(Key key)
             : this(new GlobalKeyGesture(key, ModifierKeys.None))
-        {
-        }
+        { }
 
         public GlobalTrigger(GlobalKeyGesture gesture)
         {
@@ -184,8 +181,7 @@ namespace Clowd.Config
         }
 
         public void BeforeSerialize()
-        {
-        }
+        { }
 
         public void AfterDeserialize()
         {

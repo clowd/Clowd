@@ -1,4 +1,5 @@
 ﻿//http://stackoverflow.com/a/9330358/184746
+
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -90,6 +91,7 @@ namespace Clowd.Config
                         {
                             hotKey.Action.Invoke(hotKey);
                         }
+
                         handled = true;
                     }
                 }
