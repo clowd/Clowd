@@ -12,8 +12,7 @@ namespace Clowd.Util
     {
         public DateTime LastModifiedUtc { get; set; }
 
-        [JsonIgnore]
-        public string FilePath { get; }
+        [JsonIgnore] public string FilePath { get; }
 
         public event PropertyChangedEventHandler PropertyChanged;
 

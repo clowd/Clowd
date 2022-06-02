@@ -64,7 +64,7 @@ namespace Clowd
                     : WPFUI.Appearance.ThemeType.Dark);
                 SetupTrayIconAndTheme();
                 WPFUI.Appearance.Theme.Changed += (_, _) => SetupTrayIconAndTheme();
-                
+
                 // start receiving command line arguments
                 _processor.Ready();
                 if (SquirrelUtil.IsFirstRun)
@@ -284,7 +284,7 @@ namespace Clowd
             {
                 item.SetBinding(
                     MenuItem.InputGestureTextProperty,
-                    new Binding(nameof(GlobalTrigger.KeyGestureText)){ Source = trigger});
+                    new Binding(nameof(GlobalTrigger.KeyGestureText)) { Source = trigger });
             }
 
             // context menu
@@ -325,17 +325,17 @@ namespace Clowd
             context.Items.Add(editor);
 
             context.Items.Add(new Separator());
-            
+
             var togglerec = new MenuItem() { Header = "_Start / Stop Recording" };
             togglerec.Click += (s, e) => ToggleScreenRecording();
             togglerec.SetBinding(
-                MenuItem.IsEnabledProperty, 
+                MenuItem.IsEnabledProperty,
                 new Binding(nameof(PageManager.IsVideoCapturePageOpen)) { Source = PageManager.Current });
             setGestureText(togglerec, SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut);
             context.Items.Add(togglerec);
-            
+
             context.Items.Add(new Separator());
-            
+
             var uploads = new MenuItem() { Header = "_Recents & Uploads" };
             uploads.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
             context.Items.Add(uploads);

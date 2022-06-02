@@ -14,8 +14,7 @@ namespace Clowd.UI.Controls
         /// Initializes a new instance of the SimpleStackPanel class.
         /// </summary>
         public SimpleStackPanel()
-        {
-        }
+        { }
 
         /// <summary>
         /// Gets or sets a value that indicates the dimension by which child elements are
@@ -32,13 +31,13 @@ namespace Clowd.UI.Controls
         /// Identifies the Orientation dependency property.
         /// </summary>
         public static readonly DependencyProperty OrientationProperty =
-                DependencyProperty.Register(
-                        nameof(Orientation),
-                        typeof(Orientation),
-                        typeof(SimpleStackPanel),
-                        new FrameworkPropertyMetadata(
-                                Orientation.Vertical,
-                                FrameworkPropertyMetadataOptions.AffectsMeasure));
+            DependencyProperty.Register(
+                nameof(Orientation),
+                typeof(Orientation),
+                typeof(SimpleStackPanel),
+                new FrameworkPropertyMetadata(
+                    Orientation.Vertical,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure));
 
         /// <summary>
         /// Gets or sets a uniform distance (in pixels) between stacked items. It is applied
@@ -55,13 +54,13 @@ namespace Clowd.UI.Controls
         /// Identifies the Spacing dependency property.
         /// </summary>
         public static readonly DependencyProperty SpacingProperty =
-                DependencyProperty.Register(
-                        nameof(Spacing),
-                        typeof(double),
-                        typeof(SimpleStackPanel),
-                        new FrameworkPropertyMetadata(
-                                0.0,
-                                FrameworkPropertyMetadataOptions.AffectsMeasure));
+            DependencyProperty.Register(
+                nameof(Spacing),
+                typeof(double),
+                typeof(SimpleStackPanel),
+                new FrameworkPropertyMetadata(
+                    0.0,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure));
 
         /// <summary>
         /// Gets a value that indicates if this SimpleStackPanel has vertical
@@ -185,6 +184,7 @@ namespace Clowd.UI.Controls
 
                 child.Arrange(rcChild);
             }
+
             return arrangeSize;
         }
     }

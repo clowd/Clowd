@@ -17,9 +17,6 @@ namespace Clowd.UI.Controls
 
 
         public SizeAwareProgressBar()
-        {
-
-        }
-
+        { }
     }
 }

@@ -8,15 +8,15 @@ namespace Clowd.Util
     {
         private static TimeUnit[] _unitMap = new TimeUnit[]
         {
-            new TimeUnit(1 ,"", "", 1000*60*5, "%u", "moments ago", "right now"),
-            new TimeUnit(1 ,"millisecond", "milliseconds"),
-            new TimeUnit(1000 ,"second", "seconds"),
-            new TimeUnit(1000*60 ,"minute", "minutes"),
-            new TimeUnit(1000*60*60 ,"hour", "hours"),
-            new TimeUnit(1000*60*60*24 ,"", "", 2, "%u","yesterday", "tomorrow"),
-            new TimeUnit(1000*60*60*24 ,"day", "days"),
-            new TimeUnit(1000*60*60*24*7 ,"week", "weeks"),
-            new TimeUnit(2629743830L ,"month", "months"),
+            new TimeUnit(1, "", "", 1000 * 60 * 5, "%u", "moments ago", "right now"),
+            new TimeUnit(1, "millisecond", "milliseconds"),
+            new TimeUnit(1000, "second", "seconds"),
+            new TimeUnit(1000 * 60, "minute", "minutes"),
+            new TimeUnit(1000 * 60 * 60, "hour", "hours"),
+            new TimeUnit(1000 * 60 * 60 * 24, "", "", 2, "%u", "yesterday", "tomorrow"),
+            new TimeUnit(1000 * 60 * 60 * 24, "day", "days"),
+            new TimeUnit(1000 * 60 * 60 * 24 * 7, "week", "weeks"),
+            new TimeUnit(2629743830L, "month", "months"),
             new TimeUnit(2629743830L * 12L, "year", "years"),
             //new TimeUnit(315569259747L ,"decade", "decades"),
             //new TimeUnit(3155692597470L ,"century", "centuries"),
@@ -95,6 +95,7 @@ namespace Clowd.Util
             var duration = GetDuration(date, DateTime.Now);
             return duration.Unit.Format(duration);
         }
+
         public static string Format(TimeSpan time)
         {
             var duration = GetDuration(time);
@@ -139,8 +140,10 @@ namespace Clowd.Util
                     break;
                 }
             }
+
             return result;
         }
+
         private static Duration GetDuration(DateTime then, DateTime now)
         {
             TimeSpan ts = then - now;
@@ -153,6 +156,7 @@ namespace Clowd.Util
             public long Delta { get; set; }
             public TimeUnit Unit { get; set; }
         }
+
         internal class TimeUnit : IComparable<TimeUnit>
         {
             public long Milliseconds { get; }
@@ -190,6 +194,7 @@ namespace Clowd.Util
                     return -1;
                 return 0;
             }
+
             public string Format(Duration duration)
             {
                 string unit = GetName(duration);
@@ -212,8 +217,10 @@ namespace Clowd.Util
                 {
                     result = d.Unit.PluralName;
                 }
+
                 return result;
             }
+
             private long GetQuantity(Duration duration)
             {
                 long quantity = Math.Abs(duration.Quantity);
@@ -225,8 +232,10 @@ namespace Clowd.Util
                         quantity = quantity + 1;
                     }
                 }
+
                 return quantity;
             }
+
             private string ApplyPattern(string unit, long quantity)
             {
                 string result = Pattern.Replace(QUANTITY, quantity.ToString());

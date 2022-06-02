@@ -18,16 +18,19 @@ namespace Clowd.Util
                 _hue = value / 60d;
             }
         }
+
         public double Saturation
         {
             get { return _sat * 100; }
             set { _sat = value / 100; }
         }
+
         public double Lightness
         {
             get { return _lum * 100; }
             set { _lum = value / 100; }
         }
+
         private double _hue;
         private double _sat;
         private double _lum;
@@ -96,6 +99,7 @@ namespace Clowd.Util
             if ((3 * vH) < 2) return (v1 + (v2 - v1) * ((2 / 3) - vH) * 6);
             return (v1);
         }
+
         public Color ToRGB()
         {
             byte r, g, b;
@@ -118,6 +122,7 @@ namespace Clowd.Util
                 {
                     t2 = (_lum + _sat) - (_lum * _sat);
                 }
+
                 t1 = 2d * _lum - t2;
 
                 double tr, tg, tb;
@@ -132,11 +137,12 @@ namespace Clowd.Util
                 g = (byte)Math.Round(tg * 255d);
                 b = (byte)Math.Round(tb * 255d);
             }
+
             return Color.FromRgb(r, g, b);
         }
+
         private static double ColorCalc(double c, double t1, double t2)
         {
-
             if (c < 0) c += 1d;
             if (c > 1) c -= 1d;
             if (6.0d * c < 1.0d) return t1 + (t2 - t1) * 6.0d * c;
@@ -152,8 +158,10 @@ namespace Clowd.Util
             {
                 return true;
             }
+
             return false;
         }
+
         public void Excite()
         {
             if (Saturation < 10)

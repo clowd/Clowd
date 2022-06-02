@@ -44,7 +44,7 @@ namespace Clowd.UI.Config
 
                 if (pd.IsReadOnly() && pd.GetFirstAttributeOrDefault<FlattenSettingsObjectAttribute>() == null)
                     continue;
-                
+
                 yield return pd;
             }
         }
@@ -53,7 +53,7 @@ namespace Clowd.UI.Config
         {
             return GetSettingsPanel<Page>();
         }
-        
+
         public T GetSettingsPanel<T>() where T : IAddChild, new()
         {
             var grid = new Grid();
@@ -66,7 +66,7 @@ namespace Clowd.UI.Config
             grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(10) });
 
             var root = Activator.CreateInstance<T>();
-            
+
             root.AddChild(new WPFUI.Controls.DynamicScrollViewer
             {
                 Padding = new Thickness(24, 10, 24, 24),

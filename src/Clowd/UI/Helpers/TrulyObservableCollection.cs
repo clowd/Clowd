@@ -34,6 +34,7 @@ namespace Clowd.UI.Helpers
                     (item as INotifyPropertyChanged).PropertyChanged += this.ItemPropertyChanged;
                 }
             }
+
             if (e.OldItems != null)
             {
                 foreach (Object item in e.OldItems)

@@ -24,9 +24,10 @@ namespace Clowd.UI.Helpers
             {
                 return null;
             }
+
             return (from @group in VisualStateManager.GetVisualStateGroups(root).OfType<VisualStateGroup>()
-                    where string.CompareOrdinal(groupName, @group.Name) == 0
-                    select @group).FirstOrDefault<VisualStateGroup>();
+                where string.CompareOrdinal(groupName, @group.Name) == 0
+                select @group).FirstOrDefault<VisualStateGroup>();
         }
 
         /// <summary>
@@ -40,6 +41,7 @@ namespace Clowd.UI.Helpers
             {
                 return null;
             }
+
             return (VisualTreeHelper.GetChild(dependencyObject, 0) as FrameworkElement);
         }
 
@@ -92,6 +94,7 @@ namespace Clowd.UI.Helpers
                 {
                     break;
                 }
+
                 parent = GetParent(parent);
             }
         }

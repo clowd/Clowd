@@ -9,9 +9,11 @@ namespace Clowd.UI.Helpers
     {
         readonly Action<object> _execute;
         readonly Predicate<object> _canExecute;
+
         public RelayCommand(Action<object> execute)
             : this(execute, null)
         { }
+
         public RelayCommand(Action<object> execute, Predicate<object> canExecute)
         {
             if (execute == null)
@@ -19,16 +21,19 @@ namespace Clowd.UI.Helpers
             _execute = execute;
             _canExecute = canExecute;
         }
+
         [DebuggerStepThrough]
         public bool CanExecute(object parameter)
         {
             return _canExecute == null ? true : _canExecute(parameter);
         }
+
         public event EventHandler CanExecuteChanged
         {
             add { CommandManager.RequerySuggested += value; }
             remove { CommandManager.RequerySuggested -= value; }
         }
+
         public void Execute(object parameter) { _execute(parameter); }
     }
 
@@ -39,6 +44,7 @@ namespace Clowd.UI.Helpers
             get => _iconTemplate;
             set => Set(ref _iconTemplate, value);
         }
+
         public string Text
         {
             get => _text;
@@ -51,12 +57,15 @@ namespace Clowd.UI.Helpers
         public RelayUICommand(Action<object> execute)
             : this(execute, null)
         { }
+
         public RelayUICommand(Action<object> execute, Predicate<object> canExecute)
             : this(execute, canExecute, null)
         { }
+
         public RelayUICommand(Action<object> execute, Predicate<object> canExecute, string text)
             : this(execute, canExecute, text, null)
         { }
+
         public RelayUICommand(Action<object> execute, Predicate<object> canExecute, string text, DataTemplate icon)
             : base(execute, canExecute)
         {

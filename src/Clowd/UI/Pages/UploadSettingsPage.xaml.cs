@@ -31,7 +31,7 @@ namespace Clowd.UI.Pages
         private void ProviderSettingsCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (e.Parameter is not UploadProviderInfo info) return;
-            
+
             Func<Window> getWnd = () => Window.GetWindow(this);
 
             var wnd = new SystemThemedWindow();
@@ -44,7 +44,7 @@ namespace Clowd.UI.Pages
 
             var root = new Grid();
             root.RowDefinitions.Add(new RowDefinition());
-            root.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(0, GridUnitType.Auto)});
+            root.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(0, GridUnitType.Auto) });
 
             root.Children.Add(new SettingsControlFactory(getWnd, info).GetSettingsPanel<UserControl>());
 
@@ -70,7 +70,7 @@ namespace Clowd.UI.Pages
                 m_image.Click += (_, _) => SettingsRoot.Current.Uploads.Image = info;
                 m_default.Items.Add(m_image);
             }
-            
+
             if (info.Provider.SupportedUpload.HasFlag(SupportedUploadType.Video))
             {
                 var m_video = new MenuItem();
@@ -79,7 +79,7 @@ namespace Clowd.UI.Pages
                 m_video.Click += (_, _) => SettingsRoot.Current.Uploads.Video = info;
                 m_default.Items.Add(m_video);
             }
-            
+
             if (info.Provider.SupportedUpload.HasFlag(SupportedUploadType.Text))
             {
                 var m_text = new MenuItem();
@@ -88,7 +88,7 @@ namespace Clowd.UI.Pages
                 m_text.Click += (_, _) => SettingsRoot.Current.Uploads.Text = info;
                 m_default.Items.Add(m_text);
             }
-            
+
             if (info.Provider.SupportedUpload.HasFlag(SupportedUploadType.Binary))
             {
                 var m_binary = new MenuItem();
@@ -97,13 +97,13 @@ namespace Clowd.UI.Pages
                 m_binary.Click += (_, _) => SettingsRoot.Current.Uploads.Binary = info;
                 m_default.Items.Add(m_binary);
             }
-            
+
             var m_test = new MenuItem();
             m_test.Header = "Test";
             m_test.IsEnabled = false;
             m_test.Icon = SymbolRegular.BrainCircuit24;
             menu.Items.Add(m_test);
-            
+
             var m_close = new MenuItem();
             m_close.Header = "Close";
             m_close.Icon = SymbolRegular.Dismiss20;

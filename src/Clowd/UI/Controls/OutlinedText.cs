@@ -6,7 +6,6 @@ using System.Windows.Media;
 
 namespace Clowd.UI.Controls
 {
-
     public class OutlinedText : FrameworkElement, IAddChild
     {
         #region Private Fields
@@ -41,7 +40,6 @@ namespace Clowd.UI.Controls
             CreateText();
             // Draw the outline based on the properties that are set.
             drawingContext.DrawGeometry(Fill, new Pen(Stroke, StrokeThickness), _textGeometry);
-
         }
 
         /// <summary>
@@ -69,12 +67,9 @@ namespace Clowd.UI.Controls
             _textGeometry = formattedText.BuildGeometry(new Point(0, 0));
 
 
-
-
             //set the size of the custome control based on the size of the text
             this.MinWidth = formattedText.Width;
             this.MinHeight = formattedText.Height;
-
         }
 
         #endregion
@@ -109,8 +104,8 @@ namespace Clowd.UI.Controls
                 FrameworkPropertyMetadataOptions.AffectsRender,
                 new PropertyChangedCallback(OnOutlineTextInvalidated),
                 null
-                )
-            );
+            )
+        );
 
         /// <summary>
         /// Specifies the brush to use for the fill of the formatted text.
@@ -140,8 +135,8 @@ namespace Clowd.UI.Controls
                 FrameworkPropertyMetadataOptions.AffectsRender,
                 new PropertyChangedCallback(OnOutlineTextInvalidated),
                 null
-                )
-            );
+            )
+        );
 
         /// <summary>
         /// The font to use for the displayed formatted text.
@@ -171,8 +166,8 @@ namespace Clowd.UI.Controls
                 FrameworkPropertyMetadataOptions.AffectsRender,
                 new PropertyChangedCallback(OnOutlineTextInvalidated),
                 null
-                )
-            );
+            )
+        );
 
         /// <summary>
         /// The current font size.
@@ -198,12 +193,12 @@ namespace Clowd.UI.Controls
             typeof(double),
             typeof(OutlinedText),
             new FrameworkPropertyMetadata(
-                 (double)48.0,
-                 FrameworkPropertyMetadataOptions.AffectsRender,
-                 new PropertyChangedCallback(OnOutlineTextInvalidated),
-                 null
-                 )
-            );
+                (double)48.0,
+                FrameworkPropertyMetadataOptions.AffectsRender,
+                new PropertyChangedCallback(OnOutlineTextInvalidated),
+                null
+            )
+        );
 
 
         /// <summary>
@@ -230,12 +225,12 @@ namespace Clowd.UI.Controls
             typeof(bool),
             typeof(OutlinedText),
             new FrameworkPropertyMetadata(
-                 false,
-                 FrameworkPropertyMetadataOptions.AffectsRender,
-                 new PropertyChangedCallback(OnOutlineTextInvalidated),
-                 null
-                 )
-            );
+                false,
+                FrameworkPropertyMetadataOptions.AffectsRender,
+                new PropertyChangedCallback(OnOutlineTextInvalidated),
+                null
+            )
+        );
 
         /// <summary>
         /// Specifies the brush to use for the stroke and optional hightlight of the formatted text.
@@ -261,12 +256,12 @@ namespace Clowd.UI.Controls
             typeof(Brush),
             typeof(OutlinedText),
             new FrameworkPropertyMetadata(
-                 new SolidColorBrush(Colors.Teal),
-                 FrameworkPropertyMetadataOptions.AffectsRender,
-                 new PropertyChangedCallback(OnOutlineTextInvalidated),
-                 null
-                 )
-            );
+                new SolidColorBrush(Colors.Teal),
+                FrameworkPropertyMetadataOptions.AffectsRender,
+                new PropertyChangedCallback(OnOutlineTextInvalidated),
+                null
+            )
+        );
 
         /// <summary>
         ///     The stroke thickness of the font.
@@ -292,12 +287,12 @@ namespace Clowd.UI.Controls
             typeof(ushort),
             typeof(OutlinedText),
             new FrameworkPropertyMetadata(
-                 (ushort)0,
-                 FrameworkPropertyMetadataOptions.AffectsRender,
-                 new PropertyChangedCallback(OnOutlineTextInvalidated),
-                 null
-                 )
-            );
+                (ushort)0,
+                FrameworkPropertyMetadataOptions.AffectsRender,
+                new PropertyChangedCallback(OnOutlineTextInvalidated),
+                null
+            )
+        );
 
         /// <summary>
         /// Specifies the text string to display.
@@ -323,17 +318,15 @@ namespace Clowd.UI.Controls
             typeof(string),
             typeof(OutlinedText),
             new FrameworkPropertyMetadata(
-                 "",
-                 FrameworkPropertyMetadataOptions.AffectsRender,
-                 new PropertyChangedCallback(OnOutlineTextInvalidated),
-                 null
-                 )
-            );
+                "",
+                FrameworkPropertyMetadataOptions.AffectsRender,
+                new PropertyChangedCallback(OnOutlineTextInvalidated),
+                null
+            )
+        );
 
         public void AddChild(Object value)
-        {
-
-        }
+        { }
 
         public void AddText(string value)
         {

@@ -66,8 +66,7 @@ namespace Clowd.UI.Dialogs.Font
         }
 
         public FontInfo()
-        {
-        }
+        { }
 
         public FontInfo(FontFamily fam, double sz, FontStyle style, FontStretch strc, FontWeight weight, SolidColorBrush c)
         {
