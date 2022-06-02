@@ -67,7 +67,8 @@ namespace Clowd.Video.FFmpeg
         {
             if (this.FFMpegProcess == null)
                 throw new FFMpegException(-1, "FFMpeg process was aborted");
-            if (!this.FFMpegProcess.HasExited && !this.FFMpegProcess.WaitForExit(this.ExecutionTimeout.HasValue ? (int)this.ExecutionTimeout.Value.TotalMilliseconds : int.MaxValue))
+            if (!this.FFMpegProcess.HasExited &&
+                !this.FFMpegProcess.WaitForExit(this.ExecutionTimeout.HasValue ? (int)this.ExecutionTimeout.Value.TotalMilliseconds : int.MaxValue))
             {
                 this.EnsureFFMpegProcessStopped();
                 throw new FFMpegException(-2, string.Format("FFMpeg process exceeded execution timeout ({0}) and was aborted", (object)this.ExecutionTimeout));
@@ -199,6 +200,7 @@ namespace Clowd.Video.FFmpeg
                                 if (File.GetLastWriteTime(path) > File.GetLastWriteTime(executingAssembly.Location))
                                     continue;
                             }
+
                             using (GZipStream gzipStream = new GZipStream(executingAssembly.GetManifestResourceStream(name), CompressionMode.Decompress, false))
                             {
                                 using (FileStream fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -219,7 +221,8 @@ namespace Clowd.Video.FFmpeg
             {
                 // we need to make ffmpeg per-monitor dpi aware so gdigrab / dshow filters can get correct screen coordinates.
                 // https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
-                File.WriteAllText(manifestPath, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\" xmlns:asmv3=\"urn:schemas-microsoft-com:asm.v3\">\r\n<asmv3:application>\r\n<asmv3:windowsSettings>\r\n<dpiAware xmlns=\"http://schemas.microsoft.com/SMI/2005/WindowsSettings\">true</dpiAware>\r\n<dpiAwareness xmlns=\"http://schemas.microsoft.com/SMI/2016/WindowsSettings\">PerMonitorV2</dpiAwareness>\r\n</asmv3:windowsSettings>\r\n</asmv3:application>\r\n</assembly>");
+                File.WriteAllText(manifestPath,
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\" xmlns:asmv3=\"urn:schemas-microsoft-com:asm.v3\">\r\n<asmv3:application>\r\n<asmv3:windowsSettings>\r\n<dpiAware xmlns=\"http://schemas.microsoft.com/SMI/2005/WindowsSettings\">true</dpiAware>\r\n<dpiAwareness xmlns=\"http://schemas.microsoft.com/SMI/2016/WindowsSettings\">PerMonitorV2</dpiAwareness>\r\n</asmv3:windowsSettings>\r\n</asmv3:application>\r\n</assembly>");
             }
         }
 

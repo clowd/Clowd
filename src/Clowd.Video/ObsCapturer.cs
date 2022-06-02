@@ -40,7 +40,8 @@ namespace Clowd.Video
             lock (_lock)
             {
                 if (_instance != null)
-                    throw new InvalidOperationException("There can only be one instance of ObsCapturer at once. Please dispose of the existing instance before creating another.");
+                    throw new InvalidOperationException(
+                        "There can only be one instance of ObsCapturer at once. Please dispose of the existing instance before creating another.");
                 _instance = this;
             }
 
@@ -169,7 +170,8 @@ namespace Clowd.Video
                                     tsc.SetResult(true);
 
                                 if (status.recording)
-                                    OnStatusRecieved((int)status.statistics.frameRate, (int)status.statistics.numberDroppedFrames, TimeSpan.FromMilliseconds(status.recordingTime));
+                                    OnStatusRecieved((int)status.statistics.frameRate, (int)status.statistics.numberDroppedFrames,
+                                        TimeSpan.FromMilliseconds(status.recordingTime));
 
                                 errorCount = 0;
                             }
@@ -195,7 +197,8 @@ namespace Clowd.Video
         public override async Task<string> StartAsync(ScreenRect captureRect, SettingsVideo settings)
         {
             if (!Directory.Exists(settings.OutputDirectory))
-                throw new ArgumentNullException($"{nameof(SettingsVideo)}.{nameof(SettingsVideo.OutputDirectory)} must be non null and point to an existing directory.");
+                throw new ArgumentNullException(
+                    $"{nameof(SettingsVideo)}.{nameof(SettingsVideo.OutputDirectory)} must be non null and point to an existing directory.");
 
             using (var scoped = _log.CreateProfiledScope("OBSStart"))
             {
@@ -258,8 +261,8 @@ namespace Clowd.Video
 
             FileSystemWatcher watcher = new FileSystemWatcher();
             watcher.Path = directory;
-            watcher.NotifyFilter = (NotifyFilters)0b1111111; // NotifyFilters.CreationTime | NotifyFilters.LastAccess | NotifyFilters.LastWrite | NotifyFilters.;
-            watcher.Filter = "*.*";// + extension;
+            watcher.NotifyFilter = (NotifyFilters)0b1111111; // NotifyFilters.CreationTime | NotifyFilters.LastAccess | NotifyFilters.LastWrite ....
+            watcher.Filter = "*.*"; // + extension;
             watcher.Created += new FileSystemEventHandler((s, e) =>
             {
                 if (e.ChangeType == WatcherChangeTypes.Created)
@@ -358,6 +361,7 @@ namespace Clowd.Video
                             .ConfigureAwait(false).GetAwaiter().GetResult();
                     }
                     catch { }
+
                     WebSocket.Dispose();
                 }
             }
@@ -379,8 +383,7 @@ namespace Clowd.Video
 
                             if (receiveResult.MessageType != WebSocketMessageType.Close)
                                 sb.Append(Encoding.UTF8.GetString(buffer, 0, receiveResult.Count));
-                        }
-                        while (!receiveResult.EndOfMessage);
+                        } while (!receiveResult.EndOfMessage);
 
                         ReceiveMessage(sb.ToString());
                         sb.Clear();
@@ -458,10 +461,24 @@ namespace Clowd.Video
         private class ObsRect : ObsSize
         {
             public int x;
+
             public int y;
-            //public static implicit operator ObsRect(ScreenRect rect) => new ObsRect { x = rect.Left, y = rect.Top, width = rect.Width, height = rect.Height };
-            public static implicit operator ObsRect(Rectangle rect) => new ObsRect { x = rect.X, y = rect.Y, width = rect.Width, height = rect.Height };
-            public static implicit operator ObsRect(ScreenRect rect) => new ObsRect { x = rect.X, y = rect.Y, width = rect.Width, height = rect.Height };
+
+            public static implicit operator ObsRect(Rectangle rect) => new ObsRect
+            {
+                x = rect.X,
+                y = rect.Y,
+                width = rect.Width,
+                height = rect.Height
+            };
+
+            public static implicit operator ObsRect(ScreenRect rect) => new ObsRect
+            {
+                x = rect.X,
+                y = rect.Y,
+                width = rect.Width,
+                height = rect.Height
+            };
         }
 
         private class Statistics

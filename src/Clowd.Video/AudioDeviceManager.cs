@@ -28,12 +28,20 @@ namespace Clowd.Video
 
         public static AudioDeviceInfo GetDefaultMicrophone()
         {
-            return new() { DeviceId = DEVICE_DEFAULT, DeviceType = TYPE_MICROPHONE };
+            return new()
+            {
+                DeviceId = DEVICE_DEFAULT,
+                DeviceType = TYPE_MICROPHONE
+            };
         }
 
         public static AudioDeviceInfo GetDefaultSpeaker()
         {
-            return new() { DeviceId = DEVICE_DEFAULT, DeviceType = TYPE_SPEAKER };
+            return new()
+            {
+                DeviceId = DEVICE_DEFAULT,
+                DeviceType = TYPE_SPEAKER
+            };
         }
 
         public static string GetFriendlyName(AudioDeviceInfo info)
@@ -75,7 +83,11 @@ namespace Clowd.Video
                 {
                     using (device)
                     {
-                        yield return new() { DeviceId = device.ID, DeviceType = type };
+                        yield return new()
+                        {
+                            DeviceId = device.ID,
+                            DeviceType = type
+                        };
                     }
                 }
             }
