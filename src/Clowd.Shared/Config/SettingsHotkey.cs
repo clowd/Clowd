@@ -41,7 +41,7 @@ namespace Clowd.Config
             set => Set(ref _drawOnScreenShortcut, value);
         }
         
-        [DisplayName("Start / Stop Screen Recording"), ClassifyIgnoreIfDefault]
+        [DisplayName("Start / Stop Recording"), ClassifyIgnoreIfDefault]
         public GlobalTrigger StartStopRecordingShortcut
         {
             get => _startStopRecordingShortcut;
