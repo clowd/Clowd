@@ -1488,27 +1488,37 @@ namespace Clowd.Drawing
             ReleaseMouseCapture();
         }
 
-        public void ZoomPanFit(double? widthOverride = null)
+        public void ZoomPanFit()
         {
             var rect = GetArtworkBounds();
             var dpiZoom = DpiZoom;
-            ContentScale = Math.Min((widthOverride ?? ActualWidth) / rect.Width * dpiZoom, ActualHeight / rect.Height * dpiZoom);
-            ZoomPanCenter(widthOverride);
+            ContentScale = Math.Min(ActualWidth / rect.Width * dpiZoom, ActualHeight / rect.Height * dpiZoom);
+            ZoomPanCenter();
         }
 
-        public void ZoomPanActualSize(double? widthOverride = null)
+        public void ZoomPanActualSize()
         {
             ContentScale = 1;
-            ZoomPanCenter(widthOverride);
+            ZoomPanCenter();
         }
 
-        public void ZoomPanCenter(double? widthOverride = null)
+        public void ZoomPanCenter()
         {
             var rect = GetArtworkBounds();
             var scale = ContentScale / DpiZoom;
-            var x = (widthOverride ?? ActualWidth) / 2 - rect.Width * scale / 2 - rect.Left * scale;
+            var x = ActualWidth / 2 - rect.Width * scale / 2 - rect.Left * scale;
             var y = ActualHeight / 2 - rect.Height * scale / 2 - rect.Top * scale;
             ContentOffset = new Point(x, y);
+        }
+
+        public void ZoomPanAuto()
+        {
+            var artBounds = GetArtworkBounds(false);
+            var dpiZoom = DpiZoom;
+            if (ActualHeight * dpiZoom > artBounds.Height && ActualWidth * dpiZoom > artBounds.Width)
+                ZoomPanActualSize();
+            else
+                ZoomPanFit();
         }
 
         #endregion Zooming and Panning
