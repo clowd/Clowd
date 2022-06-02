@@ -7,13 +7,13 @@ using YamlDotNet.Serialization;
 
 namespace Clowd.Upload
 {
-    public class MimeDbMimeProvider : IMimeProvider
+    public class MimeProvider : IMimeProvider
     {
         private static Dictionary<string, MimeDbMimeEntry> _database;
         private static Dictionary<string, LanguageEntry> _languages;
         private static readonly object _lock = new object();
 
-        public MimeDbMimeProvider()
+        public MimeProvider()
         {
             EnsureMimeCache();
         }
