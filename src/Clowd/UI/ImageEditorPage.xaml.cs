@@ -94,16 +94,7 @@ namespace Clowd.UI
             }
 
             // if window is bigger than image, show at actual size. else, zoom to fit
-            var artBounds = drawingCanvas.GetArtworkBounds(false);
-            var dpi = VisualTreeHelper.GetDpi(drawingCanvas);
-            if (this.ActualHeight * dpi.DpiScaleY > artBounds.Height && this.ActualWidth * dpi.DpiScaleX > artBounds.Width)
-            {
-                drawingCanvas.ZoomPanActualSize();
-            }
-            else
-            {
-                drawingCanvas.ZoomPanFit();
-            }
+            drawingCanvas.ZoomPanAuto();
 
             SyncToolState();
         }
