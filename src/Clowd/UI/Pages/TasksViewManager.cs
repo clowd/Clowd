@@ -10,15 +10,6 @@ namespace Clowd.UI.Pages
 {
     public class TasksViewManager : ITasksView
     {
-        public void Show()
-        { }
-
-        public void Hide()
-        { }
-
-        public void Notify()
-        { }
-
         public ITasksViewItem CreateTask(string name)
         {
             return new TasksViewItem(name);
@@ -35,12 +26,13 @@ namespace Clowd.UI.Pages
 
         public string ProgressText { get; private set; }
 
-        public CancellationToken CancelToken { get; } = CancellationToken.None;
+        public CancellationToken CancelToken => _source.Token;
 
         private ToastNotification _toast;
         private readonly ToastNotifierCompat _notifier;
         private readonly string _tag;
         private const string _group = "uploads";
+        private CancellationTokenSource _source;
 
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
@@ -49,6 +41,7 @@ namespace Clowd.UI.Pages
             Name = name;
             _tag = Guid.NewGuid().ToString();
             _notifier = ToastNotificationManagerCompat.CreateToastNotifier();
+            _source = new CancellationTokenSource();
         }
 
         public void Show()
@@ -60,7 +53,7 @@ namespace Clowd.UI.Pages
                     var builder = new ToastContentBuilder()
                         .SetToastDuration(ToastDuration.Long)
                         .AddText(Name)
-                        // .AddButton("Cancel", ToastActivationType.Background, "cancel")
+                        .AddButton("Cancel", ToastActivationType.Background, "cancel")
                         .AddVisualChild(new AdaptiveProgressBar()
                         {
                             Value = new BindableProgressBarValue("progressValue"),
@@ -87,7 +80,7 @@ namespace Clowd.UI.Pages
             {
                 if (ea.Arguments == "cancel")
                 {
-                    // cancel the upload
+                    SetCancelled();
                 }
                 else
                 {
@@ -109,6 +102,16 @@ namespace Clowd.UI.Pages
                     _toast = null;
                 }
             }
+        }
+
+        public void SetCancelled()
+        {
+            _source.Cancel();
+            Hide();
+            new ToastContentBuilder()
+                .AddText($"{Name} Cancelled")
+                .AddText("The file was cancelled by user and was not uploaded.")
+                .Show();
         }
 
         public void SetStatus(string status)
