@@ -30,8 +30,11 @@ namespace Clowd.UI.Unmanaged
     public static class CaptureWindow
     {
         private delegate void fnColorCapture([MarshalAs(UnmanagedType.U1)] byte r, [MarshalAs(UnmanagedType.U1)] byte g, [MarshalAs(UnmanagedType.U1)] byte b);
+
         private delegate void fnVideoCapture(RECT captureRegion);
+
         private delegate void fnSessionCapture([MarshalAs(UnmanagedType.LPWStr)] string sessionJsonPath, CaptureType captureType);
+
         private delegate void fnDisposed([MarshalAs(UnmanagedType.LPWStr)] string errorMessage);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -47,8 +50,13 @@ namespace Clowd.UI.Unmanaged
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnVideoCapture lpfnVideoCapture;
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnSessionCapture lpfnSessionCapture;
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnDisposed lpfnDisposed;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)] public string sessionDirectory;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string createdUtc;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)]
+            public string sessionDirectory;
+
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string createdUtc;
+
             [MarshalAs(UnmanagedType.Struct)] public RECT initialRect;
         };
 
@@ -89,7 +97,7 @@ namespace Clowd.UI.Unmanaged
                 lpfnDisposed = delDisposed,
                 initialRect = options.InitialRect,
             };
-            
+
             CaptureShow(ref args);
         }
 
@@ -135,7 +143,7 @@ namespace Clowd.UI.Unmanaged
                                 Platform.Current.RevealFileOrFolder(filename);
                             SettingsRoot.Current.General.LastSavePath = Path.GetDirectoryName(filename);
                             // delete only if saved as recovery is no longer needed
-                            SessionManager.Current.DeleteSession(session); 
+                            SessionManager.Current.DeleteSession(session);
                         }
                     }
                     else if (captureType == CaptureType.Upload)

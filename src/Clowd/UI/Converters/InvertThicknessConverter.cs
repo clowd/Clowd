@@ -13,6 +13,7 @@ namespace Clowd.UI.Converters
             {
                 return new Thickness(-t.Left, -t.Top, -t.Right, -t.Bottom);
             }
+
             return DependencyProperty.UnsetValue;
         }
 

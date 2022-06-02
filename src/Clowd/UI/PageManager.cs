@@ -34,7 +34,7 @@ namespace Clowd.UI
             GetOrCreate<VideoCaptureWindow>(closing: () => IsVideoCapturePageOpen = false).Open(region);
             IsVideoCapturePageOpen = true;
         }
-        
+
         public IVideoCapturePage GetExistingVideoCapturePage()
         {
             if (_singletons.TryGetValue(typeof(VideoCaptureWindow), out var wnd))

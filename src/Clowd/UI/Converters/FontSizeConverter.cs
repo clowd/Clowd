@@ -14,7 +14,7 @@ namespace Clowd.UI.Converters
     public class FontSizeConverter : IValueConverter
     {
         public object Convert(object value, Type targetType,
-                              object parameter, CultureInfo culture)
+            object parameter, CultureInfo culture)
         {
             double d = (double)value * 0.75;
 
@@ -22,7 +22,7 @@ namespace Clowd.UI.Converters
         }
 
         public object ConvertBack(object value, Type targetType,
-                                  object parameter, CultureInfo culture)
+            object parameter, CultureInfo culture)
         {
             return new NotSupportedException(this.GetType().Name + " : Convert back not supported");
         }

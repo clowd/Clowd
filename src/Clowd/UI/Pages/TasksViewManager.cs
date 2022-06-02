@@ -11,16 +11,13 @@ namespace Clowd.UI.Pages
     public class TasksViewManager : ITasksView
     {
         public void Show()
-        {
-        }
+        { }
 
         public void Hide()
-        {
-        }
+        { }
 
         public void Notify()
-        {
-        }
+        { }
 
         public ITasksViewItem CreateTask(string name)
         {
@@ -33,9 +30,9 @@ namespace Clowd.UI.Pages
         public string Name { get; }
 
         public string Status { get; private set; }
-        
+
         public double Progress { get; private set; }
-        
+
         public string ProgressText { get; private set; }
 
         public CancellationToken CancelToken { get; } = CancellationToken.None;
@@ -44,7 +41,7 @@ namespace Clowd.UI.Pages
         private readonly ToastNotifierCompat _notifier;
         private readonly string _tag;
         private const string _group = "uploads";
-        
+
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
         public TasksViewItem(string name)
@@ -77,7 +74,7 @@ namespace Clowd.UI.Pages
                     toast.Group = _group;
                     toast.Data = GetNotificationData();
                     toast.Activated += ToastOnActivated;
-                    
+
                     _toast = toast;
                     _notifier.Show(_toast);
                 }
@@ -123,14 +120,14 @@ namespace Clowd.UI.Pages
         public void SetCompleted(string uploadUrl)
         {
             Hide();
-            
+
             App.Current.Dispatcher.Invoke(async () =>
             {
                 var data = new ClipboardDataObject();
                 data.SetText(uploadUrl);
                 await data.SetClipboardData();
             });
-            
+
             new ToastContentBuilder()
                 .AddText($"{Name} Uploaded")
                 .AddText("The URL has been copied to the clipboard.")
@@ -144,7 +141,7 @@ namespace Clowd.UI.Pages
 
             if (ex is AggregateException agg && agg.InnerExceptions.Count == 1)
                 ex = agg.InnerException;
-            
+
             new ToastContentBuilder()
                 .SetToastScenario(ToastScenario.Reminder)
                 .AddText($"{Name} Failed")

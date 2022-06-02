@@ -132,8 +132,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         /// </summary>
         /// <param name="e">The <see cref="System.Windows.DependencyPropertyChangedEventArgs" /> instance containing the event data.</param>
         protected virtual void OnSelectedColorChanged(DependencyPropertyChangedEventArgs e)
-        {
-        }
+        { }
 
         /// <summary>
         /// Coerces the selected color value.

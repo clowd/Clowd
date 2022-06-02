@@ -19,7 +19,6 @@ namespace Clowd.UI.Controls
         private Border OuterFadedBorder { get; set; }
 
 
-
         public FadingScrollViewer()
         {
             this.FadedEdgeThickness = 20;
@@ -31,20 +30,18 @@ namespace Clowd.UI.Controls
         }
 
 
-
         private void FadingScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
             if (this.InnerFadedBorder == null)
                 return;
 
-            var topOffset = CalculateNewMarginBasedOnOffsetFromEdge(this.VerticalOffset); ;
+            var topOffset = CalculateNewMarginBasedOnOffsetFromEdge(this.VerticalOffset);
             var bottomOffset = CalculateNewMarginBasedOnOffsetFromEdge(this.ScrollableHeight - this.VerticalOffset);
             var leftOffset = CalculateNewMarginBasedOnOffsetFromEdge(this.HorizontalOffset);
             var rightOffset = CalculateNewMarginBasedOnOffsetFromEdge(this.ScrollableWidth - this.HorizontalOffset);
 
             this.InnerFadedBorder.Margin = new Thickness(leftOffset, topOffset, rightOffset, bottomOffset);
         }
-
 
 
         private double CalculateNewMarginBasedOnOffsetFromEdge(double edgeOffset)
@@ -54,7 +51,6 @@ namespace Clowd.UI.Controls
 
             return Math.Min(innerFadedBorderBaseMarginThickness, calculatedOffset);
         }
-
 
 
         private void FadingScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -71,7 +67,6 @@ namespace Clowd.UI.Controls
         }
 
 
-
         public override void OnApplyTemplate()
         {
             base.OnApplyTemplate();
@@ -83,7 +78,6 @@ namespace Clowd.UI.Controls
         }
 
 
-
         private void BuildInnerFadedBorderEffectForOpacityMask()
         {
             this.InnerFadedBorderEffect = new BlurEffect()
@@ -91,7 +85,6 @@ namespace Clowd.UI.Controls
                 RenderingBias = RenderingBias.Performance,
             };
         }
-
 
 
         private void BuildInnerFadedBorderForOpacityMask()
@@ -106,7 +99,6 @@ namespace Clowd.UI.Controls
         }
 
 
-
         private void BuildOuterFadedBorderForOpacityMask()
         {
             byte fadedEdgeByteOpacity = (byte)(this.FadedEdgeOpacity * 255);
@@ -118,7 +110,6 @@ namespace Clowd.UI.Controls
                 Child = this.InnerFadedBorder,
             };
         }
-
 
 
         private void SetOpacityMaskOfScrollContainer()

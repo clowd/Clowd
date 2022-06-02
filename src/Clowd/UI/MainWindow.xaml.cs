@@ -11,7 +11,8 @@ namespace Clowd.UI
 {
     public class MainWindowNavigationItem : NavigationItem
     {
-        private class FakePage : Page { }
+        private class FakePage : Page
+        { }
 
         public SettingsPageTab PageType
         {

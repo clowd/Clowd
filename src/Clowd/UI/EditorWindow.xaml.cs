@@ -136,6 +136,7 @@ namespace Clowd.UI
                     s.ActiveWindowId = null;
                     ew.AddSession(s);
                 }
+
                 ew.Show();
             }
         }
@@ -165,10 +166,10 @@ namespace Clowd.UI
 
             // look for a candidate window to open this tab in, or open a new window if one can't be found
             var query = from w in App.Current.Windows.OfType<EditorWindow>()
-                        where w.PlatformWindow.IsCurrentVirtualDesktop
-                        //where w.TabView.IsHeaderPanelVisible
-                        orderby w.LastTouched descending
-                        select w;
+                where w.PlatformWindow.IsCurrentVirtualDesktop
+                //where w.TabView.IsHeaderPanelVisible
+                orderby w.LastTouched descending
+                select w;
 
             var items = query.ToArray();
 

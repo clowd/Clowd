@@ -120,11 +120,12 @@ namespace Clowd.UI.Controls
                     return true;
                 }
             }
+
             return false;
         }
 
         private string _lastText;
-        
+
         public void UpdateText(string setTxt)
         {
             _lastText = setTxt;
@@ -149,6 +150,7 @@ namespace Clowd.UI.Controls
                 {
                     tb.Inlines.Add(upper);
                 }
+
                 this.Content = tb;
             }
         }

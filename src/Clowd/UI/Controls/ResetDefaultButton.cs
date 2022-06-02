@@ -13,6 +13,7 @@ namespace Clowd.UI.Controls
             get { return (object)GetValue(CurrentValueProperty); }
             set { SetValue(CurrentValueProperty, value); }
         }
+
         public static readonly DependencyProperty CurrentValueProperty = DependencyProperty.Register(nameof(CurrentValue), typeof(object), typeof(ResetDefaultButton), new PropertyMetadata(null, CurrentValueChanged));
 
         private static void CurrentValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

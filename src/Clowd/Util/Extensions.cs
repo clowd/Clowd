@@ -55,11 +55,13 @@ namespace Clowd.Util
             {
                 parentAsPanel.Children.Remove(child);
             }
+
             var parentAsContentControl = parent as ContentControl;
             if (parentAsContentControl != null)
             {
                 parentAsContentControl.Content = null;
             }
+
             var parentAsDecorator = parent as Decorator;
             if (parentAsDecorator != null)
             {
@@ -72,7 +74,8 @@ namespace Clowd.Util
             return string.Format("0x{0:X8}", ptr.ToInt32());
         }
 
-        private static Action EmptyDelegate = delegate () { };
+        private static Action EmptyDelegate = delegate() { };
+
         public static void DoRender(this UIElement element)
         {
             element.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, EmptyDelegate);
@@ -86,12 +89,12 @@ namespace Clowd.Util
         {
             using var bitmap = new PlatformUtil.Windows.GdiCompatibleBitmap(original.GetHbitmap());
             return System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
-               bitmap.Handle,
-               IntPtr.Zero,
-               Int32Rect.Empty,
-               System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
-
+                bitmap.Handle,
+                IntPtr.Zero,
+                Int32Rect.Empty,
+                System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
         }
+
         public static BitmapSource ConvertToBitmapSourceFast(this System.Drawing.Bitmap bitmap)
         {
             throw new NotImplementedException(); // this method is buggy, the Pixel Format is hard coded in the BitmapSource.Create call..
@@ -130,14 +133,14 @@ namespace Clowd.Util
 
             //create the grayscale ColorMatrix
             var colorMatrix = new System.Drawing.Imaging.ColorMatrix(
-               new float[][]
-               {
-                 new float[] {.3f, .3f, .3f, 0, 0},
-                 new float[] {.59f, .59f, .59f, 0, 0},
-                 new float[] {.11f, .11f, .11f, 0, 0},
-                 new float[] {0, 0, 0, 1, 0},
-                 new float[] {0, 0, 0, 0, 1}
-               });
+                new float[][]
+                {
+                    new float[] { .3f, .3f, .3f, 0, 0 },
+                    new float[] { .59f, .59f, .59f, 0, 0 },
+                    new float[] { .11f, .11f, .11f, 0, 0 },
+                    new float[] { 0, 0, 0, 1, 0 },
+                    new float[] { 0, 0, 0, 0, 1 }
+                });
 
             //create some image attributes
             var attributes = new System.Drawing.Imaging.ImageAttributes();
@@ -148,7 +151,7 @@ namespace Clowd.Util
             //draw the original image on the new image
             //using the grayscale color matrix
             g.DrawImage(original, new System.Drawing.Rectangle(0, 0, original.Width, original.Height),
-               0, 0, original.Width, original.Height, System.Drawing.GraphicsUnit.Pixel, attributes);
+                0, 0, original.Width, original.Height, System.Drawing.GraphicsUnit.Pixel, attributes);
 
             //dispose the Graphics object
             g.Dispose();
@@ -171,10 +174,11 @@ namespace Clowd.Util
         public static void Save(this BitmapSource source, string filePath, ImageFormat format)
         {
             using (var fs = File.Create(filePath))
-            { 
+            {
                 source.Save(fs, format);
             }
         }
+
         public static void Save(this BitmapSource source, Stream stream, ImageFormat format)
         {
             BitmapEncoder encoder;

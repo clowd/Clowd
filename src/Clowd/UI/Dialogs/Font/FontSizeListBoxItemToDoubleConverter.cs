@@ -7,8 +7,7 @@ namespace Clowd.UI.Dialogs.Font
     public class FontSizeListBoxItemToDoubleConverter : IValueConverter
     {
         public FontSizeListBoxItemToDoubleConverter()
-        {
-        }
+        { }
 
         object System.Windows.Data.IValueConverter.Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
@@ -21,7 +20,6 @@ namespace Clowd.UI.Dialogs.Font
             {
                 return 0;
             }
-
         }
 
         object System.Windows.Data.IValueConverter.ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

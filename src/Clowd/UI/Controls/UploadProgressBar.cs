@@ -7,6 +7,7 @@ namespace Clowd.UI.Controls
     {
         public bool ActionClicked { get; set; }
         public bool UploadFailed { get; set; }
+
         public double Progress
         {
             get { return (double)GetValue(ProgressProperty); }
@@ -31,6 +32,7 @@ namespace Clowd.UI.Controls
             get { return (string)GetValue(DisplayTextProperty); }
             set { SetValue(DisplayTextProperty, value); }
         }
+
         public static readonly DependencyProperty DisplayTextProperty =
             DependencyProperty.Register("DisplayText", typeof(string), typeof(UploadProgressBar), new PropertyMetadata(""));
 

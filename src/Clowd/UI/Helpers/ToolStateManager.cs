@@ -88,12 +88,10 @@ namespace Clowd.UI.Helpers
         public override bool HasAngle => true;
 
         public override void EnterState(ImageEditorPage page, object obj)
-        {
-        }
+        { }
 
         public override void ExitState(ImageEditorPage page)
-        {
-        }
+        { }
 
         public override bool IsCurrent(object obj)
         {
@@ -259,9 +257,7 @@ namespace Clowd.UI.Helpers
         public override bool CanChangeCanvasBackground => false;
 
         public ObjectStateCapabilities()
-        {
-
-        }
+        { }
 
         private const string ANGLE_NAME = "Angle";
         private object _currentGraphic;

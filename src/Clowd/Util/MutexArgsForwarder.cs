@@ -13,6 +13,7 @@ namespace Clowd.Util
     public class CommandLineEventArgs : EventArgs
     {
         public string[] Args { get; }
+
         public CommandLineEventArgs(string[] args)
         {
             Args = args;
@@ -205,8 +206,12 @@ namespace Clowd.Util
             if (_mutex != null)
             {
                 // I don't know why this fails, but the process is exiting so I also don't care
-                try { _mutex.ReleaseMutex(); } catch { }
-                try { _mutex.Dispose(); } catch { }
+                try { _mutex.ReleaseMutex(); }
+                catch { }
+
+                try { _mutex.Dispose(); }
+                catch { }
+
                 _mutex = null;
             }
 

@@ -35,9 +35,11 @@ namespace Clowd.UI.Dialogs.Font
                 {
                     continue;
                 }
+
                 found = brush;
                 break;
             }
+
             return found;
         }
 
@@ -50,9 +52,11 @@ namespace Clowd.UI.Dialogs.Font
                 {
                     continue;
                 }
+
                 found = b;
                 break;
             }
+
             return found;
         }
 
@@ -67,8 +71,10 @@ namespace Clowd.UI.Dialogs.Font
                 {
                     break;
                 }
+
                 idx++;
             }
+
             return idx;
         }
 

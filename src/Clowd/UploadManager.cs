@@ -285,6 +285,7 @@ namespace Clowd.Capture
                                     break;
                             }
                         }
+
                         return lookup.Provider;
                     }
 

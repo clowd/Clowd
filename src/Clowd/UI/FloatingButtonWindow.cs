@@ -105,6 +105,7 @@ namespace Clowd.UI
                     MainPanel.Orientation = MainPanel.Orientation == Orientation.Horizontal ? Orientation.Vertical : Orientation.Horizontal;
                     ScreenPosition = new ScreenRect(initialPos.Left, initialPos.Top, initialPos.Height, initialPos.Width);
                 }
+
                 dragging = false;
                 e.Handled = true;
             };
@@ -128,9 +129,9 @@ namespace Clowd.UI
                     var newY = initialPos.Top + deltaY;
                     ScreenPosition = new ScreenRect(newX, newY, initialPos.Width, initialPos.Height);
                 }
+
                 e.Handled = true;
             };
-
         }
 
         private void FloatingButtonWindow_LayoutUpdated(object sender, EventArgs e)

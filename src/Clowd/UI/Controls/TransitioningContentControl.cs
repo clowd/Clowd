@@ -27,6 +27,7 @@ namespace Clowd.UI.Controls
     public class TransitioningContentControl : ContentControl
     {
         #region Visual state names
+
         /// <summary>
         /// The name of the group that holds the presentation states.
         /// </summary>
@@ -42,9 +43,11 @@ namespace Clowd.UI.Controls
         /// The name of the state that represents the default transition.
         /// </summary>
         public const string DefaultTransitionState = "DefaultTransition";
+
         #endregion Visual state names
 
         #region Template part names
+
         /// <summary>
         /// The name of the control that will display the previous content.
         /// </summary>
@@ -58,6 +61,7 @@ namespace Clowd.UI.Controls
         #endregion Template part names
 
         #region TemplateParts
+
         /// <summary>
         /// Gets or sets the current content presentation site.
         /// </summary>
@@ -69,6 +73,7 @@ namespace Clowd.UI.Controls
         /// </summary>
         /// <value>The previous content presentation site.</value>
         private ContentPresenter PreviousContentPresentationSite { get; set; }
+
         #endregion TemplateParts
 
         #region public bool IsTransitioning
@@ -105,7 +110,8 @@ namespace Clowd.UI.Controls
 
         public object LastContent
         {
-            get; private set;
+            get;
+            private set;
         }
 
         /// <summary>
@@ -133,6 +139,7 @@ namespace Clowd.UI.Controls
                 throw new InvalidOperationException("IsTransitioning property is read-only.");
             }
         }
+
         #endregion public bool IsTransitioning
 
         /// <summary>
@@ -164,6 +171,7 @@ namespace Clowd.UI.Controls
         }
 
         #region public string Transition
+
         /// <summary>
         /// Gets or sets the name of the transition to use. These correspond
         /// directly to the VisualStates inside the PresentationStates group.
@@ -226,9 +234,11 @@ namespace Clowd.UI.Controls
                 source.CurrentTransition = newStoryboard;
             }
         }
+
         #endregion public string Transition
 
         #region public bool RestartTransitionOnContentChange
+
         /// <summary>
         /// Gets or sets a value indicating whether the current transition
         /// will be aborted when setting new content during a transition.
@@ -265,15 +275,17 @@ namespace Clowd.UI.Controls
         /// <param name="oldValue">The old value of RestartTransitionOnContentChange.</param>
         /// <param name="newValue">The new value of RestartTransitionOnContentChange.</param>
         protected virtual void OnRestartTransitionOnContentChangeChanged(bool oldValue, bool newValue)
-        {
-        }
+        { }
+
         #endregion public bool RestartTransitionOnContentChange
 
         #region Events
+
         /// <summary>
         /// Occurs when the current transition has completed.
         /// </summary>
         public event RoutedEventHandler TransitionCompleted;
+
         #endregion Events
 
 #if !SILVERLIGHT
@@ -417,6 +429,7 @@ namespace Clowd.UI.Controls
                     .Select(state => state.Storyboard)
                     .FirstOrDefault();
             }
+
             return newStoryboard;
         }
     }

@@ -30,6 +30,7 @@ namespace Clowd.UI.Dialogs.Font
                 {
                     return;
                 }
+
                 this.selectedFontColor = value;
                 this.OnPropertyChanged("SelectedFontColor");
             }

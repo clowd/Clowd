@@ -34,7 +34,6 @@ using System.Runtime.CompilerServices;
 
 namespace Clowd.Util
 {
-
     /// <summary>MetaObject gives your own classes the ability to easily implement IDynamicMetaObjectProvider without inheriting from DynamicObject</summary>
     /// <remarks>
     /// MetaObject should NOT be used directly.  It's not intended for that.
@@ -60,6 +59,7 @@ namespace Clowd.Util
         public Type ValueType { get { return Value.GetType(); } }
 
         #region Helper methods pulled from other DLR classes (most of them were internal so they couldn't be called)
+
         // From DynamicMetaObject.cs
         public static Expression[] GetExpressions(DynamicMetaObject[] objects)
         {
@@ -116,6 +116,7 @@ namespace Clowd.Util
         {
             return t1 == t2 || t1.IsEquivalentTo(t2);
         }
+
         #endregion
 
         // We no longer wrap a DynamicObject, so we don't need this ... I think?
@@ -346,6 +347,7 @@ namespace Clowd.Util
             {
                 t = t.BaseType;
             }
+
             return Expression.Constant(binder, t);
         }
 
@@ -650,6 +652,7 @@ namespace Clowd.Util
             {
                 return Expression;
             }
+
             return Expression.Convert(Expression, ValueType);
         }
 
@@ -661,8 +664,7 @@ namespace Clowd.Util
         {
             internal GetBinderAdapter(InvokeMemberBinder binder)
                 : base(binder.Name, binder.IgnoreCase)
-            {
-            }
+            { }
 
             public override DynamicMetaObject FallbackGetMember(DynamicMetaObject target, DynamicMetaObject errorSuggestion)
             {

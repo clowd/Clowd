@@ -19,7 +19,6 @@ namespace Clowd.UI.Dialogs.Font
         }
 
 
-
         public bool ShowColorPicker
         {
             get { return (bool)GetValue(ShowColorPickerProperty); }
@@ -60,6 +59,7 @@ namespace Clowd.UI.Dialogs.Font
             this.tbFontSize.IsEnabled = AllowArbitraryFontSizes;
             lstFamily.ItemTemplate = PreviewFontInFontList ? (DataTemplate)Resources["fontFamilyData"] : (DataTemplate)Resources["fontFamilyDataWithoutPreview"];
         }
+
         private static void PreviewFontInFontListPropertyCallback(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             ColorFontChooser chooser = d as ColorFontChooser;
@@ -70,6 +70,7 @@ namespace Clowd.UI.Dialogs.Font
             else
                 chooser.lstFamily.ItemTemplate = chooser.Resources["fontFamilyDataWithoutPreview"] as DataTemplate;
         }
+
         private static void AllowArbitraryFontSizesPropertyCallback(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             ColorFontChooser chooser = d as ColorFontChooser;
@@ -77,8 +78,8 @@ namespace Clowd.UI.Dialogs.Font
                 return;
 
             chooser.tbFontSize.IsEnabled = (bool)e.NewValue;
-
         }
+
         private static void ShowColorPickerPropertyCallback(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             ColorFontChooser chooser = d as ColorFontChooser;
@@ -120,10 +121,11 @@ namespace Clowd.UI.Dialogs.Font
                 e.CancelCommand();
             }
         }
+
         private Boolean TextBoxTextAllowed(String Text2)
         {
             return Array.TrueForAll<Char>(Text2.ToCharArray(),
-                delegate (Char c) { return Char.IsDigit(c) || Char.IsControl(c); });
+                delegate(Char c) { return Char.IsDigit(c) || Char.IsControl(c); });
         }
 
         private void tbFontSize_LostFocus(object sender, RoutedEventArgs e)
@@ -134,8 +136,8 @@ namespace Clowd.UI.Dialogs.Font
                 {
                     lstFontSizes.SelectedIndex = 0;
                 }
-                tbFontSize.Text = this.lstFontSizes.SelectedItem.ToString();
 
+                tbFontSize.Text = this.lstFontSizes.SelectedItem.ToString();
             }
         }
 
@@ -150,6 +152,7 @@ namespace Clowd.UI.Dialogs.Font
                     return;
                 }
             }
+
             this.lstFontSizes.SelectedItem = null;
         }
     }

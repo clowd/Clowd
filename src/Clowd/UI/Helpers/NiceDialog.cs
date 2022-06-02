@@ -265,8 +265,7 @@ namespace Clowd.UI.Helpers
                 {
                     initialName = $"{defaultName}-{i}{extension}";
                     i++;
-                }
-                while (File.Exists(Path.Combine(directory, initialName)));
+                } while (File.Exists(Path.Combine(directory, initialName)));
             }
 
             var dlg = new System.Windows.Forms.SaveFileDialog();

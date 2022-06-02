@@ -33,6 +33,7 @@ namespace Clowd.UI.Dialogs.Font
 
                 return font.Source;
             }
+
             throw new NotSupportedException();
         }
 

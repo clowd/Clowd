@@ -123,7 +123,7 @@ namespace Clowd.UI
                 {
                     if (t.Exception != null)
                         CapturerCriticalError(this, new VideoCriticalErrorEventArgs(t.Exception.ToString()));
-                    
+
                     if (_btnClowd.Text == "LOADING")
                         _btnClowd.Text = "READY";
                 },
@@ -142,9 +142,9 @@ namespace Clowd.UI
             File.AppendAllText(filename, Environment.NewLine + Environment.NewLine + e.Error);
 
             if (await NiceDialog.ShowPromptAsync(null,
-                NiceDialogIcon.Error,
-                "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.",
-                "Open Error Log"))
+                    NiceDialogIcon.Error,
+                    "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.",
+                    "Open Error Log"))
             {
                 Process.Start("notepad.exe", filename);
             }
@@ -230,7 +230,7 @@ namespace Clowd.UI
         {
             if (_disposed)
                 throw new ObjectDisposedException("This object is disposed.");
-            
+
             var wasRecording = IsRecording;
             _isCancelled = true;
             if (IsRecording)
@@ -238,6 +238,7 @@ namespace Clowd.UI
                 IsRecording = false;
                 await _capturer.StopAsync();
             }
+
             this.Close();
 
             if (wasRecording && SettingsRoot.Current.Video.OpenFinishedInExplorer)
@@ -281,6 +282,7 @@ namespace Clowd.UI
                 IsRecording = false;
                 await _capturer.StopAsync();
             }
+
             this.Close();
 
             await Task.Delay(4 * 1000);

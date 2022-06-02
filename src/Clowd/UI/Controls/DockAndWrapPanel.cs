@@ -38,14 +38,14 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly DependencyProperty ItemWidthProperty =
-                DependencyProperty.Register(
-                        "ItemWidth",
-                        typeof(double),
-                        typeof(DockAndWrapPanel),
-                        new FrameworkPropertyMetadata(
-                                Double.NaN,
-                                FrameworkPropertyMetadataOptions.AffectsMeasure),
-                        new ValidateValueCallback(IsWidthHeightValid));
+            DependencyProperty.Register(
+                "ItemWidth",
+                typeof(double),
+                typeof(DockAndWrapPanel),
+                new FrameworkPropertyMetadata(
+                    Double.NaN,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure),
+                new ValidateValueCallback(IsWidthHeightValid));
 
         [TypeConverter(typeof(LengthConverter))]
         public double ItemWidth
@@ -56,14 +56,14 @@ namespace Clowd.UI.Controls
 
 
         public static readonly DependencyProperty ItemHeightProperty =
-                DependencyProperty.Register(
-                        "ItemHeight",
-                        typeof(double),
-                        typeof(DockAndWrapPanel),
-                        new FrameworkPropertyMetadata(
-                                Double.NaN,
-                                FrameworkPropertyMetadataOptions.AffectsMeasure),
-                        new ValidateValueCallback(IsWidthHeightValid));
+            DependencyProperty.Register(
+                "ItemHeight",
+                typeof(double),
+                typeof(DockAndWrapPanel),
+                new FrameworkPropertyMetadata(
+                    Double.NaN,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure),
+                new ValidateValueCallback(IsWidthHeightValid));
 
         [TypeConverter(typeof(LengthConverter))]
         public double ItemHeight
@@ -73,12 +73,12 @@ namespace Clowd.UI.Controls
         }
 
         public static readonly DependencyProperty OrientationProperty =
-                StackPanel.OrientationProperty.AddOwner(
-                        typeof(DockAndWrapPanel),
-                        new FrameworkPropertyMetadata(
-                                Orientation.Horizontal,
-                                FrameworkPropertyMetadataOptions.AffectsMeasure,
-                                new PropertyChangedCallback(OnOrientationChanged)));
+            StackPanel.OrientationProperty.AddOwner(
+                typeof(DockAndWrapPanel),
+                new FrameworkPropertyMetadata(
+                    Orientation.Horizontal,
+                    FrameworkPropertyMetadataOptions.AffectsMeasure,
+                    new PropertyChangedCallback(OnOrientationChanged)));
 
         public Orientation Orientation
         {
@@ -117,12 +117,21 @@ namespace Clowd.UI.Controls
             internal double Width
             {
                 get { return (_orientation == Orientation.Horizontal ? U : V); }
-                set { if (_orientation == Orientation.Horizontal) U = value; else V = value; }
+                set
+                {
+                    if (_orientation == Orientation.Horizontal) U = value;
+                    else V = value;
+                }
             }
+
             internal double Height
             {
                 get { return (_orientation == Orientation.Horizontal ? V : U); }
-                set { if (_orientation == Orientation.Horizontal) V = value; else U = value; }
+                set
+                {
+                    if (_orientation == Orientation.Horizontal) V = value;
+                    else U = value;
+                }
             }
         }
 
@@ -226,6 +235,7 @@ namespace Clowd.UI.Controls
                         accumulatedV += sz.V;
                         curLineSize = new UVSize(Orientation);
                     }
+
                     firstInLine = i;
                 }
                 else //continue to accumulate a line

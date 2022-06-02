@@ -13,7 +13,7 @@ namespace Clowd.UI.Converters
     public class ColorToBrushConverter : IValueConverter
     {
         public object Convert(object value, Type targetType,
-                              object parameter, CultureInfo culture)
+            object parameter, CultureInfo culture)
         {
             Color color = (Color)value;
 
@@ -21,11 +21,9 @@ namespace Clowd.UI.Converters
         }
 
         public object ConvertBack(object value, Type targetType,
-                                  object parameter, CultureInfo culture)
+            object parameter, CultureInfo culture)
         {
             return new NotSupportedException(this.GetType().Name + " : Convert back not supported");
-
         }
-
     }
 }

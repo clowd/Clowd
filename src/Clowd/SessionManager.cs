@@ -27,8 +27,7 @@ namespace Clowd
     public class SessionInfo : FileSyncObject
     {
         public SessionInfo(string file) : base(file)
-        {
-        }
+        { }
 
         public DateTime CreatedUtc
         {
@@ -166,7 +165,7 @@ namespace Clowd
             lock (_lock)
             {
                 var inmem = Sessions.FirstOrDefault(s => s.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase))
-                    ?? Sessions.FirstOrDefault(s => s.FilePath.Equals(Path.Combine(path, "session.json"), StringComparison.OrdinalIgnoreCase));
+                            ?? Sessions.FirstOrDefault(s => s.FilePath.Equals(Path.Combine(path, "session.json"), StringComparison.OrdinalIgnoreCase));
 
                 if (inmem != null)
                     return inmem;

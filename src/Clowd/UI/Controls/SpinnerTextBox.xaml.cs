@@ -13,6 +13,7 @@ namespace Clowd.UI.Controls
             get => (string)GetValue(TextProperty);
             set => SetValue(TextProperty, value);
         }
+
         public static readonly DependencyProperty TextProperty = DependencyProperty.Register(nameof(Text), typeof(string), typeof(SpinnerTextBox), new PropertyMetadata(""));
 
         public double SpinAmount
@@ -20,6 +21,7 @@ namespace Clowd.UI.Controls
             get => (double)GetValue(SpinAmountProperty);
             set => SetValue(SpinAmountProperty, value);
         }
+
         public static readonly DependencyProperty SpinAmountProperty = DependencyProperty.Register(nameof(SpinAmount), typeof(double), typeof(SpinnerTextBox), new PropertyMetadata(1d));
 
         public double? Max
@@ -27,6 +29,7 @@ namespace Clowd.UI.Controls
             get => (double?)GetValue(MaxProperty);
             set => SetValue(MaxProperty, value);
         }
+
         public static readonly DependencyProperty MaxProperty = DependencyProperty.Register(nameof(Max), typeof(double?), typeof(SpinnerTextBox), new PropertyMetadata(null));
 
         public double? Min
@@ -34,6 +37,7 @@ namespace Clowd.UI.Controls
             get => (double?)GetValue(MinProperty);
             set => SetValue(MinProperty, value);
         }
+
         public static readonly DependencyProperty MinProperty = DependencyProperty.Register(nameof(Min), typeof(double?), typeof(SpinnerTextBox), new PropertyMetadata(null));
 
         public bool SnapToWholeNumber
@@ -41,6 +45,7 @@ namespace Clowd.UI.Controls
             get => (bool)GetValue(SnapToWholeNumberProperty);
             set => SetValue(SnapToWholeNumberProperty, value);
         }
+
         public static readonly DependencyProperty SnapToWholeNumberProperty = DependencyProperty.Register(nameof(SnapToWholeNumber), typeof(bool), typeof(SpinnerTextBox), new PropertyMetadata(false));
 
         public SpinnerTextBox()
