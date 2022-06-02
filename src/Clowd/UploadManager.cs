@@ -161,10 +161,10 @@ namespace Clowd.Capture
         private static async Task<UploadViewState> UploadInternal(SupportedUploadType type, DoUploadDelegate doUpload, long size, string extension, string name = null, string viewName = null)
         {
             if (viewName == null)
-                viewName = type.ToString() + " File";
+                viewName = type.ToString();
 
-            if (name == null)
-                name = RandomEx.GetString(8).ToLower();
+            var rnd = RandomEx.GetCryptoUniqueString(10);
+            name = name == null ? rnd : rnd + "_" + name;
 
             extension = extension.Trim('.');
             var fileName = $"{name}.{extension}";
