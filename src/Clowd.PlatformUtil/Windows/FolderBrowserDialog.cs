@@ -43,10 +43,8 @@ namespace Clowd.PlatformUtil.Windows
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto, Pack = 4)]
     internal struct COMDLG_FILTERSPEC
     {
-        [MarshalAs(UnmanagedType.LPWStr)]
-        internal string pszName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        internal string pszSpec;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string pszName;
+        [MarshalAs(UnmanagedType.LPWStr)] internal string pszSpec;
     }
 
     internal enum FDAP
@@ -112,36 +110,36 @@ namespace Clowd.PlatformUtil.Windows
 
     internal enum SIGDN : uint
     {
-        SIGDN_NORMALDISPLAY = 0x00000000,           // SHGDN_NORMAL
-        SIGDN_PARENTRELATIVEPARSING = 0x80018001,   // SHGDN_INFOLDER | SHGDN_FORPARSING
-        SIGDN_DESKTOPABSOLUTEPARSING = 0x80028000,  // SHGDN_FORPARSING
-        SIGDN_PARENTRELATIVEEDITING = 0x80031001,   // SHGDN_INFOLDER | SHGDN_FOREDITING
-        SIGDN_DESKTOPABSOLUTEEDITING = 0x8004c000,  // SHGDN_FORPARSING | SHGDN_FORADDRESSBAR
-        SIGDN_FILESYSPATH = 0x80058000,             // SHGDN_FORPARSING
-        SIGDN_URL = 0x80068000,                     // SHGDN_FORPARSING
-        SIGDN_PARENTRELATIVEFORADDRESSBAR = 0x8007c001,     // SHGDN_INFOLDER | SHGDN_FORPARSING | SHGDN_FORADDRESSBAR
-        SIGDN_PARENTRELATIVE = 0x80080001           // SHGDN_INFOLDER
+        SIGDN_NORMALDISPLAY = 0x00000000, // SHGDN_NORMAL
+        SIGDN_PARENTRELATIVEPARSING = 0x80018001, // SHGDN_INFOLDER | SHGDN_FORPARSING
+        SIGDN_DESKTOPABSOLUTEPARSING = 0x80028000, // SHGDN_FORPARSING
+        SIGDN_PARENTRELATIVEEDITING = 0x80031001, // SHGDN_INFOLDER | SHGDN_FOREDITING
+        SIGDN_DESKTOPABSOLUTEEDITING = 0x8004c000, // SHGDN_FORPARSING | SHGDN_FORADDRESSBAR
+        SIGDN_FILESYSPATH = 0x80058000, // SHGDN_FORPARSING
+        SIGDN_URL = 0x80068000, // SHGDN_FORPARSING
+        SIGDN_PARENTRELATIVEFORADDRESSBAR = 0x8007c001, // SHGDN_INFOLDER | SHGDN_FORPARSING | SHGDN_FORADDRESSBAR
+        SIGDN_PARENTRELATIVE = 0x80080001 // SHGDN_INFOLDER
     }
 
     [ComImport(),
-        Guid(IIDGuid.IModalWindow),
-        InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+     Guid(IIDGuid.IModalWindow),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IModalWindow
     {
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime),
-        PreserveSig]
+         PreserveSig]
         int Show([In] IntPtr parent);
     }
 
     [ComImport(),
-        Guid(IIDGuid.IFileDialog),
-        InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+     Guid(IIDGuid.IFileDialog),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IFileDialog : IModalWindow
     {
         // Defined on IModalWindow - repeated here due to requirements of COM interop layer
         // --------------------------------------------------------------------------------
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime),
-        PreserveSig]
+         PreserveSig]
         int Show([In] IntPtr parent);
 
         // IFileDialog-Specific interface members
@@ -218,8 +216,8 @@ namespace Clowd.PlatformUtil.Windows
     }
 
     [ComImport,
-        Guid(IIDGuid.IFileDialogEvents),
-        InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+     Guid(IIDGuid.IFileDialogEvents),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IFileDialogEvents
     {
         // NOTE: some of these callbacks are cancelable - returning S_FALSE means that 
@@ -227,11 +225,11 @@ namespace Clowd.PlatformUtil.Windows
         // support this, we need to use the PreserveSig attribute to enable us to return
         // the proper HRESULT
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime),
-        PreserveSig]
+         PreserveSig]
         HRESULT OnFileOk([In, MarshalAs(UnmanagedType.Interface)] IFileDialog pfd);
 
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime),
-        PreserveSig]
+         PreserveSig]
         HRESULT OnFolderChanging([In, MarshalAs(UnmanagedType.Interface)] IFileDialog pfd, [In, MarshalAs(UnmanagedType.Interface)] IShellItem psiFolder);
 
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime)]
@@ -241,18 +239,20 @@ namespace Clowd.PlatformUtil.Windows
         void OnSelectionChange([In, MarshalAs(UnmanagedType.Interface)] IFileDialog pfd);
 
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime)]
-        void OnShareViolation([In, MarshalAs(UnmanagedType.Interface)] IFileDialog pfd, [In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, out FDE_SHAREVIOLATION_RESPONSE pResponse);
+        void OnShareViolation([In, MarshalAs(UnmanagedType.Interface)] IFileDialog pfd, [In, MarshalAs(UnmanagedType.Interface)] IShellItem psi,
+            out FDE_SHAREVIOLATION_RESPONSE pResponse);
 
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime)]
         void OnTypeChange([In, MarshalAs(UnmanagedType.Interface)] IFileDialog pfd);
 
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime)]
-        void OnOverwrite([In, MarshalAs(UnmanagedType.Interface)] IFileDialog pfd, [In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, out FDE_OVERWRITE_RESPONSE pResponse);
+        void OnOverwrite([In, MarshalAs(UnmanagedType.Interface)] IFileDialog pfd, [In, MarshalAs(UnmanagedType.Interface)] IShellItem psi,
+            out FDE_OVERWRITE_RESPONSE pResponse);
     }
 
     [ComImport,
-        Guid(IIDGuid.IShellItem),
-        InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+     Guid(IIDGuid.IShellItem),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IShellItem
     {
         // Not supported: IBindCtx
@@ -273,14 +273,14 @@ namespace Clowd.PlatformUtil.Windows
     }
 
     [ComImport(),
-    Guid(IIDGuid.IFileOpenDialog),
-    InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+     Guid(IIDGuid.IFileOpenDialog),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IFileOpenDialog : IFileDialog
     {
         // Defined on IModalWindow - repeated here due to requirements of COM interop layer
         // --------------------------------------------------------------------------------
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime),
-        PreserveSig]
+         PreserveSig]
         int Show([In] IntPtr parent);
 
         // Defined on IFileDialog - repeated here due to requirements of COM interop layer
@@ -364,14 +364,14 @@ namespace Clowd.PlatformUtil.Windows
     }
 
     [ComImport(),
-    Guid(IIDGuid.IFileSaveDialog),
-    InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+     Guid(IIDGuid.IFileSaveDialog),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IFileSaveDialog : IFileDialog
     {
         // Defined on IModalWindow - repeated here due to requirements of COM interop layer
         // --------------------------------------------------------------------------------
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime),
-        PreserveSig]
+         PreserveSig]
         int Show([In] IntPtr parent);
 
         // Defined on IFileDialog - repeated here due to requirements of COM interop layer
@@ -465,7 +465,8 @@ namespace Clowd.PlatformUtil.Windows
 
         // Not currently supported: IPropertyStore, IFileOperationProgressSink
         [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime)]
-        void ApplyProperties([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, [In, MarshalAs(UnmanagedType.Interface)] IntPtr pStore, [In, ComAliasName("Interop.wireHWND")] ref IntPtr hwnd, [In, MarshalAs(UnmanagedType.Interface)] IntPtr pSink);
+        void ApplyProperties([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, [In, MarshalAs(UnmanagedType.Interface)] IntPtr pStore,
+            [In, ComAliasName("Interop.wireHWND")] ref IntPtr hwnd, [In, MarshalAs(UnmanagedType.Interface)] IntPtr pSink);
     }
 
     [ComImport,
@@ -507,18 +508,16 @@ namespace Clowd.PlatformUtil.Windows
     // straightforward way. Behind the scenes, the C# compiler
     // morphs all 'new CoClass()' calls to 'new CoClassWrapper()'
     [ComImport,
-    Guid(IIDGuid.IFileOpenDialog),
-    CoClass(typeof(FileOpenDialogRCW))]
+     Guid(IIDGuid.IFileOpenDialog),
+     CoClass(typeof(FileOpenDialogRCW))]
     internal interface NativeFileOpenDialog : IFileOpenDialog
-    {
-    }
+    { }
 
     [ComImport,
-    Guid(IIDGuid.IFileSaveDialog),
-    CoClass(typeof(FileSaveDialogRCW))]
+     Guid(IIDGuid.IFileSaveDialog),
+     CoClass(typeof(FileSaveDialogRCW))]
     internal interface NativeFileSaveDialog : IFileSaveDialog
-    {
-    }
+    { }
 
     //[ComImport,
     //Guid(IIDGuid.IKnownFolderManager),
@@ -530,18 +529,16 @@ namespace Clowd.PlatformUtil.Windows
     // ---------------------------------------------------
     // .NET classes representing runtime callable wrappers
     [ComImport,
-    ClassInterface(ClassInterfaceType.None),
-    Guid(CLSIDGuid.FileOpenDialog)]
+     ClassInterface(ClassInterfaceType.None),
+     Guid(CLSIDGuid.FileOpenDialog)]
     internal class FileOpenDialogRCW
-    {
-    }
+    { }
 
     [ComImport,
-    ClassInterface(ClassInterfaceType.None),
-    Guid(CLSIDGuid.FileSaveDialog)]
+     ClassInterface(ClassInterfaceType.None),
+     Guid(CLSIDGuid.FileSaveDialog)]
     internal class FileSaveDialogRCW
-    {
-    }
+    { }
 
     //[ComImport,
     //ClassInterface(ClassInterfaceType.None),
@@ -557,7 +554,8 @@ namespace Clowd.PlatformUtil.Windows
         public string SelectedPath { get; set; }
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-        private static extern int SHCreateItemFromParsingName([MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out object ppv);
+        private static extern int SHCreateItemFromParsingName([MarshalAs(UnmanagedType.LPWStr)] string pszPath, IntPtr pbc, ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
 
         private static IShellItem CreateItemFromParsingName(string path)
         {

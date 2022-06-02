@@ -71,6 +71,7 @@ namespace Clowd.PlatformUtil.Windows
                 var err = GetLastError();
                 err.ThrowIfFailed();
             }
+
             long now = GetTickCount();
             long idleTime = now - info.dwTime;
             return idleTime > 0 ? TimeSpan.FromMilliseconds(idleTime) : TimeSpan.FromMilliseconds(1);

@@ -107,7 +107,8 @@ namespace Clowd.PlatformUtil.Windows
         /// <summary>
         /// Retrieves a <see cref="User32Screen"/> for the display that contains the specified point.
         /// </summary>
-        public static User32Screen FromPoint(ScreenPoint point) => new User32Screen(MonitorFromPoint((System.Drawing.Point)point, MonitorFlags.MONITOR_DEFAULTTONEAREST));
+        public static User32Screen FromPoint(ScreenPoint point) =>
+            new User32Screen(MonitorFromPoint((System.Drawing.Point)point, MonitorFlags.MONITOR_DEFAULTTONEAREST));
 
         /// <summary>
         /// Retrieves a <see cref="User32Screen"/> for the display that contains the center point of the specified rect.
@@ -161,7 +162,7 @@ namespace Clowd.PlatformUtil.Windows
             {
                 if (IsVirtual)
                     throw new InvalidOperationException("The virtual desktop (which encompasses all displays) does not have a single DPI, " +
-                        "it is made up of the DPI of each individual display.");
+                                                        "it is made up of the DPI of each individual display.");
 
                 if (0 == GetDpiForMonitor(Handle, MONITOR_DPI_TYPE.MDT_DEFAULT, out var dpiX, out var dpiY))
                     return dpiX / 96.0;
@@ -178,7 +179,9 @@ namespace Clowd.PlatformUtil.Windows
             if (IsVirtual)
                 return $"{Bounds.Width}x{Bounds.Height}, virtual screen";
 
-            var workingArea = WorkingArea == Bounds ? "" : $", working area {WorkingArea.Width}x{WorkingArea.Height} at ({WorkingArea.Left}, {WorkingArea.Top})";
+            var workingArea = WorkingArea == Bounds
+                ? ""
+                : $", working area {WorkingArea.Width}x{WorkingArea.Height} at ({WorkingArea.Left}, {WorkingArea.Top})";
             return $"{Bounds.Width}x{Bounds.Height} at ({Bounds.Left}, {Bounds.Top}){(IsPrimary ? ", primary" : "")}{workingArea}";
         }
 

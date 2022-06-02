@@ -247,7 +247,8 @@ namespace Clowd.PlatformUtil.Windows
 
         public bool Hide()
         {
-            SetWindowPos(Handle, HWND.HWND_BOTTOM, 0, 0, 0, 0, SetWindowPosFlags.SWP_HIDEWINDOW | SetWindowPosFlags.SWP_NOMOVE | SetWindowPosFlags.SWP_NOZORDER);
+            SetWindowPos(Handle, HWND.HWND_BOTTOM, 0, 0, 0, 0,
+                SetWindowPosFlags.SWP_HIDEWINDOW | SetWindowPosFlags.SWP_NOMOVE | SetWindowPosFlags.SWP_NOZORDER);
             return Show(ShowWindowCommand.SW_HIDE);
         }
 
@@ -295,17 +296,18 @@ namespace Clowd.PlatformUtil.Windows
             return $"Window {((nint)Handle).ToString("X8")} {{'{Caption}/{ClassName}', {WindowBounds}}}";
         }
 
-        private bool HasStyle(WindowStyles style) 
+        private bool HasStyle(WindowStyles style)
             => (GetWindowLong(Handle, WindowLongFlags.GWL_STYLE) & (int)style) > 0;
 
-        private bool HasStyle(WindowStylesEx style) 
+        private bool HasStyle(WindowStylesEx style)
             => (GetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE) & (int)style) > 0;
 
-        private void SetStyle(WindowStyles style, bool set) 
+        private void SetStyle(WindowStyles style, bool set)
             => SetWindowLong(Handle, WindowLongFlags.GWL_STYLE, GetWindowLong(Handle, WindowLongFlags.GWL_STYLE) & ~((int)style) | (set ? ((int)style) : 0));
 
-        private void SetStyle(WindowStylesEx style, bool set) 
-            => SetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE, GetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE) & ~((int)style) | (set ? ((int)style) : 0));
+        private void SetStyle(WindowStylesEx style, bool set)
+            => SetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE,
+                GetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE) & ~((int)style) | (set ? ((int)style) : 0));
 
         public IScreen GetCurrentScreen()
         {

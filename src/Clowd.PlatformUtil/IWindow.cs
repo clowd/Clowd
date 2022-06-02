@@ -34,33 +34,53 @@ namespace Clowd.PlatformUtil
     {
         // see https://github.com/AvaloniaUI/Avalonia/blob/7842883961d094e08e9def7f30cf32fd573179c7/src/Avalonia.Controls/Platform/IWindowImpl.cs
         nint Handle { get; }
+        
         int ProcessId { get; }
+        
         int ThreadId { get; }
+        
         string ClassName { get; }
+        
         string Caption { get; }
+        
         ScreenRect WindowBounds { get; }
+
         ScreenRect DwmRenderBounds { get; }
-        //ScreenRect ClientBounds { get; }
+
         int ZPosition { get; }
+        
         ScrollVisibility ScrollBars { get; }
+        
         bool IsTopmost { get; }
+
         bool IsDisabled { get; }
-        //bool IsVisible { get; }
+
         bool IsMaximized { get; }
+        
         bool IsMinimized { get; }
+        
         bool IsCurrentVirtualDesktop { get; }
+        
         bool IsCurrentProcess { get; }
+
         IWindow Parent { get; }
-        //IWindow Owner { get; }
+
         IEnumerable<IWindow> Children { get; }
 
         bool Activate();
+        
         bool Show();
+        
         bool Show(bool activate);
+        
         bool Hide();
+        
         void Close();
+        
         void KillProcess();
+        
         void SetPosition(ScreenRect newPosition);
+        
         void SetEnabled(bool enabled);
 
         IScreen GetCurrentScreen();
