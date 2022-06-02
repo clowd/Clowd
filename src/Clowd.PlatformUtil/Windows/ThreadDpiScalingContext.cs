@@ -149,7 +149,11 @@ namespace Clowd.PlatformUtil.Windows
 
         public static void RunScalingAware(ThreadScalingMode mode, Action task)
         {
-            RunScalingAware(mode, () => { task(); return true; });
+            RunScalingAware(mode, () =>
+            {
+                task();
+                return true;
+            });
         }
 
         public static T RunScalingAware<T>(ThreadScalingMode mode, Func<T> task)
@@ -160,7 +164,11 @@ namespace Clowd.PlatformUtil.Windows
 
         public static Task RunScalingAwareAsync(ThreadScalingMode mode, Action task)
         {
-            return RunScalingAwareAsync(mode, () => { task(); return true; });
+            return RunScalingAwareAsync(mode, () =>
+            {
+                task();
+                return true;
+            });
         }
 
         public static Task<T> RunScalingAwareAsync<T>(ThreadScalingMode mode, Func<T> task)

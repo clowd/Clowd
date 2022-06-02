@@ -6,8 +6,7 @@
         public int Y { get; init; }
 
         public ScreenPoint()
-        {
-        }
+        { }
 
         public ScreenPoint(int x, int y)
         {

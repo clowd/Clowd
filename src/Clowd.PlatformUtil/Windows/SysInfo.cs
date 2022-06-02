@@ -12,18 +12,22 @@ namespace Clowd.PlatformUtil.Windows
         {
             get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(6, 0, 0); }
         }
+
         public static bool IsWindows7OrLater
         {
             get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(6, 0, 7600); }
         }
+
         public static bool IsWindows8OrLater
         {
             get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(6, 2, 0); }
         }
+
         public static bool IsWindows8_1OrLater
         {
             get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(6, 3, 0); }
         }
+
         public static bool IsWindows10OrLater
         {
             get { return _isWindowsNT && Environment.OSVersion.Version >= new Version(10, 0, 0); }
@@ -60,7 +64,7 @@ namespace Clowd.PlatformUtil.Windows
             get
             {
                 return WindowsIdentity.GetCurrent().Owner
-                  .IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid);
+                    .IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid);
             }
         }
 
