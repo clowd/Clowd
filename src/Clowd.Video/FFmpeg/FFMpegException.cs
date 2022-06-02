@@ -11,7 +11,7 @@ namespace Clowd.Video.FFmpeg
         public int ErrorCode { get; private set; }
 
         public FFMpegException(int errCode, string message)
-          : base(string.Format("{0} (exit code: {1})", (object)message, (object)errCode))
+            : base(string.Format("{0} (exit code: {1})", (object)message, (object)errCode))
         {
             this.ErrorCode = errCode;
         }
