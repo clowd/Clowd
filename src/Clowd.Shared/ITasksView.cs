@@ -5,9 +5,6 @@ namespace Clowd
 {
     public interface ITasksView
     {
-        void Show();
-        void Hide();
-        void Notify();
         ITasksViewItem CreateTask(string name);
     }
 
@@ -19,6 +16,7 @@ namespace Clowd
 
         void Show();
         void Hide();
+        void SetCancelled();
         void SetStatus(string status);
         void SetCompleted(string uploadUrl);
         void SetError(Exception ex);
