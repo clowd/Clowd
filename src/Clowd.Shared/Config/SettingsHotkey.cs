@@ -6,11 +6,18 @@ namespace Clowd.Config
 {
     public class SettingsHotkey : CategoryBase
     {
-        [DisplayName("Upload a File"), ClassifyIgnoreIfDefault]
+        [DisplayName("Upload from File"), ClassifyIgnoreIfDefault]
         public GlobalTrigger FileUploadShortcut
         {
             get => _fileUploadShortcut;
             set => Set(ref _fileUploadShortcut, value);
+        }
+        
+        [DisplayName("Upload Clipboard"), ClassifyIgnoreIfDefault]
+        public GlobalTrigger ClipboardUploadShortcut
+        {
+            get => _clipboardUploadShortcut;
+            set => Set(ref _clipboardUploadShortcut, value);
         }
 
         [DisplayName("Capture Region"), ClassifyIgnoreIfDefault]
@@ -49,6 +56,7 @@ namespace Clowd.Config
         }
 
         private GlobalTrigger _fileUploadShortcut = new();
+        private GlobalTrigger _clipboardUploadShortcut = new();
         private GlobalTrigger _captureRegionShortcut = new(Key.PrintScreen);
         private GlobalTrigger _captureFullscreenShortcut = new(Key.PrintScreen, ModifierKeys.Control);
         private GlobalTrigger _captureActiveShortcut = new(Key.PrintScreen, ModifierKeys.Alt);
@@ -59,7 +67,7 @@ namespace Clowd.Config
         {
             Subscribe(
                 FileUploadShortcut, CaptureRegionShortcut, CaptureFullscreenShortcut, CaptureActiveShortcut, DrawOnScreenShortcut,
-                StartStopRecordingShortcut);
+                StartStopRecordingShortcut, ClipboardUploadShortcut);
         }
 
         protected override void DisposeInternal()
@@ -69,6 +77,8 @@ namespace Clowd.Config
             CaptureFullscreenShortcut?.Dispose();
             CaptureActiveShortcut?.Dispose();
             DrawOnScreenShortcut?.Dispose();
+            StartStopRecordingShortcut?.Dispose();
+            ClipboardUploadShortcut?.Dispose();
         }
     }
 }
