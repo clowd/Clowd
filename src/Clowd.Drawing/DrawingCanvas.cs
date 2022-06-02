@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -1393,8 +1393,13 @@ namespace Clowd.Drawing
         public Point ContentOffset
         {
             get { return (Point)GetValue(ContentOffsetProperty); }
-            set { SetValue(ContentOffsetProperty, value); }
+            set
+            {
+                SetValue(ContentOffsetProperty, value);
+                _isAutoFit = false;
+            }
         }
+
         public static readonly DependencyProperty ContentOffsetProperty =
             DependencyProperty.Register("ContentOffset", typeof(Point), typeof(DrawingCanvas),
                 new PropertyMetadata(new Point(0, 0), ContentOffsetChanged));
@@ -1402,8 +1407,13 @@ namespace Clowd.Drawing
         public double ContentScale
         {
             get { return (double)GetValue(ContentScaleProperty); }
-            set { SetValue(ContentScaleProperty, value); }
+            set
+            {
+                SetValue(ContentScaleProperty, value);
+                _isAutoFit = false;
+            }
         }
+
         public static readonly DependencyProperty ContentScaleProperty =
             DependencyProperty.Register("ContentScale", typeof(double), typeof(DrawingCanvas),
                 new PropertyMetadata(1d, ContentScaleChanged));
@@ -1438,9 +1448,12 @@ namespace Clowd.Drawing
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
             base.OnRenderSizeChanged(sizeInfo);
+            bool isAutoFit = _isAutoFit;
             ContentOffset = new Point(
                 ContentOffset.X + sizeInfo.NewSize.Width / 2 - sizeInfo.PreviousSize.Width / 2,
                 ContentOffset.Y + sizeInfo.NewSize.Height / 2 - sizeInfo.PreviousSize.Height / 2);
+            if (isAutoFit)
+                ZoomPanAuto();
         }
         public void UpdateScaleTransform()
         {
@@ -1519,7 +1532,10 @@ namespace Clowd.Drawing
                 ZoomPanActualSize();
             else
                 ZoomPanFit();
+            _isAutoFit = true;
         }
+
+        private bool _isAutoFit = false;
 
         #endregion Zooming and Panning
     }
