@@ -54,7 +54,7 @@ namespace Clowd.Config
         protected virtual void BeforeSerializeInternal() { }
         protected virtual void AfterDeserializeInternal() { }
 
-        protected override bool Set<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
+        protected override bool Set<T>(ref T storage, T value, [CallerMemberName] string propertyName = null, params string[] dependentProperties)
         {
             // unsubscribe the previous object value
             if (storage is INotifyPropertyChanged npcRemove && _subscriptions.Contains(npcRemove))
@@ -72,7 +72,7 @@ namespace Clowd.Config
                 _subscriptions.Add(npcAdd);
             }
 
-            return base.Set(ref storage, value, propertyName);
+            return base.Set(ref storage, value, propertyName, dependentProperties);
         }
     }
 }

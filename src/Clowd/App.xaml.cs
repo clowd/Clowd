@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -37,7 +38,6 @@ namespace Clowd
     public partial class App : Application
     {
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
-        public static bool CanUpload => !IsDesignMode;
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
 
         private TaskbarIcon _taskbarIcon;
@@ -63,8 +63,8 @@ namespace Clowd
                     ? WPFUI.Appearance.ThemeType.Light
                     : WPFUI.Appearance.ThemeType.Dark);
                 SetupTrayIconAndTheme();
-                WPFUI.Appearance.Theme.Changed += (s, e) => SetupTrayIconAndTheme();
-
+                WPFUI.Appearance.Theme.Changed += (_, _) => SetupTrayIconAndTheme();
+                
                 // start receiving command line arguments
                 _processor.Ready();
                 if (SquirrelUtil.IsFirstRun)
@@ -279,9 +279,17 @@ namespace Clowd
             // force/refresh the correct icon size
             _taskbarIcon.Icon = AppStyles.AppIconGdi;
 
+            void setGestureText(MenuItem item, GlobalTrigger trigger)
+            {
+                item.SetBinding(
+                    MenuItem.InputGestureTextProperty,
+                    new Binding(nameof(GlobalTrigger.KeyGestureText)){ Source = trigger});
+            }
+
             // context menu
             ContextMenu context = new ContextMenu();
             var capture = new MenuItem() { Header = "_Capture Screen" };
+            setGestureText(capture, SettingsRoot.Current.Hotkeys.CaptureRegionShortcut);
             capture.Click += async (s, e) =>
             {
                 // wait long enough for context menu to disappear.
@@ -290,20 +298,14 @@ namespace Clowd
             };
             context.Items.Add(capture);
 
-            if (App.CanUpload)
-            {
-                var paste = new MenuItem() { Header = "_Paste" };
-                paste.Click += (s, e) => Paste();
-                context.Items.Add(paste);
+            var paste = new MenuItem() { Header = "_Upload Clipboard" };
+            paste.Click += (s, e) => Paste();
+            context.Items.Add(paste);
 
-                var uploadFile = new MenuItem() { Header = "Upload _Files" };
-                uploadFile.Click += (s, e) => UploadFile();
-                context.Items.Add(uploadFile);
-
-                var uploads = new MenuItem() { Header = "Show _Uploads" };
-                uploads.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
-                context.Items.Add(uploads);
-            }
+            var uploadFile = new MenuItem() { Header = "Upload from _File" };
+            uploadFile.Click += (s, e) => UploadFile();
+            setGestureText(uploadFile, SettingsRoot.Current.Hotkeys.FileUploadShortcut);
+            context.Items.Add(uploadFile);
 
             context.Items.Add(new Separator());
 
@@ -312,10 +314,8 @@ namespace Clowd
             context.Items.Add(colorp);
 
             var screend = new MenuItem() { Header = "_Draw on Screen" };
-            screend.Click += (s, e) =>
-            {
-                PageManager.Current.GetLiveDrawPage().Open();
-            };
+            screend.Click += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
+            setGestureText(screend, SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut);
             context.Items.Add(screend);
 
             var editor = new MenuItem() { Header = "Image _Editor" };
@@ -323,12 +323,23 @@ namespace Clowd
             context.Items.Add(editor);
 
             context.Items.Add(new Separator());
+            
+            var togglerec = new MenuItem() { Header = "_Start / Stop Recording" };
+            togglerec.Click += (s, e) => ToggleScreenRecording();
+            togglerec.SetBinding(
+                MenuItem.IsEnabledProperty, 
+                new Binding(nameof(PageManager.IsVideoCapturePageOpen)) { Source = PageManager.Current });
+            setGestureText(togglerec, SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut);
+            context.Items.Add(togglerec);
+            
+            context.Items.Add(new Separator());
+            
+            var uploads = new MenuItem() { Header = "_Recents & Uploads" };
+            uploads.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
+            context.Items.Add(uploads);
 
-            var settings = new MenuItem() { Header = "_Settings" };
-            settings.Click += (s, e) =>
-            {
-                PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
-            };
+            var settings = new MenuItem() { Header = "Se_ttings" };
+            settings.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
             context.Items.Add(settings);
 
             var exit = new MenuItem() { Header = "E_xit" };
