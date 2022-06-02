@@ -9,8 +9,10 @@ namespace Clowd.Upload
 
         public Stream AzureIcon => GetStream("azure.png");
 
+        // https://github.com/jshttp/mime-db/blob/master/db.json
         public Stream MimeDb => GetStream("mime-db.json");
 
+        // https://github.com/github/linguist/blob/master/lib/linguist/languages.yml
         public Stream LanguageDb => GetStream("languages.yml");
 
         public Resource() : base(Assembly.GetExecutingAssembly(), "Clowd.Upload.Embed")
