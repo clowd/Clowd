@@ -6,11 +6,18 @@ using Clowd.UI.Unmanaged;
 
 namespace Clowd.UI
 {
-    internal class PageManager
+    internal sealed class PageManager : SimpleNotifyObject
     {
-        public static PageManager Current { get; private set; }
+        public static PageManager Current { get; }
 
-        private readonly Dictionary<Type, object> _singletons = new Dictionary<Type, object>();
+        public bool IsVideoCapturePageOpen
+        {
+            get => _isVideoCapturePageOpen;
+            private set => Set(ref _isVideoCapturePageOpen, value);
+        }
+
+        private readonly Dictionary<Type, object> _singletons = new();
+        private bool _isVideoCapturePageOpen;
 
         static PageManager()
         {
@@ -24,12 +31,16 @@ namespace Clowd.UI
         {
             // if there is already an open video window, just ignore.
             if (_singletons.ContainsKey(typeof(VideoCaptureWindow))) return;
-            GetOrCreate<VideoCaptureWindow>().Open(region);
+            GetOrCreate<VideoCaptureWindow>(closing: () => IsVideoCapturePageOpen = false).Open(region);
+            IsVideoCapturePageOpen = true;
         }
         
         public IVideoCapturePage GetExistingVideoCapturePage()
         {
-            return GetOrCreate<VideoCaptureWindow>(false);
+            if (_singletons.TryGetValue(typeof(VideoCaptureWindow), out var wnd))
+                return wnd as VideoCaptureWindow;
+
+            return null;
         }
 
         public ILiveDrawPage GetLiveDrawPage()
@@ -47,21 +58,19 @@ namespace Clowd.UI
             return new StaticCaptureWrapper();
         }
 
-        private T GetOrCreate<T>(bool canCreate = true) where T : IPage
+        private T GetOrCreate<T>(Action closing = null) where T : IPage
         {
             if (_singletons.ContainsKey(typeof(T)))
                 return (T)_singletons[typeof(T)];
 
-            if (!canCreate) return default;
-            
             var inst = Activator.CreateInstance<T>();
-            HandleClosing(inst);
+            HandleClosing(inst, closing);
 
             _singletons[typeof(T)] = inst;
             return inst;
         }
 
-        private void HandleClosing<T>(T instance) where T : IPage
+        private void HandleClosing<T>(T instance, Action closing) where T : IPage
         {
             EventHandler handler = null;
             handler = new EventHandler((s, ev) =>
@@ -69,6 +78,8 @@ namespace Clowd.UI
                 instance.Closed -= handler;
                 if (_singletons.ContainsKey(typeof(T)))
                     _singletons.Remove(typeof(T));
+                if (closing != null)
+                    closing();
             });
             instance.Closed += handler;
         }
@@ -77,23 +88,17 @@ namespace Clowd.UI
         {
             public event EventHandler Closed; // TODO
 
-            public void Close()
-            {
-                CaptureWindow.Close();
-            }
-
-            public void Dispose()
-            {
-                Close();
-            }
+            public void Close() => CaptureWindow.Close();
 
             public void Open(ScreenRect captureArea)
             {
+                var settings = SettingsRoot.Current.Capture;
                 CaptureWindow.Show(new CaptureWindowOptions
                 {
                     AccentColor = AppStyles.AccentColor,
-                    TipsDisabled = SettingsRoot.Current.Capture.HideTipsPanel,
+                    TipsDisabled = settings.HideTipsPanel,
                     InitialRect = captureArea,
+                    ObstructedWindowDisabled = !settings.DetectWindows,
                 });
             }
         }

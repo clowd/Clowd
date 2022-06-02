@@ -9,13 +9,17 @@ namespace Clowd
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
-        protected virtual bool Set<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
+        protected virtual bool Set<T>(ref T storage, T value, [CallerMemberName] string propertyName = null, params string[] dependentProperties)
         {
             if (EqualityComparer<T>.Default.Equals(storage, value))
                 return false;
 
             storage = value;
             OnPropertyChanged(propertyName);
+
+            if (dependentProperties != null)
+                OnPropertiesChanged(dependentProperties);
+
             return true;
         }
 
