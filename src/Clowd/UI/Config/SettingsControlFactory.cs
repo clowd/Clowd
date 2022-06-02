@@ -21,16 +21,16 @@ namespace Clowd.UI.Config
 {
     public class SettingsControlFactory
     {
-        private readonly object obj;
-        private readonly Func<Window> wndFn;
+        private readonly object _obj;
+        private readonly Func<Window> _wndFn;
 
         public SettingsControlFactory(Func<Window> wndFn, object obj)
         {
-            this.obj = obj;
-            this.wndFn = wndFn;
+            _obj = obj;
+            _wndFn = wndFn;
         }
 
-        private IEnumerable<PropertyDescriptor> GetPropertyRows(object obj)
+        private IEnumerable<PropertyDescriptor> GetObjectProperties(object obj)
         {
             var instanceType = obj.GetType();
 
@@ -42,20 +42,10 @@ namespace Clowd.UI.Config
                 if (!pd.IsBrowsable())
                     continue;
 
-                if (pd.IsReadOnly())
+                if (pd.IsReadOnly() && pd.GetFirstAttributeOrDefault<FlattenSettingsObjectAttribute>() == null)
                     continue;
                 
-                if (pd.GetFirstAttributeOrDefault<FlattenSettingsObjectAttribute>() != null)
-                {
-                    foreach (var p2 in GetPropertyRows(pd.GetValue(obj)))
-                    {
-                        yield return p2;
-                    }
-                }
-                else
-                {
-                    yield return pd;
-                }
+                yield return pd;
             }
         }
 
@@ -71,31 +61,7 @@ namespace Clowd.UI.Config
             grid.ColumnDefinitions.Add(new ColumnDefinition());
 
             int row = 0;
-            foreach (PropertyDescriptor pd in GetPropertyRows(obj))
-            {
-                grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(0, GridUnitType.Auto) });
-
-                var rowLabel = new Label();
-                rowLabel.VerticalAlignment = VerticalAlignment.Center;
-                rowLabel.HorizontalAlignment = HorizontalAlignment.Left;
-                rowLabel.Margin = new Thickness(0, 4, 0, 4);
-                rowLabel.Content = FromCamelCase(pd.DisplayName);
-                Grid.SetRow(rowLabel, row);
-                Grid.SetColumn(rowLabel, 0);
-
-                var rowContent = new Border();
-                rowContent.VerticalAlignment = VerticalAlignment.Center;
-                rowContent.HorizontalAlignment = HorizontalAlignment.Stretch;
-                rowContent.Child = GetRowForProperty(pd);
-                rowContent.Margin = new Thickness(24, 4, 4, 4);
-                Grid.SetRow(rowContent, row);
-                Grid.SetColumn(rowContent, 1);
-
-                grid.Children.Add(rowLabel);
-                grid.Children.Add(rowContent);
-
-                row++;
-            }
+            AddRowsToGrid(ref row, grid);
 
             grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(10) });
 
@@ -110,7 +76,44 @@ namespace Clowd.UI.Config
             return root;
         }
 
-        public FrameworkElement GetRowForProperty(PropertyDescriptor pd)
+        private void AddRowsToGrid(ref int row, Grid grid)
+        {
+            foreach (PropertyDescriptor pd in GetObjectProperties(_obj))
+            {
+                if (pd.GetFirstAttributeOrDefault<FlattenSettingsObjectAttribute>() != null)
+                {
+                    var child = pd.GetValue(_obj);
+                    new SettingsControlFactory(_wndFn, child).AddRowsToGrid(ref row, grid);
+                }
+                else
+                {
+                    grid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(0, GridUnitType.Auto) });
+
+                    var rowLabel = new Label();
+                    rowLabel.VerticalAlignment = VerticalAlignment.Center;
+                    rowLabel.HorizontalAlignment = HorizontalAlignment.Left;
+                    rowLabel.Margin = new Thickness(0, 4, 0, 4);
+                    rowLabel.Content = FromCamelCase(pd.DisplayName);
+                    Grid.SetRow(rowLabel, row);
+                    Grid.SetColumn(rowLabel, 0);
+
+                    var rowContent = new Border();
+                    rowContent.VerticalAlignment = VerticalAlignment.Center;
+                    rowContent.HorizontalAlignment = HorizontalAlignment.Stretch;
+                    rowContent.Child = GetRowForProperty(pd);
+                    rowContent.Margin = new Thickness(24, 4, 4, 4);
+                    Grid.SetRow(rowContent, row);
+                    Grid.SetColumn(rowContent, 1);
+
+                    grid.Children.Add(rowLabel);
+                    grid.Children.Add(rowContent);
+
+                    row++;
+                }
+            }
+        }
+
+        private FrameworkElement GetRowForProperty(PropertyDescriptor pd)
         {
             var type = pd.PropertyType;
             var tcode = Type.GetTypeCode(pd.PropertyType);
@@ -122,11 +125,11 @@ namespace Clowd.UI.Config
                 {
                     var btn = ButtonControl("Browse", (s, e) =>
                     {
-                        var whwnd = new WindowInteropHelper(wndFn()).Handle;
+                        var whwnd = new WindowInteropHelper(_wndFn()).Handle;
                         var dlg = new PlatformUtil.Windows.FolderBrowserDialog();
                         dlg.Title = "Pick a folder";
                         if (dlg.ShowDialog(whwnd))
-                            pd.SetValue(obj, dlg.SelectedPath);
+                            pd.SetValue(_obj, dlg.SelectedPath);
                     });
                     btn.Margin = new Thickness(10, 0, 0, 0);
                     btn.VerticalAlignment = VerticalAlignment.Center;
@@ -175,7 +178,7 @@ namespace Clowd.UI.Config
 
             if (pd.Is(typeof(FrameworkElement)))
             {
-                var val = (FrameworkElement)pd.GetValue(obj); // GetPropertyValue<FrameworkElement>();
+                var val = (FrameworkElement)pd.GetValue(_obj); // GetPropertyValue<FrameworkElement>();
                 // if the control was used elsewhere prior, we need to reset the logical tree before using it again
                 val.DisconnectFromLogicalParent();
                 return val;
@@ -188,7 +191,7 @@ namespace Clowd.UI.Config
                     if (await NiceDialog.ShowYesNoPromptAsync(s as FrameworkElement, NiceDialogIcon.Warning,
                             "Are you sure you wish to reset these settings to defaults?"))
                     {
-                        pd.SetValue(obj, Activator.CreateInstance(pd.PropertyType));
+                        pd.SetValue(_obj, Activator.CreateInstance(pd.PropertyType));
                     }
                 });
             }
@@ -196,7 +199,7 @@ namespace Clowd.UI.Config
             if (pd.Is(typeof(TimeOption)))
             {
                 // TODO, make this easier to do.
-                var child = new SettingsControlFactory(wndFn, pd.GetValue(obj));
+                var child = new SettingsControlFactory(_wndFn, pd.GetValue(_obj));
                 var pdNum = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Number));
                 var pdUnit = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Unit));
                 var ctNum = child.SimpleControlBinding(new TextBox(), pdNum, TextBox.TextProperty);
@@ -247,7 +250,7 @@ namespace Clowd.UI.Config
                 ValidatesOnDataErrors = true,
                 ValidatesOnExceptions = true,
                 NotifyOnSourceUpdated = true,
-                Source = obj,
+                Source = _obj,
             };
 
             return binding;

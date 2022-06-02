@@ -18,45 +18,54 @@ namespace Clowd.Config
             get => _isEnabled;
             set => Set(ref _isEnabled, value);
         }
-        
+
         [FlattenSettingsObject]
         public IUploadProvider Provider
         {
             get => _provider;
-            set => Set(ref _provider, value);
         }
-        
+
+        private UploadProviderInfo()
+        {
+            // for serializer only
+        }
+
+        public UploadProviderInfo(IUploadProvider provider)
+        {
+            _provider = provider;
+        }
+
         private bool _isEnabled;
         private IUploadProvider _provider;
     }
-    
+
     public class SettingsUpload : CategoryBase
     {
-        public List<UploadProviderInfo> Providers { get; private set; } = new List<UploadProviderInfo>();
+        public UploadProviderInfo[] Providers => _providers.ToArray();
         
-        public List<UploadProviderInfo> EnabledProviders => Providers.Where(x => x.IsEnabled).ToList();
+        private List<UploadProviderInfo> _providers = new();
 
         public UploadProviderInfo Image
         {
-            get => _image;
+            get => _image?.IsEnabled == true ? _image : null;
             set => Set(ref _image, value);
         }
 
         public UploadProviderInfo Video
         {
-            get => _video;
+            get => _video?.IsEnabled == true ? _video : null;
             set => Set(ref _video, value);
         }
 
         public UploadProviderInfo Binary
         {
-            get => _binary;
+            get => _binary?.IsEnabled == true ? _binary : null;
             set => Set(ref _binary, value);
         }
 
         public UploadProviderInfo Text
         {
-            get => _text;
+            get => _text?.IsEnabled == true ? _text : null;
             set => Set(ref _text, value);
         }
 
@@ -86,26 +95,32 @@ namespace Clowd.Config
                 .SelectMany(s => s.GetTypes())
                 .Where(p => !p.IsAbstract && !p.IsInterface)
                 .Where(p => type.IsAssignableFrom(p));
-        
-            foreach (var toAdd in types.Except(Providers.Select(p => p.Provider.GetType())))
+
+            foreach (var toAdd in types.Except(_providers.Select(p => p.Provider.GetType())))
             {
                 var instance = (IUploadProvider)Activator.CreateInstance(toAdd);
-                Providers.Add(new UploadProviderInfo() { Provider = instance, IsEnabled = false });
+                _providers.Add(new UploadProviderInfo(instance) { IsEnabled = false });
             }
-        
-            Providers.Sort(CustomComparer<UploadProviderInfo>.By(p => p.Provider.Name));
-            
-            if (_image != null && Providers.SingleOrDefault(p => p == _image)?.IsEnabled != true)
+
+            _providers.Sort(CustomComparer<UploadProviderInfo>.By(p => p.Provider.Name));
+
+            if (_image != null && _providers.SingleOrDefault(p => p == _image)?.IsEnabled != true)
                 _image = null;
-        
-            if (_video != null && Providers.SingleOrDefault(p => p == _video)?.IsEnabled != true)
+
+            if (_video != null && _providers.SingleOrDefault(p => p == _video)?.IsEnabled != true)
                 _video = null;
-        
-            if (_binary != null && Providers.SingleOrDefault(p => p == _binary)?.IsEnabled != true)
+
+            if (_binary != null && _providers.SingleOrDefault(p => p == _binary)?.IsEnabled != true)
                 _binary = null;
-        
-            if (_text != null && Providers.SingleOrDefault(p => p == _text)?.IsEnabled != true)
+
+            if (_text != null && _providers.SingleOrDefault(p => p == _text)?.IsEnabled != true)
                 _text = null;
+
+            foreach (var p in _providers)
+            {
+                Subscribe(p);
+                Subscribe(p.Provider);
+            }
         }
     }
 }
