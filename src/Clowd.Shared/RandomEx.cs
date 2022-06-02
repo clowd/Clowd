@@ -19,6 +19,7 @@ namespace Clowd
                 return _random.Next();
             }
         }
+
         public static int GetInt32(int max)
         {
             lock (_lock)
@@ -26,6 +27,7 @@ namespace Clowd
                 return _random.Next(max);
             }
         }
+
         public static int GetInt32(int min, int max)
         {
             lock (_lock)
@@ -38,10 +40,12 @@ namespace Clowd
         {
             return GetInt64(0, long.MaxValue);
         }
+
         public static long GetInt64(long max)
         {
             return GetInt64(0, max);
         }
+
         public static long GetInt64(long min, long max)
         {
             //http://stackoverflow.com/a/13095144/184746
@@ -61,6 +65,7 @@ namespace Clowd
                     _random.NextBytes(buf);
                     ulongRand = (ulong)BitConverter.ToInt64(buf, 0);
                 } while (ulongRand > ulong.MaxValue - ((ulong.MaxValue % uRange) + 1) % uRange);
+
                 return (long)(ulongRand % uRange) + min;
             }
         }
@@ -69,10 +74,12 @@ namespace Clowd
         {
             return Guid.NewGuid();
         }
+
         public static Guid GetGuid(string name)
         {
             return GetGuid(name, _namespace, 5);
         }
+
         public static Guid GetGuid(string name, Guid gNamespace, int version)
         {
             if (name == null)
@@ -122,6 +129,7 @@ namespace Clowd
                     .Select(s => s[_random.Next(s.Length)]).ToArray());
             }
         }
+
         public static string GetCryptoUniqueString(int length)
         {
             const string allowedChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -153,6 +161,7 @@ namespace Clowd
                         result.Append(allowedCharSet[buf[i] % allowedCharSet.Length]);
                     }
                 }
+
                 return result.ToString();
             }
         }
@@ -165,6 +174,7 @@ namespace Clowd
             SwapBytes(guid, 4, 5);
             SwapBytes(guid, 6, 7);
         }
+
         private static void SwapBytes(byte[] guid, int left, int right)
         {
             byte temp = guid[left];

@@ -22,6 +22,7 @@ namespace Clowd
         Arrow,
         PolyLine,
         Text,
+
         //Pixelate,
         //Erase,
         Max

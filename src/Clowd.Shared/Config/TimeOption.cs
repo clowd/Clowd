@@ -9,11 +9,11 @@ namespace Clowd.Config
     public enum TimeOptionUnit
     {
         Seconds = 1,
-        Minutes = 2, 
+        Minutes = 2,
         Hours = 3,
         Days = 4,
         Weeks = 5,
-        Months = 6, 
+        Months = 6,
         Years = 7,
     }
 
@@ -32,8 +32,7 @@ namespace Clowd.Config
         }
 
         public TimeOption()
-        {
-        }
+        { }
 
         public TimeOption(int number, TimeOptionUnit unit)
         {

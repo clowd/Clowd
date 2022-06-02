@@ -42,11 +42,16 @@ namespace Clowd
             var d = Path.Combine(Path.GetFullPath(parentDirectory), name);
             return d;
         }
+
         public static string GetFilePath(string name, string extension, string directory) => Path.Combine(Path.GetFullPath(directory), name + "." + extension);
-        public static string GetDatedFilePath(string name, string extension, string directory) => Path.Combine(Path.GetFullPath(directory), GetDatedFileName(name, extension));
+
+        public static string GetDatedFilePath(string name, string extension, string directory) =>
+            Path.Combine(Path.GetFullPath(directory), GetDatedFileName(name, extension));
+
         public static string GetDatedFileName(string name, string extension) => name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "." + extension;
 
-        private static string GetClowdFolder(Environment.SpecialFolder dataDirectory, string dataName) => GetClowdFolder(Environment.GetFolderPath(dataDirectory), dataName);
+        private static string GetClowdFolder(Environment.SpecialFolder dataDirectory, string dataName) =>
+            GetClowdFolder(Environment.GetFolderPath(dataDirectory), dataName);
 
         private static string GetClowdFolder(string dataDirectory, string dataName)
         {

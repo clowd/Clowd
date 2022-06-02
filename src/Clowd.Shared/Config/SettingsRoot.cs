@@ -14,8 +14,7 @@ namespace Clowd.Config
     [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
     public sealed class SettingsRoot : SettingsBase, IDisposable
     {
-        [Browsable(false), ClassifyIgnore]
-        public static SettingsRoot Current { get; private set; }
+        [Browsable(false), ClassifyIgnore] public static SettingsRoot Current { get; private set; }
 
         public SettingsGeneral General { get; private set; } = new SettingsGeneral();
 
