@@ -59,8 +59,7 @@ namespace Clowd.Video.FFmpeg
         public string param_value { get; set; }
 
         public FFmpegCliOption()
-        {
-        }
+        { }
 
         public FFmpegCliOption(string name, string value)
         {
@@ -119,20 +118,15 @@ namespace Clowd.Video.FFmpeg
 
     public abstract class FFmpegCodecPreset_AudioBase : FFmpegCodecPreset
     {
-        [Browsable(false)]
-        public string Id { get; set; }
+        [Browsable(false)] public string Id { get; set; }
 
-        [Browsable(false)]
-        public string Name { get; set; }
+        [Browsable(false)] public string Name { get; set; }
 
-        [Browsable(false)]
-        public string Description { get; set; }
+        [Browsable(false)] public string Description { get; set; }
 
-        [Browsable(false)]
-        public string Extension { get; set; }
+        [Browsable(false)] public string Extension { get; set; }
 
-        [Browsable(false)]
-        public bool IsCustom => false;
+        [Browsable(false)] public bool IsCustom => false;
 
         public int CQ { get; set; } = 29;
 
@@ -331,7 +325,8 @@ namespace Clowd.Video.FFmpeg
         {
             Id = Guid.NewGuid().ToString();
             Name = "h264_nvenc (nvidia h/w)";
-            Description = "Nvidia hardware encoding (nvenc) is available on Pascal, Turing, Volta and newer. Only use this option if you have a supported Nvidia graphics card.";
+            Description =
+                "Nvidia hardware encoding (nvenc) is available on Pascal, Turing, Volta and newer. Only use this option if you have a supported Nvidia graphics card.";
             Extension = "mp4";
         }
 
@@ -430,7 +425,8 @@ namespace Clowd.Video.FFmpeg
         {
             Id = Guid.NewGuid().ToString();
             Name = "h264_libx264 (software)";
-            Description = "Software encoder; Has good support, but is much slower. Consider using a hardware encoder instead if you have a supported system configuration.";
+            Description =
+                "Software encoder; Has good support, but is much slower. Consider using a hardware encoder instead if you have a supported system configuration.";
             Extension = "mp4";
         }
 

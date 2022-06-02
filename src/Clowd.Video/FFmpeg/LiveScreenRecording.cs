@@ -105,7 +105,6 @@ namespace Clowd.Video.FFmpeg
 
             if (settings.HardwareAccelerated)
             {
-
                 FFmpegCodecPreset_h264_nvenc.FFmpegNVENCPerformanceMode perf = settings.Performance switch
                 {
                     VideoPerformance.Fast => FFmpegCodecPreset_h264_nvenc.FFmpegNVENCPerformanceMode.Fast,
@@ -283,6 +282,4 @@ namespace Clowd.Video.FFmpeg
         //    return codec + $" -preset veryfast -tune animation";
         //}
     }
-
-
 }
