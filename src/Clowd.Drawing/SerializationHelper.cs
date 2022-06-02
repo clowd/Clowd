@@ -13,7 +13,6 @@ namespace Clowd.Drawing
     /// Helper class used for XML serialization.
     /// Contains array of SerializedGraphicsBase instances.
     /// </summary>
-
     [Serializable, XmlRoot("Graphics")]
     public class SerializationHelper
     {
@@ -40,19 +39,14 @@ namespace Clowd.Drawing
             }
         }
 
-        [XmlAttribute]
-        public double Left { get; set; }
-        [XmlAttribute]
-        public double Top { get; set; }
-        [XmlAttribute]
-        public double Width { get; set; }
-        [XmlAttribute]
-        public double Height { get; set; }
+        [XmlAttribute] public double Left { get; set; }
+        [XmlAttribute] public double Top { get; set; }
+        [XmlAttribute] public double Width { get; set; }
+        [XmlAttribute] public double Height { get; set; }
 
         // Default constructor is XML serialization requirement.
         public SerializationHelper()
-        {
-        }
+        { }
 
         public SerializationHelper(IEnumerable<GraphicBase> collection, Rect contentBounds)
         {
@@ -61,7 +55,6 @@ namespace Clowd.Drawing
 
             Graphics = collection.ToArray();
             ContentBounds = contentBounds;
-
         }
     }
 }

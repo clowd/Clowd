@@ -11,7 +11,6 @@ namespace Clowd.Drawing.Graphics
         {
             get => _lineStart;
             set => Set(ref _lineStart, value);
-           
         }
 
         public Point LineEnd
@@ -24,9 +23,8 @@ namespace Clowd.Drawing.Graphics
         private Point _lineEnd;
 
         protected GraphicLine()
-        {
-        }
-        
+        { }
+
         public GraphicLine(Color objectColor, double lineWidth, Point start, Point end)
             : base(objectColor, lineWidth)
         {

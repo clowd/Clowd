@@ -26,6 +26,7 @@ namespace Clowd.Drawing
                 OnPropertyChanged(nameof(Brush));
             }
         }
+
         public Brush Brush
         {
             get
@@ -34,15 +35,18 @@ namespace Clowd.Drawing
                 {
                     return new RadialGradientBrush(new GradientStopCollection(new GradientStop[]
                     {
-                        new GradientStop(_currentColor, 0),
-                        new GradientStop(_currentColor, _hardness),
-                        new GradientStop(Color.FromArgb(0, _currentColor.R, _currentColor.G, _currentColor.B), 1),
+                        new(_currentColor, 0),
+                        new(_currentColor, _hardness),
+                        new(Color.FromArgb(0, _currentColor.R, _currentColor.G, _currentColor.B), 1)
                     }));
                 }
+
                 return new SolidColorBrush(Color);
             }
         }
+
         public Size Size => new Size(_radius * 2, _radius * 2);
+
         public int Radius
         {
             get { return _radius; }
@@ -55,6 +59,7 @@ namespace Clowd.Drawing
                 OnPropertyChanged(nameof(Brush));
             }
         }
+
         public double Hardness
         {
             get { return _hardness; }
@@ -66,6 +71,7 @@ namespace Clowd.Drawing
                 OnPropertyChanged(nameof(Brush));
             }
         }
+
         public DrawingBrushType Type
         {
             get { return _type; }
@@ -84,8 +90,7 @@ namespace Clowd.Drawing
         private DrawingBrushType _type = DrawingBrushType.Circle;
 
         public DrawingBrush()
-        {
-        }
+        { }
 
         public DrawingBrush(DrawingBrushType type, int radius, Color color, int hardness)
         {
@@ -131,6 +136,7 @@ namespace Clowd.Drawing
         }
 
         #region INTEROP
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetIconInfo(IntPtr hIcon, ref IconInfo pIconInfo);
@@ -187,6 +193,7 @@ namespace Clowd.Drawing
                 return DestroyIcon(this.handle);
             }
         }
+
         #endregion
     }
 

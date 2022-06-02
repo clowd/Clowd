@@ -145,7 +145,6 @@ namespace Clowd.Drawing
         }
 
         public Resource() : base(Assembly.GetExecutingAssembly(), "Clowd.Drawing.Images")
-        {
-        }
+        { }
     }
 }

@@ -89,8 +89,7 @@ namespace Clowd.Drawing.Graphics
         }
 
         internal virtual void DrawObject(DrawingContext ctx)
-        {
-        }
+        { }
 
         protected virtual void DrawDashedBorder(DrawingContext ctx, Rect rect)
         {

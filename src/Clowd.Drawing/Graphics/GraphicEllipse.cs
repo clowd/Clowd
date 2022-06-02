@@ -7,18 +7,15 @@ namespace Clowd.Drawing.Graphics
     public class GraphicEllipse : GraphicRectangle
     {
         protected GraphicEllipse()
-        {
-        }
+        { }
 
         public GraphicEllipse(Color objectColor, double lineWidth, Rect rect)
             : base(objectColor, lineWidth, rect)
-        {
-        }
+        { }
 
         public GraphicEllipse(Color objectColor, double lineWidth, Rect rect, double angle = 0)
             : base(objectColor, lineWidth, rect, angle)
-        {
-        }
+        { }
 
         internal override void DrawRectangle(DrawingContext drawingContext)
         {
@@ -39,8 +36,8 @@ namespace Clowd.Drawing.Graphics
         {
             get
             {
-                var a = (Right - Left) / 2;     // one axis’s radius
-                var b = (Bottom - Top) / 2;     // the other axis’s radius
+                var a = (Right - Left) / 2; // one axis’s radius
+                var b = (Bottom - Top) / 2; // the other axis’s radius
                 var cos = Math.Cos(Angle * Math.PI / 180);
                 var sin = Math.Sin(Angle * Math.PI / 180);
                 var x = Math.Sqrt(a * a * cos * cos + b * b * sin * sin);

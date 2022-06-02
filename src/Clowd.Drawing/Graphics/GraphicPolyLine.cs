@@ -48,8 +48,7 @@ namespace Clowd.Drawing.Graphics
         [ClassifyIgnore] private Geometry _geometry;
 
         protected GraphicPolyLine() // serializer constructor
-        {
-        }
+        { }
 
         public GraphicPolyLine(Color objectColor, double lineWidth, Point start)
             : base(objectColor, lineWidth, new Rect(start, new Size(1, 1)))

@@ -46,18 +46,15 @@ namespace Clowd.Drawing.Graphics
         private Size _originalSize;
 
         protected GraphicImage()
-        {
-        }
+        { }
 
         public GraphicImage(string imageFilePath, Size imageSize)
             : this(imageFilePath, new Rect(new Point(0, 0), imageSize), new Int32Rect())
-        {
-        }
+        { }
 
         public GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle = 0, int flipX = 1, int flipY = 1)
             : this(imageFilePath, displayRect, crop, angle, flipX, flipY, displayRect.Size)
-        {
-        }
+        { }
 
         protected GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle, int flipX, int flipY, Size originalSize)
             : base(Colors.Transparent, 0, displayRect, angle, false)
