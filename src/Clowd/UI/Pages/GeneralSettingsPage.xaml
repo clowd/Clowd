@@ -38,20 +38,20 @@
             </GroupBox>
             <GroupBox x:Name="grpBehavior" Header="Behavior">
                 <StackPanel>
-                    <CheckBox IsChecked="{Binding ExperimentalUpdateChannel}" >
+                    <CheckBox IsChecked="{Binding ExperimentalUpdateChannel}">
                         <TextBlock Text="Download experimental updates (things may break)" />
                     </CheckBox>
-                    <CheckBox IsChecked="{Binding ConfirmClose}" >
+                    <CheckBox IsChecked="{Binding ConfirmClose}">
                         <TextBlock Text="Ask/confirm before exiting" />
                     </CheckBox>
                 </StackPanel>
             </GroupBox>
             <GroupBox x:Name="grpShell" Header="Shell">
                 <StackPanel>
-                    <CheckBox IsChecked="{Binding ContextMenuRegistered}" >
+                    <CheckBox IsChecked="{Binding ContextMenuRegistered}">
                         <TextBlock Text="Add context menu to Explorer" />
                     </CheckBox>
-                    <CheckBox IsChecked="{Binding AutoRunRegistered}" >
+                    <CheckBox IsChecked="{Binding AutoRunRegistered}">
                         <TextBlock Text="Start Clowd with Windows" />
                     </CheckBox>
                 </StackPanel>
