@@ -6,9 +6,7 @@ namespace Clowd
 {
     public enum SettingsPageTab
     {
-        NewItem,
         RecentSessions,
-        Uploads,
         SettingsGeneral,
         SettingsHotkeys,
         SettingsCapture,
