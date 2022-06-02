@@ -1370,7 +1370,7 @@ namespace Clowd.Drawing
             CanSetProperties = hasSelectedObjects;
         }
 
-        void RefreshBounds()
+        public void RefreshBounds()
         {
             var bounds = GetArtworkBounds();
             Canvas.SetLeft(_artworkRectangle, bounds.Left);

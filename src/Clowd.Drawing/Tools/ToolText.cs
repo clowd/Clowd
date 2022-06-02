@@ -189,6 +189,7 @@ namespace Clowd.Drawing.Tools
             if (grap == null)
                 return;
             grap.Body = ((TextBox)sender).Text;
+            drawingCanvas.RefreshBounds();
         }
 
         private void textBox_Loaded(object sender, RoutedEventArgs e)
@@ -243,6 +244,7 @@ namespace Clowd.Drawing.Tools
             Canvas.SetTop(TextBox, Canvas.GetTop(TextBox) - yOffset);
             TextBox.Width = TextBox.Width + xOffset + xOffset;
             TextBox.Height = TextBox.Height + yOffset + yOffset;
+            drawingCanvas.RefreshBounds();
         }
 
         private void textBox_PreviewKeyDown(object sender, KeyEventArgs e)
