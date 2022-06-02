@@ -27,8 +27,7 @@ namespace Clowd.PlatformUtil
         public static ScreenRect Empty => new ScreenRect(0, 0, 0, 0);
 
         public ScreenRect()
-        {
-        }
+        { }
 
         public ScreenRect(ScreenPoint topLeft, ScreenSize size)
         {
@@ -79,12 +78,12 @@ namespace Clowd.PlatformUtil
             => new System.Drawing.Rectangle(rect.X, rect.Y, rect.Width, rect.Height);
 
         public static explicit operator ScreenRect(System.Drawing.Rectangle rect)
-          => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
+            => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
 
         public static implicit operator Vanara.PInvoke.RECT(ScreenRect rect)
             => rect != null ? new Vanara.PInvoke.RECT(rect.X, rect.Y, rect.Right, rect.Bottom) : RECT.Empty;
 
         public static implicit operator ScreenRect(Vanara.PInvoke.RECT rect)
-          => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
+            => new ScreenRect(rect.X, rect.Y, rect.Width, rect.Height);
     }
 }

@@ -73,6 +73,6 @@ namespace Clowd.PlatformUtil
             => new System.Drawing.RectangleF((float)rect.X, (float)rect.Y, (float)rect.Width, (float)rect.Height);
 
         public static explicit operator LogicalRect(System.Drawing.RectangleF rect)
-          => new LogicalRect(rect.X, rect.Y, rect.Width, rect.Height);
+            => new LogicalRect(rect.X, rect.Y, rect.Width, rect.Height);
     }
 }

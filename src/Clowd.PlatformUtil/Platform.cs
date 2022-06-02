@@ -26,8 +26,7 @@ namespace Clowd.PlatformUtil
 
         // instance members
         protected Platform()
-        {
-        }
+        { }
 
         // mouse
         public abstract ScreenPoint GetMousePosition();
@@ -52,6 +51,7 @@ namespace Clowd.PlatformUtil
 
         // dialogs
         public abstract void RevealFileOrFolder(string fileOrFolderPath);
+
         public abstract MessageBoxResult ShowMessageBox(
             nint owner,
             string messageBoxText,
@@ -96,20 +96,20 @@ namespace Clowd.PlatformUtil
         }
 
         public static MessageBoxResult ShowMessageBox(
-             this Platform platform,
-             string messageBoxText,
-             string title,
-             MessageBoxButtons button,
-             MessageBoxIcon icon)
+            this Platform platform,
+            string messageBoxText,
+            string title,
+            MessageBoxButtons button,
+            MessageBoxIcon icon)
         {
             return platform.ShowMessageBox(0, messageBoxText, title, button, icon);
         }
 
         public static MessageBoxResult ShowMessageBox(
-        this Platform platform,
-        string messageBoxText,
-        string title,
-        MessageBoxButtons button)
+            this Platform platform,
+            string messageBoxText,
+            string title,
+            MessageBoxButtons button)
         {
             return platform.ShowMessageBox(0, messageBoxText, title, button, MessageBoxIcon.None);
         }

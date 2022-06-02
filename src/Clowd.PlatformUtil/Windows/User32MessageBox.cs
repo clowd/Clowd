@@ -66,7 +66,6 @@ namespace Clowd.PlatformUtil.Windows
             MessageBoxResult defaultResult,
             MessageBoxOptions options)
         {
-
             // for positioning message box and custom button labels, see here
             // https://www.codeguru.com/cpp/w-p/win32/messagebox/article.php/c10873/MessageBox-with-Custom-Button-Captions.htm
             // need a CBT hook

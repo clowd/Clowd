@@ -11,14 +11,17 @@ namespace Clowd.PlatformUtil
         /// Round world coordinates using Math.Round(double)
         /// </summary>
         Midpoint = 0,
+
         /// <summary>
         /// Round world coordinates using Math.Ceiling(double)
         /// </summary>
         Ceiling = 1,
+
         /// <summary>
         /// Round world coordinates using Math.Floor(double)
         /// </summary>
         Floor = 2,
+
         /// <summary>
         /// Round up for .75 and above, floor for below.
         /// </summary>
@@ -65,10 +68,12 @@ namespace Clowd.PlatformUtil
         public virtual double DpiScaleY => DpiY / 96.0d;
 
         public DpiContext(int dpiX, int dpiY)
-            : this(dpiX, dpiY, 0, 0) { }
+            : this(dpiX, dpiY, 0, 0)
+        { }
 
         public DpiContext(int dpiX, int dpiY, int offsetX, int offsetY)
-            : this(dpiX, dpiY, offsetX, offsetY, WorldRoundingMode.RoundPreferFloor) { }
+            : this(dpiX, dpiY, offsetX, offsetY, WorldRoundingMode.RoundPreferFloor)
+        { }
 
         public DpiContext(int dpiX, int dpiY, int offsetX, int offsetY, WorldRoundingMode roundingMode)
         {
@@ -108,7 +113,8 @@ namespace Clowd.PlatformUtil
 
         public ScreenSize ToScreenSize(LogicalSize worldSize) => ToScreenSize(worldSize.Width, worldSize.Height);
 
-        public ScreenRect ToScreenRect(double worldX, double worldY, double worldW, double worldH) => new ScreenRect(ToScreenX(worldX), ToScreenY(worldY), ToScreenWH(worldW), ToScreenWH(worldH));
+        public ScreenRect ToScreenRect(double worldX, double worldY, double worldW, double worldH) =>
+            new ScreenRect(ToScreenX(worldX), ToScreenY(worldY), ToScreenWH(worldW), ToScreenWH(worldH));
 
         public ScreenRect ToScreenRect(LogicalRect worldRect) => ToScreenRect(worldRect.X, worldRect.Y, worldRect.Width, worldRect.Height);
 
@@ -126,7 +132,8 @@ namespace Clowd.PlatformUtil
 
         public LogicalSize ToWorldSize(ScreenSize screenSize) => ToWorldSize(screenSize.Width, screenSize.Height);
 
-        public LogicalRect ToWorldRect(int screenX, int screenY, int screenW, int screenH) => new LogicalRect(ToWorldX(screenX), ToWorldY(screenY), ToWorldWH(screenW), ToWorldWH(screenH));
+        public LogicalRect ToWorldRect(int screenX, int screenY, int screenW, int screenH) =>
+            new LogicalRect(ToWorldX(screenX), ToWorldY(screenY), ToWorldWH(screenW), ToWorldWH(screenH));
 
         public LogicalRect ToWorldRect(ScreenRect screenRect) => ToWorldRect(screenRect.Left, screenRect.Top, screenRect.Width, screenRect.Height);
 

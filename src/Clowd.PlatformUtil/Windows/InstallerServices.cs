@@ -91,10 +91,12 @@ namespace Clowd.PlatformUtil.Windows
         public string LaunchArgument { get; init; }
 
         public ExplorerMenuLaunchItem(string title, string iconPath, string launchPath)
-            : this(title, iconPath, launchPath, null, ExplorerMenuCommandFlags.None) { }
+            : this(title, iconPath, launchPath, null, ExplorerMenuCommandFlags.None)
+        { }
 
         public ExplorerMenuLaunchItem(string title, string iconPath, string launchPath, string launchArgument)
-            : this(title, iconPath, launchPath, launchArgument, ExplorerMenuCommandFlags.None) { }
+            : this(title, iconPath, launchPath, launchArgument, ExplorerMenuCommandFlags.None)
+        { }
 
         public ExplorerMenuLaunchItem(string title, string iconPath, string launchPath, string launchArgument, ExplorerMenuCommandFlags flags)
             : base(title, iconPath, flags)
@@ -117,7 +119,8 @@ namespace Clowd.PlatformUtil.Windows
         public ExplorerMenuBase[] Children { get; init; }
 
         public ExplorerMenuGroup(string title, string iconPath, ExplorerMenuBase[] children)
-            : this(title, iconPath, children, ExplorerMenuCommandFlags.None) { }
+            : this(title, iconPath, children, ExplorerMenuCommandFlags.None)
+        { }
 
         public ExplorerMenuGroup(string title, string iconPath, ExplorerMenuBase[] children, ExplorerMenuCommandFlags flags)
             : base(title, iconPath, flags)
@@ -190,6 +193,7 @@ namespace Clowd.PlatformUtil.Windows
                     var f = new FileInfo(p);
                     sizeInKb += (int)(f.Length / 1000);
                 }
+
                 if (sizeInKb > 0)
                 {
                     EstimatedSizeInKB = sizeInKb;
@@ -309,7 +313,11 @@ namespace Clowd.PlatformUtil.Windows
 
         private void OpenRegistryPath(string regPath, Action<RegistryKey> work)
         {
-            OpenRegistryPath(regPath, (k) => { work(k); return true; });
+            OpenRegistryPath(regPath, (k) =>
+            {
+                work(k);
+                return true;
+            });
         }
 
         private T OpenRegistryPath<T>(string regPath, Func<RegistryKey, T> work)

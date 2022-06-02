@@ -28,8 +28,7 @@ namespace Clowd.PlatformUtil.Windows
         }
 
         public GdiCompatibleBitmap(nint bmp) : this(new HBITMAP(bmp))
-        {
-        }
+        { }
 
         internal GdiCompatibleBitmap(HBITMAP bmp)
         {
@@ -57,7 +56,7 @@ namespace Clowd.PlatformUtil.Windows
                 biBitCount = bpp,
                 biClrImportant = 0,
                 biClrUsed = 0,
-                biCompression = BitmapCompressionMode .BI_RGB,
+                biCompression = BitmapCompressionMode.BI_RGB,
                 // For RGB DIBs, the image orientation is indicated by the biHeight member of the BITMAPINFOHEADER structure.
                 // If biHeight is positive, the image is bottom-up. If biHeight is negative, the image is top-down.
                 biHeight = -Height,
@@ -131,7 +130,7 @@ namespace Clowd.PlatformUtil.Windows
 
                 // create 256 gray colors
                 byte* cptr = (byte*)(bmp + bmiSize);
-                for (byte i = 0; ; i++)
+                for (byte i = 0;; i++)
                 {
                     *cptr++ = i; // r
                     *cptr++ = i; // g
