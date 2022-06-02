@@ -45,22 +45,8 @@ namespace Clowd
         Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
     }
 
-    public abstract class UploadProviderBase : IUploadProvider
+    public abstract class UploadProviderBase : SimpleNotifyObject, IUploadProvider
     {
-        [Browsable(false)]
-        public virtual bool IsEnabled
-        {
-            get => _enabled;
-            set
-            {
-                if (value != _enabled)
-                {
-                    _enabled = value;
-                    OnPropertyChanged(nameof(IsEnabled));
-                }
-            }
-        }
-
         [Browsable(false)]
         public abstract SupportedUploadType SupportedUpload { get; }
 
@@ -72,10 +58,6 @@ namespace Clowd
 
         [Browsable(false)]
         public virtual Stream Icon => EmbeddedResource.GetStream("Clowd", "default-provider-icon.png");
-
-        public virtual event PropertyChangedEventHandler PropertyChanged;
-
-        private bool _enabled;
 
         protected UploadProviderBase()
         {
@@ -90,10 +72,5 @@ namespace Clowd
         }
 
         public abstract Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
-
-        protected virtual void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
     }
 }

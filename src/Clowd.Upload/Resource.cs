@@ -6,6 +6,8 @@ namespace Clowd.Upload
     internal sealed class Resource : EmbeddedResource
     {
         public Stream ImgurIcon => GetStream("imgur.png");
+        
+        public Stream BackBlazeIcon => GetStream("backblaze.png");
 
         public Stream AzureIcon => GetStream("azure.png");
 
