@@ -41,27 +41,22 @@ namespace Clowd
         SupportedUploadType SupportedUpload { get; }
 
         Task<UploadResult> UploadAsync(string filePath, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
-        
+
         Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
     }
 
     public abstract class UploadProviderBase : SimpleNotifyObject, IUploadProvider
     {
-        [Browsable(false)]
-        public abstract SupportedUploadType SupportedUpload { get; }
+        [Browsable(false)] public abstract SupportedUploadType SupportedUpload { get; }
 
-        [Browsable(false)]
-        public abstract string Name { get; }
+        [Browsable(false)] public abstract string Name { get; }
 
-        [Browsable(false)]
-        public abstract string Description { get; }
+        [Browsable(false)] public abstract string Description { get; }
 
-        [Browsable(false)]
-        public virtual Stream Icon => EmbeddedResource.GetStream("Clowd", "default-provider-icon.png");
+        [Browsable(false)] public virtual Stream Icon => EmbeddedResource.GetStream("Clowd", "default-provider-icon.png");
 
         protected UploadProviderBase()
-        {
-        }
+        { }
 
         public virtual async Task<UploadResult> UploadAsync(string filePath, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken)
         {

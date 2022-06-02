@@ -35,7 +35,7 @@ namespace Clowd.Config
             get => _hideTipsPanel;
             set => Set(ref _hideTipsPanel, value);
         }
-        
+
         public bool OpenSavedInExplorer
         {
             get => _openSavedInExplorer;

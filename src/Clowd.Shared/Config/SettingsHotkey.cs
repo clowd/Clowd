@@ -12,7 +12,7 @@ namespace Clowd.Config
             get => _fileUploadShortcut;
             set => Set(ref _fileUploadShortcut, value);
         }
-        
+
         [DisplayName("Upload Clipboard"), ClassifyIgnoreIfDefault]
         public GlobalTrigger ClipboardUploadShortcut
         {
@@ -47,7 +47,7 @@ namespace Clowd.Config
             get => _drawOnScreenShortcut;
             set => Set(ref _drawOnScreenShortcut, value);
         }
-        
+
         [DisplayName("Start / Stop Recording"), ClassifyIgnoreIfDefault]
         public GlobalTrigger StartStopRecordingShortcut
         {

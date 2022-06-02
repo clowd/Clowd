@@ -14,8 +14,7 @@ namespace Clowd.Config
 {
     public abstract class CategoryBase : SimpleNotifyObject, IDisposable, IClassifyObjectProcessor
     {
-        [ClassifyIgnore]
-        private readonly List<INotifyPropertyChanged> _subscriptions = new List<INotifyPropertyChanged>();
+        [ClassifyIgnore] private readonly List<INotifyPropertyChanged> _subscriptions = new List<INotifyPropertyChanged>();
 
         protected void Subscribe(params INotifyPropertyChanged[] subscriptions)
         {

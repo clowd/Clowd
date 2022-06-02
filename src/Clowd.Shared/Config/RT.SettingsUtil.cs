@@ -25,7 +25,9 @@ namespace RT.Util
         {
             var attr = settingsType.GetCustomAttributes<SettingsAttribute>(false).FirstOrDefault();
             if (attr == null)
-                throw new ArgumentException("The type {0} must have a {1} on it to be used with SettingsUtil.".Fmt(settingsType.FullName, typeof(SettingsAttribute).FullName), "settingsType");
+                throw new ArgumentException(
+                    "The type {0} must have a {1} on it to be used with SettingsUtil.".Fmt(settingsType.FullName, typeof(SettingsAttribute).FullName),
+                    "settingsType");
             return attr;
         }
 
@@ -87,7 +89,8 @@ namespace RT.Util
         ///     If specified, overrides the serializer specified in the <see cref="SettingsAttribute"/> on the settings class.</param>
         /// <returns>
         ///     true if loaded an existing file, false if created a new one.</returns>
-        public static bool LoadSettings<TSettings>(out TSettings settings, string filename = null, SettingsSerializer? serializer = null) where TSettings : SettingsBase, new()
+        public static bool LoadSettings<TSettings>(out TSettings settings, string filename = null, SettingsSerializer? serializer = null)
+            where TSettings : SettingsBase, new()
         {
             var attr = GetAttribute<TSettings>();
             if (filename == null)
@@ -238,6 +241,7 @@ namespace RT.Util
                     default:
                         throw new InternalErrorException("4968453");
                 }
+
                 File.Delete(filename);
                 File.Move(tempname, filename);
             }, TimeSpan.FromSeconds(5));
@@ -361,8 +365,7 @@ namespace RT.Util
     public abstract class SettingsBase
     {
         /// <summary>Lock object used to protect concurrent access.</summary>
-        [ClassifyIgnore, NonSerialized]
-        protected internal object _lock = new object();
+        [ClassifyIgnore, NonSerialized] protected internal object _lock = new object();
 
         /// <summary>
         ///     This method is called just before the settings class is written out to disk, allowing any required changes to
@@ -370,15 +373,13 @@ namespace RT.Util
         ///     thread than the one invoking a Save* operation (but the same as the thread performing the save immediately
         ///     after this method returns).</summary>
         protected internal virtual void BeforeSave()
-        {
-        }
+        { }
 
         /// <summary>
         ///     This method is called just before the settings class is restored from disk, allowing any required changes to
         ///     be made to the fields. The base implementation does nothing.</summary>
         protected internal virtual void AfterLoad()
-        {
-        }
+        { }
 
         /// <summary>
         ///     <para>
@@ -516,10 +517,13 @@ namespace RT.Util
     {
         /// <summary>Just ignore the failure: no exceptions thrown, no dialogs shown</summary>
         DoNothing,
+
         /// <summary>Throw an exception in case of failure</summary>
         Throw,
+
         /// <summary>Ask the user to retry or to skip operation. No exceptions thrown.</summary>
         ShowRetryOnly,
+
         /// <summary>Ask the user to retry, skip operation or cancel. <see cref="SettingsCancelException"/> thrown on cancel.</summary>
         ShowRetryWithCancel,
     }
@@ -565,12 +569,10 @@ namespace RT.Util
         { }
 
         public SettingsCancelException(string message) : base(message)
-        {
-        }
+        { }
 
         public SettingsCancelException(string message, Exception innerException) : base(message, innerException)
-        {
-        }
+        { }
     }
 
     /// <summary>Describes the intended usage of a "settings" class to <see cref="SettingsUtil"/> methods.</summary>
@@ -640,9 +642,10 @@ namespace RT.Util
             }
 
             var fileExtension = typeof(SettingsSerializer).GetFields(BindingFlags.Static | BindingFlags.Public)
-                .FirstOrDefault(f => f.GetValue(null).Equals(Serializer))
-                .NullOr(field => field.GetCustomAttributes<SerializerInfoAttribute>().FirstOrDefault().NullOr(inf => inf.DefaultFileExtension))
-                ?? "bin";
+                                    .FirstOrDefault(f => f.GetValue(null).Equals(Serializer))
+                                    .NullOr(field =>
+                                        field.GetCustomAttributes<SerializerInfoAttribute>().FirstOrDefault().NullOr(inf => inf.DefaultFileExtension))
+                                ?? "bin";
 
             filename = filename.FilenameCharactersEscape() + ".Settings." + fileExtension;
 
