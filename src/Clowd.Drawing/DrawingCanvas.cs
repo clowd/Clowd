@@ -641,6 +641,7 @@ namespace Clowd.Drawing
         {
             GraphicsList.DeserializeObjectsInto(graphics);
             _undoManager.AddCommandStep();
+            RefreshBounds();
         }
 
         public ToolActionType GetToolActionType(ToolType type)
@@ -920,7 +921,7 @@ namespace Clowd.Drawing
 
         protected override Visual GetVisualChild(int index)
         {
-            // _clickable and _artworkbounds come first, 
+            // _clickable and _artworkbounds come first,
             // any other children come after.
 
             if (index == 0)
