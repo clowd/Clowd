@@ -386,7 +386,7 @@ namespace Clowd.UI
             if (!VerifyArtworkExists())
                 return;
             
-            await UploadManager.UploadImage(GetRenderedBitmap(), "Edited Image");
+            await UploadManager.UploadSession(_session);
         }
 
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)

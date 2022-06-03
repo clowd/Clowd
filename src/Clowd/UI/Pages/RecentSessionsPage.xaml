@@ -24,6 +24,7 @@
                 <cm:SortDescription Direction="Descending" PropertyName="CreatedUtc" />
             </CollectionViewSource.SortDescriptions>
         </CollectionViewSource>
+        <conv:StringNullOrEmptyToBoolConverter x:Key="EmptyString2Bool" />
     </Page.Resources>
     <Grid>
         <Grid.RowDefinitions>
@@ -138,37 +139,69 @@
                 <DataTemplate>
                     <Grid HorizontalAlignment="Stretch">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="*" />
+                            <RowDefinition Height="25" />
+                            <RowDefinition Height="25" />
+                            <RowDefinition Height="25" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="12" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="24" />
                         </Grid.ColumnDefinitions>
                         <Border
                             x:Name="imgBorder"
-                            Grid.RowSpan="2"
+                            Grid.RowSpan="3"
                             Width="110"
-                            Height="70"
+                            Height="75"
                             Margin="4"
                             Background="{StaticResource CheckeredLightGrayBackgroundBrush}">
                             <Image Source="{Binding PreviewImgPath, Converter={StaticResource convCacheImage}}" Stretch="Uniform" />
                         </Border>
                         <TextBlock
-                            Grid.Column="1"
-                            Margin="12,6,0,0"
+                            Grid.Row="0"
+                            Grid.Column="2"
                             VerticalAlignment="Center"
                             Style="{StaticResource BaseTextBlockStyle}"
                             Text="{Binding Name}" />
                         <TextBlock
                             Grid.Row="1"
-                            Grid.Column="1"
-                            Margin="12,0,0,6"
-                            VerticalAlignment="Top"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
                             Style="{StaticResource BodyTextBlockStyle}"
                             Text="{Binding CreatedUtc, Mode=OneTime, StringFormat={x:Static local:AppStyles.UiDateTimePattern}}" />
+                        <TextBlock
+                            x:Name="uploadPlaceholder"
+                            Grid.Row="2"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Text="--" />
+                        <ProgressBar
+                            x:Name="uploadProgress"
+                            Grid.Row="2"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Value="{Binding UploadProgress}" />
+                        <wpfui:Hyperlink
+                            x:Name="uploadLink"
+                            Grid.Row="2"
+                            Grid.Column="2"
+                            Margin="-4,0,0,0"
+                            VerticalAlignment="Center"
+                            Content="{Binding UploadUrl}"
+                            NavigateUri="{Binding UploadUrl}"
+                            Visibility="Collapsed" />
                     </Grid>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding UploadProgress}" Value="0">
+                            <Setter TargetName="uploadProgress" Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding UploadUrl, Converter={StaticResource EmptyString2Bool}}" Value="False">
+                            <Setter TargetName="uploadProgress" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="uploadLink" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="uploadPlaceholder" Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>

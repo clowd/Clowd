@@ -76,6 +76,31 @@ namespace Clowd
             get => Get<string>();
             set => Set(value);
         }
+        
+        public string UploadFileKey
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
+
+        public string UploadUrl
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
+        
+        // this does not need to be persisted
+        public double UploadProgress
+        {
+            get => _uploadProgress;
+            set
+            {
+                _uploadProgress = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private double _uploadProgress;
     }
 
     public class SessionManager : SimpleNotifyObject, IDisposable
