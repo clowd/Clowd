@@ -199,12 +199,12 @@ namespace Clowd.Util
             }
         }
 
-        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private void OnPropertiesChanged(params string[] propertyNames)
+        protected void OnPropertiesChanged(params string[] propertyNames)
         {
             foreach (string propertyName in propertyNames)
             {
@@ -212,7 +212,7 @@ namespace Clowd.Util
             }
         }
 
-        private void ThrowIfDisposed()
+        protected void ThrowIfDisposed()
         {
             if (_disposed)
                 throw new ObjectDisposedException(this.GetType().FullName);

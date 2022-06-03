@@ -132,6 +132,8 @@ namespace Clowd.UI.Unmanaged
                 var session = SessionManager.Current.GetSessionFromPath(sessionJsonPath);
                 if (session != null)
                 {
+                    session.Name = "Screenshot";
+
                     if (captureType == CaptureType.Save)
                     {
                         var filename = await NiceDialog.ShowSelectSaveFileDialog(null, "Save Screenshot", SettingsRoot.Current.General.LastSavePath, "screenshot", "png");
@@ -147,11 +149,10 @@ namespace Clowd.UI.Unmanaged
                     }
                     else if (captureType == CaptureType.Upload)
                     {
-                        await UploadManager.UploadFile(session.PreviewImgPath, "screenshot.png");
+                        UploadManager.UploadSession(session);
                     }
                     else
                     {
-                        session.Name = "Capture";
                         EditorWindow.ShowSession(session);
                     }
                 }

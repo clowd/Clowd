@@ -21,31 +21,65 @@ namespace Clowd
         private static readonly ITasksView _view = new TasksViewManager();
         private static readonly IMimeProvider _mime = new MimeProvider();
 
-        public static async Task<UploadViewState> UploadImage(BitmapSource image, string imgType)
+        public static async Task<UploadResult> UploadSession(SessionInfo session)
         {
             var provider = await GetUploadProvider(SupportedUploadType.Image);
             if (provider == null)
                 return null;
 
+            var view = _view.CreateTask(session.Name);
+            view.SetStatus("Uploading...");
+            view.Show();
+
+            var info = new FileInfo(session.PreviewImgPath);
+
+            UploadProgressHandler handler = (bytesUploaded) =>
+            {
+                view.SetProgress(bytesUploaded, info.Length, true);
+                App.Current.Dispatcher.Invoke(() =>
+                {
+                    session.UploadProgress = bytesUploaded / (double)info.Length * 100d;
+                });
+            };
+
+            var fileName = RandomEx.GetCryptoUniqueString(10) + ".png";
+            var uploadTask = provider.UploadAsync(info.FullName, handler, fileName, view.CancelToken);
+            var result = await HandleUploadResult(view, uploadTask);
+
+            if (result != null)
+            {
+                session.UploadUrl = result.PublicUrl;
+                session.UploadFileKey = result.UploadKey;
+            }
+
+            return result;
+        }
+        
+        public static async Task<UploadResult> UploadImage(BitmapSource image, string imgType)
+        {
+            var provider = await GetUploadProvider(SupportedUploadType.Image);
+            if (provider == null)
+                return null;
+        
             var ms = new MemoryStream();
             var enc = new PngBitmapEncoder();
             enc.Frames.Add(BitmapFrame.Create(image));
             enc.Save(ms);
-
+        
             ms.Position = 0;
-
+        
             var view = _view.CreateTask(imgType);
             view.SetStatus("Uploading...");
             view.Show();
-
+        
             UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, ms.Length, true);
-
+        
             var fileName = RandomEx.GetCryptoUniqueString(10) + ".png";
             var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
-            return UploadWrapper(view, uploadTask);
+            return await HandleUploadResult(view, uploadTask);
         }
 
-        public static async Task<UploadViewState> UploadText(string text, string textType)
+        public static async Task<UploadResult> UploadText(string text, string textType)
         {
             var provider = await GetUploadProvider(SupportedUploadType.Text);
             if (provider == null)
@@ -61,10 +95,10 @@ namespace Clowd
 
             var fileName = RandomEx.GetCryptoUniqueString(10) + ".txt";
             var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
-            return UploadWrapper(view, uploadTask);
+            return await HandleUploadResult(view, uploadTask);
         }
 
-        public static async Task<UploadViewState> UploadFile(string filePath, string fileNameOverride = null)
+        public static async Task<UploadResult> UploadFile(string filePath, string fileNameOverride = null)
         {
             var fileInfo = new FileInfo(filePath);
             var fileName = fileNameOverride ?? Path.GetFileName(filePath);
@@ -91,10 +125,10 @@ namespace Clowd
             UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, fileInfo.Length, true);
 
             var uploadTask = provider.UploadAsync(filePath, handler, uniqueName, view.CancelToken);
-            return UploadWrapper(view, uploadTask);
+            return await HandleUploadResult(view, uploadTask);
         }
 
-        public static async Task<UploadViewState> UploadSeveralFiles(params string[] filePaths)
+        public static async Task<UploadResult> UploadSeveralFiles(params string[] filePaths)
         {
             if (filePaths.Length == 1 && File.Exists(filePaths[0]))
             {
@@ -118,7 +152,7 @@ namespace Clowd
             return await ZipUpload(filePaths);
         }
 
-        private static async Task<UploadViewState> ZipUpload(string[] filePaths)
+        private static async Task<UploadResult> ZipUpload(string[] filePaths)
         {
             var provider = await GetUploadProvider(SupportedUploadType.Binary);
             if (provider == null)
@@ -184,12 +218,12 @@ namespace Clowd
 
             var archiveName = RandomEx.GetCryptoUniqueString(10) + ".zip";
             var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, view.CancelToken);
-            return UploadWrapper(view, uploadTask);
+            return await HandleUploadResult(view, uploadTask);
         }
 
-        private static UploadViewState UploadWrapper(ITasksViewItem view, Task<UploadResult> uploadTask)
+        private static Task<UploadResult> HandleUploadResult(ITasksViewItem view, Task<UploadResult> uploadTask)
         {
-            var finalTask = uploadTask.ContinueWith<UploadResult>(task =>
+            return uploadTask.ContinueWith(task =>
             {
                 if (task.IsCanceled)
                 {
@@ -208,8 +242,6 @@ namespace Clowd
                     return result;
                 }
             });
-
-            return new UploadViewState(view, finalTask);
         }
 
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
@@ -295,17 +327,5 @@ namespace Clowd
 
             return null;
         }
-    }
-
-    public class UploadViewState
-    {
-        public UploadViewState(ITasksViewItem taskView, Task<UploadResult> uploadResult)
-        {
-            TaskView = taskView;
-            UploadResult = uploadResult;
-        }
-
-        public ITasksViewItem TaskView { get; }
-        public Task<UploadResult> UploadResult { get; }
     }
 }
