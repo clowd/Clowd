@@ -160,10 +160,14 @@ namespace Clowd.UI.Pages
             UpdateToast();
         }
 
-        public void SetProgress(long completedBytes, long totalBytes)
+        public void SetProgress(long completed, long total, bool isBytes)
         {
-            Progress = completedBytes / (double)totalBytes;
-            ProgressText = $"{PrettySize.Format(completedBytes)} / {PrettySize.Format(totalBytes)}";
+            Progress = completed / (double)total;
+
+            ProgressText = isBytes
+                ? $"{PrettySize.Format(completed)} / {PrettySize.Format(total)}"
+                : $"{completed} / {total}";
+
             UpdateToast();
         }
 

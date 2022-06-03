@@ -76,7 +76,7 @@ namespace Clowd.Capture
                 }
             }
 
-            return DoZipUpload(filePaths, mimedb);
+            return ZipUpload(filePaths);
         }
 
         private static Task<UploadViewState> UploadStream(SupportedUploadType type, Stream fileStream, string extension, string name, string viewName)
@@ -85,77 +85,73 @@ namespace Clowd.Capture
             return UploadInternal(SupportedUploadType.Image, upload, fileStream.Length, extension, name, viewName);
         }
 
-        private static async Task<UploadViewState> DoZipUpload(string[] filePaths, IMimeProvider mimedb)
+        private static async Task<UploadViewState> ZipUpload(string[] filePaths)
         {
             var provider = await GetUploadProvider(SupportedUploadType.Binary);
             if (provider == null)
                 return null;
 
-            using (ZipFile zip = new ZipFile())
+            using var tmpFolder = PathEx.GetTempFolder();
+            var zipPath = tmpFolder.GetTempFilePath(".zip");
+
+            using ZipFile zip = new ZipFile();
+            List<string> fullPaths = new List<string>();
+            foreach (var path in filePaths)
             {
-                List<string> fullPaths = new List<string>();
-                foreach (var path in filePaths)
+                if (Directory.Exists(path))
                 {
-                    if (Directory.Exists(path))
-                    {
-                        zip.AddDirectory(path, Path.GetFileName(path));
-                        fullPaths.Add(Path.GetFullPath(path));
-                    }
-                    else if (File.Exists(path))
-                    {
-                        zip.AddFile(path, "");
-                        fullPaths.Add(Path.GetFullPath(path));
-                    }
+                    zip.AddDirectory(path, Path.GetFileName(path));
+                    fullPaths.Add(Path.GetFullPath(path));
                 }
-
-                // no files were added to the archive; there is nothing to upload
-                if (fullPaths.Count == 0)
-                    return null;
-
-                var view = _view.CreateTask("Archive Upload");
-                view.SetStatus("Compressing...");
-                view.Show();
-
-                using (var folder = PathEx.GetTempFolder())
+                else if (File.Exists(path))
                 {
-                    var zipPath = folder.GetTempFilePath(".zip");
-
-                    zip.SaveProgress += (s, e) =>
-                    {
-                        if (view.CancelToken.IsCancellationRequested)
-                        {
-                            e.Cancel = true;
-                        }
-                        else
-                        {
-                            Console.WriteLine($"zip - saved {e.EntriesSaved}/{e.EntriesTotal}, bytes {e.BytesTransferred}/{e.TotalBytesToTransfer},");
-                            if (e.EventType == ZipProgressEventType.Saving_BeforeWriteEntry)
-                            {
-                                var progress = e.EntriesSaved / (double)e.EntriesTotal;
-                                view.SetProgress(progress);
-                                Console.WriteLine($"zip progress {progress}%");
-                            }
-                        }
-                    };
-
-                    await Task.Run(() => zip.Save(zipPath), view.CancelToken);
-
-                    if (view.CancelToken.IsCancellationRequested)
-                        return null;
-
-                    var info = new FileInfo(zipPath);
-                    var size = info.Length;
-
-                    view.SetStatus("Uploading...");
-                    view.SetProgress(0, size);
-
-                    UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, size);
-
-                    var archiveName = RandomEx.GetString(8) + ".zip";
-                    var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, view.CancelToken);
-                    return UploadWrapper(view, uploadTask);
+                    zip.AddFile(path, "");
+                    fullPaths.Add(Path.GetFullPath(path));
                 }
             }
+
+            // no files were added to the archive; there is nothing to upload
+            if (fullPaths.Count == 0)
+                return null;
+
+            var view = _view.CreateTask("Archive");
+            view.SetStatus("Compressing...");
+            view.Show();
+
+            zip.SaveProgress += (s, e) =>
+            {
+                if (view.CancelToken.IsCancellationRequested)
+                {
+                    e.Cancel = true;
+                }
+                else
+                {
+                    Console.WriteLine($"zip - saved {e.EntriesSaved}/{e.EntriesTotal}, bytes {e.BytesTransferred}/{e.TotalBytesToTransfer},");
+                    if (e.EventType == ZipProgressEventType.Saving_BeforeWriteEntry)
+                    {
+                        var progress = e.EntriesSaved / (double)e.EntriesTotal;
+                        view.SetProgress(e.EntriesSaved, e.EntriesTotal, false);
+                        Console.WriteLine($"zip progress {progress}%");
+                    }
+                }
+            };
+
+            await Task.Run(() => zip.Save(zipPath), view.CancelToken);
+
+            if (view.CancelToken.IsCancellationRequested)
+                return null;
+
+            var info = new FileInfo(zipPath);
+            var size = info.Length;
+
+            view.SetStatus("Uploading...");
+            view.SetProgress(0, size, true);
+
+            UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, size, true);
+
+            var archiveName = RandomEx.GetCryptoUniqueString(10) + ".zip";
+            var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, view.CancelToken);
+            return UploadWrapper(view, uploadTask);
         }
 
         private static async Task<UploadViewState> UploadInternal(SupportedUploadType type, DoUploadDelegate doUpload, long size, string extension, string name = null, string viewName = null)
@@ -175,12 +171,12 @@ namespace Clowd.Capture
 
             var view = _view.CreateTask(viewName);
             view.SetStatus("Uploading...");
-            view.SetProgress(0, size);
+            view.SetProgress(0, size, true);
             view.Show();
 
             UploadProgressHandler handler = (bytesUploaded) =>
             {
-                view.SetProgress(bytesUploaded, size);
+                view.SetProgress(bytesUploaded, size, true);
             };
 
             var uploadTask = doUpload(provider, handler, fileName, view.CancelToken);
