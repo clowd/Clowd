@@ -6,7 +6,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Clowd.Capture;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
@@ -386,11 +385,8 @@ namespace Clowd.UI
         {
             if (!VerifyArtworkExists())
                 return;
-            var ms = new MemoryStream();
-            GetRenderedPng().Save(ms);
-            ms.Position = 0;
-
-            await UploadManager.UploadImage(ms, "png", viewName: "Image");
+            
+            await UploadManager.UploadImage(GetRenderedBitmap(), "Edited Image");
         }
 
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)

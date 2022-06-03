@@ -3,7 +3,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Media;
-using Clowd.Capture;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Helpers;
@@ -148,8 +147,7 @@ namespace Clowd.UI.Unmanaged
                     }
                     else if (captureType == CaptureType.Upload)
                     {
-                        await using var fs = File.OpenRead(session.PreviewImgPath);
-                        await UploadManager.UploadImage(fs, ".png", "Screenshot");
+                        await UploadManager.UploadFile(session.PreviewImgPath, "screenshot.png");
                     }
                     else
                     {

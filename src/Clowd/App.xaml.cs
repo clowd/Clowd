@@ -14,7 +14,6 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Clowd.Capture;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI;
@@ -428,16 +427,11 @@ namespace Clowd
 
             if (data.ContainsImage())
             {
-                var img = data.GetImage();
-                var ms = new MemoryStream();
-                img.Save(ms, ImageFormat.Png);
-                ms.Position = 0;
-                UploadManager.UploadImage(ms, "png", viewName: "Pasted Image");
+                UploadManager.UploadImage(data.GetImage(), "Clipboard Image");
             }
             else if (data.ContainsText())
             {
-                var ms = new MemoryStream(data.GetText().ToUtf8());
-                UploadManager.UploadText(ms, "txt", viewName: "Pasted Text");
+                UploadManager.UploadText(data.GetText(), "Clipboard Text");
             }
             else if (data.ContainsFileDropList())
             {
@@ -464,7 +458,7 @@ namespace Clowd
 
         private async void OnFilesReceived(string[] filePaths)
         {
-            await UploadManager.UploadFiles(filePaths);
+            await UploadManager.UploadSeveralFiles(filePaths);
         }
 
         private void KillOtherClowdProcess()
