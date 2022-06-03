@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Media.Imaging;
 using Clowd.Config;
 using Clowd.UI.Helpers;
 using Clowd.UI.Pages;
@@ -11,78 +12,110 @@ using Clowd.Upload;
 using Clowd.Util;
 using Ionic.Zip;
 using Ookii.Dialogs.Wpf;
+using RT.Util.ExtensionMethods;
 
-namespace Clowd.Capture
+namespace Clowd
 {
     public static class UploadManager
     {
-        static SettingsRoot _settings => SettingsRoot.Current;
-
-        private delegate Task<UploadResult> DoUploadDelegate(IUploadProvider provider, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
-
         private static readonly ITasksView _view = new TasksViewManager();
+        private static readonly IMimeProvider _mime = new MimeProvider();
 
-        public static Task<UploadViewState> UploadImage(Stream fileStream, string extension, string name = null, string viewName = null)
+        public static async Task<UploadViewState> UploadImage(BitmapSource image, string imgType)
         {
-            return UploadStream(SupportedUploadType.Image, fileStream, extension, name, viewName);
+            var provider = await GetUploadProvider(SupportedUploadType.Image);
+            if (provider == null)
+                return null;
+
+            var ms = new MemoryStream();
+            var enc = new PngBitmapEncoder();
+            enc.Frames.Add(BitmapFrame.Create(image));
+            enc.Save(ms);
+
+            ms.Position = 0;
+
+            var view = _view.CreateTask(imgType);
+            view.SetStatus("Uploading...");
+            view.Show();
+
+            UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, ms.Length, true);
+
+            var fileName = RandomEx.GetCryptoUniqueString(10) + ".png";
+            var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
+            return UploadWrapper(view, uploadTask);
         }
 
-        public static Task<UploadViewState> UploadVideo(Stream fileStream, string extension, string name = null, string viewName = null)
+        public static async Task<UploadViewState> UploadText(string text, string textType)
         {
-            return UploadStream(SupportedUploadType.Video, fileStream, extension, name, viewName);
+            var provider = await GetUploadProvider(SupportedUploadType.Text);
+            if (provider == null)
+                return null;
+
+            var ms = new MemoryStream(text.ToUtf8());
+
+            var view = _view.CreateTask(textType);
+            view.SetStatus("Uploading...");
+            view.Show();
+
+            UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, ms.Length, true);
+
+            var fileName = RandomEx.GetCryptoUniqueString(10) + ".txt";
+            var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
+            return UploadWrapper(view, uploadTask);
         }
 
-        public static Task<UploadViewState> UploadText(Stream fileStream, string extension, string name = null, string viewName = null)
+        public static async Task<UploadViewState> UploadFile(string filePath, string fileNameOverride = null)
         {
-            return UploadStream(SupportedUploadType.Text, fileStream, extension, name, viewName);
+            var fileInfo = new FileInfo(filePath);
+            var fileName = fileNameOverride ?? Path.GetFileName(filePath);
+            var extension = Path.GetExtension(filePath);
+            var category = _mime.GetCategoryFromExtension(extension);
+
+            var stype = category switch
+            {
+                ContentCategory.Image => SupportedUploadType.Image,
+                ContentCategory.Text => SupportedUploadType.Text,
+                ContentCategory.Video => SupportedUploadType.Video,
+                _ => SupportedUploadType.Binary,
+            };
+
+            var provider = await GetUploadProvider(stype);
+            if (provider == null)
+                return null;
+
+            var view = _view.CreateTask($"{stype} ({fileName})");
+            view.SetStatus("Uploading...");
+            view.Show();
+
+            var uniqueName = RandomEx.GetCryptoUniqueString(10) + "_" + fileName;
+            UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, fileInfo.Length, true);
+
+            var uploadTask = provider.UploadAsync(filePath, handler, uniqueName, view.CancelToken);
+            return UploadWrapper(view, uploadTask);
         }
 
-        public static Task<UploadViewState> UploadFiles(params string[] filePaths)
+        public static async Task<UploadViewState> UploadSeveralFiles(params string[] filePaths)
         {
-            IMimeProvider mimedb = new MimeProvider();
-
             if (filePaths.Length == 1 && File.Exists(filePaths[0]))
             {
                 var path = Path.GetFullPath(filePaths[0]);
                 var info = new FileInfo(path);
                 var ext = Path.GetExtension(path);
-                var mime = mimedb.GetMimeFromExtension(ext);
-                var category = mimedb.GetCategoryFromExtension(ext);
-
-                SupportedUploadType supported = SupportedUploadType.Binary;
-                switch (category)
-                {
-                    case ContentCategory.Image:
-                        supported = SupportedUploadType.Image;
-                        break;
-                    case ContentCategory.Text:
-                        supported = SupportedUploadType.Text;
-                        break;
-                    case ContentCategory.Video:
-                        supported = SupportedUploadType.Video;
-                        break;
-                }
+                var mime = _mime.GetMimeFromExtension(ext);
+                var category = _mime.GetCategoryFromExtension(ext);
 
                 // zip the single file if:
                 // - the file type is unknown / is not a special type like image (can not be rendered nicely in browser)
                 // - we think the mime type might be compressible
                 // - the file size is > 5mb
-                var compress = supported == SupportedUploadType.Binary && mime.Compressible != false && info.Length > 1024 * 1024 * 5;
-
+                var compress = category == ContentCategory.Unknown && mime.Compressible != false && info.Length > 1024 * 1024 * 5;
                 if (!compress)
                 {
-                    DoUploadDelegate upload = (provider, progress, uploadName, cancelToken) => provider.UploadAsync(path, progress, uploadName, cancelToken);
-                    return UploadInternal(supported, upload, info.Length, ext, Path.GetFileNameWithoutExtension(path), Path.GetFileName(path));
+                    return await UploadFile(path);
                 }
             }
 
-            return ZipUpload(filePaths);
-        }
-
-        private static Task<UploadViewState> UploadStream(SupportedUploadType type, Stream fileStream, string extension, string name, string viewName)
-        {
-            DoUploadDelegate upload = (provider, progress, uploadName, cancelToken) => provider.UploadAsync(fileStream, progress, uploadName, cancelToken);
-            return UploadInternal(SupportedUploadType.Image, upload, fileStream.Length, extension, name, viewName);
+            return await ZipUpload(filePaths);
         }
 
         private static async Task<UploadViewState> ZipUpload(string[] filePaths)
@@ -154,35 +187,6 @@ namespace Clowd.Capture
             return UploadWrapper(view, uploadTask);
         }
 
-        private static async Task<UploadViewState> UploadInternal(SupportedUploadType type, DoUploadDelegate doUpload, long size, string extension, string name = null, string viewName = null)
-        {
-            if (viewName == null)
-                viewName = type.ToString();
-
-            var rnd = RandomEx.GetCryptoUniqueString(10);
-            name = name == null ? rnd : rnd + "_" + name;
-
-            extension = extension.Trim('.');
-            var fileName = $"{name}.{extension}";
-
-            var provider = await GetUploadProvider(type);
-            if (provider == null)
-                return null;
-
-            var view = _view.CreateTask(viewName);
-            view.SetStatus("Uploading...");
-            view.SetProgress(0, size, true);
-            view.Show();
-
-            UploadProgressHandler handler = (bytesUploaded) =>
-            {
-                view.SetProgress(bytesUploaded, size, true);
-            };
-
-            var uploadTask = doUpload(provider, handler, fileName, view.CancelToken);
-            return UploadWrapper(view, uploadTask);
-        }
-
         private static UploadViewState UploadWrapper(ITasksViewItem view, Task<UploadResult> uploadTask)
         {
             var finalTask = uploadTask.ContinueWith<UploadResult>(task =>
@@ -210,7 +214,7 @@ namespace Clowd.Capture
 
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
         {
-            var settings = _settings.Uploads;
+            var settings = SettingsRoot.Current.Uploads;
             UploadProviderInfo provider;
 
             switch (type)
@@ -235,66 +239,61 @@ namespace Clowd.Capture
                 return provider.Provider;
 
             var enabled = settings.GetEnabledProviders(type).ToArray();
-
-            if (enabled.Length > 0)
-            {
-                using (TaskDialog dialog = new TaskDialog())
-                {
-                    dialog.WindowTitle = $"{type} Upload";
-                    dialog.MainInstruction = $"Select an upload destination:";
-                    dialog.Content = $"You have not selected a default upload provider for '{type}', where would you like to send your file?";
-                    dialog.ButtonStyle = TaskDialogButtonStyle.CommandLinks;
-
-                    Dictionary<TaskDialogButton, UploadProviderInfo> providerLookup = new Dictionary<TaskDialogButton, UploadProviderInfo>();
-
-                    foreach (var p in enabled)
-                    {
-                        TaskDialogButton btn = new TaskDialogButton(p.Provider.Name);
-                        btn.CommandLinkNote = p.Provider.Description;
-                        dialog.Buttons.Add(btn);
-                        providerLookup[btn] = p;
-                    }
-
-                    dialog.AllowDialogCancellation = true;
-                    dialog.VerificationText = $"Set choice as default for {type}";
-
-                    var dialogResult = await dialog.ShowAsNiceDialogAsync(null);
-
-                    if (dialogResult != null && providerLookup.ContainsKey(dialogResult))
-                    {
-                        var lookup = providerLookup[dialogResult];
-                        if (dialog.IsVerificationChecked)
-                        {
-                            switch (type)
-                            {
-                                case SupportedUploadType.Image:
-                                    settings.Image = lookup;
-                                    break;
-                                case SupportedUploadType.Video:
-                                    settings.Video = lookup;
-                                    break;
-                                case SupportedUploadType.Text:
-                                    settings.Text = lookup;
-                                    break;
-                                case SupportedUploadType.Binary:
-                                    settings.Binary = lookup;
-                                    break;
-                            }
-                        }
-
-                        return lookup.Provider;
-                    }
-
-                    return null;
-                }
-            }
-            else
+            if (enabled.Length == 0)
             {
                 await NiceDialog.ShowSettingsPromptAsync(null, SettingsPageTab.SettingsUploads,
                     $"There is no upload provider configured/enabled for '{type}'. Please visit settings to configure before uploading.");
 
                 return null;
             }
+
+            using TaskDialog dialog = new TaskDialog();
+            dialog.WindowTitle = $"{type} Upload";
+            dialog.MainInstruction = $"Select an upload destination:";
+            dialog.Content = $"You have not selected a default upload provider for '{type}', where would you like to send your file?";
+            dialog.ButtonStyle = TaskDialogButtonStyle.CommandLinks;
+
+            Dictionary<TaskDialogButton, UploadProviderInfo> providerLookup = new Dictionary<TaskDialogButton, UploadProviderInfo>();
+
+            foreach (var p in enabled)
+            {
+                TaskDialogButton btn = new TaskDialogButton(p.Provider.Name);
+                btn.CommandLinkNote = p.Provider.Description;
+                dialog.Buttons.Add(btn);
+                providerLookup[btn] = p;
+            }
+
+            dialog.AllowDialogCancellation = true;
+            dialog.VerificationText = $"Set choice as default for {type}";
+
+            var dialogResult = await dialog.ShowAsNiceDialogAsync(null);
+
+            if (dialogResult != null && providerLookup.ContainsKey(dialogResult))
+            {
+                var lookup = providerLookup[dialogResult];
+                if (dialog.IsVerificationChecked)
+                {
+                    switch (type)
+                    {
+                        case SupportedUploadType.Image:
+                            settings.Image = lookup;
+                            break;
+                        case SupportedUploadType.Video:
+                            settings.Video = lookup;
+                            break;
+                        case SupportedUploadType.Text:
+                            settings.Text = lookup;
+                            break;
+                        case SupportedUploadType.Binary:
+                            settings.Binary = lookup;
+                            break;
+                    }
+                }
+
+                return lookup.Provider;
+            }
+
+            return null;
         }
     }
 
