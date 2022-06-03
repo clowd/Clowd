@@ -20,7 +20,6 @@ namespace Clowd
         void SetStatus(string status);
         void SetCompleted(string uploadUrl);
         void SetError(Exception ex);
-        void SetProgress(double percProgress);
-        void SetProgress(long completedBytes, long totalBytes);
+        void SetProgress(long completed, long total, bool isBytes);
     }
 }

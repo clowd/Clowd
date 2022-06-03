@@ -22,7 +22,7 @@ namespace Clowd
     [Flags]
     public enum SupportedUploadType
     {
-        None = 1 << 0,
+        Unknown = 1 << 0,
         Image = 1 << 1,
         Video = 1 << 2,
         Binary = 1 << 3,
