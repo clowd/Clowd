@@ -18,6 +18,7 @@
     <Page.Resources>
         <RoutedUICommand x:Key="Commands.ProviderSettings" />
         <conv:StreamToBitmapSourceConverter x:Key="Stream2Bitmap" />
+        <conv:EnumMatchToBooleanConverter x:Key="HasEnum2Bool" />
         <Style BasedOn="{StaticResource BodyTextBlockStyle}" TargetType="TextBlock" />
         <Style BasedOn="{StaticResource {x:Type ComboBox}}" TargetType="ComboBox">
             <Setter Property="MinWidth" Value="160" />
@@ -55,8 +56,9 @@
                     <DataTemplate>
                         <Grid HorizontalAlignment="Stretch">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="*" />
+                                <RowDefinition Height="25" />
+                                <RowDefinition Height="25" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="50" />
@@ -93,7 +95,31 @@
                                 CommandParameter="{Binding}">
                                 <wpfui:SymbolIcon Foreground="White" Symbol="Settings20" />
                             </Button>
+                            <controls:SimpleStackPanel
+                                Grid.Row="2"
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="10">
+                                <wpfui:SymbolIcon x:Name="supportsImage" Symbol="Camera20" />
+                                <wpfui:SymbolIcon x:Name="supportsVideo" Symbol="Video24" />
+                                <wpfui:SymbolIcon x:Name="supportsText" Symbol="Code20" />
+                                <wpfui:SymbolIcon x:Name="supportsBinary" Symbol="Document20" />
+                            </controls:SimpleStackPanel>
                         </Grid>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}" Value="False">
+                                <Setter TargetName="supportsImage" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}" Value="False">
+                                <Setter TargetName="supportsVideo" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}" Value="False">
+                                <Setter TargetName="supportsText" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}" Value="False">
+                                <Setter TargetName="supportsBinary" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
