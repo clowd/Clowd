@@ -10,51 +10,47 @@ namespace Clowd.Upload
 {
     public class ImgurUploadProvider : UploadProviderBase
     {
-        public ImgurUploadProvider() : base()
-        { }
-
         public override string Name => "Imgur";
-        public override string Description => "Uploads an anonymous (but public) image or video to Imgur.com";
+        public override string Description => "Uploads a public image or video to Imgur.com";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.Image | SupportedUploadType.Video;
         public override Stream Icon => new Resource().ImgurIcon;
+
+        public string ClientId
+        {
+            get => _clientId;
+            set => Set(ref _clientId, value);
+        }
+
+        private string _clientId;
 
         public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName,
             CancellationToken cancelToken)
         {
-            var len = fileStream.Length;
-            progress(len / 3);
+            if (ClientId == null)
+                throw new ArgumentNullException("Client-ID must not be empty.");
 
-            using (var http = new HttpClient())
+            var auth = new System.Net.Http.Headers.AuthenticationHeaderValue("Client-ID", "c3bda1f4e978e28");
+
+            var args = new Dictionary<string, string>()
             {
-                http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Client-ID", "c3bda1f4e978e28");
-                MultipartFormDataContent multipart = new MultipartFormDataContent();
-                multipart.Add(new StreamContent(fileStream), "image", uploadName);
-                multipart.Add(new StringContent("file"), "type");
-                var response = await http.PostAsync("https://api.imgur.com/3/upload", multipart, cancelToken);
+                { "type", "file" }
+            };
 
-                if (!response.IsSuccessStatusCode)
-                    throw new Exception("Failed to upload file with error code: " + response.StatusCode);
+            var json = await SendFormDataFile("https://api.imgur.com/3/upload", fileStream, "image", progress, uploadName, args, auth: auth);
+            var parsed = JsonConvert.DeserializeObject<ImgurApiResponse>(json);
+            if (!parsed.success)
+                throw new Exception("Failed to upload file: " + parsed.status);
 
-                var json = await response.Content.ReadAsStringAsync();
-
-                progress(len);
-
-                var parsed = JsonConvert.DeserializeObject<ImgurApiResponse>(json);
-
-                if (!parsed.success)
-                    throw new Exception("Failed to upload file with error code: " + parsed.status);
-
-                return new UploadResult()
-                {
-                    ContentType = parsed.data.type,
-                    FileName = uploadName,
-                    Provider = this,
-                    PublicUrl = parsed.data.link,
-                    UploadKey = parsed.data.id,
-                    DeleteKey = parsed.data.deletehash,
-                    UploadTime = parsed.data.datetime.HasValue ? FromUnixTime(parsed.data.datetime.Value) : DateTime.Now,
-                };
-            }
+            return new UploadResult()
+            {
+                ContentType = parsed.data.type,
+                FileName = uploadName,
+                Provider = this,
+                PublicUrl = parsed.data.link,
+                UploadKey = parsed.data.id,
+                DeleteKey = parsed.data.deletehash,
+                UploadTime = parsed.data.datetime.HasValue ? FromUnixTime(parsed.data.datetime.Value) : DateTime.Now,
+            };
         }
 
         private static readonly DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);

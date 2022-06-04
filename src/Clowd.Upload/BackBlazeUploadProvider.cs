@@ -69,7 +69,7 @@ namespace Clowd.Upload
             var uploadUrlObject = await GetUploadUrl(options, bucketId, cancelToken);
             options.UploadAuthorizationToken = uploadUrlObject.AuthorizationToken;
 
-            using var http = GetB2HttpClient(TimeSpan.FromMinutes(60), progress);
+            using var http = GetHttpClient(TimeSpan.FromMinutes(60), progress);
 
             // https://www.backblaze.com/b2/docs/b2_upload_file.html
             var requestMessage = GetUploadReq(options, uploadUrlObject.UploadUrl, fileStream, uploadName);
@@ -126,7 +126,7 @@ namespace Clowd.Upload
             if (String.IsNullOrWhiteSpace(bucketName))
                 throw new ArgumentNullException(nameof(bucketName));
 
-            using var http = GetB2HttpClient(TimeSpan.FromSeconds(10));
+            using var http = GetHttpClient(TimeSpan.FromSeconds(15));
 
             var json = JsonConvert.SerializeObject(new
             {
@@ -149,31 +149,10 @@ namespace Clowd.Upload
 
         private async Task<B2UploadUrl> GetUploadUrl(B2Options options, string bucketId, CancellationToken token)
         {
-            using var http = GetB2HttpClient(TimeSpan.FromSeconds(10));
+            using var http = GetHttpClient(TimeSpan.FromSeconds(15));
             var uploadUrlRequest = FileUploadRequestGenerators.GetUploadUrl(options, bucketId);
             var uploadUrlResponse = await http.SendAsync(uploadUrlRequest, token);
             return await ResponseParser.ParseResponse<B2UploadUrl>(uploadUrlResponse);
-        }
-
-        private HttpClient GetB2HttpClient(TimeSpan timeout, UploadProgressHandler progress = null)
-        {
-            var handler = new HttpClientHandler() { AllowAutoRedirect = true };
-            var ph = new ProgressMessageHandler(handler);
-
-            if (progress != null)
-            {
-                ph.HttpSendProgress += (sender, args) =>
-                {
-                    // progress(args.BytesTransferred, args.TotalBytes);
-                    progress(args.BytesTransferred);
-                };
-            }
-
-            var client = new HttpClient(ph);
-            client.Timeout = timeout;
-            client.DefaultRequestHeaders.Accept.Clear();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            return client;
         }
 
         private static string GetSHA1Hash(Stream fileData)
