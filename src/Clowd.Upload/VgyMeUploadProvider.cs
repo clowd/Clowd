@@ -30,21 +30,15 @@ namespace Clowd.Upload
         {
             if (UserKey == null)
                 throw new ArgumentNullException("UserKey must not be empty.");
-            
-            using var http = GetVgyHttpClient(TimeSpan.FromSeconds(30), progress);
-            var uri = new Uri("https://vgy.me/upload");
 
-            using var content = new MultipartFormDataContent(RandomEx.GetString(12));
-            content.Add(new StreamContent(fileStream), "file", uploadName);
-            content.Add(new StringContent(UserKey), "userkey");
+            Dictionary<string, string> args = new()
+            {
+                { "userkey", UserKey }
+            };
 
-            using var resp = await http.PostAsync(uri, content);
-            var str = await resp.Content.ReadAsStringAsync();
-            var obj = JsonConvert.DeserializeObject<VgyResponse>(str);
-            
-            if (!resp.IsSuccessStatusCode)
-                throw new Exception($"Error uploading to vgy.me ({resp.StatusCode}). {obj?.messages?.FirstOrDefault()}");
-            
+            var resp = await SendFormDataFile("https://vgy.me/upload", fileStream, "file", progress, uploadName, args);
+            var obj = JsonConvert.DeserializeObject<VgyResponse>(resp);
+
             return new UploadResult()
             {
                 Provider = this,
@@ -66,27 +60,6 @@ namespace Clowd.Upload
             public string image { get; set; }
             public string delete { get; set; }
             public Dictionary<string, string> messages { get; set; }
-        }
-        
-        private HttpClient GetVgyHttpClient(TimeSpan timeout, UploadProgressHandler progress = null)
-        {
-            var handler = new HttpClientHandler() { AllowAutoRedirect = true };
-            var ph = new ProgressMessageHandler(handler);
-
-            if (progress != null)
-            {
-                ph.HttpSendProgress += (sender, args) =>
-                {
-                    // progress(args.BytesTransferred, args.TotalBytes);
-                    progress(args.BytesTransferred);
-                };
-            }
-
-            var client = new HttpClient(ph);
-            client.Timeout = timeout;
-            client.DefaultRequestHeaders.Accept.Clear();
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            return client;
         }
     }
 }

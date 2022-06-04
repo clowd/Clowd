@@ -14,6 +14,7 @@
     <PackageReference Include="RT.Serialization.Binary" Version="2.0.1708" />
     <PackageReference Include="RT.Serialization.Xml" Version="2.0.1708" />
     <PackageReference Include="RT.Util.Core" Version="2.0.1708" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.9" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.PlatformUtil\Clowd.PlatformUtil.csproj" />
