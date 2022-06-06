@@ -14,6 +14,7 @@
     <EmbeddedResource Include="Embed\mime-db.json" />
     <EmbeddedResource Include="Embed\vgyme.png" />
     <EmbeddedResource Include="Embed\catbox.png" />
+    <EmbeddedResource Include="Embed\hastebin.png" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="B2Net" Version="0.7.5" />
