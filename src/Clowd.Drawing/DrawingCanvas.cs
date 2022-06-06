@@ -1517,9 +1517,9 @@ namespace Clowd.Drawing
             ZoomPanCenter();
         }
 
-        public void ZoomPanActualSize()
+        public void ZoomPanActualSize(double zoom = 1d)
         {
-            ContentScale = 1;
+            ContentScale = zoom;
             ZoomPanCenter();
         }
 

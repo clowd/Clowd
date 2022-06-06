@@ -441,7 +441,11 @@ namespace Clowd.UI
 
         private void ZoomActualCommand(object sender, ExecutedRoutedEventArgs e)
         {
-            drawingCanvas.ZoomPanActualSize();
+            double zoom = 1d;
+            if (double.TryParse(e.Parameter as string, out var req))
+                zoom = req;
+            
+            drawingCanvas.ZoomPanActualSize(zoom);
         }
 
         private void ZoomFitCommand(object sender, ExecutedRoutedEventArgs e)
