@@ -61,8 +61,9 @@ namespace Clowd.UI.Config
 
         private void _button_Click(object sender, RoutedEventArgs e)
         {
-            if (IsEditing)
+            if (IsEditing || GlobalTrigger.IsPaused)
                 return;
+            GlobalTrigger.IsPaused = true;
             IsEditing = true;
             Trigger.KeyGesture = null;
             this.KeyDown += OnKeyDown;
@@ -100,6 +101,7 @@ namespace Clowd.UI.Config
         private void FinishEditing(Key key, ModifierKeys modifiers)
         {
             IsEditing = false;
+            GlobalTrigger.IsPaused = false;
             this.KeyDown -= OnKeyDown;
             this.KeyUp -= OnKeyUp;
             this.LostKeyboardFocus -= OnLostKeyboardFocus;
@@ -150,7 +152,7 @@ namespace Clowd.UI.Config
                 if (Trigger == null || Trigger.KeyGesture == null)
                 {
                     _button.Content = "(not set)";
-                    _status.ToolTip = "The gesture is not set or is an invalid gesture.";
+                    _status.ToolTip = Trigger?.Error ?? "The gesture is not set or is an invalid gesture.";
                     _status.Background = Brushes.PaleVioletRed;
                 }
                 else if (!Trigger.IsRegistered && !String.IsNullOrEmpty(Trigger.Error))
