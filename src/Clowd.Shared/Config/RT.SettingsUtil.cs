@@ -620,6 +620,11 @@ namespace RT.Util
         public string GetFileName()
         {
             string filename = AppName;
+
+#if DEBUG
+            filename += ".DEBUG";
+#endif
+
             switch (Kind)
             {
                 case SettingsKind.UserSpecific:
