@@ -100,13 +100,22 @@ namespace Clowd.Config
             private set => Set(ref _error, value);
         }
 
-        public event EventHandler TriggerExecuted;
+        public event EventHandler TriggerExecuted
+        {
+            add
+            {
+                _triggerExecuted += value;
+                if (!IsRegistered) RefreshHotkey();
+            }
+            remove { _triggerExecuted -= value; }
+        }
 
         private GlobalKeyGesture _keyGesture; // only persisted value
+        [ClassifyIgnore] private EventHandler _triggerExecuted;
         [ClassifyIgnore] private bool _isRegistered;
         [ClassifyIgnore] private string _error;
-        [ClassifyIgnore] private bool _disposed = false;
-        [ClassifyIgnore] private HotKey _hotKey = null;
+        [ClassifyIgnore] private bool _disposed;
+        [ClassifyIgnore] private HotKey _hotKey;
 
         public GlobalTrigger(Key key, ModifierKeys modifier)
             : this(new GlobalKeyGesture(key, modifier))
@@ -119,12 +128,12 @@ namespace Clowd.Config
         public GlobalTrigger(GlobalKeyGesture gesture)
         {
             _keyGesture = gesture;
-            Initialize();
+            RefreshHotkey();
         }
 
         public GlobalTrigger()
         {
-            Initialize();
+            RefreshHotkey();
         }
 
         private void Initialize()
@@ -171,13 +180,18 @@ namespace Clowd.Config
 
         private void OnExecuted(HotKey obj)
         {
-            TriggerExecuted?.Invoke(this, new EventArgs());
+            _triggerExecuted?.Invoke(this, new EventArgs());
         }
 
         private void RefreshHotkey()
         {
             _hotKey?.Dispose();
-            Initialize();
+
+            // only register hotkey if there is a valid trigger
+            if (_triggerExecuted != null)
+            {
+                Initialize();
+            }
         }
 
         public void BeforeSerialize()
@@ -201,7 +215,7 @@ namespace Clowd.Config
             _disposed = true;
             _hotKey?.Dispose();
             IsRegistered = false;
-            TriggerExecuted = null;
+            _triggerExecuted = null;
             Error = "Disposed";
         }
 
