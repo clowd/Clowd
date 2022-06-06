@@ -27,7 +27,7 @@ namespace Clowd.Upload
     public class AzureUploadProvider : UploadProviderBase
     {
         public override string Name => "Azure Storage";
-        public override string Description => "Uploads any file as a block blob to a public container";
+        public override string Description => "Uploads any file as a BlockBlob to a public container";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.All;
         public override Stream Icon => new Resource().AzureIcon;
 
