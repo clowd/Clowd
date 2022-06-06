@@ -14,7 +14,7 @@ namespace Clowd.Upload
     public class VgyMeUploadProvider : UploadProviderBase
     {
         public override string Name => "vgy.me";
-        public override string Description => "A free and easy to use image hosting service";
+        public override string Description => "A free image hosting service with private albums";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.Image;
         public override Stream Icon => new Resource().VgyMeIcon;
 
