@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
@@ -75,6 +76,9 @@ namespace Clowd.Config
     /// </summary>
     public sealed class GlobalTrigger : SimpleNotifyObject, IClassifyObjectProcessor, IDisposable
     {
+        public static bool IsPaused { get; set; }
+        private static List<GlobalTrigger> Instances = new();
+
         public string KeyGestureText => IsRegistered ? KeyGesture?.ToString() : null;
 
         public GlobalKeyGesture KeyGesture
@@ -104,6 +108,7 @@ namespace Clowd.Config
         {
             add
             {
+                ThrowIfDisposed();
                 _triggerExecuted += value;
                 if (!IsRegistered) RefreshHotkey();
             }
@@ -125,23 +130,42 @@ namespace Clowd.Config
             : this(new GlobalKeyGesture(key, ModifierKeys.None))
         { }
 
+        public GlobalTrigger()
+            : this(null)
+        { }
+
         public GlobalTrigger(GlobalKeyGesture gesture)
         {
             _keyGesture = gesture;
+            Instances.Add(this);
             RefreshHotkey();
         }
 
-        public GlobalTrigger()
+        private void RefreshHotkey()
         {
-            RefreshHotkey();
-        }
+            _hotKey?.Dispose();
+            
+            ThrowIfDisposed();
 
-        private void Initialize()
-        {
+            if (_triggerExecuted == null)
+            {
+                // do not register if there are no triggers
+                return;
+            }
+
             if (_keyGesture == null)
             {
                 IsRegistered = false;
                 Error = "Gesture is empty.";
+                return;
+            }
+
+            if (Instances.Except(new []{ this }).Any(i => i._keyGesture?.Equals(_keyGesture) == true))
+            {
+                _keyGesture = null;
+                IsRegistered = false;
+                Error = "Gesture is already in-use by another hotkey.";
+                OnPropertyChanged(nameof(KeyGesture));
                 return;
             }
 
@@ -153,7 +177,7 @@ namespace Clowd.Config
             {
                 // the hotkey is already registered within this process.
                 IsRegistered = false;
-                Error = "Selected gesture already set for a different action.";
+                Error = "Gesture is already in-use by another hotkey.";
                 return;
             }
 
@@ -180,17 +204,9 @@ namespace Clowd.Config
 
         private void OnExecuted(HotKey obj)
         {
-            _triggerExecuted?.Invoke(this, new EventArgs());
-        }
-
-        private void RefreshHotkey()
-        {
-            _hotKey?.Dispose();
-
-            // only register hotkey if there is a valid trigger
-            if (_triggerExecuted != null)
+            if (!IsPaused)
             {
-                Initialize();
+                _triggerExecuted?.Invoke(this, new EventArgs());
             }
         }
 
@@ -214,6 +230,7 @@ namespace Clowd.Config
                 return;
             _disposed = true;
             _hotKey?.Dispose();
+            Instances.Remove(this);
             IsRegistered = false;
             _triggerExecuted = null;
             Error = "Disposed";
