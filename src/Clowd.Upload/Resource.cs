@@ -14,6 +14,8 @@ namespace Clowd.Upload
         public Stream VgyMeIcon => GetStream("vgyme.png");
         
         public Stream CatboxIcon => GetStream("catbox.png");
+        
+        public Stream HastebinIcon => GetStream("hastebin.png");
 
         // https://github.com/jshttp/mime-db/blob/master/db.json
         public Stream MimeDb => GetStream("mime-db.json");
