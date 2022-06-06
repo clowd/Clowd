@@ -107,7 +107,8 @@
                                 Grid.Row="1"
                                 Grid.Column="2"
                                 VerticalAlignment="Top"
-                                Text="{Binding Provider.Description}" />
+                                Text="{Binding Provider.Description}"
+                                TextTrimming="CharacterEllipsis" />
                             <Button
                                 Grid.Row="0"
                                 Grid.RowSpan="2"

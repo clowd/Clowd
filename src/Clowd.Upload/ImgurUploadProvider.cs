@@ -10,8 +10,8 @@ namespace Clowd.Upload
 {
     public class ImgurUploadProvider : UploadProviderBase
     {
-        public override string Name => "Imgur";
-        public override string Description => "Uploads a public image or video to Imgur.com";
+        public override string Name => "Imgur.com";
+        public override string Description => "Media sharing where all uploads are shown on the front page";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.Image | SupportedUploadType.Video;
         public override Stream Icon => new Resource().ImgurIcon;
 

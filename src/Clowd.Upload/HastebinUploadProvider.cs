@@ -8,9 +8,22 @@ namespace Clowd.Upload
 {
     public class HastebinUploadProvider : UploadProviderBase
     {
-        public override string Name => "HasteBin";
+        public override string Name
+        {
+            get
+            {
+                try
+                {
+                    return $"hastebin ({new Uri(HasteBinUrl).Host})";
+                }
+                catch
+                {
+                    return "hastebin";
+                }
+            }
+        }
 
-        public override string Description => "A clean and anonymous (or self-hosted) code sharing site";
+        public override string Description => "Anonymous self-hosted text sharing with auto highlighting";
 
         public override SupportedUploadType SupportedUpload => SupportedUploadType.Text;
 
@@ -19,7 +32,7 @@ namespace Clowd.Upload
         public string HasteBinUrl
         {
             get => _hasteBinUrl;
-            set => Set(ref _hasteBinUrl, value);
+            set => Set(ref _hasteBinUrl, value, nameof(HasteBinUrl), nameof(Name));
         }
 
         private string _hasteBinUrl = "https://pastie.io";
