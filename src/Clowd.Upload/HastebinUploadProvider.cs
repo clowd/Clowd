@@ -22,12 +22,12 @@ namespace Clowd.Upload
             set => Set(ref _hasteBinUrl, value);
         }
 
-        private string _hasteBinUrl = "https://bin.caesay.com/";
+        private string _hasteBinUrl = "https://pastie.io";
 
         public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken)
         {
             var url = HasteBinUrl.TrimEnd('/');
-            var result = await SendFormDataFile(url + "/documents", fileStream, "data", progress);
+            var result = await SendFileAsContent(url + "/documents", fileStream, progress);
             var resp = JsonConvert.DeserializeObject<HasebinResponse>(result);
 
             if (resp?.key == null)
@@ -44,12 +44,16 @@ namespace Clowd.Upload
                 Provider = this,
                 PublicUrl = fileUrl,
                 FileName = uploadName,
+                DeleteKey = resp.secret,
             };
         }
 
         private class HasebinResponse
         {
             public string key { get; set; }
+            
+            // pastie.io only, native hastebin does not support 
+            public string secret { get; set; } 
         }
     }
 }

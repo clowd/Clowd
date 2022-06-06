@@ -36,7 +36,7 @@ namespace Clowd.Upload
                 { "userkey", UserKey }
             };
 
-            var resp = await SendFormDataFile("https://vgy.me/upload", fileStream, "file", progress, uploadName, args);
+            var resp = await SendFileAsFormData("https://vgy.me/upload", fileStream, "file", progress, uploadName, args);
             var obj = JsonConvert.DeserializeObject<VgyResponse>(resp);
 
             return new UploadResult()

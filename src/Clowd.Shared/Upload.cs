@@ -96,7 +96,7 @@ namespace Clowd
             return client;
         }
 
-        protected async Task<string> SendFormDataFile(
+        protected async Task<string> SendFileAsFormData(
             string url, Stream fileStream, string formName, UploadProgressHandler progress, string fileName = null,
             Dictionary<string, string> otherFields = null, HttpMethod method = null, string accept = "application/json", 
             TimeSpan? timeout = null, AuthenticationHeaderValue auth = null)
@@ -131,7 +131,29 @@ namespace Clowd
             var str = await resp.Content.ReadAsStringAsync();
 
             if (!resp.IsSuccessStatusCode)
-                throw new Exception($"Send failed (error {resp.StatusCode}){Environment.NewLine}{str}");
+                throw new Exception($"Send form data failed (error {resp.StatusCode}){Environment.NewLine}{str}");
+
+            return str;
+        }
+        
+        protected async Task<string> SendFileAsContent(
+            string url, Stream fileStream, UploadProgressHandler progress, HttpMethod method = null, 
+            string accept = "application/json", TimeSpan? timeout = null, AuthenticationHeaderValue auth = null)
+        {
+            method ??= HttpMethod.Post;
+            timeout ??= TimeSpan.FromSeconds(100);
+
+            using var req = new HttpRequestMessage(method, url)
+            {
+                Content = new StreamContent(fileStream),
+            };
+
+            using var http = GetHttpClient(timeout.Value, progress, accept, auth);
+            using var resp = await http.SendAsync(req);
+            var str = await resp.Content.ReadAsStringAsync();
+
+            if (!resp.IsSuccessStatusCode)
+                throw new Exception($"Send form data failed (error {resp.StatusCode}){Environment.NewLine}{str}");
 
             return str;
         }
