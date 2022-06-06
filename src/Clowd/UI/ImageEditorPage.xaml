@@ -152,12 +152,32 @@
             Command="{StaticResource Commands.ZoomActual}"
             Modifiers="Ctrl" />
         <KeyBinding
+            Key="D2"
+            Command="{StaticResource Commands.ZoomActual}"
+            CommandParameter="2"
+            Modifiers="Ctrl" />
+        <KeyBinding
+            Key="D3"
+            Command="{StaticResource Commands.ZoomActual}"
+            CommandParameter="3"
+            Modifiers="Ctrl" />
+        <KeyBinding
             Key="NumPad0"
             Command="{StaticResource Commands.ZoomFit}"
             Modifiers="Ctrl" />
         <KeyBinding
             Key="NumPad1"
             Command="{StaticResource Commands.ZoomActual}"
+            Modifiers="Ctrl" />
+        <KeyBinding
+            Key="NumPad2"
+            Command="{StaticResource Commands.ZoomActual}"
+            CommandParameter="2"
+            Modifiers="Ctrl" />
+        <KeyBinding
+            Key="NumPad3"
+            Command="{StaticResource Commands.ZoomActual}"
+            CommandParameter="3"
             Modifiers="Ctrl" />
         <KeyBinding Key="Home" Command="{StaticResource Commands.MoveToFront}" />
         <KeyBinding Key="End" Command="{StaticResource Commands.MoveToBack}" />
