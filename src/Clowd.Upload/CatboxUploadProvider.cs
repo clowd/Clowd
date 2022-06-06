@@ -14,7 +14,7 @@ namespace Clowd.Upload
     public class CatboxUploadProvider : UploadProviderBase
     {
         public override string Name => "catbox.moe";
-        public override string Description => "A simple, anonymous file host with expiry options (max 200mb).";
+        public override string Description => "A simple, anonymous file host with expiry options (max 200mb)";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.All;
         public override Stream Icon => new Resource().CatboxIcon;
 
