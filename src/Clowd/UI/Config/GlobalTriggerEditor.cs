@@ -67,7 +67,13 @@ namespace Clowd.UI.Config
             Trigger.KeyGesture = null;
             this.KeyDown += OnKeyDown;
             this.KeyUp += OnKeyUp;
+            this.LostKeyboardFocus += OnLostKeyboardFocus;
             UpdateControls();
+        }
+
+        private void OnLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            FinishEditing(Key.None, ModifierKeys.None);
         }
 
         private void OnKeyUp(object sender, KeyEventArgs e)
@@ -96,6 +102,7 @@ namespace Clowd.UI.Config
             IsEditing = false;
             this.KeyDown -= OnKeyDown;
             this.KeyUp -= OnKeyUp;
+            this.LostKeyboardFocus -= OnLostKeyboardFocus;
 
             if (!IsBlacklisted(key, modifiers))
             {
@@ -114,10 +121,10 @@ namespace Clowd.UI.Config
 
         private bool IsBlacklisted(Key key, ModifierKeys modifiers)
         {
-            if (modifiers != ModifierKeys.None)
-                return false;
-
-            if (key == Key.Escape)
+            if (key == Key.None)
+                return true;
+            
+            if (key == Key.Escape && modifiers == ModifierKeys.None)
                 return true;
 
             return false;
@@ -131,7 +138,7 @@ namespace Clowd.UI.Config
                 StringBuilder key = new StringBuilder();
                 foreach (var en in GetUniqueFlags(Keyboard.Modifiers))
                 {
-                    key.Append((ModifierKeys)en);
+                    key.Append(((ModifierKeys)en).ToString().Replace("Control", "Ctrl"));
                     key.Append('+');
                 }
 
@@ -142,7 +149,7 @@ namespace Clowd.UI.Config
             {
                 if (Trigger == null || Trigger.KeyGesture == null)
                 {
-                    _button.Content = "(undefined)";
+                    _button.Content = "(not set)";
                     _status.ToolTip = "The gesture is not set or is an invalid gesture.";
                     _status.Background = Brushes.PaleVioletRed;
                 }
