@@ -93,7 +93,7 @@ namespace Clowd
 
             UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, ms.Length, true);
 
-            var fileName = RandomEx.GetCryptoUniqueString(10) + ".txt";
+            var fileName = RandomEx.GetCryptoUniqueString(10);
             var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
             return await HandleUploadResult(view, uploadTask);
         }
