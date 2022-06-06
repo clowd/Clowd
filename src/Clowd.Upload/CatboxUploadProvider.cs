@@ -57,7 +57,7 @@ namespace Clowd.Upload
                     break;
             }
 
-            var resp = await SendFormDataFile(url, fileStream, "fileToUpload", progress, uploadName, args);
+            var resp = await SendFileAsFormData(url, fileStream, "fileToUpload", progress, uploadName, args);
             return new UploadResult()
             {
                 Provider = this,
