@@ -6,9 +6,6 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="default-provider-icon.png" />
-  </ItemGroup>
-  <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="RT.Serialization" Version="2.0.1708" />
     <PackageReference Include="RT.Serialization.Binary" Version="2.0.1708" />
