@@ -57,7 +57,7 @@ namespace Clowd
 
         [Browsable(false)] public abstract string Description { get; }
 
-        [Browsable(false)] public virtual Stream Icon => EmbeddedResource.GetStream("Clowd", "default-provider-icon.png");
+        [Browsable(false)] public abstract Stream Icon { get; }
 
         protected UploadProviderBase()
         { }
