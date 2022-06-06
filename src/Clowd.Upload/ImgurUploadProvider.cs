@@ -36,7 +36,7 @@ namespace Clowd.Upload
                 { "type", "file" }
             };
 
-            var json = await SendFormDataFile("https://api.imgur.com/3/upload", fileStream, "image", progress, uploadName, args, auth: auth);
+            var json = await SendFileAsFormData("https://api.imgur.com/3/upload", fileStream, "image", progress, uploadName, args, auth: auth);
             var parsed = JsonConvert.DeserializeObject<ImgurApiResponse>(json);
             if (!parsed.success)
                 throw new Exception("Failed to upload file: " + parsed.status);
