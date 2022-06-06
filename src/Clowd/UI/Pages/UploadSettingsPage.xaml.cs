@@ -62,12 +62,14 @@ namespace Clowd.UI.Pages
             m_default.Icon = SymbolRegular.ChevronCircleDown12;
             menu.Items.Add(m_default);
 
+            var uploads = SettingsRoot.Current.Uploads;
+
             if (info.Provider.SupportedUpload.HasFlag(SupportedUploadType.Image))
             {
                 var m_image = new MenuItem();
                 m_image.Header = "Image";
                 m_image.Icon = SymbolRegular.Camera20;
-                m_image.Click += (_, _) => SettingsRoot.Current.Uploads.Image = info;
+                m_image.Click += (_, _) => uploads.SetDefaultProvider(info, SupportedUploadType.Image);
                 m_default.Items.Add(m_image);
             }
 
@@ -76,7 +78,7 @@ namespace Clowd.UI.Pages
                 var m_video = new MenuItem();
                 m_video.Header = "Video";
                 m_video.Icon = SymbolRegular.Video24;
-                m_video.Click += (_, _) => SettingsRoot.Current.Uploads.Video = info;
+                m_video.Click += (_, _) => uploads.SetDefaultProvider(info, SupportedUploadType.Video);
                 m_default.Items.Add(m_video);
             }
 
@@ -85,7 +87,7 @@ namespace Clowd.UI.Pages
                 var m_text = new MenuItem();
                 m_text.Header = "Text";
                 m_text.Icon = SymbolRegular.Code20;
-                m_text.Click += (_, _) => SettingsRoot.Current.Uploads.Text = info;
+                m_text.Click += (_, _) => uploads.SetDefaultProvider(info, SupportedUploadType.Text);
                 m_default.Items.Add(m_text);
             }
 
@@ -94,7 +96,7 @@ namespace Clowd.UI.Pages
                 var m_binary = new MenuItem();
                 m_binary.Header = "File";
                 m_binary.Icon = SymbolRegular.Document20;
-                m_binary.Click += (_, _) => SettingsRoot.Current.Uploads.Binary = info;
+                m_binary.Click += (_, _) => uploads.SetDefaultProvider(info, SupportedUploadType.Binary);
                 m_default.Items.Add(m_binary);
             }
 
