@@ -30,12 +30,19 @@ namespace Clowd.Upload
             var result = await SendFormDataFile(url + "/documents", fileStream, "data", progress);
             var resp = JsonConvert.DeserializeObject<HasebinResponse>(result);
 
+            if (resp?.key == null)
+                throw new Exception("Empty response");
+
+            var fileUrl = url + "/" + resp.key;
+
             var ext = Path.GetExtension(uploadName);
+            if (!String.IsNullOrWhiteSpace(ext))
+                fileUrl += ext;
 
             return new UploadResult()
             {
                 Provider = this,
-                PublicUrl = url + "/" + resp.key,
+                PublicUrl = fileUrl,
                 FileName = uploadName,
             };
         }
