@@ -37,6 +37,11 @@
                 Background="Transparent"
                 BorderThickness="0"
                 ItemsSource="{Binding Providers}">
+                <ListView.Template>
+                    <ControlTemplate>
+                        <ItemsPresenter />
+                    </ControlTemplate>
+                </ListView.Template>
                 <ListView.Style>
                     <Style TargetType="ListView">
                         <Style.Triggers>
