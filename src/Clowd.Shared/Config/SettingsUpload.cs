@@ -19,6 +19,13 @@ namespace Clowd.Config
             set => Set(ref _isEnabled, value);
         }
 
+        [Browsable(false)]
+        public SupportedUploadType DefaultFor
+        {
+            get => _defaultFor;
+            set => Set(ref _defaultFor, value);
+        }
+
         [FlattenSettingsObject]
         public IUploadProvider Provider
         {
@@ -37,6 +44,7 @@ namespace Clowd.Config
 
         private bool _isEnabled;
         private IUploadProvider _provider;
+        private SupportedUploadType _defaultFor;
     }
 
     public class SettingsUpload : CategoryBase
@@ -45,37 +53,33 @@ namespace Clowd.Config
 
         private List<UploadProviderInfo> _providers = new();
 
-        public UploadProviderInfo Image
-        {
-            get => _image?.IsEnabled == true ? _image : null;
-            set => Set(ref _image, value);
-        }
-
-        public UploadProviderInfo Video
-        {
-            get => _video?.IsEnabled == true ? _video : null;
-            set => Set(ref _video, value);
-        }
-
-        public UploadProviderInfo Binary
-        {
-            get => _binary?.IsEnabled == true ? _binary : null;
-            set => Set(ref _binary, value);
-        }
-
-        public UploadProviderInfo Text
-        {
-            get => _text?.IsEnabled == true ? _text : null;
-            set => Set(ref _text, value);
-        }
-
-        private UploadProviderInfo _image;
-        private UploadProviderInfo _video;
-        private UploadProviderInfo _binary;
-        private UploadProviderInfo _text;
-
         public SettingsUpload()
         { }
+
+        public void SetDefaultProvider(UploadProviderInfo provider, SupportedUploadType types)
+        {
+            provider.DefaultFor |= types;
+
+            // remove this default from all other providers
+            foreach (var p in _providers)
+            {
+                if (p == provider) continue;
+                p.DefaultFor &= ~types;
+            }
+        }
+
+        public void ClearAllDefaultProviders()
+        {
+            foreach (var p in _providers)
+            {
+                p.DefaultFor = SupportedUploadType.None;
+            }
+        }
+
+        public UploadProviderInfo GetDefaultProvider(SupportedUploadType type)
+        {
+            return GetEnabledProviders(type).FirstOrDefault(p => p.DefaultFor.HasFlag(type));
+        }
 
         public IEnumerable<UploadProviderInfo> GetEnabledProviders(SupportedUploadType type)
         {
@@ -87,7 +91,9 @@ namespace Clowd.Config
 
         protected override void AfterDeserializeInternal()
         {
-            // add any providers to the list which are 
+            // this function searches for and adds any 'IUploadProvider' classes 
+            // it can find that are not currently listed in the settings.
+
             var assembliesToSearch = AppDomain.CurrentDomain.GetAssemblies();
             var type = typeof(IUploadProvider);
             var types = assembliesToSearch
@@ -103,18 +109,7 @@ namespace Clowd.Config
 
             _providers.Sort(CustomComparer<UploadProviderInfo>.By(p => p.Provider.Name));
 
-            if (_image != null && _providers.SingleOrDefault(p => p == _image)?.IsEnabled != true)
-                _image = null;
-
-            if (_video != null && _providers.SingleOrDefault(p => p == _video)?.IsEnabled != true)
-                _video = null;
-
-            if (_binary != null && _providers.SingleOrDefault(p => p == _binary)?.IsEnabled != true)
-                _binary = null;
-
-            if (_text != null && _providers.SingleOrDefault(p => p == _text)?.IsEnabled != true)
-                _text = null;
-
+            // need to subscribe to all the providers so we can propegate property changed events
             foreach (var p in _providers)
             {
                 Subscribe(p);

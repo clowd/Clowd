@@ -59,41 +59,59 @@
                 </ListView.Style>
                 <ListView.ItemTemplate>
                     <DataTemplate>
-                        <Grid HorizontalAlignment="Stretch">
+                        <Grid
+                            x:Name="ProviderGrid"
+                            HorizontalAlignment="Stretch"
+                            Background="Transparent">
+                            <Grid.InputBindings>
+                                <MouseBinding
+                                    Command="{StaticResource Commands.ProviderSettings}"
+                                    CommandParameter="{Binding}"
+                                    Gesture="LeftDoubleClick" />
+                            </Grid.InputBindings>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="25" />
                                 <RowDefinition Height="25" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20" />
                                 <ColumnDefinition Width="50" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
+                            <CheckBox
+                                Grid.RowSpan="3"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                IsChecked="{Binding IsEnabled}" />
                             <Image
+                                Grid.Row="0"
                                 Grid.RowSpan="2"
+                                Grid.Column="1"
                                 MaxWidth="30"
                                 MaxHeight="30"
                                 Margin="10"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}"
-                                Stretch="Uniform" />
+                                Stretch="Uniform"
+                                Visibility="Visible" />
                             <TextBlock
                                 Grid.Row="0"
-                                Grid.Column="1"
+                                Grid.Column="2"
                                 VerticalAlignment="Bottom"
                                 FontWeight="Bold"
                                 Text="{Binding Provider.Name}" />
                             <TextBlock
                                 Grid.Row="1"
-                                Grid.Column="1"
+                                Grid.Column="2"
                                 VerticalAlignment="Top"
                                 Text="{Binding Provider.Description}" />
                             <Button
                                 Grid.Row="0"
                                 Grid.RowSpan="2"
-                                Grid.Column="2"
+                                Grid.Column="3"
                                 Margin="10"
                                 VerticalAlignment="Center"
                                 Command="{StaticResource Commands.ProviderSettings}"
@@ -102,27 +120,62 @@
                             </Button>
                             <controls:SimpleStackPanel
                                 Grid.Row="2"
-                                Grid.Column="1"
+                                Grid.Column="2"
                                 Orientation="Horizontal"
                                 Spacing="10">
-                                <wpfui:SymbolIcon x:Name="supportsImage" Symbol="Camera20" />
-                                <wpfui:SymbolIcon x:Name="supportsVideo" Symbol="Video24" />
-                                <wpfui:SymbolIcon x:Name="supportsText" Symbol="Code20" />
-                                <wpfui:SymbolIcon x:Name="supportsBinary" Symbol="Document20" />
+                                <wpfui:SymbolIcon
+                                    x:Name="SupportsImage"
+                                    FontSize="20"
+                                    Symbol="Camera20" />
+                                <wpfui:SymbolIcon
+                                    x:Name="SupportsVideo"
+                                    FontSize="20"
+                                    Symbol="Video24" />
+                                <wpfui:SymbolIcon
+                                    x:Name="SupportsText"
+                                    FontSize="20"
+                                    Symbol="Code20" />
+                                <wpfui:SymbolIcon
+                                    x:Name="SupportsBinary"
+                                    FontSize="20"
+                                    Symbol="Document20" />
                             </controls:SimpleStackPanel>
                         </Grid>
                         <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                <Setter TargetName="ProviderGrid" Property="Opacity" Value="0.5" />
+                            </DataTrigger>
+
+                            <!--  Visibility of "supports" icons  -->
                             <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}" Value="False">
-                                <Setter TargetName="supportsImage" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="SupportsImage" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}" Value="False">
-                                <Setter TargetName="supportsVideo" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="SupportsVideo" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}" Value="False">
-                                <Setter TargetName="supportsText" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="SupportsText" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}" Value="False">
-                                <Setter TargetName="supportsBinary" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="SupportsBinary" Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+
+                            <!--  Show "supports" icon as bold if it is also the default  -->
+                            <DataTrigger Binding="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}" Value="True">
+                                <Setter TargetName="SupportsImage" Property="Foreground" Value="{DynamicResource AccentColorBrush}" />
+                                <Setter TargetName="SupportsImage" Property="Filled" Value="True" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}" Value="True">
+                                <Setter TargetName="SupportsVideo" Property="Foreground" Value="{DynamicResource AccentColorBrush}" />
+                                <Setter TargetName="SupportsVideo" Property="Filled" Value="True" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}" Value="True">
+                                <Setter TargetName="SupportsText" Property="Foreground" Value="{DynamicResource AccentColorBrush}" />
+                                <Setter TargetName="SupportsText" Property="Filled" Value="True" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}" Value="True">
+                                <Setter TargetName="SupportsBinary" Property="Foreground" Value="{DynamicResource AccentColorBrush}" />
+                                <Setter TargetName="SupportsBinary" Property="Filled" Value="True" />
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>

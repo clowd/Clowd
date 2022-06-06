@@ -247,27 +247,9 @@ namespace Clowd
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
         {
             var settings = SettingsRoot.Current.Uploads;
-            UploadProviderInfo provider;
+            UploadProviderInfo provider = settings.GetDefaultProvider(type);
 
-            switch (type)
-            {
-                case SupportedUploadType.Image:
-                    provider = settings.Image;
-                    break;
-                case SupportedUploadType.Video:
-                    provider = settings.Video;
-                    break;
-                case SupportedUploadType.Text:
-                    provider = settings.Text;
-                    break;
-                case SupportedUploadType.Binary:
-                    provider = settings.Binary;
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(type));
-            }
-
-            if (provider != null && provider.IsEnabled)
+            if (provider != null)
                 return provider.Provider;
 
             var enabled = settings.GetEnabledProviders(type).ToArray();
@@ -305,21 +287,7 @@ namespace Clowd
                 var lookup = providerLookup[dialogResult];
                 if (dialog.IsVerificationChecked)
                 {
-                    switch (type)
-                    {
-                        case SupportedUploadType.Image:
-                            settings.Image = lookup;
-                            break;
-                        case SupportedUploadType.Video:
-                            settings.Video = lookup;
-                            break;
-                        case SupportedUploadType.Text:
-                            settings.Text = lookup;
-                            break;
-                        case SupportedUploadType.Binary:
-                            settings.Binary = lookup;
-                            break;
-                    }
+                    settings.SetDefaultProvider(lookup, type);
                 }
 
                 return lookup.Provider;
