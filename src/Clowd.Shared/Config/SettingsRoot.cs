@@ -113,6 +113,7 @@ namespace Clowd.Config
 
         private void RegisterEvents()
         {
+            Uploads.DiscoverProviders();
             All.ToList().ForEach(a => a.PropertyChanged += Item_PropertyChanged);
         }
 

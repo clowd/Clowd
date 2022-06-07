@@ -65,7 +65,7 @@ namespace Clowd.Config
             }
 
             // subscribe the new object value
-            if (value is INotifyPropertyChanged npcAdd && _subscriptions.Contains(npcAdd))
+            if (value is INotifyPropertyChanged npcAdd && !_subscriptions.Contains(npcAdd))
             {
                 npcAdd.PropertyChanged += Item_PropertyChanged;
                 _subscriptions.Add(npcAdd);
