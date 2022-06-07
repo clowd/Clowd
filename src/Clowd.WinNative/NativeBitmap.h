@@ -13,7 +13,7 @@ protected:
 	int h;
 
 protected:
-	NativeBitmap() {}
+    NativeBitmap() = default;
 
 public:
 	NativeBitmap(int width, int height);

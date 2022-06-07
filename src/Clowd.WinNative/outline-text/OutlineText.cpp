@@ -715,9 +715,9 @@ void OutlineText::RenderFontShadow(
 		}
 	}
 
-	pBmpMask->UnlockBits(&bitmapDataMask);
-	pBmpDisplay->UnlockBits(&bitmapDataDest);
-	pBmpFontBodyBackup->UnlockBits(&bitmapDataSrc);
+    if (pBmpMask) pBmpMask->UnlockBits(&bitmapDataMask);
+    if (pBmpDisplay) pBmpDisplay->UnlockBits(&bitmapDataDest);
+    if (pBmpFontBodyBackup) pBmpFontBodyBackup->UnlockBits(&bitmapDataSrc);
 
 	pGraphics->DrawImage(pBmpDisplay,0,0,pBmpDisplay->GetWidth(),pBmpDisplay->GetHeight());
 
@@ -726,15 +726,15 @@ void OutlineText::RenderFontShadow(
 		delete pBmpMask;
 		pBmpMask = NULL;
 	}
+    if(pBmpDisplay)
+    {
+        delete pBmpDisplay;
+        pBmpDisplay = NULL;
+    }
 	if(pBmpFontBodyBackup)
 	{
 		delete pBmpFontBodyBackup;
 		pBmpFontBodyBackup = NULL;
-	}
-	if(pBmpDisplay)
-	{
-		delete pBmpDisplay;
-		pBmpDisplay = NULL;
 	}
 }
 
@@ -872,9 +872,9 @@ void OutlineText::RenderFontShadow(
 			}
 		}
 	}
-	pBmpMask->UnlockBits(&bitmapDataMask);
-	pBmpDisplay->UnlockBits(&bitmapDataDest);
-	pBmpFontBodyBackup->UnlockBits(&bitmapDataSrc);
+    if (pBmpMask) pBmpMask->UnlockBits(&bitmapDataMask);
+    if (pBmpDisplay) pBmpDisplay->UnlockBits(&bitmapDataDest);
+    if (pBmpFontBodyBackup) pBmpFontBodyBackup->UnlockBits(&bitmapDataSrc);
 
 	pGraphics->DrawImage(pBmpDisplay,0,0,pBmpDisplay->GetWidth(),pBmpDisplay->GetHeight());
 
@@ -883,15 +883,15 @@ void OutlineText::RenderFontShadow(
 		delete pBmpMask;
 		pBmpMask = NULL;
 	}
+    if(pBmpDisplay)
+    {
+        delete pBmpDisplay;
+        pBmpDisplay = NULL;
+    }
 	if(pBmpFontBodyBackup)
 	{
 		delete pBmpFontBodyBackup;
 		pBmpFontBodyBackup = NULL;
-	}
-	if(pBmpDisplay)
-	{
-		delete pBmpDisplay;
-		pBmpDisplay = NULL;
 	}
 }
 
@@ -1020,9 +1020,9 @@ void OutlineText::GdiRenderFontShadow(
 			}
 		}
 	}
-	pBmpMask->UnlockBits(&bitmapDataMask);
-	pBmpDisplay->UnlockBits(&bitmapDataDest);
-	pBmpFontBodyBackup->UnlockBits(&bitmapDataSrc);
+    if (pBmpMask) pBmpMask->UnlockBits(&bitmapDataMask);
+    if (pBmpDisplay) pBmpDisplay->UnlockBits(&bitmapDataDest);
+    if (pBmpFontBodyBackup) pBmpFontBodyBackup->UnlockBits(&bitmapDataSrc);
 
 	pGraphics->DrawImage(pBmpDisplay,0,0,pBmpDisplay->GetWidth(),pBmpDisplay->GetHeight());
 
@@ -1031,15 +1031,15 @@ void OutlineText::GdiRenderFontShadow(
 		delete pBmpMask;
 		pBmpMask = NULL;
 	}
+    if(pBmpDisplay)
+    {
+        delete pBmpDisplay;
+        pBmpDisplay = NULL;
+    }
 	if(pBmpFontBodyBackup)
 	{
 		delete pBmpFontBodyBackup;
 		pBmpFontBodyBackup = NULL;
-	}
-	if(pBmpDisplay)
-	{
-		delete pBmpDisplay;
-		pBmpDisplay = NULL;
 	}
 }
 
@@ -1167,9 +1167,9 @@ void OutlineText::GdiRenderFontShadow(
 			}
 		}
 	}
-	pBmpMask->UnlockBits(&bitmapDataMask);
-	pBmpDisplay->UnlockBits(&bitmapDataDest);
-	pBmpFontBodyBackup->UnlockBits(&bitmapDataSrc);
+    if (pBmpMask) pBmpMask->UnlockBits(&bitmapDataMask);
+    if (pBmpDisplay) pBmpDisplay->UnlockBits(&bitmapDataDest);
+    if (pBmpFontBodyBackup) pBmpFontBodyBackup->UnlockBits(&bitmapDataSrc);
 
 	pGraphics->DrawImage(pBmpDisplay,0,0,pBmpDisplay->GetWidth(),pBmpDisplay->GetHeight());
 
@@ -1178,15 +1178,15 @@ void OutlineText::GdiRenderFontShadow(
 		delete pBmpMask;
 		pBmpMask = NULL;
 	}
+    if(pBmpDisplay)
+    {
+        delete pBmpDisplay;
+        pBmpDisplay = NULL;
+    }
 	if(pBmpFontBodyBackup)
 	{
 		delete pBmpFontBodyBackup;
 		pBmpFontBodyBackup = NULL;
-	}
-	if(pBmpDisplay)
-	{
-		delete pBmpDisplay;
-		pBmpDisplay = NULL;
 	}
 }
 

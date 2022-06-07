@@ -142,7 +142,6 @@ void BorderWindow::UpdateLayer()
     HGDIOBJ hOld = SelectObject(memoryDC, hBitmap);
 
     Color accentColor(_lineColor.GetR(), _lineColor.GetG(), _lineColor.GetB());
-    Color complimentaryColor(255, 255, 255, 255);
 
     // draw layer
     Graphics g(memoryDC);
@@ -167,6 +166,7 @@ void BorderWindow::UpdateLayer()
     // draw text
     if (!_overlayTxt.empty())
     {
+        Color complimentaryColor(255, 255, 255, 255);
         //System::String^ clrstr = _overlayTxt;
         //auto pszbuf = msclr::interop::marshal_as<std::wstring>(clrstr);
 

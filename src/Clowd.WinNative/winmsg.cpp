@@ -425,7 +425,6 @@ XMSGITEM xhittestlist[] =
 
 wstring GetHitTestText(DWORD nchittest)
 {
-	wstring outp;
 	for (int i = 0; i < NUM_XHITTEST; i++)
 	{
 		auto& item = xhittestlist[i];
