@@ -41,11 +41,12 @@ namespace Clowd
 
         private TaskbarIcon _taskbarIcon;
         private MutexArgsForwarder _processor;
+        private ILogger _log;
 
         protected override async void OnStartup(StartupEventArgs e)
         {
             var appArgs = SquirrelUtil.Startup(e.Args);
-            var log = SetupExceptionHandling(SquirrelUtil.IsInstalled);
+            _log = SetupExceptionHandling(SquirrelUtil.IsInstalled);
 
             try
             {
@@ -79,7 +80,7 @@ namespace Clowd
             }
             catch (Exception ex)
             {
-                log.Fatal(ex);
+                _log.Fatal(ex);
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.ToString(), "Error starting Clowd. The program will now exit.");
                 ExitApp();
             }
@@ -108,6 +109,7 @@ namespace Clowd
             }
             catch (Exception ex)
             {
+                _log.Fatal(ex);
                 if (await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Error,
                         "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
                         "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
@@ -128,7 +130,6 @@ namespace Clowd
             SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
             SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
             SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut.TriggerExecuted += (s, e) => ToggleScreenRecording();
-
 
             //void setTheme()
             //{
@@ -179,7 +180,7 @@ namespace Clowd
             config.AddTarget(new FileTarget("file")
             {
                 FileName = logFile,
-                Layout = new NLog.Layouts.SimpleLayout("${longdate} [${level:uppercase=true}] - ${message}"),
+                Layout = new NLog.Layouts.SimpleLayout("${longdate} [${level:uppercase=true:truncate=4}] - ${message} ${onexception:\r\n---\r\n${exception:format=ToString,Data}\r\n---}"),
                 ConcurrentWrites = true, // should allow multiple processes to use the same file
                 KeepFileOpen = true,
                 ArchiveFileName = logArchiveFile,

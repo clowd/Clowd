@@ -77,9 +77,9 @@ namespace Clowd.Config
 
                     if (opt.Errors.Any())
                     {
-                        _log.Warn("Settings were deserialized with errors:");
+                        _log.Error("Settings were deserialized with errors:");
                         foreach (var e in opt.Errors)
-                            _log.Warn(e.Exception, e.ObjectPath);
+                            _log.Error(e.Exception, "Exception on field: " + e.ObjectPath);
                     }
                     else
                     {
@@ -138,13 +138,13 @@ namespace Clowd.Config
 
                 if (opt.Errors.Any())
                 {
-                    _log.Warn("Settings were saved with errors:");
+                    _log.Error("Settings were saved with errors:");
                     foreach (var e in opt.Errors)
-                        _log.Warn(e.Exception, e.ObjectPath);
+                        _log.Error(e.Exception, e.ObjectPath);
                 }
                 else
                 {
-                    _log.Debug("Settings were saved.");
+                    _log.Trace("Settings were saved.");
                 }
 
                 return true;

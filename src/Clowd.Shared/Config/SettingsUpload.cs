@@ -93,6 +93,14 @@ namespace Clowd.Config
         {
             // this function searches for and adds any 'IUploadProvider' classes 
             // it can find that are not currently listed in the settings.
+            // also, it removes any info classes which have a null provider
+            // (eg. if it failed to be deserialized)
+
+            foreach (var i in _providers.ToArray())
+            {
+                if (i.Provider == null)
+                    _providers.Remove(i);
+            }
 
             var assembliesToSearch = AppDomain.CurrentDomain.GetAssemblies();
             var type = typeof(IUploadProvider);
