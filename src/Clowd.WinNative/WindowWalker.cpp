@@ -361,8 +361,8 @@ bool WindowWalker::HitTestV2(const POINTFF& wp, HitV2Result* hitResult)
 
         // populate data
         href.hWnd = child;
-        href.style = GetWindowLong(child, GWL_STYLE);
-        href.exStyle = GetWindowLong(child, GWL_EXSTYLE);
+        href.style = GetWindowLongPtr(child, GWL_STYLE);
+        href.exStyle = GetWindowLongPtr(child, GWL_EXSTYLE);
         href.scrollH = (href.style & WS_HSCROLL) > 0;
         href.scrollV = (href.style & WS_VSCROLL) > 0;
 

@@ -93,13 +93,14 @@ namespace BitmapEx
 		int size = CalcStride(24, width) * abs(height);
 
 		auto bmi = mkcallocobj<BITMAPINFO>(sizeof(BITMAPINFOHEADER));
-		bmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-		bmi->bmiHeader.biBitCount = 24;
-		bmi->bmiHeader.biCompression = BI_RGB;
-		bmi->bmiHeader.biHeight = height;
-		bmi->bmiHeader.biWidth = width;
-		bmi->bmiHeader.biPlanes = 1;
-		bmi->bmiHeader.biSizeImage = size;
+        auto& header = bmi->bmiHeader;
+        header.biSize = sizeof(BITMAPINFOHEADER);
+        header.biBitCount = 24;
+        header.biCompression = BI_RGB;
+        header.biHeight = height;
+        header.biWidth = width;
+        header.biPlanes = 1;
+        header.biSizeImage = size;
 
 		return std::make_unique<NativeDib>(bmi.get());
 	}
@@ -109,13 +110,14 @@ namespace BitmapEx
 		int size = CalcStride(32, width) * abs(height);
 
 		auto bmi = mkcallocobj<BITMAPINFO>(sizeof(BITMAPINFOHEADER));
-		bmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-		bmi->bmiHeader.biBitCount = 32;
-		bmi->bmiHeader.biCompression = BI_RGB;
-		bmi->bmiHeader.biHeight = height;
-		bmi->bmiHeader.biWidth = width;
-		bmi->bmiHeader.biPlanes = 1;
-		bmi->bmiHeader.biSizeImage = size;
+        auto& header = bmi->bmiHeader;
+        header.biSize = sizeof(BITMAPINFOHEADER);
+        header.biBitCount = 32;
+        header.biCompression = BI_RGB;
+        header.biHeight = height;
+        header.biWidth = width;
+        header.biPlanes = 1;
+        header.biSizeImage = size;
 
 		return std::make_unique<NativeDib>(bmi.get());
 	}
@@ -125,15 +127,16 @@ namespace BitmapEx
 		int size = CalcStride(8, width) * abs(height);
 
 		auto bmi = mkcallocobj<BITMAPINFO>(sizeof(BITMAPINFOHEADER) + (sizeof(RGBQUAD) * 256));
-		bmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-		bmi->bmiHeader.biBitCount = 8;
-		bmi->bmiHeader.biClrImportant = 256;
-		bmi->bmiHeader.biClrUsed = 256;
-		bmi->bmiHeader.biCompression = BI_RGB;
-		bmi->bmiHeader.biHeight = height;
-		bmi->bmiHeader.biWidth = width;
-		bmi->bmiHeader.biPlanes = 1;
-		bmi->bmiHeader.biSizeImage = size;
+        auto& header = bmi->bmiHeader;
+        header.biSize = sizeof(BITMAPINFOHEADER);
+        header.biBitCount = 8;
+        header.biClrImportant = 256;
+        header.biClrUsed = 256;
+        header.biCompression = BI_RGB;
+        header.biHeight = height;
+        header.biWidth = width;
+        header.biPlanes = 1;
+        header.biSizeImage = size;
 
 		for (byte i = 0; ; i++)
 		{

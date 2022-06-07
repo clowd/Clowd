@@ -198,10 +198,11 @@ inline HRGN CreateRgnFromMultipleRects(RECT* rgnArr, int count)
 
 	size_t rdataSize = sizeof(RGNDATAHEADER) + (sizeof(RECT) * count);
 	auto rdata = mkcallocobj<RGNDATA>(rdataSize);
-	rdata->rdh.dwSize = sizeof(RGNDATAHEADER);
-	rdata->rdh.iType = RDH_RECTANGLES;
-	rdata->rdh.nCount = count;
-	rdata->rdh.nRgnSize = (sizeof(RECT) * count);
+    auto& header = rdata->rdh;
+    header.dwSize = sizeof(RGNDATAHEADER);
+    header.iType = RDH_RECTANGLES;
+    header.nCount = count;
+    header.nRgnSize = (sizeof(RECT) * count);
 
 	RECT bounds = rgnArr[0];
 

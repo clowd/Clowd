@@ -105,14 +105,25 @@ ITextStrategy* Canvas::TextOnlyOutline(
 
 Gdiplus::Bitmap* Canvas::GenImage(int width, int height)
 {
-	return new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB);
+    Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB);
+
+    if (bmp == NULL)
+        return NULL;
+
+    return bmp;
 }
 
 Gdiplus::Bitmap* Canvas::GenImage(int width, int height, std::vector<Gdiplus::Color>& vec, bool bHorizontal)
 {
 	Gdiplus::Bitmap* bmp = new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB);
 
-	DrawGradient::Draw(*bmp, vec, bHorizontal);
+    if (bmp == NULL)
+        return NULL;
+
+    if (!DrawGradient::Draw(*bmp, vec, bHorizontal)) {
+        delete bmp;
+        return NULL;
+    }
 
 	return bmp;
 }
@@ -139,8 +150,10 @@ Gdiplus::Bitmap* Canvas::GenImage(int width, int height, Gdiplus::Color clr)
 
 	pixels = (UINT*)bitmapData.Scan0;
 
-	if( !pixels )
-		return NULL;
+    if (!pixels) {
+        delete bmp;
+        return NULL;
+    }
 
 	UINT col = 0;
 	int stride = bitmapData.Stride >> 2;
@@ -181,8 +194,10 @@ Gdiplus::Bitmap* Canvas::GenImage(int width, int height, Gdiplus::Color clr, BYT
 
 	pixels = (UINT*)bitmapData.Scan0;
 
-	if( !pixels )
-		return NULL;
+    if (!pixels) {
+        delete bmp;
+        return NULL;
+    }
 
 	UINT col = 0;
 	int stride = bitmapData.Stride >> 2;
@@ -212,6 +227,9 @@ Gdiplus::Bitmap* Canvas::GenMask(
 		return NULL;
 
 	Gdiplus::Bitmap* pBmp = new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB);
+
+    if (pBmp == NULL)
+        return NULL;
 
 	Gdiplus::Graphics graphics((Gdiplus::Image*)(pBmp));
 	graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
