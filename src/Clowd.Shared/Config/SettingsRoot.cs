@@ -1,18 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Windows;
-using System.Windows.Input;
 using System.Windows.Media;
+using NLog;
 using RT.Serialization;
 using RT.Util;
 
 namespace Clowd.Config
 {
-    [Settings("Clowd", SettingsKind.UserSpecific, SettingsSerializer.ClassifyXml)]
-    public sealed class SettingsRoot : SettingsBase, IDisposable
+    public sealed class SettingsRoot : IDisposable
     {
         [Browsable(false), ClassifyIgnore] public static SettingsRoot Current { get; private set; }
 
@@ -37,28 +35,59 @@ namespace Clowd.Config
             Current = this;
         }
 
-        public override void Save(string filename = null, SettingsSerializer? serializer = null, SettingsOnFailure onFailure = SettingsOnFailure.Throw)
+        static SettingsRoot()
         {
-            SaveInternal(filename, serializer, onFailure);
+            Classify.DefaultOptions = GetClassifyOptions();
         }
 
-        public override void SaveLoud(string filename = null, SettingsSerializer? serializer = null)
-        {
-            SaveInternal(filename, serializer, SettingsOnFailure.Throw);
-        }
+        private static ILogger _log = LogManager.GetLogger(nameof(SettingsRoot));
 
-        public override void SaveQuiet(string filename = null, SettingsSerializer? serializer = null)
+        private static string FilePath =>
+#if DEBUG
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd", "Clowd.DEBUG.Settings.xml");
+#else
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd", "Clowd.Settings.xml");
+#endif
+
+        private static ClassifyOptions GetClassifyOptions()
         {
-            SaveInternal(filename, serializer, SettingsOnFailure.DoNothing);
+            var opt = new ClassifyOptions();
+            opt.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
+            opt.AddTypeSubstitution(new ClassifyColorTypeOptions());
+            return opt;
         }
 
         public static void LoadDefault()
         {
+            if (!File.Exists(FilePath))
+            {
+                CreateNew();
+                return;
+            }
+            
             try
             {
-                SettingsRoot tmp;
-                SettingsUtil.LoadSettings(out tmp);
-                tmp.RegisterEvents();
+                var opt = GetClassifyOptions();
+                opt.Errors = new List<ClassifyError>();
+
+                Ut.WaitSharingVio(maximum: TimeSpan.FromSeconds(5), func: () =>
+                {
+                    var settings = ClassifyXml.DeserializeFile<SettingsRoot>(FilePath, opt);
+                    settings.RegisterEvents();
+
+                    if (opt.Errors.Any())
+                    {
+                        _log.Warn("Settings were deserialized with errors:");
+                        foreach (var e in opt.Errors)
+                            _log.Warn(e.Exception, e.ObjectPath);
+                    }
+                    else
+                    {
+                        _log.Debug("Settings were loaded.");
+                    }
+
+                    return true;
+                });
             }
             catch
             {
@@ -77,7 +106,9 @@ namespace Clowd.Config
         {
             All.ToList().ForEach(a => a.PropertyChanged -= Item_PropertyChanged);
             All.ToList().ForEach(a => a.Dispose());
-            Current = null;
+
+            if (Current == this)
+                Current = null;
         }
 
         private void RegisterEvents()
@@ -87,13 +118,36 @@ namespace Clowd.Config
 
         private void Item_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            SaveQuiet();
+            Save();
         }
 
-        private void SaveInternal(string filename = null, SettingsSerializer? serializer = null, SettingsOnFailure onFailure = SettingsOnFailure.Throw)
+        public void Save()
         {
-            base.Save(filename, serializer, onFailure);
-            System.Diagnostics.Trace.WriteLine("Saved Settings");
+            var filename = FilePath;
+            var tempname = filename + ".~tmp";
+
+            var opt = GetClassifyOptions();
+            opt.Errors = new List<ClassifyError>();
+
+            Ut.WaitSharingVio(maximum: TimeSpan.FromSeconds(5), func: () =>
+            {
+                ClassifyXml.SerializeToFile(this, tempname, opt, format: ClassifyXmlFormat.Create("Settings"));
+                File.Delete(filename);
+                File.Move(tempname, filename);
+
+                if (opt.Errors.Any())
+                {
+                    _log.Warn("Settings were saved with errors:");
+                    foreach (var e in opt.Errors)
+                        _log.Warn(e.Exception, e.ObjectPath);
+                }
+                else
+                {
+                    _log.Debug("Settings were saved.");
+                }
+
+                return true;
+            });
         }
     }
 }

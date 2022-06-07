@@ -102,12 +102,6 @@ namespace Clowd
                 Assembly.Load(assy);
             }
 
-            Classify.DefaultOptions = new ClassifyOptions();
-            Classify.DefaultOptions.AddTypeProcessor(typeof(Color), new ClassifyColorTypeOptions());
-            Classify.DefaultOptions.AddTypeSubstitution(new ClassifyColorTypeOptions());
-
-            // TODO add upload providers, and graphics objects to classify "friendly classes" when it exists
-
             try
             {
                 SettingsRoot.LoadDefault();
