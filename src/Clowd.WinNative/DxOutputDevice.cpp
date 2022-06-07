@@ -243,7 +243,7 @@ void DxOutputDevice::CreateFontFormat(DxRef<IDWriteTextFormat>& format, FLOAT fo
     HR(dwrite->CreateTextFormat(family, NULL, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizePt, L"en-us", format.put()));
 }
 
-void DxOutputDevice::CreateFontLayout(DxRef<IDWriteTextLayout>& layout, IDWriteTextFormat* format, std::wstring txt, DWRITE_TEXT_METRICS* metrics, FLOAT maxW, FLOAT maxH)
+void DxOutputDevice::CreateFontLayout(DxRef<IDWriteTextLayout>& layout, IDWriteTextFormat* format, const std::wstring& txt, DWRITE_TEXT_METRICS* metrics, FLOAT maxW, FLOAT maxH)
 {
     HR(dwrite->CreateTextLayout(txt.c_str(), txt.size(), format, maxW, maxH, layout.put()));
     if (metrics != nullptr) HR((layout)->GetMetrics(metrics));

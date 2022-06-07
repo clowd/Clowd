@@ -374,7 +374,7 @@ void DxScreenCapture::RunMessagePump()
             DispatchMessage(&msg);
         }
     }
-    catch (System::Exception err)
+    catch (System::Exception& err)
     {
         errors.push_back(err);
     }
@@ -424,7 +424,7 @@ unsigned int __stdcall DxScreenCapture::RenderThreadProc(void* lpParam)
 
         pThis->RunRenderLoop(*pInfo, mon, myscreen);
     }
-    catch (System::Exception err)
+    catch (System::Exception& err)
     {
         // TODO, handle following responses from Present
         // DXGI_STATUS_OCCLUDED
@@ -2005,7 +2005,7 @@ json rect2json(RECT& rc)
     return j;
 }
 
-System::String DxScreenCapture::SaveSession(System::String sessionDirectory, System::String createdUtc)
+System::String DxScreenCapture::SaveSession(System::String sessionDirectory, const System::String& createdUtc)
 {
     if (!native->frame.captured)
         return nullptr;

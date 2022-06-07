@@ -182,7 +182,7 @@ public:
     ~DxScreenCapture();
     void Reset();
     void Close(bool waitForExit = false);
-    System::String SaveSession(System::String sessionDirectory, System::String createdUtc);
+    System::String SaveSession(System::String sessionDirectory, const System::String& createdUtc);
     void WriteToClipboard();
     //RECT GetSelection();
     //bool GetCaptured();

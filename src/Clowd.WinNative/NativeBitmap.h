@@ -21,7 +21,7 @@ public:
 	HDC GetBitmapDC();
 	int GetWidth();
 	int GetHeight();
-	void WriteToFilePNG(std::wstring filePath);
+	void WriteToFilePNG(const std::wstring& filePath);
 };
 
 class NativeDib : public NativeBitmap

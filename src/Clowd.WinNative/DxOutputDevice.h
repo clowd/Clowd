@@ -147,7 +147,7 @@ public:
     }
 
     void CreateFontFormat(DxRef<IDWriteTextFormat>& format, FLOAT fontSizePt, DWRITE_FONT_WEIGHT weight, bool monospaced);
-    void CreateFontLayout(DxRef<IDWriteTextLayout>& layout, IDWriteTextFormat* format, std::wstring txt, DWRITE_TEXT_METRICS* metrics, FLOAT maxW, FLOAT maxH);
+    void CreateFontLayout(DxRef<IDWriteTextLayout>& layout, IDWriteTextFormat* format, const std::wstring& txt, DWRITE_TEXT_METRICS* metrics, FLOAT maxW, FLOAT maxH);
 
     void CreateSolidBrush(DxRef<ID2D1SolidColorBrush>& brush, const D2D1_COLOR_F& color);
     void CreateSolidBrush(DxRef<ID2D1SolidColorBrush>& brush, const FLOAT r, const FLOAT g, const FLOAT b, const FLOAT a = 1.0f);

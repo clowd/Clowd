@@ -72,7 +72,7 @@ int NativeBitmap::GetHeight()
 	return h;
 }
 
-void NativeBitmap::WriteToFilePNG(std::wstring filePath)
+void NativeBitmap::WriteToFilePNG(const std::wstring& filePath)
 {
 	auto gdi = std::unique_ptr<Gdiplus::Bitmap>(Gdiplus::Bitmap::FromHBITMAP(hBitmap, 0));
 	CLSID pngClsid;
