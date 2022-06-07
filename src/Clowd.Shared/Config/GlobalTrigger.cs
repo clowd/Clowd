@@ -241,7 +241,7 @@ namespace Clowd.Config
             if (_keyGesture == null)
                 return "Trigger:{null/false}";
 
-            return $"Trigger:{{{_keyGesture?.Key}:{IsRegistered}}}";
+            return $"Trigger:{{{_keyGesture.Key}:{IsRegistered}}}";
         }
     }
 }

@@ -406,7 +406,7 @@ namespace Clowd.UI
         private async void PasteCommand(object sender, ExecutedRoutedEventArgs e)
         {
             var data = await ClipboardDataObject.GetClipboardData(this);
-            if (data.ContainsDataFormat(CANVAS_CLIPBOARD_FORMAT))
+            if (data != null && data.ContainsDataFormat(CANVAS_CLIPBOARD_FORMAT))
             {
                 var ms = data.GetDataFormat<MemoryStream>(CANVAS_CLIPBOARD_FORMAT);
                 if (ms != null)

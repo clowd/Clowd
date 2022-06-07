@@ -23,7 +23,7 @@ namespace Clowd.UI
             {
                 if (SourceCreated)
                 {
-                    return PlatformWindow.WindowBounds;
+                    return PlatformWindow?.WindowBounds;
                 }
                 else
                 {
@@ -109,13 +109,13 @@ namespace Clowd.UI
         private void SetTransitionsDisabled()
         {
             if (_transitionsDisabled.HasValue)
-                PlatformWindow.DwmSetTransitionsDisabled(_transitionsDisabled == true);
+                PlatformWindow?.DwmSetTransitionsDisabled(_transitionsDisabled == true);
         }
 
         private void SetNeverActivate()
         {
             if (_neverActivate.HasValue)
-                PlatformWindow.SetNeverActivateStyle(_neverActivate == true);
+                PlatformWindow?.SetNeverActivateStyle(_neverActivate == true);
         }
 
         protected virtual IntPtr WndProc(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

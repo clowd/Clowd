@@ -56,7 +56,7 @@ namespace Clowd.Util
             _mutex = new Mutex(false, _mutexName, out created);
             if (!created)
             {
-                if (args != null || args.Length > 0)
+                if (args != null && args.Length > 0)
                     await SendArgsToRemote(args);
 
                 // Can't call dispose here, we don't own the mutex and Dispose will try to release the mutex
@@ -137,7 +137,7 @@ namespace Clowd.Util
                     return;
                 }
 
-                if (!(request.ContentType ?? "").Split(';').FirstOrDefault().EqualsIgnoreCase("application/json"))
+                if (!(request.ContentType ?? "").Split(';').First().EqualsIgnoreCase("application/json"))
                 {
                     response.StatusCode = 415;
                     return;

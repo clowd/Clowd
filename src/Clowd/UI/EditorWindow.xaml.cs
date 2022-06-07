@@ -119,7 +119,7 @@ namespace Clowd.UI
             var newItem = GetTabFromSession(session);
             TabView.Items.Add(newItem);
             TabView.SelectedItem = newItem;
-            this.PlatformWindow.Activate();
+            PlatformWindow?.Activate();
         }
 
         public static void ShowAllPreviouslyActiveSessions()
@@ -152,7 +152,7 @@ namespace Clowd.UI
                 var openWnd = App.Current.Windows.OfType<EditorWindow>().FirstOrDefault(f => f.WindowId == session.ActiveWindowId);
                 if (openWnd != null)
                 {
-                    openWnd.PlatformWindow.Activate();
+                    openWnd.PlatformWindow?.Activate();
                     var tab = openWnd.TabView.Items.OfType<TabItem>().FirstOrDefault(t => GetSessionFromTab(t) == session);
                     if (tab != null)
                         openWnd.TabView.SelectedItem = tab;

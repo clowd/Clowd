@@ -77,7 +77,7 @@ namespace Clowd.UI
         public void Open(SettingsPageTab? selectedTab)
         {
             Show();
-            PlatformWindow.Activate();
+            PlatformWindow?.Activate();
             if (selectedTab != null)
             {
                 RootNavigation.Navigate(selectedTab.ToString());

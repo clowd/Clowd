@@ -420,7 +420,7 @@ namespace Clowd
         {
             var data = await ClipboardDataObject.GetClipboardData();
 
-            if (data.ContainsImage())
+            if (data != null && data.ContainsImage())
             {
                 UploadManager.UploadImage(data.GetImage(), "Clipboard Image");
             }

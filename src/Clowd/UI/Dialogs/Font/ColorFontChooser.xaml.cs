@@ -132,12 +132,12 @@ namespace Clowd.UI.Dialogs.Font
         {
             if (tbFontSize.Text.Length == 0)
             {
-                if (this.lstFontSizes.SelectedItem == null)
+                if (lstFontSizes.SelectedItem == null)
                 {
                     lstFontSizes.SelectedIndex = 0;
                 }
 
-                tbFontSize.Text = this.lstFontSizes.SelectedItem.ToString();
+                tbFontSize.Text = lstFontSizes.SelectedItem?.ToString();
             }
         }
 

@@ -402,7 +402,7 @@ namespace Clowd.UI
             if (!CanUndo()) return;
             var last = Pop(_history);
             _ignoreStrokesChange = true;
-            if (last.Type == StrokesHistoryNodeType.Added)
+            if (last != null && last.Type == StrokesHistoryNodeType.Added)
                 MainInkCanvas.Strokes.Remove(last.Strokes);
             else
                 MainInkCanvas.Strokes.Add(last.Strokes);
@@ -415,7 +415,7 @@ namespace Clowd.UI
             if (!CanRedo()) return;
             var last = Pop(_redoHistory);
             _ignoreStrokesChange = true;
-            if (last.Type == StrokesHistoryNodeType.Removed)
+            if (last != null && last.Type == StrokesHistoryNodeType.Removed)
                 MainInkCanvas.Strokes.Remove(last.Strokes);
             else
                 MainInkCanvas.Strokes.Add(last.Strokes);

@@ -682,9 +682,9 @@ bool PngOutlineText::RenderFontShadow(
 		}
 	}
 
-	pBitmapShadowMask->UnlockBits(&bitmapDataShadowMask);
-	pBitmapMask->UnlockBits(&bitmapDataMask);
-	pBitmapDrawn->UnlockBits(&bitmapDataDest);
+    if (pBitmapShadowMask) pBitmapShadowMask->UnlockBits(&bitmapDataShadowMask);
+    if (pBitmapMask) pBitmapMask->UnlockBits(&bitmapDataMask);
+    if (pBitmapDrawn) pBitmapDrawn->UnlockBits(&bitmapDataDest);
 
 	if(pGraphicsShadowMask)
 	{
@@ -697,6 +697,18 @@ bool PngOutlineText::RenderFontShadow(
 		delete pBitmapShadowMask;
 		pBitmapShadowMask = NULL;
 	}
+
+    if(pBitmapMask)
+    {
+        delete pBitmapMask;
+        pBitmapMask = NULL;
+    }
+
+    if(pBitmapDrawn)
+    {
+        delete pBitmapDrawn;
+        pBitmapDrawn = NULL;
+    }
 
 	return true;
 }
