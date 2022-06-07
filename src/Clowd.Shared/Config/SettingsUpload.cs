@@ -89,7 +89,7 @@ namespace Clowd.Config
                 .Select(p => p);
         }
 
-        protected override void AfterDeserializeInternal()
+        public void DiscoverProviders()
         {
             // this function searches for and adds any 'IUploadProvider' classes 
             // it can find that are not currently listed in the settings.
