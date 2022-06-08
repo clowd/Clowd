@@ -35,6 +35,7 @@ namespace Clowd.UI.Pages
             Func<Window> getWnd = () => Window.GetWindow(this);
 
             var wnd = new SystemThemedWindow();
+            
             wnd.Owner = getWnd();
             wnd.Title = "Edit settings for " + info.Provider.Name;
             wnd.MaxHeight = 600;

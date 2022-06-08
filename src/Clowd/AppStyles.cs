@@ -55,6 +55,7 @@ namespace Clowd
         public static Brush AccentBackgroundBrush => new SolidColorBrush(AccentColor);
         public static Brush IdealBackgroundBrush => new SolidColorBrush(Color.FromRgb(55, 55, 55));
         public static Brush IdealForegroundBrush => Brushes.White;
+        public static Style CustomWindowStyle => (Style)FindResource("CustomUiWindow");
 
         public static bool IsDarkTheme => WPFUI.Appearance.Theme.GetAppTheme() == WPFUI.Appearance.ThemeType.Dark;
 
