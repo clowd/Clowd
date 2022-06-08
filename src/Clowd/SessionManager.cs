@@ -24,6 +24,13 @@ namespace Clowd
         public ScreenRect Position { get; init; }
     }
 
+    public class SessionOpenEditor
+    {
+        public Guid? VirtualDesktopId { get; set; }
+        public bool IsTopMost { get; set; }
+        public ScreenRect Position { get; init; }
+    }
+
     public class SessionInfo : FileSyncObject
     {
         public SessionInfo(string file) : base(file)
@@ -52,16 +59,16 @@ namespace Clowd
             get => Get<ScreenRect>();
             set => Set(value);
         }
+        
+        public SessionOpenEditor OpenEditor
+        {
+            get => Get<SessionOpenEditor>();
+            set => Set(value);
+        }
 
         public SessionWindow[] Windows
         {
             get => Get<SessionWindow[]>();
-            set => Set(value);
-        }
-
-        public string ActiveWindowId
-        {
-            get => Get<string>();
             set => Set(value);
         }
 
@@ -141,7 +148,7 @@ namespace Clowd
             _fsw.Deleted += new FileSystemEventHandler(SynchronizationContextEventHandler.CreateDelegate<FileSystemEventArgs>(OnDeleted));
 
             OnCleanUpTimerTick();
-            _cleanupTimer = DisposableTimer.Start(TimeSpan.FromDays(1), OnCleanUpTimerTick);
+            _cleanupTimer = DisposableTimer.Start(TimeSpan.FromHours(1), OnCleanUpTimerTick);
         }
 
         private void OnCleanUpTimerTick()
@@ -150,7 +157,7 @@ namespace Clowd
             foreach (var s in Sessions.ToArray())
             {
                 var sAge = DateTime.UtcNow - s.LastModifiedUtc;
-                if (sAge > deleteSessionsAfter && s.ActiveWindowId == null)
+                if (sAge > deleteSessionsAfter && s.OpenEditor == null)
                     DeleteSession(s);
             }
         }
@@ -217,7 +224,7 @@ namespace Clowd
 
         public void DeleteSession(SessionInfo session)
         {
-            if (session.ActiveWindowId != null)
+            if (session.OpenEditor != null)
                 throw new InvalidOperationException("Can't delete session that is opened in an editor");
 
             lock (_lock)

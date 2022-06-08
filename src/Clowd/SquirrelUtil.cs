@@ -173,7 +173,7 @@ namespace Clowd
                 {
                     ClickCommandText = "Check for updates";
                     Description = "Version: " + ThisAssembly.AssemblyInformationalVersion;
-                    _timer = DisposableTimer.Start(TimeSpan.FromMinutes(5), CheckForUpdateTimer);
+                    _timer = DisposableTimer.Start(TimeSpan.FromMinutes(30), CheckForUpdateTimer);
 
                     if (justUpdated)
                         Description += ", just updated!";
@@ -192,7 +192,7 @@ namespace Clowd
                 {
                     // restart automatically if update waiting to install and system is idle
                     var idleTime = PlatformUtil.Platform.Current.GetSystemIdleTime();
-                    if (idleTime > TimeSpan.FromMinutes(30))
+                    if (idleTime > TimeSpan.FromHours(6))
                     {
                         RestartApp();
                     }

@@ -97,6 +97,8 @@ namespace Clowd.UI
             drawingCanvas.ZoomPanAuto();
 
             SyncToolState();
+            
+            toggleTopMost.IsChecked = Window.GetWindow(this)?.Topmost;
         }
 
         protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)

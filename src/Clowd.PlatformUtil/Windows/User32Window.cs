@@ -128,6 +128,21 @@ namespace Clowd.PlatformUtil.Windows
             }
         }
 
+        public Guid? VirtualDesktopId
+        {
+            get
+            {
+                try
+                {
+                    return _desktopManager.GetWindowDesktopId(Handle);
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+        }
+
         public bool IsCurrentProcess => _currentProcessId == ProcessId;
 
         //public HwndWindow Owner
@@ -291,6 +306,11 @@ namespace Clowd.PlatformUtil.Windows
             DwmSetWindowAttribute(Handle, DWMWINDOWATTRIBUTE.DWMWA_TRANSITIONS_FORCEDISABLED, (IntPtr)(&disabled), sizeof(int));
         }
 
+        public void MoveToDesktop(Guid desktop)
+        {
+            _desktopManager.MoveWindowToDesktop(Handle, desktop);
+        }
+        
         public override string ToString()
         {
             return $"Window {((nint)Handle).ToString("X8")} {{'{Caption}/{ClassName}', {WindowBounds}}}";
