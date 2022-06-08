@@ -14,40 +14,4 @@
     Style="{StaticResource CustomUiWindow}"
     UseLayoutRounding="True"
     WindowStartupLocation="CenterScreen"
-    mc:Ignorable="d">
-    <local:SystemThemedWindow.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/Dragablz;component/Themes/Generic.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <dragablz:InterTabController
-                x:Key="InterTabController"
-                x:Shared="False"
-                InterTabClient="{Binding InterTabClient}"
-                Partition="2AE89D18-F236-4D20-9605-6C03319038E6" />
-            <Style
-                x:Key="TabablzControlStyle"
-                BasedOn="{StaticResource {x:Type dragablz:TabablzControl}}"
-                TargetType="{x:Type controls:TabablzControlEx}">
-                <Setter Property="ItemsSource" Value="{Binding Items}" />
-                <Setter Property="ClosingItemCallback" Value="{Binding ClosingTabItemHandler}" />
-                <Setter Property="ShowDefaultAddButton" Value="True" />
-                <Setter Property="ShowDefaultCloseButton" Value="True" />
-                <Setter Property="AdjacentHeaderItemOffset" Value="-10" />
-                <Setter Property="ItemContainerStyle" Value="{StaticResource TrapezoidDragableTabItemStyle}" />
-                <Setter Property="HeaderMemberPath" Value="Header" />
-                <Setter Property="InterTabController" Value="{StaticResource InterTabController}" />
-                <Setter Property="Margin" Value="0,8,0,0" />
-            </Style>
-        </ResourceDictionary>
-    </local:SystemThemedWindow.Resources>
-    <controls:TabablzControlEx
-        x:Name="TabView"
-        ShowDefaultAddButton="True"
-        ShowDefaultCloseButton="True"
-        Style="{StaticResource TabablzControlStyle}">
-        <dragablz:TabablzControl.InterTabController>
-            <dragablz:InterTabController />
-        </dragablz:TabablzControl.InterTabController>
-    </controls:TabablzControlEx>
-</local:SystemThemedWindow>
+    mc:Ignorable="d" />
