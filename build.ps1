@@ -122,22 +122,22 @@ if ($mode -eq "compile") {
 
 
 # build packaging tools only if in local mode
-if ($LocalProjectMode) {
-    Write-Host "Build Squirrel (local mode)" -ForegroundColor Magenta
-    if ($skipSquirrel -eq $false) {
-        Set-Location "$PSScriptRoot\..\Clowd.Squirrel"
-        & ".\build.cmd"
-    }
-    Set-Alias Squirrel ("$PSScriptRoot\..\Clowd.Squirrel\build\publish\Squirrel.exe");
-} else {
-    $projdeps = dotnet list "$PSScriptRoot\src\Clowd\Clowd.csproj" package
-    $projstring = $projdeps -join "`r`n"
-    $squirrelVersion = $projstring -match "(?m)Clowd\.Squirrel.*\s(\d{1,3}\.\d{1,3}\.\d.*?)$"
-    $squirrelVersion = $Matches[1].Trim()
-    Write-Host "Using Squirrel '$squirrelVersion' from local NuGet cache" -ForegroundColor Magenta
-    Set-Alias Squirrel ($env:USERPROFILE + "\.nuget\packages\clowd.squirrel\$squirrelVersion\tools\Squirrel.exe");
-}
-Set-Location $PSScriptRoot
+# if ($LocalProjectMode) {
+#     Write-Host "Build Squirrel (local mode)" -ForegroundColor Magenta
+#     if ($skipSquirrel -eq $false) {
+#         Set-Location "$PSScriptRoot\..\Clowd.Squirrel"
+#         & ".\build.cmd"
+#     }
+#     Set-Alias Squirrel ("$PSScriptRoot\..\Clowd.Squirrel\build\publish\Squirrel.exe");
+# } else {
+#     $projdeps = dotnet list "$PSScriptRoot\src\Clowd\Clowd.csproj" package
+#     $projstring = $projdeps -join "`r`n"
+#     $squirrelVersion = $projstring -match "(?m)Clowd\.Squirrel.*\s(\d{1,3}\.\d{1,3}\.\d.*?)$"
+#     $squirrelVersion = $Matches[1].Trim()
+#     Write-Host "Using Squirrel '$squirrelVersion' from local NuGet cache" -ForegroundColor Magenta
+#     Set-Alias Squirrel ($env:USERPROFILE + "\.nuget\packages\clowd.squirrel\$squirrelVersion\tools\Squirrel.exe");
+# }
+# Set-Location $PSScriptRoot
 
 if ($mode -eq "compile" -Or $mode -eq "pack") {
 
@@ -145,7 +145,7 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
         # download recent packages
         New-Item -ItemType "directory" -Path "$PSScriptRoot\releases"
         Write-Host "Download latest release" -ForegroundColor Magenta
-        Squirrel s3-down `
+        csq s3-down `
         -r "$PSScriptRoot\releases" `
         --bucket $bucket `
         --keyId $keyId `
@@ -157,7 +157,7 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
 
     # releasify
     Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
-    Squirrel pack `
+    csq pack `
     -f net6 `
     -r "$PSScriptRoot\releases" `
     -i="$PSScriptRoot\artwork\default-setup.ico" `
@@ -176,7 +176,7 @@ if ($mode -eq "upload") {
 
     # upload local releases to s3/b2
     Write-Host "Upload latest releases" -ForegroundColor Magenta
-    Squirrel s3-up `
+    csq s3-up `
     -r "$PSScriptRoot\releases" `
     --bucket $bucket `
     --keyId $keyId `
