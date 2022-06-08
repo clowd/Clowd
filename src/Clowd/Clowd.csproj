@@ -42,7 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.0.2" />
-    <PackageReference Include="Clowd.Squirrel" Version="2.9.40" />
+    <PackageReference Include="Clowd.Squirrel" Version="3.0.152-*" />
     <PackageReference Include="DotNetZip" Version="1.16.0" />
     <PackageReference Include="Dragablz" Version="0.0.3.223" />
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
