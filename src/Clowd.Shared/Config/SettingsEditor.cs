@@ -99,20 +99,6 @@ namespace Clowd
             }
 
             [Browsable(false)]
-            public bool TabsEnabled
-            {
-                get => _tabsEnabled;
-                set => Set(ref _tabsEnabled, value);
-            }
-
-            [Browsable(false)]
-            public bool AskBeforeClosingMultipleTabs
-            {
-                get => _askBeforeClosingMultipleTabs;
-                set => Set(ref _askBeforeClosingMultipleTabs, value);
-            }
-
-            [Browsable(false)]
             public int StartupPadding
             {
                 get => _startupPadding;
@@ -133,8 +119,6 @@ namespace Clowd
             }
 
             private Color _canvasBackground = Colors.Transparent;
-            private bool _tabsEnabled = true;
-            private bool _askBeforeClosingMultipleTabs = true;
             private int _startupPadding = 30;
             private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
             private AutoDictionary<ToolType, SavedToolSettings> _tools = new AutoDictionary<ToolType, SavedToolSettings>();

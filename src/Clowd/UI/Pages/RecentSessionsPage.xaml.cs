@@ -74,7 +74,7 @@ namespace Clowd.UI
             bool itemOpen = false;
             foreach (SessionInfo session in listView.SelectedItems.OfType<SessionInfo>().ToArray())
             {
-                if (session.ActiveWindowId != null)
+                if (session.OpenEditor != null)
                 {
                     itemOpen = true;
                 }
