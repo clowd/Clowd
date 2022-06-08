@@ -16,6 +16,7 @@ namespace Clowd.UI
             //this.SetResourceReference(Window.BackgroundProperty, "SystemControlPageBackgroundAltHighBrush");
             //this.SetResourceReference(Window.ForegroundProperty, "SystemControlPageTextBaseHighBrush");
             this.SourceInitialized += SystemThemedWindow_SourceInitialized;
+            this.Style = AppStyles.CustomWindowStyle;
             //this.Loaded += SystemThemedWindow_Loaded;
             WPFUI.Appearance.Theme.Changed += Theme_Changed;
         }

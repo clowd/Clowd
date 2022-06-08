@@ -5,7 +5,7 @@
 
     <Style x:Key="CustomUiWindow" TargetType="{x:Type Window}">
         <Setter Property="Height" Value="600" />
-        <Setter Property="MinHeight" Value="320" />
+        <Setter Property="MinHeight" Value="100" />
         <Setter Property="Width" Value="1100" />
         <Setter Property="MinWidth" Value="460" />
         <Setter Property="BorderThickness" Value="0" />
