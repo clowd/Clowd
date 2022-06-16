@@ -69,6 +69,7 @@ namespace Clowd.UI
                 }
                 
                 wnd.Show();
+                wnd.PlatformWindow.Activate();
             }
         }
 
