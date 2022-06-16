@@ -14,6 +14,8 @@ jobs:
         uses: actions/setup-dotnet@v1
         with:
           dotnet-version: 6.0.203
+      - name: "Install CSQ"
+        run: dotnet tool install --tool-path . csq --version 3.0.157-unstable-g8c8507
       - name: "Install NGBV"
         run: dotnet tool install --tool-path . nbgv
       - name: Build Clowd
