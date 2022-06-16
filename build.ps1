@@ -145,7 +145,7 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
         # download recent packages
         New-Item -ItemType "directory" -Path "$PSScriptRoot\releases"
         Write-Host "Download latest release" -ForegroundColor Magenta
-        &csq s3-down `
+        csq s3-down `
         -r "$PSScriptRoot\releases" `
         --bucket $bucket `
         --keyId $keyId `
@@ -157,7 +157,7 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
 
     # releasify
     Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
-    &csq pack `
+    csq pack `
     -f net6 `
     -r "$PSScriptRoot\releases" `
     -i="$PSScriptRoot\artwork\default-setup.ico" `
@@ -176,7 +176,7 @@ if ($mode -eq "upload") {
 
     # upload local releases to s3/b2
     Write-Host "Upload latest releases" -ForegroundColor Magenta
-    &csq s3-up `
+    csq s3-up `
     -r "$PSScriptRoot\releases" `
     --bucket $bucket `
     --keyId $keyId `
