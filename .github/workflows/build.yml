@@ -13,11 +13,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v1
         with:
-          dotnet-version: 6.0.203
-      - name: "Install Tools"
-        run: |
-          dotnet tool install -g csq --version 3.0.157-unstable-g8c8507
-          dotnet tool install -g nbgv
+          dotnet-version: 6.0.301
+      - name: "Install CSQ"
+        run: dotnet tool install -g csq --version 3.0.157-unstable-g8c8507
       - name: Build Clowd
         shell: pwsh
         run: .\build.ps1 -mode compile -keyId ${{ secrets.B2_KEY_ID }} -keySecret ${{ secrets.B2_KEY_SECRET }}
