@@ -12,6 +12,8 @@ namespace Clowd.UI
 {
     public partial class EditorWindow : SystemThemedWindow
     {
+        public ImageEditorPage EditorPage { get; }
+
         private SessionInfo _info;
 
         private EditorWindow(SessionInfo info)
@@ -19,7 +21,7 @@ namespace Clowd.UI
             _info = info;
             InitializeComponent();
             Closing += EditorWindow_Closing;
-            Content = new ImageEditorPage(info);
+            Content = EditorPage = new ImageEditorPage(info);
             Loaded += (_, _) => UpdateSessionInfo();
             Deactivated += (_, _) => UpdateSessionInfo();
             Activated += (_, _) => UpdateSessionInfo();
@@ -54,22 +56,46 @@ namespace Clowd.UI
             else
             {
                 var wnd = new EditorWindow(session);
+                wnd.EnsureHandle();
+                wnd.WindowStartupLocation = WindowStartupLocation.Manual;
+
                 if (session.OpenEditor != null)
                 {
-                    wnd.EnsureHandle();
-                    wnd.WindowStartupLocation = WindowStartupLocation.Manual;
+                    // this session was not closed properly, restore it to it's previous location
                     wnd.Topmost = session.OpenEditor.IsTopMost;
-                    wnd.ScreenPosition = session.OpenEditor.Position;
+                    wnd.ShowActivated = false;
                     if (session.OpenEditor.VirtualDesktopId != null)
                         wnd.PlatformWindow.MoveToDesktop(session.OpenEditor.VirtualDesktopId.Value);
+                    wnd.ScreenPosition = session.OpenEditor.Position;
+                    wnd.Show();
                 }
                 else
                 {
-                    // do something, like size the window to the capture
+                    // this is a brand new session. we'll show it on top of the captured area.
+                    var screen = Platform.Current.GetScreenFromRect(session.CroppedRect);
+                    var dpi = screen.ToDpiContext();
+
+                    var logicalImageSize = dpi.ToWorldSize(session.CroppedRect.Size);
+
+                    // add 30 because of default toolbar size. 
+                    var padding = SettingsRoot.Current.Editor.StartupPadding;
+                    var requiredSize = new Size(logicalImageSize.Width + 30 + padding, logicalImageSize.Height + 30 + padding);
+
+                    var page = wnd.EditorPage;
+                    page.Measure(requiredSize);
+
+                    var rect = new ScreenRect(
+                        session.CroppedRect.X - dpi.ToScreenX(page.ToolBar.DesiredSize.Width) - padding,
+                        session.CroppedRect.Y - dpi.ToScreenY(page.PropertiesBar.DesiredSize.Height) - padding,
+                        session.CroppedRect.Width + dpi.ToScreenX(page.ToolBar.DesiredSize.Width) + padding * 2,
+                        session.CroppedRect.Height + dpi.ToScreenX(page.PropertiesBar.DesiredSize.Height) + padding * 2);
+
+                    var wndRect = wnd.PlatformWindow.GetWindowRectFromIdealClientRect(rect);
+                    wnd.PlatformWindow.WindowBounds = wndRect.Intersect(screen.WorkingArea);
+
+                    wnd.Show();
+                    wnd.PlatformWindow.Activate();
                 }
-                
-                wnd.Show();
-                wnd.PlatformWindow.Activate();
             }
         }
 
