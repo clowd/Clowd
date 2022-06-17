@@ -210,7 +210,7 @@
         </Grid.RowDefinitions>
 
         <controls:DockAndWrapPanel
-            x:Name="propertiesBar"
+            x:Name="PropertiesBar"
             HorizontalAlignment="Stretch"
             ItemHeight="30"
             Orientation="Horizontal">
@@ -422,7 +422,7 @@
                 Fill="#666666" />
 
             <WrapPanel
-                x:Name="toolBar"
+                x:Name="ToolBar"
                 Grid.Column="0"
                 Margin="0,4,0,0"
                 Orientation="Vertical"

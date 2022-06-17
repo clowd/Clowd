@@ -44,10 +44,26 @@ namespace Clowd.PlatformUtil.Windows
                 GetWindowRect(Handle, out var rect);
                 return ScreenRect.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
             }
-            set => SetWindowPos(Handle, HWND.HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height,
-                SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER);
+            set
+            {
+                SetWindowPos(Handle, HWND.HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height,
+                    SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER);
+            }
         }
 
+        public ScreenRect ClientBounds
+        {
+            get
+            {
+                GetClientRect(Handle, out var rect);
+                return ScreenRect.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
+            }
+            set
+            {
+                WindowBounds = GetWindowRectFromIdealClientRect(value);
+            }
+        }
+        
         public ScreenRect DwmRenderBounds
         {
             get
@@ -309,6 +325,15 @@ namespace Clowd.PlatformUtil.Windows
         public void MoveToDesktop(Guid desktop)
         {
             _desktopManager.MoveWindowToDesktop(Handle, desktop);
+        }
+
+        public ScreenRect GetWindowRectFromIdealClientRect(ScreenRect clientRect)
+        {
+            RECT r = clientRect;
+            var wndStyle = (WindowStyles)GetWindowLong(Handle, WindowLongFlags.GWL_STYLE);
+            var wndExStyle = (WindowStylesEx)GetWindowLong(Handle, WindowLongFlags.GWL_EXSTYLE);
+            AdjustWindowRectEx(ref r, wndStyle, false, wndExStyle);
+            return r;
         }
         
         public override string ToString()
