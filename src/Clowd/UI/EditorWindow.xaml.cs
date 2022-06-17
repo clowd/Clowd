@@ -85,10 +85,10 @@ namespace Clowd.UI
                     page.Measure(requiredSize);
 
                     var rect = new ScreenRect(
-                        session.CroppedRect.X - dpi.ToScreenX(page.ToolBar.DesiredSize.Width) - padding,
-                        session.CroppedRect.Y - dpi.ToScreenY(page.PropertiesBar.DesiredSize.Height) - padding,
-                        session.CroppedRect.Width + dpi.ToScreenX(page.ToolBar.DesiredSize.Width) + padding * 2,
-                        session.CroppedRect.Height + dpi.ToScreenX(page.PropertiesBar.DesiredSize.Height) + padding * 2);
+                        session.CroppedRect.X - dpi.ToScreenWH(page.ToolBar.DesiredSize.Width) - padding,
+                        session.CroppedRect.Y - dpi.ToScreenWH(page.PropertiesBar.DesiredSize.Height) - padding,
+                        session.CroppedRect.Width + dpi.ToScreenWH(page.ToolBar.DesiredSize.Width) + padding * 2,
+                        session.CroppedRect.Height + dpi.ToScreenWH(page.PropertiesBar.DesiredSize.Height) + padding * 2);
 
                     var wndRect = wnd.PlatformWindow.GetWindowRectFromIdealClientRect(rect);
                     wnd.PlatformWindow.WindowBounds = wndRect.Intersect(screen.WorkingArea);
