@@ -6,7 +6,7 @@ using Clowd.Util;
 using Microsoft.Toolkit.Uwp.Notifications;
 using NLog;
 
-namespace Clowd.UI.Pages
+namespace Clowd.UI
 {
     public class TasksViewManager : ITasksView
     {
