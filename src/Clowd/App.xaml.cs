@@ -10,27 +10,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Input;
+using System.Windows.Forms;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI;
 using Clowd.UI.Helpers;
-using Clowd.Upload;
 using Clowd.Util;
-using Clowd.Video;
 using Hardcodet.Wpf.TaskbarNotification;
 using Microsoft.Toolkit.Uwp.Notifications;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
-using Ookii.Dialogs.Wpf;
-using RT.Serialization;
-using RT.Util.ExtensionMethods;
 using Squirrel;
-using Color = System.Windows.Media.Color;
+using Application = System.Windows.Application;
+using Binding = System.Windows.Data.Binding;
+using MessageBox = System.Windows.MessageBox;
 
 namespace Clowd
 {
@@ -110,7 +106,7 @@ namespace Clowd
             catch (Exception ex)
             {
                 _log.Fatal(ex);
-                if (await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Error,
+                if (await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Error,
                         "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
                         "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
                 {
@@ -235,7 +231,7 @@ namespace Clowd
             {
                 if (await _processor.Startup(args) == false)
                 {
-                    if (Debugger.IsAttached && await NiceDialog.ShowPromptAsync(null, NiceDialogIcon.Warning,
+                    if (Debugger.IsAttached && await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Warning,
                             "There is already an instance of clowd running. Would you like to kill it before continuing?",
                             "Debugger attached; Clowd already running",
                             "Kill Clowd", "Exit"))
@@ -343,22 +339,26 @@ namespace Clowd
             {
                 if (SettingsRoot.Current.General.ConfirmClose)
                 {
-                    using TaskDialog dialog = new TaskDialog();
-                    dialog.WindowTitle = "Clowd";
-                    dialog.MainInstruction = "Are you sure you wish to close Clowd?";
-                    dialog.Content = "If you close Clowd, it will stop any in-progress uploads and you will be unable to upload anything new.";
-                    dialog.VerificationText = "&Don’t ask me this again";
-                    dialog.MainIcon = TaskDialogIcon.Warning;
+                    TaskDialogButton okButton = TaskDialogButton.Yes;
+                    TaskDialogButton cancelButton = TaskDialogButton.Cancel;
 
-                    TaskDialogButton okButton = new TaskDialogButton(ButtonType.Yes);
-                    TaskDialogButton cancelButton = new TaskDialogButton(ButtonType.No);
-                    dialog.Buttons.Add(okButton);
-                    dialog.Buttons.Add(cancelButton);
+                    var dialog = new TaskDialogPage()
+                    {
+                        Heading = "Are you sure you wish to close Clowd?",
+                        Text = "If you close Clowd, it will stop any in-progress uploads and you will be unable to upload anything new.",
+                        Icon = TaskDialogIcon.Warning,
+                        Verification = "&Don’t ask me this again",
+                        Buttons = new TaskDialogButtonCollection()
+                        {
+                            okButton,
+                            cancelButton,
+                        }
+                    };
 
                     var clicked = await dialog.ShowAsNiceDialogAsync(null);
                     if (clicked == okButton)
                     {
-                        if (dialog.IsVerificationChecked == true)
+                        if (dialog.Verification?.Checked == true)
                             SettingsRoot.Current.General.ConfirmClose = false;
                         ExitApp();
                     }

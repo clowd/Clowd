@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using System.Windows.Media.Imaging;
 using Clowd.Config;
 using Clowd.UI.Helpers;
@@ -11,7 +12,6 @@ using Clowd.UI.Pages;
 using Clowd.Upload;
 using Clowd.Util;
 using Ionic.Zip;
-using Ookii.Dialogs.Wpf;
 using RT.Util.ExtensionMethods;
 
 namespace Clowd
@@ -260,32 +260,34 @@ namespace Clowd
 
                 return null;
             }
-
-            using TaskDialog dialog = new TaskDialog();
-            dialog.WindowTitle = $"{type} Upload";
-            dialog.MainInstruction = $"Select an upload destination:";
-            dialog.Content = $"You have not selected a default upload provider for '{type}', where would you like to send your file?";
-            dialog.ButtonStyle = TaskDialogButtonStyle.CommandLinks;
+            
+            var dialog = new TaskDialogPage()
+            {
+                Caption = $"{type} Upload",
+                Heading = "Select an upload destination:",
+                Text = $"You have not selected a default upload provider for '{type}', where would you like to send your file?",
+                Verification = $"Set choice as default for {type}",
+            };
 
             Dictionary<TaskDialogButton, UploadProviderInfo> providerLookup = new Dictionary<TaskDialogButton, UploadProviderInfo>();
 
             foreach (var p in enabled)
             {
-                TaskDialogButton btn = new TaskDialogButton(p.Provider.Name);
-                btn.CommandLinkNote = p.Provider.Description;
+                var btn = new TaskDialogCommandLinkButton()
+                {
+                    Text = p.Provider.Name,
+                    DescriptionText = p.Provider.Description,
+                };
                 dialog.Buttons.Add(btn);
                 providerLookup[btn] = p;
             }
-
-            dialog.AllowDialogCancellation = true;
-            dialog.VerificationText = $"Set choice as default for {type}";
 
             var dialogResult = await dialog.ShowAsNiceDialogAsync(null);
 
             if (dialogResult != null && providerLookup.ContainsKey(dialogResult))
             {
                 var lookup = providerLookup[dialogResult];
-                if (dialog.IsVerificationChecked)
+                if (dialog.Verification?.Checked == true)
                 {
                     settings.SetDefaultProvider(lookup, type);
                 }
