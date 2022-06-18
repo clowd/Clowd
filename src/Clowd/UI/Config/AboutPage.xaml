@@ -36,7 +36,7 @@
                 Press the [PrntScr] key and explore to see what I can do!
             </TextBlock>
 
-            <wpfui:Hyperlink Content="Read more online" NavigateUri="https://github.com/clowd" />
+            <wpfui:Hyperlink Content="Read more online" NavigateUri="https://github.com/clowd/Clowd" />
 
             <TextBlock Style="{StaticResource BodyTextBlockStyle}">
                 Clowd is made possible in part by each of the following open source projects -
