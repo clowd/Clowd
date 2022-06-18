@@ -278,7 +278,7 @@ namespace Clowd.Util
             if (p != null)
                 footer = $"Process '{p.ProcessName}' (pid {p.Id}) is locking the clipboard.";
 
-            bool shouldRetry = await NiceDialog.ShowPromptAsync(
+            bool shouldRetry = await NiceDialog.ShowDialogAsync(
                 owner,
                 NiceDialogIcon.Error,
                 error.Message,

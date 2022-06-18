@@ -5,21 +5,26 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Forms;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Clowd.PlatformUtil;
-using Clowd.Util;
 using Cyotek.Windows.Forms;
-using Ookii.Dialogs.Wpf;
 
 namespace Clowd.UI.Helpers
 {
     public enum NiceDialogIcon
     {
-        Shield = 65532,
-        Information = 65533,
-        Error = 65534,
-        Warning = 65535
+        None = 0,
+        Information = ushort.MaxValue - 2, // TD_INFORMATION_ICON
+        Warning = ushort.MaxValue, // TD_WARNING_ICON
+        Error = ushort.MaxValue - 1, // TD_ERROR_ICON
+        Shield = ushort.MaxValue - 3, // TD_SHIELD_ICON
+        ShieldBlueBar = ushort.MaxValue - 4,
+        ShieldGrayBar = ushort.MaxValue - 8,
+        ShieldWarningYellowBar = ushort.MaxValue - 5,
+        ShieldErrorRedBar = ushort.MaxValue - 6,
+        ShieldSuccessGreenBar = ushort.MaxValue - 7,
     }
 
     public enum RememberPromptChoice
@@ -33,181 +38,95 @@ namespace Clowd.UI.Helpers
     {
         public static Task ShowNoticeAsync(FrameworkElement parent, NiceDialogIcon icon, string content)
         {
-            return ShowPromptAsync(parent, icon, content, icon.ToString(), "Ok", null);
+            return ShowDialogAsync(parent, icon, content, icon.ToString(), "Ok", null);
         }
 
         public static Task ShowNoticeAsync(FrameworkElement parent, NiceDialogIcon icon, string content, string mainInstruction)
         {
-            return ShowPromptAsync(parent, icon, content, mainInstruction, "Ok", null);
+            return ShowDialogAsync(parent, icon, content, mainInstruction, "Ok", null);
         }
 
         public static Task<bool> ShowPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content, string promptTxt)
         {
-            return ShowPromptAsync(parent, icon, content, icon.ToString(), promptTxt, "Close");
+            return ShowDialogAsync(parent, icon, content, icon.ToString(), promptTxt, "Close");
         }
 
         public static Task<bool> ShowYesNoPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content)
         {
-            return ShowPromptAsync(parent, icon, content, icon.ToString(), "Yes", "No");
+            return ShowYesNoPromptAsync(parent, icon, content, icon.ToString());
         }
 
         public static Task<bool> ShowYesNoPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content, string mainInstruction)
         {
-            return ShowPromptAsync(parent, icon, content, mainInstruction, "Yes", "No");
+            return ShowDialogAsync(parent, icon, content, mainInstruction, "Yes", "No");
         }
 
         public static async Task ShowSettingsPromptAsync(FrameworkElement parent, SettingsPageTab category, string content)
         {
-            if (await ShowPromptAsync(parent, NiceDialogIcon.Warning, content, "Settings configuration required", "Open Settings", "Close"))
+            if (await ShowDialogAsync(parent, NiceDialogIcon.Warning, content, "Settings configuration required", "Open Settings", "Close"))
             {
                 PageManager.Current.GetSettingsPage().Open(category);
             }
         }
 
-        public static Task<bool> ShowPromptAsync(
+        public static async Task<bool> ShowDialogAsync(
             FrameworkElement parent,
             NiceDialogIcon icon,
             string content,
-            string mainInstruction,
-            string trueTxt,
-            string falseTxt)
+            string mainInstruction = null,
+            string trueTxt = "Ok",
+            string falseTxt = null,
+            NiceDialogIcon footerIcon = NiceDialogIcon.None,
+            string footerTxt = null)
         {
-            return ShowPromptAsync<object>(parent, icon, content, mainInstruction, trueTxt, falseTxt, null, null);
-        }
-
-        public static Task<bool> ShowPromptAsync<TSettings>(
-            FrameworkElement parent,
-            NiceDialogIcon icon,
-            string content,
-            string mainInstruction,
-            string trueTxt,
-            string falseTxt,
-            TSettings settings,
-            Expression<Func<TSettings, RememberPromptChoice>> memory)
-            where TSettings : class
-        {
-            return ShowPromptBlockingOrAsync(false, parent, icon, content, mainInstruction, trueTxt, falseTxt, settings, memory, 0, null);
-        }
-
-        public static Task<bool> ShowPromptAsync(
-            FrameworkElement parent,
-            NiceDialogIcon icon,
-            string content,
-            string mainInstruction,
-            string trueTxt,
-            string falseTxt,
-            NiceDialogIcon footerIcon,
-            string footerTxt)
-        {
-            return ShowPromptBlockingOrAsync<object>(false, parent, icon, content, mainInstruction, trueTxt, falseTxt, null, null, footerIcon, footerTxt);
-        }
-
-        public static bool ShowPromptBlocking(
-            FrameworkElement parent,
-            NiceDialogIcon icon,
-            string content,
-            string mainInstruction,
-            string trueTxt,
-            string falseTxt)
-        {
-            return ShowPromptBlocking<object>(parent, icon, content, mainInstruction, trueTxt, falseTxt, null, null);
-        }
-
-        public static bool ShowPromptBlocking<TSettings>(
-            FrameworkElement parent,
-            NiceDialogIcon icon,
-            string content,
-            string mainInstruction,
-            string trueTxt,
-            string falseTxt,
-            TSettings settings,
-            Expression<Func<TSettings, RememberPromptChoice>> memory)
-            where TSettings : class
-        {
-            return ShowPromptBlockingOrAsync(true, parent, icon, content, mainInstruction, trueTxt, falseTxt, settings, memory, 0, null).Result;
-        }
-
-        public static bool ShowPromptBlocking(
-            FrameworkElement parent,
-            NiceDialogIcon icon,
-            string content,
-            string mainInstruction,
-            string trueTxt,
-            string falseTxt,
-            NiceDialogIcon footerIcon,
-            string footerTxt)
-        {
-            return ShowPromptBlockingOrAsync<object>(true, parent, icon, content, mainInstruction, trueTxt, falseTxt, null, null, footerIcon, footerTxt).Result;
-        }
-
-        private static async Task<bool> ShowPromptBlockingOrAsync<TSettings>(
-            bool blocking,
-            FrameworkElement parent,
-            NiceDialogIcon icon,
-            string content,
-            string mainInstruction,
-            string trueTxt,
-            string falseTxt,
-            TSettings settings,
-            Expression<Func<TSettings, RememberPromptChoice>> memory,
-            NiceDialogIcon footerIcon,
-            string footerTxt)
-            where TSettings : class
-        {
-            var hasMemoryStorage = settings != null && memory != null;
-            PropertyInfo propInfo = null;
-
-            if (hasMemoryStorage)
+            var page = new TaskDialogPage()
             {
-                propInfo = GetPropertyInfo(settings, memory);
-                var currentMemory = (RememberPromptChoice)propInfo.GetValue(settings);
-                if (currentMemory != RememberPromptChoice.Ask)
-                    return currentMemory == RememberPromptChoice.Yes;
+                Heading = mainInstruction,
+                Text = content,
+                Caption = Constants.ClowdAppName,
+                Icon = GetTaskIconFromNiceIcon(icon),
+                SizeToContent = false,
+                AllowMinimize = false,
+                AllowCancel = true,
+            };
+
+            if (!String.IsNullOrWhiteSpace(footerTxt))
+            {
+                page.Footnote = new TaskDialogFootnote()
+                {
+                    Icon = GetTaskIconFromNiceIcon(footerIcon),
+                    Text = footerTxt,
+                };
             }
 
-            using (var dialog = new TaskDialog())
+            var btnTrue = new TaskDialogButton(trueTxt);
+            page.Buttons.Add(btnTrue);
+
+            if (!String.IsNullOrWhiteSpace(falseTxt))
             {
-                dialog.WindowTitle = Constants.ClowdAppName;
-                dialog.MainInstruction = mainInstruction;
-                dialog.Content = content;
-                dialog.MainIcon = (TaskDialogIcon)(int)icon;
-
-                if (!String.IsNullOrWhiteSpace(footerTxt))
-                {
-                    dialog.FooterIcon = (TaskDialogIcon)(int)footerIcon;
-                    if (footerTxt.Length > 100)
-                    {
-                        dialog.ExpandFooterArea = true;
-                        dialog.ExpandedInformation = footerTxt;
-                        dialog.ExpandedByDefault = false;
-                    }
-                    else
-                    {
-                        dialog.Footer = footerTxt;
-                    }
-                }
-
-                var trueBtn = new TaskDialogButton(trueTxt);
-                dialog.Buttons.Add(trueBtn);
-
-                if (!String.IsNullOrWhiteSpace(falseTxt))
-                {
-                    var falseBtn = new TaskDialogButton(falseTxt);
-                    dialog.Buttons.Add(falseBtn);
-                }
-
-                if (hasMemoryStorage)
-                    dialog.VerificationText = "Don't ask me this again";
-
-                var result = await FakeShowTaskDialogBlockingOrAsync(parent, dialog, blocking);
-                var isResultTrue = result == trueBtn;
-
-                // if "don't ask" was checked, save this choice
-                if (hasMemoryStorage && dialog.IsVerificationChecked)
-                    propInfo.SetValue(settings, isResultTrue ? RememberPromptChoice.Yes : RememberPromptChoice.No);
-
-                return isResultTrue;
+                page.Buttons.Add(new TaskDialogButton(falseTxt));
             }
+            
+            var result = await page.ShowAsNiceDialogAsync(parent);
+            return result == btnTrue;
+        }
+        
+        private static TaskDialogIcon GetTaskIconFromNiceIcon(NiceDialogIcon nice)
+        {
+            return nice switch
+            {
+                NiceDialogIcon.None => TaskDialogIcon.None,
+                NiceDialogIcon.Information => TaskDialogIcon.Information,
+                NiceDialogIcon.Warning => TaskDialogIcon.Warning,
+                NiceDialogIcon.Error => TaskDialogIcon.Error,
+                NiceDialogIcon.Shield => TaskDialogIcon.Shield,
+                NiceDialogIcon.ShieldBlueBar => TaskDialogIcon.ShieldBlueBar,
+                NiceDialogIcon.ShieldGrayBar => TaskDialogIcon.ShieldGrayBar,
+                NiceDialogIcon.ShieldWarningYellowBar => TaskDialogIcon.ShieldWarningYellowBar,
+                NiceDialogIcon.ShieldErrorRedBar => TaskDialogIcon.ShieldErrorRedBar,
+                NiceDialogIcon.ShieldSuccessGreenBar => TaskDialogIcon.ShieldSuccessGreenBar,
+                _ => throw new ArgumentOutOfRangeException(nameof(nice), nice, null)
+            };
         }
 
         public static async Task<Color> ShowColorDialogAsync(FrameworkElement parent, Color initial)
@@ -219,7 +138,7 @@ namespace Clowd.UI.Helpers
 
             var result = await dialog.ShowAsNiceDialogAsync(parent);
 
-            if (result == System.Windows.Forms.DialogResult.OK)
+            if (result == DialogResult.OK)
             {
                 var final = dialog.Color;
                 return Color.FromArgb(final.A, final.R, final.G, final.B);
@@ -232,7 +151,7 @@ namespace Clowd.UI.Helpers
 
         public static async Task<string[]> ShowSelectFilesDialog(FrameworkElement parent, string title = null, string initialDirectory = null, bool multiSelect = false, string filter = null)
         {
-            var dialog = new System.Windows.Forms.OpenFileDialog();
+            var dialog = new OpenFileDialog();
 
             if (!String.IsNullOrWhiteSpace(title))
                 dialog.Title = title;
@@ -268,7 +187,7 @@ namespace Clowd.UI.Helpers
                 } while (File.Exists(Path.Combine(directory, initialName)));
             }
 
-            var dlg = new System.Windows.Forms.SaveFileDialog();
+            var dlg = new SaveFileDialog();
 
             dlg.Title = title;
             dlg.FileName = initialName; // Default file name
@@ -292,149 +211,28 @@ namespace Clowd.UI.Helpers
             return null;
         }
 
-        [Obsolete("You should prefer the System.Windows.Forms variant of CommonDialog's as those do not require reflection to be shown nicely")]
-        public static async Task<bool> ShowAsNiceDialogAsync(this Microsoft.Win32.CommonDialog dialog, FrameworkElement parent)
-        {
-            try
-            {
-                return await FakeShowCommonDialogAsync((owner) =>
-                {
-                    var dyn = Exposed.From(dialog);
-                    return dyn.RunDialog(owner);
-                }, parent);
-            }
-            catch (Exception)
-            {
-                // only viable fallback for Microsoft.Win32.CommonDialog is synchronous execution.
-                // dialog.ShowDialog() checks that it is being called on the same thread that created the class
-                // therefore, even creating a new WPF window in the new thread won't overcome this issue.
-                // using reflection there are a few other async options (such as updating the thread reference)
-                // but none are as robust as the above so they are not included.
-
-                CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
-                var result = dialog.ShowDialog(ownerWindow);
-                ReleaseOwner(ownerWindow, isFake);
-                return result == true;
-            }
-        }
-
-        public static Task<bool> ShowAsNiceDialogAsync(this System.Windows.Forms.CommonDialog dialog, FrameworkElement parent)
-        {
-            return FakeShowCommonDialogAsync((owner) =>
-            {
-                // thank fuck someone with brains wrote the System.Windows.Forms.CommonDialog and the IWin32Window interface.
-                var result = dialog.ShowDialog(new Win32Window(owner));
-                return result == System.Windows.Forms.DialogResult.OK || result == System.Windows.Forms.DialogResult.Yes;
-            }, parent);
-        }
-
-        private static Task<bool> FakeShowCommonDialogAsync(Func<IntPtr, bool> showDialog, FrameworkElement parent)
+        public static async Task<bool> ShowAsNiceDialogAsync(this CommonDialog dialog, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
-            //HwndWindow.HwndWindowHook dialogWindowHook = null;
-
             try
             {
-                return Task.FromResult(showDialog(ownerHandle));
-                //var taskSource = new TaskCompletionSource<bool>();
-                //uint threadId = 0;
-
-                //Thread t = new Thread(() =>
-                //{
-                //    try
-                //    {
-                //        threadId = Interop.Kernel32.KERNEL32.GetCurrentThreadId();
-                //        taskSource.SetResult(showDialog(ownerHandle));
-                //    }
-                //    catch (Exception e)
-                //    {
-                //        taskSource.SetException(e);
-                //    }
-                //});
-
-                //t.SetApartmentState(ApartmentState.STA);
-                //t.Start();
-
-                //// basically, since we opened the dialog in a new thread, we can be sure it is one of the only windows in that thread
-                //// so we enumerate GetThreadWindows until the window handle is created, and then update the window position
-
-                //while (true)
-                //{
-                //    if (taskSource.Task.IsCompleted)
-                //        break;
-
-                //    await Task.Delay(20);
-
-                //    if (threadId == 0)
-                //        continue;
-
-                //    var children = USER32EX.GetThreadWindows(threadId);
-
-                //    if (children.Count > 0)
-                //    {
-                //        // there are some other "COM" windows that get created in the thread, so we should look for the window that is a child of our ownerWindow or patchWindow.
-                //        var dialogHandle = children
-                //            .Select(s => HwndWindow.FromHandle(s))
-                //            .FirstOrDefault(w => w.Owner != null && w.Owner.Handle == ownerHandle);
-
-                //        if (dialogHandle == null)
-                //            continue;
-
-                //        // first pass positioning this dialog. these dialogs like to resize themselves a bunch during rendering, so we will install a hook if we can.
-                //        // the hook will detect if the size has changed and will update the window position again. the hook will abort when the user has interacted with the dialog.
-                //        AutoPositionNativeWindowHandle(dialogHandle, ownerHandle, isFake);
-
-                //        if (dialogHandle.CanHookWndProc)
-                //        {
-                //            dialogWindowHook = dialogHandle.AddWndProcHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam) =>
-                //            {
-                //                if (msg == (int)WindowMessage.WM_SIZE)
-                //                {
-                //                    // the window has changed size and it was not the user who resized it (see next condition)
-                //                    AutoPositionNativeWindowHandle(dialogHandle, ownerHandle, isFake);
-                //                }
-                //                else if (msg == (int)WindowMessage.WM_SIZING || msg == (int)WindowMessage.WM_SETCURSOR || msg == (int)WindowMessage.WM_MOUSEACTIVATE)
-                //                {
-                //                    // dispose of this hook if the user has interacted with the dialog
-                //                    dialogWindowHook.Dispose();
-                //                }
-                //            });
-                //        }
-
-                //        break;
-                //    }
-                //}
-
-                //return await taskSource.Task;
-            }
-            catch
-            {
-                throw;
+                return await Task.Run(() =>
+                {
+                    var result = dialog.ShowDialog(new Win32Window(ownerHandle));
+                    return result == DialogResult.OK || result == DialogResult.Yes;
+                });
             }
             finally
             {
-                //if (dialogWindowHook != null)
-                //    dialogWindowHook.Dispose();
-
                 ReleaseOwner(ownerWindow, isFake);
             }
         }
-
-        public static Task<TaskDialogButton> ShowAsNiceDialogAsync(this TaskDialog dialog, FrameworkElement parent)
-        {
-            return FakeShowTaskDialogBlockingOrAsync(parent, dialog, false);
-        }
-
-        public static TaskDialogButton ShowAsNiceDialog(this TaskDialog dialog, FrameworkElement parent)
-        {
-            return FakeShowTaskDialogBlockingOrAsync(parent, dialog, true).Result;
-        }
-
-        public static Task<System.Windows.Forms.DialogResult> ShowAsNiceDialogAsync(this System.Windows.Forms.Form form, FrameworkElement parent)
+        
+        public static Task<DialogResult> ShowAsNiceDialogAsync(this Form form, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
 
-            var taskSource = new TaskCompletionSource<System.Windows.Forms.DialogResult>();
+            var taskSource = new TaskCompletionSource<DialogResult>();
 
             form.Load += (_, e) =>
             {
@@ -450,29 +248,40 @@ namespace Clowd.UI.Helpers
             return taskSource.Task;
         }
 
-        private static async Task<TaskDialogButton> FakeShowTaskDialogBlockingOrAsync(FrameworkElement parent, TaskDialog dialog, bool blocking)
+        public static Task<TaskDialogButton> ShowAsNiceDialogAsync(this TaskDialogPage dialog, FrameworkElement parent)
+        {
+            return FakeShowTaskDialogBlockingOrAsync(parent, dialog, false);
+        }
+
+        public static TaskDialogButton ShowAsNiceDialog(this TaskDialogPage dialog, FrameworkElement parent)
+        {
+            return FakeShowTaskDialogBlockingOrAsync(parent, dialog, true).Result;
+        }
+
+        private static async Task<TaskDialogButton> FakeShowTaskDialogBlockingOrAsync(FrameworkElement parent, TaskDialogPage dialog, bool blocking)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
 
             try
             {
-                dialog.Created += (s, e) =>
-                {
-                    AutoPositionNativeWindowHandle(dialog.Handle, ownerHandle, isFake);
-                };
+                TaskDialogStartupLocation location = isFake ? TaskDialogStartupLocation.CenterScreen : TaskDialogStartupLocation.CenterOwner;
 
+                if (String.IsNullOrWhiteSpace(dialog.Caption))
+                {
+                    dialog.Caption = Constants.ClowdAppName;
+                }
+
+                dialog.AllowMinimize = false;
+                dialog.AllowCancel = true;
+                
                 if (blocking)
                 {
-                    return dialog.ShowDialog(ownerHandle);
+                    return TaskDialog.ShowDialog(ownerHandle, dialog, location);
                 }
                 else
                 {
-                    return await Task.Run(() => dialog.ShowDialog(ownerHandle));
+                    return await Task.Run(() => TaskDialog.ShowDialog(ownerHandle, dialog, location));
                 }
-            }
-            catch
-            {
-                throw;
             }
             finally
             {
@@ -546,16 +355,6 @@ namespace Clowd.UI.Helpers
             }
         }
 
-        private static void AutoPositionNativeWindowHandle(IntPtr childHandle, IntPtr ownerHandle, bool isFake)
-        {
-            // update dialog positioning
-            var pChild = Platform.Current.GetWindowFromHandle(childHandle);
-            var size = pChild.WindowBounds.Size;
-            var p = (ScreenPoint)GetDialogPosition((System.Drawing.Size)size, ownerHandle, isFake);
-            pChild.SetPosition(new ScreenRect(p, size));
-            pChild.Activate();
-        }
-
         private static System.Drawing.Point GetDialogPosition(System.Drawing.Size dialogSize, IntPtr ownerHandle, bool ownerIsFake)
         {
             if (ownerIsFake)
@@ -598,32 +397,6 @@ namespace Clowd.UI.Helpers
 
                 return p;
             }
-        }
-
-        private static PropertyInfo GetPropertyInfo<TSource, TProperty>(TSource source, Expression<Func<TSource, TProperty>> propertyLambda)
-        {
-            Type type = typeof(TSource);
-
-            MemberExpression member = propertyLambda.Body as MemberExpression;
-            if (member == null)
-                throw new ArgumentException(string.Format(
-                    "Expression '{0}' refers to a method, not a property.",
-                    propertyLambda.ToString()));
-
-            PropertyInfo propInfo = member.Member as PropertyInfo;
-            if (propInfo == null)
-                throw new ArgumentException(string.Format(
-                    "Expression '{0}' refers to a field, not a property.",
-                    propertyLambda.ToString()));
-
-            if (type != propInfo.ReflectedType &&
-                !type.IsSubclassOf(propInfo.ReflectedType))
-                throw new ArgumentException(string.Format(
-                    "Expression '{0}' refers to a property that is not from type {1}.",
-                    propertyLambda.ToString(),
-                    type));
-
-            return propInfo;
         }
 
         private class Win32Window : System.Windows.Forms.IWin32Window
