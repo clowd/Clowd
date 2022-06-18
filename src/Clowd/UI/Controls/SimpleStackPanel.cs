@@ -63,6 +63,21 @@ namespace Clowd.UI.Controls
                     FrameworkPropertyMetadataOptions.AffectsMeasure));
 
         /// <summary>
+        /// Identifies the ReverseChildren dependency property.
+        /// </summary>
+        public static readonly DependencyProperty ReverseChildrenProperty = DependencyProperty.Register(
+            "ReverseChildren", typeof(bool), typeof(SimpleStackPanel), new PropertyMetadata(false));
+
+        /// <summary>
+        /// If true, the order of the children will be reversed during Arrange.
+        /// </summary>
+        public bool ReverseChildren
+        {
+            get { return (bool)GetValue(ReverseChildrenProperty); }
+            set { SetValue(ReverseChildrenProperty, value); }
+        }
+
+        /// <summary>
         /// Gets a value that indicates if this SimpleStackPanel has vertical
         /// or horizontal orientation.
         /// </summary>
@@ -156,11 +171,9 @@ namespace Clowd.UI.Controls
             double previousChildSize = 0.0;
             double spacing = Spacing;
 
-            for (int i = 0, count = children.Count; i < count; ++i)
+            void placeChild(UIElement child)
             {
-                UIElement child = children[i];
-
-                if (child == null) { continue; }
+                if (child == null) { return; }
 
                 if (fHorizontal)
                 {
@@ -183,6 +196,21 @@ namespace Clowd.UI.Controls
                 }
 
                 child.Arrange(rcChild);
+            }
+
+            if (ReverseChildren)
+            {
+                for (int i = children.Count; i > 0; i--)
+                {
+                    placeChild(children[i - 1]);
+                }
+            }
+            else
+            {
+                for (int i = 0, count = children.Count; i < count; ++i)
+                {
+                    placeChild(children[i]);
+                }
             }
 
             return arrangeSize;
