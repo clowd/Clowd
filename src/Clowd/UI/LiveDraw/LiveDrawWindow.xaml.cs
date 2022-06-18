@@ -14,6 +14,24 @@ namespace Clowd.UI
 {
     public partial class LiveDrawWindow : Window, ILiveDrawPage
     {
+        public static readonly DependencyProperty PanelOrientationProperty = DependencyProperty.Register(
+            "PanelOrientation", typeof(Orientation), typeof(LiveDrawWindow), new PropertyMetadata(Orientation.Horizontal));
+
+        public Orientation PanelOrientation
+        {
+            get { return (Orientation)GetValue(PanelOrientationProperty); }
+            set { SetValue(PanelOrientationProperty, value); }
+        }
+
+        public static readonly DependencyProperty PanelReversedProperty = DependencyProperty.Register(
+            "PanelReversed", typeof(bool), typeof(LiveDrawWindow), new PropertyMetadata(false));
+
+        public bool PanelReversed
+        {
+            get { return (bool)GetValue(PanelReversedProperty); }
+            set { SetValue(PanelReversedProperty, value); }
+        }
+        
         public LiveDrawWindow()
         {
             _history = new Stack<StrokesHistoryNode>();
@@ -25,8 +43,8 @@ namespace Clowd.UI
             SetEnable(false, _mode);
             SetBrushSize(_brushSizes[_brushIndex]);
 
-            FontReduceButton.Opacity = 0;
-            FontIncreaseButton.Opacity = 0;
+            // FontReduceButton.Opacity = 0;
+            // FontIncreaseButton.Opacity = 0;
 
             MainInkCanvas.Strokes.StrokesChanged += StrokesChanged;
 
@@ -115,16 +133,16 @@ namespace Clowd.UI
 
             MainInkCanvas.Cursor = Cursors.Cross;
 
-            if (_mode == DrawMode.Text)
-            {
-                FontIncreaseButton.Opacity = 1;
-                FontReduceButton.Opacity = 1;
-            }
-            else
-            {
-                FontIncreaseButton.Opacity = 0;
-                FontReduceButton.Opacity = 0;
-            }
+            // if (_mode == DrawMode.Text)
+            // {
+            //     FontIncreaseButton.Opacity = 1;
+            //     FontReduceButton.Opacity = 1;
+            // }
+            // else
+            // {
+            //     FontIncreaseButton.Opacity = 0;
+            //     FontReduceButton.Opacity = 0;
+            // }
 
             MainInkCanvas.UseCustomCursor = bUseCustomCursor;
             MainInkCanvas.EditingMode = editingMode;
@@ -169,8 +187,27 @@ namespace Clowd.UI
 
         private void SetOrientation(bool v)
         {
-            PaletteRotate.Angle = v ? -90 : 0;
-            MinWidth = v ? 90 : 0;
+            if (v)
+            {
+                PanelOrientation = Orientation.Vertical;
+                PanelReversed = true;
+                Palette.Orientation = Orientation.Horizontal;
+                PaletteGrip.Width = 25;
+                PaletteGrip.Height = 325;
+                OrientationButtonTransform.Angle = 0;
+                OrientationButton.IsActivated = true;
+            }
+            else
+            {
+                PanelOrientation = Orientation.Horizontal;
+                PanelReversed = false;
+                Palette.Orientation = Orientation.Vertical;
+                PaletteGrip.Width = 325;
+                PaletteGrip.Height = 25;
+                OrientationButtonTransform.Angle = 90;
+                OrientationButton.IsActivated = false;
+            }
+            
             _displayOrientation = v;
         }
 
