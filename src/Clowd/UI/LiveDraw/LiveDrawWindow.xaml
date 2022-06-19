@@ -23,18 +23,18 @@
                 <ResourceDictionary Source="LiveDrawDictionary.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <SolidColorBrush x:Key="PaintingColor1" Color="#FF86E238" />
-            <SolidColorBrush x:Key="PaintingColor2" Color="#FF38E2A8" />
-            <SolidColorBrush x:Key="PaintingColor3" Color="#FF359EC9" />
-            <SolidColorBrush x:Key="PaintingColor4" Color="#FF7E7E7E" />
-            <SolidColorBrush x:Key="PaintingColor5" Color="#FFE2CF38" />
-            <SolidColorBrush x:Key="PaintingColor6" Color="#FF7855D4" />
-            <SolidColorBrush x:Key="PaintingColor7" Color="#FFD570C2" />
-            <SolidColorBrush x:Key="PaintingColor8" Color="#FFD6D6D6" />
-            <SolidColorBrush x:Key="PaintingColor9" Color="#FFE27F38" />
-            <SolidColorBrush x:Key="PaintingColor10" Color="#FFDF2828" />
-            <SolidColorBrush x:Key="PaintingColor11" Color="#FFE2386D" />
-            <SolidColorBrush x:Key="PaintingColor12" Color="#FF1E1E1E" />
+            <SolidColorBrush x:Key="PaintingColor1" Color="#86E238" />
+            <SolidColorBrush x:Key="PaintingColor2" Color="#38E2A8" />
+            <SolidColorBrush x:Key="PaintingColor3" Color="#359EC9" />
+            <SolidColorBrush x:Key="PaintingColor4" Color="#7E7E7E" />
+            <SolidColorBrush x:Key="PaintingColor5" Color="#E2CF38" />
+            <SolidColorBrush x:Key="PaintingColor6" Color="#7855D4" />
+            <SolidColorBrush x:Key="PaintingColor7" Color="#D570C2" />
+            <SolidColorBrush x:Key="PaintingColor8" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="PaintingColor9" Color="#E27F38" />
+            <SolidColorBrush x:Key="PaintingColor10" Color="#DF2828" />
+            <SolidColorBrush x:Key="PaintingColor11" Color="#E2386D" />
+            <SolidColorBrush x:Key="PaintingColor12" Color="#1E1E1E" />
 
             <Style TargetType="Path">
                 <Setter Property="Fill" Value="White" />
@@ -97,8 +97,8 @@
                     </controls:SimpleStackPanel.Resources>
                     <Border
                         x:Name="PaletteGrip"
-                        Width="330"
-                        Height="25"
+                        Width="320"
+                        Height="28"
                         Margin="0"
                         Padding="3"
                         HorizontalAlignment="Center"
@@ -106,7 +106,7 @@
                         Cursor="SizeAll"
                         MouseDown="PaletteGrip_MouseDown">
                         <Border
-                            Background="#338A8A8A"
+                            Background="#CC404040"
                             CornerRadius="5"
                             ToolTip="Click to drag">
                             <TextBlock
@@ -116,7 +116,7 @@
                                 VerticalAlignment="Center"
                                 FontFamily="Consolas"
                                 FontSize="10"
-                                Foreground="Black" />
+                                Foreground="White" />
                         </Border>
                     </Border>
                     <local:ActivatableButton
@@ -137,17 +137,14 @@
                     </local:ActivatableButton>
                     <Button
                         x:Name="CloseButton"
-                        Width="28"
-                        Height="28"
+                        Width="24"
+                        Height="24"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Background="#FFFF7774"
                         Click="CloseButton_Click"
                         ToolTip="Close">
-                        <Path
-                            Width="10"
-                            Margin="1,1,0,0"
-                            Data="{DynamicResource IconCross}" />
+                        <Path Width="10" Data="{DynamicResource IconCross}" />
                     </Button>
                 </controls:SimpleStackPanel>
 
@@ -285,13 +282,13 @@
                         x:Name="UndoButton"
                         Click="UndoButton_Click"
                         ToolTip="Undo">
-                        <Path Data="{DynamicResource IconUndo}" />
+                        <Path Data="{DynamicResource IconLUndo}" />
                     </local:ActivatableButton>
                     <local:ActivatableButton
                         x:Name="RedoButton"
                         Click="RedoButton_Click"
                         ToolTip="Redo">
-                        <Path Data="{DynamicResource IconUndo}" RenderTransformOrigin="0.5,0.5">
+                        <Path Data="{DynamicResource IconLUndo}" RenderTransformOrigin="0.5,0.5">
                             <Path.RenderTransform>
                                 <ScaleTransform ScaleX="-1" />
                             </Path.RenderTransform>
