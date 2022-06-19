@@ -192,8 +192,7 @@ namespace Clowd.UI
                 PanelOrientation = Orientation.Vertical;
                 PanelReversed = true;
                 Palette.Orientation = Orientation.Horizontal;
-                PaletteGrip.Width = 25;
-                PaletteGrip.Height = 325;
+                PaletteGrip.LayoutTransform = new RotateTransform(-90);
                 OrientationButtonTransform.Angle = 0;
                 OrientationButton.IsActivated = true;
             }
@@ -202,8 +201,7 @@ namespace Clowd.UI
                 PanelOrientation = Orientation.Horizontal;
                 PanelReversed = false;
                 Palette.Orientation = Orientation.Vertical;
-                PaletteGrip.Width = 325;
-                PaletteGrip.Height = 25;
+                PaletteGrip.LayoutTransform = null;
                 OrientationButtonTransform.Angle = 90;
                 OrientationButton.IsActivated = false;
             }
