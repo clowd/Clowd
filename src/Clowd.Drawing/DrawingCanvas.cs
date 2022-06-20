@@ -102,7 +102,7 @@ namespace Clowd.Drawing
             InitializeZoom();
 
             _clickable = new Border();
-            _clickable.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+            _clickable.Background = (Brush)FindResource("CheckeredLargeLightWhiteBackgroundBrush");
             Children.Add(_clickable);
 
             _artworkRectangle = new Border();
@@ -931,14 +931,6 @@ namespace Clowd.Drawing
 
             if (index == 0)
             {
-                if (_clickable != null && ActualWidth > 0 && ContentScale > 0)
-                {
-                    Canvas.SetLeft(_clickable, -_translateTransform.X / _scaleTransform2.ScaleX);
-                    Canvas.SetTop(_clickable, -_translateTransform.Y / _scaleTransform2.ScaleY);
-                    _clickable.Width = ActualWidth / _scaleTransform2.ScaleX;
-                    _clickable.Height = ActualHeight / _scaleTransform2.ScaleY;
-                }
-
                 return _clickable;
             }
             else if (index == 1)
@@ -1441,6 +1433,7 @@ namespace Clowd.Drawing
         {
             var me = (DrawingCanvas)d;
             me.UpdateScaleTransform();
+            me.UpdateClickableSurface();
         }
 
         private static void ContentOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -1450,6 +1443,7 @@ namespace Clowd.Drawing
             var pt = (Point)e.NewValue;
             me._translateTransform.X = Math.Floor(pt.X * dpiZoom) / dpiZoom;
             me._translateTransform.Y = Math.Floor(pt.Y * dpiZoom) / dpiZoom;
+            me.UpdateClickableSurface();
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -1461,6 +1455,26 @@ namespace Clowd.Drawing
                 ContentOffset.Y + sizeInfo.NewSize.Height / 2 - sizeInfo.PreviousSize.Height / 2);
             if (isAutoFit)
                 ZoomPanAuto();
+        }
+
+        public void UpdateClickableSurface()
+        {
+            // _clickable is an element that simply spans the entire visible canvas area
+            // this is necessary because the "real" canvas element may actually not even be on screen
+            // (for example, if the current translation is large) and if that's the case, WPF will not
+            // handle any mouse events.
+            
+            // the parallax calculation here is to give the effect that the background is moving when the 
+            // canvas is being dragged (despite it actually being stationary and fixed to the viewport)
+            double parallaxSize = 100 * _scaleTransform2.ScaleX;
+            var xp = ((_translateTransform.X % parallaxSize) - parallaxSize) / _scaleTransform2.ScaleX;
+            var yp = ((_translateTransform.Y % parallaxSize) - parallaxSize) / _scaleTransform2.ScaleY;
+            
+            // this is to "undo" the current zoom/pan transform on the canvas
+            Canvas.SetLeft(_clickable, -_translateTransform.X / _scaleTransform2.ScaleX + xp);
+            Canvas.SetTop(_clickable, -_translateTransform.Y / _scaleTransform2.ScaleY + yp);
+            _clickable.Width = ActualWidth / _scaleTransform2.ScaleX + Math.Abs(xp);
+            _clickable.Height = ActualHeight / _scaleTransform2.ScaleY + Math.Abs(yp);
         }
 
         public void UpdateScaleTransform()

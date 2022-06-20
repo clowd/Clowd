@@ -35,6 +35,16 @@
                 </DrawingBrush.Drawing>
             </DrawingBrush>
 
+            <DrawingBrush
+                x:Key="CheckeredLargeLightWhiteBackgroundBrush"
+                TileMode="Tile"
+                Viewport="0,0,50,50"
+                ViewportUnits="Absolute">
+                <DrawingBrush.Drawing>
+                    <GeometryDrawing Brush="#11FFFFFF" Geometry="M0,0 H1 V1 H2 V2 H1 V1 H0Z" />
+                </DrawingBrush.Drawing>
+            </DrawingBrush>
+
             <DropShadowEffect
                 x:Key="z-depth1"
                 BlurRadius="5"
