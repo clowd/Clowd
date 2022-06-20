@@ -1255,7 +1255,7 @@ namespace Clowd.Drawing
             menuItem = new MenuItem();
             menuItem.Header = "Zoom to fit content";
             menuItem.InputGestureText = "Ctrl+0";
-            menuItem.Click += (s, e) => this.ZoomPanFit();
+            menuItem.Click += (s, e) => this.ZoomPanAuto();
             _contextMenu.Items.Add(menuItem);
 
             menuItem = new MenuItem();
