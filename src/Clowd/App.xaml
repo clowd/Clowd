@@ -45,6 +45,8 @@
                 </DrawingBrush.Drawing>
             </DrawingBrush>
 
+            <Duration x:Key="ButtonHoverDuration">0:0:0.1</Duration>
+
             <DropShadowEffect
                 x:Key="z-depth1"
                 BlurRadius="5"
@@ -146,7 +148,7 @@
                                                     Storyboard.TargetName="_hover"
                                                     Storyboard.TargetProperty="Opacity"
                                                     To="1"
-                                                    Duration="0:0:0.2" />
+                                                    Duration="{StaticResource ButtonHoverDuration}" />
                                             </Storyboard>
                                         </BeginStoryboard>
                                     </Trigger.EnterActions>
@@ -157,7 +159,7 @@
                                                     Storyboard.TargetName="_hover"
                                                     Storyboard.TargetProperty="Opacity"
                                                     To="0"
-                                                    Duration="0:0:0.2" />
+                                                    Duration="{StaticResource ButtonHoverDuration}" />
                                             </Storyboard>
                                         </BeginStoryboard>
                                     </Trigger.ExitActions>
@@ -239,7 +241,7 @@
                                                     Storyboard.TargetName="_hover"
                                                     Storyboard.TargetProperty="Opacity"
                                                     To="1"
-                                                    Duration="0:0:0.2" />
+                                                    Duration="{StaticResource ButtonHoverDuration}" />
                                             </Storyboard>
                                         </BeginStoryboard>
                                     </MultiTrigger.EnterActions>
@@ -250,7 +252,7 @@
                                                     Storyboard.TargetName="_hover"
                                                     Storyboard.TargetProperty="Opacity"
                                                     To="0"
-                                                    Duration="0:0:0.2" />
+                                                    Duration="{StaticResource ButtonHoverDuration}" />
                                             </Storyboard>
                                         </BeginStoryboard>
                                     </MultiTrigger.ExitActions>

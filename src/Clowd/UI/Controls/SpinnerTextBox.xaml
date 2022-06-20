@@ -19,16 +19,31 @@
                     Style="{x:Null}"
                     Text="{TemplateBinding Content}"
                     TextAlignment="Center" />
-                <!--<ContentPresenter
-                    x:Name="MyContentPresenter"
-                    Margin="0"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Top"
-                    Content="{TemplateBinding Content}" />-->
             </Border>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="_bg" Property="Background" Value="#66FFFFFF" />
+                    <Trigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <ColorAnimation
+                                    Storyboard.TargetName="_bg"
+                                    Storyboard.TargetProperty="(Background).(SolidColorBrush.Color)"
+                                    To="#66FFFFFF"
+                                    Duration="{StaticResource ButtonHoverDuration}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+                    <Trigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard FillBehavior="Stop">
+                                <ColorAnimation
+                                    Storyboard.TargetName="_bg"
+                                    Storyboard.TargetProperty="(Background).(SolidColorBrush.Color)"
+                                    To="#33FFFFFF"
+                                    Duration="{StaticResource ButtonHoverDuration}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.ExitActions>
                 </Trigger>
             </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -65,6 +80,7 @@
             Padding="0"
             Click="SpinUp"
             Content="&#x25B2;"
+            Cursor="Hand"
             FontSize="6"
             Foreground="White"
             Style="{x:Null}"
@@ -75,6 +91,7 @@
             Margin="0,1,2,2"
             Click="SpinDown"
             Content="&#x25BC;"
+            Cursor="Hand"
             FontSize="6"
             Foreground="White"
             Style="{x:Null}"
