@@ -452,7 +452,7 @@ namespace Clowd.UI
 
         private void ZoomFitCommand(object sender, ExecutedRoutedEventArgs e)
         {
-            drawingCanvas.ZoomPanFit();
+            drawingCanvas.ZoomPanAuto();
         }
 
         private void MoveToFrontCommand(object sender, ExecutedRoutedEventArgs e)
