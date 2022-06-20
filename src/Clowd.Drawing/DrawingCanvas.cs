@@ -1049,19 +1049,33 @@ namespace Clowd.Drawing
         {
             if (IsPanning)
                 return;
+            
+            double[] zoomStops = { 0.1, 0.25, 0.50, 0.75, 1, 1.5, 2, 3 };
 
-            double zoom = e.Delta > 0 ? .2 : -.2;
-            if (!(e.Delta > 0) && (ContentScale < .3 || ContentScale < .3))
+            double newZoom = 0;
+
+            if (ContentScale > 2.99)
+            {
+                newZoom = ContentScale + (e.Delta > 0 ? 1 : -1);
+                if (newZoom > 10) newZoom = 0; // max zoom
+            }
+            else if (e.Delta > 0)
+            {
+                newZoom = zoomStops.Where(z => z > ContentScale).Min();
+            }
+            else if (e.Delta < 0 && ContentScale > 0.1)
+            {
+                newZoom = zoomStops.Where(z => z < ContentScale).Max();
+            }
+
+            if (newZoom == 0) 
                 return;
-
+            
             Point relativeMouse = e.GetPosition(this);
-            double absoluteX;
-            double absoluteY;
+            double absoluteX = relativeMouse.X * ContentScale + _translateTransform.X;
+            double absoluteY = relativeMouse.Y * ContentScale + _translateTransform.Y;
 
-            absoluteX = relativeMouse.X * ContentScale + _translateTransform.X;
-            absoluteY = relativeMouse.Y * ContentScale + _translateTransform.Y;
-
-            ContentScale += zoom;
+            ContentScale = newZoom;
             ContentOffset = new Point(absoluteX - relativeMouse.X * ContentScale, absoluteY - relativeMouse.Y * ContentScale);
         }
 
