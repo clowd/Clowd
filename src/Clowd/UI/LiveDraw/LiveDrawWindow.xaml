@@ -13,8 +13,7 @@
     ResizeMode="NoResize"
     Topmost="True"
     UseLayoutRounding="True"
-    WindowStartupLocation="CenterScreen"
-    WindowState="Maximized"
+    WindowStartupLocation="Manual"
     WindowStyle="None"
     mc:Ignorable="d">
     <Window.Resources>
