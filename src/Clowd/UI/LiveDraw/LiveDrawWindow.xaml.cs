@@ -6,7 +6,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Ink;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using Clowd.PlatformUtil;
+using Clowd.PlatformUtil.Windows;
 using Brush = System.Windows.Media.Brush;
 using Point = System.Windows.Point;
 
@@ -62,6 +65,13 @@ namespace Clowd.UI
 
         public void Open()
         {
+            var vbounds = Platform.Current.VirtualScreen.Bounds;
+            var helper = new WindowInteropHelper(this);
+            helper.EnsureHandle();
+
+            var wnd = User32Window.FromHandle(helper.Handle);
+            wnd.WindowBounds = vbounds;
+
             this.Show();
         }
 
