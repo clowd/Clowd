@@ -28,23 +28,16 @@ namespace Clowd.UI.Helpers
         ShieldSuccessGreenBar = ushort.MaxValue - 7,
     }
 
-    public enum RememberPromptChoice
-    {
-        Ask = 0,
-        Yes = 1,
-        No = 2,
-    }
-
     public static class NiceDialog
     {
         public static Task ShowNoticeAsync(FrameworkElement parent, NiceDialogIcon icon, string content)
         {
-            return ShowDialogAsync(parent, icon, content, icon.ToString(), "Ok", null);
+            return ShowDialogAsync(parent, icon, content, icon.ToString());
         }
 
         public static Task ShowNoticeAsync(FrameworkElement parent, NiceDialogIcon icon, string content, string mainInstruction)
         {
-            return ShowDialogAsync(parent, icon, content, mainInstruction, "Ok", null);
+            return ShowDialogAsync(parent, icon, content, mainInstruction);
         }
 
         public static Task<bool> ShowPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content, string promptTxt)
@@ -75,7 +68,7 @@ namespace Clowd.UI.Helpers
             NiceDialogIcon icon,
             string content,
             string mainInstruction = null,
-            string trueTxt = "Ok",
+            string trueTxt = "OK",
             string falseTxt = null,
             NiceDialogIcon footerIcon = NiceDialogIcon.None,
             string footerTxt = null)
@@ -150,9 +143,61 @@ namespace Clowd.UI.Helpers
             }
         }
 
+        public static async Task<SelectedFont> ShowFontDialogAsync(
+            FrameworkElement parent,
+            string fFamily,
+            double fSize,
+            System.Windows.FontStyle fStyle,
+            System.Windows.FontWeight fWeight)
+        {
+            using var dlg = new ExFontDialog();
+            float wfSize = (float)fSize / 96 * 72;
+
+            System.Drawing.FontStyle wfStyle;
+            if (fStyle == FontStyles.Italic)
+                wfStyle = System.Drawing.FontStyle.Italic;
+            else
+                wfStyle = System.Drawing.FontStyle.Regular;
+
+            if (fWeight.ToOpenTypeWeight() > 400)
+                wfStyle |= System.Drawing.FontStyle.Bold;
+
+            dlg.Font = new System.Drawing.Font(fFamily, wfSize, wfStyle, System.Drawing.GraphicsUnit.Point);
+            dlg.FontMustExist = true;
+            dlg.MaxSize = 64;
+            dlg.MinSize = 8;
+            dlg.ShowColor = false;
+            dlg.ShowEffects = false;
+            dlg.ShowHelp = false;
+            dlg.AllowVerticalFonts = false;
+            dlg.AllowVectorFonts = true;
+            dlg.AllowScriptChange = false;
+
+            if (await dlg.ShowAsNiceDialogAsync(parent))
+            {
+                return new SelectedFont()
+                {
+                    TextFontFamilyName = dlg.Font.FontFamily.GetName(0),
+                    TextFontSize = dlg.Font.SizeInPoints / 72 * 96,
+                    TextFontStyle = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Italic) ? FontStyles.Italic : FontStyles.Normal,
+                    TextFontWeight = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Bold) ? FontWeights.Bold : FontWeights.Normal,
+                };
+            }
+
+            return null;
+        }
+
+        public class SelectedFont
+        {
+            public string TextFontFamilyName { get; init; }
+            public double TextFontSize { get; init; }
+            public FontStyle TextFontStyle { get; init; }
+            public FontWeight TextFontWeight { get; init; }
+        }
+
         public static async Task<string[]> ShowSelectFilesDialog(FrameworkElement parent, string title = null, string initialDirectory = null, bool multiSelect = false, string filter = null)
         {
-            var dialog = new OpenFileDialog();
+            using var dialog = new OpenFileDialog();
 
             if (!String.IsNullOrWhiteSpace(title))
                 dialog.Title = title;
@@ -173,7 +218,7 @@ namespace Clowd.UI.Helpers
 
         public static async Task<string> ShowSelectSaveFileDialog(FrameworkElement parent, string title, string directory, string defaultName, string extension)
         {
-            directory = directory ?? Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            directory ??= Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             extension = "." + extension.Trim('.').Trim();
 
             // generate unique file name (screenshot-1.png, screenshot-2.png etc)
@@ -188,7 +233,7 @@ namespace Clowd.UI.Helpers
                 } while (File.Exists(Path.Combine(directory, initialName)));
             }
 
-            var dlg = new SaveFileDialog();
+            using var dlg = new SaveFileDialog();
 
             dlg.Title = title;
             dlg.FileName = initialName; // Default file name
@@ -222,6 +267,18 @@ namespace Clowd.UI.Helpers
                 {
                     try
                     {
+                        if (dialog is IExCommonDialog ex)
+                        {
+                            ex.Created += (s, ev) =>
+                            {
+                                AutoPositionNativeWindowHandle(ev.Handle, ownerHandle, isFake);
+                            };
+                        }
+
+                        // it might be possible to use a NativeWindow here to grab the hwnd of the dialog.
+                        // https://www.codeproject.com/Articles/16276/Customizing-OpenFileDialog-in-NET
+                        // basically wait for WM_SHOWWINDOW
+
                         var result = dialog.ShowDialog(new Win32Window(ownerHandle));
                         tcs.SetResult(result == DialogResult.OK || result == DialogResult.Yes);
                     }
@@ -229,7 +286,6 @@ namespace Clowd.UI.Helpers
                     {
                         tcs.SetException(e);
                     }
-               
                 });
                 thread.SetApartmentState(ApartmentState.STA);
                 thread.Start();
@@ -261,17 +317,7 @@ namespace Clowd.UI.Helpers
             return taskSource.Task;
         }
 
-        public static Task<TaskDialogButton> ShowAsNiceDialogAsync(this TaskDialogPage dialog, FrameworkElement parent)
-        {
-            return FakeShowTaskDialogBlockingOrAsync(parent, dialog, false);
-        }
-
-        public static TaskDialogButton ShowAsNiceDialog(this TaskDialogPage dialog, FrameworkElement parent)
-        {
-            return FakeShowTaskDialogBlockingOrAsync(parent, dialog, true).Result;
-        }
-
-        private static async Task<TaskDialogButton> FakeShowTaskDialogBlockingOrAsync(FrameworkElement parent, TaskDialogPage dialog, bool blocking)
+        public static async Task<TaskDialogButton> ShowAsNiceDialogAsync(this TaskDialogPage dialog, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
 
@@ -280,21 +326,11 @@ namespace Clowd.UI.Helpers
                 TaskDialogStartupLocation location = isFake ? TaskDialogStartupLocation.CenterScreen : TaskDialogStartupLocation.CenterOwner;
 
                 if (String.IsNullOrWhiteSpace(dialog.Caption))
-                {
                     dialog.Caption = Constants.ClowdAppName;
-                }
 
                 dialog.AllowMinimize = false;
                 dialog.AllowCancel = true;
-
-                if (blocking)
-                {
-                    return TaskDialog.ShowDialog(ownerHandle, dialog, location);
-                }
-                else
-                {
-                    return await Task.Run(() => TaskDialog.ShowDialog(ownerHandle, dialog, location));
-                }
+                return await Task.Run(() => TaskDialog.ShowDialog(ownerHandle, dialog, location));
             }
             finally
             {
@@ -409,6 +445,43 @@ namespace Clowd.UI.Helpers
                     p.Y = screenRect.Y + screenRect.Height - s.Height;
 
                 return p;
+            }
+        }
+
+        private static void AutoPositionNativeWindowHandle(IntPtr childHandle, IntPtr ownerHandle, bool isFake)
+        {
+            // update dialog positioning
+            var pChild = Platform.Current.GetWindowFromHandle(childHandle);
+            var size = pChild.WindowBounds.Size;
+            var p = (ScreenPoint)GetDialogPosition((System.Drawing.Size)size, ownerHandle, isFake);
+            pChild.SetPosition(new ScreenRect(p, size));
+            pChild.Activate();
+        }
+
+        private interface IExCommonDialog
+        {
+            event EventHandler<HwndCreatedEventArgs> Created;
+        }
+
+        private class ExFontDialog : FontDialog, IExCommonDialog
+        {
+            public event EventHandler<HwndCreatedEventArgs> Created;
+
+            protected override IntPtr HookProc(IntPtr hWnd, int msg, IntPtr wparam, IntPtr lparam)
+            {
+                var result = base.HookProc(hWnd, msg, wparam, lparam);
+                if (msg == 0x0110 /* INITDIALOG */) Created?.Invoke(this, new HwndCreatedEventArgs(hWnd));
+                return result;
+            }
+        }
+
+        private class HwndCreatedEventArgs : EventArgs
+        {
+            public IntPtr Handle { get; }
+
+            public HwndCreatedEventArgs(IntPtr handle)
+            {
+                Handle = handle;
             }
         }
 
