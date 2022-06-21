@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
@@ -106,11 +107,11 @@ namespace Clowd.UI.Helpers
             {
                 page.Buttons.Add(new TaskDialogButton(falseTxt));
             }
-            
+
             var result = await page.ShowAsNiceDialogAsync(parent);
             return result == btnTrue;
         }
-        
+
         private static TaskDialogIcon GetTaskIconFromNiceIcon(NiceDialogIcon nice)
         {
             return nice switch
@@ -216,18 +217,30 @@ namespace Clowd.UI.Helpers
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
             try
             {
-                return await Task.Run(() =>
+                var tcs = new TaskCompletionSource<bool>();
+                var thread = new Thread(() =>
                 {
-                    var result = dialog.ShowDialog(new Win32Window(ownerHandle));
-                    return result == DialogResult.OK || result == DialogResult.Yes;
+                    try
+                    {
+                        var result = dialog.ShowDialog(new Win32Window(ownerHandle));
+                        tcs.SetResult(result == DialogResult.OK || result == DialogResult.Yes);
+                    }
+                    catch (Exception e)
+                    {
+                        tcs.SetException(e);
+                    }
+               
                 });
+                thread.SetApartmentState(ApartmentState.STA);
+                thread.Start();
+                return await tcs.Task;
             }
             finally
             {
                 ReleaseOwner(ownerWindow, isFake);
             }
         }
-        
+
         public static Task<DialogResult> ShowAsNiceDialogAsync(this Form form, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
@@ -273,7 +286,7 @@ namespace Clowd.UI.Helpers
 
                 dialog.AllowMinimize = false;
                 dialog.AllowCancel = true;
-                
+
                 if (blocking)
                 {
                     return TaskDialog.ShowDialog(ownerHandle, dialog, location);
