@@ -73,14 +73,23 @@ namespace Clowd.UI
                 {
                     // this is a brand new session. we'll show it on top of the captured area.
                     var screen = Platform.Current.GetScreenFromRect(session.CroppedRect);
+                    var workArea = screen.WorkingArea;
                     var dpi = screen.ToDpiContext();
 
-                    var logicalImageSize = dpi.ToWorldSize(session.CroppedRect.Size);
+                    // adjust working area to account for the invisible resizing border around the window
+                    var resizePadding = (int)(SystemParameters.ResizeFrameVerticalBorderWidth + SystemParameters.FixedFrameVerticalBorderWidth);
+                    workArea = new ScreenRect(
+                        workArea.Left - resizePadding,
+                        workArea.Y,
+                        workArea.Width + (resizePadding * 2),
+                        workArea.Height + resizePadding);
 
-                    // add 30 because of default toolbar size. 
+                    // calculate needed client rect; add 30 because of default toolbar size.
+                    var logicalImageSize = dpi.ToWorldSize(session.CroppedRect.Size);
                     var padding = SettingsRoot.Current.Editor.StartupPadding;
                     var requiredSize = new Size(logicalImageSize.Width + 30 + padding, logicalImageSize.Height + 30 + padding);
 
+                    // measure the page to see if any of the tool bars wrap
                     var page = wnd.EditorPage;
                     page.Measure(requiredSize);
 
@@ -90,8 +99,19 @@ namespace Clowd.UI
                         session.CroppedRect.Width + dpi.ToScreenWH(page.ToolBar.DesiredSize.Width) + padding * 2,
                         session.CroppedRect.Height + dpi.ToScreenWH(page.PropertiesBar.DesiredSize.Height) + padding * 2);
 
-                    var wndRect = wnd.PlatformWindow.GetWindowRectFromIdealClientRect(rect);
-                    wnd.PlatformWindow.WindowBounds = wndRect.Intersect(screen.WorkingArea);
+                    // this is the 'ideal' rect that places the window precisely on top of the captured area,
+                    // but part of the window may be outside the monitor
+                    var idealRect = wnd.PlatformWindow.GetWindowRectFromIdealClientRect(rect);
+
+                    // we shuffle the ideal rect around each edge if it is off screen to try and 
+                    // achieve a window location that can show with 100% zoom.
+                    if (idealRect.Left < workArea.Left) idealRect = idealRect.Translate(workArea.Left - idealRect.Left, 0);
+                    if (idealRect.Top < workArea.Top) idealRect = idealRect.Translate(0, workArea.Top - idealRect.Top);
+                    if (idealRect.Right > workArea.Right) idealRect = idealRect.Translate(workArea.Right - idealRect.Right, 0);
+                    if (idealRect.Bottom > workArea.Bottom) idealRect = idealRect.Translate(0, workArea.Bottom - idealRect.Bottom);
+
+                    // finally intersect with screen to crop if the image really can't fit.
+                    wnd.PlatformWindow.WindowBounds = idealRect.Intersect(workArea);
 
                     wnd.Show();
                     wnd.PlatformWindow.Activate();
