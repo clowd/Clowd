@@ -59,6 +59,8 @@ namespace Clowd.PlatformUtil
 
         public ScreenRect Grow(int amount) => new ScreenRect(Left - amount, Top - amount, Width + 2 * amount, Height + 2 * amount);
 
+        public ScreenRect Translate(int tx, int ty) => new ScreenRect(Left + tx, Top + ty, Width, Height);
+
         public ScreenRect Intersect(ScreenRect rect)
         {
             var result = FromLTRB(
