@@ -549,31 +549,19 @@ namespace Clowd.UI
 
         private async void font_Click(object sender, RoutedEventArgs e)
         {
-            System.Windows.Forms.FontDialog dlg = new System.Windows.Forms.FontDialog();
-            float wfSize = (float)drawingCanvas.TextFontSize / 96 * 72;
-            System.Drawing.FontStyle wfStyle;
-            if (drawingCanvas.TextFontStyle == FontStyles.Italic)
-                wfStyle = System.Drawing.FontStyle.Italic;
-            else
-                wfStyle = System.Drawing.FontStyle.Regular;
-            if (drawingCanvas.TextFontWeight.ToOpenTypeWeight() > 400)
-                wfStyle |= System.Drawing.FontStyle.Bold;
-            dlg.Font = new System.Drawing.Font(drawingCanvas.TextFontFamilyName, wfSize, wfStyle, System.Drawing.GraphicsUnit.Point);
-            dlg.FontMustExist = true;
-            dlg.MaxSize = 64;
-            dlg.MinSize = 8;
-            dlg.ShowColor = false;
-            dlg.ShowEffects = false;
-            dlg.ShowHelp = false;
-            dlg.AllowVerticalFonts = false;
-            dlg.AllowVectorFonts = true;
-            dlg.AllowScriptChange = false;
-            if (await dlg.ShowAsNiceDialogAsync(this))
+            var result = await NiceDialog.ShowFontDialogAsync(
+                this,
+                drawingCanvas.TextFontFamilyName,
+                drawingCanvas.TextFontSize,
+                drawingCanvas.TextFontStyle,
+                drawingCanvas.TextFontWeight);
+
+            if (result != null)
             {
-                drawingCanvas.TextFontFamilyName = dlg.Font.FontFamily.GetName(0);
-                drawingCanvas.TextFontSize = dlg.Font.SizeInPoints / 72 * 96;
-                drawingCanvas.TextFontStyle = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Italic) ? FontStyles.Italic : FontStyles.Normal;
-                drawingCanvas.TextFontWeight = dlg.Font.Style.HasFlag(System.Drawing.FontStyle.Bold) ? FontWeights.Bold : FontWeights.Normal;
+                drawingCanvas.TextFontFamilyName = result.TextFontFamilyName;
+                drawingCanvas.TextFontSize = result.TextFontSize;
+                drawingCanvas.TextFontStyle = result.TextFontStyle;
+                drawingCanvas.TextFontWeight = result.TextFontWeight;
             }
         }
 
