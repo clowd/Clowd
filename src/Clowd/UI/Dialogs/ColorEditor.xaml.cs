@@ -22,27 +22,71 @@ namespace Clowd.UI.Dialogs
     /// </summary>
     public partial class ColorEditor : Window
     {
+        public Color CurrentColor
+        {
+            get { return (Color)GetValue(CurrentColorProperty); }
+            set { SetValue(CurrentColorProperty, value); }
+        }
+
+        public static readonly DependencyProperty CurrentColorProperty =
+            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorEditor), new PropertyMetadata(Colors.White));
+
         public ColorEditor()
         {
             InitializeComponent();
             CreateColorPalette();
         }
 
-
         private void CreateColorPalette()
         {
             ColorPalette.Children.Clear();
-
             var colors = Cyotek.Windows.Forms.ColorPalettes.PaintPalette.Select(c => Color.FromArgb(c.A, c.R, c.G, c.B));
-
             foreach (var c in colors)
             {
-                ColorPalette.Children.Add(new Border { Background = new SolidColorBrush(c) });
+                var item = new ColorPaletteItem { Background = new SolidColorBrush(c) };
+                item.MouseDown += ColorPaletteItemSelected;
+                ColorPalette.Children.Add(item);
+            }
+        }
+
+        private void ColorPaletteItemSelected(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is ColorPaletteItem item && item.Background is SolidColorBrush brush)
+            {
+                CurrentColor = brush.Color;
             }
         }
     }
 
+    public class ColorPaletteItem : Control
+    {
+        const double _penThicknes = 1;
+        Pen _blackPen = new Pen(Brushes.Black, _penThicknes);
+        Pen _whitePen = new Pen(Brushes.White, _penThicknes);
 
+        protected override void OnMouseEnter(MouseEventArgs e)
+        {
+            base.OnMouseEnter(e);
+            InvalidateVisual();
+        }
+
+        protected override void OnMouseLeave(MouseEventArgs e)
+        {
+            base.OnMouseLeave(e);
+            InvalidateVisual();
+        }
+
+        protected override void OnRender(DrawingContext drawingContext)
+        {
+            drawingContext.DrawRectangle(Background, null, new Rect(0, 0, ActualWidth, ActualHeight));
+
+            if (IsMouseOver)
+            {
+                drawingContext.DrawRectangle(null, _blackPen, new Rect(0.5, 0.5, ActualWidth - 1, ActualHeight - 1));
+                drawingContext.DrawRectangle(null, _whitePen, new Rect(1.5, 1.5, ActualWidth - 3, ActualHeight - 3));
+            }
+        }
+    }
 
     public class ColorWheel : Canvas
     {
@@ -53,7 +97,7 @@ namespace Clowd.UI.Dialogs
         }
 
         public static readonly DependencyProperty CurrentColorProperty =
-            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorWheel), new PropertyMetadata(Colors.Black, CurrentColorPropertyChanged));
+            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorWheel), new PropertyMetadata(Colors.White, CurrentColorPropertyChanged));
 
         private static void CurrentColorPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -144,7 +188,7 @@ namespace Clowd.UI.Dialogs
 
         private void UpdateCursor()
         {
-            _cursor.Background = new SolidColorBrush(CurrentColor);
+            _cursor.Background = new SolidColorBrush(Color.FromRgb(CurrentColor.R, CurrentColor.G, CurrentColor.B));
             var lc = GetColorLocation(CurrentColor);
             SetLeft(_cursor, lc.X - HalfCursorSize);
             SetTop(_cursor, lc.Y - HalfCursorSize);
@@ -152,14 +196,27 @@ namespace Clowd.UI.Dialogs
 
         protected Point GetColorLocation(Color color)
         {
-            return GetColorLocation(HSLColor.FromRGB(color));
+            var h1 = HSLColor.FromRGB(color);
+            var h2 = new Cyotek.Windows.Forms.HslColor(System.Drawing.Color.FromArgb(color.R, color.G, color.B));
+
+            return GetColorLocation(h1);
         }
 
         protected virtual Point GetColorLocation(HSLColor color)
         {
             double angle = color.Hue * Math.PI / 180;
             double radius = ActualWidth / 2 - BorderMargin;
-            radius *= color.Saturation;
+
+            if (color.Saturation == 0)
+            {
+                radius = 0;
+            }
+            else
+            {
+                double mult = 1 - (Math.Max(0.5, color.Lightness) / 0.5 - 1);
+                radius *= mult;
+            }
+
             return this.GetColorLocation(angle, radius);
         }
 
@@ -183,9 +240,10 @@ namespace Clowd.UI.Dialogs
             double radius = ActualWidth / 2 - BorderMargin; // 100
             double dx = Math.Abs(point.X - (ActualWidth / 2) - BorderMargin); // 250 - 100 - 2 = 150
             double dy = Math.Abs(point.Y - (ActualHeight / 2) - BorderMargin); // 100 - 100 = 0
-            double angle = Math.Atan(dy / dx) / Math.PI * 180; 
+            double angle = Math.Atan(dy / dx) / Math.PI * 180;
             double distance = Math.Pow(Math.Pow(dx, 2) + Math.Pow(dy, 2), 0.5);
-            double saturation = distance / radius;
+            double saturation = Math.Min(1, distance / radius);
+            double lightness = 1 - (saturation * 0.5);
 
             if (point.X < (ActualWidth / 2))
             {
@@ -197,9 +255,56 @@ namespace Clowd.UI.Dialogs
                 angle = 360 - angle;
             }
 
-            HSLColor newColor = new HSLColor() { Hue = angle, Lightness = 0.5, Saturation = saturation };
+            HSLColor newColor = new HSLColor() { Hue = angle, Lightness = lightness, Saturation = 1 };
             CurrentColor = newColor.ToRGB();
         }
+
+        //protected virtual void SetColor(Point uv)
+        //{
+        //    // https://developer.download.nvidia.com/cg/length.html
+        //    double length(Point v)
+        //    {
+        //        double dot(Point a, Point b)
+        //        {
+        //            return a.X * b.X + a.Y * b.Y;
+        //        }
+        //        return Math.Sqrt(dot(v, v));
+        //    }
+
+
+        //    // same impl as ColorWheelShader.hlsl
+        //    const double value = 1d;
+        //    uv = new Point(uv.X / ActualWidth, uv.Y / ActualHeight);
+        //    uv = new Point(2 * uv.X - 1, 2 * uv.Y - 1);
+        //    uv = new Point(uv.X, uv.Y / -1);
+        //    double saturation = length(uv);
+        //    double hue = 3 * (Math.PI - Math.Atan2(uv.Y, -uv.X)) / Math.PI;
+        //    double chroma = value * saturation;
+        //    double second = chroma * (1 - Math.Abs(hue % 2.0 - 1));
+
+        //    (double r, double g, double b) rgb;
+
+        //    if (hue < 1)
+        //        rgb = (chroma, second, 0);
+        //    else if (hue < 2)
+        //        rgb = (second, chroma, 0);
+        //    else if (hue < 3)
+        //        rgb = (0, chroma, second);
+        //    else if (hue < 4)
+        //        rgb = (0, second, chroma);
+        //    else if (hue < 5)
+        //        rgb = (second, 0, chroma);
+        //    else
+        //        rgb = (chroma, 0, second);
+
+        //    var m = (value - chroma);
+
+        //    byte r = (byte)((rgb.r + m) * 255);
+        //    byte g = (byte)((rgb.g + m) * 255);
+        //    byte b = (byte)((rgb.b + m) * 255);
+
+        //    CurrentColor = Color.FromRgb(r, g, b);
+        //}
 
         private class ColorWheelEffect : ShaderEffect
         {
