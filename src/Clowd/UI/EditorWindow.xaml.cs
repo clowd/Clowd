@@ -48,6 +48,15 @@ namespace Clowd.UI
 
         public static void ShowSession(SessionInfo session)
         {
+            if (session == null)
+            {
+                session = SessionManager.Current.CreateNewSession();
+                var wnd = new EditorWindow(session);
+                wnd.Show();
+                wnd.PlatformWindow.Activate();
+                return;
+            }
+            
             var openWnd = App.Current.Windows.OfType<EditorWindow>().FirstOrDefault(f => f._info == session);
             if (openWnd != null)
             {

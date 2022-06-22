@@ -311,7 +311,7 @@ namespace Clowd
             context.Items.Add(screend);
 
             var editor = new MenuItem() { Header = "Image _Editor" };
-            editor.Click += (s, e) => EditorWindow.ShowSession(SessionManager.Current.CreateNewSession());
+            editor.Click += (s, e) => EditorWindow.ShowSession(null);
             context.Items.Add(editor);
 
             context.Items.Add(new Separator());
