@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0-windows10.0.17763.0</TargetFramework>
     <OutputType>WinExe</OutputType>
@@ -13,9 +13,15 @@
     <OutputPath>..\..\bin\$(Configuration)</OutputPath>
     <StartupObject>Clowd.Program</StartupObject>
   </PropertyGroup>
+  
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <DebugType>none</DebugType>
   </PropertyGroup>
+  
+  <ItemGroup>
+    <None Include="UI\Dialogs\ColorWheelShader.hlsl" />
+  </ItemGroup>
+  
   <ItemGroup>
     <Resource Include="Assets\Raleway.ttf" />
     <Resource Include="Images\Checkmark-26.png" />
@@ -31,7 +37,9 @@
     <Resource Include="Images\ok_48px.png" />
     <Resource Include="UI\Dialogs\ColorPicker\ColorPicker.png" />
     <Resource Include="UI\Dialogs\ColorPicker\Hsv.png" />
+    <Resource Include="UI\Dialogs\ColorWheelShader.cso" />
   </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
@@ -39,6 +47,7 @@
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
     <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj" />
   </ItemGroup>
+  
   <ItemGroup>
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.0.2" />
     <PackageReference Include="Clowd.Squirrel" Version="3.0.157-*" />
@@ -49,6 +58,13 @@
     <PackageReference Include="ThomasLevesque.WeakEvent" Version="4.1.0" />
     <PackageReference Include="WPF-UI" Version="1.2.7" />
   </ItemGroup>
+
+  <!-- uncomment to compile shaders -->
+  <!--<ItemGroup>
+    <PixelShader ShaderModel="3_0" Include="UI\Dialogs\ColorWheelShader.hlsl" />
+    <PackageReference Include="Microsoft.HLSL.CSharpVB" Version="1.0.2" />
+  </ItemGroup>-->
+
   <ItemGroup>
     <Page Update="UI\Dialogs\ColorPicker\Generic.xaml">
       <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>

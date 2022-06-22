@@ -15,25 +15,36 @@ namespace Clowd.Util
             }
             set
             {
-                _hue = value / 60d;
+                _hue = value;
+                if (_hue > 359)
+                {
+                    _hue = 0;
+                }
+                if (_hue < 0)
+                {
+                    _hue = 359;
+                }
+                _hue /= 60d;
             }
         }
 
         public double Saturation
         {
-            get { return _sat * 100; }
-            set { _sat = value / 100; }
+            get { return _sat; }
+            set { _sat = Math.Min(1, Math.Max(0, value)); }
         }
 
         public double Lightness
         {
-            get { return _lum * 100; }
-            set { _lum = value / 100; }
+            get { return _lum; }
+            set { _lum = Math.Min(1, Math.Max(0, value)); }
         }
 
         private double _hue;
         private double _sat;
         private double _lum;
+
+        public HSLColor() { }
 
         private HSLColor(double H, double S, double L)
         {
