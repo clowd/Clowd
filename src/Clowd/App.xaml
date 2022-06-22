@@ -36,6 +36,16 @@
             </DrawingBrush>
 
             <DrawingBrush
+                x:Key="CheckeredMediumGrayBackgroundBrush"
+                TileMode="Tile"
+                Viewport="0,0,16,16"
+                ViewportUnits="Absolute">
+                <DrawingBrush.Drawing>
+                    <GeometryDrawing Brush="#96969696" Geometry="M0,0 H1 V1 H2 V2 H1 V1 H0Z" />
+                </DrawingBrush.Drawing>
+            </DrawingBrush>
+
+            <DrawingBrush
                 x:Key="CheckeredLargeLightWhiteBackgroundBrush"
                 TileMode="Tile"
                 Viewport="0,0,50,50"

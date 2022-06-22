@@ -9,28 +9,32 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         ResizeMode="NoResize"
-        Title="ColorEditor" Height="370" Width="600">
+        Title="ColorEditor" SizeToContent="WidthAndHeight">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="240" />
-            <ColumnDefinition />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="80" />
         </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-        <WrapPanel x:Name="ColorPalette" ItemHeight="15" ItemWidth="15" Orientation="Horizontal" Height="90"
-                   Background="{StaticResource CheckeredLightGrayBackgroundBrush}" Width="240"
+        <local:ColorWheel Width="200" Height="200" VerticalAlignment="Center" 
+                          HorizontalAlignment="Center" Margin="20" 
+                          CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
+        <WrapPanel x:Name="ColorPalette" ItemHeight="16" ItemWidth="16" Orientation="Horizontal" Height="96"
+                   Background="{StaticResource CheckeredMediumGrayBackgroundBrush}" Width="256" Grid.Row="1"
                    VerticalAlignment="Bottom">
-
             <Border Background="Black" />
             <Border Background="White" />
             <Border Background="#A0A0A0" />
             <Border Background="#C0C0C0" />
             <Border Background="#7F000000" />
             <Border Background="Transparent" />
-       
         </WrapPanel>
 
-        <local:ColorWheel Width="200" Height="200" VerticalAlignment="Top" Margin="0,20,0,0" CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-     
     </Grid>
 </Window>
