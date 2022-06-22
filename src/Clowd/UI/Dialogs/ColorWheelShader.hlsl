@@ -1,10 +1,11 @@
 
 
-#define PI 3.141592653f
+#define PI 3.1415926535897932384626433832795f
 #define value 1.0f
 
-float4 main(float2 uv : TEXCOORD) : COLOR{
+float4 main(float2 uv : TEXCOORD) : SV_TARGET {
     uv = 2 * uv - 1;
+    uv.y /= -1;
     float saturation = length(uv);
     float hue = 3 * (PI - atan2(uv.y, -uv.x)) / PI;
     float chroma = value * saturation;
