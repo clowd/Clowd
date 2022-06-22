@@ -5,18 +5,21 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Clowd.UI.Dialogs"
         mc:Ignorable="d"
+        DataContext="{Binding RelativeSource={RelativeSource Self}}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        Title="ColorEditor" Height="450" Width="800">
+        ResizeMode="NoResize"
+        Title="ColorEditor" Height="370" Width="600">
     <Grid>
         <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240" />
             <ColumnDefinition />
-            <ColumnDefinition />
-            <ColumnDefinition />
+            <ColumnDefinition Width="80" />
         </Grid.ColumnDefinitions>
 
         <WrapPanel x:Name="ColorPalette" ItemHeight="15" ItemWidth="15" Orientation="Horizontal" Height="90"
-                   Background="{StaticResource CheckeredLightGrayBackgroundBrush}" Width="240">
+                   Background="{StaticResource CheckeredLightGrayBackgroundBrush}" Width="240"
+                   VerticalAlignment="Bottom">
 
             <Border Background="Black" />
             <Border Background="White" />
@@ -24,32 +27,10 @@
             <Border Background="#C0C0C0" />
             <Border Background="#7F000000" />
             <Border Background="Transparent" />
-            
-            <Border Background="#404040" />
-            <Border Background="#808080" />
-            <Border Background="#303030" />
-            <Border Background="#606060" />
-            <Border Background="#7F404040" />
-            <Border Background="#7F808080" />
-
-            <Border Background="#FF0000" />
-            <Border Background="#7F0000" />
-            <Border Background="#FF7F7F" />
-            <Border Background="#7F3F3F" />
-            <Border Background="#7FFF0000" />
-            <Border Background="#7F7F0000" />
+       
         </WrapPanel>
 
-        <local:ColorWheel Width="200" Height="200" />
-
-        <!--<Canvas Width="200" Height="200" >
-            <Ellipse Stroke="Pink" StrokeThickness="2" Width="200" Height="200" />
-        </Canvas>-->
-        <!--<Ellipse Width="200" Height="200" Fill="Transparent">
-            <Ellipse.Effect>
-                <local:ColorWheelEffect />
-            </Ellipse.Effect>
-        </Ellipse>
-        <Ellipse Width="202" Height="202" Fill="Transparent" StrokeThickness="3" Stroke="White" />-->
+        <local:ColorWheel Width="200" Height="200" VerticalAlignment="Top" Margin="0,20,0,0" CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+     
     </Grid>
 </Window>
