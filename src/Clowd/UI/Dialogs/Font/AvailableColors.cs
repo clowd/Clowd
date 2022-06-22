@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using System.Windows.Media;
 
@@ -21,7 +21,7 @@ namespace Clowd.UI.Dialogs.Font
             return (new AvailableColors()).GetFontColorByName(name);
         }
 
-        public static FontColor GetFontColor(Color c)
+        public static FontColor GetFontColor(System.Windows.Media.Color c)
         {
             return AvailableColors.GetFontColor(new SolidColorBrush(c));
         }
@@ -85,7 +85,7 @@ namespace Clowd.UI.Dialogs.Font
             {
                 PropertyInfo prop = properties[i];
                 string name = prop.Name;
-                SolidColorBrush brush = new SolidColorBrush((Color)prop.GetValue(null, null));
+                SolidColorBrush brush = new SolidColorBrush((System.Windows.Media.Color)prop.GetValue(null, null));
                 base.Add(new FontColor(name, brush));
             }
         }
