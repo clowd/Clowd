@@ -1,40 +1,140 @@
-﻿<Window x:Class="Clowd.UI.Dialogs.ColorEditor"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Clowd.UI.Dialogs"
-        mc:Ignorable="d"
-        DataContext="{Binding RelativeSource={RelativeSource Self}}"
-        UseLayoutRounding="True"
-        SnapsToDevicePixels="True"
-        ResizeMode="NoResize"
-        Title="ColorEditor" SizeToContent="WidthAndHeight">
+﻿<Window
+    x:Class="Clowd.UI.Dialogs.ColorEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd.UI.Dialogs"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="ColorEditor"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    ResizeMode="NoResize"
+    SizeToContent="WidthAndHeight"
+    SnapsToDevicePixels="True"
+    UseLayoutRounding="True"
+    mc:Ignorable="d">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="80" />
         </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
 
-        <local:ColorWheel Width="200" Height="200" VerticalAlignment="Center" 
-                          HorizontalAlignment="Center" Margin="20" 
-                          CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <WrapPanel x:Name="ColorPalette" ItemHeight="16" ItemWidth="16" Orientation="Horizontal" Height="96"
-                   Background="{StaticResource CheckeredMediumGrayBackgroundBrush}" Width="256" Grid.Row="1"
-                   VerticalAlignment="Bottom">
-            <Border Background="Black" />
-            <Border Background="White" />
-            <Border Background="#A0A0A0" />
-            <Border Background="#C0C0C0" />
-            <Border Background="#7F000000" />
-            <Border Background="Transparent" />
-        </WrapPanel>
+            <local:ColorWheel
+                Width="200"
+                Height="200"
+                Margin="20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
+            <WrapPanel
+                x:Name="ColorPalette"
+                Grid.Row="1"
+                Width="256"
+                Height="96"
+                VerticalAlignment="Bottom"
+                Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
+                ItemHeight="16"
+                ItemWidth="16"
+                Orientation="Horizontal">
+                <Border Background="Black" />
+                <Border Background="White" />
+                <Border Background="#A0A0A0" />
+                <Border Background="#C0C0C0" />
+                <Border Background="#7F000000" />
+                <Border Background="Transparent" />
+            </WrapPanel>
+        </Grid>
+
+        <Grid Grid.Column="1" Margin="10,20,10,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="200" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+            </Grid.RowDefinitions>
+
+            <Grid.Resources>
+                <Style TargetType="Label">
+                    <Setter Property="HorizontalAlignment" Value="Right" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="FontFamily" Value="Consolas" />
+                </Style>
+                <Style TargetType="local:ColorSlider">
+                    <Setter Property="CornerRadius" Value="4" />
+                    <Setter Property="Margin" Value="0,4" />
+                </Style>
+            </Grid.Resources>
+
+            <Label Grid.Row="0">HEX:</Label>
+            <Label
+                Grid.Row="2"
+                Grid.Column="1"
+                HorizontalAlignment="Left">
+                rgba(0,0,0,0)
+            </Label>
+
+            <Label Grid.Row="3">R:</Label>
+            <local:ColorSlider
+                Grid.Row="3"
+                Grid.Column="1"
+                ColorPart="R"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
+            <Label Grid.Row="4">G:</Label>
+            <local:ColorSlider
+                Grid.Row="4"
+                Grid.Column="1"
+                ColorPart="G"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
+            <Label Grid.Row="5">B:</Label>
+            <local:ColorSlider
+                Grid.Row="5"
+                Grid.Column="1"
+                ColorPart="B"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
+            <Label
+                Grid.Row="7"
+                Grid.Column="1"
+                HorizontalAlignment="Left">
+                hsla(0,0,0,0)
+            </Label>
+            <Label Grid.Row="8">H:</Label>
+            <Label Grid.Row="9">S:</Label>
+            <Label Grid.Row="10">L:</Label>
+            <Label Grid.Row="11">A:</Label>
+        </Grid>
+
+        <Grid Grid.Column="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="20" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+        </Grid>
 
     </Grid>
 </Window>
