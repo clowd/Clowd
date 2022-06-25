@@ -64,7 +64,7 @@ namespace Clowd.UI.Dialogs
         }
 
         public static readonly DependencyProperty CurrentColorProperty =
-            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorSlider), 
+            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorSlider),
                 new FrameworkPropertyMetadata(Colors.White, FrameworkPropertyMetadataOptions.AffectsRender));
 
         public string ColorPart
@@ -74,7 +74,7 @@ namespace Clowd.UI.Dialogs
         }
 
         public static readonly DependencyProperty ColorPartProperty =
-            DependencyProperty.Register("ColorPart", typeof(string), typeof(ColorSlider), 
+            DependencyProperty.Register("ColorPart", typeof(string), typeof(ColorSlider),
                 new FrameworkPropertyMetadata("A", FrameworkPropertyMetadataOptions.AffectsRender));
 
         protected Brush GetBackgroundColorBrush()
@@ -285,20 +285,19 @@ namespace Clowd.UI.Dialogs
             me.UpdateCursor();
         }
 
-        Ellipse _border;
-        Ellipse _inner;
+        Path _border;
+        Rectangle _inner;
         Border _cursor;
 
-        bool _mouseDown;
-
-        private const int BorderMargin = 1;
         private const int CursorSize = 10;
         private const int HalfCursorSize = CursorSize / 2;
 
         public ColorWheel()
         {
-            _border = new Ellipse() { StrokeThickness = 2, Stroke = Brushes.White };
-            _inner = new Ellipse() { Fill = Brushes.Black };
+            _border = new Path() { Fill = Brushes.White };
+            _border.SetBinding(Path.FillProperty, new Binding(nameof(Background)) { Source = this });
+
+            _inner = new Rectangle() { Fill = Brushes.Black };
             if (!App.IsDesignMode)
                 _inner.Effect = new ColorWheelEffect();
 
@@ -320,48 +319,46 @@ namespace Clowd.UI.Dialogs
 
         protected override void OnMouseDown(MouseButtonEventArgs e)
         {
+            base.OnMouseDown(e);
             var pt = Mouse.GetPosition(this);
             if (e.LeftButton == MouseButtonState.Pressed && IsPointInWheel(pt))
             {
                 CaptureMouse();
-                _mouseDown = true;
                 SetColor(pt);
             }
-            base.OnMouseDown(e);
         }
 
         protected override void OnMouseUp(MouseButtonEventArgs e)
         {
-            if (_mouseDown)
+            base.OnMouseUp(e);
+            if (IsMouseCaptured)
             {
                 ReleaseMouseCapture();
-                _mouseDown = false;
                 SetColor(Mouse.GetPosition(this));
             }
-
-            base.OnMouseUp(e);
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
-            if (_mouseDown)
-            {
-                SetColor(Mouse.GetPosition(this));
-            }
             base.OnMouseMove(e);
+            if (IsMouseCaptured)
+                SetColor(Mouse.GetPosition(this));
         }
 
         private void Arrange()
         {
-            SetLeft(_border, 0);
-            SetTop(_border, 0);
             _border.Width = ActualWidth;
             _border.Height = ActualHeight;
+            _inner.Width = ActualWidth;
+            _inner.Height = ActualHeight;
 
-            SetLeft(_inner, BorderMargin);
-            SetTop(_inner, BorderMargin);
-            _inner.Width = Math.Max(0, ActualWidth - BorderMargin * 2);
-            _inner.Height = Math.Max(0, ActualHeight - BorderMargin * 2);
+            if (ActualWidth > 0 && ActualHeight > 0)
+            {
+                _border.Data = new CombinedGeometry(
+                        GeometryCombineMode.Exclude,
+                        new RectangleGeometry(new Rect(0, 0, ActualWidth, ActualHeight)),
+                        new EllipseGeometry(new Rect(1, 1, ActualWidth - 2, ActualHeight - 2)));
+            }
 
             UpdateCursor();
         }
@@ -383,7 +380,7 @@ namespace Clowd.UI.Dialogs
         protected virtual Point GetColorLocation(HSLColor color)
         {
             double angle = color.Hue * Math.PI / 180;
-            double radius = ActualWidth / 2 - BorderMargin;
+            double radius = ActualWidth / 2;
 
             if (color.Saturation == 0)
             {
@@ -409,15 +406,15 @@ namespace Clowd.UI.Dialogs
         {
             // http://my.safaribooksonline.com/book/programming/csharp/9780672331985/graphics-with-windows-forms-and-gdiplus/ch17lev1sec21
             Point normalized = new Point(point.X - (ActualWidth / 2), point.Y - (ActualHeight / 2));
-            double radius = ActualWidth / 2 - BorderMargin;
+            double radius = ActualWidth / 2;
             return normalized.X * normalized.X + normalized.Y * normalized.Y <= radius * radius;
         }
 
         protected virtual void SetColor(Point point)
         {
-            double radius = ActualWidth / 2 - BorderMargin; // 100
-            double dx = Math.Abs(point.X - (ActualWidth / 2) - BorderMargin); // 250 - 100 - 2 = 150
-            double dy = Math.Abs(point.Y - (ActualHeight / 2) - BorderMargin); // 100 - 100 = 0
+            double radius = ActualWidth / 2;
+            double dx = Math.Abs(point.X - (ActualWidth / 2));
+            double dy = Math.Abs(point.Y - (ActualHeight / 2));
             double angle = Math.Atan(dy / dx) / Math.PI * 180;
             double distance = Math.Pow(Math.Pow(dx, 2) + Math.Pow(dy, 2), 0.5);
             double saturation = Math.Min(1, distance / radius);
