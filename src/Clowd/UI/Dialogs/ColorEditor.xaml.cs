@@ -34,13 +34,24 @@ namespace Clowd.UI.Dialogs
             CreateColorPalette();
         }
 
+        protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+        {
+            base.OnPreviewMouseLeftButtonDown(e);
+
+            if (e.Source.GetType() != typeof(TextBox))
+            {
+                // reset focus if clicking on anything other than textbox
+                Keyboard.Focus(tabReset);
+            }
+        }
+
         private void CreateColorPalette()
         {
             ColorPalette.Children.Clear();
             var colors = Cyotek.Windows.Forms.ColorPalettes.PaintPalette.Select(c => Color.FromArgb(c.A, c.R, c.G, c.B));
             foreach (var c in colors)
             {
-                var item = new ColorPaletteItem { Background = new SolidColorBrush(c) };
+                var item = new ColorPaletteItem { Background = new SolidColorBrush(c), IsTabStop = false };
                 item.MouseDown += ColorPaletteItemSelected;
                 ColorPalette.Children.Add(item);
             }
@@ -67,6 +78,16 @@ namespace Clowd.UI.Dialogs
             DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorSlider),
                 new FrameworkPropertyMetadata(Colors.White, FrameworkPropertyMetadataOptions.AffectsRender));
 
+        public Brush ThumbBrush
+        {
+            get { return (Brush)GetValue(ThumbBrushProperty); }
+            set { SetValue(ThumbBrushProperty, value); }
+        }
+
+        public static readonly DependencyProperty ThumbBrushProperty =
+            DependencyProperty.Register("ThumbBrush", typeof(Brush), typeof(ColorSlider),
+                new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
+
         public string ColorPart
         {
             get { return (string)GetValue(ColorPartProperty); }
@@ -76,6 +97,28 @@ namespace Clowd.UI.Dialogs
         public static readonly DependencyProperty ColorPartProperty =
             DependencyProperty.Register("ColorPart", typeof(string), typeof(ColorSlider),
                 new FrameworkPropertyMetadata("A", FrameworkPropertyMetadataOptions.AffectsRender));
+
+        Brush _hueBrush;
+
+        public ColorSlider()
+        {
+            const double stop = 1d / 6d;
+            _hueBrush = new LinearGradientBrush()
+            {
+                StartPoint = new Point(0, 0.5),
+                EndPoint = new Point(1, 0.5),
+                GradientStops = new GradientStopCollection()
+                {
+                    new GradientStop(Colors.Red, 0),
+                    new GradientStop(Colors.Yellow, stop),
+                    new GradientStop(Colors.Lime, stop * 2),
+                    new GradientStop(Colors.Cyan, stop * 3),
+                    new GradientStop(Colors.Blue, stop * 4),
+                    new GradientStop(Colors.Magenta, stop * 5),
+                    new GradientStop(Colors.Red, stop * 6),
+                }
+            };
+        }
 
         protected Brush GetBackgroundColorBrush()
         {
@@ -102,23 +145,27 @@ namespace Clowd.UI.Dialogs
                     end = Color.FromArgb(255, clr.R, clr.G, clr.B);
                     break;
                 case "H":
-                    start = Colors.Pink;
-                    end = Colors.Pink;
-                    break;
+                    return _hueBrush;
                 case "S":
+                    start = Color.FromArgb(CurrentColor.A, 128, 128, 128);
                     hsl = HSLColor.FromRGB(CurrentColor);
-                    hsl.Saturation = 0;
-                    start = hsl.ToRGB();
                     hsl.Saturation = 1;
                     end = hsl.ToRGB();
                     break;
                 case "L":
                     hsl = HSLColor.FromRGB(CurrentColor);
-                    hsl.Lightness = 0;
-                    start = hsl.ToRGB();
-                    hsl.Lightness = 1;
-                    end = hsl.ToRGB();
-                    break;
+                    hsl.Lightness = 0.5;
+                    return new LinearGradientBrush()
+                    {
+                        StartPoint = new Point(0, 0.5),
+                        EndPoint = new Point(1, 0.5),
+                        GradientStops = new GradientStopCollection()
+                        {
+                            new GradientStop(Color.FromArgb(CurrentColor.A, 0, 0, 0), 0),
+                            new GradientStop(hsl.ToRGB(), 0.5),
+                            new GradientStop(Color.FromArgb(CurrentColor.A, 255, 255, 255), 1),
+                        }
+                    };
             }
 
             return new LinearGradientBrush(start, end, 0);
@@ -132,7 +179,7 @@ namespace Clowd.UI.Dialogs
                 "G" => CurrentColor.G / 255d,
                 "B" => CurrentColor.B / 255d,
                 "A" => CurrentColor.A / 255d,
-                "H" => HSLColor.FromRGB(CurrentColor).Hue / 360d,
+                "H" => HSLColor.FromRGB(CurrentColor).Hue / 359d,
                 "S" => HSLColor.FromRGB(CurrentColor).Saturation,
                 "L" => HSLColor.FromRGB(CurrentColor).Lightness,
                 _ => throw new InvalidOperationException("Invalid color part property"),
@@ -158,8 +205,12 @@ namespace Clowd.UI.Dialogs
                     CurrentColor = Color.FromArgb((byte)(value * 255), clr.R, clr.G, clr.B);
                     break;
                 case "H":
-                    hsl = HSLColor.FromRGB(CurrentColor);
-                    hsl.Hue = value * 360d;
+                    hsl = new HSLColor()
+                    {
+                        Hue = value * 359d,
+                        Lightness = 0.5,
+                        Saturation = 1,
+                    };
                     CurrentColor = hsl.ToRGB();
                     break;
                 case "S":
@@ -232,8 +283,20 @@ namespace Clowd.UI.Dialogs
                 }
             };
 
-            var whitePen = new Pen(Brushes.White, 1);
-            drawingContext.DrawGeometry(Brushes.Black, whitePen, geo);
+            Pen border = null;
+
+            if (ThumbBrush is SolidColorBrush br)
+            {
+                var inverse = Color.FromArgb(
+                    255,
+                    (byte)(255 - br.Color.R),
+                    (byte)(255 - br.Color.G),
+                    (byte)(255 - br.Color.B));
+
+                border = new Pen(new SolidColorBrush(inverse), 1);
+            }
+
+            drawingContext.DrawGeometry(ThumbBrush, border, geo);
         }
     }
 

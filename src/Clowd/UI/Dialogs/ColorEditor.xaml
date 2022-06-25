@@ -2,19 +2,25 @@
     x:Class="Clowd.UI.Dialogs.ColorEditor"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI.Dialogs"
-    xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="clr-namespace:Clowd.UI"
     Title="ColorEditor"
     DataContext="{Binding RelativeSource={RelativeSource Self}}"
     ResizeMode="NoResize"
     SizeToContent="WidthAndHeight"
     SnapsToDevicePixels="True"
     UseLayoutRounding="True"
-    Background="White"
     mc:Ignorable="d">
+    <Window.Resources>
+        <conv:ColorToBrushConverter x:Key="color2brush" />
+        <conv:ColorToHexConverter x:Key="color2hex" />
+        <conv:ColorToRgbConverter x:Key="color2rgb" />
+        <conv:ColorToHslConverter x:Key="color2hsl" />
+    </Window.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -32,9 +38,9 @@
                 Width="200"
                 Height="200"
                 Margin="20"
-                Background="{Binding Background}"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
+                Background="{Binding Background}"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
 
             <WrapPanel
@@ -60,17 +66,17 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="160" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="50" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="24" />
+                <RowDefinition Height="16" />
                 <RowDefinition Height="24" />
                 <RowDefinition Height="24" />
                 <RowDefinition Height="24" />
                 <RowDefinition Height="24" />
                 <RowDefinition Height="24" />
-                <RowDefinition Height="24" />
-                <RowDefinition Height="24" />
+                <RowDefinition Height="16" />
                 <RowDefinition Height="24" />
                 <RowDefinition Height="24" />
                 <RowDefinition Height="24" />
@@ -82,29 +88,38 @@
                     <Setter Property="HorizontalAlignment" Value="Right" />
                     <Setter Property="VerticalAlignment" Value="Center" />
                     <Setter Property="FontFamily" Value="Consolas" />
-                </Style>
-                <Style TargetType="TextBlock">
-                    <Setter Property="HorizontalAlignment" Value="Left" />
-                    <Setter Property="VerticalAlignment" Value="Center" />
-                    <Setter Property="FontFamily" Value="Consolas" />
-                    <Setter Property="FontWeight" Value="ExtraBold" />
-                    <Setter Property="Margin" Value="10,0,0,0" />
+                    <Setter Property="Foreground" Value="{Binding RelativeSource={RelativeSource AncestorType={x:Type FrameworkElement}}, Path=(TextElement.Foreground)}"/>
                 </Style>
                 <Style TargetType="local:ColorSlider">
                     <Setter Property="CornerRadius" Value="4" />
                     <Setter Property="Height" Value="16" />
+                    <Setter Property="ThumbBrush" Value="{Binding RelativeSource={RelativeSource AncestorType={x:Type FrameworkElement}}, Path=(TextElement.Foreground)}" />
                     <Setter Property="Background" Value="{StaticResource CheckeredMediumGrayBackgroundBrush}" />
+                </Style>
+                <Style TargetType="TextBox">
+                    <Setter Property="Height" Value="20" />
+                    <Setter Property="Margin" Value="6,0,0,0" />
+                    <Setter Property="TextAlignment" Value="Center" />
                 </Style>
             </Grid.Resources>
 
+            <Control
+                x:Name="tabReset"
+                FocusVisualStyle="{x:Null}"
+                Focusable="true"
+                IsTabStop="false" />
+
             <Label Grid.Row="0">HEX:</Label>
-            
+            <TextBox
+                Grid.Column="1"
+                Margin="0"
+                Text="{Binding CurrentColor, Converter={StaticResource color2hex}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
             <Label
                 Grid.Row="2"
                 Grid.Column="1"
-                HorizontalAlignment="Left">
-                rgba(0,0,0,0)
-            </Label>
+                HorizontalAlignment="Left"
+                Content="{Binding CurrentColor, Converter={StaticResource color2rgb}}" />
 
             <Label Grid.Row="3">R:</Label>
             <local:ColorSlider
@@ -112,7 +127,7 @@
                 Grid.Column="1"
                 ColorPart="R"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding CurrentColor.R}" />
+            <TextBox Grid.Row="3" Grid.Column="2" />
 
             <Label Grid.Row="4">G:</Label>
             <local:ColorSlider
@@ -120,7 +135,7 @@
                 Grid.Column="1"
                 ColorPart="G"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding CurrentColor.G}" />
+            <TextBox Grid.Row="4" Grid.Column="2" />
 
             <Label Grid.Row="5">B:</Label>
             <local:ColorSlider
@@ -128,55 +143,59 @@
                 Grid.Column="1"
                 ColorPart="B"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBlock Grid.Row="5" Grid.Column="2" Text="{Binding CurrentColor.B}" />
+            <TextBox Grid.Row="5" Grid.Column="2" />
 
-            <Label
-                Grid.Row="7"
-                Grid.Column="1"
-                HorizontalAlignment="Left">
-                hsla(0,0,0,0)
-            </Label>
-            
-            <Label Grid.Row="8">H:</Label>
+            <Label Grid.Row="6">A:</Label>
             <local:ColorSlider
-                Grid.Row="8"
-                Grid.Column="1"
-                ColorPart="H"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-
-            <Label Grid.Row="9">S:</Label>
-            <local:ColorSlider
-                Grid.Row="9"
-                Grid.Column="1"
-                ColorPart="S"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-
-            <Label Grid.Row="10">L:</Label>
-            <local:ColorSlider
-                Grid.Row="10"
-                Grid.Column="1"
-                ColorPart="L"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-
-            <Label Grid.Row="11">A:</Label>
-            <local:ColorSlider
-                Grid.Row="11"
+                Grid.Row="6"
                 Grid.Column="1"
                 ColorPart="A"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBlock Grid.Row="11" Grid.Column="2" Text="{Binding CurrentColor.A}" />
+            <TextBox Grid.Row="6" Grid.Column="2" />
 
+            <Label
+                Grid.Row="8"
+                Grid.Column="1"
+                HorizontalAlignment="Left"
+                Content="{Binding CurrentColor, Converter={StaticResource color2hsl}}" />
+
+            <Label Grid.Row="9">H:</Label>
+            <local:ColorSlider
+                Grid.Row="9"
+                Grid.Column="1"
+                ColorPart="H"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox Grid.Row="9" Grid.Column="2" />
+
+            <Label Grid.Row="10">S:</Label>
+            <local:ColorSlider
+                Grid.Row="10"
+                Grid.Column="1"
+                ColorPart="S"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox Grid.Row="10" Grid.Column="2" />
+
+            <Label Grid.Row="11">L:</Label>
+            <local:ColorSlider
+                Grid.Row="11"
+                Grid.Column="1"
+                ColorPart="L"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox Grid.Row="11" Grid.Column="2" />
         </Grid>
 
-        <Grid Grid.Column="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="20" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-        </Grid>
-
+        <DockPanel Grid.Column="2" Margin="0,10,10,10">
+            <Button DockPanel.Dock="Top">Ok</Button>
+            <Button DockPanel.Dock="Top">Cancel</Button>
+            <Border
+                Height="50"
+                Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
+                BorderBrush="{Binding Foreground}"
+                BorderThickness="1"
+                DockPanel.Dock="Bottom">
+                <Rectangle Fill="{Binding CurrentColor, Converter={StaticResource color2brush}}" />
+            </Border>
+            <Rectangle />
+        </DockPanel>
     </Grid>
 </Window>
