@@ -56,7 +56,8 @@
         <Grid Grid.Column="1" Margin="10,20,10,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="160" />
+                <ColumnDefinition Width="40" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="24" />
@@ -81,11 +82,13 @@
                 </Style>
                 <Style TargetType="local:ColorSlider">
                     <Setter Property="CornerRadius" Value="4" />
-                    <Setter Property="Margin" Value="0,4" />
+                    <Setter Property="Height" Value="16" />
+                    <Setter Property="Background" Value="{StaticResource CheckeredMediumGrayBackgroundBrush}" />
                 </Style>
             </Grid.Resources>
 
             <Label Grid.Row="0">HEX:</Label>
+            
             <Label
                 Grid.Row="2"
                 Grid.Column="1"
@@ -120,10 +123,34 @@
                 HorizontalAlignment="Left">
                 hsla(0,0,0,0)
             </Label>
+            
             <Label Grid.Row="8">H:</Label>
+            <local:ColorSlider
+                Grid.Row="8"
+                Grid.Column="1"
+                ColorPart="H"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
             <Label Grid.Row="9">S:</Label>
+            <local:ColorSlider
+                Grid.Row="9"
+                Grid.Column="1"
+                ColorPart="S"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
             <Label Grid.Row="10">L:</Label>
+            <local:ColorSlider
+                Grid.Row="10"
+                Grid.Column="1"
+                ColorPart="L"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
             <Label Grid.Row="11">A:</Label>
+            <local:ColorSlider
+                Grid.Row="11"
+                Grid.Column="1"
+                ColorPart="A"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
         </Grid>
 
         <Grid Grid.Column="2">

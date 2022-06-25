@@ -64,14 +64,8 @@ namespace Clowd.UI.Dialogs
         }
 
         public static readonly DependencyProperty CurrentColorProperty =
-            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorSlider), new PropertyMetadata(Colors.White, CurrentColorPropertyChanged));
-
-        private static void CurrentColorPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            if (e.OldValue == e.NewValue) return;
-            var me = (ColorSlider)d;
-            me.UpdateColor();
-        }
+            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorSlider), 
+                new FrameworkPropertyMetadata(Colors.White, FrameworkPropertyMetadataOptions.AffectsRender));
 
         public string ColorPart
         {
@@ -80,40 +74,54 @@ namespace Clowd.UI.Dialogs
         }
 
         public static readonly DependencyProperty ColorPartProperty =
-            DependencyProperty.Register("ColorPart", typeof(string), typeof(ColorSlider), new PropertyMetadata("A"));
+            DependencyProperty.Register("ColorPart", typeof(string), typeof(ColorSlider), 
+                new FrameworkPropertyMetadata("A", FrameworkPropertyMetadataOptions.AffectsRender));
 
-        protected override void OnInitialized(EventArgs e)
-        {
-            base.OnInitialized(e);
-            UpdateColor();
-        }
-
-        protected void UpdateColor()
+        protected Brush GetBackgroundColorBrush()
         {
             Color clr = CurrentColor;
-            Color start, clend;
+            Color start, end;
+            HSLColor hsl;
 
             switch (ColorPart)
             {
                 case "R":
                     start = Color.FromArgb(clr.A, 0, clr.G, clr.B);
-                    clend = Color.FromArgb(clr.A, 255, clr.G, clr.B);
+                    end = Color.FromArgb(clr.A, 255, clr.G, clr.B);
                     break;
                 case "G":
                     start = Color.FromArgb(clr.A, clr.R, 0, clr.B);
-                    clend = Color.FromArgb(clr.A, clr.R, 255, clr.B);
+                    end = Color.FromArgb(clr.A, clr.R, 255, clr.B);
                     break;
                 case "B":
                     start = Color.FromArgb(clr.A, clr.R, clr.G, 0);
-                    clend = Color.FromArgb(clr.A, clr.R, clr.G, 255);
+                    end = Color.FromArgb(clr.A, clr.R, clr.G, 255);
                     break;
                 case "A":
                     start = Color.FromArgb(0, clr.R, clr.G, clr.B);
-                    clend = Color.FromArgb(255, clr.R, clr.G, clr.B);
+                    end = Color.FromArgb(255, clr.R, clr.G, clr.B);
+                    break;
+                case "H":
+                    start = Colors.Pink;
+                    end = Colors.Pink;
+                    break;
+                case "S":
+                    hsl = HSLColor.FromRGB(CurrentColor);
+                    hsl.Saturation = 0;
+                    start = hsl.ToRGB();
+                    hsl.Saturation = 1;
+                    end = hsl.ToRGB();
+                    break;
+                case "L":
+                    hsl = HSLColor.FromRGB(CurrentColor);
+                    hsl.Lightness = 0;
+                    start = hsl.ToRGB();
+                    hsl.Lightness = 1;
+                    end = hsl.ToRGB();
                     break;
             }
 
-            Background = new LinearGradientBrush(start, clend, 0);
+            return new LinearGradientBrush(start, end, 0);
         }
 
         protected double GetPartValue()
@@ -124,12 +132,16 @@ namespace Clowd.UI.Dialogs
                 "G" => CurrentColor.G / 255d,
                 "B" => CurrentColor.B / 255d,
                 "A" => CurrentColor.A / 255d,
+                "H" => HSLColor.FromRGB(CurrentColor).Hue / 360d,
+                "S" => HSLColor.FromRGB(CurrentColor).Saturation,
+                "L" => HSLColor.FromRGB(CurrentColor).Lightness,
                 _ => throw new InvalidOperationException("Invalid color part property"),
             };
         }
 
         protected void SetPartValue(double value)
         {
+            HSLColor hsl;
             var clr = CurrentColor;
             switch (ColorPart)
             {
@@ -144,6 +156,21 @@ namespace Clowd.UI.Dialogs
                     break;
                 case "A":
                     CurrentColor = Color.FromArgb((byte)(value * 255), clr.R, clr.G, clr.B);
+                    break;
+                case "H":
+                    hsl = HSLColor.FromRGB(CurrentColor);
+                    hsl.Hue = value * 360d;
+                    CurrentColor = hsl.ToRGB();
+                    break;
+                case "S":
+                    hsl = HSLColor.FromRGB(CurrentColor);
+                    hsl.Saturation = value;
+                    CurrentColor = hsl.ToRGB();
+                    break;
+                case "L":
+                    hsl = HSLColor.FromRGB(CurrentColor);
+                    hsl.Lightness = value;
+                    CurrentColor = hsl.ToRGB();
                     break;
             }
         }
@@ -176,9 +203,14 @@ namespace Clowd.UI.Dialogs
 
         protected override void OnRender(DrawingContext drawingContext)
         {
-            base.OnRender(drawingContext); // draw background
-            var pos = ActualWidth * GetPartValue();
+            // draw background
+            var bounds = new Rect(0, 0, ActualWidth, ActualHeight);
+            var radius = CornerRadius.TopLeft;
+            drawingContext.DrawRoundedRectangle(Background, null, bounds, radius, radius);
+            drawingContext.DrawRoundedRectangle(GetBackgroundColorBrush(), null, bounds, radius, radius);
 
+            // draw cursor triangle
+            var pos = ActualWidth * GetPartValue();
             const int triSize = 10;
             const int halfTriSize = triSize / 2;
 
