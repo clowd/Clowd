@@ -17,9 +17,6 @@ using Clowd.Util;
 
 namespace Clowd.UI.Dialogs
 {
-    /// <summary>
-    /// Interaction logic for ColorEditor.xaml
-    /// </summary>
     public partial class ColorEditor : Window
     {
         public Color CurrentColor
@@ -55,6 +52,156 @@ namespace Clowd.UI.Dialogs
             {
                 CurrentColor = brush.Color;
             }
+        }
+    }
+
+    public class ColorSlider : Border
+    {
+        public Color CurrentColor
+        {
+            get { return (Color)GetValue(CurrentColorProperty); }
+            set { SetValue(CurrentColorProperty, value); }
+        }
+
+        public static readonly DependencyProperty CurrentColorProperty =
+            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorSlider), new PropertyMetadata(Colors.White, CurrentColorPropertyChanged));
+
+        private static void CurrentColorPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (e.OldValue == e.NewValue) return;
+            var me = (ColorSlider)d;
+            me.UpdateColor();
+        }
+
+        public string ColorPart
+        {
+            get { return (string)GetValue(ColorPartProperty); }
+            set { SetValue(ColorPartProperty, value); }
+        }
+
+        public static readonly DependencyProperty ColorPartProperty =
+            DependencyProperty.Register("ColorPart", typeof(string), typeof(ColorSlider), new PropertyMetadata("A"));
+
+        protected override void OnInitialized(EventArgs e)
+        {
+            base.OnInitialized(e);
+            UpdateColor();
+        }
+
+        protected void UpdateColor()
+        {
+            Color clr = CurrentColor;
+            Color start, clend;
+
+            switch (ColorPart)
+            {
+                case "R":
+                    start = Color.FromArgb(clr.A, 0, clr.G, clr.B);
+                    clend = Color.FromArgb(clr.A, 255, clr.G, clr.B);
+                    break;
+                case "G":
+                    start = Color.FromArgb(clr.A, clr.R, 0, clr.B);
+                    clend = Color.FromArgb(clr.A, clr.R, 255, clr.B);
+                    break;
+                case "B":
+                    start = Color.FromArgb(clr.A, clr.R, clr.G, 0);
+                    clend = Color.FromArgb(clr.A, clr.R, clr.G, 255);
+                    break;
+                case "A":
+                    start = Color.FromArgb(0, clr.R, clr.G, clr.B);
+                    clend = Color.FromArgb(255, clr.R, clr.G, clr.B);
+                    break;
+            }
+
+            Background = new LinearGradientBrush(start, clend, 0);
+        }
+
+        protected double GetPartValue()
+        {
+            return ColorPart switch
+            {
+                "R" => CurrentColor.R / 255d,
+                "G" => CurrentColor.G / 255d,
+                "B" => CurrentColor.B / 255d,
+                "A" => CurrentColor.A / 255d,
+                _ => throw new InvalidOperationException("Invalid color part property"),
+            };
+        }
+
+        protected void SetPartValue(double value)
+        {
+            var clr = CurrentColor;
+            switch (ColorPart)
+            {
+                case "R":
+                    CurrentColor = Color.FromArgb(clr.A, (byte)(value * 255), clr.G, clr.B);
+                    break;
+                case "G":
+                    CurrentColor = Color.FromArgb(clr.A, clr.R, (byte)(value * 255), clr.B);
+                    break;
+                case "B":
+                    CurrentColor = Color.FromArgb(clr.A, clr.R, clr.G, (byte)(value * 255));
+                    break;
+                case "A":
+                    CurrentColor = Color.FromArgb((byte)(value * 255), clr.R, clr.G, clr.B);
+                    break;
+            }
+        }
+
+        protected void HandleMouse()
+        {
+            var pos = Mouse.GetPosition(this);
+            SetPartValue(Math.Max(Math.Min(pos.X / ActualWidth, 1), 0));
+        }
+
+        protected override void OnMouseDown(MouseButtonEventArgs e)
+        {
+            base.OnMouseDown(e);
+            CaptureMouse();
+            HandleMouse();
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (IsMouseCaptured)
+                HandleMouse();
+        }
+
+        protected override void OnMouseUp(MouseButtonEventArgs e)
+        {
+            base.OnMouseUp(e);
+            ReleaseMouseCapture();
+        }
+
+        protected override void OnRender(DrawingContext drawingContext)
+        {
+            base.OnRender(drawingContext); // draw background
+            var pos = ActualWidth * GetPartValue();
+
+            const int triSize = 10;
+            const int halfTriSize = triSize / 2;
+
+            var geo = new PathGeometry()
+            {
+                Figures = new PathFigureCollection()
+                {
+                    new PathFigure()
+                    {
+                        IsClosed = true,
+                        IsFilled = true,
+                        StartPoint = new Point(pos, ActualHeight - halfTriSize),
+                        Segments = new PathSegmentCollection()
+                        {
+                            new LineSegment(new Point(pos - halfTriSize, ActualHeight + halfTriSize), true),
+                            new LineSegment(new Point(pos + halfTriSize, ActualHeight + halfTriSize), true),
+                        }
+                    }
+                }
+            };
+
+            var whitePen = new Pen(Brushes.White, 1);
+            drawingContext.DrawGeometry(Brushes.Black, whitePen, geo);
         }
     }
 
@@ -101,6 +248,7 @@ namespace Clowd.UI.Dialogs
 
         private static void CurrentColorPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
+            if (e.OldValue == e.NewValue) return;
             var me = (ColorWheel)d;
             me.UpdateCursor();
         }
@@ -197,8 +345,6 @@ namespace Clowd.UI.Dialogs
         protected Point GetColorLocation(Color color)
         {
             var h1 = HSLColor.FromRGB(color);
-            var h2 = new Cyotek.Windows.Forms.HslColor(System.Drawing.Color.FromArgb(color.R, color.G, color.B));
-
             return GetColorLocation(h1);
         }
 
