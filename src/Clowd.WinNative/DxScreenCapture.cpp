@@ -2074,15 +2074,20 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
 
     // write session to file
     json root;
-    root["createdUtc"] = converter.to_bytes(createdUtc);
-    root["windows"] = windows;
+    root["CreatedUtc"] = converter.to_bytes(createdUtc);
+    root["Windows"] = windows;
     //root["rootPath"] = converter.to_bytes(sessionDir);
-    root["desktopImgPath"] = converter.to_bytes(ssPath);
-    root["previewImgPath"] = converter.to_bytes(croppedPath);
-    root["croppedRect"] = rect2json(native->frame.selection);
-    if (native->frame.windowSelection.window != nullptr)
-        root["selectionWnd"] = native->frame.windowSelection.window->index;
+    root["DesktopImgPath"] = converter.to_bytes(ssPath);
+    root["PreviewImgPath"] = converter.to_bytes(croppedPath);
 
+    RECT r = native->frame.selection;
+    root["CroppedRect"] = rect2json(r);
+    native->screens->TranslateToSystem(r);
+    root["OriginalBounds"] = rect2json(r);
+
+    if (native->frame.windowSelection.window != nullptr)
+        root["SelectionWnd"] = native->frame.windowSelection.window->index;
+    
     auto sp = sessionDir + L"\\session.json";
     std::ofstream o(sp);
     o << std::setw(4) << root << std::endl;
