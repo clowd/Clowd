@@ -41,12 +41,14 @@ namespace Clowd.PlatformUtil.Windows
         {
             get
             {
+                var vs = User32Screen.VirtualScreen.Bounds;
                 GetWindowRect(Handle, out var rect);
-                return ScreenRect.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
+                return ScreenRect.FromLTRB(rect.left - vs.Left, rect.top - vs.Top, rect.right - vs.Left, rect.bottom - vs.Top);
             }
             set
             {
-                SetWindowPos(Handle, HWND.HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height,
+                var vs = User32Screen.VirtualScreen.Bounds;
+                SetWindowPos(Handle, HWND.HWND_NOTOPMOST, value.X + vs.Left, value.Y + vs.Top, value.Width, value.Height,
                     SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER);
             }
         }
@@ -63,7 +65,7 @@ namespace Clowd.PlatformUtil.Windows
                 WindowBounds = GetWindowRectFromIdealClientRect(value);
             }
         }
-        
+
         public ScreenRect DwmRenderBounds
         {
             get
@@ -335,7 +337,7 @@ namespace Clowd.PlatformUtil.Windows
             AdjustWindowRectEx(ref r, wndStyle, false, wndExStyle);
             return r;
         }
-        
+
         public override string ToString()
         {
             return $"Window {((nint)Handle).ToString("X8")} {{'{Caption}/{ClassName}', {WindowBounds}}}";
