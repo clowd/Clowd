@@ -26,8 +26,8 @@ namespace Clowd
 
     public class SessionOpenEditor
     {
-        public Guid? VirtualDesktopId { get; set; }
-        public bool IsTopMost { get; set; }
+        public Guid? VirtualDesktopId { get; init; }
+        public bool IsTopMost { get; init; }
         public ScreenRect Position { get; init; }
     }
 
@@ -59,7 +59,13 @@ namespace Clowd
             get => Get<ScreenRect>();
             set => Set(value);
         }
-        
+
+        public ScreenRect OriginalBounds
+        {
+            get => Get<ScreenRect>();
+            set => Set(value);
+        }
+
         public SessionOpenEditor OpenEditor
         {
             get => Get<SessionOpenEditor>();
