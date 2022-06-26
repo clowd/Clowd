@@ -391,6 +391,8 @@ namespace Clowd.Video
                 }
                 catch (OperationCanceledException)
                 { }
+                catch (WebSocketException) // eg: The remote party closed the WebSocket connection without completing the close handshake
+                { }
             }
 
             private void ReceiveMessage(string message)
