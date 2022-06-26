@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -64,13 +64,14 @@ namespace Clowd.UI
             }
             else
             {
+                bool isBrandNewSession = session.OpenEditor == null; // it's possible for EnsureHandle to go off and trigger the Activate event which sets OpenEditor to not null, all before we hit the if/else below
                 var wnd = new EditorWindow(session);
                 wnd.EnsureHandle();
                 wnd.WindowStartupLocation = WindowStartupLocation.Manual;
 
-                if (session.OpenEditor != null)
+                if (!isBrandNewSession)
                 {
-                    // this session was not closed properly, restore it to it's previous location
+                    // this session was not closed properly, restore it to its previous location
                     wnd.Topmost = session.OpenEditor.IsTopMost;
                     wnd.ShowActivated = false;
                     if (session.OpenEditor.VirtualDesktopId != null)
