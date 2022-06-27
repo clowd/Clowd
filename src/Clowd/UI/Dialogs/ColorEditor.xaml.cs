@@ -13,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Clowd.UI.Converters;
 using Clowd.Util;
 
 namespace Clowd.UI.Dialogs
@@ -119,6 +120,30 @@ namespace Clowd.UI.Dialogs
                 }
                 catch {; }
             };
+        }
+
+        private void CopyHexExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            Clipboard.SetText(ColorTextHelper.GetHex(CurrentColor));
+            Close();
+        }
+
+        private void CopyRgbExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            Clipboard.SetText(ColorTextHelper.GetRgb(CurrentColor));
+            Close();
+        }
+
+        private void CopyHslExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            Clipboard.SetText(ColorTextHelper.GetHsl(CurrentColor));
+            Close();
+        }
+
+        private void OKClicked(object sender, RoutedEventArgs e)
+        {
+            DialogResult = true;
+            Close();
         }
     }
 
