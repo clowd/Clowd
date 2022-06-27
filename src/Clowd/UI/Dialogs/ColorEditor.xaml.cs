@@ -26,12 +26,24 @@ namespace Clowd.UI.Dialogs
         }
 
         public static readonly DependencyProperty CurrentColorProperty =
-            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorEditor), new PropertyMetadata(Colors.White));
+            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorEditor),
+                new PropertyMetadata(Colors.White, (d, e) => ((ColorEditor)d).OnCurrentColorChanged()));
+
+        protected bool HandleTextEvents { get; private set; }
 
         public ColorEditor()
         {
             InitializeComponent();
             CreateColorPalette();
+            OnCurrentColorChanged();
+
+            HandleRgbSet(txtClrR, (c, i) => Color.FromArgb(c.A, i, c.G, c.B));
+            HandleRgbSet(txtClrG, (c, i) => Color.FromArgb(c.A, c.R, i, c.B));
+            HandleRgbSet(txtClrB, (c, i) => Color.FromArgb(c.A, c.R, c.G, i));
+            HandleRgbSet(txtClrA, (c, i) => Color.FromArgb(i, c.R, c.G, c.B));
+            HandleHslSet(txtClrH, (c, i) => c.Hue = i);
+            HandleHslSet(txtClrS, (c, i) => c.Saturation = i / 100d);
+            HandleHslSet(txtClrL, (c, i) => c.Lightness = i / 100d);
         }
 
         protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -43,6 +55,20 @@ namespace Clowd.UI.Dialogs
                 // reset focus if clicking on anything other than textbox
                 Keyboard.Focus(tabReset);
             }
+        }
+
+        protected void OnCurrentColorChanged()
+        {
+            HandleTextEvents = false;
+            var hsl = HSLColor.FromRGB(CurrentColor);
+            if (!txtClrR.IsFocused) txtClrR.Text = CurrentColor.R.ToString();
+            if (!txtClrG.IsFocused) txtClrG.Text = CurrentColor.G.ToString();
+            if (!txtClrB.IsFocused) txtClrB.Text = CurrentColor.B.ToString();
+            if (!txtClrA.IsFocused) txtClrA.Text = CurrentColor.A.ToString();
+            if (!txtClrH.IsFocused) txtClrH.Text = Math.Floor(hsl.Hue).ToString();
+            if (!txtClrS.IsFocused) txtClrS.Text = Math.Floor(hsl.Saturation * 100).ToString();
+            if (!txtClrL.IsFocused) txtClrL.Text = Math.Floor(hsl.Lightness * 100).ToString();
+            HandleTextEvents = true;
         }
 
         private void CreateColorPalette()
@@ -63,6 +89,36 @@ namespace Clowd.UI.Dialogs
             {
                 CurrentColor = brush.Color;
             }
+        }
+
+        private void HandleRgbSet(TextBox txt, Func<Color, byte, Color> thunk)
+        {
+            txt.TextChanged += (s, e) =>
+            {
+                try
+                {
+                    if (!HandleTextEvents) return;
+                    var i = int.Parse(txt.Text);
+                    if (i > 255 || i < 0) return;
+                    CurrentColor = thunk(CurrentColor, (byte)i);
+                }
+                catch {; }
+            };
+        }
+
+        private void HandleHslSet(TextBox txt, Action<HSLColor, double> thunk)
+        {
+            txt.TextChanged += (s, e) =>
+            {
+                try
+                {
+                    if (!HandleTextEvents) return;
+                    var hsl = HSLColor.FromRGB(CurrentColor);
+                    thunk(hsl, double.Parse(txt.Text));
+                    CurrentColor = hsl.ToRGB();
+                }
+                catch {; }
+            };
         }
     }
 
