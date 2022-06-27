@@ -127,7 +127,7 @@
                 Grid.Column="1"
                 ColorPart="R"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBox Grid.Row="3" Grid.Column="2" />
+            <TextBox x:Name="txtClrR" Grid.Row="3" Grid.Column="2" />
 
             <Label Grid.Row="4">G:</Label>
             <local:ColorSlider
@@ -135,7 +135,7 @@
                 Grid.Column="1"
                 ColorPart="G"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBox Grid.Row="4" Grid.Column="2" />
+            <TextBox x:Name="txtClrG" Grid.Row="4" Grid.Column="2" />
 
             <Label Grid.Row="5">B:</Label>
             <local:ColorSlider
@@ -143,7 +143,7 @@
                 Grid.Column="1"
                 ColorPart="B"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBox Grid.Row="5" Grid.Column="2" />
+            <TextBox x:Name="txtClrB" Grid.Row="5" Grid.Column="2" />
 
             <Label Grid.Row="6">A:</Label>
             <local:ColorSlider
@@ -151,7 +151,7 @@
                 Grid.Column="1"
                 ColorPart="A"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBox Grid.Row="6" Grid.Column="2" />
+            <TextBox x:Name="txtClrA" Grid.Row="6" Grid.Column="2" />
 
             <Label
                 Grid.Row="8"
@@ -165,7 +165,7 @@
                 Grid.Column="1"
                 ColorPart="H"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBox Grid.Row="9" Grid.Column="2" />
+            <TextBox x:Name="txtClrH" Grid.Row="9" Grid.Column="2" />
 
             <Label Grid.Row="10">S:</Label>
             <local:ColorSlider
@@ -173,7 +173,7 @@
                 Grid.Column="1"
                 ColorPart="S"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBox Grid.Row="10" Grid.Column="2" />
+            <TextBox x:Name="txtClrS" Grid.Row="10" Grid.Column="2" />
 
             <Label Grid.Row="11">L:</Label>
             <local:ColorSlider
@@ -181,12 +181,12 @@
                 Grid.Column="1"
                 ColorPart="L"
                 CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
-            <TextBox Grid.Row="11" Grid.Column="2" />
+            <TextBox x:Name="txtClrL" Grid.Row="11" Grid.Column="2" />
         </Grid>
 
         <DockPanel Grid.Column="2" Margin="0,10,10,10">
-            <Button DockPanel.Dock="Top">Ok</Button>
-            <Button DockPanel.Dock="Top">Cancel</Button>
+            <Button DockPanel.Dock="Top" Style="{x:Null}" Height="24">OK</Button>
+            <Button DockPanel.Dock="Top" Style="{x:Null}" Height="24" Margin="0,8,0,0">Cancel</Button>
             <Border
                 Height="50"
                 Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
