@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -536,13 +536,13 @@ namespace Clowd.UI
 
         private async void objectColor_Click(object sender, MouseButtonEventArgs e)
         {
-            drawingCanvas.ObjectColor = await NiceDialog.ShowColorDialogAsync(this, drawingCanvas.ObjectColor);
+            drawingCanvas.ObjectColor = await NiceDialog.ShowColorPromptAsync(this, drawingCanvas.ObjectColor);
         }
 
         private async void backgroundColor_Click(object sender, MouseButtonEventArgs e)
         {
             var oldColor = drawingCanvas.ArtworkBackground as SolidColorBrush;
-            var newColor = await NiceDialog.ShowColorDialogAsync(this, oldColor?.Color ?? Colors.White);
+            var newColor = await NiceDialog.ShowColorPromptAsync(this, oldColor?.Color ?? Colors.White);
             drawingCanvas.ArtworkBackground = new SolidColorBrush(newColor);
             _settings.Editor.CanvasBackground = newColor;
         }

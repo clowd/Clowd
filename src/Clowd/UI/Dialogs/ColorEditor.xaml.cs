@@ -47,11 +47,10 @@ namespace Clowd.UI.Dialogs
 
         protected bool IsDialogMode { get; private set; }
 
-        public ColorEditor(Color? previousColor = null, Color? currentColor = null, bool asDialog = true)
+        public ColorEditor(Color? previousColor = null, bool asDialog = true)
         {
             InitializeComponent();
             CreateColorPalette();
-            OnCurrentColorChanged();
 
             HandleRgbSet(txtClrR, (c, i) => Color.FromArgb(c.A, i, c.G, c.B));
             HandleRgbSet(txtClrG, (c, i) => Color.FromArgb(c.A, c.R, i, c.B));
@@ -61,13 +60,13 @@ namespace Clowd.UI.Dialogs
             HandleHslSet(txtClrS, (c, i) => c.Saturation = i / 100d);
             HandleHslSet(txtClrL, (c, i) => c.Lightness = i / 100d);
 
-            if (previousColor.HasValue)
-                PreviousColor = previousColor.Value;
-
-            if (currentColor.HasValue)
-                CurrentColor = currentColor.Value;
-
             IsDialogMode = asDialog;
+
+            if (previousColor.HasValue)
+            {
+                PreviousColor = previousColor.Value;
+                CurrentColor = previousColor.Value;
+            }
 
             if (!asDialog)
             {
@@ -79,6 +78,8 @@ namespace Clowd.UI.Dialogs
             {
                 Title = "Clowd - Color Picker";
             }
+
+            OnCurrentColorChanged();
         }
 
         private void CopyCanExecute(object sender, CanExecuteRoutedEventArgs e)
@@ -109,6 +110,7 @@ namespace Clowd.UI.Dialogs
             if (!txtClrH.IsFocused) txtClrH.Text = Math.Floor(hsl.Hue).ToString();
             if (!txtClrS.IsFocused) txtClrS.Text = Math.Floor(hsl.Saturation * 100).ToString();
             if (!txtClrL.IsFocused) txtClrL.Text = Math.Floor(hsl.Lightness * 100).ToString();
+            pathPrevColor.Cursor = (PreviousColor != Colors.Transparent && PreviousColor != CurrentColor) ? Cursors.Hand : Cursors.Arrow;
             HandleTextEvents = true;
         }
 
@@ -188,7 +190,14 @@ namespace Clowd.UI.Dialogs
 
         private void CloseClicked(object sender, RoutedEventArgs e)
         {
+            MyDialogResult = false;
             Close();
+        }
+
+        private void PrevColorClicked(object sender, MouseButtonEventArgs e)
+        {
+            if (PreviousColor != Colors.Transparent)
+                CurrentColor = PreviousColor;
         }
     }
 
