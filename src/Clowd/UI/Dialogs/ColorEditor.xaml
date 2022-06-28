@@ -214,7 +214,8 @@
                     BorderBrush="{Binding Foreground}"
                     BorderThickness="1">
                     <Border Background="{Binding CurrentColor, Converter={StaticResource color2brush}}" ClipToBounds="True">
-                        <Path Fill="{Binding PreviousColor}" Data="M 0,0 H 64 L 44,28 H 0 Z" />
+                        <Path x:Name="pathPrevColor" Fill="{Binding PreviousColor, Converter={StaticResource color2brush}}" Data="M 0,0 H 60 L 48,28 H 0 Z"
+                              MouseDown="PrevColorClicked" />
                     </Border>
                 </Border>
                 <Button x:Name="btnCancel" IsCancel="True" Padding="12,0" Style="{x:Null}" Click="CloseClicked">

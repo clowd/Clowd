@@ -109,7 +109,7 @@ namespace Clowd.UI.Unmanaged
         {
             App.Current.Dispatcher.InvokeAsync(() =>
             {
-                NiceDialog.ShowColorDialogAsync(null, Color.FromRgb(r, g, b));
+                NiceDialog.ShowColorViewer(Color.FromRgb(r, g, b));
             });
         }
 

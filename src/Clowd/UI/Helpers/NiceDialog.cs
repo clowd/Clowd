@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Clowd.PlatformUtil;
+using Clowd.PlatformUtil.Windows;
 using Cyotek.Windows.Forms;
 
 namespace Clowd.UI.Helpers
@@ -123,24 +124,27 @@ namespace Clowd.UI.Helpers
             };
         }
 
-        public static async Task<Color> ShowColorDialogAsync(FrameworkElement parent, Color initial)
+        public static async Task<Color> ShowColorPromptAsync(FrameworkElement parent, Color initial)
         {
-            ColorPickerDialog dialog = new ColorPickerDialog();
-            dialog.Text = Constants.ClowdAppName + " - Color Picker";
-            dialog.ShowAlphaChannel = true;
-            dialog.Color = System.Drawing.Color.FromArgb(initial.A, initial.R, initial.G, initial.B);
+            var clr = new Dialogs.ColorEditor(initial, true);
+            await clr.ShowAsNiceDialogAsync(parent);
 
-            var result = await dialog.ShowAsNiceDialogAsync(parent);
-
-            if (result == DialogResult.OK)
+            if (clr.MyDialogResult == true)
             {
-                var final = dialog.Color;
-                return Color.FromArgb(final.A, final.R, final.G, final.B);
+                return clr.CurrentColor;
             }
             else
             {
                 return initial;
             }
+        }
+
+        public static void ShowColorViewer(Color? initial = null)
+        {
+            var clr = new Dialogs.ColorEditor(initial, false);
+            clr.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            clr.Show();
+            clr.GetPlatformWindow().Activate();
         }
 
         public static async Task<SelectedFont> ShowFontDialogAsync(
@@ -297,6 +301,34 @@ namespace Clowd.UI.Helpers
             }
         }
 
+        public static Task<bool?> ShowAsNiceDialogAsync(this Window wnd, FrameworkElement parent)
+        {
+            CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
+
+            var taskSource = new TaskCompletionSource<bool?>();
+
+            WindowInteropHelper helper = new WindowInteropHelper(wnd);
+            helper.EnsureHandle();
+            var pwnd = User32Window.FromHandle(helper.Handle);
+
+            wnd.Loaded += (s, e) =>
+            {
+                AutoPositionNativeWindowHandle(helper.Handle, ownerHandle, isFake);
+            };
+
+            wnd.Closed += (s, e) =>
+            {
+                ReleaseOwner(ownerWindow, isFake);
+                taskSource.SetResult((wnd as IWpfNiceDialog)?.MyDialogResult);
+            };
+
+            wnd.Owner = ownerWindow;
+            wnd.Show();
+            pwnd.Activate();
+
+            return taskSource.Task;
+        }
+
         public static Task<DialogResult> ShowAsNiceDialogAsync(this Form form, FrameworkElement parent)
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
@@ -307,8 +339,13 @@ namespace Clowd.UI.Helpers
             {
                 form.Location = GetDialogPosition(new System.Drawing.Size(form.Width, form.Height), ownerHandle, isFake);
             };
-            form.FormClosing += (s, e) => ReleaseOwner(ownerWindow, isFake);
-            form.Closed += (s, e) => taskSource.SetResult(form.DialogResult);
+
+            form.Closed += (s, e) =>
+            {
+                ReleaseOwner(ownerWindow, isFake);
+                taskSource.SetResult(form.DialogResult);
+            };
+
             form.Show(new Win32Window(ownerHandle));
 
             var pOwner = Platform.Current.GetWindowFromHandle(form.Handle);
@@ -401,6 +438,7 @@ namespace Clowd.UI.Helpers
                 // enable parent window
                 pOwner.SetEnabled(true);
                 ownerWindow.IsEnabled = true;
+                pOwner.Activate();
             }
         }
 
