@@ -14,11 +14,12 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Clowd.UI.Converters;
+using Clowd.UI.Helpers;
 using Clowd.Util;
 
 namespace Clowd.UI.Dialogs
 {
-    public partial class ColorEditor : Window
+    public partial class ColorEditor : Window, IWpfNiceDialog
     {
         public Color CurrentColor
         {
@@ -30,9 +31,23 @@ namespace Clowd.UI.Dialogs
             DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorEditor),
                 new PropertyMetadata(Colors.White, (d, e) => ((ColorEditor)d).OnCurrentColorChanged()));
 
+        public Color PreviousColor
+        {
+            get { return (Color)GetValue(PreviousColorProperty); }
+            set { SetValue(PreviousColorProperty, value); }
+        }
+
+        public static readonly DependencyProperty PreviousColorProperty =
+            DependencyProperty.Register("PreviousColor", typeof(Color), typeof(ColorEditor),
+                new PropertyMetadata(Colors.Transparent));
+
+        public bool? MyDialogResult { get; private set; }
+
         protected bool HandleTextEvents { get; private set; }
 
-        public ColorEditor()
+        protected bool IsDialogMode { get; private set; }
+
+        public ColorEditor(Color? previousColor = null, Color? currentColor = null, bool asDialog = true)
         {
             InitializeComponent();
             CreateColorPalette();
@@ -45,6 +60,31 @@ namespace Clowd.UI.Dialogs
             HandleHslSet(txtClrH, (c, i) => c.Hue = i);
             HandleHslSet(txtClrS, (c, i) => c.Saturation = i / 100d);
             HandleHslSet(txtClrL, (c, i) => c.Lightness = i / 100d);
+
+            if (previousColor.HasValue)
+                PreviousColor = previousColor.Value;
+
+            if (currentColor.HasValue)
+                CurrentColor = currentColor.Value;
+
+            IsDialogMode = asDialog;
+
+            if (!asDialog)
+            {
+                btnOK.Visibility = Visibility.Collapsed;
+                btnCancel.Content = "_Close";
+                Title = "Clowd - Color Viewer";
+            }
+            else
+            {
+                Title = "Clowd - Color Picker";
+            }
+        }
+
+        private void CopyCanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.Handled = true;
+            e.CanExecute = !IsDialogMode;
         }
 
         protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -142,7 +182,12 @@ namespace Clowd.UI.Dialogs
 
         private void OKClicked(object sender, RoutedEventArgs e)
         {
-            DialogResult = true;
+            MyDialogResult = true;
+            Close();
+        }
+
+        private void CloseClicked(object sender, RoutedEventArgs e)
+        {
             Close();
         }
     }

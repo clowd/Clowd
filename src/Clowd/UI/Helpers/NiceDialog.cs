@@ -495,4 +495,9 @@ namespace Clowd.UI.Helpers
             }
         }
     }
+
+    public interface IWpfNiceDialog
+    {
+        bool? MyDialogResult { get; }
+    }
 }
