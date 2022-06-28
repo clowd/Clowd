@@ -24,30 +24,15 @@
         <RoutedUICommand x:Key="Commands.CopyRgb" />
         <RoutedUICommand x:Key="Commands.CopyHsl" />
     </Window.Resources>
-    <Window.InputBindings>
-        <KeyBinding
-            Key="E"
-            Command="{StaticResource Commands.CopyHex}"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="R"
-            Command="{StaticResource Commands.CopyRgb}"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="H"
-            Command="{StaticResource Commands.CopyHsl}"
-            Modifiers="Ctrl" />
-    </Window.InputBindings>
     <Window.CommandBindings>
-        <CommandBinding Command="{StaticResource Commands.CopyHex}" Executed="CopyHexExecuted" />
-        <CommandBinding Command="{StaticResource Commands.CopyRgb}" Executed="CopyRgbExecuted" />
-        <CommandBinding Command="{StaticResource Commands.CopyHsl}" Executed="CopyHslExecuted" />
+        <CommandBinding Command="{StaticResource Commands.CopyHex}" Executed="CopyHexExecuted" CanExecute="CopyCanExecute" />
+        <CommandBinding Command="{StaticResource Commands.CopyRgb}" Executed="CopyRgbExecuted" CanExecute="CopyCanExecute" />
+        <CommandBinding Command="{StaticResource Commands.CopyHsl}" Executed="CopyHslExecuted" CanExecute="CopyCanExecute" />
     </Window.CommandBindings>
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
-            <!--<ColumnDefinition Width="80" />-->
         </Grid.ColumnDefinitions>
 
         <Grid Grid.Column="0">
@@ -86,7 +71,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="180" />
-                <ColumnDefinition Width="50" />
+                <ColumnDefinition Width="54" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="24" />
@@ -102,7 +87,7 @@
                 <RowDefinition Height="24" />
                 <RowDefinition Height="24" />
                 <RowDefinition Height="16" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="28" />
             </Grid.RowDefinitions>
 
             <Grid.Resources>
@@ -122,6 +107,11 @@
                     <Setter Property="Margin" Value="6,2,0,1" />
                     <Setter Property="TextAlignment" Value="Center" />
                 </Style>
+                <Style TargetType="Button">
+                    <Setter Property="Margin" Value="6,0,0,0" />
+                    <Setter Property="FontSize" Value="9" />
+                    <Setter Property="VerticalAlignment" Value="Stretch" />
+                </Style>
             </Grid.Resources>
 
             <Control
@@ -136,11 +126,8 @@
                 Margin="0"
                 Text="{Binding CurrentColor, Converter={StaticResource color2hex}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-            <Button Grid.Column="2" Style="{x:Null}" Margin="6,0,0,0" VerticalAlignment="Stretch" Command="{StaticResource Commands.CopyHex}">
-                <StackPanel Orientation="Vertical" VerticalAlignment="Center">
-                    <TextBlock Text="Copy" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="9" />
-                    <TextBlock Grid.Row="1" Text="(Ctrl+E)" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="8" />
-                </StackPanel>
+            <Button Grid.Column="2" Command="{StaticResource Commands.CopyHex}">
+                <AccessText>Copy HE_X</AccessText>
             </Button>
 
             <Label
@@ -149,11 +136,8 @@
                 HorizontalAlignment="Left"
                 Content="{Binding CurrentColor, Converter={StaticResource color2rgb}}" />
 
-            <Button Grid.Row="2" Grid.Column="2" Style="{x:Null}" Margin="6,0,0,0" VerticalAlignment="Stretch" Command="{StaticResource Commands.CopyRgb}">
-                <StackPanel Orientation="Vertical" VerticalAlignment="Center">
-                    <TextBlock Text="Copy" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="9" />
-                    <TextBlock Grid.Row="1" Text="(Ctrl+R)" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="8" />
-                </StackPanel>
+            <Button Grid.Row="2" Grid.Column="2" Command="{StaticResource Commands.CopyRgb}">
+                <AccessText>Copy _RGB</AccessText>
             </Button>
 
 
@@ -195,11 +179,8 @@
                 HorizontalAlignment="Left"
                 Content="{Binding CurrentColor, Converter={StaticResource color2hsl}}" />
 
-            <Button Grid.Row="8" Grid.Column="2" Style="{x:Null}" Margin="6,0,0,0" VerticalAlignment="Stretch" Command="{StaticResource Commands.CopyHsl}">
-                <StackPanel Orientation="Vertical" VerticalAlignment="Center">
-                    <TextBlock Text="Copy" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="9" />
-                    <TextBlock Grid.Row="1" Text="(Ctrl+H)" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="8" />
-                </StackPanel>
+            <Button Grid.Row="8" Grid.Column="2" Command="{StaticResource Commands.CopyHsl}">
+                <AccessText>Copy _HSL</AccessText>
             </Button>
 
             <Label Grid.Row="9">H:</Label>
@@ -228,39 +209,21 @@
 
             <controls:SimpleStackPanel Spacing="10" Grid.Row="13" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Border
-                    Width="107"
+                    Width="108"
                     Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
                     BorderBrush="{Binding Foreground}"
                     BorderThickness="1">
                     <Border Background="{Binding CurrentColor, Converter={StaticResource color2brush}}" ClipToBounds="True">
-                        <Rectangle Fill="Red">
-                            <Rectangle.RenderTransform>
-                                <TransformGroup>
-                                    <ScaleTransform ScaleY="10" />
-                                    <RotateTransform Angle="45" CenterX="50" />
-                                    <TranslateTransform X="-10" />
-                                </TransformGroup>
-                            </Rectangle.RenderTransform>
-                        </Rectangle>
+                        <Path Fill="{Binding PreviousColor}" Data="M 0,0 H 64 L 44,28 H 0 Z" />
                     </Border>
                 </Border>
-                <Button IsDefault="True" Padding="12,0" Style="{x:Null}">Cancel</Button>
-                <Button IsCancel="True" Padding="12,0" Style="{x:Null}" Click="OKClicked">OK</Button>
+                <Button x:Name="btnCancel" IsCancel="True" Padding="12,0" Style="{x:Null}" Click="CloseClicked">
+                    <AccessText>_Cancel</AccessText>
+                </Button>
+                <Button x:Name="btnOK" IsDefault="True" Padding="14,0" Style="{x:Null}" Click="OKClicked">
+                    <AccessText>_OK</AccessText>
+                </Button>
             </controls:SimpleStackPanel>
         </Grid>
-
-        <!--<DockPanel Grid.Column="2" Margin="0,10,10,10">
-            <Button DockPanel.Dock="Top" Style="{x:Null}" Height="24">OK</Button>
-            <Button DockPanel.Dock="Top" Style="{x:Null}" Height="24" Margin="0,10,0,0">Cancel</Button>
-            <Border
-                Height="50"
-                Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
-                BorderBrush="{Binding Foreground}"
-                BorderThickness="1"
-                DockPanel.Dock="Bottom">
-                <Rectangle Fill="{Binding CurrentColor, Converter={StaticResource color2brush}}" />
-            </Border>
-            <Rectangle />
-        </DockPanel>-->
     </Grid>
 </Window>
