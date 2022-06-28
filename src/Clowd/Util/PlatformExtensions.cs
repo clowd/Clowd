@@ -9,6 +9,7 @@ namespace Clowd
         public static IWindow GetPlatformWindow(this Window window)
         {
             var iop = new WindowInteropHelper(window);
+            iop.EnsureHandle();
             return Platform.Current.GetWindowFromHandle(iop.Handle);
         }
     }

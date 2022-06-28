@@ -302,7 +302,7 @@ namespace Clowd
             context.Items.Add(new Separator());
 
             var colorp = new MenuItem() { Header = "Color Pic_ker" };
-            colorp.Click += (s, e) => NiceDialog.ShowColorDialogAsync(null, Colors.Transparent);
+            colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
             context.Items.Add(colorp);
 
             var screend = new MenuItem() { Header = "_Draw on Screen" };
@@ -388,7 +388,7 @@ namespace Clowd
                     vid.StartRecording();
                 }
             }
-            catch { ; } // don't really care if recorder is in a bad state.
+            catch {; } // don't really care if recorder is in a bad state.
         }
 
         public void StartCapture(ScreenRect region = null)
