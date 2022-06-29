@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -77,6 +77,7 @@ namespace Clowd.UI
             // position Palette on monitor with cursor and scale for dpi
             _dpi = this.ClientAreaToDpiContext();
             var screen = Platform.Current.GetScreenFromPoint(Platform.Current.GetMousePosition());
+            Palette.LayoutTransform = new ScaleTransform(screen.PixelDensity, screen.PixelDensity);
             SetPaletteLocation(new ScreenPoint(screen.WorkingArea.X + 150, screen.WorkingArea.Y + 150));
         }
 
@@ -671,11 +672,38 @@ namespace Clowd.UI
         private void Palette_MouseMove(object sender, MouseEventArgs e)
         {
             if (!_isDraging) return;
+
             var currentMousePosition = Mouse.GetPosition(this);
             var offset = currentMousePosition - _lastMousePosition;
 
             Canvas.SetTop(Palette, Canvas.GetTop(Palette) + offset.Y);
             Canvas.SetLeft(Palette, Canvas.GetLeft(Palette) + offset.X);
+
+            // update DPI of component if dragged to a different monitor
+            var currentTransform = Palette.LayoutTransform as ScaleTransform;
+            var screen = Platform.Current.GetScreenFromRect(GetPaletteLocation());
+
+            if (currentTransform.ScaleX != screen.PixelDensity)
+            {
+                var adjRatio = screen.PixelDensity / currentTransform.ScaleX;
+
+                // calculate the new top left position, centering the scaling on the current mouse pos
+                var matrix = Matrix.Identity;
+                matrix.ScaleAt(adjRatio, adjRatio, currentMousePosition.X, currentMousePosition.Y);
+                var topLeft = matrix.Transform(new Point(Canvas.GetLeft(Palette), Canvas.GetTop(Palette)));
+
+                // only want to rescale if this does not change the 'GetScreenFromRect' calculation
+                // this avoids "jitters" where resizing the area causes the center point to jump
+                // back to the previous screen.
+                var newLogicalPos = new LogicalRect(topLeft.X, topLeft.Y, Palette.ActualWidth * adjRatio, Palette.ActualHeight * adjRatio);
+                var newScreen = Platform.Current.GetScreenFromRect(_dpi.ToScreenRect(newLogicalPos));
+                if (newScreen.Handle.Equals(screen.Handle))
+                {
+                    Canvas.SetLeft(Palette, topLeft.X);
+                    Canvas.SetTop(Palette, topLeft.Y);
+                    Palette.LayoutTransform = new ScaleTransform(screen.PixelDensity, screen.PixelDensity);
+                }
+            }
 
             _lastMousePosition = currentMousePosition;
         }
