@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -15,7 +15,7 @@ using Point = System.Windows.Point;
 
 namespace Clowd.UI
 {
-    public partial class LiveDrawWindow : Window, ILiveDrawPage
+    public partial class LiveDrawWindow : InteropWindow, ILiveDrawPage
     {
         public static readonly DependencyProperty PanelOrientationProperty = DependencyProperty.Register(
             "PanelOrientation", typeof(Orientation), typeof(LiveDrawWindow), new PropertyMetadata(Orientation.Horizontal));
@@ -34,7 +34,7 @@ namespace Clowd.UI
             get { return (bool)GetValue(PanelReversedProperty); }
             set { SetValue(PanelReversedProperty, value); }
         }
-        
+
         public LiveDrawWindow()
         {
             _history = new Stack<StrokesHistoryNode>();
@@ -73,6 +73,11 @@ namespace Clowd.UI
             wnd.WindowBounds = vbounds;
 
             this.Show();
+
+            // position Palette on monitor with cursor and scale for dpi
+            _dpi = this.ClientAreaToDpiContext();
+            var screen = Platform.Current.GetScreenFromPoint(Platform.Current.GetMousePosition());
+            SetPaletteLocation(new ScreenPoint(screen.WorkingArea.X + 150, screen.WorkingArea.Y + 150));
         }
 
         private void MainInkCanvas_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
@@ -80,6 +85,7 @@ namespace Clowd.UI
             SetEnable(false, _mode);
         }
 
+        private DpiContext _dpi;
         private ColorPicker _selectedColor;
         private bool _inkVisibility = true;
         private bool _enable = false;
@@ -195,8 +201,27 @@ namespace Clowd.UI
             brushPreview.Width = s;
         }
 
+        private ScreenRect GetPaletteLocation()
+        {
+            Palette.Measure(new Size(999, 999));
+            var logicalPos = new LogicalRect(Canvas.GetLeft(Palette), Canvas.GetTop(Palette), Palette.DesiredSize.Width, Palette.DesiredSize.Height);
+            return _dpi.ToScreenRect(logicalPos);
+        }
+
+        private void SetPaletteLocation(ScreenPoint newPos)
+        {
+            var newLogicalPos = _dpi.ToWorldPoint(newPos);
+            Canvas.SetLeft(Palette, newLogicalPos.X);
+            Canvas.SetTop(Palette, newLogicalPos.Y);
+        }
+
         private void SetOrientation(bool v)
         {
+            // find current monitor palette is on
+            var origPos = GetPaletteLocation();
+            var screen = Platform.Current.GetScreenFromRect(origPos);
+
+            // update orientation of palette component
             if (v)
             {
                 PanelOrientation = Orientation.Vertical;
@@ -215,7 +240,19 @@ namespace Clowd.UI
                 OrientationButtonTransform.Angle = 90;
                 OrientationButton.IsActivated = false;
             }
-            
+
+            // shift palette so it is rotated along the center point
+            var rotatedPos = GetPaletteLocation();
+            var newPt = new ScreenPoint(
+                (origPos.X + (origPos.Width / 2)) - (rotatedPos.Width / 2),
+                (origPos.Y + (origPos.Height / 2)) - (rotatedPos.Height / 2));
+
+            rotatedPos = new ScreenRect(newPt, rotatedPos.Size);
+
+            // make sure it is fully contained within the original monitor
+            rotatedPos = screen.FitRectToScreen(rotatedPos);
+            SetPaletteLocation(rotatedPos.TopLeft);
+
             _displayOrientation = v;
         }
 
