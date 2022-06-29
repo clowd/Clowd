@@ -46,8 +46,12 @@ namespace Clowd.PlatformUtil.Windows
             }
             set
             {
-                SetWindowPos(Handle, HWND.HWND_NOTOPMOST, value.X, value.Y, value.Width, value.Height,
-                    SetWindowPosFlags.SWP_NOOWNERZORDER | SetWindowPosFlags.SWP_NOACTIVATE | SetWindowPosFlags.SWP_NOZORDER);
+                // This is called twice to work-around a WPF behavior. If this is being moved
+                // to a new monitor with a different DPI, WPF will then recieve a WM_DPICHHANGED
+                // message and re-size the window. The second MoveWindow then achieves our desired
+                // size.
+                MoveWindow(Handle, value.X, value.Y, value.Width, value.Height, false);
+                MoveWindow(Handle, value.X, value.Y, value.Width, value.Height, true);
             }
         }
 
@@ -57,10 +61,6 @@ namespace Clowd.PlatformUtil.Windows
             {
                 GetClientRect(Handle, out var rect);
                 return ScreenRect.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
-            }
-            set
-            {
-                WindowBounds = GetWindowRectFromIdealClientRect(value);
             }
         }
         
