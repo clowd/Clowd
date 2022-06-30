@@ -45,7 +45,6 @@
     <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
     <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
-    <ProjectReference Include="..\..\third-party\Cyotek.Windows.Forms.ColorPicker\Cyotek.Windows.Forms.ColorPicker.csproj" />
   </ItemGroup>
   
   <ItemGroup>

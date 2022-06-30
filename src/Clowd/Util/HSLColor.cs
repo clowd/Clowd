@@ -65,6 +65,11 @@ namespace Clowd.Util
         {
             return FromRGB(clr.R, clr.G, clr.B, clr.A);
         }
+        
+        public static HSLColor FromRGB(System.Drawing.Color clr)
+        {
+            return FromRGB(clr.R, clr.G, clr.B, clr.A);
+        }
 
         public static HSLColor FromRGB(byte R, byte G, byte B, byte A = 255)
         {
