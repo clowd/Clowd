@@ -11,7 +11,6 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using Clowd.PlatformUtil;
 using Clowd.PlatformUtil.Windows;
-using Cyotek.Windows.Forms;
 
 namespace Clowd.UI.Helpers
 {
@@ -126,7 +125,7 @@ namespace Clowd.UI.Helpers
 
         public static async Task<Color> ShowColorPromptAsync(FrameworkElement parent, Color initial)
         {
-            var clr = new Dialogs.ColorEditor(initial, true);
+            var clr = new Dialogs.ColorPicker.ColorDialog(initial, true);
             await clr.ShowAsNiceDialogAsync(parent);
 
             if (clr.MyDialogResult == true)
@@ -141,7 +140,7 @@ namespace Clowd.UI.Helpers
 
         public static void ShowColorViewer(Color? initial = null)
         {
-            var clr = new Dialogs.ColorEditor(initial, false);
+            var clr = new Dialogs.ColorPicker.ColorDialog(initial, false);
             clr.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             clr.Show();
             clr.GetPlatformWindow().Activate();
