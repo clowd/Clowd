@@ -51,7 +51,7 @@ namespace Clowd
     {
         public static Color AccentColor => (Color)FindResource("SystemAccentColor");
         public static Style AudioLevelProgressBarStyle => (Style)FindResource("AudioLevelProgressBarStyle");
-
+        public static Brush CheckerboardBrushSmall => (Brush)FindResource("CheckeredLightGrayBackgroundBrush");
         public static Brush AccentBackgroundBrush => new SolidColorBrush(AccentColor);
         public static Brush IdealBackgroundBrush => new SolidColorBrush(Color.FromRgb(55, 55, 55));
         public static Brush IdealForegroundBrush => Brushes.White;

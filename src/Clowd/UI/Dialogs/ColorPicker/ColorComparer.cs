@@ -1,32 +1,23 @@
 ﻿using System;
 using System.Drawing;
 
-namespace Cyotek.Windows.Forms
+namespace Clowd.UI.Dialogs.ColorPicker
 {
     // Cyotek Color Picker controls library
     // Copyright © 2013-2017 Cyotek Ltd.
     // http://cyotek.com/blog/tag/colorpicker
-
-    // Licensed under the MIT License. See license.txt for the full text.
-
-    // If you use this code in your applications, donations or attribution are welcome
+    // Licensed under the MIT License. 
 
     /// <summary>
     /// Provides access to color comparison operations.
     /// </summary>
     public static class ColorComparer
     {
-        #region Constants
-
         private const double BlueLuminance = 0.072187;
 
         private const double GreenLuminance = 0.715158;
 
         private const double RedLuminance = 0.212655;
-
-        #endregion
-
-        #region Static Methods
 
         /// <summary>
         /// Compares two colors by brightness and returns an indication of their relative sort order.
@@ -161,7 +152,5 @@ namespace Cyotek.Windows.Forms
 
             return result;
         }
-
-        #endregion
     }
 }

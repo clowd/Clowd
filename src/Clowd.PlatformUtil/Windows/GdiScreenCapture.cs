@@ -74,7 +74,7 @@ namespace Clowd.PlatformUtil.Windows
                 if (!PrintWindow(new HWND(nWin.Handle), b1.hdcBitmap, PW.PW_RENDERFULLCONTENT))
                     throw new Win32Exception();
 
-                if (b1.Equals(b2))
+                if (r1.Equals(r2))
                 {
                     // no cropping needed
                     return b1;
@@ -93,8 +93,8 @@ namespace Clowd.PlatformUtil.Windows
             }
             catch
             {
-                if (b1 != null) b1.Dispose();
-                if (b2 != null) b2.Dispose();
+                b1?.Dispose();
+                b2?.Dispose();
                 throw;
             }
             finally
