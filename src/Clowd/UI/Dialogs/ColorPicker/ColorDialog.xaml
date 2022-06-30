@@ -1,0 +1,230 @@
+﻿<Window
+    x:Class="Clowd.UI.Dialogs.ColorPicker.ColorDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="clr-namespace:Clowd.UI"
+    Title="ColorEditor"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    ResizeMode="NoResize"
+    SizeToContent="WidthAndHeight"
+    SnapsToDevicePixels="True"
+    UseLayoutRounding="True"
+    mc:Ignorable="d">
+    <Window.Resources>
+        <conv:ColorToBrushConverter x:Key="color2brush" />
+        <conv:ColorToHexConverter x:Key="color2hex" />
+        <conv:ColorToRgbConverter x:Key="color2rgb" />
+        <conv:ColorToHslConverter x:Key="color2hsl" />
+        <RoutedUICommand x:Key="Commands.CopyHex" />
+        <RoutedUICommand x:Key="Commands.CopyRgb" />
+        <RoutedUICommand x:Key="Commands.CopyHsl" />
+    </Window.Resources>
+    <Window.CommandBindings>
+        <CommandBinding Command="{StaticResource Commands.CopyHex}" Executed="CopyHexExecuted" CanExecute="CopyCanExecute" />
+        <CommandBinding Command="{StaticResource Commands.CopyRgb}" Executed="CopyRgbExecuted" CanExecute="CopyCanExecute" />
+        <CommandBinding Command="{StaticResource Commands.CopyHsl}" Executed="CopyHslExecuted" CanExecute="CopyCanExecute" />
+    </Window.CommandBindings>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <local:ColorWheel
+                Margin="20"
+                Width="200"
+                Height="200"
+                Background="{Binding Background}"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+
+            <WrapPanel
+                x:Name="ColorPalette"
+                Grid.Row="1"
+                Width="256"
+                Height="96"
+                VerticalAlignment="Bottom"
+                Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
+                ItemHeight="16"
+                ItemWidth="16"
+                Orientation="Horizontal">
+                <Border Background="Black" />
+                <Border Background="White" />
+                <Border Background="#A0A0A0" />
+                <Border Background="#C0C0C0" />
+                <Border Background="#7F000000" />
+                <Border Background="Transparent" />
+            </WrapPanel>
+        </Grid>
+
+        <Grid Grid.Column="1" Margin="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="54" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="24" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="24" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="28" />
+            </Grid.RowDefinitions>
+
+            <Grid.Resources>
+                <Style TargetType="Label">
+                    <Setter Property="HorizontalAlignment" Value="Right" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="FontFamily" Value="Consolas" />
+                    <Setter Property="Foreground" Value="{Binding RelativeSource={RelativeSource AncestorType={x:Type FrameworkElement}}, Path=(TextElement.Foreground)}"/>
+                </Style>
+                <Style TargetType="local:ColorSlider">
+                    <Setter Property="CornerRadius" Value="4" />
+                    <Setter Property="Height" Value="16" />
+                    <Setter Property="ThumbBrush" Value="{Binding RelativeSource={RelativeSource AncestorType={x:Type FrameworkElement}}, Path=(TextElement.Foreground)}" />
+                    <Setter Property="Background" Value="{StaticResource CheckeredMediumGrayBackgroundBrush}" />
+                </Style>
+                <Style TargetType="TextBox">
+                    <Setter Property="Margin" Value="6,2,0,1" />
+                    <Setter Property="TextAlignment" Value="Center" />
+                </Style>
+                <Style TargetType="Button">
+                    <Setter Property="Margin" Value="6,0,0,0" />
+                    <Setter Property="FontSize" Value="9" />
+                    <Setter Property="VerticalAlignment" Value="Stretch" />
+                </Style>
+            </Grid.Resources>
+
+            <Control
+                x:Name="tabReset"
+                FocusVisualStyle="{x:Null}"
+                Focusable="true"
+                IsTabStop="false" />
+
+            <Label Grid.Row="0">HEX:</Label>
+            <TextBox
+                Grid.Column="1"
+                Margin="0"
+                Text="{Binding CurrentColor, Converter={StaticResource color2hex}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Button Grid.Column="2" Command="{StaticResource Commands.CopyHex}">
+                <AccessText>Copy HE_X</AccessText>
+            </Button>
+
+            <Label
+                Grid.Row="2"
+                Grid.Column="1"
+                HorizontalAlignment="Left"
+                Content="{Binding CurrentColor, Converter={StaticResource color2rgb}}" />
+
+            <Button Grid.Row="2" Grid.Column="2" Command="{StaticResource Commands.CopyRgb}">
+                <AccessText>Copy _RGB</AccessText>
+            </Button>
+
+
+            <Label Grid.Row="3">R:</Label>
+            <local:ColorSlider
+                Grid.Row="3"
+                Grid.Column="1"
+                ColorPart="R"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox x:Name="txtClrR" Grid.Row="3" Grid.Column="2" />
+
+            <Label Grid.Row="4">G:</Label>
+            <local:ColorSlider
+                Grid.Row="4"
+                Grid.Column="1"
+                ColorPart="G"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox x:Name="txtClrG" Grid.Row="4" Grid.Column="2" />
+
+            <Label Grid.Row="5">B:</Label>
+            <local:ColorSlider
+                Grid.Row="5"
+                Grid.Column="1"
+                ColorPart="B"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox x:Name="txtClrB" Grid.Row="5" Grid.Column="2" />
+
+            <Label Grid.Row="6">A:</Label>
+            <local:ColorSlider
+                Grid.Row="6"
+                Grid.Column="1"
+                ColorPart="A"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox x:Name="txtClrA" Grid.Row="6" Grid.Column="2" />
+
+            <Label
+                Grid.Row="8"
+                Grid.Column="1"
+                HorizontalAlignment="Left"
+                Content="{Binding CurrentColor, Converter={StaticResource color2hsl}}" />
+
+            <Button Grid.Row="8" Grid.Column="2" Command="{StaticResource Commands.CopyHsl}">
+                <AccessText>Copy _HSL</AccessText>
+            </Button>
+
+            <Label Grid.Row="9">H:</Label>
+            <local:ColorSlider
+                Grid.Row="9"
+                Grid.Column="1"
+                ColorPart="H"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox x:Name="txtClrH" Grid.Row="9" Grid.Column="2" />
+
+            <Label Grid.Row="10">S:</Label>
+            <local:ColorSlider
+                Grid.Row="10"
+                Grid.Column="1"
+                ColorPart="S"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox x:Name="txtClrS" Grid.Row="10" Grid.Column="2" />
+
+            <Label Grid.Row="11">L:</Label>
+            <local:ColorSlider
+                Grid.Row="11"
+                Grid.Column="1"
+                ColorPart="L"
+                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+            <TextBox x:Name="txtClrL" Grid.Row="11" Grid.Column="2" />
+
+            <controls:SimpleStackPanel Spacing="10" Grid.Row="13" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Border
+                    Width="108"
+                    Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
+                    BorderBrush="{Binding Foreground}"
+                    BorderThickness="1">
+                    <Border Background="{Binding CurrentColor, Converter={StaticResource color2brush}}" ClipToBounds="True">
+                        <Path x:Name="pathPrevColor" Fill="{Binding PreviousColor, Converter={StaticResource color2brush}}" Data="M 0,0 H 60 L 48,28 H 0 Z"
+                              MouseDown="PrevColorClicked" />
+                    </Border>
+                </Border>
+                <Button x:Name="btnCancel" IsCancel="True" Padding="12,0" Style="{x:Null}" Click="CloseClicked">
+                    <AccessText>_Cancel</AccessText>
+                </Button>
+                <Button x:Name="btnOK" IsDefault="True" Padding="14,0" Style="{x:Null}" Click="OKClicked">
+                    <AccessText>_OK</AccessText>
+                </Button>
+            </controls:SimpleStackPanel>
+        </Grid>
+    </Grid>
+</Window>

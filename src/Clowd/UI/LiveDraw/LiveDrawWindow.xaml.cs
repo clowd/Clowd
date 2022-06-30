@@ -15,7 +15,7 @@ using Point = System.Windows.Point;
 
 namespace Clowd.UI
 {
-    public partial class LiveDrawWindow : Window, ILiveDrawPage
+    public partial class LiveDrawWindow : InteropWindow, ILiveDrawPage
     {
         public static readonly DependencyProperty PanelOrientationProperty = DependencyProperty.Register(
             "PanelOrientation", typeof(Orientation), typeof(LiveDrawWindow), new PropertyMetadata(Orientation.Horizontal));
@@ -34,7 +34,7 @@ namespace Clowd.UI
             get { return (bool)GetValue(PanelReversedProperty); }
             set { SetValue(PanelReversedProperty, value); }
         }
-        
+
         public LiveDrawWindow()
         {
             _history = new Stack<StrokesHistoryNode>();
@@ -73,6 +73,12 @@ namespace Clowd.UI
             wnd.WindowBounds = vbounds;
 
             this.Show();
+
+            // position Palette on monitor with cursor and scale for dpi
+            _dpi = this.ClientAreaToDpiContext();
+            var screen = Platform.Current.GetScreenFromPoint(Platform.Current.GetMousePosition());
+            Palette.LayoutTransform = new ScaleTransform(screen.PixelDensity, screen.PixelDensity);
+            SetPaletteLocation(new ScreenPoint(screen.WorkingArea.X + 150, screen.WorkingArea.Y + 150));
         }
 
         private void MainInkCanvas_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
@@ -80,6 +86,7 @@ namespace Clowd.UI
             SetEnable(false, _mode);
         }
 
+        private DpiContext _dpi;
         private ColorPicker _selectedColor;
         private bool _inkVisibility = true;
         private bool _enable = false;
@@ -195,8 +202,27 @@ namespace Clowd.UI
             brushPreview.Width = s;
         }
 
+        private ScreenRect GetPaletteLocation()
+        {
+            Palette.Measure(new Size(999, 999));
+            var logicalPos = new LogicalRect(Canvas.GetLeft(Palette), Canvas.GetTop(Palette), Palette.DesiredSize.Width, Palette.DesiredSize.Height);
+            return _dpi.ToScreenRect(logicalPos);
+        }
+
+        private void SetPaletteLocation(ScreenPoint newPos)
+        {
+            var newLogicalPos = _dpi.ToWorldPoint(newPos);
+            Canvas.SetLeft(Palette, newLogicalPos.X);
+            Canvas.SetTop(Palette, newLogicalPos.Y);
+        }
+
         private void SetOrientation(bool v)
         {
+            // find current monitor palette is on
+            var origPos = GetPaletteLocation();
+            var screen = Platform.Current.GetScreenFromRect(origPos);
+
+            // update orientation of palette component
             if (v)
             {
                 PanelOrientation = Orientation.Vertical;
@@ -215,7 +241,19 @@ namespace Clowd.UI
                 OrientationButtonTransform.Angle = 90;
                 OrientationButton.IsActivated = false;
             }
-            
+
+            // shift palette so it is rotated along the center point
+            var rotatedPos = GetPaletteLocation();
+            var newPt = new ScreenPoint(
+                (origPos.X + (origPos.Width / 2)) - (rotatedPos.Width / 2),
+                (origPos.Y + (origPos.Height / 2)) - (rotatedPos.Height / 2));
+
+            rotatedPos = new ScreenRect(newPt, rotatedPos.Size);
+
+            // make sure it is fully contained within the original monitor
+            rotatedPos = screen.FitRectToScreen(rotatedPos);
+            SetPaletteLocation(rotatedPos.TopLeft);
+
             _displayOrientation = v;
         }
 
@@ -634,11 +672,38 @@ namespace Clowd.UI
         private void Palette_MouseMove(object sender, MouseEventArgs e)
         {
             if (!_isDraging) return;
+
             var currentMousePosition = Mouse.GetPosition(this);
             var offset = currentMousePosition - _lastMousePosition;
 
             Canvas.SetTop(Palette, Canvas.GetTop(Palette) + offset.Y);
             Canvas.SetLeft(Palette, Canvas.GetLeft(Palette) + offset.X);
+
+            // update DPI of component if dragged to a different monitor
+            var currentTransform = Palette.LayoutTransform as ScaleTransform;
+            var screen = Platform.Current.GetScreenFromRect(GetPaletteLocation());
+
+            if (currentTransform.ScaleX != screen.PixelDensity)
+            {
+                var adjRatio = screen.PixelDensity / currentTransform.ScaleX;
+
+                // calculate the new top left position, centering the scaling on the current mouse pos
+                var matrix = Matrix.Identity;
+                matrix.ScaleAt(adjRatio, adjRatio, currentMousePosition.X, currentMousePosition.Y);
+                var topLeft = matrix.Transform(new Point(Canvas.GetLeft(Palette), Canvas.GetTop(Palette)));
+
+                // only want to rescale if this does not change the 'GetScreenFromRect' calculation
+                // this avoids "jitters" where resizing the area causes the center point to jump
+                // back to the previous screen.
+                var newLogicalPos = new LogicalRect(topLeft.X, topLeft.Y, Palette.ActualWidth * adjRatio, Palette.ActualHeight * adjRatio);
+                var newScreen = Platform.Current.GetScreenFromRect(_dpi.ToScreenRect(newLogicalPos));
+                if (newScreen.Handle.Equals(screen.Handle))
+                {
+                    Canvas.SetLeft(Palette, topLeft.X);
+                    Canvas.SetTop(Palette, topLeft.Y);
+                    Palette.LayoutTransform = new ScaleTransform(screen.PixelDensity, screen.PixelDensity);
+                }
+            }
 
             _lastMousePosition = currentMousePosition;
         }

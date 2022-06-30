@@ -15,43 +15,68 @@ namespace Clowd.Util
             }
             set
             {
-                _hue = value / 60d;
+                _hue = value;
+                if (_hue > 359)
+                {
+                    _hue = 0;
+                }
+                if (_hue < 0)
+                {
+                    _hue = 359;
+                }
+                _hue /= 60d;
             }
         }
 
         public double Saturation
         {
-            get { return _sat * 100; }
-            set { _sat = value / 100; }
+            get { return _sat; }
+            set { _sat = Math.Min(1, Math.Max(0, value)); }
         }
 
         public double Lightness
         {
-            get { return _lum * 100; }
-            set { _lum = value / 100; }
+            get { return _lum; }
+            set { _lum = Math.Min(1, Math.Max(0, value)); }
         }
 
-        private double _hue;
-        private double _sat;
-        private double _lum;
+        public double Alpha
+        {
+            get { return _alpha; }
+            set { _alpha = Math.Min(1, Math.Max(0, value)); }
+        }
 
-        private HSLColor(double H, double S, double L)
+        private double _hue = 0d;
+        private double _sat = 1d;
+        private double _lum = 0.5d;
+        private double _alpha = 1d;
+
+        public HSLColor() { }
+
+        private HSLColor(double H, double S, double L, double A)
         {
             _hue = H;
             _sat = S;
             _lum = L;
+            _alpha = A;
         }
 
-        public static HSLColor FromRGB(Color Clr)
+        public static HSLColor FromRGB(Color clr)
         {
-            return FromRGB(Clr.R, Clr.G, Clr.B);
+            return FromRGB(clr.R, clr.G, clr.B, clr.A);
+        }
+        
+        public static HSLColor FromRGB(System.Drawing.Color clr)
+        {
+            return FromRGB(clr.R, clr.G, clr.B, clr.A);
         }
 
-        public static HSLColor FromRGB(byte R, byte G, byte B)
+        public static HSLColor FromRGB(byte R, byte G, byte B, byte A = 255)
         {
             double _R = (R / 255d);
             double _G = (G / 255d);
             double _B = (B / 255d);
+            double _A = (A / 255d);
 
             double _Min = Math.Min(Math.Min(_R, _G), _B);
             double _Max = Math.Max(Math.Max(_R, _G), _B);
@@ -87,7 +112,7 @@ namespace Clowd.Util
                 }
             }
 
-            return new HSLColor(H, S, L);
+            return new HSLColor(H, S, L, _A);
         }
 
         private double Hue_2_RGB(double v1, double v2, double vH)
@@ -102,7 +127,7 @@ namespace Clowd.Util
 
         public Color ToRGB()
         {
-            byte r, g, b;
+            byte r, g, b, a = (byte)Math.Round(_alpha * 255d);
             if (_sat == 0)
             {
                 r = (byte)Math.Round(_lum * 255d);
@@ -138,7 +163,7 @@ namespace Clowd.Util
                 b = (byte)Math.Round(tb * 255d);
             }
 
-            return Color.FromRgb(r, g, b);
+            return Color.FromArgb(a, r, g, b);
         }
 
         private static double ColorCalc(double c, double t1, double t2)
@@ -183,12 +208,12 @@ namespace Clowd.Util
 
         public HSLColor Clone()
         {
-            return new HSLColor(_hue, _sat, _lum);
+            return new HSLColor(_hue, _sat, _lum, _alpha);
         }
 
         object ICloneable.Clone()
         {
-            return new HSLColor(_hue, _sat, _lum);
+            return new HSLColor(_hue, _sat, _lum, _alpha);
         }
     }
 }
