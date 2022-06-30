@@ -8,11 +8,13 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using Clowd.Config;
 using Clowd.UI.Controls;
+using Clowd.UI.Converters;
 using Clowd.UI.Helpers;
 using Clowd.Util;
 using Clowd.Video;
@@ -156,7 +158,24 @@ namespace Clowd.UI.Config
             }
 
             if (pd.Is(typeof(Color)))
-                return SimpleControlBinding(new Dialogs.ColorPicker.ColorPicker(), pd, Dialogs.ColorPicker.ColorPicker.SelectedColorProperty);
+            {
+                var border = new Border() { BorderBrush = Brushes.White, BorderThickness = new Thickness(1) };
+                border.SetBinding(Border.BackgroundProperty, CreateBinding(pd.Name, converter: new ColorToBrushConverter()));
+                
+                border = new Border() { BorderBrush = Brushes.Black, BorderThickness = new Thickness(1), Child = border, 
+                     Background = AppStyles.CheckerboardBrushSmall, Width = 24, Height = 24 };
+
+                var label = new TextBlock() { VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.White };
+                label.SetBinding(TextBlock.TextProperty, CreateBinding(pd.Name, converter: new ColorToHexConverter()));
+
+                var stack = StackCtrl(border, label);
+                stack.Cursor = Cursors.Hand;
+                stack.MouseDown += (s, e) =>
+                {
+                    NiceDialog.ShowColorPromptAsync(_wndFn(), (Color)pd.GetValue(_obj)).ContinueWith(t => pd.SetValue(_obj, t.Result));
+                };
+                return stack;
+            }
 
             if (pd.Is(typeof(AudioDeviceInfo)))
             {
@@ -241,7 +260,7 @@ namespace Clowd.UI.Config
             return sb.ToString();
         }
 
-        Binding CreateBinding(string bindingPath, UpdateSourceTrigger trigger = UpdateSourceTrigger.Default)
+        Binding CreateBinding(string bindingPath, UpdateSourceTrigger trigger = UpdateSourceTrigger.Default, IValueConverter converter = null)
         {
             var binding = new Binding(bindingPath)
             {
@@ -250,6 +269,7 @@ namespace Clowd.UI.Config
                 ValidatesOnDataErrors = true,
                 ValidatesOnExceptions = true,
                 NotifyOnSourceUpdated = true,
+                Converter = converter,
                 Source = _obj,
             };
 
@@ -271,11 +291,21 @@ namespace Clowd.UI.Config
 
         FrameworkElement DockCtrl(FrameworkElement fill, FrameworkElement dock, Dock position)
         {
+            return DockCtrl(fill, (dock, position));
+        }
+
+        FrameworkElement DockCtrl(FrameworkElement fill, params (FrameworkElement dock, Dock position)[] docked)
+        {
             var panel = new DockPanel();
             panel.VerticalAlignment = VerticalAlignment.Stretch;
             panel.HorizontalAlignment = HorizontalAlignment.Stretch;
-            DockPanel.SetDock(dock, position);
-            panel.Children.Add(dock);
+
+            foreach (var i in docked)
+            {
+                DockPanel.SetDock(i.dock, i.position);
+                panel.Children.Add(i.dock);
+            }
+
             panel.Children.Add(fill);
             return panel;
         }

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Drawing;
 
-namespace Cyotek.Windows.Forms
+namespace Clowd.UI.Dialogs.ColorPicker
 {
     // Cyotek Color Picker controls library
     // Copyright © 2013-2017 Cyotek Ltd.
