@@ -219,6 +219,7 @@ namespace Clowd.Video
                         maxOutputHeight = settings.MaxResolutionHeight,
                         maxOutputWidth = settings.MaxResolutionWidth,
                         trackMouseClicks = settings.TrackMouseClicks,
+                        containerFormat = settings.OutputType == VideoOutputType.MP4 ? "mp4" : "mkv",
                     };
 
                     if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice != null)
@@ -451,6 +452,7 @@ namespace Clowd.Video
             public string outputDirectory;
             public string performanceMode;
             public string subsamplingMode;
+            public string containerFormat;
             public bool trackMouseClicks;
         }
 

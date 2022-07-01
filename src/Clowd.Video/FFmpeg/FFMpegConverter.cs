@@ -9,7 +9,6 @@ namespace Clowd.Video.FFmpeg
     /// <summary>Video converter component (wrapper to FFMpeg process)</summary>
     public class FFMpegConverter
     {
-        private static object globalObj = new object();
         private Process FFMpegProcess;
 
         /// <summary>Gets or sets path where FFMpeg tool is located</summary>
@@ -31,6 +30,11 @@ namespace Clowd.Video.FFmpeg
 
         /// <summary>Occurs when log line is received from FFMpeg process</summary>
         public event EventHandler<FFMpegLogEventArgs> LogReceived;
+
+        /// <summary>
+        /// Occurs when FFMpeg outputs media info (total duration, convert progress)
+        /// </summary>
+        public event EventHandler<ConvertProgressEventArgs> ConvertProgress;
 
         /// <summary>
         /// Gets or sets FFMpeg process priority (Normal by default)
@@ -55,7 +59,7 @@ namespace Clowd.Video.FFmpeg
             this.FFMpegToolPath = AppDomain.CurrentDomain.BaseDirectory;
             if (string.IsNullOrEmpty(this.FFMpegToolPath))
                 this.FFMpegToolPath = Path.GetDirectoryName(typeof(FFMpegConverter).Assembly.Location);
-            this.FFMpegExeName = "ffmpeg.exe";
+            this.FFMpegExeName = "ffmpeg-5.0-lgpl-x64.exe";
         }
 
         internal string GetFFMpegExePath()
@@ -99,7 +103,6 @@ namespace Clowd.Video.FFmpeg
         /// <param name="ffmpegArgs">string with arguments</param>
         public void Invoke(string ffmpegArgs)
         {
-            this.EnsureFFMpegLibs();
             try
             {
                 string ffMpegExePath = this.GetFFMpegExePath();
@@ -126,11 +129,13 @@ namespace Clowd.Video.FFmpeg
                 if (this.FFMpegProcessPriority != ProcessPriorityClass.Normal)
                     this.FFMpegProcess.PriorityClass = this.FFMpegProcessPriority;
                 string lastErrorLine = string.Empty;
+                FFMpegProgress ffmpegProgress = new FFMpegProgress(new Action<ConvertProgressEventArgs>(this.OnConvertProgress), this.ConvertProgress != null);
                 this.FFMpegProcess.ErrorDataReceived += (DataReceivedEventHandler)((o, args) =>
                 {
                     if (args.Data == null)
                         return;
                     lastErrorLine = args.Data;
+                    ffmpegProgress.ParseLine(args.Data);
                     this.FFMpegLogHandler(args.Data);
                 });
                 this.FFMpegProcess.BeginErrorReadLine();
@@ -151,6 +156,7 @@ namespace Clowd.Video.FFmpeg
                     throw new FFMpegException(this.FFMpegProcess.ExitCode, lastErrorLine);
                 this.FFMpegProcess.Close();
                 this.FFMpegProcess = (Process)null;
+                ffmpegProgress.Complete();
             }
             finally
             {
@@ -158,72 +164,18 @@ namespace Clowd.Video.FFmpeg
             }
         }
 
+        internal void OnConvertProgress(ConvertProgressEventArgs args)
+        {
+            if (this.ConvertProgress == null)
+                return;
+            this.ConvertProgress((object)this, args);
+        }
+
         internal void FFMpegLogHandler(string line)
         {
             if (this.LogReceived == null)
                 return;
             this.LogReceived((object)this, new FFMpegLogEventArgs(line));
-        }
-
-        /// <summary>
-        /// Extracts ffmpeg binaries (if needed) to the location specified by FFMpegToolPath />.
-        /// </summary>
-        /// <remarks><para>If missed ffmpeg is extracted automatically before starting conversion process.
-        /// In some cases it is better to do that explicetily on the application start by calling ExtractFFmpeg method.</para>
-        /// <para>This method is not available in LT version (without embedded ffmpeg binaries).</para></remarks>
-        public void ExtractFFmpeg()
-        {
-            this.EnsureFFMpegLibs();
-        }
-
-        private void EnsureFFMpegLibs()
-        {
-            if (!File.Exists(GetFFMpegExePath()))
-            {
-                lock (FFMpegConverter.globalObj)
-                {
-                    var bitness = Environment.Is64BitOperatingSystem ? "x64" : "x86";
-                    Assembly executingAssembly = Assembly.GetExecutingAssembly();
-                    string[] manifestResourceNames = executingAssembly.GetManifestResourceNames();
-                    string str = "Clowd.Video.Embed.";
-                    foreach (string name in manifestResourceNames)
-                    {
-                        if (name.StartsWith(str) && name.Contains(bitness))
-                        {
-                            string path = Path.Combine(this.FFMpegToolPath, Path.GetFileNameWithoutExtension(name.Substring(str.Length)));
-
-                            if (!File.Exists(GetFFMpegExePath()))
-                                FFMpegExeName = Path.GetFileName(path);
-
-                            if (File.Exists(path))
-                            {
-                                if (File.GetLastWriteTime(path) > File.GetLastWriteTime(executingAssembly.Location))
-                                    continue;
-                            }
-
-                            using (GZipStream gzipStream = new GZipStream(executingAssembly.GetManifestResourceStream(name), CompressionMode.Decompress, false))
-                            {
-                                using (FileStream fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
-                                {
-                                    byte[] buffer = new byte[65536];
-                                    int count;
-                                    while ((count = gzipStream.Read(buffer, 0, buffer.Length)) > 0)
-                                        fileStream.Write(buffer, 0, count);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            var manifestPath = GetFFMpegExePath() + ".manifest";
-            if (!File.Exists(manifestPath))
-            {
-                // we need to make ffmpeg per-monitor dpi aware so gdigrab / dshow filters can get correct screen coordinates.
-                // https://docs.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process
-                File.WriteAllText(manifestPath,
-                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\" xmlns:asmv3=\"urn:schemas-microsoft-com:asm.v3\">\r\n<asmv3:application>\r\n<asmv3:windowsSettings>\r\n<dpiAware xmlns=\"http://schemas.microsoft.com/SMI/2005/WindowsSettings\">true</dpiAware>\r\n<dpiAwareness xmlns=\"http://schemas.microsoft.com/SMI/2016/WindowsSettings\">PerMonitorV2</dpiAwareness>\r\n</asmv3:windowsSettings>\r\n</asmv3:application>\r\n</assembly>");
-            }
         }
 
         /// <summary>

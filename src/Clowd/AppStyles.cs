@@ -45,6 +45,9 @@ namespace Clowd
         IconCrop,
         IconChevronDown,
         IconHamburgerMore,
+        IconVideoMKV,
+        IconVideoMP4,
+        IconVideoGIF,
     }
 
     static class AppStyles

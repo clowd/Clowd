@@ -18,7 +18,7 @@ namespace Clowd
 {
     public static class UploadManager
     {
-        private static readonly ITasksView _view = new TasksViewManager();
+        private static ITasksView _view => PageManager.Current.Tasks;
         private static readonly IMimeProvider _mime = new MimeProvider();
 
         public static async Task<UploadResult> UploadSession(SessionInfo session)
