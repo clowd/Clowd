@@ -10,6 +10,7 @@ using Clowd.UI.Helpers;
 using Clowd.UI.Unmanaged;
 using Clowd.Util;
 using Clowd.Video;
+using Clowd.Video.FFmpeg;
 using NLog;
 
 namespace Clowd.UI
@@ -24,6 +25,7 @@ namespace Clowd.UI
         private CaptureToolButton _btnStop;
         private CaptureToolButton _btnMicrophone;
         private CaptureToolButton _btnSpeaker;
+        private CaptureToolButton _btnOutput;
         private CaptureToolButton _btnSettings;
         private CaptureToolButton _btnDraw;
         private CaptureToolButton _btnCancel;
@@ -94,6 +96,19 @@ namespace Clowd.UI
                 Text = "Spk",
             };
 
+            _btnOutput = new CaptureToolButton
+            {
+                Text = "Output",
+                Executed = OnChangeOutput,
+                IconPath = _settings.OutputType switch
+                {
+                    VideoOutputType.MKV => AppStyles.GetIconElement(ResourceIcon.IconVideoMKV),
+                    VideoOutputType.MP4 => AppStyles.GetIconElement(ResourceIcon.IconVideoMP4),
+                    VideoOutputType.GIF => AppStyles.GetIconElement(ResourceIcon.IconVideoGIF),
+                    _ => throw new ArgumentOutOfRangeException()
+                },
+            };
+            
             _btnSettings = new CaptureToolButton
             {
                 Text = "Settings",
@@ -116,7 +131,7 @@ namespace Clowd.UI
             };
 
             _floating = FloatingButtonWindow.Create(
-                new[] { _btnClowd, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnSettings, _btnDraw, _btnCancel });
+                new[] { _btnClowd, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnOutput, _btnSettings, _btnDraw, _btnCancel });
 
             _capturer.Initialize().ContinueWith(
                 t =>
@@ -194,6 +209,7 @@ namespace Clowd.UI
 
             _hasStarted = true;
             _btnStart.IsEnabled = false;
+            _btnOutput.IsEnabled = false;
             _btnMicrophone.IsEnabled = false;
             _btnSpeaker.IsEnabled = false;
 
@@ -241,14 +257,67 @@ namespace Clowd.UI
 
             this.Close();
 
-            if (wasRecording && SettingsRoot.Current.Video.OpenFinishedInExplorer)
+            if (wasRecording)
             {
-                await Task.Delay(1000);
-                // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
-                if (File.Exists(_fileName))
-                    Platform.Current.RevealFileOrFolder(_fileName);
-                else
-                    Platform.Current.RevealFileOrFolder(_settings.OutputDirectory);
+                if (_settings.OutputType == VideoOutputType.GIF)
+                {
+                    _fileName = await EncodeGif(_fileName);
+                }
+
+                if (SettingsRoot.Current.Video.OpenFinishedInExplorer)
+                {
+                    // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
+                    if (File.Exists(_fileName))
+                        Platform.Current.RevealFileOrFolder(_fileName);
+                    else
+                        Platform.Current.RevealFileOrFolder(_settings.OutputDirectory);
+                }
+            }
+        }
+
+        private static Task<string> EncodeGif(string filePath)
+        {
+            return Task.Run(() =>
+            {
+                var task = PageManager.Current.Tasks.CreateTask($"Encode GIF ({Path.GetFileName(filePath)})");
+                task.SetStatus("Preparing...");
+                
+                var ffmpeg = new FFMpegConverter();
+                ffmpeg.ConvertProgress += (s, e) =>
+                {
+                    App.Current.Dispatcher.Invoke(() =>
+                    {
+                        task.SetProgress((int)e.Processed.TotalSeconds, (int)e.TotalDuration.TotalSeconds, false);
+                    });
+                };
+                
+                task.Show();
+
+                // ffmpeg -ss 30 -t 3 -i input.mp4 -vf "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 output.gif
+                var gifPath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath) + ".gif");
+                ffmpeg.Invoke($"-i \"{filePath}\" -vf \"fps=15\" \"{gifPath}\"");
+                
+                task.Hide();
+                return gifPath;
+            });
+        }
+
+        private void OnChangeOutput(object sender, EventArgs e)
+        {
+            switch (_settings.OutputType)
+            {
+                case VideoOutputType.MP4:
+                    _settings.OutputType = VideoOutputType.MKV;
+                    _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoMKV);
+                    break;
+                case VideoOutputType.MKV:
+                    _settings.OutputType = VideoOutputType.GIF;
+                    _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoGIF);
+                    break;
+                default:
+                    _settings.OutputType = VideoOutputType.MP4;
+                    _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoMP4);
+                    break;
             }
         }
 

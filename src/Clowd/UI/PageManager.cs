@@ -11,6 +11,8 @@ namespace Clowd.UI
     {
         public static PageManager Current { get; }
 
+        public ITasksView Tasks { get; } = new TasksViewManager();
+
         public bool IsVideoCapturePageOpen
         {
             get => _isVideoCapturePageOpen;
