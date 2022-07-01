@@ -13,9 +13,9 @@ using Clowd.PlatformUtil.Windows;
 using Brush = System.Windows.Media.Brush;
 using Point = System.Windows.Point;
 
-namespace Clowd.UI
+namespace Clowd.UI.Dialogs.LiveDraw
 {
-    public partial class LiveDrawWindow : InteropWindow, ILiveDrawPage
+    public partial class LiveDrawWindow : Window, ILiveDrawPage
     {
         public static readonly DependencyProperty PanelOrientationProperty = DependencyProperty.Register(
             "PanelOrientation", typeof(Orientation), typeof(LiveDrawWindow), new PropertyMetadata(Orientation.Horizontal));
