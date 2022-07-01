@@ -71,7 +71,6 @@
                 Canvas.Top="130"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
-                MouseLeave="Palette_MouseLeave"
                 MouseMove="Palette_MouseMove"
                 MouseUp="Palette_MouseUp"
                 Orientation="Vertical">
