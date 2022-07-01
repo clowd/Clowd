@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Ink;
 
-namespace Clowd.UI
+namespace Clowd.UI.Dialogs.LiveDraw
 {
     public enum StrokesHistoryNodeType
     {
