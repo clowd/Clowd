@@ -1,11 +1,12 @@
-<local:InteropWindow
-    x:Class="Clowd.UI.LiveDrawWindow"
+<Window
+    x:Class="Clowd.UI.Dialogs.LiveDraw.LiveDrawWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="clr-namespace:Clowd.UI"
+    xmlns:local="clr-namespace:Clowd.UI.Dialogs.LiveDraw"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="clr-namespace:Clowd.UI"
     Title="LiveDraw"
     AllowsTransparency="True"
     Background="#01000000"
@@ -16,7 +17,7 @@
     WindowStartupLocation="Manual"
     WindowStyle="None"
     mc:Ignorable="d">
-    <local:InteropWindow.Resources>
+    <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="LiveDrawDictionary.xaml" />
@@ -44,7 +45,7 @@
                 <Setter Property="HorizontalAlignment" Value="Center" />
             </Style>
         </ResourceDictionary>
-    </local:InteropWindow.Resources>
+    </Window.Resources>
     <Grid>
         <InkCanvas
             x:Name="MainInkCanvas"
@@ -296,4 +297,4 @@
             </controls:SimpleStackPanel>
         </Canvas>
     </Grid>
-</local:InteropWindow>
+</Window>
