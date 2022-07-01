@@ -641,37 +641,31 @@ namespace Clowd.UI
         }
 
         private Point _lastMousePosition;
-        private bool _isDraging;
         private bool _tempEnable;
 
-        private void StartDrag()
+        private void PaletteGrip_MouseDown(object sender, MouseButtonEventArgs e)
         {
             _lastMousePosition = Mouse.GetPosition(this);
-            _isDraging = true;
+            Palette.CaptureMouse();
             Palette.Background = new SolidColorBrush(Colors.Transparent);
             _tempEnable = _enable;
             SetEnable(true, _mode);
         }
 
-        private void EndDrag()
+        private void Palette_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (_isDraging == true)
+            if (Palette.IsMouseCaptured)
             {
                 SetEnable(_tempEnable, _mode);
             }
 
-            _isDraging = false;
             Palette.Background = null;
-        }
-
-        private void PaletteGrip_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            StartDrag();
+            Palette.ReleaseMouseCapture();
         }
 
         private void Palette_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!_isDraging) return;
+            if (!Palette.IsMouseCaptured) return;
 
             var currentMousePosition = Mouse.GetPosition(this);
             var offset = currentMousePosition - _lastMousePosition;
@@ -708,28 +702,18 @@ namespace Clowd.UI
             _lastMousePosition = currentMousePosition;
         }
 
-        private void Palette_MouseUp(object sender, MouseButtonEventArgs e)
-        {
-            EndDrag();
-        }
-
-        private void Palette_MouseLeave(object sender, MouseEventArgs e)
-        {
-            EndDrag();
-        }
-
-        private void FontReduceButton_Click(object sender, RoutedEventArgs e)
-        {
-            _drawerTextBox.FontSize = _drawerTextBox.FontSize - 2;
-            _drawerTextBox.FontSize = Math.Max(14, _drawerTextBox.FontSize);
-            Display("Reduce Font -2");
-        }
-
-        private void FontIncreaseButton_Click(object sender, RoutedEventArgs e)
-        {
-            _drawerTextBox.FontSize = _drawerTextBox.FontSize + 2;
-            _drawerTextBox.FontSize = Math.Min(60, _drawerTextBox.FontSize);
-            Display("Increase Font +2");
-        }
+        // private void FontReduceButton_Click(object sender, RoutedEventArgs e)
+        // {
+        //     _drawerTextBox.FontSize = _drawerTextBox.FontSize - 2;
+        //     _drawerTextBox.FontSize = Math.Max(14, _drawerTextBox.FontSize);
+        //     Display("Reduce Font -2");
+        // }
+        //
+        // private void FontIncreaseButton_Click(object sender, RoutedEventArgs e)
+        // {
+        //     _drawerTextBox.FontSize = _drawerTextBox.FontSize + 2;
+        //     _drawerTextBox.FontSize = Math.Min(60, _drawerTextBox.FontSize);
+        //     Display("Increase Font +2");
+        // }
     }
 }
