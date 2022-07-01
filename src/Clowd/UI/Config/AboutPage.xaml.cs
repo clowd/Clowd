@@ -95,7 +95,6 @@ YamlDotNet                          https://github.com/aaubry/YamlDotNet/blob/ma
             }
 
             // sub-modules, etc
-            deps.Add(new OpenSourceLibrary { LibraryName = "Cyotek.Windows.Forms.ColorPicker", LibraryLicenseUrl = "https://github.com/cyotek/Cyotek.Windows.Forms.ColorPicker/blob/master/LICENSE.txt" });
             deps.Add(new OpenSourceLibrary { LibraryName = "obs-studio-node", LibraryLicenseUrl = "https://github.com/stream-labs/obs-studio-node/blob/staging/LICENSE" });
             deps.Add(new OpenSourceLibrary { LibraryName = "obs-studio", LibraryLicenseUrl = "https://github.com/obsproject/obs-studio/blob/master/COPYING" });
             deps.Add(new OpenSourceLibrary { LibraryName = "obs-express", LibraryLicenseUrl = "https://github.com/clowd/obs-express/blob/master/LICENSE" });
