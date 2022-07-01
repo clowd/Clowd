@@ -30,6 +30,13 @@ namespace Clowd.Config
         yuv420,
         yuv444,
     }
+    
+    public enum VideoOutputType
+    {
+        MKV,
+        MP4,
+        GIF,
+    }
 
     public class SettingsVideo : CategoryBase
     {
@@ -73,6 +80,12 @@ namespace Clowd.Config
         {
             get => _subsamplingMode;
             set => Set(ref _subsamplingMode, value);
+        }
+        
+        public VideoOutputType OutputType
+        {
+            get => _outputType;
+            set => Set(ref _outputType, value);
         }
 
         public bool CaptureSpeaker
@@ -124,6 +137,7 @@ namespace Clowd.Config
         private VideoQuality _quality = VideoQuality.Medium;
         private VideoPerformance _performance = VideoPerformance.Medium;
         private VideoSubsamplingMode _subsamplingMode = VideoSubsamplingMode.yuv420;
+        private VideoOutputType _outputType = VideoOutputType.MKV;
         private bool _captureSpeaker = false;
         private AudioDeviceInfo _captureSpeakerDevice;
         private bool _captureMicrophone = false;

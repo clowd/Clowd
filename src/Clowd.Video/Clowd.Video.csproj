@@ -9,4 +9,9 @@
   <ItemGroup>
     <PackageReference Include="NAudio.Wasapi" Version="2.1.0" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="ffmpeg-5.0-lgpl-x64.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
