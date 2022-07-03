@@ -1,5 +1,5 @@
 param (
-    [Parameter(Mandatory=$true)][string]$mode,
+    [string]$mode = "compile",
     [string]$keyId,
     [string]$keySecret,
     [string]$bucket = "clowd-releases",
@@ -67,7 +67,7 @@ if ($mode -eq "compile") {
 
     # publish clowd main project
     Write-Host "Build Clowd.csproj" -ForegroundColor Magenta
-    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --no-self-contained -o "$PSScriptRoot\publish"
+    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --self-contained -o "$PSScriptRoot\publish"
 
 
     # build clowd native and copy to publish directory
@@ -120,25 +120,6 @@ if ($mode -eq "compile") {
 
 }
 
-
-# build packaging tools only if in local mode
-# if ($LocalProjectMode) {
-#     Write-Host "Build Squirrel (local mode)" -ForegroundColor Magenta
-#     if ($skipSquirrel -eq $false) {
-#         Set-Location "$PSScriptRoot\..\Clowd.Squirrel"
-#         & ".\build.cmd"
-#     }
-#     Set-Alias Squirrel ("$PSScriptRoot\..\Clowd.Squirrel\build\publish\Squirrel.exe");
-# } else {
-#     $projdeps = dotnet list "$PSScriptRoot\src\Clowd\Clowd.csproj" package
-#     $projstring = $projdeps -join "`r`n"
-#     $squirrelVersion = $projstring -match "(?m)Clowd\.Squirrel.*\s(\d{1,3}\.\d{1,3}\.\d.*?)$"
-#     $squirrelVersion = $Matches[1].Trim()
-#     Write-Host "Using Squirrel '$squirrelVersion' from local NuGet cache" -ForegroundColor Magenta
-#     Set-Alias Squirrel ($env:USERPROFILE + "\.nuget\packages\clowd.squirrel\$squirrelVersion\tools\Squirrel.exe");
-# }
-# Set-Location $PSScriptRoot
-
 if ($mode -eq "compile" -Or $mode -eq "pack") {
 
     if ($noDelta -eq $false) {
@@ -158,7 +139,6 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
     # releasify
     Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
     csq pack `
-    -f net6 `
     -r "$PSScriptRoot\releases" `
     -i="$PSScriptRoot\artwork\default-setup.ico" `
     --appIcon="$PSScriptRoot\artwork\default.ico" `
