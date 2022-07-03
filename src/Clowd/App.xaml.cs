@@ -35,6 +35,8 @@ namespace Clowd
         public static new App Current => IsDesignMode ? null : (App)Application.Current;
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
 
+        public static GoogleAnalytics Analytics { get; private set; }
+        
         private TaskbarIcon _taskbarIcon;
         private MutexArgsForwarder _processor;
         private ILogger _log;
@@ -119,13 +121,23 @@ namespace Clowd
                 }
             }
 
-            SettingsRoot.Current.Hotkeys.FileUploadShortcut.TriggerExecuted += (s, e) => UploadFile();
-            SettingsRoot.Current.Hotkeys.ClipboardUploadShortcut.TriggerExecuted += (s, e) => Paste();
-            SettingsRoot.Current.Hotkeys.CaptureActiveShortcut.TriggerExecuted += (s, e) => QuickCaptureCurrentWindow();
-            SettingsRoot.Current.Hotkeys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
-            SettingsRoot.Current.Hotkeys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
-            SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
-            SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut.TriggerExecuted += (s, e) => ToggleScreenRecording();
+            var keys = SettingsRoot.Current.Hotkeys;
+            keys.FileUploadShortcut.TriggerExecuted += (s, e) => UploadFile();
+            keys.ClipboardUploadShortcut.TriggerExecuted += (s, e) => Paste();
+            keys.CaptureActiveShortcut.TriggerExecuted += (s, e) => QuickCaptureCurrentWindow();
+            keys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => QuickCaptureFullScreen();
+            keys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
+            keys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
+            keys.StartStopRecordingShortcut.TriggerExecuted += (s, e) => ToggleScreenRecording();
+
+            string uaId = null;
+
+#if !DEBUG
+            uaId = "UA-116288212-2";
+#endif
+
+            Analytics = new GoogleAnalytics(SettingsRoot.Current.General.ClientId, uaId);
+            Analytics.StartSession();
 
             //void setTheme()
             //{
@@ -447,7 +459,6 @@ namespace Clowd
             catch { }
 
             ToastNotificationManagerCompat.Uninstall();
-
             Environment.Exit(0);
         }
 

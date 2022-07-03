@@ -5,7 +5,9 @@ using System.Windows.Controls;
 using Clowd.Config;
 using Clowd.UI.Config;
 using Clowd.UI.Pages;
+using WPFUI.Common;
 using WPFUI.Controls;
+using WPFUI.Controls.Interfaces;
 
 namespace Clowd.UI
 {
@@ -72,6 +74,15 @@ namespace Clowd.UI
         public MainWindow()
         {
             InitializeComponent();
+            RootNavigation.Navigated += OnNavigated;
+        }
+
+        private void OnNavigated(INavigation sender, RoutedNavigationEventArgs e)
+        {
+            if (e.CurrentPage is MainWindowNavigationItem item)
+            {
+                App.Analytics.ScreenView(item.PageType.ToString());
+            }
         }
 
         public void Open(SettingsPageTab? selectedTab)
