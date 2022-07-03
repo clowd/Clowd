@@ -48,6 +48,8 @@ namespace Clowd.UI
 
         public static void ShowSession(SessionInfo session)
         {
+            App.Analytics.ScreenView("EditorWindow");
+            
             // check if there is already a window open with this session in it
             if (session != null)
             {

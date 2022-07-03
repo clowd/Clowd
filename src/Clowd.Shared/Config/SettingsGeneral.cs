@@ -30,6 +30,13 @@ namespace Clowd.Config
             get => _lastUploadPath;
             set => Set(ref _lastUploadPath, value);
         }
+        
+        [Browsable(false)]
+        public string ClientId
+        {
+            get => _clientId;
+            set => Set(ref _clientId, value);
+        }
 
         [Browsable(false)]
         public string LastSavePath
@@ -46,6 +53,7 @@ namespace Clowd.Config
             set => Set(ref _confirmClose, value);
         }
 
+        private string _clientId = Guid.NewGuid().ToString().ToLower();
         private string _lastUploadPath;
         private string _lastSavePath;
         private bool _confirmClose = true;
