@@ -69,7 +69,7 @@ namespace Clowd.UI
 
             var inst = Activator.CreateInstance<T>();
             HandleClosing(inst, closing);
-            
+
             App.Analytics.ScreenView(typeof(T).Name);
 
             _singletons[typeof(T)] = inst;
@@ -92,12 +92,18 @@ namespace Clowd.UI
 
         private class StaticCaptureWrapper : IScreenCapturePage
         {
-            public event EventHandler Closed; // TODO
+            public event EventHandler Closed;
 
-            public void Close() => CaptureWindow.Close();
+            private bool _opened;
+            private bool _closed;
 
             public void Open(ScreenRect captureArea)
             {
+                if (_opened) return;
+
+                _opened = true;
+                CaptureWindow.Disposed += CaptureWindowOnDisposed;
+
                 var settings = SettingsRoot.Current.Capture;
                 CaptureWindow.Show(new CaptureWindowOptions
                 {
@@ -106,6 +112,21 @@ namespace Clowd.UI
                     InitialRect = captureArea,
                     ObstructedWindowDisabled = !settings.DetectWindows,
                 });
+            }
+
+            public void Close()
+            {
+                if (_opened && !_closed)
+                {
+                    CaptureWindow.Close();
+                }
+            }
+
+            private void CaptureWindowOnDisposed(object sender, EventArgs e)
+            {
+                _closed = true;
+                CaptureWindow.Disposed -= CaptureWindowOnDisposed;
+                Closed?.Invoke(this, e);
             }
         }
     }
