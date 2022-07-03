@@ -9,12 +9,10 @@ namespace Clowd
 {
     public class ClowdHttpClient : HttpClient
     {
-        const string USER_AGENT = "Mozilla/5.0 (compatible; Clowd/1.0)";
-        const string JSON_CONTENT_TYPE = "application/json";
-
         public ClowdHttpClient()
         {
-            DefaultRequestHeaders.Add("User-Agent", USER_AGENT);
+            var os = Environment.OSVersion.Version;
+            DefaultRequestHeaders.Add("User-Agent", $"Mozilla/5.0 (Windows NT {os.Major}.{os.Minor}; Win64; x64) Clowd/{ThisAssembly.AssemblyFileVersion}");
         }
 
         public async Task<T> GetJsonAsync<T>(Uri uri)
@@ -40,7 +38,7 @@ namespace Clowd
         public async Task<TRESP> PostJsonAsync<TREQ, TRESP>(Uri uri, TREQ request, bool throwOnErrorCode = true)
         {
             var json = JsonConvert.SerializeObject(request);
-            using (var jsoncontent = new StringContent(json, Encoding.UTF8, JSON_CONTENT_TYPE))
+            using (var jsoncontent = new StringContent(json, Encoding.UTF8, "application/json"))
             {
                 var response = await PostAsync(uri, jsoncontent);
                 string content = await response.Content.ReadAsStringAsync();

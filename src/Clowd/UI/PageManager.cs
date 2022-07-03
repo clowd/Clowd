@@ -58,6 +58,7 @@ namespace Clowd.UI
 
         public IScreenCapturePage GetScreenCapturePage()
         {
+            App.Analytics.ScreenView(nameof(CaptureWindow));
             return new StaticCaptureWrapper();
         }
 
@@ -68,6 +69,8 @@ namespace Clowd.UI
 
             var inst = Activator.CreateInstance<T>();
             HandleClosing(inst, closing);
+            
+            App.Analytics.ScreenView(typeof(T).Name);
 
             _singletons[typeof(T)] = inst;
             return inst;
