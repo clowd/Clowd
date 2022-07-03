@@ -11,6 +11,7 @@ typedef void(__cdecl* fnColorCapture)(const BYTE r, const BYTE g, const BYTE b);
 typedef void(__cdecl* fnVideoCapture)(const RECT captureRegion);
 typedef void(__cdecl* fnSessionCapture)(const wchar_t* sessionJsonPath, CaptureType captureType);
 typedef void(__cdecl* fnDisposed)(const wchar_t* errorMsg);
+typedef void(__cdecl* fnLoaded)(const wchar_t* primaryGpu);
 
 typedef struct 
 {
@@ -24,6 +25,7 @@ typedef struct
     fnVideoCapture lpfnVideoCapture;
     fnSessionCapture lpfnSessionCapture;
     fnDisposed lpfnDisposed;
+    fnLoaded lpfnLoaded;
     wchar_t sessionDirectory[512];
     wchar_t createdUtc[128];
     RECT initialRect;

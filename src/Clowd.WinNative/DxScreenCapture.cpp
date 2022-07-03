@@ -1065,6 +1065,8 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
         {
             shown = true;
             ShowWindow(wi.hWnd, SW_SHOWNOACTIVATE);
+            trender = std::chrono::high_resolution_clock::now();
+            
             if (myscreen.primary)
             {
                 // we have multiple windows, only want one to take focus
@@ -1072,7 +1074,10 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
                 SetActiveWindow(wi.hWnd);
             }
 
-            trender = std::chrono::high_resolution_clock::now();
+            if (_options.lpfnLoaded)
+            {
+                _options.lpfnLoaded(mon.AdapterDescription);
+            }
         }
     }
 }
