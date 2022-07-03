@@ -68,3 +68,16 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
  - Can draw anywhere on the screen while recording a video or sharing screen during a video conference
 
 https://user-images.githubusercontent.com/1287295/177044423-7f90f7b3-01fa-45a9-9c7b-d647c6f6159f.mp4
+
+----
+
+# Building Clowd
+
+The Clowd.WinNative project must be compiled before Clowd. If using Visual Studio, this should be done automatically. If using Rider, you may need to edit the run configuration to build WinNative before starting the main project.
+
+If having any troubles compiling with the IDE, you can replicate a CI build by running the following commands:
+
+```cmd
+git clone https://github.com/clowd/Clowd.git
+build.cmd -noDelta
+```
