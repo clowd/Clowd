@@ -10,6 +10,7 @@ Clowd is a minimalist screen capture / screen recording tool. It sits out of you
 The latest "stable" release can always be downloaded from here. If you are looking for the "beta", you should update via the app settings.
 
 [![download btn](https://user-images.githubusercontent.com/1287295/177044033-961e5817-83ca-4e71-b204-245dd337a300.png)](https://clowd-releases.s3.eu-central-003.backblazeb2.com/stable/ClowdSetup.exe)
+<br/>**windows x64 - only tested on Windows 10/11**
 
 I will respond to bug reports or questions in GitHub issues. Also feel free to bug me (@caesay) in the Clowd Discord server:
 
