@@ -96,13 +96,16 @@ namespace Clowd.UI
 
             private bool _opened;
             private bool _closed;
+            private DateTime _timingStart;
 
             public void Open(ScreenRect captureArea)
             {
                 if (_opened) return;
 
                 _opened = true;
+                _timingStart = DateTime.UtcNow;
                 CaptureWindow.Disposed += CaptureWindowOnDisposed;
+                CaptureWindow.Loaded += CaptureWindowOnLoaded;
 
                 var settings = SettingsRoot.Current.Capture;
                 CaptureWindow.Show(new CaptureWindowOptions
@@ -112,6 +115,12 @@ namespace Clowd.UI
                     InitialRect = captureArea,
                     ObstructedWindowDisabled = !settings.DetectWindows,
                 });
+            }
+
+            private void CaptureWindowOnLoaded(object sender, CaptureWindowLoadedEventArgs e)
+            {
+                var time = DateTime.UtcNow - _timingStart;
+                App.Analytics.Timing("prntscr", e.PrimaryGpu, (int)time.TotalMilliseconds);
             }
 
             public void Close()

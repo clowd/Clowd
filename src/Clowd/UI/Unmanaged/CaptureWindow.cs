@@ -26,9 +26,21 @@ namespace Clowd.UI.Unmanaged
         Save = 3,
     }
 
+    public class CaptureWindowLoadedEventArgs : EventArgs
+    {
+        public string PrimaryGpu { get; }
+
+        public CaptureWindowLoadedEventArgs(string primaryGpu)
+        {
+            PrimaryGpu = primaryGpu;
+        }
+    }
+
     public static class CaptureWindow
     {
         public static event EventHandler Disposed;
+
+        public static event EventHandler<CaptureWindowLoadedEventArgs> Loaded;
 
         private delegate void fnColorCapture([MarshalAs(UnmanagedType.U1)] byte r, [MarshalAs(UnmanagedType.U1)] byte g, [MarshalAs(UnmanagedType.U1)] byte b);
 
@@ -37,6 +49,8 @@ namespace Clowd.UI.Unmanaged
         private delegate void fnSessionCapture([MarshalAs(UnmanagedType.LPWStr)] string sessionJsonPath, CaptureType captureType);
 
         private delegate void fnDisposed([MarshalAs(UnmanagedType.LPWStr)] string errorMessage);
+
+        private delegate void fnLoaded([MarshalAs(UnmanagedType.LPWStr)] string primaryGpu);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private struct captureArgs
@@ -51,6 +65,7 @@ namespace Clowd.UI.Unmanaged
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnVideoCapture lpfnVideoCapture;
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnSessionCapture lpfnSessionCapture;
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnDisposed lpfnDisposed;
+            [MarshalAs(UnmanagedType.FunctionPtr)] public fnLoaded lpfnLoaded;
 
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)]
             public string sessionDirectory;
@@ -71,6 +86,7 @@ namespace Clowd.UI.Unmanaged
         private static fnVideoCapture delVideoCapture;
         private static fnSessionCapture delSessionCapture;
         private static fnDisposed delDisposed;
+        private static fnLoaded delLoaded;
 
         static CaptureWindow()
         {
@@ -78,6 +94,7 @@ namespace Clowd.UI.Unmanaged
             delVideoCapture = new fnVideoCapture(VideoCaptureImpl);
             delSessionCapture = new fnSessionCapture(SessionCaptureImpl);
             delDisposed = new fnDisposed(DisposedImpl);
+            delLoaded = new fnLoaded(LoadedImpl);
         }
 
         public static void Show(CaptureWindowOptions options)
@@ -96,6 +113,7 @@ namespace Clowd.UI.Unmanaged
                 lpfnVideoCapture = delVideoCapture,
                 lpfnSessionCapture = delSessionCapture,
                 lpfnDisposed = delDisposed,
+                lpfnLoaded = delLoaded,
                 initialRect = options.InitialRect,
             };
 
@@ -169,7 +187,16 @@ namespace Clowd.UI.Unmanaged
                 {
                     NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, errMessage, "An error occurred while showing screen capture window");
                 }
+
                 Disposed?.Invoke(null, new EventArgs());
+            });
+        }
+        
+        private static void LoadedImpl(string primarygpu)
+        {
+            App.Current.Dispatcher.InvokeAsync(() =>
+            {
+                Loaded?.Invoke(null, new CaptureWindowLoadedEventArgs(primarygpu));
             });
         }
     }
