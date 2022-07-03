@@ -28,6 +28,8 @@ namespace Clowd.UI.Unmanaged
 
     public static class CaptureWindow
     {
+        public static event EventHandler Disposed;
+
         private delegate void fnColorCapture([MarshalAs(UnmanagedType.U1)] byte r, [MarshalAs(UnmanagedType.U1)] byte g, [MarshalAs(UnmanagedType.U1)] byte b);
 
         private delegate void fnVideoCapture(RECT captureRegion);
@@ -161,13 +163,14 @@ namespace Clowd.UI.Unmanaged
 
         private static void DisposedImpl(string errMessage)
         {
-            if (!String.IsNullOrEmpty(errMessage))
+            App.Current.Dispatcher.InvokeAsync(() =>
             {
-                App.Current.Dispatcher.InvokeAsync(() =>
+                if (!String.IsNullOrEmpty(errMessage))
                 {
                     NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, errMessage, "An error occurred while showing screen capture window");
-                });
-            }
+                }
+                Disposed?.Invoke(null, new EventArgs());
+            });
         }
     }
 }

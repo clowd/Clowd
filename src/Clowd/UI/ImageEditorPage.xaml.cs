@@ -97,7 +97,7 @@ namespace Clowd.UI
             drawingCanvas.ZoomPanAuto();
 
             SyncToolState();
-            
+
             toggleTopMost.IsChecked = Window.GetWindow(this)?.Topmost;
         }
 
@@ -387,7 +387,7 @@ namespace Clowd.UI
         {
             if (!VerifyArtworkExists())
                 return;
-            
+
             await UploadManager.UploadSession(_session);
         }
 
@@ -446,7 +446,7 @@ namespace Clowd.UI
             double zoom = 1d;
             if (double.TryParse(e.Parameter as string, out var req))
                 zoom = req;
-            
+
             drawingCanvas.ZoomPanActualSize(zoom);
         }
 
@@ -565,58 +565,58 @@ namespace Clowd.UI
             }
         }
 
-        private async void ImageStitch_Click(object sender, DPadButtonClickEventArgs e)
-        {
-            //var wnd = TemplatedWindow.GetWindow(this);
-            //var state = wnd.WindowState;
-            //wnd.WindowState = WindowState.Minimized;
-            //await Task.Delay(400); // wait for window to hide
+        // private async void ImageStitch_Click(object sender, DPadButtonClickEventArgs e)
+        // {
+        //var wnd = TemplatedWindow.GetWindow(this);
+        //var state = wnd.WindowState;
+        //wnd.WindowState = WindowState.Minimized;
+        //await Task.Delay(400); // wait for window to hide
 
-            //var selection = drawingCanvas.Selection.ToArray();
-            //if (selection.Length != 1)
-            //    return;
+        //var selection = drawingCanvas.Selection.ToArray();
+        //if (selection.Length != 1)
+        //    return;
 
-            //var image = selection[0] as GraphicImage;
-            //if (image == null)
-            //    return;
+        //var image = selection[0] as GraphicImage;
+        //if (image == null)
+        //    return;
 
 
-            //CaptureWindow2.ShowNewCapture(_initialBounds, (img) =>
-            //{
-            //    var xReferenceCenter = (image.Right + image.Left) / 2;
-            //    var yRefereceCenter = (image.Bottom + image.Top) / 2;
-            //    var width = ScreenTools.ScreenToWpf(img.PixelWidth);
-            //    var height = ScreenTools.ScreenToWpf(img.PixelHeight);
-            //    double x, y;
+        //CaptureWindow2.ShowNewCapture(_initialBounds, (img) =>
+        //{
+        //    var xReferenceCenter = (image.Right + image.Left) / 2;
+        //    var yRefereceCenter = (image.Bottom + image.Top) / 2;
+        //    var width = ScreenTools.ScreenToWpf(img.PixelWidth);
+        //    var height = ScreenTools.ScreenToWpf(img.PixelHeight);
+        //    double x, y;
 
-            //    switch (e.Button)
-            //    {
-            //        case DPadButton.Left:
-            //            x = image.Left - width;
-            //            y = yRefereceCenter - (height / 2);
-            //            break;
-            //        case DPadButton.Top:
-            //            x = xReferenceCenter - (width / 2);
-            //            y = image.Top - height;
-            //            break;
-            //        case DPadButton.Right:
-            //            x = image.Right;
-            //            y = yRefereceCenter - (height / 2);
-            //            break;
-            //        case DPadButton.Bottom:
-            //            x = xReferenceCenter - (width / 2);
-            //            y = image.Bottom;
-            //            break;
-            //        default:
-            //            throw new ArgumentOutOfRangeException();
-            //    }
+        //    switch (e.Button)
+        //    {
+        //        case DPadButton.Left:
+        //            x = image.Left - width;
+        //            y = yRefereceCenter - (height / 2);
+        //            break;
+        //        case DPadButton.Top:
+        //            x = xReferenceCenter - (width / 2);
+        //            y = image.Top - height;
+        //            break;
+        //        case DPadButton.Right:
+        //            x = image.Right;
+        //            y = yRefereceCenter - (height / 2);
+        //            break;
+        //        case DPadButton.Bottom:
+        //            x = xReferenceCenter - (width / 2);
+        //            y = image.Bottom;
+        //            break;
+        //        default:
+        //            throw new ArgumentOutOfRangeException();
+        //    }
 
-            //    var graphic = new GraphicImage(drawingCanvas, new Rect(x, y, width, height), img, 0);
-            //    drawingCanvas.AddGraphic(graphic);
-            //    drawingCanvas.ZoomPanFit();
-            //    wnd.WindowState = state;
-            //});
-        }
+        //    var graphic = new GraphicImage(drawingCanvas, new Rect(x, y, width, height), img, 0);
+        //    drawingCanvas.AddGraphic(graphic);
+        //    drawingCanvas.ZoomPanFit();
+        //    wnd.WindowState = state;
+        //});
+        // }
 
         private void toggleTopMost_Click(object sender, RoutedEventArgs e)
         {

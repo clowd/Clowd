@@ -5,10 +5,12 @@ namespace Clowd.Video.FFmpeg
 {
     internal class FFMpegProgress
     {
+        public float? Seek { get; set; }
+        
+        public float? MaxDuration { get; set; }
+        
         private static Regex DurationRegex = new Regex("Duration:\\s(?<duration>[0-9:.]+)([,]|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
         private static Regex ProgressRegex = new Regex("time=(?<progress>[0-9:.]+)\\s", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
-        internal float? Seek;
-        internal float? MaxDuration;
         private Action<ConvertProgressEventArgs> ProgressCallback;
         private ConvertProgressEventArgs lastProgressArgs;
         private bool Enabled = true;
