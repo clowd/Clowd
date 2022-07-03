@@ -227,17 +227,17 @@
                     <Run FontWeight="Bold" Text="{Binding Capabilities.Name, Mode=OneWay}" />
                 </TextBlock>
             </StackPanel>
-            <controls:DPadControl
-                Width="22"
-                Height="22"
-                Background="#454545"
-                BorderBrush="#666666"
-                BorderThickness="1"
-                Click="ImageStitch_Click"
-                Foreground="White"
-                HoverBrush="#66FFFFFF"
-                ToolTip="Capture another screenshot and attach it to the selected side of this image"
-                Visibility="{Binding Capabilities.CanStitchAndCrop, Converter={StaticResource Bool2Vis}}" />
+            <!--  <controls:DPadControl  -->
+            <!--  Width="22"  -->
+            <!--  Height="22"  -->
+            <!--  Background="#454545"  -->
+            <!--  BorderBrush="#666666"  -->
+            <!--  BorderThickness="1"  -->
+            <!--  Click="ImageStitch_Click"  -->
+            <!--  Foreground="White"  -->
+            <!--  HoverBrush="#66FFFFFF"  -->
+            <!--  ToolTip="Capture another screenshot and attach it to the selected side of this image"  -->
+            <!--  Visibility="{Binding Capabilities.CanStitchAndCrop, Converter={StaticResource Bool2Vis}}" />  -->
             <!--  <controls:ToolButton  -->
             <!--  x:Name="btnCropImage"  -->
             <!--  Width="22"  -->

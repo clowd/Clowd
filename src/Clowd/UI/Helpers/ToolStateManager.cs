@@ -50,7 +50,7 @@ namespace Clowd.UI.Helpers
         }
     }
 
-    public abstract class StateCapabilities : INotifyPropertyChanged
+    public abstract class StateCapabilities : SimpleNotifyObject
     {
         public abstract string Description { get; }
         public abstract string Name { get; }
@@ -61,9 +61,7 @@ namespace Clowd.UI.Helpers
         public abstract bool HasAngle { get; }
         public virtual bool CanCanvasZoom { get; } = true;
         public virtual bool CanChangeCanvasBackground { get; } = true;
-        public virtual bool CanStitchAndCrop { get; } = false;
-
-        public event PropertyChangedEventHandler PropertyChanged;
+        // public virtual bool CanStitchAndCrop { get; } = false;
 
         public abstract void EnterState(ImageEditorPage page, object obj);
         public abstract void ExitState(ImageEditorPage page);
@@ -252,7 +250,7 @@ namespace Clowd.UI.Helpers
 
         public override bool HasAngle => typeof(TGraphic).GetProperty(ANGLE_NAME) != null;
 
-        public override bool CanStitchAndCrop => false; // IsOneOf(typeof(GraphicImage));
+        // public override bool CanStitchAndCrop => false; // IsOneOf(typeof(GraphicImage));
 
         public override bool CanChangeCanvasBackground => false;
 
