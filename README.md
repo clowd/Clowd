@@ -1,7 +1,9 @@
 [![Discord](https://img.shields.io/discord/767856501477343282?style=flat-square&color=purple)](https://discord.gg/CjrCrNzd3F)
 [![Build](https://img.shields.io/github/workflow/status/clowd/Clowd/Build%20Clowd/master?style=flat-square)](https://github.com/clowd/Clowd/actions)
 
-# What is Clowd?
+![73130051](https://user-images.githubusercontent.com/1287295/177045040-15601340-0380-418e-975a-cc1d0dd06ebc.png)
+
+# Clowd
 
 Clowd is a minimalist screen capture / screen recording tool. It sits out of your way in your system tray, and is activated when you press the `PrntScr` key.
 
