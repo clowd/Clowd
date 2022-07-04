@@ -1192,6 +1192,7 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
         }
     }
 
+    case WM_SYSKEYDOWN:
     case WM_KEYDOWN:
     {
         mc_frame_data data{};
