@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -1083,6 +1083,7 @@ namespace Clowd.Drawing
         {
             this.Focusable = true; // to handle keyboard messages
             UpdateScaleTransform();
+            UpdateClickableSurface();
         }
 
         void DrawingCanvas_Unloaded(object sender, RoutedEventArgs e)
