@@ -15,14 +15,21 @@ namespace Clowd.UI.Converters
             if (value == null)
                 return null;
 
-            if (!string.IsNullOrEmpty(value.ToString()))
+            try
             {
-                BitmapImage bi = new BitmapImage();
-                bi.BeginInit();
-                bi.UriSource = new Uri(value.ToString());
-                bi.CacheOption = BitmapCacheOption.OnLoad;
-                bi.EndInit();
-                return bi;
+                if (!string.IsNullOrEmpty(value.ToString()))
+                {
+                    BitmapImage bi = new BitmapImage();
+                    bi.BeginInit();
+                    bi.UriSource = new Uri(value.ToString());
+                    bi.CacheOption = BitmapCacheOption.OnLoad;
+                    bi.EndInit();
+                    return bi;
+                }
+            }
+            catch (NotSupportedException)
+            {
+                // invalid / corrupted image
             }
 
             return null;

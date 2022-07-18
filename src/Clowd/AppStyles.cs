@@ -48,6 +48,10 @@ namespace Clowd
         IconVideoMKV,
         IconVideoMP4,
         IconVideoGIF,
+        IconGalleryList,
+        IconGallerySmall,
+        IconGalleryMedium,
+        IconGalleryLarge,
     }
 
     static class AppStyles

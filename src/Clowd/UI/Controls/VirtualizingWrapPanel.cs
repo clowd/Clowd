@@ -18,46 +18,24 @@ namespace Clowd.UI.Controls
     /// </summary>
     public class VirtualizingWrapPanel : VirtualizingPanelBase
     {
-        #region Deprecated properties
-
-        [Obsolete("Use SpacingMode")] public static readonly DependencyProperty IsSpacingEnabledProperty = DependencyProperty.Register(nameof(IsSpacingEnabled), typeof(bool), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsMeasure));
-
-        [Obsolete("Use IsSpacingEnabled")] public bool SpacingEnabled { get => IsSpacingEnabled; set => IsSpacingEnabled = value; }
-
-        /// <summary>
-        ///  Gets or sets a value that specifies whether the items are distributed evenly across the width (horizontal orientation) 
-        ///  or height (vertical orientation). The default value is true.
-        /// </summary>
-        [Obsolete("Use SpacingMode")]
-        public bool IsSpacingEnabled { get => (bool)GetValue(IsSpacingEnabledProperty); set => SetValue(IsSpacingEnabledProperty, value); }
-
-        [Obsolete("Use ItemSize")] public Size ChildrenSize { get => ItemSize; set => ItemSize = value; }
-
-        #endregion
-
-        public static readonly DependencyProperty SpacingModeProperty = DependencyProperty.Register(nameof(SpacingMode), typeof(SpacingMode), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(SpacingMode.Uniform, FrameworkPropertyMetadataOptions.AffectsMeasure));
-
-        public static readonly DependencyProperty OrientationProperty = DependencyProperty.Register(nameof(Orientation), typeof(Orientation), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(Orientation.Vertical, FrameworkPropertyMetadataOptions.AffectsMeasure, (obj, args) => ((VirtualizingWrapPanel)obj).Orientation_Changed()));
-
-        public static readonly DependencyProperty ItemSizeProperty = DependencyProperty.Register(nameof(ItemSize), typeof(Size), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(Size.Empty, FrameworkPropertyMetadataOptions.AffectsMeasure));
-
-        public static readonly DependencyProperty StretchItemsProperty = DependencyProperty.Register(nameof(StretchItems), typeof(bool), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsArrange));
-
         /// <summary>
         /// Gets or sets the spacing mode used when arranging the items. The default value is <see cref="SpacingMode.Uniform"/>.
         /// </summary>
         public SpacingMode SpacingMode { get => (SpacingMode)GetValue(SpacingModeProperty); set => SetValue(SpacingModeProperty, value); }
+        public static readonly DependencyProperty SpacingModeProperty = DependencyProperty.Register(nameof(SpacingMode), typeof(SpacingMode), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(SpacingMode.Uniform, FrameworkPropertyMetadataOptions.AffectsMeasure));
 
         /// <summary>
         /// Gets or sets a value that specifies the orientation in which items are arranged. The default value is <see cref="Orientation.Vertical"/>.
         /// </summary>
         public Orientation Orientation { get => (Orientation)GetValue(OrientationProperty); set => SetValue(OrientationProperty, value); }
+        public static readonly DependencyProperty OrientationProperty = DependencyProperty.Register(nameof(Orientation), typeof(Orientation), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(Orientation.Vertical, FrameworkPropertyMetadataOptions.AffectsMeasure, (obj, args) => ((VirtualizingWrapPanel)obj).Orientation_Changed()));
 
         /// <summary>
         /// Gets or sets a value that specifies the size of the items. The default value is <see cref="Size.Empty"/>. 
         /// If the value is <see cref="Size.Empty"/> the size of the items gots measured by the first realized item.
         /// </summary>
         public Size ItemSize { get => (Size)GetValue(ItemSizeProperty); set => SetValue(ItemSizeProperty, value); }
+        public static readonly DependencyProperty ItemSizeProperty = DependencyProperty.Register(nameof(ItemSize), typeof(Size), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(Size.Empty, FrameworkPropertyMetadataOptions.AffectsMeasure));
 
         /// <summary>
         /// Gets or sets a value that specifies if the items get stretched to fill up remaining space. The default value is false.
@@ -67,7 +45,14 @@ namespace Clowd.UI.Controls
         /// In this case the use of the remaining space will be determined by the SpacingMode property. 
         /// </remarks>
         public bool StretchItems { get => (bool)GetValue(StretchItemsProperty); set => SetValue(StretchItemsProperty, value); }
+        public static readonly DependencyProperty StretchItemsProperty = DependencyProperty.Register(nameof(StretchItems), typeof(bool), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsArrange));
 
+        /// <summary>
+        /// If true, the items will take up the full available width, meaning this WrapPanel will function similarly to a StackPanel.
+        /// </summary>
+        public bool StretchItemsToWidth { get => (bool)GetValue(StretchItemsToWidthProperty); set => SetValue(StretchItemsToWidthProperty, value); }
+        public static readonly DependencyProperty StretchItemsToWidthProperty = DependencyProperty.Register(nameof(StretchItemsToWidth), typeof(bool), typeof(VirtualizingWrapPanel), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsMeasure));
+        
         protected Size childSize;
 
         protected int rowCount;
@@ -124,6 +109,12 @@ namespace Clowd.UI.Controls
                 itemsPerRowCount = Math.Max(1, (int)Math.Floor(GetWidth(availableSize) / GetWidth(childSize)));
             }
 
+            if (StretchItemsToWidth)
+            {
+                itemsPerRowCount = 1;
+                childSize = new Size(availableSize.Width, childSize.Height);
+            }
+
             rowCount = (int)Math.Ceiling((double)Items.Count / itemsPerRowCount);
         }
 
@@ -147,7 +138,7 @@ namespace Clowd.UI.Controls
 
         protected override Size CalculateExtent(Size availableSize)
         {
-            double extentWidth = IsSpacingEnabled && SpacingMode != SpacingMode.None && !double.IsInfinity(GetWidth(availableSize))
+            double extentWidth = SpacingMode != SpacingMode.None && !double.IsInfinity(GetWidth(availableSize))
                 ? GetWidth(availableSize)
                 : GetWidth(childSize) * itemsPerRowCount;
 
@@ -176,9 +167,7 @@ namespace Clowd.UI.Controls
             double totalItemsWidth = Math.Min(GetWidth(childSize) * itemsPerRowCount, finalWidth);
             double unusedWidth = finalWidth - totalItemsWidth;
 
-            SpacingMode spacingMode = IsSpacingEnabled ? SpacingMode : SpacingMode.None;
-
-            switch (spacingMode)
+            switch (SpacingMode)
             {
                 case SpacingMode.Uniform:
                     innerSpacing = outerSpacing = unusedWidth / (itemsPerRowCount + 1);
@@ -481,7 +470,7 @@ namespace Clowd.UI.Controls
         public static readonly DependencyProperty ScrollLineDeltaItemProperty = DependencyProperty.Register(nameof(ScrollLineDeltaItem), typeof(int), typeof(VirtualizingPanelBase), new FrameworkPropertyMetadata(1));
         public static readonly DependencyProperty MouseWheelDeltaItemProperty = DependencyProperty.Register(nameof(MouseWheelDeltaItem), typeof(int), typeof(VirtualizingPanelBase), new FrameworkPropertyMetadata(3));
 
-        public ScrollViewer? ScrollOwner { get; set; }
+        public ScrollViewer ScrollOwner { get; set; }
 
         public bool CanVerticallyScroll { get; set; }
         public bool CanHorizontallyScroll { get; set; }
@@ -568,7 +557,7 @@ namespace Clowd.UI.Controls
             }
         }
 
-        private DependencyObject? _itemsOwner;
+        private DependencyObject _itemsOwner;
 
         protected ReadOnlyCollection<object> Items => ((ItemContainerGenerator)ItemContainerGenerator).Items;
 
@@ -588,7 +577,7 @@ namespace Clowd.UI.Controls
             }
         }
 
-        private IRecyclingItemContainerGenerator? _itemContainerGenerator;
+        private IRecyclingItemContainerGenerator _itemContainerGenerator;
 
         public double ExtentWidth => Extent.Width;
         public double ExtentHeight => Extent.Height;

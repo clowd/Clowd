@@ -2,37 +2,33 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using Clowd.UI.Converters;
 using Clowd.UI.Helpers;
 
 namespace Clowd.UI
 {
-    public partial class RecentSessionsPage : Page, INotifyPropertyChanged
+    public partial class RecentSessionsPage : Page
     {
-        private TrulyObservableCollection<SessionInfo> _sessions;
+        public TrulyObservableCollection<SessionInfo> Sessions { get; }
 
-        public TrulyObservableCollection<SessionInfo> Sessions
+        public static readonly DependencyProperty ItemSizeProperty = DependencyProperty.Register(
+            "ItemSize", typeof(Size), typeof(RecentSessionsPage), new PropertyMetadata(new Size(110, 75)));
+
+        public Size ItemSize
         {
-            get => _sessions;
-            set
-            {
-                if (_sessions != value)
-                {
-                    _sessions = value;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Sessions)));
-                }
-            }
+            get { return (Size)GetValue(ItemSizeProperty); }
+            set { SetValue(ItemSizeProperty, value); }
+        }
+
+        public static readonly DependencyProperty ListModeProperty = DependencyProperty.Register(
+            "ListMode", typeof(bool), typeof(RecentSessionsPage), new PropertyMetadata(true));
+
+        public bool ListMode
+        {
+            get { return (bool)GetValue(ListModeProperty); }
+            set { SetValue(ListModeProperty, value); }
         }
 
         public RecentSessionsPage()
@@ -40,9 +36,8 @@ namespace Clowd.UI
             Sessions = SessionManager.Current.Sessions;
             InitializeComponent();
             listView.SelectionChanged += ListView_SelectionChanged;
+            GalleryList_Click(null, null);
         }
-
-        public event PropertyChangedEventHandler PropertyChanged;
 
         private void ListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -92,6 +87,53 @@ namespace Clowd.UI
         {
             if (e.OriginalSource is FrameworkElement el && el.DataContext is SessionInfo session)
                 SessionManager.Current.OpenSession(session);
+        }
+
+        private void GalleryModeReset(double sizeMult)
+        {
+            btnGalleryLarge.IsChecked = false;
+            btnGallerySmall.IsChecked = false;
+            btnGalleryMedium.IsChecked = false;
+            btnGalleryList.IsChecked = false;
+
+            if (sizeMult == 0)
+            {
+                ListMode = true;
+                ItemSize = new Size(double.PositiveInfinity, 75);
+                listView.ItemTemplate = (DataTemplate)FindResource("GalleryItemTemplateList");
+            }
+            else
+            {
+                ListMode = false;
+                const double textHeight = 26;
+                const double b = 11.11111d;
+                ItemSize = new Size(b * 16d * sizeMult, b * 10d * sizeMult + textHeight);
+                listView.ItemTemplate = (DataTemplate)FindResource("GalleryItemTemplateGrid");
+            }
+        }
+
+        private void GalleryLarge_Click(object sender, RoutedEventArgs e)
+        {
+            GalleryModeReset(2);
+            btnGalleryLarge.IsChecked = true;
+        }
+
+        private void GalleryMedium_Click(object sender, RoutedEventArgs e)
+        {
+            GalleryModeReset(1.5);
+            btnGalleryMedium.IsChecked = true;
+        }
+
+        private void GallerySmall_Click(object sender, RoutedEventArgs e)
+        {
+            GalleryModeReset(1);
+            btnGallerySmall.IsChecked = true;
+        }
+
+        private void GalleryList_Click(object sender, RoutedEventArgs e)
+        {
+            GalleryModeReset(0);
+            btnGalleryList.IsChecked = true;
         }
     }
 }
