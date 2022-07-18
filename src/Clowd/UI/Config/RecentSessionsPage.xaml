@@ -26,11 +26,14 @@
         </CollectionViewSource>
         <conv:StringNullOrEmptyToBoolConverter x:Key="EmptyString2Bool" />
     </Page.Resources>
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <DockPanel>
+        <StackPanel
+            DockPanel.Dock="Top"
+            Orientation="Horizontal">
+            <Button Click="ButtonNormalClick">Normal</Button>
+            <Button Click="ButtonGalleryClick">Gallery</Button>
+        </StackPanel>
+        <Grid>
         <ListView
             x:Name="listView"
             Background="Transparent"
@@ -207,5 +210,152 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-    </Grid>
+
+            <ListView
+                x:Name="listViewGallery"
+                Background="Transparent"
+                BorderThickness="0"
+                ItemsSource="{Binding Source={StaticResource viewSource}}"
+                MouseDoubleClick="ViewDoubleClick"
+                VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                VirtualizingPanel.VirtualizationMode="Recycling">
+                <ListView.ContextMenu>
+                    <ContextMenu>
+                        <ContextMenu.Items>
+                            <MenuItem
+                                x:Name="ctxOpenItem2"
+                                Click="OpenItemClicked"
+                                Header="Open"
+                                Icon="{x:Static wpfuiCommon:SymbolFilled.Edit24}"
+                                IsEnabled="False"
+                                ToolTip="Open in Editor" />
+                            <MenuItem
+                                x:Name="ctxCopyItem2"
+                                Click="CopyItemClicked"
+                                Header="Copy"
+                                Icon="{x:Static wpfuiCommon:SymbolFilled.Copy24}"
+                                IsEnabled="False"
+                                ToolTip="Copy to Clipboard" />
+                            <MenuItem
+                                x:Name="ctxDeleteItem2"
+                                Click="DeleteItemClicked"
+                                Header="Delete"
+                                Icon="{x:Static wpfuiCommon:SymbolFilled.Delete24}"
+                                IsEnabled="False"
+                                ToolTip="Delete" />
+                        </ContextMenu.Items>
+                    </ContextMenu>
+                </ListView.ContextMenu>
+                <ListView.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <TextBlock Margin="0,8" Text="{Binding Name, Mode=OneTime}">
+                                    <TextBlock.Foreground>
+                                        <SolidColorBrush Color="{DynamicResource TextFillColorPrimary}" />
+                                    </TextBlock.Foreground>
+                                </TextBlock>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListView.GroupStyle>
+                <ListView.Style>
+                    <Style TargetType="ListView">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListView">
+                                    <wpfui:DynamicScrollViewer>
+                                        <ItemsPresenter />
+                                    </wpfui:DynamicScrollViewer>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListView.Style>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <Border
+                                        x:Name="Border"
+                                        Background="Transparent"
+                                        SnapsToDevicePixels="true">
+                                        <ContentPresenter
+                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                        <VisualStateManager.VisualStateGroups>
+                                            <VisualStateGroup x:Name="CommonStates">
+                                                <VisualState x:Name="Normal" />
+                                                <VisualState x:Name="MouseOver" />
+                                                <VisualState x:Name="Disabled" />
+                                            </VisualStateGroup>
+                                            <VisualStateGroup x:Name="SelectionStates">
+                                                <VisualState x:Name="Unselected" />
+                                                <VisualState x:Name="Selected">
+                                                    <Storyboard>
+                                                        <ColorAnimationUsingKeyFrames Storyboard.TargetName="Border"
+                                                            Storyboard.TargetProperty="(Panel.Background).(SolidColorBrush.Color)">
+                                                            <EasingColorKeyFrame KeyTime="0"
+                                                                                 Value="{DynamicResource SystemAccentColor}" />
+                                                        </ColorAnimationUsingKeyFrames>
+                                                    </Storyboard>
+                                                </VisualState>
+                                                <VisualState x:Name="SelectedUnfocused">
+                                                    <Storyboard>
+                                                        <ColorAnimationUsingKeyFrames Storyboard.TargetName="Border"
+                                                            Storyboard.TargetProperty="(Panel.Background).(SolidColorBrush.Color)">
+                                                            <EasingColorKeyFrame KeyTime="0"
+                                                                                 Value="{DynamicResource SystemAccentColorLight1}" />
+                                                        </ColorAnimationUsingKeyFrames>
+                                                    </Storyboard>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                        </VisualStateManager.VisualStateGroups>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid HorizontalAlignment="Stretch">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="25" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                x:Name="imgBorder"
+                                Width="200"
+                                Height="140"
+                                Margin="4"
+                                Background="{StaticResource CheckeredLightGrayBackgroundBrush}">
+                                <Image Source="{Binding PreviewImgPath, Converter={StaticResource convCacheImage}}"
+                                       Stretch="Uniform" />
+                            </Border>
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="{Binding CreatedUtc, Mode=OneTime, StringFormat={x:Static local:AppStyles.UiDateTimePattern}}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+    </DockPanel>
 </Page>

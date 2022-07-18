@@ -93,5 +93,17 @@ namespace Clowd.UI
             if (e.OriginalSource is FrameworkElement el && el.DataContext is SessionInfo session)
                 SessionManager.Current.OpenSession(session);
         }
+
+        private void ButtonNormalClick(object sender, RoutedEventArgs e)
+        {
+            listView.Visibility = Visibility.Visible;
+            listViewGallery.Visibility = Visibility.Collapsed;
+        }
+
+        private void ButtonGalleryClick(object sender, RoutedEventArgs e)
+        {
+            listView.Visibility = Visibility.Collapsed;
+            listViewGallery.Visibility = Visibility.Visible;
+        }
     }
 }
