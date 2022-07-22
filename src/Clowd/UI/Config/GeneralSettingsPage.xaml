@@ -6,7 +6,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
     Title="GeneralSettingsPage"
     d:Background="White"
     d:DesignHeight="450"
@@ -25,7 +24,7 @@
             <Setter Property="Margin" Value="0,8,0,8" />
         </Style>-->
     </Page.Resources>
-    <wpfui:DynamicScrollViewer Padding="0,0,24,24">
+    <ScrollViewer Padding="0,0,24,24">
         <controls:SimpleStackPanel>
             <GroupBox x:Name="grpUpdates" Header="Updates">
                 <StackPanel>
@@ -57,5 +56,5 @@
                 </StackPanel>
             </GroupBox>
         </controls:SimpleStackPanel>
-    </wpfui:DynamicScrollViewer>
+    </ScrollViewer>
 </Page>

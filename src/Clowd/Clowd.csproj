@@ -3,6 +3,7 @@
     <TargetFramework>net6.0-windows10.0.17763.0</TargetFramework>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
+    <UseWinRT>true</UseWinRT>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseVSHostingProcess>false</UseVSHostingProcess>
@@ -49,7 +50,6 @@
     <PackageReference Include="Sentry" Version="3.17.1" />
     <PackageReference Include="Sentry.NLog" Version="3.17.1" />
     <PackageReference Include="ThomasLevesque.WeakEvent" Version="4.1.0" />
-    <PackageReference Include="WPF-UI" Version="1.2.7" />
   </ItemGroup>
 
   <!-- uncomment to compile shaders -->

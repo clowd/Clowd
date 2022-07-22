@@ -6,13 +6,12 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
     Title="AboutPage"
     d:Background="White"
     d:DesignHeight="450"
     d:DesignWidth="400"
     mc:Ignorable="d">
-    <wpfui:DynamicScrollViewer Padding="0,0,24,24">
+    <ScrollViewer Padding="0,0,24,24">
         <controls:SimpleStackPanel Spacing="8">
             <Viewbox Width="60" HorizontalAlignment="Left">
                 <Path
@@ -36,7 +35,7 @@
                 Press the [PrntScr] key and explore to see what I can do!
             </TextBlock>
 
-            <wpfui:Hyperlink Content="Read more online" NavigateUri="https://github.com/clowd/Clowd" />
+            <controls:Hyperlink NavigateUri="https://github.com/clowd/Clowd" Text="Read more online" />
 
             <TextBlock Style="{StaticResource BodyTextBlockStyle}">
                 Clowd is made possible in part by each of the following open source projects -
@@ -74,12 +73,11 @@
                                 HorizontalAlignment="Center"
                                 Style="{StaticResource BodyTextBlockStyle}"
                                 Text="{Binding LibraryName}" />
-                            <wpfui:Hyperlink
+                            <controls:Hyperlink
                                 Margin="12,0,0,0"
                                 Padding="0"
                                 HorizontalAlignment="Center"
-                                Command="{Binding ClickLicenseCommand}"
-                                Content="(see license)" />
+                                NavigateUri="{Binding LibraryLicenseUrl}" />
                         </StackPanel>
                     </DataTemplate>
                 </ListView.ItemTemplate>
@@ -89,5 +87,5 @@
                 Missed your project in this list? Feel free to reach out through our GitHub.
             </TextBlock>
         </controls:SimpleStackPanel>
-    </wpfui:DynamicScrollViewer>
+    </ScrollViewer>
 </Page>

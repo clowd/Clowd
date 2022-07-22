@@ -6,8 +6,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
-    xmlns:wpfuiCommon="clr-namespace:WPFUI.Common;assembly=WPFUI"
     Title="Clowd"
     Width="800"
     Height="600"
@@ -52,7 +50,7 @@
                 <TextBlock Foreground="{DynamicResource TextFillColorTertiaryBrush}" Text="Screen Capture Tool" />
             </StackPanel>
         </Grid>
-        <wpfui:NavigationFluent
+        <!--<wpfui:NavigationFluent
             x:Name="RootNavigation"
             Grid.Row="1"
             Grid.Column="0"
@@ -98,7 +96,7 @@
                     Icon="Info24"
                     PageType="About" />
             </wpfui:NavigationFluent.Footer>
-        </wpfui:NavigationFluent>
+        </wpfui:NavigationFluent>-->
         <Grid
             Grid.Row="0"
             Grid.RowSpan="2"
@@ -107,10 +105,10 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <wpfui:Breadcrumb
+            <!--<wpfui:Breadcrumb
                 Grid.Row="0"
                 Margin="0,0,0,18"
-                Navigation="{Binding ElementName=RootNavigation}" />
+                Navigation="{Binding ElementName=RootNavigation}" />-->
             <Frame x:Name="RootFrame" Grid.Row="1" />
         </Grid>
     </Grid>

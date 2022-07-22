@@ -8,7 +8,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Clowd.UI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:wpfui="clr-namespace:WPFUI.Controls;assembly=WPFUI"
     Title="GeneralSettingsPage"
     d:Background="White"
     d:DataContext="{d:DesignInstance Type=config:SettingsUpload}"
@@ -31,7 +30,7 @@
     <Page.CommandBindings>
         <CommandBinding Command="{StaticResource Commands.ProviderSettings}" Executed="ProviderSettingsCommand" />
     </Page.CommandBindings>
-    <wpfui:DynamicScrollViewer Padding="0,0,24,24">
+    <ScrollViewer Padding="0,0,24,24">
         <controls:SimpleStackPanel>
             <ListView
                 Background="Transparent"
@@ -117,37 +116,37 @@
                                 VerticalAlignment="Center"
                                 Command="{StaticResource Commands.ProviderSettings}"
                                 CommandParameter="{Binding}">
-                                <wpfui:SymbolIcon Foreground="White" Symbol="Settings20" />
+                                <!-- <wpfui:SymbolIcon Foreground="White" Symbol="Settings20" /> -->
                             </Button>
                             <controls:SimpleStackPanel
                                 Grid.Row="2"
                                 Grid.Column="2"
                                 Orientation="Horizontal"
                                 Spacing="10">
-                                <wpfui:SymbolIcon
-                                    x:Name="SupportsImage"
-                                    FontSize="20"
-                                    Symbol="Camera20" />
-                                <wpfui:SymbolIcon
-                                    x:Name="SupportsVideo"
-                                    FontSize="20"
-                                    Symbol="Video24" />
-                                <wpfui:SymbolIcon
-                                    x:Name="SupportsText"
-                                    FontSize="20"
-                                    Symbol="Code20" />
-                                <wpfui:SymbolIcon
-                                    x:Name="SupportsBinary"
-                                    FontSize="20"
-                                    Symbol="Document20" />
+                                <!--  <wpfui:SymbolIcon  -->
+                                <!--  x:Name="SupportsImage"  -->
+                                <!--  FontSize="20"  -->
+                                <!--  Symbol="Camera20" />  -->
+                                <!--  <wpfui:SymbolIcon  -->
+                                <!--  x:Name="SupportsVideo"  -->
+                                <!--  FontSize="20"  -->
+                                <!--  Symbol="Video24" />  -->
+                                <!--  <wpfui:SymbolIcon  -->
+                                <!--  x:Name="SupportsText"  -->
+                                <!--  FontSize="20"  -->
+                                <!--  Symbol="Code20" />  -->
+                                <!--  <wpfui:SymbolIcon  -->
+                                <!--  x:Name="SupportsBinary"  -->
+                                <!--  FontSize="20"  -->
+                                <!--  Symbol="Document20" />  -->
                             </controls:SimpleStackPanel>
                         </Grid>
-                        <DataTemplate.Triggers>
+                        <!--<DataTemplate.Triggers>
                             <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                                 <Setter TargetName="ProviderGrid" Property="Opacity" Value="0.5" />
                             </DataTrigger>
 
-                            <!--  Visibility of "supports" icons  -->
+                            ~1~  Visibility of "supports" icons  @1@
                             <DataTrigger Binding="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}" Value="False">
                                 <Setter TargetName="SupportsImage" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
@@ -161,7 +160,7 @@
                                 <Setter TargetName="SupportsBinary" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
 
-                            <!--  Show "supports" icon as bold if it is also the default  -->
+                            ~1~  Show "supports" icon as bold if it is also the default  @1@
                             <DataTrigger Binding="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}" Value="True">
                                 <Setter TargetName="SupportsImage" Property="Foreground" Value="{DynamicResource AccentColorBrush}" />
                                 <Setter TargetName="SupportsImage" Property="Filled" Value="True" />
@@ -178,10 +177,10 @@
                                 <Setter TargetName="SupportsBinary" Property="Foreground" Value="{DynamicResource AccentColorBrush}" />
                                 <Setter TargetName="SupportsBinary" Property="Filled" Value="True" />
                             </DataTrigger>
-                        </DataTemplate.Triggers>
+                        </DataTemplate.Triggers>-->
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
         </controls:SimpleStackPanel>
-    </wpfui:DynamicScrollViewer>
+    </ScrollViewer>
 </Page>

@@ -13,6 +13,7 @@ using System.Windows.Controls;
 using System.Windows.Forms;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Windows.UI.ViewManagement;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI;
@@ -57,11 +58,13 @@ namespace Clowd
                 await SetupSettings();
 
                 // theme
-                WPFUI.Appearance.Theme.Apply(WPFUI.Appearance.Theme.GetSystemTheme() == WPFUI.Appearance.SystemThemeType.Light
-                    ? WPFUI.Appearance.ThemeType.Light
-                    : WPFUI.Appearance.ThemeType.Dark);
+                // WPFUI.Appearance.Theme.Apply(WPFUI.Appearance.Theme.GetSystemTheme() == WPFUI.Appearance.SystemThemeType.Light
+                //     ? WPFUI.Appearance.ThemeType.Light
+                //     : WPFUI.Appearance.ThemeType.Dark);
+          
+                AppStyles.Initialize();
                 SetupTrayIconAndTheme();
-                WPFUI.Appearance.Theme.Changed += (_, _) => SetupTrayIconAndTheme();
+                // WPFUI.Appearance.Theme.Changed += (_, _) => SetupTrayIconAndTheme();
 
                 // start receiving command line arguments
                 _processor.Ready();

@@ -69,7 +69,7 @@ namespace Clowd.UI.Config
 
             var root = Activator.CreateInstance<T>();
 
-            root.AddChild(new WPFUI.Controls.DynamicScrollViewer
+            root.AddChild(new ScrollViewer
             {
                 Padding = new Thickness(24, 10, 24, 24),
                 Content = grid
@@ -151,10 +151,11 @@ namespace Clowd.UI.Config
 
             if ((int)tcode >= (int)TypeCode.Char && (int)tcode <= (int)TypeCode.Decimal)
             {
-                return SimpleControlBinding(new WPFUI.Controls.NumberBox()
-                {
-                    // properties?
-                }, pd, WPFUI.Controls.NumberBox.ValueProperty);
+                return new TextBlock() { Text = "Not implemented" };
+                // return SimpleControlBinding(new WPFUI.Controls.NumberBox()
+                // {
+                //     // properties?
+                // }, pd, WPFUI.Controls.NumberBox.ValueProperty);
             }
 
             if (pd.Is(typeof(Color)))

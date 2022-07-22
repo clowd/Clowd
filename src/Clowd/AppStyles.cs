@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Windows.UI.ViewManagement;
 using Icon = System.Drawing.Icon;
 
 namespace Clowd
@@ -56,7 +57,8 @@ namespace Clowd
 
     static class AppStyles
     {
-        public static Color AccentColor => (Color)FindResource("SystemAccentColor");
+       
+        public static Color AccentColor => (Color)FindResource(SYSTEM_ACCENT_COLOR_KEY);
         public static Style AudioLevelProgressBarStyle => (Style)FindResource("AudioLevelProgressBarStyle");
         public static Brush CheckerboardBrushSmall => (Brush)FindResource("CheckeredLightGrayBackgroundBrush");
         public static Brush AccentBackgroundBrush => new SolidColorBrush(AccentColor);
@@ -64,7 +66,7 @@ namespace Clowd
         public static Brush IdealForegroundBrush => Brushes.White;
         public static Style CustomWindowStyle => (Style)FindResource("CustomUiWindow");
 
-        public static bool IsDarkTheme => WPFUI.Appearance.Theme.GetAppTheme() == WPFUI.Appearance.ThemeType.Dark;
+        // public static bool IsDarkTheme => WPFUI.Appearance.Theme.GetAppTheme() == WPFUI.Appearance.ThemeType.Dark;
 
         public static Stream AppIconDarkThemeStream => Application.GetResourceStream(new Uri("pack://application:,,,/Images/default-white.ico")).Stream;
         public static Stream AppIconLightThemeStream => Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico")).Stream;
@@ -73,6 +75,15 @@ namespace Clowd
             => System.Threading.Thread.CurrentThread.CurrentCulture.DateTimeFormat.ShortDatePattern + " " +
                System.Threading.Thread.CurrentThread.CurrentCulture.DateTimeFormat.ShortTimePattern;
 
+        private static readonly UISettings _uiSettings;
+        private const string SYSTEM_ACCENT_COLOR_KEY = "SystemAccentColor";
+        
+        static AppStyles()
+        {
+            _uiSettings = new UISettings();
+            _uiSettings.ColorValuesChanged += (_, _) => Initialize();
+        }
+
         public static Icon AppIconGdi
         {
             get
@@ -80,8 +91,8 @@ namespace Clowd
                 var desiredSize = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
                 var avaliableSizes = new[] { 64, 48, 40, 32, 24, 20, 16 };
                 var nearest = avaliableSizes.OrderBy(x => Math.Abs(x - desiredSize)).First();
-                var stream = IsDarkTheme ? AppIconDarkThemeStream : AppIconLightThemeStream;
-                return new Icon(stream, new System.Drawing.Size(nearest, nearest));
+                // var stream = IsDarkTheme ? AppIconDarkThemeStream : AppIconLightThemeStream;
+                return new Icon(AppIconLightThemeStream, new System.Drawing.Size(nearest, nearest));
             }
         }
 
@@ -89,8 +100,8 @@ namespace Clowd
         {
             get
             {
-                var stream = IsDarkTheme ? AppIconDarkThemeStream : AppIconLightThemeStream;
-                BitmapDecoder decoder = IconBitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                // var stream = IsDarkTheme ? AppIconDarkThemeStream : AppIconLightThemeStream;
+                BitmapDecoder decoder = IconBitmapDecoder.Create(AppIconLightThemeStream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
                 return decoder.Frames[0];
             }
         }
@@ -98,6 +109,17 @@ namespace Clowd
         public static System.Windows.Shapes.Path GetIconElement(ResourceIcon icon)
         {
             return (System.Windows.Shapes.Path)FindResource(icon.ToString());
+        }
+
+        public static void Initialize()
+        {
+            App.Current.Resources[SYSTEM_ACCENT_COLOR_KEY] = GetUIColor(UIColorType.Accent);
+        }
+
+        private static Color GetUIColor(UIColorType type)
+        {
+            var c = _uiSettings.GetColorValue(type);
+            return Color.FromArgb(c.A, c.R, c.G, c.B);
         }
 
         private static object FindResource(string resourceName)

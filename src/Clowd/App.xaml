@@ -8,8 +8,8 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/WPFUI;component/Styles/Theme/Light.xaml" />
-                <ResourceDictionary Source="pack://application:,,,/WPFUI;component/Styles/WPFUI.xaml" />
+                <!-- <ResourceDictionary Source="pack://application:,,,/WPFUI;component/Styles/Theme/Light.xaml" /> -->
+                <!-- <ResourceDictionary Source="pack://application:,,,/WPFUI;component/Styles/WPFUI.xaml" /> -->
                 <ResourceDictionary Source="Assets/ProgressRingControl.xaml" />
                 <ResourceDictionary Source="Assets/VectorGeometries.xaml" />
                 <ResourceDictionary Source="Assets/VectorIcons.xaml" />

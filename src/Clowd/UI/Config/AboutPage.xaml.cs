@@ -21,20 +21,9 @@ namespace Clowd.UI.Pages
     {
         public string LibraryName { get; set; }
         public string LibraryLicenseUrl { get; set; }
-        public ICommand ClickLicenseCommand { get; set; }
 
         public OpenSourceLibrary()
         {
-            ClickLicenseCommand = new RelayUICommand(OnClick);
-        }
-
-        private void OnClick(object obj)
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = LibraryLicenseUrl,
-                UseShellExecute = true
-            });
         }
     }
 
