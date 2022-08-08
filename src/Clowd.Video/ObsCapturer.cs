@@ -4,27 +4,22 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using NLog;
 
 namespace Clowd.Video
 {
     public class ObsCapturer : VideoCapturerBase
     {
-        Task _setup;
-        Task _status;
+        public string LibraryPath => _libraryPath;
+        public string ObsBinPath => Path.Combine(LibraryPath, "bin", "64bit");
+        
         WatchProcess _watch;
-
-        private const string obsHost = "127.0.0.1";
-        private const string obsPort = "21889";
-        private static readonly string obsUrl = $"http://{obsHost}:{obsPort}";
-        private static readonly string obsSocket = $"ws://{obsHost}:{obsPort}/volmeter";
 
         private CancellationTokenSource _source;
         private CancellationToken _token;
@@ -34,6 +29,11 @@ namespace Clowd.Video
         private static readonly object _lock = new object();
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
         private string _libraryPath;
+        private string _filePath;
+
+        TaskCompletionSource<bool> _signalInit = new();
+        TaskCompletionSource<string> _signalStart = new();
+        TaskCompletionSource<bool> _signalStop = new();
 
         public ObsCapturer(string libraryPath)
         {
@@ -48,249 +48,180 @@ namespace Clowd.Video
             _source = new CancellationTokenSource();
             _token = _source.Token;
             _libraryPath = libraryPath;
-            _setup = Task.Run(StartObs);
         }
 
-        public override Task Initialize()
+        public override Task Initialize(ScreenRect captureRect, SettingsVideo settings)
         {
-            return _setup;
-        }
-
-        private async Task StartObs()
-        {
-            // if obs is missing, try to find obs in app data, only if we're debugging.
+            // if obs is missing, try to find obs in build cache, only if we're debugging.
             if (!Directory.Exists(_libraryPath) && Debugger.IsAttached)
             {
-                var appdata = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clowd");
-                if (Directory.Exists(appdata))
+                DirectoryInfo di = new DirectoryInfo(AppContext.BaseDirectory);
+                do
                 {
-                    string obspath = Directory.EnumerateFiles(appdata, "obs-express.exe", SearchOption.AllDirectories).FirstOrDefault();
-                    if (obspath != null)
+                    var dir = Path.Combine(di.FullName, ".cache", "obs-express");
+                    var exe = Path.Combine(dir, "bin", "64bit", "obs-express.exe");
+                    if (File.Exists(exe))
                     {
-                        _libraryPath = Path.GetDirectoryName(obspath);
+                        _libraryPath = dir;
+                        break;
                     }
+                    di = di.Parent;
+                } while (di != null);
+            }
+            
+            try
+            {
+                if (!Directory.Exists(_libraryPath))
+                    throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
+
+                var obsExpressPath = Path.Combine(ObsBinPath, "obs-express.exe");
+                if (!File.Exists(obsExpressPath))
+                    throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
+
+                if (String.IsNullOrWhiteSpace(settings.OutputDirectory))
+                    throw new Exception("OutputDirectory must not be null");
+
+                if (!Directory.Exists(settings.OutputDirectory))
+                    Directory.CreateDirectory(settings.OutputDirectory);
+
+                // find an available file name
+                for (int i = 0; i < 10; i++)
+                {
+                    var dateStr = DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
+                    if (i > 0) dateStr += $" ({i})";
+                    var fileName = dateStr + ".mp4";
+                    _filePath = Path.Combine(settings.OutputDirectory, fileName);
+                    if (!File.Exists(_filePath)) break;
+                }
+
+                using (var scoped = _log.CreateProfiledScope("InitOBS"))
+                {
+                    List<string> arguments = new()
+                    {
+                        "--captureRegion", $"{captureRect.X},{captureRect.Y},{captureRect.Width},{captureRect.Height}",
+                        "--fps", settings.Fps.ToString(),
+                        "--crf", ((int)settings.Quality).ToString(),
+                        "--maxOutputWidth", settings.MaxResolutionWidth.ToString(),
+                        "--maxOutputHeight", settings.MaxResolutionHeight.ToString(),
+                        "--pause",
+                        "--output", _filePath,
+                    };
+
+                    if (settings.TrackMouseClicks)
+                    {
+                        arguments.Add("--trackerEnabled");
+                    }
+
+                    if (settings.HardwareAccelerated)
+                    {
+                        arguments.Add("--hwAccel");
+                    }
+
+                    if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice?.DeviceId != null)
+                    {
+                        arguments.Add("--microphones");
+                        arguments.Add(settings.CaptureMicrophoneDevice?.DeviceId);
+                    }
+
+                    if (settings.CaptureSpeaker && settings.CaptureSpeakerDevice?.DeviceId != null)
+                    {
+                        arguments.Add("--speakers");
+                        arguments.Add(settings.CaptureMicrophoneDevice?.DeviceId);
+                    }
+
+                    var obsexpress = new ProcessStartInfo()
+                    {
+                        FileName = obsExpressPath,
+                        UseShellExecute = false,
+                        WorkingDirectory = ObsBinPath,
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        RedirectStandardInput = true,
+                        CreateNoWindow = true,
+                    };
+
+                    foreach (var a in arguments)
+                        obsexpress.ArgumentList.Add(a);
+
+                    scoped.Info("Starting obs child processes");
+
+                    _watch = WatchProcess.StartAndWatch(obsexpress);
+                    _watch.OutputReceived += OutputReceived;
                 }
             }
-
-            if (!Directory.Exists(_libraryPath))
-                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
-
-            if (!File.Exists(Path.Combine(_libraryPath, "obs-express.exe")))
-                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
-
-            if (!File.Exists(Path.Combine(_libraryPath, "lib", "obs64.exe")))
-                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
-
-            using (var scoped = _log.CreateProfiledScope("InitOBS"))
+            catch (Exception ex)
             {
-                List<ProcessStartInfo> psis = new List<ProcessStartInfo>();
-                try
+                _signalInit.SetException(ex);
+            }
+
+            return _signalInit.Task;
+        }
+
+        private void OutputReceived(object sender, WatchLogEventArgs e)
+        {
+            try
+            {
+                var data = e.Data.Trim();
+                if (data.StartsWith("{") && data.EndsWith("}"))
                 {
-                    var pjsonPath = Path.Combine(_libraryPath, "package.json");
-                    var pjson = JsonConvert.DeserializeObject<PJsonVersion>(File.ReadAllText(pjsonPath));
-
-                    if (String.IsNullOrWhiteSpace(pjson.osnVersion))
-                        throw new Exception("osnVersion null or empty");
-
-                    string pipeName = $"clowd-{Guid.NewGuid()}";
-
-                    var obs64 = new ProcessStartInfo()
+                    var jobj = JObject.Parse(data);
+                    var msg_type = jobj["type"]?.ToString();
+                    switch (msg_type)
                     {
-                        FileName = Path.Combine(_libraryPath, "lib", "obs64.exe"),
-                        Arguments = $"{pipeName} {pjson.osnVersion}",
-                        UseShellExecute = false,
-                        WorkingDirectory = Path.Combine(_libraryPath, "lib"),
-                        WindowStyle = ProcessWindowStyle.Hidden,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true,
-                    };
-
-                    var obsexpress = new ProcessStartInfo()
-                    {
-                        FileName = Path.Combine(_libraryPath, "obs-express.exe"),
-                        Arguments = $"-c {pipeName}",
-                        UseShellExecute = false,
-                        WorkingDirectory = Path.Combine(_libraryPath, "lib"),
-                        WindowStyle = ProcessWindowStyle.Hidden,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true,
-                    };
-
-                    psis.Add(obs64);
-                    psis.Add(obsexpress);
-                }
-                catch (Exception ex)
-                {
-                    scoped.Error(ex, "Unable to parse osn version from package.json. Falling back to legacy OBS hosting");
-                    var obsexpress = new ProcessStartInfo()
-                    {
-                        FileName = Path.Combine(_libraryPath, "obs-express.exe"),
-                        UseShellExecute = false,
-                        WorkingDirectory = Path.Combine(_libraryPath, "lib"),
-                        WindowStyle = ProcessWindowStyle.Hidden,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true,
-                    };
-                    psis.Add(obsexpress);
-                }
-
-                scoped.Info("Starting obs child processes");
-
-                _watch = WatchProcess.StartAndWatch(psis.ToArray());
-                _watch.OutputReceived += (s, e) =>
-                {
-                    string msg = $"{e.ProcessName}: " + e.Data;
-                    _log.Debug(msg);
-                    _output.AppendLine($"[{DateTime.Now.ToShortTimeString()}]" + msg);
-                };
-
-                scoped.Info("Running background tasks");
-
-                string logDir = Path.Combine(_libraryPath, "obs-data", "node-obs", "logs");
-                TaskCompletionSource<bool> tsc = new TaskCompletionSource<bool>();
-                _status = Task.Run(async () =>
-                {
-                    using (var client = new ClowdHttpClient())
-                    {
-                        int errorCount = 0;
-                        while (true)
-                        {
-                            if (_token.IsCancellationRequested) return;
-                            await Task.Delay(1000);
-                            if (_token.IsCancellationRequested) return;
-
-                            try
-                            {
-                                var status = await client.GetJsonAsync<ObsStatusResponse>(ObsUri("/status"));
-
-                                if (!tsc.Task.IsCompleted && status.initialized)
-                                    tsc.SetResult(true);
-
-                                if (status.recording)
-                                    OnStatusRecieved((int)status.statistics.frameRate, (int)status.statistics.numberDroppedFrames,
-                                        TimeSpan.FromMilliseconds(status.recordingTime));
-
-                                errorCount = 0;
-                            }
-                            catch (Exception ex)
-                            {
-                                errorCount++;
-                                if (errorCount % 10 == 0)
-                                    _log.Warn(ex, "STATUS CHECK FAILING - Count: " + errorCount);
-                            }
-                        }
+                        case "status":
+                            int fps = Convert.ToInt32(jobj["fps"]);
+                            int dropped = Convert.ToInt32(jobj["dropped"]);
+                            long timsMs = Convert.ToInt32(jobj["timeMs"]);
+                            OnStatusRecieved(fps, dropped, TimeSpan.FromMilliseconds(timsMs));
+                            break;
+                        case "initialized":
+                            _signalInit.SetResult(true);
+                            break;
+                        case "started_recording":
+                            _signalStart.SetResult(_filePath);
+                            break;
+                        case "stopped_recording":
+                            _signalStop.SetResult(true);
+                            break;
                     }
-                });
+                }
 
-                scoped.Info("Waiting for initialized http response");
-
-                await tsc.Task.WithTimeout(10000);
-
-                BusyStatus = null;
-                scoped.Info("Done/Ready");
+                string msg = $"{e.ProcessName}: " + data;
+                _log.Debug(msg);
+                _output.AppendLine($"[{DateTime.Now.ToShortTimeString()}]" + msg);
+            }
+            catch (Exception ex)
+            {
+                _log.Debug(ex, "error parsing video output");
             }
         }
 
-        public override async Task<string> StartAsync(ScreenRect captureRect, SettingsVideo settings)
+        public override Task<string> StartAsync()
         {
-            if (!Directory.Exists(settings.OutputDirectory))
-                throw new ArgumentNullException(
-                    $"{nameof(SettingsVideo)}.{nameof(SettingsVideo.OutputDirectory)} must be non null and point to an existing directory.");
+            _watch.WriteToStdIn("");
+            return _signalStart.Task;
+        }
 
-            using (var scoped = _log.CreateProfiledScope("OBSStart"))
-            {
-                var dir = Path.GetFullPath(settings.OutputDirectory);
-
-                await _setup;
-                using (var client = new ClowdHttpClient())
-                {
-                    var req = new ObsStartRequest
-                    {
-                        fps = settings.Fps,
-                        captureRegion = captureRect,
-                        cq = (int)settings.Quality,
-                        hardwareAccelerated = settings.HardwareAccelerated,
-                        performanceMode = settings.Performance.ToString(),
-                        subsamplingMode = settings.SubsamplingMode.ToString(),
-                        outputDirectory = dir,
-                        maxOutputHeight = settings.MaxResolutionHeight,
-                        maxOutputWidth = settings.MaxResolutionWidth,
-                        trackMouseClicks = settings.TrackMouseClicks,
-                        containerFormat = settings.OutputType == VideoOutputType.MP4 ? "mp4" : "mkv",
-                    };
-
-                    if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice != null)
-                        req.microphones = new string[] { settings.CaptureMicrophoneDevice.DeviceId };
-                    else
-                        req.microphones = new string[0];
-
-                    if (settings.CaptureSpeaker && settings.CaptureSpeakerDevice != null)
-                        req.speakers = new string[] { settings.CaptureSpeakerDevice.DeviceId };
-                    else
-                        req.speakers = new string[0];
-
-                    var videoPathTask = WatchForNewFile(dir, "mkv");
-
-                    scoped.Info("Start recording...");
-                    var resp = await client.PostJsonAsync<ObsStartRequest, ObsResponse>(ObsUri("/recording/start"), req);
-                    if (resp.status != "ok")
-                        throw new Exception("A capture error occurred: " + resp.message);
-
-                    if (await Task.WhenAny(videoPathTask, Task.Delay(10000)) == videoPathTask)
-                    {
-                        return videoPathTask.Result;
-                    }
-                    else
-                    {
-                        return null; // timeout
-                    }
-                }
-            }
+        public override Task StopAsync()
+        {
+            _watch.WriteToStdIn("q");
+            return _signalStop.Task;
         }
 
         public override IAudioLevelListener CreateListener(AudioDeviceInfo device)
         {
-            return new ObsAudioListener(_setup, device);
+            return new DummyListener();
         }
 
-        public Task<string> WatchForNewFile(string directory, string extension)
+        class DummyListener : IAudioLevelListener
         {
-            TaskCompletionSource<string> tsc = new TaskCompletionSource<string>();
+            public void Dispose()
+            { }
 
-            FileSystemWatcher watcher = new FileSystemWatcher();
-            watcher.Path = directory;
-            watcher.NotifyFilter = (NotifyFilters)0b1111111; // NotifyFilters.CreationTime | NotifyFilters.LastAccess | NotifyFilters.LastWrite ....
-            watcher.Filter = "*.*"; // + extension;
-            watcher.Created += new FileSystemEventHandler((s, e) =>
+            public double GetPeakLevel()
             {
-                if (e.ChangeType == WatcherChangeTypes.Created)
-                {
-                    watcher.Dispose();
-                    tsc.SetResult(e.FullPath);
-                }
-            });
-            watcher.EnableRaisingEvents = true;
-
-            _token.Register(() =>
-            {
-                watcher.Dispose();
-                if (!tsc.Task.IsCompleted)
-                    tsc.SetException(new Exception("The file watch task was cancelled"));
-            });
-
-            return tsc.Task;
-        }
-
-        private Uri ObsUri(string path) => new Uri(obsUrl.TrimEnd('/') + "/" + path.TrimStart('/'));
-
-        public override async Task StopAsync()
-        {
-            using (var client = new ClowdHttpClient())
-            {
-                await client.PostNothingAsync<ObsResponse>(ObsUri("/recording/stop"));
+                return 0;
             }
         }
 
@@ -308,204 +239,6 @@ namespace Clowd.Video
         public override void WriteLogToFile(string fileName)
         {
             File.WriteAllText(fileName, _output.ToString());
-        }
-
-        private class ObsAudioListener : IAudioLevelListener
-        {
-            public AudioDeviceInfo Device { get; }
-            public ClientWebSocket WebSocket { get; }
-            public CancellationTokenSource TokenSource { get; }
-
-            private readonly object _lock = new object();
-            private readonly Task _initThread;
-
-            private double _peak;
-
-            public ObsAudioListener(Task init, AudioDeviceInfo device)
-            {
-                _initThread = init;
-                _peak = short.MinValue;
-                Device = device;
-                TokenSource = new CancellationTokenSource();
-                WebSocket = new ClientWebSocket();
-                Task.Factory.StartNew(ThreadProc, TokenSource.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-            }
-
-            private void ThreadProc()
-            {
-                // wait for OBS to start
-                try
-                {
-                    _initThread.Wait();
-                }
-                catch
-                {
-                    // if OBS failed to start, we should just exit.
-                    return;
-                }
-
-                // connect to websocket
-                WebSocket.ConnectAsync(new Uri(obsSocket + $"?device_type={Device.DeviceType}&device_id={Device.DeviceId}"),
-                    new CancellationTokenSource(10000).Token).ConfigureAwait(false).GetAwaiter().GetResult();
-
-                try
-                {
-                    ReceiveLoop();
-                }
-                finally
-                {
-                    try
-                    {
-                        WebSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None)
-                            .ConfigureAwait(false).GetAwaiter().GetResult();
-                        WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None)
-                            .ConfigureAwait(false).GetAwaiter().GetResult();
-                    }
-                    catch { }
-
-                    WebSocket.Dispose();
-                }
-            }
-
-            private void ReceiveLoop()
-            {
-                var buffer = new byte[8192];
-                StringBuilder sb = new StringBuilder();
-                WebSocketReceiveResult receiveResult;
-
-                try
-                {
-                    while (!TokenSource.IsCancellationRequested)
-                    {
-                        do
-                        {
-                            receiveResult = WebSocket.ReceiveAsync(buffer, TokenSource.Token)
-                                .ConfigureAwait(false).GetAwaiter().GetResult();
-
-                            if (receiveResult.MessageType != WebSocketMessageType.Close)
-                                sb.Append(Encoding.UTF8.GetString(buffer, 0, receiveResult.Count));
-                        } while (!receiveResult.EndOfMessage);
-
-                        ReceiveMessage(sb.ToString());
-                        sb.Clear();
-                    }
-                }
-                catch (OperationCanceledException)
-                { }
-                catch (WebSocketException) // eg: The remote party closed the WebSocket connection without completing the close handshake
-                { }
-            }
-
-            private void ReceiveMessage(string message)
-            {
-                var obj = JsonConvert.DeserializeObject<ObsVolmeter>(message);
-                lock (_lock)
-                {
-                    _peak = obj.peak;
-                }
-            }
-
-            public void Dispose()
-            {
-                TokenSource.Cancel();
-            }
-
-            public double GetPeakLevel()
-            {
-                lock (_lock)
-                {
-                    return _peak;
-                }
-            }
-        }
-
-#pragma warning disable CS0649 // is never assigned to
-
-        private class PJsonVersion
-        {
-            public string version;
-            public string osnVersion;
-        }
-
-        private class ObsResponse
-        {
-            public string status;
-            public string message;
-        }
-
-        private class ObsVolmeter : ObsResponse
-        {
-            public double peak;
-            public double magnitude;
-        }
-
-        private class ObsStartRequest
-        {
-            public ObsRect captureRegion;
-            public int maxOutputWidth;
-            public int maxOutputHeight;
-            public string[] speakers;
-            public string[] microphones;
-            public int fps;
-            public int cq;
-            public bool hardwareAccelerated;
-            public string outputDirectory;
-            public string performanceMode;
-            public string subsamplingMode;
-            public string containerFormat;
-            public bool trackMouseClicks;
-        }
-
-        private class ObsSize
-        {
-            public int width;
-            public int height;
-        }
-
-        private class ObsRect : ObsSize
-        {
-            public int x;
-
-            public int y;
-
-            public static implicit operator ObsRect(Rectangle rect) => new ObsRect
-            {
-                x = rect.X,
-                y = rect.Y,
-                width = rect.Width,
-                height = rect.Height
-            };
-
-            public static implicit operator ObsRect(ScreenRect rect) => new ObsRect
-            {
-                x = rect.X,
-                y = rect.Y,
-                width = rect.Width,
-                height = rect.Height
-            };
-        }
-
-        private class Statistics
-        {
-            public double CPU;
-            public double numberDroppedFrames;
-            public double percentageDroppedFrames;
-            public double streamingBandwidth;
-            public double streamingDataOutput;
-            public double recordingBandwidth;
-            public double recordingDataOutput;
-            public double frameRate;
-            public double averageTimeToRenderFrame;
-            public double memoryUsage;
-            public string diskSpaceAvailable;
-        }
-
-        private class ObsStatusResponse
-        {
-            public bool initialized;
-            public bool recording;
-            public uint recordingTime;
-            public Statistics statistics;
         }
     }
 }

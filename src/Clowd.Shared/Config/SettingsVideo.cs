@@ -14,28 +14,27 @@ namespace Clowd.Config
     public enum VideoQuality
     {
         Low = 29,
-        Medium = 24,
-        High = 19,
+        Medium = 23,
+        High = 16,
     }
 
-    public enum VideoPerformance
-    {
-        Slow,
-        Medium,
-        Fast,
-    }
+    // public enum VideoPerformance
+    // {
+    //     Slow,
+    //     Medium,
+    //     Fast,
+    // }
 
-    public enum VideoSubsamplingMode
-    {
-        yuv420,
-        yuv444,
-    }
+    // public enum VideoSubsamplingMode
+    // {
+    //     yuv420,
+    //     yuv444,
+    // }
     
     public enum VideoOutputType
     {
-        MKV,
-        MP4,
-        GIF,
+        MP4 = 1,
+        GIF = 2,
     }
 
     public class SettingsVideo : CategoryBase
@@ -70,22 +69,22 @@ namespace Clowd.Config
             set => Set(ref _quality, value);
         }
 
-        public VideoPerformance Performance
-        {
-            get => _performance;
-            set => Set(ref _performance, value);
-        }
-
-        public VideoSubsamplingMode SubsamplingMode
-        {
-            get => _subsamplingMode;
-            set => Set(ref _subsamplingMode, value);
-        }
+        // public VideoPerformance Performance
+        // {
+        //     get => _performance;
+        //     set => Set(ref _performance, value);
+        // }
+        //
+        // public VideoSubsamplingMode SubsamplingMode
+        // {
+        //     get => _subsamplingMode;
+        //     set => Set(ref _subsamplingMode, value);
+        // }
         
-        public VideoOutputType OutputType
+        public VideoOutputType OutputMode
         {
-            get => _outputType;
-            set => Set(ref _outputType, value);
+            get => _outputMode;
+            set => Set(ref _outputMode, value);
         }
 
         public bool CaptureSpeaker
@@ -135,9 +134,9 @@ namespace Clowd.Config
         private int _maxResolutionWidth;
         private int _maxResolutionHeight;
         private VideoQuality _quality = VideoQuality.Medium;
-        private VideoPerformance _performance = VideoPerformance.Medium;
-        private VideoSubsamplingMode _subsamplingMode = VideoSubsamplingMode.yuv420;
-        private VideoOutputType _outputType = VideoOutputType.MKV;
+        // private VideoPerformance _performance = VideoPerformance.Medium;
+        // private VideoSubsamplingMode _subsamplingMode = VideoSubsamplingMode.yuv420;
+        private VideoOutputType _outputMode = VideoOutputType.MP4;
         private bool _captureSpeaker = false;
         private AudioDeviceInfo _captureSpeakerDevice;
         private bool _captureMicrophone = false;
