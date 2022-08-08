@@ -61,7 +61,7 @@ namespace Clowd.UI
             _btnClowd = new CaptureToolButton
             {
                 Primary = true,
-                Text = "Drag",
+                Text = "Drag Me",
                 IconPath = AppStyles.GetIconElement(ResourceIcon.IconToolNone),
                 IsDragHandle = true,
             };
@@ -148,10 +148,11 @@ namespace Clowd.UI
             _capturer.WriteLogToFile(filename);
             _log.Error("CapturerCriticalError: " + File.ReadAllText(filename));
             File.AppendAllText(filename, Environment.NewLine + Environment.NewLine + e.Error);
-
+            
             if (await NiceDialog.ShowPromptAsync(null,
                     NiceDialogIcon.Error,
-                    "An unexpected error was encountered while trying to start recording. A log file has been created in your video output directory.",
+                    e.Error + Environment.NewLine + "A log file has been created in your video output directory for more information.",
+                    "An unexpected error was encountered while recording.",
                     "Open Error Log"))
             {
                 Process.Start("notepad.exe", filename);
@@ -200,7 +201,7 @@ namespace Clowd.UI
             if (_hasStarted)
                 throw new InvalidOperationException("StartRecording can only be called once");
             
-            _capturer.Initialize(_selection, _settings).ContinueWith(
+            var initTask = _capturer.Initialize(_selection, _settings).ContinueWith(
                 t =>
                 {
                     if (t.Exception != null)
@@ -219,7 +220,12 @@ namespace Clowd.UI
             {
                 BorderWindow.SetText(i.ToString());
                 // labelCountdown.FontSize = 120;
-                // _btnClowd.Text = "REC in " + i.ToString();
+
+                if (initTask.IsCompleted)
+                {
+                    _btnClowd.Text = "REC in " + i.ToString();
+                }
+
                 await Task.Delay(1000);
                 if (_isCancelled)
                     return;
