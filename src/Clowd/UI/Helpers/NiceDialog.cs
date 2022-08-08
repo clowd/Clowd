@@ -44,6 +44,11 @@ namespace Clowd.UI.Helpers
         {
             return ShowDialogAsync(parent, icon, content, icon.ToString(), promptTxt, "Close");
         }
+        
+        public static Task<bool> ShowPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content, string mainInstruction, string promptTxt)
+        {
+            return ShowDialogAsync(parent, icon, content, mainInstruction, promptTxt, "Close");
+        }
 
         public static Task<bool> ShowYesNoPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content)
         {

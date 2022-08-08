@@ -22,6 +22,20 @@ namespace Clowd
         public string Data { get; }
         public bool IsError { get; }
     }
+    
+    public class WatchProcessExitedEventArgs
+    {
+        internal WatchProcessExitedEventArgs(Process process, string name, int exitCode)
+        {
+            Process = process;
+            ProcessName = name;
+            ExitCode = exitCode;
+        }
+
+        public Process Process { get; }
+        public string ProcessName { get; }
+        public int ExitCode { get; }
+    }
 
     public class WatchProcess
     {
@@ -30,7 +44,8 @@ namespace Clowd
         private Dictionary<int, string> _namecache = new Dictionary<int, string>();
 
         public event EventHandler<WatchLogEventArgs> OutputReceived;
-
+        public event EventHandler<WatchProcessExitedEventArgs> ProcessExited;
+        
         public bool IsRunning => !_watcher.HasExited;
 
         public void ForceExit()
@@ -69,6 +84,7 @@ namespace Clowd
             void startlog(Process p)
             {
                 _namecache[p.Id] = p.ProcessName;
+                p.EnableRaisingEvents = true;
 
                 p.OutputDataReceived += (s, e) =>
                 {
@@ -86,6 +102,7 @@ namespace Clowd
                 {
                     var useName = _namecache.TryGetValue(p.Id, out var pname) ? pname : ("pid." + p.Id.ToString());
                     RaiseOutputRecieved(new WatchLogEventArgs(p, useName, $"Process exited - code: {p.ExitCode}", true));
+                    ProcessExited?.Invoke(this, new WatchProcessExitedEventArgs(p, useName, p.ExitCode));
                 };
 
                 p.BeginOutputReadLine();
