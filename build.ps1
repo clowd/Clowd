@@ -90,8 +90,9 @@ if ($mode -eq "compile") {
         Copy-Item "bin" -Destination "$PSScriptRoot\publish\obs-express" -Recurse
     } else {
 
-        $obsUrl = "https://github.com/clowd/obs-express/releases/latest/download/obs-express.zip"
+        $obsUrl = "https://github.com/clowd/obs-express-cpp/releases/latest/download/obs-express.zip"
         $obsLocalPath = "$PSScriptRoot/.cache/obs-express.zip"
+        $obsLocalBinPath = "$PSScriptRoot/.cache/obs-express"
 
         md "$PSScriptRoot/.cache" -Force
 
@@ -105,12 +106,18 @@ if ($mode -eq "compile") {
             } else {
                 Write-Host "obs-express is no longer valid, deleting cache..." -ForegroundColor Magenta
                 Remove-Item $obsLocalPath
+                Remove-Item $obsLocalBinPath -Recurse -ErrorAction Ignore
             }
         }
 
         if (-Not (Test-Path $obsLocalPath)) {
             Write-Host "Downloading obs-express from GitHub" -ForegroundColor Magenta
             Invoke-WebRequest $obsUrl -OutFile $obsLocalPath
+        }
+
+        if (-Not (Test-Path $obsLocalBinPath)) {
+            Write-Host "Extracting obs-express to cache" -ForegroundColor Magenta
+            Expand-Archive $obsLocalPath -DestinationPath $obsLocalBinPath
         }
 
         Write-Host "Extracting obs-express archive to build dir" -ForegroundColor Magenta

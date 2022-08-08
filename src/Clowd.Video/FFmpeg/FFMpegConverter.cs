@@ -52,14 +52,12 @@ namespace Clowd.Video.FFmpeg
         /// <remarks>
         /// FFMpegConverter is NOT thread-safe. Separate instance should be used for each thread.
         /// </remarks>
-        public FFMpegConverter()
+        public FFMpegConverter(string libraryPath)
         {
             this.FFMpegProcessPriority = ProcessPriorityClass.Normal;
             this.LogLevel = "info";
-            this.FFMpegToolPath = AppDomain.CurrentDomain.BaseDirectory;
-            if (string.IsNullOrEmpty(this.FFMpegToolPath))
-                this.FFMpegToolPath = Path.GetDirectoryName(typeof(FFMpegConverter).Assembly.Location);
-            this.FFMpegExeName = "ffmpeg-5.0-lgpl-x64.exe";
+            this.FFMpegToolPath = libraryPath;
+            this.FFMpegExeName = "ffmpeg.exe";
         }
 
         internal string GetFFMpegExePath()

@@ -52,6 +52,15 @@ namespace Clowd
             }
         }
 
+        public void WriteToStdIn(string message)
+        {
+            foreach (var o in _other)
+            {
+                o.StandardInput.WriteLine(message);
+                o.StandardInput.Flush();
+            }
+        }
+
         public WatchProcess(Process watcher, Process[] other)
         {
             this._watcher = watcher;

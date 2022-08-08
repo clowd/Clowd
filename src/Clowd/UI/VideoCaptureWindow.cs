@@ -41,13 +41,17 @@ namespace Clowd.UI
         private UIAudioMonitor _monitor;
         private string _fileName;
         private FloatingButtonWindow _floating;
+        private string _obsBinPath;
 
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
         public VideoCaptureWindow()
         {
             var obsPath = Path.Combine(AppContext.BaseDirectory, "obs-express");
-            _capturer = new ObsCapturer(obsPath);
+            var obs = new ObsCapturer(obsPath);
+            _obsBinPath = obs.ObsBinPath;
+            _capturer = obs;
+            
             _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
             _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
 
@@ -57,7 +61,7 @@ namespace Clowd.UI
             _btnClowd = new CaptureToolButton
             {
                 Primary = true,
-                Text = "LOADING",
+                Text = "Drag",
                 IconPath = AppStyles.GetIconElement(ResourceIcon.IconToolNone),
                 IsDragHandle = true,
             };
@@ -100,9 +104,9 @@ namespace Clowd.UI
             {
                 Text = "Output",
                 Executed = OnChangeOutput,
-                IconPath = _settings.OutputType switch
+                IconPath = _settings.OutputMode switch
                 {
-                    VideoOutputType.MKV => AppStyles.GetIconElement(ResourceIcon.IconVideoMKV),
+                    // VideoOutputType.MKV => AppStyles.GetIconElement(ResourceIcon.IconVideoMKV),
                     VideoOutputType.MP4 => AppStyles.GetIconElement(ResourceIcon.IconVideoMP4),
                     VideoOutputType.GIF => AppStyles.GetIconElement(ResourceIcon.IconVideoGIF),
                     _ => throw new ArgumentOutOfRangeException()
@@ -132,17 +136,6 @@ namespace Clowd.UI
 
             _floating = FloatingButtonWindow.Create(
                 new[] { _btnClowd, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnOutput, _btnSettings, _btnDraw, _btnCancel });
-
-            _capturer.Initialize().ContinueWith(
-                t =>
-                {
-                    if (t.Exception != null)
-                        CapturerCriticalError(this, new VideoCriticalErrorEventArgs(t.Exception.ToString()));
-
-                    if (_btnClowd.Text == "LOADING")
-                        _btnClowd.Text = "READY";
-                },
-                TaskScheduler.FromCurrentSynchronizationContext());
         }
 
         private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
@@ -206,6 +199,15 @@ namespace Clowd.UI
 
             if (_hasStarted)
                 throw new InvalidOperationException("StartRecording can only be called once");
+            
+            _capturer.Initialize(_selection, _settings).ContinueWith(
+                t =>
+                {
+                    if (t.Exception != null)
+                        CapturerCriticalError(this, new VideoCriticalErrorEventArgs(t.Exception.ToString()));
+                    _btnClowd.Text = "READY";
+                },
+                TaskScheduler.FromCurrentSynchronizationContext());
 
             _hasStarted = true;
             _btnStart.IsEnabled = false;
@@ -216,8 +218,8 @@ namespace Clowd.UI
             for (int i = 3; i >= 1; i--)
             {
                 BorderWindow.SetText(i.ToString());
-                //labelCountdown.FontSize = 120;
-                _btnClowd.Text = "REC in " + i.ToString();
+                // labelCountdown.FontSize = 120;
+                // _btnClowd.Text = "REC in " + i.ToString();
                 await Task.Delay(1000);
                 if (_isCancelled)
                     return;
@@ -228,7 +230,7 @@ namespace Clowd.UI
 
             try
             {
-                _fileName = await _capturer.StartAsync(_selection, _settings);
+                _fileName = await _capturer.StartAsync();
                 IsRecording = true;
             }
             catch (Exception ex)
@@ -259,7 +261,7 @@ namespace Clowd.UI
 
             if (wasRecording)
             {
-                if (_settings.OutputType == VideoOutputType.GIF)
+                if (_settings.OutputMode == VideoOutputType.GIF)
                 {
                     _fileName = await EncodeGif(_fileName);
                 }
@@ -275,14 +277,14 @@ namespace Clowd.UI
             }
         }
 
-        private static Task<string> EncodeGif(string filePath)
+        private Task<string> EncodeGif(string filePath)
         {
             return Task.Run(() =>
             {
                 var task = PageManager.Current.Tasks.CreateTask($"Encode GIF ({Path.GetFileName(filePath)})");
                 task.SetStatus("Preparing...");
                 
-                var ffmpeg = new FFMpegConverter();
+                var ffmpeg = new FFMpegConverter(_obsBinPath);
                 ffmpeg.ConvertProgress += (s, e) =>
                 {
                     App.Current.Dispatcher.Invoke(() =>
@@ -304,18 +306,18 @@ namespace Clowd.UI
 
         private void OnChangeOutput(object sender, EventArgs e)
         {
-            switch (_settings.OutputType)
+            switch (_settings.OutputMode)
             {
                 case VideoOutputType.MP4:
-                    _settings.OutputType = VideoOutputType.MKV;
-                    _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoMKV);
-                    break;
-                case VideoOutputType.MKV:
-                    _settings.OutputType = VideoOutputType.GIF;
+                    _settings.OutputMode = VideoOutputType.GIF;
                     _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoGIF);
                     break;
+                // case VideoOutputType.MKV:
+                //     _settings.OutputMode = VideoOutputType.GIF;
+                //     _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoGIF);
+                //     break;
                 default:
-                    _settings.OutputType = VideoOutputType.MP4;
+                    _settings.OutputMode = VideoOutputType.MP4;
                     _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoMP4);
                     break;
             }

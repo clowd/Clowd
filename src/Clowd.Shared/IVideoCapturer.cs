@@ -12,8 +12,8 @@ namespace Clowd
         event EventHandler<VideoStatusEventArgs> StatusReceived;
         string BusyStatus { get; }
         bool IsRecording { get; }
-        Task Initialize();
-        Task<string> StartAsync(ScreenRect captureRect, SettingsVideo settings);
+        Task Initialize(ScreenRect captureRect, SettingsVideo settings);
+        Task<string> StartAsync();
         Task StopAsync();
         void WriteLogToFile(string fileName);
         IAudioLevelListener CreateListener(AudioDeviceInfo device);
@@ -71,13 +71,13 @@ namespace Clowd
 
         public abstract void Dispose();
 
-        public abstract Task<string> StartAsync(ScreenRect captureRect, SettingsVideo settings);
+        public abstract Task<string> StartAsync();
 
         public abstract Task StopAsync();
 
         public abstract void WriteLogToFile(string fileName);
 
-        public virtual Task Initialize() { return Task.CompletedTask; }
+        public abstract Task Initialize(ScreenRect captureRect, SettingsVideo settings);
 
         public abstract IAudioLevelListener CreateListener(AudioDeviceInfo device);
     }
