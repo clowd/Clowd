@@ -46,7 +46,7 @@ namespace Clowd.Video
                 while (!_exitRequested)
                 {
                     Thread.Sleep(1);
-                    double level = device.AudioMeterInformation.MasterPeakValue * 100;
+                    double level = device.AudioMeterInformation.MasterPeakValue;
 
                     // convert to Db and UI scale (0-100)
                     if (level > 0 && level <= 1)
