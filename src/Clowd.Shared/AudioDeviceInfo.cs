@@ -10,6 +10,7 @@ namespace Clowd
 
     public interface IAudioLevelListener : IDisposable
     {
-        double GetPeakLevel();
+        AudioDeviceInfo Device { get; }
+        double PeakLevel { get; }
     }
 }

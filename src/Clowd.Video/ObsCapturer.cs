@@ -225,22 +225,6 @@ namespace Clowd.Video
             return _signalStop.Task;
         }
 
-        public override IAudioLevelListener CreateListener(AudioDeviceInfo device)
-        {
-            return new DummyListener();
-        }
-
-        class DummyListener : IAudioLevelListener
-        {
-            public void Dispose()
-            { }
-
-            public double GetPeakLevel()
-            {
-                return 0;
-            }
-        }
-
         public override void Dispose()
         {
             lock (_lock)
