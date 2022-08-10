@@ -16,26 +16,46 @@ namespace Clowd.Video
 {
     public class ObsCapturer : VideoCapturerBase
     {
-        public string LibraryPath => _libraryPath;
-        public string ObsBinPath => Path.Combine(LibraryPath, "bin", "64bit");
-
-        WatchProcess _watch;
-
-        private CancellationTokenSource _source;
-        private CancellationToken _token;
-        private StringBuilder _output = new StringBuilder();
+        public static string LibraryDirPath { get; } = Path.Combine(AppContext.BaseDirectory, "obs-express");
+        public static string BinDirPath => Path.Combine(LibraryDirPath, "bin", "64bit");
+        public static string ObsExpressExePath => Path.Combine(BinDirPath, "obs-express.exe");
+        public static string FFmpegExePath => Path.Combine(BinDirPath, "ffmpeg.exe");
 
         private static ObsCapturer _instance;
         private static readonly object _lock = new object();
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
-        private string _libraryPath;
+
+        private WatchProcess _watch;
+        private StringBuilder _output = new();
         private string _filePath;
+        private TaskCompletionSource<bool> _signalInit = new();
+        private TaskCompletionSource<string> _signalStart = new();
+        private TaskCompletionSource<bool> _signalStop = new();
 
-        TaskCompletionSource<bool> _signalInit = new();
-        TaskCompletionSource<string> _signalStart = new();
-        TaskCompletionSource<bool> _signalStop = new();
+        static ObsCapturer()
+        {
+#if DEBUG
+            // if obs is missing, try to find obs in build cache, only if we're debugging.
+            if (!Directory.Exists(LibraryDirPath))
+            {
+                DirectoryInfo di = new DirectoryInfo(AppContext.BaseDirectory);
+                do
+                {
+                    var dir = Path.Combine(di.FullName, ".cache", "obs-express");
+                    var exe = Path.Combine(dir, "bin", "64bit", "obs-express.exe");
+                    if (File.Exists(exe))
+                    {
+                        LibraryDirPath = dir;
+                        break;
+                    }
 
-        public ObsCapturer(string libraryPath)
+                    di = di.Parent;
+                } while (di != null);
+            }
+#endif
+        }
+
+        public ObsCapturer()
         {
             lock (_lock)
             {
@@ -45,42 +65,17 @@ namespace Clowd.Video
                 _instance = this;
             }
 
-            _source = new CancellationTokenSource();
-            _token = _source.Token;
-            _libraryPath = libraryPath;
+            if (!Directory.Exists(LibraryDirPath))
+                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + LibraryDirPath);
 
-#if DEBUG
-            // if obs is missing, try to find obs in build cache, only if we're debugging.
-            if (!Directory.Exists(_libraryPath))
-            {
-                DirectoryInfo di = new DirectoryInfo(AppContext.BaseDirectory);
-                do
-                {
-                    var dir = Path.Combine(di.FullName, ".cache", "obs-express");
-                    var exe = Path.Combine(dir, "bin", "64bit", "obs-express.exe");
-                    if (File.Exists(exe))
-                    {
-                        _libraryPath = dir;
-                        break;
-                    }
-
-                    di = di.Parent;
-                } while (di != null);
-            }
-#endif
-            
-            if (!Directory.Exists(_libraryPath))
-                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
+            if (!File.Exists(ObsExpressExePath))
+                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + ObsExpressExePath);
         }
 
         public override Task Initialize(ScreenRect captureRect, SettingsVideo settings)
         {
             try
             {
-                var obsExpressPath = Path.Combine(ObsBinPath, "obs-express.exe");
-                if (!File.Exists(obsExpressPath))
-                    throw new ArgumentException("OBS does not exist or is corrupt at the path: " + _libraryPath);
-
                 if (String.IsNullOrWhiteSpace(settings.OutputDirectory))
                     throw new Exception("OutputDirectory must not be null");
 
@@ -132,9 +127,9 @@ namespace Clowd.Video
 
                 var obsexpress = new ProcessStartInfo()
                 {
-                    FileName = obsExpressPath,
+                    FileName = ObsExpressExePath,
                     UseShellExecute = false,
-                    WorkingDirectory = ObsBinPath,
+                    WorkingDirectory = BinDirPath,
                     WindowStyle = ProcessWindowStyle.Hidden,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -252,7 +247,8 @@ namespace Clowd.Video
             {
                 _instance = null;
                 _log.Info("Disposing ObsCapturer Instance");
-                _source?.Cancel();
+                try { _watch?.WriteToStdIn("q"); }
+                catch { ; }
                 _watch?.WaitTimeoutThenForceExit(5000);
             }
         }

@@ -41,17 +41,12 @@ namespace Clowd.UI
         private UIAudioMonitor _monitor;
         private string _fileName;
         private FloatingButtonWindow _floating;
-        private string _obsBinPath;
 
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
         public VideoCaptureWindow()
         {
-            var obsPath = Path.Combine(AppContext.BaseDirectory, "obs-express");
-            var obs = new ObsCapturer(obsPath);
-            _obsBinPath = obs.ObsBinPath;
-            _capturer = obs;
-            
+            _capturer = new ObsCapturer();
             _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
             _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
 
@@ -294,7 +289,7 @@ namespace Clowd.UI
                 var task = PageManager.Current.Tasks.CreateTask($"Encode GIF ({Path.GetFileName(filePath)})");
                 task.SetStatus("Preparing...");
                 
-                var ffmpeg = new FFMpegConverter(_obsBinPath);
+                var ffmpeg = new FFMpegConverter();
                 ffmpeg.ConvertProgress += (s, e) =>
                 {
                     App.Current.Dispatcher.Invoke(() =>
