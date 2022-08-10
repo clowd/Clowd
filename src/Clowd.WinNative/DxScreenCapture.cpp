@@ -1330,6 +1330,13 @@ LRESULT DxScreenCapture::WndProcImpl(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 GetSelectionRect(sel);
                 _options.lpfnVideoCapture(sel);
                 Close();
+
+                if (data.windowSelection.window != nullptr)
+                {
+                    // if you have selected a window to record a video of, you probably do not want
+                    // it to be covered by other windows.
+                    SetForegroundWindow(data.windowSelection.window->hWnd);
+                }
             }
             break;
         }
