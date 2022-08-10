@@ -103,14 +103,21 @@ namespace Clowd.Video
                     "--output", _filePath,
                 };
 
-                if (settings.TrackMouseClicks)
+                if (settings.ShowClickAnimation)
                 {
                     arguments.Add("--trackerEnabled");
+                    arguments.Add("--trackerColor");
+                    arguments.Add($"{settings.ClickAnimationColor.R},{settings.ClickAnimationColor.G},{settings.ClickAnimationColor.B}");
                 }
 
                 if (settings.HardwareAccelerated)
                 {
                     arguments.Add("--hwAccel");
+                }
+
+                if (!settings.ShowMouseCursor)
+                {
+                    arguments.Add("--noCursor");
                 }
 
                 if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice?.DeviceId != null)
@@ -165,6 +172,9 @@ namespace Clowd.Video
 
         private void OutputReceived(object sender, WatchLogEventArgs e)
         {
+            if (String.IsNullOrWhiteSpace(e.Data))
+                return;
+
             try
             {
                 bool shouldLog = true;
@@ -233,6 +243,7 @@ namespace Clowd.Video
                 _log.Info("Disposing ObsCapturer Instance");
                 try { _watch?.WriteToStdIn("q"); }
                 catch { ; }
+
                 _watch?.WaitTimeoutThenForceExit(5000);
             }
         }
