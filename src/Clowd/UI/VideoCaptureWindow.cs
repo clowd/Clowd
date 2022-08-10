@@ -257,6 +257,10 @@ namespace Clowd.UI
 
             var wasRecording = IsRecording;
             _isCancelled = true;
+            
+            BorderWindow.Hide();
+            _floating.Hide();
+            
             if (IsRecording)
             {
                 IsRecording = false;
