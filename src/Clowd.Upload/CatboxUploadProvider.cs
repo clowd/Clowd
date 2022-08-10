@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -68,9 +69,13 @@ namespace Clowd.Upload
         public enum CatBoxExpiry
         {
             Never = 0,
+            [Description("1 hour")]
             _1h = 1,
+            [Description("12 hours")]
             _12h = 2,
+            [Description("1 day")]
             _24h = 3,
+            [Description("3 days")]
             _72h = 4,
         }
     }

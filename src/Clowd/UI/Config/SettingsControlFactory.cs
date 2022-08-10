@@ -147,7 +147,7 @@ namespace Clowd.UI.Config
                 return SimpleControlBinding(new CheckBox(), pd, CheckBox.IsCheckedProperty);
 
             if (pd.PropertyType.IsEnum)
-                return ComboSelectBinding(() => Enum.GetValues(type), pd, null, false);
+                return ComboSelectBinding(() => Enum.GetValues(type), pd, new ComboDisplayEnumValueTemplateSelector(pd.PropertyType), false);
 
             if ((int)tcode >= (int)TypeCode.Char && (int)tcode <= (int)TypeCode.Decimal)
             {
@@ -161,9 +161,12 @@ namespace Clowd.UI.Config
             {
                 var border = new Border() { BorderBrush = Brushes.White, BorderThickness = new Thickness(1) };
                 border.SetBinding(Border.BackgroundProperty, CreateBinding(pd.Name, converter: new ColorToBrushConverter()));
-                
-                border = new Border() { BorderBrush = Brushes.Black, BorderThickness = new Thickness(1), Child = border, 
-                     Background = AppStyles.CheckerboardBrushSmall, Width = 24, Height = 24 };
+
+                border = new Border()
+                {
+                    BorderBrush = Brushes.Black, BorderThickness = new Thickness(1), Child = border,
+                    Background = AppStyles.CheckerboardBrushSmall, Width = 24, Height = 24
+                };
 
                 var label = new TextBlock() { VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.White };
                 label.SetBinding(TextBlock.TextProperty, CreateBinding(pd.Name, converter: new ColorToHexConverter()));
@@ -317,7 +320,35 @@ namespace Clowd.UI.Config
             return control;
         }
 
-        class ComboDisplayTemplateSelector<T> : DataTemplateSelector
+        class ComboDisplayEnumValueTemplateSelector : ComboDisplayTemplateSelector
+        {
+            private readonly Type _enumType;
+
+            public ComboDisplayEnumValueTemplateSelector(Type enumType)
+            {
+                _enumType = enumType;
+                if (!enumType.IsEnum)
+                    throw new InvalidOperationException("enumType must be an enum");
+            }
+
+            protected override string ConvertValueToDisplayString(object arg)
+            {
+                try
+                {
+                    var valueAttributes = arg.GetType().GetField(arg.ToString()).GetCustomAttributes(false);
+                    var desc = valueAttributes.FirstOrDefault(a => a is DescriptionAttribute) as DescriptionAttribute;
+                    if (desc != null)
+                    {
+                        return desc.Description;
+                    }
+                }
+                catch { ; }
+
+                return arg.ToString();
+            }
+        }
+
+        class ComboDisplayTemplateSelector<T> : ComboDisplayTemplateSelector
         {
             private readonly Func<T, string> _factory;
 
@@ -326,37 +357,41 @@ namespace Clowd.UI.Config
                 _factory = factory;
             }
 
+            protected override string ConvertValueToDisplayString(object arg)
+            {
+                return _factory((T)arg);
+            }
+        }
+
+        abstract class ComboDisplayTemplateSelector : DataTemplateSelector
+        {
             public override DataTemplate SelectTemplate(object item, DependencyObject container)
             {
                 var template = new DataTemplate();
                 FrameworkElementFactory text = new FrameworkElementFactory(typeof(TextBlock));
                 Binding binding = new Binding();
                 binding.Source = item;
-                binding.Converter = new ComboDisplayConverter<T>(_factory);
+                binding.Converter = new ComboDisplayConverter(ConvertValueToDisplayString);
                 text.SetBinding(TextBlock.TextProperty, binding);
                 template.VisualTree = text;
                 template.Seal();
                 return template;
             }
-        }
 
-        class ComboDisplayConverter<T> : IValueConverter
-        {
-            private readonly Func<T, string> _factory;
+            protected abstract string ConvertValueToDisplayString(object arg);
 
-            public ComboDisplayConverter(Func<T, string> factory)
+            class ComboDisplayConverter : IValueConverter
             {
-                _factory = factory;
-            }
+                private readonly Func<object, string> _factory;
 
-            public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-            {
-                return _factory((T)value);
-            }
+                public ComboDisplayConverter(Func<object, string> factory)
+                {
+                    _factory = factory;
+                }
 
-            public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            {
-                throw new NotSupportedException();
+                public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => _factory(value);
+
+                public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
             }
         }
 
