@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NLog;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd.Video
 {
@@ -156,6 +157,7 @@ namespace Clowd.Video
             catch (Exception ex)
             {
                 _signalInit.SetException(ex);
+                _log.Error(ex);
             }
 
             return _signalInit.Task;
@@ -163,17 +165,23 @@ namespace Clowd.Video
 
         private void ProcessExited(object sender, WatchProcessExitedEventArgs e)
         {
-            if (_signalStop.Task.IsCompleted)
+            if (!e.ProcessName.EqualsIgnoreCase("obs-express"))
                 return;
 
-            // if the process exits before the stopped_recording event there is something wrong.
-            OnCriticalError("The recording process has exited unexpectedly.");
-            _signalStop.SetResult(false);
+            lock (_signalStop)
+            {
+                if (_signalStop.Task.IsCompleted)
+                    return;
+
+                // if the process exits before the stopped_recording event there is something wrong.
+                OnCriticalError("The recording process has exited unexpectedly.");
+                _signalStop.SetResult(false);
+            }
         }
 
         private void OutputReceived(object sender, WatchLogEventArgs e)
         {
-            if (String.IsNullOrWhiteSpace(e.Data))
+            if (!e.ProcessName.EqualsIgnoreCase("obs-express"))
                 return;
 
             try
@@ -200,7 +208,9 @@ namespace Clowd.Video
                             _signalStart.SetResult(_filePath);
                             break;
                         case "stopped_recording":
-                            _signalStop.SetResult(true);
+                            lock (_signalStop)
+                                _signalStop.SetResult(true);
+
                             int code = Convert.ToInt32(jobj["code"]);
                             string message = jobj["message"]?.ToString() ?? "";
                             string error = jobj["error"]?.ToString() ?? "";
