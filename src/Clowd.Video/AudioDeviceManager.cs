@@ -2,6 +2,9 @@
 using NAudio.Wave;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Threading;
+using NLog;
 using RT.Util.ExtensionMethods;
 
 namespace Clowd.Video
@@ -75,6 +78,25 @@ namespace Clowd.Video
             return dev.FriendlyName;
         }
 
+        public static IAudioLevelListener GetAudioListener(AudioDeviceInfo info)
+        {
+            return new NAudioLevelListener(info);
+        }
+
+        internal static MMDevice GetDevice(AudioDeviceInfo info)
+        {
+            if (info.DeviceId.EqualsIgnoreCase(DEVICE_DEFAULT))
+            {
+                if (info.DeviceType.EqualsIgnoreCase(TYPE_SPEAKER))
+                    return WasapiLoopbackCapture.GetDefaultLoopbackCaptureDevice();
+                if (info.DeviceType.EqualsIgnoreCase(TYPE_MICROPHONE))
+                    return WasapiCapture.GetDefaultCaptureDevice();
+            }
+
+            using var enumerator = new MMDeviceEnumerator();
+            return enumerator.GetDevice(info.DeviceId);
+        }
+        
         private static IEnumerable<AudioDeviceInfo> GetDevices(DataFlow flow, string type)
         {
             using (MMDeviceEnumerator enumerator = new MMDeviceEnumerator())

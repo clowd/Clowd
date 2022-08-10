@@ -16,7 +16,6 @@ namespace Clowd
         Task<string> StartAsync();
         Task StopAsync();
         void WriteLogToFile(string fileName);
-        IAudioLevelListener CreateListener(AudioDeviceInfo device);
     }
 
     public abstract class VideoCapturerBase : IVideoCapturer
@@ -78,8 +77,6 @@ namespace Clowd
         public abstract void WriteLogToFile(string fileName);
 
         public abstract Task Initialize(ScreenRect captureRect, SettingsVideo settings);
-
-        public abstract IAudioLevelListener CreateListener(AudioDeviceInfo device);
     }
 
     public class VideoCriticalErrorEventArgs : EventArgs

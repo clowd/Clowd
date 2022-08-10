@@ -87,6 +87,7 @@ namespace Clowd.Config
             set => Set(ref _outputMode, value);
         }
 
+        [Browsable(false)]
         public bool CaptureSpeaker
         {
             get => _captureSpeaker;
@@ -99,6 +100,7 @@ namespace Clowd.Config
             set => Set(ref _captureSpeakerDevice, value);
         }
 
+        [Browsable(false)]
         public bool CaptureMicrophone
         {
             get => _captureMicrophone;

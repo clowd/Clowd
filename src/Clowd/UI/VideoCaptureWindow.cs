@@ -1,8 +1,11 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
@@ -37,10 +40,12 @@ namespace Clowd.UI
 
         private ScreenRect _selection;
         private IVideoCapturer _capturer;
-        private static SettingsVideo _settings => SettingsRoot.Current.Video;
-        private UIAudioMonitor _monitor;
+        private SettingsVideo _settings = SettingsRoot.Current.Video;
         private string _fileName;
         private FloatingButtonWindow _floating;
+
+        private IAudioLevelListener _speakerLevel;
+        private IAudioLevelListener _microphoneLevel;
 
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
@@ -86,6 +91,9 @@ namespace Clowd.UI
                 Executed = OnMicrophoneToggle,
                 Text = "Mic",
             };
+            _btnMicrophone.SetBinding(
+                CaptureToolButton.ShowAlternateIconProperty,
+                new Binding(nameof(SettingsVideo.CaptureMicrophone)) { Source = _settings, Mode = BindingMode.OneWay });
 
             _btnSpeaker = new CaptureToolButton
             {
@@ -94,6 +102,9 @@ namespace Clowd.UI
                 Executed = OnSpeakerToggle,
                 Text = "Spk",
             };
+            _btnSpeaker.SetBinding(
+                CaptureToolButton.ShowAlternateIconProperty,
+                new Binding(nameof(SettingsVideo.CaptureSpeaker)) { Source = _settings, Mode = BindingMode.OneWay });
 
             _btnOutput = new CaptureToolButton
             {
@@ -107,7 +118,7 @@ namespace Clowd.UI
                     _ => throw new ArgumentOutOfRangeException()
                 },
             };
-            
+
             _btnSettings = new CaptureToolButton
             {
                 Text = "Settings",
@@ -131,6 +142,8 @@ namespace Clowd.UI
 
             _floating = FloatingButtonWindow.Create(
                 new[] { _btnClowd, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnOutput, _btnSettings, _btnDraw, _btnCancel });
+
+            _settings.PropertyChanged += SettingChanged;
         }
 
         private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
@@ -143,7 +156,7 @@ namespace Clowd.UI
             _capturer.WriteLogToFile(filename);
             _log.Error("CapturerCriticalError: " + File.ReadAllText(filename));
             File.AppendAllText(filename, Environment.NewLine + Environment.NewLine + e.Error);
-            
+
             if (await NiceDialog.ShowPromptAsync(null,
                     NiceDialogIcon.Error,
                     e.Error + Environment.NewLine + "A log file has been created in your video output directory for more information.",
@@ -174,15 +187,8 @@ namespace Clowd.UI
             _opened = true;
             _selection = captureArea;
 
-            var wpfclr = AppStyles.AccentColor;
-
-            _monitor = new UIAudioMonitor(_capturer, _settings, 20);
-            _btnMicrophone.Overlay = _monitor.GetMicrophoneVisual();
-            _btnMicrophone.SetBinding(CaptureToolButton.ShowAlternateIconProperty, _monitor.GetMicrophoneEnabledBinding());
-            _btnSpeaker.Overlay = _monitor.GetSpeakerVisual();
-            _btnSpeaker.SetBinding(CaptureToolButton.ShowAlternateIconProperty, _monitor.GetSpeakerEnabledBinding());
-
-            BorderWindow.Show(wpfclr, captureArea);
+            RefreshListeners();
+            BorderWindow.Show(AppStyles.AccentColor, captureArea);
             BorderWindow.SetText("Press Start");
 
             _floating.ShowPanel(captureArea);
@@ -195,7 +201,7 @@ namespace Clowd.UI
 
             if (_hasStarted)
                 throw new InvalidOperationException("StartRecording can only be called once");
-            
+
             var initTask = _capturer.Initialize(_selection, _settings).ContinueWith(
                 t =>
                 {
@@ -214,12 +220,9 @@ namespace Clowd.UI
             for (int i = 3; i >= 1; i--)
             {
                 BorderWindow.SetText(i.ToString());
-                // labelCountdown.FontSize = 120;
 
                 if (initTask.IsCompleted)
-                {
                     _btnClowd.Text = "REC in " + i.ToString();
-                }
 
                 await Task.Delay(1000);
                 if (_isCancelled)
@@ -252,10 +255,10 @@ namespace Clowd.UI
 
             var wasRecording = IsRecording;
             _isCancelled = true;
-            
+
             BorderWindow.Hide();
             _floating.Hide();
-            
+
             if (IsRecording)
             {
                 IsRecording = false;
@@ -282,13 +285,65 @@ namespace Clowd.UI
             }
         }
 
+        private void SettingChanged(object sender, PropertyChangedEventArgs e)
+        {
+            RefreshListeners();
+        }
+
+        private void RefreshListeners()
+        {
+            if (_disposed) return;
+
+            if (_settings.CaptureMicrophoneDevice == null || !_settings.CaptureMicrophone)
+            {
+                _microphoneLevel?.Dispose();
+                _microphoneLevel = null;
+            }
+            else if (_settings.CaptureMicrophoneDevice != _microphoneLevel?.Device)
+            {
+                _microphoneLevel?.Dispose();
+                _microphoneLevel = AudioDeviceManager.GetAudioListener(_settings.CaptureMicrophoneDevice);
+                _btnMicrophone.Overlay = GetLevelVisual(_microphoneLevel, nameof(_settings.CaptureMicrophone));
+            }
+
+            if (_settings.CaptureSpeakerDevice == null || !_settings.CaptureSpeaker)
+            {
+                _speakerLevel?.Dispose();
+                _speakerLevel = null;
+            }
+            else if (_settings.CaptureSpeakerDevice != _speakerLevel?.Device)
+            {
+                _speakerLevel?.Dispose();
+                _speakerLevel = AudioDeviceManager.GetAudioListener(_settings.CaptureSpeakerDevice);
+                _btnSpeaker.Overlay = GetLevelVisual(_speakerLevel, nameof(_settings.CaptureSpeaker));
+            }
+        }
+
+        private ProgressBar GetLevelVisual(IAudioLevelListener listener, string enabledPath)
+        {
+            var prog = new ProgressBar { Style = AppStyles.AudioLevelProgressBarStyle };
+
+            var valueBinding = new Binding(nameof(IAudioLevelListener.PeakLevel));
+            valueBinding.Source = listener;
+            valueBinding.Mode = BindingMode.OneWay;
+            prog.SetBinding(ProgressBar.ValueProperty, valueBinding);
+
+            var visibilityBinding = new Binding(enabledPath);
+            visibilityBinding.Source = _settings;
+            visibilityBinding.Mode = BindingMode.OneWay;
+            visibilityBinding.Converter = new Converters.BoolToVisibilityConverter2();
+            prog.SetBinding(ProgressBar.VisibilityProperty, visibilityBinding);
+
+            return prog;
+        }
+
         private Task<string> EncodeGif(string filePath)
         {
             return Task.Run(() =>
             {
                 var task = PageManager.Current.Tasks.CreateTask($"Encode GIF ({Path.GetFileName(filePath)})");
                 task.SetStatus("Preparing...");
-                
+
                 var ffmpeg = new FFMpegConverter();
                 ffmpeg.ConvertProgress += (s, e) =>
                 {
@@ -297,13 +352,13 @@ namespace Clowd.UI
                         task.SetProgress((int)e.Processed.TotalSeconds, (int)e.TotalDuration.TotalSeconds, false);
                     });
                 };
-                
+
                 task.Show();
 
                 // ffmpeg -ss 30 -t 3 -i input.mp4 -vf "fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 output.gif
                 var gifPath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath) + ".gif");
                 ffmpeg.Invoke($"-i \"{filePath}\" -vf \"fps=15\" \"{gifPath}\"");
-                
+
                 task.Hide();
                 return gifPath;
             });
@@ -330,12 +385,12 @@ namespace Clowd.UI
 
         private void OnSpeakerToggle(object sender, EventArgs e)
         {
-            _monitor.SpeakerEnabled = !_monitor.SpeakerEnabled;
+            _settings.CaptureSpeaker = !_settings.CaptureSpeaker;
         }
 
         private void OnMicrophoneToggle(object sender, EventArgs e)
         {
-            _monitor.MicrophoneEnabled = !_monitor.MicrophoneEnabled;
+            _settings.CaptureMicrophone = !_settings.CaptureMicrophone;
         }
 
         private void OnSettings(object sender, EventArgs e)
@@ -370,11 +425,14 @@ namespace Clowd.UI
         {
             if (_disposed)
                 return;
+
             _disposed = true;
+            _settings.PropertyChanged -= SettingChanged;
             BorderWindow.Hide();
+            _speakerLevel?.Dispose();
+            _microphoneLevel?.Dispose();
             _capturer?.Dispose();
             _floating.Close();
-            _monitor.Dispose();
             Closed?.Invoke(this, new EventArgs());
         }
     }
