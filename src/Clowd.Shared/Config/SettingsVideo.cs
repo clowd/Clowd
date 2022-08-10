@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -13,8 +13,11 @@ namespace Clowd.Config
 {
     public enum VideoQuality
     {
+        [Description("Low (smaller files)")]
         Low = 29,
+        [Description("Medium (balanced)")]
         Medium = 23,
+        [Description("High (larger files)")]
         High = 16,
     }
 
