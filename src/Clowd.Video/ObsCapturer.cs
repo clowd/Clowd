@@ -253,7 +253,7 @@ namespace Clowd.Video
                 _instance = null;
                 _log.Info("Disposing ObsCapturer Instance");
                 _source?.Cancel();
-                _watch?.ForceExit();
+                _watch?.WaitTimeoutThenForceExit(5000);
             }
         }
 

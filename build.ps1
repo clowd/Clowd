@@ -90,7 +90,7 @@ if ($mode -eq "compile") {
         Copy-Item "bin" -Destination "$PSScriptRoot\publish\obs-express" -Recurse
     } else {
 
-        $obsUrl = "https://github.com/clowd/obs-express-cpp/releases/latest/download/obs-express.zip"
+        $obsUrl = "https://github.com/clowd/obs-express/releases/latest/download/obs-express.zip"
         $obsLocalPath = "$PSScriptRoot/.cache/obs-express.zip"
         $obsLocalBinPath = "$PSScriptRoot/.cache/obs-express"
 
