@@ -1,13 +1,6 @@
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.ComponentModel;
-using System.Linq;
-using System.Reflection;
-using System.Windows;
-using System.Windows.Input;
 using System.Windows.Media;
-using RT.Serialization;
-using RT.Util;
 
 namespace Clowd.Config
 {
@@ -33,7 +26,7 @@ namespace Clowd.Config
     //     yuv420,
     //     yuv444,
     // }
-    
+
     public enum VideoOutputType
     {
         MP4 = 1,
@@ -83,7 +76,7 @@ namespace Clowd.Config
         //     get => _subsamplingMode;
         //     set => Set(ref _subsamplingMode, value);
         // }
-        
+
         public VideoOutputType OutputMode
         {
             get => _outputMode;
@@ -122,10 +115,22 @@ namespace Clowd.Config
             set => Set(ref _hardwareAccelerated, value);
         }
 
-        public bool TrackMouseClicks
+        public bool ShowMouseCursor
         {
-            get => _trackMouseClicks;
-            set => Set(ref _trackMouseClicks, value);
+            get => _showMouseCursor;
+            set => Set(ref _showMouseCursor, value);
+        }
+
+        public bool ShowClickAnimation
+        {
+            get => _showClickAnimation;
+            set => Set(ref _showClickAnimation, value);
+        }
+
+        public Color ClickAnimationColor
+        {
+            get => _clickAnimationColor;
+            set => Set(ref _clickAnimationColor, value);
         }
 
         public bool OpenFinishedInExplorer
@@ -147,7 +152,9 @@ namespace Clowd.Config
         private bool _captureMicrophone = false;
         private AudioDeviceInfo _captureMicrophoneDevice;
         private bool _hardwareAccelerated = true;
-        private bool _trackMouseClicks = true;
+        private bool _showMouseCursor = true;
+        private bool _showClickAnimation = true;
+        private Color _clickAnimationColor = Colors.Red;
         private bool _openFinishedInExplorer = true;
     }
 }
