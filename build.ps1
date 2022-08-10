@@ -67,7 +67,7 @@ if ($mode -eq "compile") {
 
     # publish clowd main project
     Write-Host "Build Clowd.csproj" -ForegroundColor Magenta
-    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --self-contained -o "$PSScriptRoot\publish"
+    dotnet publish "$PSScriptRoot\src\Clowd\Clowd.csproj" -c Release -r win-x64 --no-self-contained -o "$PSScriptRoot\publish"
 
 
     # build clowd native and copy to publish directory
@@ -146,6 +146,7 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
     # releasify
     Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
     csq pack `
+    -f net6 `
     -r "$PSScriptRoot\releases" `
     -i="$PSScriptRoot\artwork\default-setup.ico" `
     --appIcon="$PSScriptRoot\artwork\default.ico" `
