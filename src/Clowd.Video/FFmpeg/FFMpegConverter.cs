@@ -52,12 +52,12 @@ namespace Clowd.Video.FFmpeg
         /// <remarks>
         /// FFMpegConverter is NOT thread-safe. Separate instance should be used for each thread.
         /// </remarks>
-        public FFMpegConverter(string libraryPath)
+        public FFMpegConverter()
         {
             this.FFMpegProcessPriority = ProcessPriorityClass.Normal;
             this.LogLevel = "info";
-            this.FFMpegToolPath = libraryPath;
-            this.FFMpegExeName = "ffmpeg.exe";
+            this.FFMpegToolPath = ObsCapturer.BinDirPath;
+            this.FFMpegExeName = ObsCapturer.FFmpegExePath;
         }
 
         internal string GetFFMpegExePath()
