@@ -168,6 +168,7 @@ namespace Clowd.Video
 
             // if the process exits before the stopped_recording event there is something wrong.
             OnCriticalError("The recording process has exited unexpectedly.");
+            _signalStop.SetResult(false);
         }
 
         private void OutputReceived(object sender, WatchLogEventArgs e)
