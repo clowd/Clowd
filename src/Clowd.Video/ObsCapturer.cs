@@ -66,6 +66,13 @@ namespace Clowd.Video
                 _instance = this;
             }
 
+#if DEBUG
+            // friendly developer message for missing OBS!
+            if (!Directory.Exists(LibraryDirPath))
+                throw new ArgumentException("OBS could not be found. This is a development build, so you (the developer) probably forgot to run the 'build.cmd' " +
+                                            "script at the root of this project to download a pre-compiled version of OBS. Run that script and try again!");
+#endif
+
             if (!Directory.Exists(LibraryDirPath))
                 throw new ArgumentException("OBS does not exist or is corrupt at the path: " + LibraryDirPath);
 
