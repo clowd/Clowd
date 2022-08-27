@@ -233,7 +233,7 @@ namespace Clowd
 
         private async Task SetupMutex(string[] args)
         {
-            _processor = new MutexArgsForwarder(Constants.ClowdMutex);
+            _processor = new MutexArgsForwarder();
             _processor.ArgsReceived += SynchronizationContextEventHandler.CreateDelegate<CommandLineEventArgs>((s, e) =>
             {
                 OnFilesReceived(e.Args);
@@ -259,7 +259,7 @@ namespace Clowd
                     }
                 }
             }
-            catch (HttpRequestException)
+            catch (TimeoutException)
             {
                 // there is an unresponsive clowd process, try to kill it and re-start
                 KillOtherClowdProcess();

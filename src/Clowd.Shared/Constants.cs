@@ -7,9 +7,8 @@ namespace Clowd
     {
         public const string ClowdAppName = "Clowd";
         public const string ClowdExeName = "Clowd.exe";
-        public const string ClowdNamedPipe = "ClowdRunningPipe";
-        public const string ClowdMutex = "ClowdMutex000";
-        public const string DirectShowAppName = "ClowdDirectShow";
+        public const string ClowdNamedPipe = "ClowdNamedPipe:02c1544e-7d60-435a-bce8-f61496bdbabe";
+        public const string ClowdMutex = "ClowdMutex:02c1544e-7d60-435a-bce8-f61496bdbabe";
         public const string ClowdWinNativeLib = "Clowd.WinNative";
         public const string ShortcutName = "Clowd.lnk";
         public const string PublishingCompany = "Caelan Sayler";
