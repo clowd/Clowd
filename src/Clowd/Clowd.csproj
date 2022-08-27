@@ -50,6 +50,8 @@
     <PackageReference Include="Sentry.NLog" Version="3.20.1" />
     <PackageReference Include="ThomasLevesque.WeakEvent" Version="4.1.0" />
     <PackageReference Include="WPF-UI" Version="1.2.7" />
+    <PackageReference Include="PipeMethodCalls" Version="3.2.0" />
+    <PackageReference Include="PipeMethodCalls.NetJson" Version="3.0.0" />
   </ItemGroup>
 
   <!-- uncomment to compile shaders -->
