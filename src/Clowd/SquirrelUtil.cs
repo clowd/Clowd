@@ -193,9 +193,9 @@ namespace Clowd
                 {
                     Description = "Version: " + CurrentVersion + ", no update available";
                 }
-                else if (JustRestarted)
+                else if (JustRestarted && (DateTime.Now - _startTime) < TimeSpan.FromMinutes(30))
                 {
-                    Description = $"Version: {CurrentVersion}, updated {PrettyTime.Format(_startTime)}";
+                    Description = $"Version: {CurrentVersion}, just updated!";
                 }
                 else
                 {
