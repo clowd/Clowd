@@ -63,6 +63,10 @@ namespace Clowd
                 SetupTrayIconAndTheme();
                 WPFUI.Appearance.Theme.Changed += (_, _) => SetupTrayIconAndTheme();
 
+                // update registry if needed
+                SquirrelUtil.SetAutoStart(SettingsRoot.Current.General.RegisterAutoStart);
+                SquirrelUtil.SetExplorerMenu(SettingsRoot.Current.General.RegisterExplorerContextMenu);
+
                 // start receiving command line arguments
                 _processor.Ready();
                 if (SquirrelUtil.IsFirstRun)
