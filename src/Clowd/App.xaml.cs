@@ -63,6 +63,11 @@ namespace Clowd
                 SetupTrayIconAndTheme();
                 WPFUI.Appearance.Theme.Changed += (_, _) => SetupTrayIconAndTheme();
 
+                // fix tooltip render delay
+                ToolTipService.InitialShowDelayProperty
+                    .OverrideMetadata(typeof(FrameworkElement),
+                        new FrameworkPropertyMetadata(300));
+
                 // update registry if needed
                 SquirrelUtil.SetAutoStart(SettingsRoot.Current.General.RegisterAutoStart);
                 SquirrelUtil.SetExplorerMenu(SettingsRoot.Current.General.RegisterExplorerContextMenu);
