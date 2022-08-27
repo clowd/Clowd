@@ -36,7 +36,7 @@ namespace Clowd
         public static bool IsDesignMode => System.ComponentModel.DesignerProperties.GetIsInDesignMode(new DependencyObject());
 
         public static GoogleAnalytics Analytics { get; private set; }
-        
+
         private TaskbarIcon _taskbarIcon;
         private MutexArgsForwarder _processor;
         private ILogger _log;
@@ -71,7 +71,8 @@ namespace Clowd
                 }
                 else
                 {
-                    EditorWindow.ShowAllPreviouslyActiveSessions();
+                    if (SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
+                        EditorWindow.ShowAllPreviouslyActiveSessions();
                     if (SquirrelUtil.JustRestarted)
                         PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
                 }
@@ -400,7 +401,7 @@ namespace Clowd
                     vid.StartRecording();
                 }
             }
-            catch {; } // don't really care if recorder is in a bad state.
+            catch { ; } // don't really care if recorder is in a bad state.
         }
 
         public void StartCapture(ScreenRect region = null)

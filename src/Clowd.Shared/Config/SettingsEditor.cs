@@ -92,6 +92,18 @@ namespace Clowd
 
         public class SettingsEditor : CategoryBase
         {
+            public bool RestoreSessionsOnClowdStart
+            {
+                get => _restoreSessionsOnClowdStart;
+                set => Set(ref _restoreSessionsOnClowdStart, value);
+            }
+
+            public bool RestoreToSameVirtualDesktop
+            {
+                get => _restoreToSameVirtualDesktop;
+                set => Set(ref _restoreToSameVirtualDesktop, value);
+            }
+
             public Color CanvasBackground
             {
                 get => _canvasBackground;
@@ -122,6 +134,8 @@ namespace Clowd
             private int _startupPadding = 30;
             private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
             private AutoDictionary<ToolType, SavedToolSettings> _tools = new AutoDictionary<ToolType, SavedToolSettings>();
+            private bool _restoreSessionsOnClowdStart = true;
+            private bool _restoreToSameVirtualDesktop = true;
 
             public SettingsEditor()
             {

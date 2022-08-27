@@ -49,7 +49,7 @@ namespace Clowd.UI
         public static void ShowSession(SessionInfo session)
         {
             App.Analytics.ScreenView("EditorWindow");
-            
+
             // check if there is already a window open with this session in it
             if (session != null)
             {
@@ -78,8 +78,13 @@ namespace Clowd.UI
                 // this session was not closed properly, restore it to its previous location
                 wnd.Topmost = session.OpenEditor.IsTopMost;
                 wnd.ShowActivated = false;
-                if (session.OpenEditor.VirtualDesktopId != null)
-                    wnd.PlatformWindow.MoveToDesktop(session.OpenEditor.VirtualDesktopId.Value);
+                try
+                {
+                    if (session.OpenEditor.VirtualDesktopId != null && SettingsRoot.Current.Editor.RestoreToSameVirtualDesktop)
+                        wnd.PlatformWindow.MoveToDesktop(session.OpenEditor.VirtualDesktopId.Value);
+                }
+                catch { ; }
+
                 wnd.ScreenPosition = session.OpenEditor.Position;
                 wnd.Show();
             }
