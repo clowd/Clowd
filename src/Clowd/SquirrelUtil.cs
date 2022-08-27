@@ -8,19 +8,19 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using Clowd.Config;
 using Clowd.PlatformUtil.Windows;
 using Clowd.UI.Helpers;
 using Clowd.Util;
+using NLog;
 using NuGet.Versioning;
 using Squirrel;
-
-[assembly: AssemblyMetadata("SquirrelAwareVersion", "1")]
 
 namespace Clowd
 {
     internal static class SquirrelUtil
     {
-        public static string CurrentVersion { get; } = ThisAssembly.AssemblyInformationalVersion;
+        public static string CurrentVersion => ThisAssembly.AssemblyInformationalVersion;
         public static bool IsFirstRun { get; private set; }
         public static bool JustRestarted { get; private set; }
         public static bool IsInstalled { get; private set; }
@@ -29,7 +29,11 @@ namespace Clowd
         private static readonly object _lock = new object();
         private static SquirrelUpdateViewModel _model;
         private static InstallerServices _srv;
+        private static DateTime _startTime;
 
+        /// <summary>
+        /// Handles Squirrel startup arguments, configures auto-updates, and returns remaining non-squirrel arguments
+        /// </summary>
         public static string[] Startup(string[] args)
         {
             _srv = new InstallerServices(UniqueAppKey, InstallerLocation.CurrentUser);
@@ -42,9 +46,36 @@ namespace Clowd
                 arguments: args);
 
             JustRestarted = args.Contains("--squirrel-restarted", StringComparer.OrdinalIgnoreCase);
-
-            // if app is still running, filter out squirrel args and continue
+            _model = new SquirrelUpdateViewModel();
+            _startTime = DateTime.Now;
             return args.Where(a => !a.Contains("--squirrel", StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+
+        public static void SetAutoStart(bool isEnabled)
+        {
+            if (isEnabled)
+            {
+                _srv.AutoStartLaunchPath = SquirrelRuntimeInfo.EntryExePath;
+            }
+            else
+            {
+                _srv.AutoStartLaunchPath = null;
+            }
+        }
+
+        public static void SetExplorerMenu(bool isEnabled)
+        {
+            if (isEnabled)
+            {
+                var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
+                _srv.ExplorerAllFilesMenu = menu;
+                _srv.ExplorerDirectoryMenu = menu;
+            }
+            else
+            {
+                _srv.ExplorerDirectoryMenu = null;
+                _srv.ExplorerAllFilesMenu = null;
+            }
         }
 
         public static SquirrelUpdateViewModel GetUpdateViewModel()
@@ -58,80 +89,44 @@ namespace Clowd
         {
             tools.CreateUninstallerRegistryEntry();
             tools.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
-
-            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
-            _srv.ExplorerAllFilesMenu = menu;
-            _srv.ExplorerDirectoryMenu = menu;
-            _srv.AutoStartLaunchPath = SquirrelRuntimeInfo.EntryExePath;
         }
 
         private static void OnUpdate(SemanticVersion ver, IAppTools tools)
         {
             tools.CreateUninstallerRegistryEntry();
             tools.CreateShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
-
-            // only update registry during update if they have not been removed by user
-            var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
-            if (_srv.ExplorerAllFilesMenu != null)
-                _srv.ExplorerAllFilesMenu = menu;
-            if (_srv.ExplorerDirectoryMenu != null)
-                _srv.ExplorerDirectoryMenu = menu;
-            if (_srv.AutoStartLaunchPath != null)
-                _srv.AutoStartLaunchPath = SquirrelRuntimeInfo.EntryExePath;
         }
 
         private static void OnUninstall(SemanticVersion ver, IAppTools tools)
         {
             _srv.RemoveAll();
-
-            //tools.RemoveShortcutForThisExe(ShortcutLocation.StartMenuRoot | ShortcutLocation.Desktop);
-            //tools.RemoveUninstallerRegistryEntry();
         }
 
         private static void OnEveryRun(SemanticVersion ver, IAppTools tools, bool firstRun)
         {
             IsFirstRun = firstRun;
             IsInstalled = tools.CurrentlyInstalledVersion() != null;
-            _model = new SquirrelUpdateViewModel(JustRestarted, IsInstalled);
         }
 
         public class SquirrelUpdateViewModel : SimpleNotifyObject
         {
             public bool ContextMenuRegistered
             {
-                get
-                {
-                    var files = _srv.ExplorerAllFilesMenu;
-                    var directory = _srv.ExplorerDirectoryMenu;
-                    if (files == null || directory == null)
-                        return false;
-                    return true;
-                }
+                get => SettingsRoot.Current.General.RegisterExplorerContextMenu;
                 set
                 {
-                    if (value)
-                    {
-                        var menu = new ExplorerMenuLaunchItem("Upload with Clowd", SquirrelRuntimeInfo.EntryExePath, SquirrelRuntimeInfo.EntryExePath);
-                        _srv.ExplorerAllFilesMenu = menu;
-                        _srv.ExplorerDirectoryMenu = menu;
-                    }
-                    else
-                    {
-                        _srv.ExplorerAllFilesMenu = null;
-                        _srv.ExplorerDirectoryMenu = null;
-                    }
-
-                    OnPropertyChanged();
+                    SettingsRoot.Current.General.RegisterExplorerContextMenu = value;
+                    SetExplorerMenu(value);
                 }
             }
 
             public bool AutoRunRegistered
             {
-                get => _srv.AutoStartLaunchPath != null;
+                get => SettingsRoot.Current.General.RegisterAutoStart;
                 set
                 {
-                    _srv.AutoStartLaunchPath = value ? SquirrelRuntimeInfo.EntryExePath : null;
-                    OnPropertyChanged();
+                    SettingsRoot.Current.General.RegisterAutoStart = value;
+                    SetAutoStart(value);
                 }
             }
 
@@ -165,24 +160,46 @@ namespace Clowd
             private string _clickCommandText;
             private string _description;
             private bool _isWorking;
+            private DateTime? _manuallyCheckedForUpdate;
 
-            public SquirrelUpdateViewModel(bool justUpdated, bool isInstalled)
+            private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
+
+            public SquirrelUpdateViewModel()
             {
                 ClickCommand = new RelayUICommand(OnClick, CanExecute);
-                if (true || isInstalled)
-                {
-                    ClickCommandText = "Check for updates";
-                    Description = "Version: " + ThisAssembly.AssemblyInformationalVersion;
-                    _timer = DisposableTimer.Start(TimeSpan.FromMinutes(30), CheckForUpdateTimer);
+                _timer = DisposableTimer.Start(TimeSpan.FromMinutes(30), CheckForUpdateTimer);
+                UpdateStateText();
+            }
 
-                    if (justUpdated)
-                        Description += ", just updated!";
-                }
-                else
+            private void UpdateStateText()
+            {
+                if (!IsInstalled)
                 {
                     IsWorking = true;
                     ClickCommandText = "Not Available";
                     Description = "Can't check for updates in portable mode";
+                    return;
+                }
+
+                if (_newVersion != null)
+                {
+                    ClickCommandText = "Restart Clowd";
+                    Description = $"Version {_newVersion.Version} is ready to be installed";
+                    return;
+                }
+
+                ClickCommandText = "Check for Updates";
+                if (_manuallyCheckedForUpdate.HasValue && (DateTime.Now - _manuallyCheckedForUpdate.Value) < TimeSpan.FromMinutes(5))
+                {
+                    Description = "Version: " + CurrentVersion + ", no update available";
+                }
+                else if (JustRestarted)
+                {
+                    Description = $"Version: {CurrentVersion}, updated {PrettyTime.Format(_startTime)}";
+                }
+                else
+                {
+                    Description = "Version: " + CurrentVersion;
                 }
             }
 
@@ -194,7 +211,7 @@ namespace Clowd
                     var idleTime = PlatformUtil.Platform.Current.GetSystemIdleTime();
                     if (idleTime > TimeSpan.FromHours(6))
                     {
-                        RestartApp();
+                        RestartApp(false);
                     }
                 }
                 else
@@ -217,32 +234,18 @@ namespace Clowd
 
                     CommandManager.InvalidateRequerySuggested();
                     ClickCommandText = "Checking...";
-                    using var mgr = new UpdateManager(Config.SettingsRoot.Current.General.UpdateReleaseUrl);
+                    using var mgr = new UpdateManager(SettingsRoot.Current.General.UpdateReleaseUrl);
                     _newVersion = await mgr.UpdateApp(OnProgress);
                 }
                 catch (Exception e)
                 {
                     ex = e;
+                    _log.Error(ex, "Failed to check for updates");
                 }
                 finally
                 {
-                    if (_newVersion != null)
-                    {
-                        ClickCommandText = "Restart Clowd";
-                        Description = $"Version {_newVersion.Version} has been downloaded";
-                    }
-                    else
-                    {
-                        ClickCommandText = "Check for Updates";
-                        Description = "Version: " + CurrentVersion + ", no update available";
-                    }
-
-                    if (ex != null)
-                    {
-                        Description = ex.Message;
-                        // log this
-                    }
-
+                    UpdateStateText();
+                    if (ex != null) Description = ex.Message;
                     lock (_lock) IsWorking = false;
                     CommandManager.InvalidateRequerySuggested();
                 }
@@ -253,17 +256,19 @@ namespace Clowd
                 if (_newVersion == null)
                 {
                     // no update downloaded, lets check
+                    _manuallyCheckedForUpdate = DateTime.Now;
                     await CheckForUpdatesUnattended();
                 }
                 else
                 {
-                    RestartApp();
+                    RestartApp(true);
                 }
             }
 
-            private void RestartApp()
+            private void RestartApp(bool notifyUser)
             {
-                UpdateManager.RestartAppWhenExited(arguments: "--squirrel-restarted");
+                var arguments = notifyUser ? "--squirrel-restarted" : "";
+                UpdateManager.RestartAppWhenExited(arguments: arguments);
                 App.Current.ExitApp();
             }
 

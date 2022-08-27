@@ -45,6 +45,18 @@ namespace Clowd.Config
             set => Set(ref _lastSavePath, value);
         }
 
+        public bool RegisterAutoStart
+        {
+            get => _registerAutoStart;
+            set => Set(ref _registerAutoStart, value);
+        }
+
+        public bool RegisterExplorerContextMenu
+        {
+            get => _registerExplorerContextMenu;
+            set => Set(ref _registerExplorerContextMenu, value);
+        }
+
         [DisplayName("Confirm before exit")]
         [Description("If true, Clowd will prompt for confirmation before closing.")]
         public bool ConfirmClose
@@ -58,5 +70,7 @@ namespace Clowd.Config
         private string _lastSavePath;
         private bool _confirmClose = true;
         private bool _experimentalUpdateChannel;
+        private bool _registerExplorerContextMenu = true;
+        private bool _registerAutoStart = true;
     }
 }
