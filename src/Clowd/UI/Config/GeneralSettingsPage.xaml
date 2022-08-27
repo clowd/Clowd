@@ -31,6 +31,7 @@
                 <StackPanel>
                     <TextBlock Style="{StaticResource BodyTextBlockStyle}" Text="{Binding Description}" />
                     <Button
+                        Margin="0,10,0,0"
                         HorizontalAlignment="Left"
                         Command="{Binding ClickCommand}"
                         Content="{Binding ClickCommandText}" />

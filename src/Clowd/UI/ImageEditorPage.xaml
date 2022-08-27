@@ -433,7 +433,7 @@
                     CommandParameter="None"
                     IconPath="{StaticResource IconToolNone}"
                     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=None}"
-                    ToolTip="Pan Tool (D)" />
+                    ToolTip="Pan Tool (D)&#10;&#10;Can also hold SHIFT to enter Pan Mode." />
 
                 <controls:ToolButton
                     Command="{StaticResource Commands.SelectTool}"
