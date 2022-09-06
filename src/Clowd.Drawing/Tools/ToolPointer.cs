@@ -182,26 +182,34 @@ namespace Clowd.Drawing.Tools
                     if (_handleGrabbedObject != null)
                     {
                         // if should maintain aspect ratio of a rectangle
+                        var shiftPressed = Keyboard.IsKeyDown(Key.RightShift) || Keyboard.IsKeyDown(Key.LeftShift);
+                        var lineGraphic = _handleGrabbedObject as GraphicLine;
                         var rotatableGraphic = _handleGrabbedObject as GraphicRectangle;
-                        var rotatableDestRect = GetTransformedRect(rotatableGraphic?.UnrotatedBounds ?? Rect.Empty, _handleGrabbed,
+                        var rotatableDestRect = GetTransformedRect(
+                            rotatableGraphic?.UnrotatedBounds ?? Rect.Empty, 
+                            _handleGrabbed,
                             rotatableGraphic?.UnapplyRotation(point) ?? default(Point));
-                        if ((Keyboard.IsKeyDown(Key.RightShift) || Keyboard.IsKeyDown(Key.LeftShift))
-                            && rotatableGraphic != null && _handleRatio != 0 && !rotatableDestRect.IsEmpty)
+                        if (shiftPressed && rotatableGraphic != null && _handleRatio != 0 && !rotatableDestRect.IsEmpty)
                         {
                             var sourceRatio = _handleRatio;
                             rotatableDestRect = ScaleRectToAspect(rotatableDestRect, sourceRatio);
                             rotatableDestRect = TranslateDestAroundHandle(rotatableGraphic.UnrotatedBounds, rotatableDestRect, _handleGrabbed);
-
                             rotatableGraphic.Left = rotatableDestRect.Left;
                             rotatableGraphic.Bottom = rotatableDestRect.Bottom;
                             rotatableGraphic.Right = rotatableDestRect.Right;
                             rotatableGraphic.Top = rotatableDestRect.Top;
                         }
+                        else if (shiftPressed && lineGraphic != null)
+                        {
+                            var anchor = _handleGrabbed == 1 ? lineGraphic.LineEnd : lineGraphic.LineStart;
+                            point = HelperFunctions.SnapPointToCommonAngle(anchor, point, false);
+                            _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
+                        }
                         else
                         {
                             _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
-                            drawingCanvas.Cursor = _handleGrabbedObject.GetHandleCursor(_handleGrabbed);
                         }
+                        drawingCanvas.Cursor = _handleGrabbedObject.GetHandleCursor(_handleGrabbed);
                     }
 
                     break;
