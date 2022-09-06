@@ -105,7 +105,7 @@ namespace Clowd.Drawing.Tools
 
             if (newGraphic)
             {
-                TextBox.Text = graphicsText.Body = "Start typing your note.\r\nUse Shift+Enter for new lines.";
+                TextBox.Text = graphicsText.Body = "Double-Click to edit notes.\r\nUse Shift+Enter for new lines.";
                 TextBox.SelectAll();
                 OldText = "";
             }
