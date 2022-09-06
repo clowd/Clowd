@@ -96,6 +96,7 @@ namespace Clowd.Drawing
             this.MouseUp += new MouseButtonEventHandler(DrawingCanvas_MouseUp);
             this.MouseWheel += DrawingCanvas_MouseWheel;
             this.KeyDown += new KeyEventHandler(DrawingCanvas_KeyDown);
+            this.KeyUp += new KeyEventHandler(DrawingCanvas_KeyUp);
             this.LostMouseCapture += new MouseEventHandler(DrawingCanvas_LostMouseCapture);
             this.Unloaded += DrawingCanvas_Unloaded;
 
@@ -1157,6 +1158,27 @@ namespace Clowd.Drawing
                 {
                     CancelCurrentOperation();
                     UpdateState();
+                }
+            }
+            
+            // Shift key causes a MouseMove, so any drag-based snapping will be updated
+            if (e.Key == Key.LeftShift || e.Key == Key.RightShift)
+            {
+                if (this.IsMouseCaptured)
+                {
+                    DrawingCanvas_MouseMove(this, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount));
+                }
+            }
+        }
+        
+        void DrawingCanvas_KeyUp(object sender, KeyEventArgs e)
+        {
+            // Shift key causes a MouseMove, so any drag-based snapping will be updated
+            if (e.Key == Key.LeftShift || e.Key == Key.RightShift)
+            {
+                if (this.IsMouseCaptured)
+                {
+                    DrawingCanvas_MouseMove(this, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount));
                 }
             }
         }
