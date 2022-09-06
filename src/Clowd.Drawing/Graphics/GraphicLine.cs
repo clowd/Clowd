@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Numerics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using RT.Util.Geometry;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -56,10 +58,24 @@ namespace Clowd.Drawing.Graphics
 
         internal override void MoveHandleTo(Point point, int handleNumber)
         {
-            if (handleNumber == 1)
-                LineStart = point;
-            else
-                LineEnd = point;
+            var anchor = handleNumber == 1 ? LineEnd : LineStart;
+            var dragging = point;
+
+            if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.LeftShift))
+            {
+                double x1 = anchor.X, y1 = anchor.Y, x2 = dragging.X, y2 = dragging.Y;
+                double xDiff = x2 - x1;
+                double yDiff = y2 - y1;
+                var angle = (Math.Atan2(yDiff, xDiff) * 180.0 / Math.PI + 360) % 360;
+                var closest45 = Math.Round(angle / 45d) * 45d;
+                var vecSnap = new PointD(closest45 / 180 * Math.PI);
+                var snapLen = new PointD(xDiff, yDiff).LengthProjectedOnto(vecSnap);
+                dragging.X = anchor.X + (snapLen * vecSnap).X;
+                dragging.Y = anchor.Y + (snapLen * vecSnap).Y;
+            }
+
+            if (handleNumber == 1) LineStart = dragging;
+            else LineEnd = dragging;
         }
 
         internal override Cursor GetHandleCursor(int handleNumber) => Cursors.SizeAll;
