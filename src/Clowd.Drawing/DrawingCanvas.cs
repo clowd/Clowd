@@ -55,27 +55,32 @@ namespace Clowd.Drawing
             _tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
                 Resource.CursorRectangle,
                 point => new GraphicRectangle(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
-                (point, g) => g.MoveHandleTo(point, 5));
+                (point, g) => g.MoveHandleTo(point, 5),
+                snapMode: DraggableSnapMode.Diagonal);
 
             _tools[(int)ToolType.FilledRectangle] = new ToolDraggable<GraphicFilledRectangle>(
                 Resource.CursorRectangle,
                 point => new GraphicFilledRectangle(ObjectColor, new Rect(point, new Size(1, 1))),
-                (point, g) => g.MoveHandleTo(point, 5));
+                (point, g) => g.MoveHandleTo(point, 5),
+                snapMode: DraggableSnapMode.Diagonal);
 
             _tools[(int)ToolType.Ellipse] = new ToolDraggable<GraphicEllipse>(
                 Resource.CursorEllipse,
                 point => new GraphicEllipse(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
-                (point, g) => g.MoveHandleTo(point, 5));
+                (point, g) => g.MoveHandleTo(point, 5),
+                snapMode: DraggableSnapMode.Diagonal);
 
             _tools[(int)ToolType.Line] = new ToolDraggable<GraphicLine>(
                 Resource.CursorLine,
                 point => new GraphicLine(ObjectColor, LineWidth, point, point),
-                (point, g) => g.MoveHandleTo(point, 2));
+                (point, g) => g.MoveHandleTo(point, 2),
+                snapMode: DraggableSnapMode.All);
 
             _tools[(int)ToolType.Arrow] = new ToolDraggable<GraphicArrow>(
                 Resource.CursorArrow,
                 point => new GraphicArrow(ObjectColor, LineWidth, point, point),
-                (point, g) => g.MoveHandleTo(point, 2));
+                (point, g) => g.MoveHandleTo(point, 2),
+                snapMode: DraggableSnapMode.All);
 
             _tools[(int)ToolType.PolyLine] = new ToolPolyLine();
 
