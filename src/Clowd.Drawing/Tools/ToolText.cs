@@ -64,6 +64,7 @@ namespace Clowd.Drawing.Tools
                         {
                             gr.Left = point.X;
                             gr.Top = point.Y;
+                            gr.Normalize();
                         }
                     }
                 }
