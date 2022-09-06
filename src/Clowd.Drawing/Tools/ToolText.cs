@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Drawing.Graphics;
@@ -98,7 +99,7 @@ namespace Clowd.Drawing.Tools
             TextBox.AcceptsReturn = true;
 
             var finalTransform = new TransformGroup();
-            finalTransform.Children.Add(new TranslateTransform(GraphicText.TextPadding, GraphicText.TextPadding));
+            finalTransform.Children.Add(new TranslateTransform(GraphicText.TextPadding - 2, GraphicText.TextPadding));
             finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2,
                 (graphicsText.Bottom - graphicsText.Top) / 2));
             TextBox.RenderTransform = finalTransform;
@@ -127,11 +128,6 @@ namespace Clowd.Drawing.Tools
             TextBox.PreviewKeyDown += new KeyEventHandler(textBox_PreviewKeyDown);
             TextBox.ContextMenu = null; // see notes in textBox_LostKeyboardFocus
             TextBox.TextChanged += textBox_TextChanged;
-
-            // Initially textbox is set to the same rectangle as graphicsText.
-            // After textbox loading its template is available, and we can
-            // correct textbox position - see details in the textBox_Loaded function.
-            TextBox.Loaded += new RoutedEventHandler(textBox_Loaded);
         }
 
         private void HideTextbox(GraphicBase graphic, DrawingCanvas drawingCanvas)
@@ -194,80 +190,20 @@ namespace Clowd.Drawing.Tools
             drawingCanvas.RefreshBounds();
         }
 
-        private void textBox_Loaded(object sender, RoutedEventArgs e)
-        {
-            double xOffset, yOffset;
-
-            // compute text offset
-
-            // Set hard-coded values initially
-            xOffset = 5;
-            yOffset = 3;
-
-            try
-            {
-                var tb = TextBox;
-                ContentControl cc = (ContentControl)tb.Template.FindName("PART_ContentHost", tb);
-
-                /*
-                // Way to see control template (Charles Petzold, Applications = Code + Markup, part 25).
-
-                System.Xml.XmlWriterSettings settings = new System.Xml.XmlWriterSettings();
-                settings.Indent = true;
-                settings.IndentChars = new string(' ', 4);
-                settings.NewLineOnAttributes = true;
-
-                System.Text.StringBuilder strbuild = new System.Text.StringBuilder();
-                System.Xml.XmlWriter xmlwrite = System.Xml.XmlWriter.Create(strbuild, settings);
-                System.Windows.Markup.XamlWriter.Save(tb.Template, xmlwrite);
-                string s = strbuild.ToString();
-                System.Diagnostics.Trace.WriteLine(s);
-                 */
-
-                GeneralTransform tf = ((Visual)cc.Content).TransformToAncestor(tb);
-                Point offset = tf.Transform(new Point(0, 0));
-
-                xOffset = offset.X;
-                yOffset = offset.Y;
-            }
-            catch (ArgumentException ex)
-            {
-                System.Diagnostics.Trace.WriteLine("ComputeTextOffset: " + ex.Message);
-            }
-            catch (InvalidOperationException ex)
-            {
-                System.Diagnostics.Trace.WriteLine("ComputeTextOffset: " + ex.Message);
-            }
-
-            // end compute text offset
-
-
-            Canvas.SetLeft(TextBox, Canvas.GetLeft(TextBox) - xOffset);
-            Canvas.SetTop(TextBox, Canvas.GetTop(TextBox) - yOffset);
-            TextBox.Width = TextBox.Width + xOffset + xOffset;
-            TextBox.Height = TextBox.Height + yOffset + yOffset;
-            drawingCanvas.RefreshBounds();
-        }
-
         private void textBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
             {
                 TextBox.Text = OldText;
-
                 HideTextbox(editedGraphicsText, drawingCanvas);
-
                 e.Handled = true;
-                return;
             }
 
             // Enter without modifiers - Shift+Enter should be available.
-            if (e.Key == Key.Return && Keyboard.Modifiers == ModifierKeys.None)
+            else if (e.Key == Key.Return && Keyboard.Modifiers == ModifierKeys.None)
             {
                 HideTextbox(editedGraphicsText, drawingCanvas);
-
                 e.Handled = true;
-                return;
             }
         }
 
