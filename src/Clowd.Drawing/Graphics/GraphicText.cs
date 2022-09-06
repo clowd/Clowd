@@ -94,7 +94,7 @@ namespace Clowd.Drawing.Graphics
         public GraphicText(Color objectColor, double lineWidth, Point point, double angle = 0, string body = null)
             : base(objectColor, lineWidth, new Rect(point, new Size(1, 1)), angle)
         {
-            Body = body ?? "Double-click to edit note.";
+            Body = body ?? "Double-Click to edit notes.\r\nUse Shift+Enter for new lines.";
         }
 
         internal override int HandleCount => 1;
