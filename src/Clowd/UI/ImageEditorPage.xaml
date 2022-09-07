@@ -491,18 +491,18 @@
                 <controls:ToolButton
                     Padding="8"
                     Command="{StaticResource Commands.SelectTool}"
-                    CommandParameter="Text"
-                    IconPath="{StaticResource IconToolText}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Text}"
-                    ToolTip="Text (T)" />
-
-                <controls:ToolButton
-                    Padding="8"
-                    Command="{StaticResource Commands.SelectTool}"
                     CommandParameter="Count"
                     IconPath="{StaticResource IconToolNumericCount}"
                     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Count}"
                     ToolTip="Numerical Step Count (N)" />
+
+                <controls:ToolButton
+                    Padding="8"
+                    Command="{StaticResource Commands.SelectTool}"
+                    CommandParameter="Text"
+                    IconPath="{StaticResource IconToolText}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Text}"
+                    ToolTip="Text (T)" />
 
                 <controls:ToolButton
                     Command="{StaticResource Commands.SelectTool}"
