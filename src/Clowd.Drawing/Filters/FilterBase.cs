@@ -7,14 +7,14 @@ namespace Clowd.Drawing.Filters
 {
     internal abstract class FilterBase
     {
-        public DrawingCanvas Canvas { get; }
+        public DrawingCanvas MyCanvas { get; }
         public GraphicImage Source { get; }
 
         private Point? _lastPoint;
 
         protected FilterBase(DrawingCanvas canvas, GraphicImage source)
         {
-            Canvas = canvas;
+            MyCanvas = canvas;
             Source = source;
         }
 

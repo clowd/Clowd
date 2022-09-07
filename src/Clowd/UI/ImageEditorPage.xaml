@@ -139,10 +139,10 @@
             Key="N"
             Command="{StaticResource Commands.SelectTool}"
             CommandParameter="Count" />
-        <!--  <clowd:BareKeyBinding  -->
-        <!--  Key="O"  -->
-        <!--  Command="{StaticResource Commands.SelectTool}"  -->
-        <!--  CommandParameter="Pixelate" />  -->
+        <clowd:BareKeyBinding
+            Key="O"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Pixelate" />
         <!--  <clowd:BareKeyBinding  -->
         <!--  Key="X"  -->
         <!--  Command="{StaticResource Commands.SelectTool}"  -->
@@ -504,12 +504,12 @@
                     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Count}"
                     ToolTip="Numerical Step Count (N)" />
 
-                <!--  <controls:ToolButton  -->
-                <!--  Command="{StaticResource Commands.SelectTool}"  -->
-                <!--  CommandParameter="Pixelate"  -->
-                <!--  IconPath="{StaticResource IconToolPixelate}"  -->
-                <!--  IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pixelate}"  -->
-                <!--  ToolTip="Obscure (O)" />  -->
+                <controls:ToolButton
+                    Command="{StaticResource Commands.SelectTool}"
+                    CommandParameter="Pixelate"
+                    IconPath="{StaticResource IconToolPixelate}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pixelate}"
+                    ToolTip="Obscure (O)" />
 
                 <!--  <controls:ToolButton  -->
                 <!--  Command="{StaticResource Commands.SelectTool}"  -->

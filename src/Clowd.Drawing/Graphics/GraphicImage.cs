@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -13,6 +14,12 @@ namespace Clowd.Drawing.Graphics
         {
             get => _bitmapFilePath;
             set => Set(ref _bitmapFilePath, value);
+        }
+
+        public string DecoratorFilePath
+        {
+            get => _decoratorFilePath;
+            set => Set(ref _decoratorFilePath, value);
         }
 
         public Int32Rect Crop
@@ -40,6 +47,7 @@ namespace Clowd.Drawing.Graphics
         }
 
         private string _bitmapFilePath;
+        private string _decoratorFilePath;
         private int _scaleX = 1;
         private int _scaleY = 1;
         private Int32Rect _crop;
@@ -69,9 +77,6 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawRectangle(DrawingContext drawingContext)
         {
-            var bmp = CachedBitmapLoader.LoadFromFile(_bitmapFilePath);
-            var crop = new CroppedBitmap(bmp, Crop);
-
             Rect r = UnrotatedBounds;
 
             var centerX = r.Left + (r.Width / 2);
@@ -84,7 +89,14 @@ namespace Clowd.Drawing.Graphics
             if (Right <= Left || Bottom <= Top)
                 drawingContext.PushTransform(new ScaleTransform(Right <= Left ? -1 : 1, Bottom <= Top ? -1 : 1, centerX, centerY));
 
-            drawingContext.DrawImage(crop, r);
+            var bitmap = new CroppedBitmap(CachedBitmapLoader.LoadFromFile(_bitmapFilePath), Crop);
+            drawingContext.DrawImage(bitmap, r);
+
+            if (_decoratorFilePath != null && File.Exists(_decoratorFilePath))
+            {
+                var decorator = new CroppedBitmap(CachedBitmapLoader.LoadFromFile(_decoratorFilePath), Crop);
+                drawingContext.DrawImage(decorator, r);
+            }
 
             if (Right <= Left || Bottom <= Top)
                 drawingContext.Pop();

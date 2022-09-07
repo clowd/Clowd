@@ -8,6 +8,7 @@ using System.Windows.Media;
 using Clowd.Drawing.Tools;
 using Clowd.Drawing.Graphics;
 using System.Windows.Media.Imaging;
+using Clowd.Drawing.Filters;
 
 namespace Clowd.Drawing
 {
@@ -85,8 +86,7 @@ namespace Clowd.Drawing
             _tools[(int)ToolType.PolyLine] = new ToolPolyLine();
             _tools[(int)ToolType.Text] = new ToolText(this);
             _tools[(int)ToolType.Count] = new ToolCount(this);
-
-            //tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>();
+            _tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>();
             //tools[(int)ToolType.Erase] = new ToolFilter<FilterEraser>();
 
             // Create undo manager
