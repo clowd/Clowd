@@ -135,6 +135,10 @@
             Key="T"
             Command="{StaticResource Commands.SelectTool}"
             CommandParameter="Text" />
+        <clowd:BareKeyBinding
+            Key="N"
+            Command="{StaticResource Commands.SelectTool}"
+            CommandParameter="Count" />
         <!--  <clowd:BareKeyBinding  -->
         <!--  Key="O"  -->
         <!--  Command="{StaticResource Commands.SelectTool}"  -->
@@ -491,6 +495,14 @@
                     IconPath="{StaticResource IconToolText}"
                     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Text}"
                     ToolTip="Text (T)" />
+
+                <controls:ToolButton
+                    Padding="8"
+                    Command="{StaticResource Commands.SelectTool}"
+                    CommandParameter="Count"
+                    IconPath="{StaticResource IconToolNumericCount}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Count}"
+                    ToolTip="Numerical Step Count (N)" />
 
                 <!--  <controls:ToolButton  -->
                 <!--  Command="{StaticResource Commands.SelectTool}"  -->

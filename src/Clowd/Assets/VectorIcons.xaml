@@ -244,6 +244,14 @@
         Fill="{StaticResource IconForeground}" />
 
     <Path
+        x:Key="IconToolNumericCount"
+        Width="26"
+        Height="26"
+        x:Shared="False"
+        Data="M0,13C0,5.8,5.8,0,13,0s13,5.8,13,13s-5.8,13-13,13S0,20.2,0,13z M13,23.4 c5.7,0,10.4-4.7,10.4-10.4S18.7,2.6,13,2.6S2.6,7.3,2.6,13S7.3,23.4,13,23.4z M9.6,6.2l-0.3,3H6.7l-0.2,1.7h2.7l-0.4,4.7H6.1 l-0.2,1.7h2.7l-0.2,2.5v0H10l0.2-2.6H15l-0.2,2.5v0h1.7l0.2-2.6h2.9l0.2-1.7h-2.9l0.4-4.7h2.9l0.2-1.7h-2.9l0.3-2.9v0H16l-0.3,3H11 l0.3-2.9v0H9.6z M10.9,10.9h4.7l-0.4,4.7h-4.7L10.9,10.9z"
+        Fill="{StaticResource IconForeground}" />
+
+    <Path
         x:Key="IconRedo"
         Width="26"
         Height="26"

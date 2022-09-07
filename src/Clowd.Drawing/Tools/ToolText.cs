@@ -1,13 +1,36 @@
 ﻿using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Drawing.Graphics;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd.Drawing.Tools
 {
+    internal class ToolCount : ToolText
+    {
+        public ToolCount(DrawingCanvas drawingCanvas) : base(drawingCanvas)
+        {
+        }
+
+        public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
+        {
+            var maxNum = drawingCanvas.GraphicsList
+                .OfType<GraphicCount>()
+                .Where(g => int.TryParse(g.Body, out var _))
+                .MaxOrDefault(g => int.Parse(g.Body));
+
+            Point point = e.GetPosition(drawingCanvas);
+            var o = new GraphicCount(drawingCanvas, point, (maxNum + 1).ToString());
+            drawingCanvas.UnselectAll();
+            o.IsSelected = true;
+            drawingCanvas.GraphicsList.Add(o);
+            drawingCanvas.CaptureMouse();
+        }
+    }
+    
     internal class ToolText : ToolBase
     {
         internal override ToolActionType ActionType => ToolActionType.Object;
@@ -106,7 +129,7 @@ namespace Clowd.Drawing.Tools
 
             if (newGraphic)
             {
-                TextBox.Text = graphicsText.Body = "Double-Click to edit notes.\r\nUse Shift+Enter for new lines.";
+                TextBox.Text = graphicsText.Body;
                 TextBox.SelectAll();
                 OldText = "";
             }
@@ -123,11 +146,23 @@ namespace Clowd.Drawing.Tools
 
             TextBox.Focus();
 
-            TextBox.LostFocus += new RoutedEventHandler(textBox_LostFocus);
-            TextBox.LostKeyboardFocus += new KeyboardFocusChangedEventHandler(textBox_LostKeyboardFocus);
+            TextBox.LostFocus += (_, _) => HideTextbox(editedGraphicsText, drawingCanvas);
+            TextBox.LostKeyboardFocus += (_, _) => HideTextbox(editedGraphicsText, drawingCanvas);
             TextBox.PreviewKeyDown += new KeyEventHandler(textBox_PreviewKeyDown);
-            TextBox.ContextMenu = null; // see notes in textBox_LostKeyboardFocus
             TextBox.TextChanged += textBox_TextChanged;
+
+            // Notes:
+            // TextBox context menu is set to null
+            // The reason I did this is the following:
+            // I must hide textbox when user clicks anywhere
+            // outside of textbox, outside of this program window,
+            // or any other window pops up and steals focus.
+            // The only function which works for all these cases for 100%
+            // is LostKeyboardFocus handler. However, LostKeyboardFocus
+            // is raised also when textbox context menu is shown, and this
+            // breaks all logic. To keep things consistent, I don't allow
+            // showing context menu.
+            TextBox.ContextMenu = null;
         }
 
         private void HideTextbox(GraphicBase graphic, DrawingCanvas drawingCanvas)
@@ -205,28 +240,6 @@ namespace Clowd.Drawing.Tools
                 HideTextbox(editedGraphicsText, drawingCanvas);
                 e.Handled = true;
             }
-        }
-
-        private void textBox_LostFocus(object sender, RoutedEventArgs e)
-        {
-            HideTextbox(editedGraphicsText, drawingCanvas);
-        }
-
-        private void textBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-        {
-            HideTextbox(editedGraphicsText, drawingCanvas);
-
-            // Notes:
-            // TextBox context menu is set to null in CreateTextBox function.
-            // The reason I did this is the following:
-            // I must hide textbox when user clicks anywhere
-            // outside of textbox, outside of this program window,
-            // or any other window pops up and steals focus.
-            // The only function which works for all these cases for 100%
-            // is LostKeyboardFocus handler. However, LostKeyboardFocus
-            // is raised also when textbox context menu is shown, and this
-            // breaks all logic. To keep things consistent, I don't allow
-            // showing context menu.
         }
     }
 }

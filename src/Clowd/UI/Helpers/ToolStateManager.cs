@@ -34,6 +34,7 @@ namespace Clowd.UI.Helpers
             _capabilities.Add(new ObjectStateCapabilities<GraphicPolyLine>());
             _capabilities.Add(new ObjectStateCapabilities<GraphicRectangle>());
             _capabilities.Add(new ObjectStateCapabilities<GraphicText>());
+            _capabilities.Add(new ObjectStateCapabilities<GraphicCount>());
         }
 
         public StateCapabilities GetObjectCapabilities(object obj)
@@ -120,7 +121,7 @@ namespace Clowd.UI.Helpers
 
         public override bool HasStroke => _action == ToolActionType.Object && _tool != ToolType.FilledRectangle && _tool != ToolType.Text;
 
-        public override bool HasFont => _tool == ToolType.Text;
+        public override bool HasFont => _tool == ToolType.Text || _tool == ToolType.Count;
 
         public override bool HasAngle => false;
 
@@ -246,7 +247,7 @@ namespace Clowd.UI.Helpers
 
         public override bool HasStroke => IsNotOneOf(typeof(GraphicImage), typeof(GraphicText), typeof(GraphicFilledRectangle));
 
-        public override bool HasFont => IsOneOf(typeof(GraphicText));
+        public override bool HasFont => IsOneOf(typeof(GraphicText), typeof(GraphicCount));
 
         public override bool HasAngle => typeof(TGraphic).GetProperty(ANGLE_NAME) != null;
 

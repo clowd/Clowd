@@ -83,8 +83,8 @@ namespace Clowd.Drawing
                 snapMode: DraggableSnapMode.All);
 
             _tools[(int)ToolType.PolyLine] = new ToolPolyLine();
-
             _tools[(int)ToolType.Text] = new ToolText(this);
+            _tools[(int)ToolType.Count] = new ToolCount(this);
 
             //tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>();
             //tools[(int)ToolType.Erase] = new ToolFilter<FilterEraser>();
@@ -459,7 +459,7 @@ namespace Clowd.Drawing
 
             foreach (GraphicBase g in d.SelectedItems)
             {
-                if (g is GraphicText || g is GraphicSelectionRectangle)
+                if (g is GraphicSelectionRectangle)
                     continue;
                 if (g.LineWidth != d.LineWidth)
                 {
