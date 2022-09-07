@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -20,41 +21,37 @@ namespace Clowd.Drawing.Graphics
         public string Body
         {
             get => _body;
-            set
-            {
-                if (Set(ref _body, value))
-                    Normalize();
-            }
+            set => SetAndNormalize(ref _body, value);
         }
 
         public string FontName
         {
             get => _fontName;
-            set => Set(ref _fontName, value);
+            set => SetAndNormalize(ref _fontName, value);
         }
 
         public double FontSize
         {
             get => _fontSize;
-            set => Set(ref _fontSize, value);
+            set => SetAndNormalize(ref _fontSize, value);
         }
 
         public FontStyle FontStyle
         {
             get => _fontStyle;
-            set => Set(ref _fontStyle, value);
+            set => SetAndNormalize(ref _fontStyle, value);
         }
 
         public FontWeight FontWeight
         {
             get => _fontWeight;
-            set => Set(ref _fontWeight, value);
+            set => SetAndNormalize(ref _fontWeight, value);
         }
 
         public FontStretch FontStretch
         {
             get => _fontStretch;
-            set => Set(ref _fontStretch, value);
+            set => SetAndNormalize(ref _fontStretch, value);
         }
 
         private string _body;
@@ -135,7 +132,7 @@ namespace Clowd.Drawing.Graphics
             DrawObjectImpl(context, true);
         }
 
-        private void DrawObjectImpl(DrawingContext context, bool showText)
+        protected virtual void DrawObjectImpl(DrawingContext context, bool showText)
         {
             context.PushTransform(new RotateTransform(Angle, CenterOfRotation.X, CenterOfRotation.Y));
             context.DrawRectangle(new SolidColorBrush(ObjectColor), null, UnrotatedBounds);
@@ -162,7 +159,7 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
-        internal FormattedText CreateFormattedText()
+        protected virtual FormattedText CreateFormattedText()
         {
             // trailing whitespace is truncated from height measurements. 
             // this '_' won't get rendered while Editing=true, but it will allow us to calculate the correct rectangle bounds
