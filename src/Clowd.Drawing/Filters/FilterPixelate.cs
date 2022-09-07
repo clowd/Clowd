@@ -12,15 +12,24 @@ namespace Clowd.Drawing.Filters
 {
     internal class FilterPixelate : FilterBase
     {
+        private DrawingCanvas _canvas;
+        private GraphicImage _source;
         private BitmapSource _imageSource;
         private RenderTargetBitmap _imageOverlay;
         private byte[] _imageBytes;
         private int _imageStride;
         private Image _rendered;
         private ScreenSize _originalSize;
+        private bool _opened;
 
-        public FilterPixelate(DrawingCanvas canvas, GraphicImage source) : base(canvas, source)
+        public override bool Start(DrawingBrush brush, Point p, DrawingCanvas canvas)
         {
+            var clicked = canvas.ToolPointer.MakeHitTest(canvas, p, out var handleNum);
+            if (clicked is not GraphicImage source)
+                return false;
+
+            _canvas = canvas;
+            _source = source;
             var image = CachedBitmapLoader.LoadFromFile(source.BitmapFilePath);
             _originalSize = new ScreenSize(image.PixelWidth, image.PixelHeight);
             image = new CroppedBitmap(image, source.Crop);
@@ -53,6 +62,7 @@ namespace Clowd.Drawing.Filters
                 using (var ctx = vis.RenderOpen())
                     ctx.DrawImage(decorator, new Rect(0, 0, decorator.PixelWidth, decorator.PixelHeight));
                 _imageOverlay.Render(vis);
+                source.DecoratorFilePath = null;
             }
 
             // add overlay to canvas as child element
@@ -61,6 +71,10 @@ namespace Clowd.Drawing.Filters
             Canvas.SetLeft(_rendered, source.Left);
             Canvas.SetTop(_rendered, source.Top);
             canvas.Children.Add(_rendered);
+
+            _opened = true;
+            Handle(brush, p);
+            return true;
         }
 
         private int CalculateHalfPixelSize(ref int brushRadius)
@@ -80,13 +94,16 @@ namespace Clowd.Drawing.Filters
             return brute[0].Pixel;
         }
 
-        protected override void HandleInternal(DrawingBrush brush, Point p)
+        public override void Handle(DrawingBrush brush, Point p)
         {
+            if (!_opened)
+                throw new InvalidOperationException("Need to open filter before calling Handle");
+
             // translate mouse point because relative to DPI and to the GraphicImage location / rotation
-            p = Source.UnapplyRotation(p);
-            p.Offset(-Source.Left, -Source.Top);
-            var scaleRatioX = (_imageSource.PixelWidth / Source.UnrotatedBounds.Width);
-            var scaleRatioY = (_imageSource.PixelHeight / Source.UnrotatedBounds.Height);
+            p = _source.UnapplyRotation(p);
+            p.Offset(-_source.Left, -_source.Top);
+            var scaleRatioX = (_imageSource.PixelWidth / _source.UnrotatedBounds.Width);
+            var scaleRatioY = (_imageSource.PixelHeight / _source.UnrotatedBounds.Height);
             p = new Point(p.X * scaleRatioX, p.Y * scaleRatioY);
 
             // brushSize must be a multiple of pixelSize and also a multiple of 2 for nice results.
@@ -163,18 +180,20 @@ namespace Clowd.Drawing.Filters
             _imageOverlay.Render(vis);
         }
 
-        public override void Close()
+        public override void Dispose()
         {
+            if (!_opened) return;
+
             var vis = new DrawingVisual();
             using (var ctx = vis.RenderOpen())
             {
-                ctx.DrawImage(_imageOverlay, new Rect(Source.Crop.X, Source.Crop.Y, Source.Crop.Width, Source.Crop.Height));
+                ctx.DrawImage(_imageOverlay, new Rect(_source.Crop.X, _source.Crop.Y, _source.Crop.Width, _source.Crop.Height));
             }
 
             var final = new RenderTargetBitmap(_originalSize.Width, _originalSize.Height, 96, 96, PixelFormats.Pbgra32);
             final.Render(vis);
 
-            var filePath = Path.Combine(Path.GetDirectoryName(Source.BitmapFilePath), Guid.NewGuid() + ".png");
+            var filePath = Path.Combine(Path.GetDirectoryName(_source.BitmapFilePath), Guid.NewGuid() + ".png");
             var enc = new PngBitmapEncoder();
             enc.Frames.Add(BitmapFrame.Create(final));
 
@@ -183,8 +202,9 @@ namespace Clowd.Drawing.Filters
                 enc.Save(fs);
             }
 
-            Source.DecoratorFilePath = filePath;
-            MyCanvas.Children.Remove(_rendered);
+            _source.DecoratorFilePath = filePath;
+            _canvas.Children.Remove(_rendered);
+            _opened = false;
         }
     }
 }
