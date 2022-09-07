@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using RT.Serialization;
@@ -91,12 +92,12 @@ namespace Clowd.Drawing.Graphics
         internal virtual void DrawObject(DrawingContext ctx)
         { }
 
-        protected virtual void DrawDashedBorder(DrawingContext ctx, Rect rect)
+        protected virtual void DrawDashedBorder(DrawingContext ctx, Rect rect, double lineWidth = 2)
         {
-            ctx.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromArgb(127, 255, 255, 255)), LineWidth), rect);
+            ctx.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromArgb(127, 255, 255, 255)), lineWidth), rect);
             DashStyle dashStyle = new DashStyle();
             dashStyle.Dashes.Add(4);
-            Pen dashedPen = new Pen(new SolidColorBrush(Color.FromArgb(127, 0, 0, 0)), LineWidth);
+            Pen dashedPen = new Pen(new SolidColorBrush(Color.FromArgb(127, 0, 0, 0)), lineWidth);
             dashedPen.DashStyle = dashStyle;
             ctx.DrawRectangle(null, dashedPen, rect);
         }
@@ -127,6 +128,13 @@ namespace Clowd.Drawing.Graphics
             Point point = GetHandle(handleNumber, uiscale);
             double size = UnscaledControlSize * uiscale.DpiScaleX;
             return new Rect(point.X - size / 2, point.Y - size / 2, size, size);
+        }
+
+        protected virtual bool SetAndNormalize<T>(ref T storage, T value, [CallerMemberName] string propertyName = null, params string[] dependentProperties)
+        {
+            var changed = Set(ref storage, value, propertyName, dependentProperties);
+            if (changed) Normalize();
+            return changed;
         }
     }
 }
