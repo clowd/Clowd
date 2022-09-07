@@ -23,8 +23,7 @@ namespace Clowd
         PolyLine,
         Text,
         Count,
-
-        //Pixelate,
+        Pixelate,
         //Erase,
         Max
     };
