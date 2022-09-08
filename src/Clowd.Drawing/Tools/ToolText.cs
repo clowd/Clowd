@@ -1,36 +1,12 @@
 ﻿using System;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Drawing.Graphics;
-using RT.Util.ExtensionMethods;
 
 namespace Clowd.Drawing.Tools
 {
-    internal class ToolCount : ToolText
-    {
-        public ToolCount(DrawingCanvas drawingCanvas) : base(drawingCanvas)
-        {
-        }
-
-        public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
-        {
-            var maxNum = drawingCanvas.GraphicsList
-                .OfType<GraphicCount>()
-                .Where(g => int.TryParse(g.Body, out var _))
-                .MaxOrDefault(g => int.Parse(g.Body));
-
-            Point point = e.GetPosition(drawingCanvas);
-            var o = new GraphicCount(drawingCanvas, point, (maxNum + 1).ToString());
-            drawingCanvas.UnselectAll();
-            o.IsSelected = true;
-            drawingCanvas.GraphicsList.Add(o);
-            drawingCanvas.CaptureMouse();
-        }
-    }
-    
     internal class ToolText : ToolBase
     {
         internal override ToolActionType ActionType => ToolActionType.Object;
