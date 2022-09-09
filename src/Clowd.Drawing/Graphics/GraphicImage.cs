@@ -123,6 +123,8 @@ namespace Clowd.Drawing.Graphics
 
         internal void AddObscuredArea(Rect rect)
         {
+            if (_imageSource == null) UpdateImageCache();
+            
             var bounds = UnrotatedBounds;
             rect.Intersect(bounds);
             if (rect.IsEmpty) return;
@@ -132,8 +134,12 @@ namespace Clowd.Drawing.Graphics
             var r = l + rect.Width;
             var b = t + rect.Height;
 
-            int translateX(double p) => (int)(p / bounds.Width * Crop.Width + Crop.X);
-            int translateY(double p) => (int)(p / bounds.Height * Crop.Height + Crop.Y);
+            int translateX(double p) => Crop.IsEmpty 
+                ? (int)(p / bounds.Width * _imageSource.PixelWidth)
+                : (int)(p / bounds.Width * Crop.Width + Crop.X);
+            int translateY(double p) => Crop.IsEmpty
+                ? (int)(p / bounds.Height * _imageSource.PixelHeight)
+                : (int)(p / bounds.Height * Crop.Height + Crop.Y);
 
             var x = translateX(l);
             var y = translateY(t);
@@ -156,10 +162,7 @@ namespace Clowd.Drawing.Graphics
 
         private bool UpdateObscureCache()
         {
-            if (_imageSource == null)
-            {
-                UpdateImageCache();
-            }
+            if (_imageSource == null) UpdateImageCache();
 
             if (_obscuredRects?.Any() != true)
             {
