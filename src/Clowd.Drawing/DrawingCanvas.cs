@@ -86,7 +86,7 @@ namespace Clowd.Drawing
             _tools[(int)ToolType.PolyLine] = new ToolPolyLine();
             _tools[(int)ToolType.Text] = new ToolText(this);
             _tools[(int)ToolType.Count] = new ToolCount(this);
-            _tools[(int)ToolType.Pixelate] = new ToolFilter<FilterPixelate>();
+            _tools[(int)ToolType.Pixelate] = new ToolPixelate();
             //tools[(int)ToolType.Erase] = new ToolFilter<FilterEraser>();
 
             // Create undo manager
@@ -1094,7 +1094,6 @@ namespace Clowd.Drawing
 
         void DrawingCanvas_Unloaded(object sender, RoutedEventArgs e)
         {
-            CachedBitmapLoader.InvalidateCache();
             GraphicsList.Clear();
             _undoManager.ClearHistory();
         }
