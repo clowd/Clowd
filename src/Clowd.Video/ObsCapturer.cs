@@ -137,7 +137,7 @@ namespace Clowd.Video
                 if (settings.CaptureSpeaker && settings.CaptureSpeakerDevice?.DeviceId != null)
                 {
                     arguments.Add("--speakers");
-                    arguments.Add(settings.CaptureMicrophoneDevice?.DeviceId);
+                    arguments.Add(settings.CaptureSpeakerDevice?.DeviceId);
                 }
 
                 var obsexpress = new ProcessStartInfo()
