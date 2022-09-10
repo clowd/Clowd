@@ -5,7 +5,7 @@ namespace Clowd.Drawing
 {
     internal class UndoManager
     {
-        public bool CanUndo => _position >= 0 && _position <= _historyList.Count - 1;
+        public bool CanUndo => _position > 0 && _position <= _historyList.Count - 1;
         public bool CanRedo => _position < _historyList.Count - 1;
         public event EventHandler StateChanged;
 
@@ -48,7 +48,7 @@ namespace Clowd.Drawing
 
             this.TrimHistoryList();
             _historyList.Add(state);
-            _position++;
+            _position = _historyList.Count - 1;
             RaiseStateChangedEvent();
         }
 
@@ -57,15 +57,15 @@ namespace Clowd.Drawing
             if (!CanUndo)
                 return;
 
-            var nextState = _historyList[_position--];
+            var nextState = _historyList[--_position];
             var nextGraphics = new GraphicCollection(_drawingCanvas, _drawingCanvas.CanvasUiElementScale);
             nextGraphics.DeserializeObjectsInto(nextState);
 
             // replace the current graphic set with the one from history
             var old = _drawingCanvas.GraphicsList;
             _drawingCanvas.GraphicsList = nextGraphics;
-            _drawingCanvas.InvalidateVisual();
             old.Clear();
+            _drawingCanvas.InvalidateVisual();
 
             RaiseStateChangedEvent();
         }
@@ -75,19 +75,17 @@ namespace Clowd.Drawing
             if (!CanRedo)
                 return;
 
-            int itemToRedo = _position + 1;
 
-            var nextState = _historyList[itemToRedo];
+            var nextState = _historyList[++_position];
             var nextGraphics = new GraphicCollection(_drawingCanvas, _drawingCanvas.CanvasUiElementScale);
             nextGraphics.DeserializeObjectsInto(nextState);
 
             // replace the current graphic set with the one from history
             var old = _drawingCanvas.GraphicsList;
             _drawingCanvas.GraphicsList = nextGraphics;
-            _drawingCanvas.InvalidateVisual();
             old.Clear();
+            _drawingCanvas.InvalidateVisual();
 
-            _position++;
             RaiseStateChangedEvent();
         }
 
