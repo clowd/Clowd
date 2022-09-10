@@ -24,7 +24,6 @@ namespace Clowd.Drawing.Graphics
     public class GraphicPolyLine : GraphicRectangle
     {
         private List<Point> _points;
-        [ClassifyIgnore] private CurveBuilder _realtime;
         [ClassifyIgnore] private List<Geometry> _segments;
         [ClassifyIgnore] private bool _drawing;
         [ClassifyIgnore] private Geometry _final;
@@ -38,7 +37,19 @@ namespace Clowd.Drawing.Graphics
             BeginDrawing();
             AddPoint(start);
         }
-        
+
+        public override Rect Bounds
+        {
+            get
+            {
+                if (_final != null)
+                    return _final.GetRenderBounds(new Pen(null, LineWidth));
+
+                var half = LineWidth / 2;
+                return new Rect(Left - half, Top - half, Right - Left + LineWidth, Bottom - Top + LineWidth);
+            }
+        }
+
         internal override void DrawRectangle(DrawingContext context)
         {
             Pen pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
@@ -51,7 +62,7 @@ namespace Clowd.Drawing.Graphics
             }
             else
             {
-                if (_final == null) EndDrawing();
+                if (_final == null) EndDrawing(false);
 
                 // geometry points will be at the original location they were drawn. we need to translate them into
                 // the correct location as this rectangle may have been moved or resized. 
@@ -76,8 +87,7 @@ namespace Clowd.Drawing.Graphics
 
         internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
-            if (_drawing) return -1;
-            if (_final == null) EndDrawing();
+            if (_drawing || _final == null) return -1;
 
             var rotatedPt = UnapplyRotation(point);
 
@@ -97,17 +107,15 @@ namespace Clowd.Drawing.Graphics
 
         internal void BeginDrawing()
         {
-            _realtime = new CurveBuilder(8, 1);
             _segments = new List<Geometry>();
             _points = new List<Point>();
             _final = null;
             _drawing = true;
         }
 
-        internal void EndDrawing()
+        internal void EndDrawing(bool updateBounds)
         {
             _drawing = false;
-            _realtime = null;
             _segments = null;
 
             List<VECTOR> ppPts = CurvePreprocess.Linearize(_points.Select(p => (Vector)p).ToList(), 8);
@@ -124,44 +132,39 @@ namespace Clowd.Drawing.Graphics
             }
 
             _final = geo;
+
+            if (updateBounds)
+            {
+                Left = _points.Min(p => p.X);
+                Right = _points.Max(p => p.X);
+                Top = _points.Min(p => p.Y);
+                Bottom = _points.Max(p => p.Y);
+            }
+            
+            Normalize(); // set CenterOfRotation
+            OnPropertyChanged(nameof(Bounds));
         }
 
         internal void AddPoint(Point p)
         {
             if (!_drawing) throw new InvalidOperationException("Cannot add points after poly shape is closed");
 
+            if (!_points.Any())
+            {
+                _points.Add(p);
+                return;
+            }
+            
+            var startPoint = _points.Last();
             _points.Add(p);
-            var result = _realtime.AddPoint((Vector)p);
-            if (!result.WasChanged) return;
 
-            // remove any changed segments
-            while (_segments.Count > 0 && _segments.Count >= result.FirstChangedIndex)
-            {
-                _segments.RemoveAt(_segments.Count - 1);
-            }
+            var geometry = new LineGeometry(startPoint, p);
+            _segments.Add(geometry);
 
-            List<Rect> all_bounds = new List<Rect>();
-
-            // add any missing segments to master list
-            for (int i = _segments.Count; i < _realtime.Curves.Count; i++)
-            {
-                CubicBezier curve = _realtime.Curves[i];
-                StreamGeometry geo = new StreamGeometry();
-                using (StreamGeometryContext gctx = geo.Open())
-                {
-                    gctx.BeginFigure((Point)curve.p0, false, false);
-                    gctx.BezierTo((Point)curve.p1, (Point)curve.p2, (Point)curve.p3, true, false);
-                }
-
-                geo.Freeze();
-                _segments.Add(geo);
-                all_bounds.Add(geo.GetRenderBounds(new Pen(null, LineWidth)));
-            }
-
-            Left = Math.Min(Left, all_bounds.Min(x => x.Left));
-            Right = Math.Max(Right, all_bounds.Max(x => x.Right));
-            Top = Math.Min(Top, all_bounds.Min(x => x.Top));
-            Bottom = Math.Max(Bottom, all_bounds.Max(x => x.Bottom));
+            Left = Math.Min(Left, p.X);
+            Right = Math.Max(Right, p.X);
+            Top = Math.Min(Top, p.Y);
+            Bottom = Math.Max(Bottom, p.Y);
             
             OnPropertyChanged(nameof(Bounds));
         }
