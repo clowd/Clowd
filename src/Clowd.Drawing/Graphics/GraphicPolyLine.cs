@@ -23,73 +23,64 @@ namespace Clowd.Drawing.Graphics
 {
     public class GraphicPolyLine : GraphicRectangle
     {
-        public Point[] Points
-        {
-            get
-            {
-                return _points.ToArray();
-            }
-            set
-            {
-                _points = new List<Point>();
-                _builder = new CurveBuilder(4, 2);
-
-                foreach (var v in value)
-                    AddPointInternal(v, false);
-
-                UpdateGeometry();
-                OnPropertyChanged(nameof(Points));
-            }
-        }
-
         private List<Point> _points;
-        private Rect _vectorBounds;
-        [ClassifyIgnore] private CurveBuilder _builder;
-        [ClassifyIgnore] private Geometry _geometry;
+        [ClassifyIgnore] private CurveBuilder _realtime;
+        [ClassifyIgnore] private List<Geometry> _segments;
+        [ClassifyIgnore] private bool _drawing;
+        [ClassifyIgnore] private Geometry _final;
 
         protected GraphicPolyLine() // serializer constructor
         { }
 
         public GraphicPolyLine(Color objectColor, double lineWidth, Point start)
-            : base(objectColor, lineWidth, new Rect(start, new Size(1, 1)))
+            : base(objectColor, lineWidth, new Rect(start, new Size(0, 0)))
         {
-            this.Points = new[] { start };
+            BeginDrawing();
+            AddPoint(start);
         }
-
-        public GraphicPolyLine(Color objectColor, double lineWidth, Rect rect, double angle, Point[] points) // clone constructor
-            : base(objectColor, lineWidth, rect, angle)
-        {
-            this.Points = points;
-        }
-
+        
         internal override void DrawRectangle(DrawingContext context)
         {
-            if (_geometry == null)
-            {
-                if (_points == null || !_points.Any())
-                    return;
-                else
-                    Points = _points.ToArray(); // causes geometry to be updated.
-            }
-
-            var desiredBounds = UnrotatedBounds;
-            double offsetX = desiredBounds.Left - _vectorBounds.Left;
-            double offsetY = desiredBounds.Top - _vectorBounds.Top;
-            double scaleX = (desiredBounds.Right - (_vectorBounds.Left + offsetX)) / _vectorBounds.Width;
-            double scaleY = (desiredBounds.Bottom - (_vectorBounds.Top + offsetY)) / _vectorBounds.Height;
-
-            var group = new TransformGroup();
-            group.Children.Add(new TranslateTransform(offsetX, offsetY));
-            group.Children.Add(new ScaleTransform(scaleX, scaleY, _vectorBounds.Left + offsetX, _vectorBounds.Top + offsetY));
-            _geometry.Transform = group;
-
             Pen pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
-            context.DrawGeometry(null, pen, _geometry);
+            if (_drawing)
+            {
+                foreach (var geo in _segments)
+                {
+                    context.DrawGeometry(null, pen, geo);
+                }
+            }
+            else
+            {
+                if (_final == null) EndDrawing();
+
+                // geometry points will be at the original location they were drawn. we need to translate them into
+                // the correct location as this rectangle may have been moved or resized. 
+                _final.Transform = null;
+                var geometryBounds = _final.GetRenderBounds(pen);
+                var desiredBounds = UnrotatedBounds;
+                double offsetX = desiredBounds.Left - geometryBounds.Left;
+                double offsetY = desiredBounds.Top - geometryBounds.Top;
+                double scaleX = (desiredBounds.Right - (geometryBounds.Left + offsetX)) / geometryBounds.Width;
+                double scaleY = (desiredBounds.Bottom - (geometryBounds.Top + offsetY)) / geometryBounds.Height;
+
+                // we set this on the geometry instead of as a PushTransform so that it will also be 
+                // respected for MakeHitTest. Render is called every time a property updates, so this should work fine.
+                var group = new TransformGroup();
+                group.Children.Add(new TranslateTransform(offsetX, offsetY));
+                group.Children.Add(new ScaleTransform(scaleX, scaleY, geometryBounds.Left + offsetX, geometryBounds.Top + offsetY));
+                _final.Transform = group;
+
+                context.DrawGeometry(null, pen, _final);
+            }
         }
 
         internal override int MakeHitTest(Point point, DpiScale uiscale)
         {
+            if (_drawing) return -1;
+            if (_final == null) EndDrawing();
+
             var rotatedPt = UnapplyRotation(point);
+
             if (IsSelected)
             {
                 for (int i = 1; i <= HandleCount; i++)
@@ -99,63 +90,80 @@ namespace Clowd.Drawing.Graphics
                 }
             }
 
-            var widened = _geometry.GetWidenedPathGeometry(new Pen(Brushes.Black, 8));
+            var widened = _final.GetWidenedPathGeometry(new Pen(null, LineWidth + (8 * uiscale.DpiScaleX)));
             var hit = widened.FillContains(rotatedPt);
             return hit ? 0 : -1;
         }
 
-        internal void AddPoint(Point p)
+        internal void BeginDrawing()
         {
-            AddPointInternal(p, true);
+            _realtime = new CurveBuilder(8, 1);
+            _segments = new List<Geometry>();
+            _points = new List<Point>();
+            _final = null;
+            _drawing = true;
         }
 
-        private void AddPointInternal(Point p, bool updateGeometry)
+        internal void EndDrawing()
         {
-            Left = Math.Min(Left, p.X);
-            Right = Math.Max(Right, p.X);
-            Top = Math.Min(Top, p.Y);
-            Bottom = Math.Max(Bottom, p.Y);
+            _drawing = false;
+            _realtime = null;
+            _segments = null;
 
-            _points.Add(p);
-
-            var vector = new VECTOR((FLOAT)p.X, (FLOAT)p.Y);
-            _builder.AddPoint(vector);
-
-            if (updateGeometry)
-                UpdateGeometry();
-        }
-
-        private void UpdateGeometry()
-        {
-            var curves = _builder.Curves;
-            var curveLength = curves.Count();
-
-            Point toWpfPoint(VECTOR wpp)
-            {
-                return new Point(VectorHelper.GetX(wpp), VectorHelper.GetY(wpp));
-            }
+            List<VECTOR> ppPts = CurvePreprocess.Linearize(_points.Select(p => (Vector)p).ToList(), 8);
+            CubicBezier[] curves = CurveFit.Fit(ppPts, 2);
 
             StreamGeometry geo = new StreamGeometry();
             using (StreamGeometryContext gctx = geo.Open())
             {
-                for (int index = 0; index < curveLength; index++)
+                foreach (CubicBezier curve in curves)
                 {
-                    CubicBezier curve = curves[index];
-                    gctx.BeginFigure(toWpfPoint(curve.p0), false, false);
-                    gctx.BezierTo(toWpfPoint(curve.p1), toWpfPoint(curve.p2), toWpfPoint(curve.p3), true, false);
+                    gctx.BeginFigure((Point)curve.p0, false, false);
+                    gctx.BezierTo((Point)curve.p1, (Point)curve.p2, (Point)curve.p3, true, false);
                 }
             }
 
-            _geometry = geo;
+            _final = geo;
+        }
 
-            var xmin = _points.Min(p => p.X);
-            var xmax = _points.Max(p => p.X);
-            var ymin = _points.Min(p => p.Y);
-            var ymax = _points.Max(p => p.Y);
+        internal void AddPoint(Point p)
+        {
+            if (!_drawing) throw new InvalidOperationException("Cannot add points after poly shape is closed");
 
-            _vectorBounds = new Rect(new Point(xmin, ymin), new Point(xmax, ymax));
+            _points.Add(p);
+            var result = _realtime.AddPoint((Vector)p);
+            if (!result.WasChanged) return;
 
-            //OnPropertyChanged(nameof(Points)); // causes re-render
+            // remove any changed segments
+            while (_segments.Count > 0 && _segments.Count >= result.FirstChangedIndex)
+            {
+                _segments.RemoveAt(_segments.Count - 1);
+            }
+
+            List<Rect> all_bounds = new List<Rect>();
+
+            // add any missing segments to master list
+            for (int i = _segments.Count; i < _realtime.Curves.Count; i++)
+            {
+                CubicBezier curve = _realtime.Curves[i];
+                StreamGeometry geo = new StreamGeometry();
+                using (StreamGeometryContext gctx = geo.Open())
+                {
+                    gctx.BeginFigure((Point)curve.p0, false, false);
+                    gctx.BezierTo((Point)curve.p1, (Point)curve.p2, (Point)curve.p3, true, false);
+                }
+
+                geo.Freeze();
+                _segments.Add(geo);
+                all_bounds.Add(geo.GetRenderBounds(new Pen(null, LineWidth)));
+            }
+
+            Left = Math.Min(Left, all_bounds.Min(x => x.Left));
+            Right = Math.Max(Right, all_bounds.Max(x => x.Right));
+            Top = Math.Min(Top, all_bounds.Min(x => x.Top));
+            Bottom = Math.Max(Bottom, all_bounds.Max(x => x.Bottom));
+            
+            OnPropertyChanged(nameof(Bounds));
         }
     }
 }

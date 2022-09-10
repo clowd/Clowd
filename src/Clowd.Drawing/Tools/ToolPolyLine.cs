@@ -38,8 +38,8 @@ namespace Clowd.Drawing.Tools
             Point p = e.GetPosition(drawingCanvas);
 
             newPolyLine.AddPoint(p);
+            newPolyLine.EndDrawing();
             newPolyLine.IsSelected = true;
-            newPolyLine.Normalize();
 
             drawingCanvas.AddCommandToHistory();
             newPolyLine = null;
