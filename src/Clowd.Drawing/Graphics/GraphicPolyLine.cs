@@ -1,17 +1,4 @@
-﻿#if SYSTEM_WINDOWS_VECTOR
-using VECTOR = System.Windows.Vector;
-using FLOAT = System.Double;
-#elif SYSTEM_NUMERICS_VECTOR
-using VECTOR = System.Numerics.Vector2;
-using FLOAT = System.Single;
-#elif UNITY
-using VECTOR = UnityEngine.Vector2;
-using FLOAT = System.Single;
-#else
-#error Unknown vector type -- must define one of SYSTEM_WINDOWS_VECTOR, SYSTEM_NUMERICS_VECTOR or UNITY
-#endif
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
@@ -118,7 +105,7 @@ namespace Clowd.Drawing.Graphics
             _drawing = false;
             _segments = null;
 
-            List<VECTOR> ppPts = CurvePreprocess.Linearize(_points.Select(p => (Vector)p).ToList(), 8);
+            List<Vector> ppPts = CurvePreprocess.Linearize(_points.Select(p => (Vector)p).ToList(), 8);
             CubicBezier[] curves = CurveFit.Fit(ppPts, 2);
 
             StreamGeometry geo = new StreamGeometry();
