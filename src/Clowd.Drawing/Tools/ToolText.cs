@@ -11,121 +11,111 @@ namespace Clowd.Drawing.Tools
     {
         internal override ToolActionType ActionType => ToolActionType.Object;
 
-        public string OldText { get; private set; }
-        public TextBox TextBox { get; private set; }
+        private GraphicText _newText;
+        private GraphicText _editText;
+        private TextBox _txtBox;
+        private string _oldText;
 
-        GraphicText editedGraphicsText;
-        DrawingCanvas drawingCanvas;
+        public ToolText(Cursor cursor = null, SnapMode snapMode = SnapMode.None) : base(cursor ?? Resource.CursorText, snapMode)
+        { }
 
-        public ToolText(DrawingCanvas drawingCanvas) : base(Resource.CursorText)
+        protected override void OnMouseDownImpl(DrawingCanvas canvas, Point pt)
         {
-            this.drawingCanvas = drawingCanvas;
+            _newText = new GraphicText(canvas, pt);
+            _newText.IsSelected = true;
+            canvas.GraphicsList.Add(_newText);
         }
 
-        public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
+        protected override void OnMouseMoveImpl(DrawingCanvas canvas, Point pt)
         {
-            Point point = e.GetPosition(drawingCanvas);
-            var o = new GraphicText(drawingCanvas, point);
-            drawingCanvas.UnselectAll();
-            o.IsSelected = true;
-            drawingCanvas.GraphicsList.Add(o);
-            drawingCanvas.CaptureMouse();
-        }
-
-        public override void OnMouseUp(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
-        {
-            base.OnMouseUp(drawingCanvas, e);
-            if (drawingCanvas.Count > 0)
+            if (_newText != null)
             {
-                drawingCanvas[drawingCanvas.Count - 1].Normalize();
-                GraphicText t = drawingCanvas[drawingCanvas.Count - 1] as GraphicText;
-                if (t != null)
-                {
-                    // Create textbox for editing of graphics object which is just created
-                    CreateTextBox(t, drawingCanvas, true);
-                }
+                _newText.Left = pt.X;
+                _newText.Top = pt.Y;
+                _newText.Normalize();
             }
-
-            // Commnnd will be added to History later, after closing
-            // in-place textbox.
         }
 
-        public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)
+        protected override void OnMouseUpImpl(DrawingCanvas canvas)
         {
-            if (e.LeftButton == MouseButtonState.Pressed)
+            if (_newText != null)
             {
-                if (drawingCanvas.IsMouseCaptured)
-                {
-                    if (drawingCanvas.Count > 0)
-                    {
-                        Point point = e.GetPosition(drawingCanvas);
-                        var gr = drawingCanvas[drawingCanvas.Count - 1] as GraphicText;
-                        if (gr != null)
-                        {
-                            gr.Left = point.X;
-                            gr.Top = point.Y;
-                            gr.Normalize();
-                        }
-                    }
-                }
+                CreateTextBox(_newText, canvas, true);
+                _newText = null;
             }
         }
 
         public void CreateTextBox(GraphicText graphicsText, DrawingCanvas drawingCanvas, bool newGraphic = false)
         {
+            if (_txtBox != null || _editText != null)
+                AbortOperation(drawingCanvas);
+
             graphicsText.Editing = true;
+            _editText = graphicsText;
 
-            // Keep old text in the case Esc is pressed while editing
-            OldText = graphicsText.Body;
-
-            // Keep reference to edited object
-            editedGraphicsText = graphicsText;
-
-            TextBox = new TextBox();
-            TextBox.FontFamily = new FontFamily(graphicsText.FontName);
-            TextBox.FontSize = graphicsText.FontSize;
-            TextBox.FontStretch = graphicsText.FontStretch;
-            TextBox.FontStyle = graphicsText.FontStyle;
-            TextBox.FontWeight = graphicsText.FontWeight;
-            TextBox.Width = Double.NaN;
-            TextBox.Height = Double.NaN;
-            TextBox.Background = Brushes.Transparent;
-            TextBox.Text = graphicsText.Body;
-            TextBox.BorderThickness = new Thickness(0, 0, 0, 0);
-            TextBox.BorderBrush = Brushes.Transparent;
-            TextBox.Tag = graphicsText;
-            TextBox.Style = null;
-            TextBox.AcceptsReturn = true;
+            _txtBox = new TextBox();
+            _txtBox.FontFamily = new FontFamily(graphicsText.FontName);
+            _txtBox.FontSize = graphicsText.FontSize;
+            _txtBox.FontStretch = graphicsText.FontStretch;
+            _txtBox.FontStyle = graphicsText.FontStyle;
+            _txtBox.FontWeight = graphicsText.FontWeight;
+            _txtBox.Width = Double.NaN;
+            _txtBox.Height = Double.NaN;
+            _txtBox.Background = Brushes.Transparent;
+            _txtBox.Text = graphicsText.Body;
+            _txtBox.BorderThickness = new Thickness(0, 0, 0, 0);
+            _txtBox.BorderBrush = Brushes.Transparent;
+            _txtBox.Tag = graphicsText;
+            _txtBox.Style = null;
+            _txtBox.AcceptsReturn = true;
 
             var finalTransform = new TransformGroup();
             finalTransform.Children.Add(new TranslateTransform(GraphicText.TextPadding - 2, GraphicText.TextPadding));
             finalTransform.Children.Add(new RotateTransform(graphicsText.Angle, (graphicsText.Right - graphicsText.Left) / 2,
                 (graphicsText.Bottom - graphicsText.Top) / 2));
-            TextBox.RenderTransform = finalTransform;
+            _txtBox.RenderTransform = finalTransform;
 
             if (newGraphic)
             {
-                TextBox.Text = graphicsText.Body;
-                TextBox.SelectAll();
-                OldText = "";
+                _txtBox.Text = graphicsText.Body;
+                _txtBox.SelectAll();
+                _oldText = "";
             }
             else
             {
-                OldText = graphicsText.Body;
-                TextBox.CaretIndex = int.MaxValue;
+                _oldText = graphicsText.Body;
+                _txtBox.CaretIndex = int.MaxValue;
             }
 
-            drawingCanvas.Children.Add(TextBox);
+            drawingCanvas.Children.Add(_txtBox);
 
-            Canvas.SetLeft(TextBox, graphicsText.Left);
-            Canvas.SetTop(TextBox, graphicsText.Top);
+            Canvas.SetLeft(_txtBox, graphicsText.Left);
+            Canvas.SetTop(_txtBox, graphicsText.Top);
 
-            TextBox.Focus();
+            _txtBox.Focus();
+            _txtBox.LostFocus += (_, _) => FinishEdit(drawingCanvas, newGraphic);
+            _txtBox.LostKeyboardFocus += (_, _) => FinishEdit(drawingCanvas, newGraphic);
 
-            TextBox.LostFocus += (_, _) => HideTextbox(editedGraphicsText, drawingCanvas);
-            TextBox.LostKeyboardFocus += (_, _) => HideTextbox(editedGraphicsText, drawingCanvas);
-            TextBox.PreviewKeyDown += new KeyEventHandler(textBox_PreviewKeyDown);
-            TextBox.TextChanged += textBox_TextChanged;
+            _txtBox.PreviewKeyDown += (sender, e) =>
+            {
+                if (e.Key == Key.Escape)
+                {
+                    e.Handled = true;
+                    AbortOperation(drawingCanvas);
+                }
+
+                // Enter without modifiers - Shift+Enter should be available for new-lines.
+                else if (e.Key == Key.Return && Keyboard.Modifiers == ModifierKeys.None)
+                {
+                    e.Handled = true;
+                    FinishEdit(drawingCanvas, newGraphic);
+                }
+            };
+
+            _txtBox.TextChanged += (sender, e) =>
+            {
+                graphicsText.Body = _txtBox.Text;
+            };
 
             // Notes:
             // TextBox context menu is set to null
@@ -138,84 +128,72 @@ namespace Clowd.Drawing.Tools
             // is raised also when textbox context menu is shown, and this
             // breaks all logic. To keep things consistent, I don't allow
             // showing context menu.
-            TextBox.ContextMenu = null;
+            _txtBox.ContextMenu = null;
         }
 
-        private void HideTextbox(GraphicBase graphic, DrawingCanvas drawingCanvas)
+        public override void AbortOperation(DrawingCanvas canvas)
         {
-            if (TextBox == null)
-                return;
-
-            var graphicsText = graphic as GraphicText;
-            if (graphicsText == null)
-                return;
-
-            graphicsText.Editing = false;
-
-            if (TextBox.Text.Trim().Length == 0)
+            if (_newText != null)
             {
-                // Textbox is empty: remove text object.
-                drawingCanvas.GraphicsList.Remove(graphic);
-
-                if (!String.IsNullOrEmpty(OldText)) // existing text was edited
-                    drawingCanvas.AddCommandToHistory();
-            }
-            else
-            {
-                if (!String.IsNullOrEmpty(OldText)) // existing text was edited
-                {
-                    if (TextBox.Text.Trim() != OldText) // text was really changed
-                    {
-                        // Make change in the text object
-                        graphicsText.Body = TextBox.Text.Trim();
-
-                        // Keep state after change and add command to the history
-                        drawingCanvas.AddCommandToHistory();
-                    }
-                }
-                else // new text was added
-                {
-                    // Make change in the text object
-                    graphicsText.Body = TextBox.Text.Trim();
-
-                    // Add command to the history
-                    drawingCanvas.AddCommandToHistory();
-                }
+                canvas.GraphicsList.Remove(_newText);
+                _newText = null;
             }
 
-            // Remove textbox and set it to null.
-            drawingCanvas.Children.Remove(TextBox);
-            TextBox = null;
+            if (_editText != null)
+            {
+                if (String.IsNullOrEmpty(_oldText))
+                {
+                    // if this textbox is brand new, remove it
+                    canvas.GraphicsList.Remove(_editText);
+                }
+                else
+                {
+                    // otherwise, revert it to it's previous text
+                    _editText.Body = _oldText;
+                    _editText.Editing = false;
+                    _editText.IsSelected = true;
+                }
+
+                _editText = null;
+            }
+
+            if (_txtBox != null)
+            {
+                canvas.Children.Remove(_txtBox);
+                _txtBox = null;
+            }
+
+            // This enables back all ApplicationCommands,
+            // which are disabled while textbox is active.
+            canvas.Focus();
+        }
+
+        private void FinishEdit(DrawingCanvas drawingCanvas, bool newGraphic)
+        {
+            if (_txtBox == null || _editText == null || String.IsNullOrWhiteSpace(_txtBox.Text))
+            {
+                AbortOperation(drawingCanvas);
+                return;
+            }
+
+            var newText = _txtBox.Text.Trim();
+            _editText.Body = newText;
+
+            if (newText != _oldText)
+            {
+                drawingCanvas.AddCommandToHistory();
+            }
+
+            _editText.Editing = false;
+            _editText.IsSelected = true;
+
+            drawingCanvas.Children.Remove(_txtBox);
+            _txtBox = null;
+            _editText = null;
 
             // This enables back all ApplicationCommands,
             // which are disabled while textbox is active.
             drawingCanvas.Focus();
-        }
-
-        private void textBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            var grap = (sender as TextBox)?.Tag as GraphicText;
-            if (grap == null)
-                return;
-            grap.Body = ((TextBox)sender).Text;
-            drawingCanvas.RefreshBounds();
-        }
-
-        private void textBox_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Escape)
-            {
-                TextBox.Text = OldText;
-                HideTextbox(editedGraphicsText, drawingCanvas);
-                e.Handled = true;
-            }
-
-            // Enter without modifiers - Shift+Enter should be available.
-            else if (e.Key == Key.Return && Keyboard.Modifiers == ModifierKeys.None)
-            {
-                HideTextbox(editedGraphicsText, drawingCanvas);
-                e.Handled = true;
-            }
         }
     }
 }

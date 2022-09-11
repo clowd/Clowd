@@ -10,59 +10,69 @@ namespace Clowd.Drawing.Tools
     {
         private GraphicArrow _currentArrow;
         private GraphicCount _currentCount;
-        
-        public ToolCount(DrawingCanvas drawingCanvas) : base(drawingCanvas)
-        {
-        }
 
-        public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
+        public ToolCount() : base(Resource.CursorText, SnapMode.All)
+        { }
+
+        protected override void OnMouseDownImpl(DrawingCanvas canvas, Point pt)
         {
-            var maxNum = drawingCanvas.GraphicsList
+            var maxNum = canvas.GraphicsList
                 .OfType<GraphicCount>()
-                .Where(g => int.TryParse(g.Body, out var _))
-                .MaxOrDefault(g => int.Parse((string)g.Body));
+                .Where(g => int.TryParse(g.Body, out _))
+                .MaxOrDefault(g => int.Parse(g.Body));
 
-            Point point = e.GetPosition(drawingCanvas);
+            _currentArrow = new GraphicArrow(canvas.ObjectColor, canvas.LineWidth, pt, pt);
 
-            _currentArrow = new GraphicArrow(drawingCanvas.ObjectColor, drawingCanvas.LineWidth, point, point);
-            
-            var o = new GraphicCount(drawingCanvas, point, (maxNum + 1).ToString());
+            var o = new GraphicCount(canvas, pt, (maxNum + 1).ToString());
             o.Normalize();
             // we want count to be centered on point, not aligned to the top left
             o.Move(o.Bounds.Width / -2d, o.Bounds.Height / -2d);
             _currentCount = o;
-            
-            drawingCanvas.UnselectAll();
-            drawingCanvas.GraphicsList.Add(_currentArrow);
-            drawingCanvas.GraphicsList.Add(o);
-            drawingCanvas.CaptureMouse();
+
+            canvas.GraphicsList.Add(_currentArrow);
+            canvas.GraphicsList.Add(o);
         }
 
-        public override void OnMouseMove(DrawingCanvas drawingCanvas, MouseEventArgs e)
+        protected override void OnMouseMoveImpl(DrawingCanvas canvas, Point pt)
         {
-            if (drawingCanvas.IsMouseCaptured)
+            if (_currentArrow != null)
             {
-                Point point = e.GetPosition(drawingCanvas);
-                if (Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.LeftShift))
-                {
-                    point = HelperFunctions.SnapPointToCommonAngle(_currentArrow.LineStart, point, false);
-                }
-
-                _currentArrow.LineEnd = point;
+                _currentArrow.LineEnd = pt;
             }
         }
 
-        public override void OnMouseUp(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
+        protected override void OnMouseUpImpl(DrawingCanvas canvas)
         {
-            if (drawingCanvas.IsMouseCaptured)
+            if (_currentArrow != null && _currentCount != null)
             {
                 if (_currentCount.Contains(_currentArrow.LineStart) && _currentCount.Contains(_currentArrow.LineEnd))
                 {
-                    drawingCanvas.GraphicsList.Remove(_currentArrow);
+                    canvas.GraphicsList.Remove(_currentArrow);
                 }
 
-                base.OnMouseUp(drawingCanvas, e);
+                // CreateTextBox adds command history etc.
+                CreateTextBox(_currentCount, canvas, true);
             }
+            
+            _currentArrow = null;
+            _currentCount = null;
+        }
+
+        public override void AbortOperation(DrawingCanvas canvas)
+        {
+            if (_currentArrow != null)
+            {
+                canvas.GraphicsList.Remove(_currentArrow);
+                _currentArrow = null;
+            }
+
+            if (_currentCount != null)
+            {
+                canvas.GraphicsList.Remove(_currentCount);
+                _currentCount = null;
+            }
+            
+            base.AbortOperation(canvas);
         }
     }
 }

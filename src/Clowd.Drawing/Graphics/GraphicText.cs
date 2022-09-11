@@ -151,12 +151,9 @@ namespace Clowd.Drawing.Graphics
         internal override void Normalize()
         {
             base.Normalize();
-            if (!String.IsNullOrEmpty(Body))
-            {
-                var form = CreateFormattedText();
-                Right = Left + form.Width + (TextPadding * 2);
-                Bottom = Top + form.Height + (TextPadding * 2);
-            }
+            var form = CreateFormattedText();
+            Right = Left + form.Width + (TextPadding * 2);
+            Bottom = Top + form.Height + (TextPadding * 2);
         }
 
         protected virtual FormattedText CreateFormattedText()
@@ -164,6 +161,11 @@ namespace Clowd.Drawing.Graphics
             // trailing whitespace is truncated from height measurements. 
             // this '_' won't get rendered while Editing=true, but it will allow us to calculate the correct rectangle bounds
             string txt = Body;
+
+            // we should still be able to measure if you've just done Ctrl+A, Bksp
+            if (String.IsNullOrEmpty(txt))
+                txt = " ";
+            
             if (Editing && (Body.EndsWith('\r') || Body.EndsWith('\n')))
                 txt += "_";
 

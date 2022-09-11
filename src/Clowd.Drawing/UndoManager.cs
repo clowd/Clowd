@@ -6,7 +6,9 @@ namespace Clowd.Drawing
     internal class UndoManager
     {
         public bool CanUndo => _position > 0 && _position <= _historyList.Count - 1;
+
         public bool CanRedo => _position < _historyList.Count - 1;
+
         public event EventHandler StateChanged;
 
         private readonly DrawingCanvas _drawingCanvas;
@@ -32,12 +34,6 @@ namespace Clowd.Drawing
             return a1.SequenceEqual(a2);
         }
 
-        public void SetFirstStep()
-        {
-            ClearHistory();
-            AddCommandStep();
-        }
-
         public void AddCommandStep()
         {
             var state = _drawingCanvas.GraphicsList.SerializeObjects(false);
@@ -58,15 +54,9 @@ namespace Clowd.Drawing
                 return;
 
             var nextState = _historyList[--_position];
-            var nextGraphics = new GraphicCollection(_drawingCanvas, _drawingCanvas.CanvasUiElementScale);
+            var nextGraphics = new GraphicCollection(_drawingCanvas);
             nextGraphics.DeserializeObjectsInto(nextState);
-
-            // replace the current graphic set with the one from history
-            var old = _drawingCanvas.GraphicsList;
             _drawingCanvas.GraphicsList = nextGraphics;
-            old.Clear();
-            _drawingCanvas.InvalidateVisual();
-
             RaiseStateChangedEvent();
         }
 
@@ -75,17 +65,10 @@ namespace Clowd.Drawing
             if (!CanRedo)
                 return;
 
-
             var nextState = _historyList[++_position];
-            var nextGraphics = new GraphicCollection(_drawingCanvas, _drawingCanvas.CanvasUiElementScale);
+            var nextGraphics = new GraphicCollection(_drawingCanvas);
             nextGraphics.DeserializeObjectsInto(nextState);
-
-            // replace the current graphic set with the one from history
-            var old = _drawingCanvas.GraphicsList;
             _drawingCanvas.GraphicsList = nextGraphics;
-            old.Clear();
-            _drawingCanvas.InvalidateVisual();
-
             RaiseStateChangedEvent();
         }
 

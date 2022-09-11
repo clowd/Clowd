@@ -13,14 +13,36 @@ namespace Clowd.Drawing
 {
     public sealed class GraphicCollection : SimpleNotifyObject, ICollection<GraphicBase>
     {
-        public int VisualCount => _visuals.Count;
+        public int VisualCount => _visuals.Count + 1;
+
         public int Count => _graphics.Count;
+
         public bool IsReadOnly => false;
+
+        public DrawingVisual BackgroundVisual => _artworkBackground;
 
         public Rect ContentBounds
         {
             get => _contentBounds;
-            private set => Set(ref _contentBounds, value);
+            private set
+            {
+                if (Set(ref _contentBounds, value))
+                {
+                    InvalidateBackground();
+                }
+            }
+        }
+
+        internal Brush BackgroundBrush
+        {
+            get => _backgroundBrush;
+            set
+            {
+                if (Set(ref _backgroundBrush, value))
+                {
+                    InvalidateBackground();
+                }
+            }
         }
 
         internal DpiScale Dpi
@@ -30,20 +52,28 @@ namespace Clowd.Drawing
             {
                 // if the DPI has changed, the selected elements need to be re-drawn
                 if (Set(ref _dpi, value))
+                {
                     InvalidateDpi();
+                }
             }
         }
 
-        private DpiScale _dpi;
         private Rect _contentBounds;
+        private Brush _backgroundBrush = Brushes.Transparent;
+        private DpiScale _dpi;
+
         private readonly List<GraphicBase> _graphics;
         private readonly VisualCollection _visuals;
+        private readonly DrawingVisual _artworkBackground;
 
-        internal GraphicCollection(DrawingCanvas parent, DpiScale dpi)
+        internal GraphicCollection(DrawingCanvas parent)
         {
             _visuals = new VisualCollection(parent);
             _graphics = new List<GraphicBase>();
-            _dpi = dpi;
+            _dpi = parent.CanvasUiElementScale;
+            _artworkBackground = new DrawingVisual();
+            _backgroundBrush = new SolidColorBrush(parent.ArtworkBackground);
+            InvalidateBackground();
         }
 
         public void Add(GraphicBase graphic)
@@ -53,6 +83,7 @@ namespace Clowd.Drawing
             _visuals.Add(vis);
             graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
             DrawGraphic(graphic, vis);
+            OnPropertyChanged(nameof(Count));
         }
 
         public void Insert(int index, GraphicBase graphic)
@@ -62,6 +93,7 @@ namespace Clowd.Drawing
             _visuals.Insert(index, vis);
             graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
             DrawGraphic(graphic, vis);
+            OnPropertyChanged(nameof(Count));
         }
 
         public bool Remove(GraphicBase graphic)
@@ -79,6 +111,7 @@ namespace Clowd.Drawing
             _graphics.RemoveAt(index);
             _visuals.RemoveAt(index);
             InvalidateBounds();
+            OnPropertyChanged(nameof(Count));
         }
 
         public void Clear()
@@ -87,6 +120,7 @@ namespace Clowd.Drawing
             _graphics.Clear();
             _visuals.Clear();
             InvalidateBounds();
+            OnPropertyChanged(nameof(Count));
         }
 
         internal byte[] SerializeObjects(bool selectedOnly)
@@ -101,7 +135,7 @@ namespace Clowd.Drawing
                 Add(g);
         }
 
-        internal DrawingVisual DrawGraphicsToVisual(Brush backgroundBrush = null)
+        internal DrawingVisual DrawGraphicsToVisual()
         {
             // note, this method loses all bitmap effects,
             // but the alternative requires recursive painting with VisualBrush and produces really poor text rendering
@@ -118,8 +152,8 @@ namespace Clowd.Drawing
                 dc.PushTransform(transform);
 
                 // draw background
-                if (backgroundBrush != null)
-                    dc.DrawRectangle(backgroundBrush, null, bounds);
+                if (_backgroundBrush != null)
+                    dc.DrawRectangle(_backgroundBrush, null, bounds);
 
                 // draw all graphics (without any selection handles etc)
                 foreach (var g in gl)
@@ -129,7 +163,7 @@ namespace Clowd.Drawing
             return vs;
         }
 
-        internal BitmapSource DrawGraphicsToBitmap(Brush backgroundBrush = null)
+        internal BitmapSource DrawGraphicsToBitmap()
         {
             var gl = GetGraphicList(false);
             var bounds = ContentBounds;
@@ -143,13 +177,13 @@ namespace Clowd.Drawing
                 PixelFormats.Pbgra32);
 
             // draw background
-            if (backgroundBrush != null)
+            if (_backgroundBrush != null)
             {
                 DrawingVisual background = new DrawingVisual();
                 using (DrawingContext dc = background.RenderOpen())
                 {
                     dc.PushTransform(transform);
-                    dc.DrawRectangle(backgroundBrush, null, bounds);
+                    dc.DrawRectangle(_backgroundBrush, null, bounds);
                 }
 
                 bmp.Render(background);
@@ -166,8 +200,18 @@ namespace Clowd.Drawing
             return bmp;
         }
 
-        // indexers
-        public Visual GetVisual(int index) => _visuals[index];
+        public Visual GetVisual(int index)
+        {
+            if (index == 0)
+            {
+                return _artworkBackground;
+            }
+            else
+            {
+                return _visuals[index - 1];
+            }
+        }
+
         public GraphicBase this[int index] => _graphics[index];
 
         // misc ICollection
@@ -216,7 +260,6 @@ namespace Clowd.Drawing
         private void InvalidateBounds()
         {
             ContentBounds = GetArtworkBounds();
-            OnPropertyChanged(nameof(ContentBounds));
         }
 
         private void InvalidateDpi()
@@ -229,6 +272,12 @@ namespace Clowd.Drawing
                 if (g?.IsSelected == true && v != null)
                     DrawGraphic(g, v);
             }
+        }
+
+        private void InvalidateBackground()
+        {
+            using var ctx = _artworkBackground.RenderOpen();
+            ctx.DrawRectangle(_backgroundBrush, null, ContentBounds);
         }
 
         private Rect GetArtworkBounds()
