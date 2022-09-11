@@ -130,7 +130,7 @@ namespace Clowd.UI.Helpers
         public ToolStateCapabilities(ToolType tool)
         {
             _tool = tool;
-            _action = _fakeCanvas.GetToolActionType(tool);
+            // _action = _fakeCanvas.GetToolActionType(tool);
         }
 
         static ToolStateCapabilities()

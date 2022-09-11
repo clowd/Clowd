@@ -22,7 +22,7 @@ namespace Clowd.UI.Helpers
             _canExecute = canExecute;
         }
 
-        [DebuggerStepThrough]
+        //[DebuggerStepThrough]
         public bool CanExecute(object parameter)
         {
             return _canExecute == null ? true : _canExecute(parameter);

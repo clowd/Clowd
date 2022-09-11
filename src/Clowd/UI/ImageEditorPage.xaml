@@ -290,7 +290,11 @@
                                 </DrawingBrush.Drawing>
                             </DrawingBrush>
                         </Border.Background>
-                        <Rectangle Fill="{Binding ElementName=drawingCanvas, Path=ArtworkBackground, Mode=OneWay}" />
+                        <Rectangle>
+                            <Rectangle.Fill>
+                                <SolidColorBrush Color="{Binding ElementName=drawingCanvas, Path=ArtworkBackground, Mode=OneWay}" />
+                            </Rectangle.Fill>
+                        </Rectangle>
                     </Border>
                 </Border>
             </StackPanel>
@@ -511,23 +515,14 @@
                     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pixelate}"
                     ToolTip="Obscure (O)" />
 
-                <!--  <controls:ToolButton  -->
-                <!--  Command="{StaticResource Commands.SelectTool}"  -->
-                <!--  CommandParameter="Erase"  -->
-                <!--  IconPath="{StaticResource IconToolErase}"  -->
-                <!--  IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Erase}"  -->
-                <!--  ToolTip="Erase (E)" />  -->
-
                 <controls:ToolButton
-                    Command="ApplicationCommands.Undo"
+                    Command="{Binding ElementName=drawingCanvas, Path=CommandUndo, Mode=OneWay}"
                     IconPath="{StaticResource IconUndo}"
-                    IsEnabled="{Binding ElementName=drawingCanvas, Path=CanUndo, Mode=OneWay}"
                     ToolTip="Undo (Ctrl+Z)" />
 
                 <controls:ToolButton
-                    Command="ApplicationCommands.Redo"
+                    Command="{Binding ElementName=drawingCanvas, Path=CommandRedo, Mode=OneWay}"
                     IconPath="{StaticResource IconRedo}"
-                    IsEnabled="{Binding ElementName=drawingCanvas, Path=CanRedo, Mode=OneWay}"
                     ToolTip="Redo (Ctrl+Y)" />
 
             </WrapPanel>

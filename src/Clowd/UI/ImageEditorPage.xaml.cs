@@ -49,7 +49,7 @@ namespace Clowd.UI
             InitializeComponent();
             //drawingCanvas.SetResourceReference(DrawingCanvas.HandleColorProperty, "AccentColor");
             drawingCanvas.HandleColor = AppStyles.AccentColor;
-            drawingCanvas.ArtworkBackground = new SolidColorBrush(_settings.Editor.CanvasBackground);
+            drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
 
             // register tool changed listener
@@ -202,7 +202,7 @@ namespace Clowd.UI
 
         private bool VerifyArtworkExists()
         {
-            var b = drawingCanvas.GetArtworkBounds();
+            var b = drawingCanvas.GraphicsList.ContentBounds;
             if (b.Height < 10 || b.Width < 10)
             {
                 NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "This operation could not be completed because there are no objects on the canvas.", "Canvas Empty");
@@ -396,8 +396,7 @@ namespace Clowd.UI
             if (Mouse.LeftButton == MouseButtonState.Pressed)
                 return;
 
-            if (drawingCanvas.CanUnselectAll)
-                drawingCanvas.UnselectAll();
+            drawingCanvas.UnselectAll();
 
             var tool = (ToolType)Enum.Parse(typeof(ToolType), (string)e.Parameter);
             drawingCanvas.Tool = tool;
@@ -541,9 +540,9 @@ namespace Clowd.UI
 
         private async void backgroundColor_Click(object sender, MouseButtonEventArgs e)
         {
-            var oldColor = drawingCanvas.ArtworkBackground as SolidColorBrush;
-            var newColor = await NiceDialog.ShowColorPromptAsync(this, oldColor?.Color ?? Colors.White);
-            drawingCanvas.ArtworkBackground = new SolidColorBrush(newColor);
+            var oldColor = drawingCanvas.ArtworkBackground;
+            var newColor = await NiceDialog.ShowColorPromptAsync(this, oldColor);
+            drawingCanvas.ArtworkBackground = newColor;
             _settings.Editor.CanvasBackground = newColor;
         }
 

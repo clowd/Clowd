@@ -24,17 +24,17 @@
         Drawing,
     }
 
-    internal enum ContextMenuCommand
-    {
-        SelectAll,
-        UnselectAll,
-        Delete,
-        DeleteAll,
-        MoveToFront,
-        MoveToBack,
-        ResetRotation,
-        Undo,
-        Redo,
-        SetProperties
-    };
+    //internal enum ContextMenuCommand
+    //{
+    //    SelectAll,
+    //    UnselectAll,
+    //    Delete,
+    //    DeleteAll,
+    //    MoveToFront,
+    //    MoveToBack,
+    //    ResetRotation,
+    //    Undo,
+    //    Redo,
+    //    SetProperties
+    //};
 }
