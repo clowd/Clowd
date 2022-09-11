@@ -5,7 +5,6 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using Clowd.Config;
 
 namespace Clowd.UI.Controls
 {
@@ -90,7 +89,7 @@ namespace Clowd.UI.Controls
 
         public bool IsDragHandle { get; set; }
 
-        public List<GlobalKeyGesture> Gestures { get; set; } = new List<GlobalKeyGesture>();
+        public List<SimpleKeyGesture> Gestures { get; set; } = new List<SimpleKeyGesture>();
 
         public EventHandler Executed { get; set; }
 

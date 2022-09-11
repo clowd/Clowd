@@ -39,6 +39,12 @@ namespace Clowd
             Gesture = _gesture;
         }
 
+        public BareKeyBinding(Key key)
+        {
+            _gesture = new BareKeyGesture() { Key = key };
+            Gesture = _gesture;
+        }
+
         public Key Key
         {
             get => _gesture.Key;
