@@ -8,69 +8,6 @@ using RT.Serialization;
 
 namespace Clowd.Config
 {
-    public class GlobalKeyGesture : IEquatable<GlobalKeyGesture>
-    {
-        public Key Key { get; }
-        public ModifierKeys Modifiers { get; }
-
-        public GlobalKeyGesture()
-        { }
-
-        public GlobalKeyGesture(Key key)
-        {
-            Key = key;
-        }
-
-        public GlobalKeyGesture(Key key, ModifierKeys modifiers)
-        {
-            Key = key;
-            Modifiers = modifiers;
-        }
-
-        public override int GetHashCode()
-        {
-            return unchecked(Key.GetHashCode() + Modifiers.GetHashCode());
-        }
-
-        public override bool Equals(object obj)
-        {
-            if (obj is GlobalKeyGesture kg) return Equals(kg);
-            return false;
-        }
-
-        public bool Equals(GlobalKeyGesture other)
-        {
-            if (other == null) return false;
-            return other.Key == Key && other.Modifiers == Modifiers;
-        }
-
-        public override string ToString()
-        {
-            if (Key == Key.None)
-                return String.Empty;
-
-            string strBinding = "";
-            string strKey = Key.ToString();
-            if (strKey != String.Empty)
-            {
-                if (Modifiers != ModifierKeys.None)
-                {
-                    strBinding += Modifiers.ToString();
-                    if (strBinding != String.Empty)
-                    {
-                        strBinding += '+';
-                    }
-                }
-
-                strBinding += strKey;
-            }
-
-            return String.Join("+", strBinding.Split('+', ',').Select(c => c.Trim()))
-                .Replace("Snapshot", "PrtScr")
-                .Replace("Control", "Ctrl");
-        }
-    }
-
     /// <summary>
     /// A serializable manager for global hotkeys
     /// </summary>
@@ -81,7 +18,7 @@ namespace Clowd.Config
 
         public string KeyGestureText => IsRegistered ? KeyGesture?.ToString() : null;
 
-        public GlobalKeyGesture KeyGesture
+        public SimpleKeyGesture KeyGesture
         {
             get => _keyGesture;
             set
@@ -115,7 +52,7 @@ namespace Clowd.Config
             remove { _triggerExecuted -= value; }
         }
 
-        private GlobalKeyGesture _keyGesture; // only persisted value
+        private SimpleKeyGesture _keyGesture; // only persisted value
         [ClassifyIgnore] private EventHandler _triggerExecuted;
         [ClassifyIgnore] private bool _isRegistered;
         [ClassifyIgnore] private string _error;
@@ -123,18 +60,18 @@ namespace Clowd.Config
         [ClassifyIgnore] private HotKey _hotKey;
 
         public GlobalTrigger(Key key, ModifierKeys modifier)
-            : this(new GlobalKeyGesture(key, modifier))
+            : this(new SimpleKeyGesture(key, modifier))
         { }
 
         public GlobalTrigger(Key key)
-            : this(new GlobalKeyGesture(key, ModifierKeys.None))
+            : this(new SimpleKeyGesture(key, ModifierKeys.None))
         { }
 
         public GlobalTrigger()
             : this(null)
         { }
 
-        public GlobalTrigger(GlobalKeyGesture gesture)
+        public GlobalTrigger(SimpleKeyGesture gesture)
         {
             _keyGesture = gesture;
             Instances.Add(this);

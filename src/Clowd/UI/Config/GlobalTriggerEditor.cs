@@ -110,7 +110,7 @@ namespace Clowd.UI.Config
             {
                 try
                 {
-                    Trigger.KeyGesture = new GlobalKeyGesture(key, modifiers);
+                    Trigger.KeyGesture = new SimpleKeyGesture(key, modifiers);
                 }
                 catch
                 {
