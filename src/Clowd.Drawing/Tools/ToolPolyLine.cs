@@ -28,7 +28,7 @@ namespace Clowd.Drawing.Tools
         {
             if (_newPolyLine != null)
             {
-                _newPolyLine.EndDrawing();
+                _newPolyLine.EndDrawing(true);
                 _newPolyLine.IsSelected = true;
                 canvas.AddCommandToHistory();
                 _newPolyLine = null;
