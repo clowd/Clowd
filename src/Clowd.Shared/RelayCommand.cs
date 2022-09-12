@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
@@ -70,7 +70,7 @@ namespace Clowd.UI.Helpers
                 return null;
 
             if (Gesture.Modifiers == ModifierKeys.None)
-                return new BareKeyBinding(Gesture.Key);
+                return new BareKeyBinding(this, Gesture.Key);
 
             return new KeyBinding(this, Gesture.Key, Gesture.Modifiers);
         }

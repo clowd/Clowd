@@ -39,10 +39,11 @@ namespace Clowd
             Gesture = _gesture;
         }
 
-        public BareKeyBinding(Key key)
+        public BareKeyBinding(ICommand command, Key key)
         {
             _gesture = new BareKeyGesture() { Key = key };
             Gesture = _gesture;
+            Command = command;
         }
 
         public Key Key
