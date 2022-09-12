@@ -50,29 +50,35 @@ namespace Clowd.UI.Pages
         // and double check there are no missing/deprecated license links
         // Get-Package | Select-Object Id,LicenseUrl
         private const string _nugetPackages = @"
-B2Net                               https://licenses.nuget.org/MIT                                        
-Clowd.Squirrel                      https://licenses.nuget.org/MIT                                        
+B2Net                               https://licenses.nuget.org/MIT
+Clowd.Squirrel                      https://licenses.nuget.org/MIT
+DependencyPropertyGenerator         https://licenses.nuget.org/MIT
 DotNetZip                           https://raw.githubusercontent.com/haf/DotNetZip.Semverd/master/LICENSE
-Hardcodet.NotifyIcon.Wpf            https://github.com/hardcodet/wpf-notifyicon/blob/develop/LICENSE                                  
-Microsoft.Win32.Registry            https://licenses.nuget.org/MIT                                        
-NAudio.Wasapi                       https://licenses.nuget.org/MIT                                        
-Nerdbank.GitVersioning              https://licenses.nuget.org/MIT                                        
-Newtonsoft.Json                     https://licenses.nuget.org/MIT                                        
-NLog                                https://licenses.nuget.org/BSD-3-Clause  
-RT.Serialization                    https://licenses.nuget.org/MIT                                                                              
-RT.Serialization.Binary             https://licenses.nuget.org/MIT                                                                                
-RT.Serialization.Xml                https://licenses.nuget.org/MIT                                                                                        
-RT.Util.Core                        https://licenses.nuget.org/MIT
-Sentry                              https://licenses.nuget.org/MIT                                        
-Sentry.NLog                         https://licenses.nuget.org/MIT                                        
-ThomasLevesque.WeakEvent            https://licenses.nuget.org/Apache-2.0                                 
-Vanara.PInvoke.DwmApi               https://licenses.nuget.org/MIT                                        
-Vanara.PInvoke.SHCore               https://licenses.nuget.org/MIT                                        
-Vanara.PInvoke.Shell32              https://licenses.nuget.org/MIT                                        
-Vanara.PInvoke.User32               https://licenses.nuget.org/MIT                                        
-WindowsAzure.Storage                https://github.com/Azure/azure-storage-net/blob/master/LICENSE.txt    
-WPF-UI                              https://licenses.nuget.org/MIT                                        
-YamlDotNet                          https://github.com/aaubry/YamlDotNet/blob/master/LICENSE.txt                                  
+Hardcodet.NotifyIcon.Wpf            https://github.com/hardcodet/wpf-notifyicon/blob/develop/LICENSE
+Microsoft.AspNet.WebApi.Client      https://github.com/aspnet/AspNetWebStack/blob/main/LICENSE.txt
+Microsoft.Toolkit.Uwp.Notifications https://licenses.nuget.org/MIT
+Microsoft.Win32.Registry            https://licenses.nuget.org/MIT
+NAudio.Wasapi                       https://licenses.nuget.org/MIT
+Nerdbank.GitVersioning              https://licenses.nuget.org/MIT
+Newtonsoft.Json                     https://licenses.nuget.org/MIT
+NLog                                https://licenses.nuget.org/BSD-3-Clause
+PipeMethodCalls                     https://github.com/RandomEngy/PipeMethodCalls/blob/master/LICENSE
+PipeMethodCalls.NetJson             https://github.com/RandomEngy/PipeMethodCalls/blob/master/LICENSE
+RT.Serialization                    https://github.com/RT-Projects/RT.Util/blob/master/LICENSE
+RT.Serialization.Binary             https://github.com/RT-Projects/RT.Util/blob/master/LICENSE
+RT.Serialization.Xml                https://github.com/RT-Projects/RT.Util/blob/master/LICENSE
+RT.Util.Core                        https://github.com/RT-Projects/RT.Util/blob/master/LICENSE
+Sentry                              https://licenses.nuget.org/MIT
+Sentry.NLog                         https://licenses.nuget.org/MIT
+System.Drawing.Common               https://licenses.nuget.org/MIT
+ThomasLevesque.WeakEvent            https://licenses.nuget.org/Apache-2.0
+Vanara.PInvoke.DwmApi               https://licenses.nuget.org/MIT
+Vanara.PInvoke.SHCore               https://licenses.nuget.org/MIT
+Vanara.PInvoke.Shell32              https://licenses.nuget.org/MIT
+Vanara.PInvoke.User32               https://licenses.nuget.org/MIT
+WindowsAzure.Storage                https://github.com/Azure/azure-storage-net/blob/master/LICENSE.txt
+WPF-UI                              https://licenses.nuget.org/MIT
+YamlDotNet                          https://github.com/aaubry/YamlDotNet/blob/master/LICENSE.txt                         
 ";
 
         public AboutPage()
@@ -95,7 +101,6 @@ YamlDotNet                          https://github.com/aaubry/YamlDotNet/blob/ma
             }
 
             // sub-modules, etc
-            deps.Add(new OpenSourceLibrary { LibraryName = "obs-studio-node", LibraryLicenseUrl = "https://github.com/stream-labs/obs-studio-node/blob/staging/LICENSE" });
             deps.Add(new OpenSourceLibrary { LibraryName = "obs-studio", LibraryLicenseUrl = "https://github.com/obsproject/obs-studio/blob/master/COPYING" });
             deps.Add(new OpenSourceLibrary { LibraryName = "obs-express", LibraryLicenseUrl = "https://github.com/clowd/obs-express/blob/master/LICENSE" });
             deps.Add(new OpenSourceLibrary { LibraryName = "ffmpeg", LibraryLicenseUrl = "https://www.ffmpeg.org/legal.html" });
