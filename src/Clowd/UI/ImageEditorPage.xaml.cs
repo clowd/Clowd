@@ -47,7 +47,6 @@ namespace Clowd.UI
             _session = info;
 
             InitializeComponent();
-            //drawingCanvas.SetResourceReference(DrawingCanvas.HandleColorProperty, "AccentColor");
             drawingCanvas.HandleColor = AppStyles.AccentColor;
             drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
@@ -55,6 +54,24 @@ namespace Clowd.UI
             // register tool changed listener
             toolNotifier = new PropertyChangeNotifier(drawingCanvas, DrawingCanvas.ToolProperty);
             toolNotifier.ValueChanged += drawingCanvas_ToolChanged;
+
+            this.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) drawingCanvas.CancelCurrentOperation(); };
+            this.InputBindings.Add(drawingCanvas.CommandSelectAll.CreateKeyBinding());
+            this.InputBindings.Add(drawingCanvas.CommandDelete.CreateKeyBinding());
+            this.InputBindings.Add(drawingCanvas.CommandMoveToFront.CreateKeyBinding());
+            this.InputBindings.Add(drawingCanvas.CommandMoveToBack.CreateKeyBinding());
+            this.InputBindings.Add(drawingCanvas.CommandMoveForward.CreateKeyBinding());
+            this.InputBindings.Add(drawingCanvas.CommandMoveBackward.CreateKeyBinding());
+            this.InputBindings.Add(drawingCanvas.CommandUndo.CreateKeyBinding());
+            this.InputBindings.Add(drawingCanvas.CommandRedo.CreateKeyBinding());
+            this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanAuto, Key.D0, ModifierKeys.Control));
+            this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanAuto, Key.NumPad0, ModifierKeys.Control));
+            this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.D1, ModifierKeys.Control));
+            this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad1, ModifierKeys.Control));
+            this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.D2, ModifierKeys.Control) { CommandParameter = 2d });
+            this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad2, ModifierKeys.Control) { CommandParameter = 2d });
+            this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.D3, ModifierKeys.Control) { CommandParameter = 3d });
+            this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad3, ModifierKeys.Control) { CommandParameter = 3d });
 
             this.Loaded += ImageEditorPage2_Loaded;
             SyncToolState();
@@ -154,7 +171,6 @@ namespace Clowd.UI
         //SyncToolState();
         //}
 
-        #region Helpers
 
         //private void AddImage(BitmapSource img)
         //{
@@ -298,9 +314,7 @@ namespace Clowd.UI
             }
         }
 
-        #endregion
 
-        #region Commands
 
         private void PrintCommand(object sender, ExecutedRoutedEventArgs e)
         {
@@ -342,18 +356,6 @@ namespace Clowd.UI
             }
         }
 
-        private void UndoCommand(object sender, ExecutedRoutedEventArgs e)
-        {
-            drawingCanvas.Undo();
-            SyncToolState();
-        }
-
-        private void RedoCommand(object sender, ExecutedRoutedEventArgs e)
-        {
-            drawingCanvas.Redo();
-            SyncToolState();
-        }
-
         private async void CopyCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
@@ -374,12 +376,6 @@ namespace Clowd.UI
         {
             CopyCommand(sender, e);
             drawingCanvas.DeleteAll();
-            SyncToolState();
-        }
-
-        private void DeleteCommand(object sender, ExecutedRoutedEventArgs e)
-        {
-            drawingCanvas.Delete();
             SyncToolState();
         }
 
@@ -433,40 +429,6 @@ namespace Clowd.UI
 
             await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "The clipboard does not contain an image.", "Failed to paste");
         }
-
-        private void SelectAllCommand(object sender, ExecutedRoutedEventArgs e)
-        {
-            drawingCanvas.SelectAll();
-            SyncToolState();
-        }
-
-        private void ZoomActualCommand(object sender, ExecutedRoutedEventArgs e)
-        {
-            double zoom = 1d;
-            if (double.TryParse(e.Parameter as string, out var req))
-                zoom = req;
-
-            drawingCanvas.ZoomPanActualSize(zoom);
-        }
-
-        private void ZoomFitCommand(object sender, ExecutedRoutedEventArgs e)
-        {
-            drawingCanvas.ZoomPanAuto();
-        }
-
-        private void MoveToFrontCommand(object sender, ExecutedRoutedEventArgs e)
-        {
-            drawingCanvas.MoveToFront();
-        }
-
-        private void MoveToBackCommand(object sender, ExecutedRoutedEventArgs e)
-        {
-            drawingCanvas.MoveToBack();
-        }
-
-        #endregion
-
-        #region Events
 
         private void rootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
@@ -543,7 +505,6 @@ namespace Clowd.UI
             var oldColor = drawingCanvas.ArtworkBackground;
             var newColor = await NiceDialog.ShowColorPromptAsync(this, oldColor);
             drawingCanvas.ArtworkBackground = newColor;
-            _settings.Editor.CanvasBackground = newColor;
         }
 
         private async void font_Click(object sender, RoutedEventArgs e)
@@ -564,65 +525,10 @@ namespace Clowd.UI
             }
         }
 
-        // private async void ImageStitch_Click(object sender, DPadButtonClickEventArgs e)
-        // {
-        //var wnd = TemplatedWindow.GetWindow(this);
-        //var state = wnd.WindowState;
-        //wnd.WindowState = WindowState.Minimized;
-        //await Task.Delay(400); // wait for window to hide
-
-        //var selection = drawingCanvas.Selection.ToArray();
-        //if (selection.Length != 1)
-        //    return;
-
-        //var image = selection[0] as GraphicImage;
-        //if (image == null)
-        //    return;
-
-
-        //CaptureWindow2.ShowNewCapture(_initialBounds, (img) =>
-        //{
-        //    var xReferenceCenter = (image.Right + image.Left) / 2;
-        //    var yRefereceCenter = (image.Bottom + image.Top) / 2;
-        //    var width = ScreenTools.ScreenToWpf(img.PixelWidth);
-        //    var height = ScreenTools.ScreenToWpf(img.PixelHeight);
-        //    double x, y;
-
-        //    switch (e.Button)
-        //    {
-        //        case DPadButton.Left:
-        //            x = image.Left - width;
-        //            y = yRefereceCenter - (height / 2);
-        //            break;
-        //        case DPadButton.Top:
-        //            x = xReferenceCenter - (width / 2);
-        //            y = image.Top - height;
-        //            break;
-        //        case DPadButton.Right:
-        //            x = image.Right;
-        //            y = yRefereceCenter - (height / 2);
-        //            break;
-        //        case DPadButton.Bottom:
-        //            x = xReferenceCenter - (width / 2);
-        //            y = image.Bottom;
-        //            break;
-        //        default:
-        //            throw new ArgumentOutOfRangeException();
-        //    }
-
-        //    var graphic = new GraphicImage(drawingCanvas, new Rect(x, y, width, height), img, 0);
-        //    drawingCanvas.AddGraphic(graphic);
-        //    drawingCanvas.ZoomPanFit();
-        //    wnd.WindowState = state;
-        //});
-        // }
-
         private void toggleTopMost_Click(object sender, RoutedEventArgs e)
         {
             var w = Window.GetWindow(this);
             w.Topmost = toggleTopMost.IsChecked == true;
         }
-
-        #endregion
     }
 }
