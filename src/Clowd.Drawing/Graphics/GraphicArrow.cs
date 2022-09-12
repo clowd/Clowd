@@ -4,6 +4,7 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("Arrow", Skills = Skill.Stroke | Skill.Color)]
     public class GraphicArrow : GraphicLine
     {
         protected GraphicArrow()

@@ -8,6 +8,7 @@ using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("PolyLine", Skills = Skill.Angle | Skill.Color | Skill.Stroke)]
     public class GraphicPolyLine : GraphicRectangle
     {
         private List<Point> _points;

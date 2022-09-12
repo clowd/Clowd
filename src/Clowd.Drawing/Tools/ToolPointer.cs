@@ -5,13 +5,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Drawing.Graphics;
 
-
 namespace Clowd.Drawing.Tools
 {
     internal class ToolPointer : ToolBase
     {
-        internal override ToolActionType ActionType => ToolActionType.Cursor;
-
         public SelectionMode Selection => _selectMode;
 
         public enum SelectionMode

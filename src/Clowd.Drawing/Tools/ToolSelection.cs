@@ -6,8 +6,6 @@ namespace Clowd.Drawing.Tools
 {
     internal abstract class ToolSelection : ToolBase
     {
-        internal override ToolActionType ActionType => ToolActionType.Drawing;
-
         private GraphicSelectionRectangle _selection = new(new Rect(0, 0, 1, 1));
 
         public ToolSelection() : base(Cursors.Cross, SnapMode.Diagonal)

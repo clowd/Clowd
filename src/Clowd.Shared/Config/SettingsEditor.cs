@@ -24,8 +24,6 @@ namespace Clowd
         Text,
         Count,
         Pixelate,
-        //Erase,
-        Max
     };
 
     namespace Config

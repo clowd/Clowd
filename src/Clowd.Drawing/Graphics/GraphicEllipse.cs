@@ -4,6 +4,7 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("Ellipse", Skills = Skill.Stroke | Skill.Color | Skill.Angle)]
     public class GraphicEllipse : GraphicRectangle
     {
         protected GraphicEllipse()

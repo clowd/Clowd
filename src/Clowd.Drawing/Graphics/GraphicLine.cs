@@ -5,6 +5,7 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("Line", Skills = Skill.Stroke | Skill.Color)]
     public class GraphicLine : GraphicBase
     {
         public Point LineStart

@@ -9,8 +9,6 @@ namespace Clowd.Drawing.Tools
 {
     internal class ToolText : ToolBase
     {
-        internal override ToolActionType ActionType => ToolActionType.Object;
-
         private GraphicText _newText;
         private GraphicText _editText;
         private TextBox _txtBox;

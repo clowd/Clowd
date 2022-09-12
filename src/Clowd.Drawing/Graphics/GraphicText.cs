@@ -8,6 +8,7 @@ using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("Numeric Step", Skills = Skill.Stroke | Skill.Color | Skill.AutoColor | Skill.Font | Skill.Angle)]
     public class GraphicText : GraphicRectangle
     {
         public const int TextPadding = 15;
@@ -145,7 +146,7 @@ namespace Clowd.Drawing.Graphics
 
         internal override void Activate(DrawingCanvas canvas)
         {
-            (canvas.GetTool(ToolType.Text) as ToolText).CreateTextBox(this, canvas, false);
+            canvas.ToolText.CreateTextBox(this, canvas, false);
         }
 
         internal override void Normalize()

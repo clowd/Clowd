@@ -6,6 +6,7 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("Rectangle", Skills = Skill.Angle | Skill.Color | Skill.Stroke)]
     public class GraphicRectangle : GraphicBase
     {
         public double Left

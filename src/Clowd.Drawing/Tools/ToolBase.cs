@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System;
+using System.Windows;
 using System.Windows.Input;
 
 namespace Clowd.Drawing.Tools
@@ -12,8 +13,6 @@ namespace Clowd.Drawing.Tools
 
     internal abstract class ToolBase
     {
-        internal abstract ToolActionType ActionType { get; }
-
         protected Point LastMouseDownPt { get; set; }
         protected Point LastMouseMovePt { get; set; }
 
@@ -30,7 +29,7 @@ namespace Clowd.Drawing.Tools
         {
             if (e.LeftButton != MouseButtonState.Pressed)
                 return;
-            
+
             canvas.CaptureMouse();
             canvas.UnselectAll();
 

@@ -19,25 +19,10 @@ namespace Clowd.UI
 {
     public partial class ImageEditorPage : UserControl, INotifyPropertyChanged
     {
-        public StateCapabilities Capabilities
-        {
-            get => _capabilities;
-            set
-            {
-                if (_capabilities != value)
-                {
-                    _capabilities = value;
-                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Capabilities)));
-                }
-            }
-        }
-
-        private ToolStateManager _manager = new ToolStateManager();
         private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private PropertyChangeNotifier toolNotifier;
-        private SettingsRoot _settings => SettingsRoot.Current;
+        private SettingsRoot _settings = SettingsRoot.Current;
         private SessionInfo _session;
-        private StateCapabilities _capabilities = ToolStateManager.Empty();
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -52,8 +37,8 @@ namespace Clowd.UI
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
 
             // register tool changed listener
-            toolNotifier = new PropertyChangeNotifier(drawingCanvas, DrawingCanvas.ToolProperty);
-            toolNotifier.ValueChanged += drawingCanvas_ToolChanged;
+            //toolNotifier = new PropertyChangeNotifier(drawingCanvas, DrawingCanvas.ToolProperty);
+            //toolNotifier.ValueChanged += drawingCanvas_ToolChanged;
 
             this.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) drawingCanvas.CancelCurrentOperation(); };
             this.InputBindings.Add(drawingCanvas.CommandSelectAll.CreateKeyBinding());
@@ -74,7 +59,6 @@ namespace Clowd.UI
             this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad3, ModifierKeys.Control) { CommandParameter = 3d });
 
             this.Loaded += ImageEditorPage2_Loaded;
-            SyncToolState();
         }
 
         private void ImageEditorPage2_Loaded(object sender, RoutedEventArgs e)
@@ -113,8 +97,6 @@ namespace Clowd.UI
             // if window is bigger than image, show at actual size. else, zoom to fit
             drawingCanvas.ZoomPanAuto();
 
-            SyncToolState();
-
             toggleTopMost.IsChecked = Window.GetWindow(this)?.Topmost;
         }
 
@@ -123,98 +105,6 @@ namespace Clowd.UI
             base.OnDpiChanged(oldDpi, newDpi);
             drawingCanvas.UpdateScaleTransform();
         }
-
-        //public static void ShowFromSession(SessionInfo info)
-        //{
-        //    var w = new ImageEditorPage();
-        //    w._session = info;
-
-        //    var screen = Platform.Current.GetScreenFromRect(info.SelectionRect);
-        //    var dpi = screen.ToDpiContext();
-        //    var padding = dpi.ToWorldWH(w._settings.Editor.StartupPadding);
-
-
-        //    // get wpf to do a layout pass, check if it can be fully fit within the screen
-        //    var availableSize = dpi.ToWorldSize(screen.WorkingArea.Size);
-        //    w.Measure(new Size(availableSize.Width, availableSize.Height));
-        //    var requestedSize = w.DesiredSize;
-
-        //    //var t = w.toolBar.DesiredSize;
-
-        //    //w.Show();
-        //    //w.GetPlatformWindow().Activate();
-        //}
-
-        //protected override async void OnActivated(Window wnd)
-        //{
-        //if (_initialImage == null)
-        //    return;
-
-        //AddImage(_initialImage);
-
-        //var wasSidebarWidth = toolBar.ActualWidth;
-        //var wasActionRowHeight = propertiesBar.ActualHeight;
-
-        ////bool fit = DoWindowFit(wnd);
-        ////if (propertiesBar.ActualHeight != wasActionRowHeight || toolBar.ActualWidth != wasSidebarWidth)
-        ////    fit = DoWindowFit(wnd); // re-fit in case the action row has reflowed
-
-        //// just doing this to force a thread context switch.
-        //// by the time we get back on to the UI thread the window will be done resizing.
-        //await Task.Delay(10);
-
-        ////if (fit)
-        //drawingCanvas.ZoomPanActualSize();
-        ////else
-        ////    drawingCanvas.ZoomPanFit();
-
-        //SyncToolState();
-        //}
-
-
-        //private void AddImage(BitmapSource img)
-        //{
-        //    if (img == null)
-        //        return;
-
-        //    //var width = ScreenTools.ScreenToWpf(img.PixelWidth);
-        //    //var height = ScreenTools.ScreenToWpf(img.PixelHeight);
-        //    //var graphic = new GraphicImage(drawingCanvas, new Rect(
-        //    //    ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.X - (width / 2)),
-        //    //    ScreenTools.WpfSnapToPixels(drawingCanvas.WorldOffset.Y - (height / 2)),
-        //    //    width, height), img);
-
-        //    var width = img.PixelWidth;
-        //    var height = img.PixelHeight;
-        //    var graphic = new GraphicImage(drawingCanvas, new Rect(
-        //       drawingCanvas.WorldOffset.X - (width / 2),
-        //      drawingCanvas.WorldOffset.Y - (height / 2),
-        //        width, height), img);
-
-        //    drawingCanvas.AddGraphic(graphic);
-        //}
-
-        //private bool DoWindowFit(Window wnd)
-        //{
-        //    //if (_initialImage == null)
-        //    //    return true;
-
-        //    //var imageSize = new Size(ScreenTools.ScreenToWpf(_initialImage.PixelWidth), ScreenTools.ScreenToWpf(_initialImage.Height));
-        //    //var capturePadding = App.Current.Settings.EditorSettings.CapturePadding;
-        //    //var contentOffsetX = capturePadding + Math.Max(30, toolBar.ActualWidth);
-        //    //var contentOffsetY = capturePadding + Math.Max(30, propertiesBar.ActualHeight);
-
-        //    //var contentSize = new Size(imageSize.Width + contentOffsetX + capturePadding, imageSize.Height + contentOffsetY + capturePadding);
-
-        //    ////if (_initialBounds != null)
-        //    ////{
-        //    ////    return TemplatedWindow.SizeToContent(wnd, contentSize, _initialBounds.Value.Left - contentOffsetX, _initialBounds.Value.Top - contentOffsetY);
-        //    ////}
-        //    ////else
-        //    ////{
-        //    //return TemplatedWindow.SizeToContent(wnd, contentSize);
-        //    //}
-        //}
 
         private bool VerifyArtworkExists()
         {
@@ -233,51 +123,10 @@ namespace Clowd.UI
             return drawingCanvas.DrawGraphicsToVisual();
         }
 
-        //private DrawingVisual GetRenderedVisual()
-        //{
-        //    var bounds = drawingCanvas.GetArtworkBounds();
-        //    var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
-
-        //    DrawingVisual vs = new DrawingVisual();
-        //    using (DrawingContext dc = vs.RenderOpen())
-        //    {
-        //        dc.PushTransform(transform);
-        //        dc.DrawRectangle(new SolidColorBrush(_settings.Editor.CanvasBackground), null, bounds);
-        //        dc.Pop();
-        //        drawingCanvas.Draw(dc, null, transform, false);
-        //    }
-        //    return vs;
-        //}
-
         private BitmapSource GetRenderedBitmap()
         {
             return drawingCanvas.DrawGraphicsToBitmap();
         }
-
-        //private RenderTargetBitmap GetRenderedBitmap()
-        //{
-        //    var bounds = drawingCanvas.GetArtworkBounds();
-        //    if (bounds.IsEmpty)
-        //        return null;
-
-        //    var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
-
-        //    RenderTargetBitmap bmp = new RenderTargetBitmap(
-        //        (int)bounds.Width,
-        //        (int)bounds.Height,
-        //        96,
-        //        96,
-        //        PixelFormats.Pbgra32);
-        //    DrawingVisual background = new DrawingVisual();
-        //    using (DrawingContext dc = background.RenderOpen())
-        //    {
-        //        dc.PushTransform(transform);
-        //        dc.DrawRectangle(new SolidColorBrush(_settings.Editor.CanvasBackground), null, bounds);
-        //    }
-        //    bmp.Render(background);
-        //    drawingCanvas.Draw(null, bmp, transform, false);
-        //    return bmp;
-        //}
 
         private PngBitmapEncoder GetRenderedPng()
         {
@@ -285,36 +134,6 @@ namespace Clowd.UI
             enc.Frames.Add(BitmapFrame.Create(GetRenderedBitmap()));
             return enc;
         }
-
-        private void SyncToolState()
-        {
-            var selection = drawingCanvas.SelectedItems.ToArray();
-            object newStateObj;
-            if (selection.Length == 0)
-            {
-                newStateObj = drawingCanvas.Tool;
-            }
-            else if (selection.Length == 1)
-            {
-                newStateObj = selection.First();
-            }
-            else
-            {
-                newStateObj = null;
-            }
-
-            // if the state object has changed (IsCurrent) then we need to enter a new capability state
-            var currentState = Capabilities;
-            if (!currentState.IsCurrent(newStateObj))
-            {
-                var newState = _manager.GetObjectCapabilities(newStateObj);
-                currentState.ExitState(this);
-                Capabilities = newState;
-                newState.EnterState(this, newStateObj);
-            }
-        }
-
-
 
         private void PrintCommand(object sender, ExecutedRoutedEventArgs e)
         {
@@ -376,7 +195,6 @@ namespace Clowd.UI
         {
             CopyCommand(sender, e);
             drawingCanvas.DeleteAll();
-            SyncToolState();
         }
 
         private async void UploadCommand(object sender, ExecutedRoutedEventArgs e)
@@ -392,12 +210,8 @@ namespace Clowd.UI
             if (Mouse.LeftButton == MouseButtonState.Pressed)
                 return;
 
-            drawingCanvas.UnselectAll();
-
             var tool = (ToolType)Enum.Parse(typeof(ToolType), (string)e.Parameter);
             drawingCanvas.Tool = tool;
-
-            SyncToolState();
         }
 
         private async void PasteCommand(object sender, ExecutedRoutedEventArgs e)
@@ -409,7 +223,6 @@ namespace Clowd.UI
                 if (ms != null)
                 {
                     drawingCanvas.DeserializeGraphics(ms.ToArray());
-                    SyncToolState();
                     return;
                 }
             }
@@ -422,7 +235,6 @@ namespace Clowd.UI
                     var imgPath = SaveImageToSessionDir(img);
                     var graphic = new GraphicImage(imgPath, new Size(img.PixelWidth, img.PixelHeight));
                     drawingCanvas.AddGraphic(graphic);
-                    SyncToolState();
                     return;
                 }
             }
@@ -456,17 +268,10 @@ namespace Clowd.UI
             }
         }
 
-        private void drawingCanvas_ToolChanged(object sender, EventArgs e)
-        {
-            SyncToolState();
-        }
-
         private void drawingCanvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
             if (drawingCanvas.GraphicsList.Count == 0)
                 return;
-
-            SyncToolState();
 
             // persist editor state to session file
             var state = drawingCanvas.SerializeGraphics(false);
