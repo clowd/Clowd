@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,10 +26,10 @@ namespace Clowd.UI.Helpers
         {
         }
 
-        public RelayCommand(UIElement parent)
-        {
-            _parent = parent;
-        }
+        //public RelayCommand(UIElement parent)
+        //{
+        //    _parent = parent;
+        //}
 
         event EventHandler ICommand.CanExecuteChanged
         {

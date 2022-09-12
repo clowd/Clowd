@@ -66,7 +66,6 @@ namespace Clowd.Drawing
         private GraphicCollection _graphicsList;
         private ToolBase[] _tools;
         private Border _clickable;
-        private ContextMenu _contextMenu;
         private UndoManager _undoManager;
 
         public RelayCommand CommandSelectAll { get; }
@@ -132,100 +131,105 @@ namespace Clowd.Drawing
             _undoManager = new UndoManager(this);
             _undoManager.StateChanged += (_, _) => UpdateState();
 
-            CommandSelectAll = new RelayCommand(this)
+            double parseDoubleOrDefault(object obj, double def)
+            {
+                if (obj == null) return def;
+                if (obj is string str)
+                    if (double.TryParse(str, out var i))
+                        return i;
+                try { return Convert.ToDouble(obj); }
+                catch { return def; }
+            }
+
+            CommandSelectAll = new RelayCommand()
             {
                 Executed = (obj) => SelectAll(),
                 CanExecute = (obj) => Count > 0,
                 Text = "_Select all",
                 Gesture = new SimpleKeyGesture(Key.A, ModifierKeys.Control),
             };
-            CommandUnselectAll = new RelayCommand(this)
+            CommandUnselectAll = new RelayCommand()
             {
-                Executed = (obj) => UnselectAll(),
+                Executed = (obj) => CancelCurrentOperation(), // this resets the tool, unselects all, etc
                 CanExecute = (obj) => SelectedItems.Any(),
                 Text = "Unselect all",
                 Gesture = new SimpleKeyGesture(Key.Escape),
             };
-            CommandDelete = new RelayCommand(this)
+            CommandDelete = new RelayCommand()
             {
                 Executed = (obj) => Delete(),
                 CanExecute = (obj) => SelectedItems.Any(),
                 Text = "_Delete",
                 Gesture = new SimpleKeyGesture(Key.Delete),
             };
-            CommandDeleteAll = new RelayCommand(this)
+            CommandDeleteAll = new RelayCommand()
             {
                 Executed = (obj) => DeleteAll(),
                 CanExecute = (obj) => Count > 0,
                 Text = "Delete all",
             };
-            CommandMoveToFront = new RelayCommand(this)
+            CommandMoveToFront = new RelayCommand()
             {
                 Executed = (obj) => MoveToFront(),
                 CanExecute = (obj) => SelectedItems.Any(),
                 Text = "Move to front",
                 Gesture = new SimpleKeyGesture(Key.Home),
             };
-            CommandMoveToBack = new RelayCommand(this)
+            CommandMoveToBack = new RelayCommand()
             {
                 Executed = (obj) => MoveToBack(),
                 CanExecute = (obj) => SelectedItems.Any(),
                 Text = "Move to back",
                 Gesture = new SimpleKeyGesture(Key.End),
             };
-            CommandMoveForward = new RelayCommand(this)
+            CommandMoveForward = new RelayCommand()
             {
                 Executed = (obj) => MoveForward(),
                 CanExecute = (obj) => SelectedItems.Any(),
                 Text = "Move forward",
                 Gesture = new SimpleKeyGesture(Key.Home, ModifierKeys.Control),
             };
-            CommandMoveBackward = new RelayCommand(this)
+            CommandMoveBackward = new RelayCommand()
             {
                 Executed = (obj) => MoveBackward(),
                 CanExecute = (obj) => SelectedItems.Any(),
                 Text = "Move backward",
                 Gesture = new SimpleKeyGesture(Key.End, ModifierKeys.Control),
             };
-            CommandResetRotation = new RelayCommand(this)
+            CommandResetRotation = new RelayCommand()
             {
                 Executed = (obj) => ResetRotation(),
                 CanExecute = (obj) => SelectedItems.Any(),
                 Text = "Reset rotation",
             };
-            CommandZoomPanAuto = new RelayCommand(this)
+            CommandZoomPanAuto = new RelayCommand()
             {
                 Executed = (obj) => ZoomPanAuto(),
                 CanExecute = (obj) => Count > 0,
                 Text = "Zoom to fit content",
                 GestureText = "Ctrl+0",
             };
-            CommandZoomPanActualSize = new RelayCommand(this)
+            CommandZoomPanActualSize = new RelayCommand()
             {
-                Executed = (obj) => ZoomPanActualSize(),
+                Executed = (obj) => ZoomPanActualSize(parseDoubleOrDefault(obj, 1)),
                 CanExecute = (obj) => Count > 0,
                 Text = "Zoom to actual size",
                 GestureText = "Ctrl+1"
             };
-            CommandUndo = new RelayCommand(this)
+            CommandUndo = new RelayCommand()
             {
                 Executed = (obj) => _undoManager.Undo(),
                 CanExecute = (obj) => _undoManager.CanUndo,
                 Text = "_Undo",
                 Gesture = new SimpleKeyGesture(Key.Z, ModifierKeys.Control),
             };
-            CommandRedo = new RelayCommand(this)
+            CommandRedo = new RelayCommand()
             {
                 Executed = (obj) => _undoManager.Redo(),
                 CanExecute = (obj) => _undoManager.CanRedo,
                 Text = "_Redo",
                 Gesture = new SimpleKeyGesture(Key.Y, ModifierKeys.Control),
             };
-
-            this.InputBindings.Add(new KeyBinding(CommandZoomPanAuto, Key.D0, ModifierKeys.Control));
-            this.InputBindings.Add(new KeyBinding(CommandZoomPanAuto, Key.NumPad0, ModifierKeys.Control));
-            this.InputBindings.Add(new KeyBinding(CommandZoomPanActualSize, Key.D1, ModifierKeys.Control));
-            this.InputBindings.Add(new KeyBinding(CommandZoomPanActualSize, Key.NumPad1, ModifierKeys.Control));
 
             ContextMenu = new ContextMenu();
             ContextMenu.PlacementTarget = this;
@@ -432,6 +436,18 @@ namespace Clowd.Drawing
             }
 
             UpdateState();
+        }
+
+        public void Nudge(int offsetX, int offsetY)
+        {
+            if (SelectedItems.Any() && (offsetX != 0 || offsetY != 0))
+            {
+                foreach (var obj in SelectedItems)
+                {
+                    obj.Move(offsetX, offsetY);
+                }
+                _undoManager.AddCommandStepNudge();
+            }
         }
 
         public void MoveToFront()
@@ -696,39 +712,23 @@ namespace Clowd.Drawing
 
         void DrawingCanvas_KeyDown(object sender, KeyEventArgs e)
         {
-            // Esc key stops currently active operation
-            if (e.Key == Key.Escape)
-            {
-                if (this.IsMouseCaptured)
-                {
-                    CancelCurrentOperation();
-                    UpdateState();
-                }
-            }
-
             // Shift key causes a MouseMove, so any drag-based snapping will be updated
-            if (e.Key == Key.LeftShift || e.Key == Key.RightShift)
+            if (this.IsMouseCaptured && (e.Key == Key.LeftShift || e.Key == Key.RightShift))
             {
-                if (this.IsMouseCaptured)
-                {
-                    DrawingCanvas_MouseMove(this, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount));
-                }
+                DrawingCanvas_MouseMove(this, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount));
             }
         }
 
         void DrawingCanvas_KeyUp(object sender, KeyEventArgs e)
         {
             // Shift key causes a MouseMove, so any drag-based snapping will be updated
-            if (e.Key == Key.LeftShift || e.Key == Key.RightShift)
+            if (this.IsMouseCaptured && (e.Key == Key.LeftShift || e.Key == Key.RightShift))
             {
-                if (this.IsMouseCaptured)
-                {
-                    DrawingCanvas_MouseMove(this, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount));
-                }
+                DrawingCanvas_MouseMove(this, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount));
             }
         }
 
-        void CancelCurrentOperation()
+        public void CancelCurrentOperation()
         {
             if (Tool == ToolType.Pointer)
             {
@@ -757,6 +757,7 @@ namespace Clowd.Drawing
 
             this.ReleaseMouseCapture();
             this.Cursor = HelperFunctions.DefaultCursor;
+            UnselectAll();
         }
 
         internal void AddCommandToHistory()

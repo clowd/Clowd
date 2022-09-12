@@ -17,15 +17,8 @@
     mc:Ignorable="d">
     <UserControl.Resources>
         <ResourceDictionary>
-            <!--<ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/FlatSlider.xaml" />
-            </ResourceDictionary.MergedDictionaries>-->
             <RoutedUICommand x:Key="Commands.Upload" />
             <RoutedUICommand x:Key="Commands.SelectTool" />
-            <RoutedUICommand x:Key="Commands.ZoomFit" />
-            <RoutedUICommand x:Key="Commands.ZoomActual" />
-            <RoutedUICommand x:Key="Commands.MoveToFront" />
-            <RoutedUICommand x:Key="Commands.MoveToBack" />
             <draw:ToolTypeConverter x:Key="convToolType" />
             <conv:ZoomScaleConverter x:Key="convZoomScale" />
             <conv:StringPixelConverter x:Key="convPixel2String" />
@@ -95,10 +88,6 @@
             Key="U"
             Command="{StaticResource Commands.Upload}"
             Modifiers="Ctrl" />
-        <KeyBinding
-            Key="Esc"
-            Command="{StaticResource Commands.SelectTool}"
-            CommandParameter="Pointer" />
         <clowd:BareKeyBinding
             Key="D"
             Command="{StaticResource Commands.SelectTool}"
@@ -143,66 +132,16 @@
             Key="O"
             Command="{StaticResource Commands.SelectTool}"
             CommandParameter="Pixelate" />
-        <!--  <clowd:BareKeyBinding  -->
-        <!--  Key="X"  -->
-        <!--  Command="{StaticResource Commands.SelectTool}"  -->
-        <!--  CommandParameter="Erase" />  -->
-        <KeyBinding
-            Key="D0"
-            Command="{StaticResource Commands.ZoomFit}"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="D1"
-            Command="{StaticResource Commands.ZoomActual}"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="D2"
-            Command="{StaticResource Commands.ZoomActual}"
-            CommandParameter="2"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="D3"
-            Command="{StaticResource Commands.ZoomActual}"
-            CommandParameter="3"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="NumPad0"
-            Command="{StaticResource Commands.ZoomFit}"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="NumPad1"
-            Command="{StaticResource Commands.ZoomActual}"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="NumPad2"
-            Command="{StaticResource Commands.ZoomActual}"
-            CommandParameter="2"
-            Modifiers="Ctrl" />
-        <KeyBinding
-            Key="NumPad3"
-            Command="{StaticResource Commands.ZoomActual}"
-            CommandParameter="3"
-            Modifiers="Ctrl" />
-        <KeyBinding Key="Home" Command="{StaticResource Commands.MoveToFront}" />
-        <KeyBinding Key="End" Command="{StaticResource Commands.MoveToBack}" />
     </UserControl.InputBindings>
     <UserControl.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Print" Executed="PrintCommand" />
         <CommandBinding Command="ApplicationCommands.Close" Executed="CloseCommand" />
         <CommandBinding Command="ApplicationCommands.Save" Executed="SaveCommand" />
-        <CommandBinding Command="ApplicationCommands.Undo" Executed="UndoCommand" />
-        <CommandBinding Command="ApplicationCommands.Redo" Executed="RedoCommand" />
         <CommandBinding Command="ApplicationCommands.Copy" Executed="CopyCommand" />
         <CommandBinding Command="ApplicationCommands.Cut" Executed="CutCommand" />
-        <CommandBinding Command="ApplicationCommands.Delete" Executed="DeleteCommand" />
         <CommandBinding Command="ApplicationCommands.Paste" Executed="PasteCommand" />
-        <CommandBinding Command="ApplicationCommands.SelectAll" Executed="SelectAllCommand" />
         <CommandBinding Command="{StaticResource Commands.Upload}" Executed="UploadCommand" />
         <CommandBinding Command="{StaticResource Commands.SelectTool}" Executed="SelectToolCommand" />
-        <CommandBinding Command="{StaticResource Commands.ZoomActual}" Executed="ZoomActualCommand" />
-        <CommandBinding Command="{StaticResource Commands.ZoomFit}" Executed="ZoomFitCommand" />
-        <CommandBinding Command="{StaticResource Commands.MoveToBack}" Executed="MoveToBackCommand" />
-        <CommandBinding Command="{StaticResource Commands.MoveToFront}" Executed="MoveToFrontCommand" />
     </UserControl.CommandBindings>
     <Grid
         Background="#535353"

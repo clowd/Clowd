@@ -14,6 +14,7 @@ namespace Clowd.Drawing
         private readonly DrawingCanvas _drawingCanvas;
         private List<byte[]> _historyList;
         private int _position;
+        private bool _lastCommandWasNudge;
 
         public UndoManager(DrawingCanvas drawingCanvas)
         {
@@ -25,27 +26,56 @@ namespace Clowd.Drawing
         {
             _historyList = new List<byte[]>();
             _position = -1;
+            _lastCommandWasNudge = false;
             RaiseStateChangedEvent();
         }
 
-        static bool ByteArrayCompare(ReadOnlySpan<byte> a1, ReadOnlySpan<byte> a2)
+        public bool AddCommandStep()
         {
-            // fastest way to compare two arrays without a p/invoke to memcmp
-            return a1.SequenceEqual(a2);
+            var state = GetNextState();
+            if (state == null) return false;
+
+            _lastCommandWasNudge = false;
+            this.TrimHistoryList();
+            _historyList.Add(state);
+            _position = _historyList.Count - 1;
+            RaiseStateChangedEvent();
+            return true;
         }
 
-        public void AddCommandStep()
+        public void AddCommandStepNudge()
+        {
+            // all other commands will always register a new item in the history list,
+            // but we want to group nudge commands together in a single operation.
+            // so: if the previous command was a nudge, and this command is also a nudge, 
+            // we will replace the previous command in the history.
+
+            if (_lastCommandWasNudge)
+            {
+                var state = GetNextState();
+                if (state == null) return;
+                _historyList[_historyList.Count - 1] = state;
+            }
+            else
+            {
+                // last was not nudge. so add a command regularly and set flag.
+                // next nudge will replace this nudge.
+                if (AddCommandStep())
+                {
+                    _lastCommandWasNudge = true;
+                }
+            }
+        }
+
+        private byte[] GetNextState()
         {
             var state = _drawingCanvas.GraphicsList.SerializeObjects(false);
 
             // skip duplicates
             if (_position >= 0 && ByteArrayCompare(_historyList[_position], state))
-                return;
+                return null;
 
-            this.TrimHistoryList();
-            _historyList.Add(state);
-            _position = _historyList.Count - 1;
-            RaiseStateChangedEvent();
+            return state;
         }
 
         public void Undo()
@@ -53,6 +83,7 @@ namespace Clowd.Drawing
             if (!CanUndo)
                 return;
 
+            _lastCommandWasNudge = false;
             var nextState = _historyList[--_position];
             var nextGraphics = new GraphicCollection(_drawingCanvas);
             nextGraphics.DeserializeObjectsInto(nextState);
@@ -65,6 +96,7 @@ namespace Clowd.Drawing
             if (!CanRedo)
                 return;
 
+            _lastCommandWasNudge = false;
             var nextState = _historyList[++_position];
             var nextGraphics = new GraphicCollection(_drawingCanvas);
             nextGraphics.DeserializeObjectsInto(nextState);
@@ -92,6 +124,12 @@ namespace Clowd.Drawing
         private void RaiseStateChangedEvent()
         {
             StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static bool ByteArrayCompare(ReadOnlySpan<byte> a1, ReadOnlySpan<byte> a2)
+        {
+            // fastest way to compare two arrays without a p/invoke to memcmp
+            return a1.SequenceEqual(a2);
         }
     }
 }
