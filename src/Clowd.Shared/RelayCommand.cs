@@ -1,76 +1,88 @@
 ﻿using System;
-using System.Diagnostics;
+using System.Numerics;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
+using DependencyPropertyGenerator;
 
 namespace Clowd.UI.Helpers
 {
-    public class RelayCommand : SimpleNotifyObject, ICommand
+    public delegate void RelayExecute(object parameter);
+    public delegate bool RelayCanExecute(object parameter);
+
+    [DependencyProperty<RelayExecute>("Executed")]
+    [DependencyProperty<RelayCanExecute>("CanExecute")]
+    [DependencyProperty<string>("Text")]
+    [DependencyProperty<string>("GestureText")]
+    [DependencyProperty<SimpleKeyGesture>("Gesture")]
+    [DependencyProperty<object>("Icon")]
+    public partial class RelayCommand : DependencyObject, ICommand
     {
-        readonly Action<object> _execute;
-        readonly Predicate<object> _canExecute;
+        private readonly UIElement _parent;
+        private InputBinding _binding;
 
-        public RelayCommand(Action<object> execute)
-            : this(execute, null)
-        { }
-
-        public RelayCommand(Action<object> execute, Predicate<object> canExecute)
+        public RelayCommand()
         {
-            if (execute == null)
-                throw new ArgumentNullException("execute");
-            _execute = execute;
-            _canExecute = canExecute;
         }
 
-        //[DebuggerStepThrough]
-        public bool CanExecute(object parameter)
+        public RelayCommand(UIElement parent)
         {
-            return _canExecute == null ? true : _canExecute(parameter);
+            _parent = parent;
         }
 
-        public event EventHandler CanExecuteChanged
+        event EventHandler ICommand.CanExecuteChanged
         {
             add { CommandManager.RequerySuggested += value; }
             remove { CommandManager.RequerySuggested -= value; }
         }
 
-        public void Execute(object parameter) { _execute(parameter); }
-    }
-
-    public class RelayUICommand : RelayCommand
-    {
-        public DataTemplate IconTemplate
+        bool ICommand.CanExecute(object parameter)
         {
-            get => _iconTemplate;
-            set => Set(ref _iconTemplate, value);
+            return CanExecute?.Invoke(parameter) ?? true;
         }
 
-        public string Text
+        void ICommand.Execute(object parameter)
         {
-            get => _text;
-            set => Set(ref _text, value);
+            Executed?.Invoke(parameter);
         }
 
-        private DataTemplate _iconTemplate;
-        private string _text;
-
-        public RelayUICommand(Action<object> execute)
-            : this(execute, null)
-        { }
-
-        public RelayUICommand(Action<object> execute, Predicate<object> canExecute)
-            : this(execute, canExecute, null)
-        { }
-
-        public RelayUICommand(Action<object> execute, Predicate<object> canExecute, string text)
-            : this(execute, canExecute, text, null)
-        { }
-
-        public RelayUICommand(Action<object> execute, Predicate<object> canExecute, string text, DataTemplate icon)
-            : base(execute, canExecute)
+        partial void OnGestureChanged(SimpleKeyGesture oldValue, SimpleKeyGesture newValue)
         {
-            Text = text;
-            IconTemplate = icon;
+            // if we have a parent, we'll automatically register input bindings.
+            if (_parent != null)
+            {
+                if (_binding != null)
+                    _parent.InputBindings.Remove(_binding);
+
+                _binding = CreateKeyBinding(); // can be null
+
+                if (_binding != null)
+                    _parent.InputBindings.Add(_binding);
+            }
+
+            GestureText = newValue.ToString();
+        }
+
+        public InputBinding CreateKeyBinding()
+        {
+            if (Gesture == null)
+                return null;
+
+            if (Gesture.Modifiers == ModifierKeys.None)
+                return new BareKeyBinding(Gesture.Key);
+
+            return new KeyBinding(this, Gesture.Key, Gesture.Modifiers);
+        }
+
+        public MenuItem CreateMenuItem()
+        {
+            var menu = new MenuItem();
+            menu.SetBinding(MenuItem.HeaderProperty, new Binding(nameof(Text)) { Source = this, Mode = BindingMode.OneWay });
+            menu.SetBinding(MenuItem.InputGestureTextProperty, new Binding(nameof(GestureText)) { Source = this, Mode = BindingMode.OneWay });
+            menu.SetBinding(MenuItem.IconProperty, new Binding(nameof(Icon)) { Source = this, Mode = BindingMode.OneWay });
+            menu.Command = this;
+            return menu;
         }
     }
 }
