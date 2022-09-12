@@ -10,6 +10,7 @@ using Clowd.Drawing.Tools;
 using Clowd.Drawing.Graphics;
 using Clowd.UI.Helpers;
 using DependencyPropertyGenerator;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd.Drawing
 {
@@ -74,6 +75,8 @@ namespace Clowd.Drawing
         public RelayCommand CommandDeleteAll { get; }
         public RelayCommand CommandMoveToFront { get; }
         public RelayCommand CommandMoveToBack { get; }
+        public RelayCommand CommandMoveForward { get; }
+        public RelayCommand CommandMoveBackward { get; }
         public RelayCommand CommandResetRotation { get; }
         public RelayCommand CommandUndo { get; }
         public RelayCommand CommandRedo { get; }
@@ -129,19 +132,118 @@ namespace Clowd.Drawing
             _undoManager = new UndoManager(this);
             _undoManager.StateChanged += (_, _) => UpdateState();
 
-            CommandSelectAll = new RelayCommand((obj) => SelectAll(), (obj) => Count > 0);
-            CommandUnselectAll = new RelayCommand((obj) => UnselectAll(), (obj) => SelectedItems.Any());
-            CommandDelete = new RelayCommand((obj) => Delete(), (obj) => SelectedItems.Any());
-            CommandDeleteAll = new RelayCommand((obj) => DeleteAll(), (obj) => Count > 0);
-            CommandMoveToFront = new RelayCommand((obj) => MoveToFront(), (obj) => SelectedItems.Any());
-            CommandMoveToBack = new RelayCommand((obj) => MoveToBack(), (obj) => SelectedItems.Any());
-            CommandResetRotation = new RelayCommand((obj) => ResetRotation(), (obj) => SelectedItems.Any());
-            CommandUndo = new RelayCommand((obj) => _undoManager.Undo(), (obj) => _undoManager.CanUndo);
-            CommandRedo = new RelayCommand((obj) => _undoManager.Redo(), (obj) => _undoManager.CanRedo);
-            CommandZoomPanAuto = new RelayCommand((obj) => ZoomPanAuto(), (obj) => Count > 0);
-            CommandZoomPanActualSize = new RelayCommand((obj) => ZoomPanActualSize(), (obj) => Count > 0);
+            CommandSelectAll = new RelayCommand(this)
+            {
+                Executed = (obj) => SelectAll(),
+                CanExecute = (obj) => Count > 0,
+                Text = "_Select all",
+                Gesture = new SimpleKeyGesture(Key.A, ModifierKeys.Control),
+            };
+            CommandUnselectAll = new RelayCommand(this)
+            {
+                Executed = (obj) => UnselectAll(),
+                CanExecute = (obj) => SelectedItems.Any(),
+                Text = "Unselect all",
+                Gesture = new SimpleKeyGesture(Key.Escape),
+            };
+            CommandDelete = new RelayCommand(this)
+            {
+                Executed = (obj) => Delete(),
+                CanExecute = (obj) => SelectedItems.Any(),
+                Text = "_Delete",
+                Gesture = new SimpleKeyGesture(Key.Delete),
+            };
+            CommandDeleteAll = new RelayCommand(this)
+            {
+                Executed = (obj) => DeleteAll(),
+                CanExecute = (obj) => Count > 0,
+                Text = "Delete all",
+            };
+            CommandMoveToFront = new RelayCommand(this)
+            {
+                Executed = (obj) => MoveToFront(),
+                CanExecute = (obj) => SelectedItems.Any(),
+                Text = "Move to front",
+                Gesture = new SimpleKeyGesture(Key.Home),
+            };
+            CommandMoveToBack = new RelayCommand(this)
+            {
+                Executed = (obj) => MoveToBack(),
+                CanExecute = (obj) => SelectedItems.Any(),
+                Text = "Move to back",
+                Gesture = new SimpleKeyGesture(Key.End),
+            };
+            CommandMoveForward = new RelayCommand(this)
+            {
+                Executed = (obj) => MoveForward(),
+                CanExecute = (obj) => SelectedItems.Any(),
+                Text = "Move forward",
+                Gesture = new SimpleKeyGesture(Key.Home, ModifierKeys.Control),
+            };
+            CommandMoveBackward = new RelayCommand(this)
+            {
+                Executed = (obj) => MoveBackward(),
+                CanExecute = (obj) => SelectedItems.Any(),
+                Text = "Move backward",
+                Gesture = new SimpleKeyGesture(Key.End, ModifierKeys.Control),
+            };
+            CommandResetRotation = new RelayCommand(this)
+            {
+                Executed = (obj) => ResetRotation(),
+                CanExecute = (obj) => SelectedItems.Any(),
+                Text = "Reset rotation",
+            };
+            CommandZoomPanAuto = new RelayCommand(this)
+            {
+                Executed = (obj) => ZoomPanAuto(),
+                CanExecute = (obj) => Count > 0,
+                Text = "Zoom to fit content",
+                GestureText = "Ctrl+0",
+            };
+            CommandZoomPanActualSize = new RelayCommand(this)
+            {
+                Executed = (obj) => ZoomPanActualSize(),
+                CanExecute = (obj) => Count > 0,
+                Text = "Zoom to actual size",
+                GestureText = "Ctrl+1"
+            };
+            CommandUndo = new RelayCommand(this)
+            {
+                Executed = (obj) => _undoManager.Undo(),
+                CanExecute = (obj) => _undoManager.CanUndo,
+                Text = "_Undo",
+                Gesture = new SimpleKeyGesture(Key.Z, ModifierKeys.Control),
+            };
+            CommandRedo = new RelayCommand(this)
+            {
+                Executed = (obj) => _undoManager.Redo(),
+                CanExecute = (obj) => _undoManager.CanRedo,
+                Text = "_Redo",
+                Gesture = new SimpleKeyGesture(Key.Y, ModifierKeys.Control),
+            };
 
-            CreateContextMenu();
+            this.InputBindings.Add(new KeyBinding(CommandZoomPanAuto, Key.D0, ModifierKeys.Control));
+            this.InputBindings.Add(new KeyBinding(CommandZoomPanAuto, Key.NumPad0, ModifierKeys.Control));
+            this.InputBindings.Add(new KeyBinding(CommandZoomPanActualSize, Key.D1, ModifierKeys.Control));
+            this.InputBindings.Add(new KeyBinding(CommandZoomPanActualSize, Key.NumPad1, ModifierKeys.Control));
+
+            ContextMenu = new ContextMenu();
+            ContextMenu.PlacementTarget = this;
+            ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            ContextMenu.Items.Add(CommandSelectAll.CreateMenuItem());
+            ContextMenu.Items.Add(CommandUnselectAll.CreateMenuItem());
+            ContextMenu.Items.Add(CommandDelete.CreateMenuItem());
+            ContextMenu.Items.Add(CommandDeleteAll.CreateMenuItem());
+            ContextMenu.Items.Add(new Separator());
+            ContextMenu.Items.Add(CommandMoveToFront.CreateMenuItem());
+            ContextMenu.Items.Add(CommandMoveForward.CreateMenuItem());
+            ContextMenu.Items.Add(CommandMoveToBack.CreateMenuItem());
+            ContextMenu.Items.Add(CommandMoveBackward.CreateMenuItem());
+            ContextMenu.Items.Add(new Separator());
+            ContextMenu.Items.Add(CommandResetRotation.CreateMenuItem());
+            ContextMenu.Items.Add(new Separator());
+            ContextMenu.Items.Add(CommandZoomPanAuto.CreateMenuItem());
+            ContextMenu.Items.Add(CommandZoomPanActualSize.CreateMenuItem());
 
             this.FocusVisualStyle = null;
 
@@ -334,52 +436,60 @@ namespace Clowd.Drawing
 
         public void MoveToFront()
         {
-            List<GraphicBase> list = new List<GraphicBase>();
+            MoveToIndex(int.MaxValue);
+        }
 
-            for (int i = this.Count - 1; i >= 0; i--)
+        public void MoveForward()
+        {
+            int idx = GraphicsList.IndexOf(b => b.IsSelected);
+            if (idx >= 0)
             {
-                if (this[i].IsSelected)
-                {
-                    list.Insert(0, this[i]);
-                    this.GraphicsList.RemoveAt(i);
-                }
+                MoveToIndex(idx + 1);
             }
+        }
 
-            // Add all items from temporary list to the end of GraphicsList
-            foreach (GraphicBase g in list)
+        public void MoveBackward()
+        {
+            int idx = GraphicsList.IndexOf(b => b.IsSelected);
+            if (idx >= 0)
             {
-                this.GraphicsList.Add(g);
+                MoveToIndex(idx == 0 ? 0 : idx - 1);
             }
-
-            if (list.Count > 0)
-            {
-                AddCommandToHistory();
-            }
-
-            UpdateState();
         }
 
         public void MoveToBack()
         {
+            MoveToIndex(0);
+        }
+
+        private void MoveToIndex(int idx)
+        {
             List<GraphicBase> list = new List<GraphicBase>();
 
-            for (int i = this.Count - 1; i >= 0; i--)
+            for (int i = Count - 1; i >= 0; i--)
             {
                 if (this[i].IsSelected)
                 {
                     list.Add(this[i]);
-                    this.GraphicsList.RemoveAt(i);
+                    GraphicsList.RemoveAt(i);
                 }
             }
 
-            // Add all items from temporary list to the beginning of GraphicsList
-            foreach (GraphicBase g in list)
-            {
-                this.GraphicsList.Insert(0, g);
-            }
+            var shouldAdd = idx > GraphicsList.Count;
 
             if (list.Count > 0)
             {
+                foreach (GraphicBase g in list)
+                {
+                    if (shouldAdd)
+                    {
+                        GraphicsList.Add(g);
+                    }
+                    else
+                    {
+                        GraphicsList.Insert(idx, g);
+                    }
+                }
                 AddCommandToHistory();
             }
 
@@ -616,86 +726,6 @@ namespace Clowd.Drawing
                     DrawingCanvas_MouseMove(this, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount));
                 }
             }
-        }
-
-        void CreateContextMenu()
-        {
-            _contextMenu = new ContextMenu();
-            _contextMenu.PlacementTarget = this;
-            _contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
-            this.ContextMenu = _contextMenu;
-
-            MenuItem menuItem;
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Select all";
-            menuItem.InputGestureText = "Ctrl+A";
-            menuItem.Command = CommandSelectAll;
-            _contextMenu.Items.Add(menuItem);
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Unselect all";
-            menuItem.InputGestureText = "Esc";
-            menuItem.Command = CommandUnselectAll;
-            _contextMenu.Items.Add(menuItem);
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Delete";
-            menuItem.InputGestureText = "Del";
-            menuItem.Command = CommandDelete;
-            _contextMenu.Items.Add(menuItem);
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Delete all";
-            menuItem.Command = CommandDeleteAll;
-            _contextMenu.Items.Add(menuItem);
-
-            _contextMenu.Items.Add(new Separator());
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Move to front";
-            menuItem.InputGestureText = "Home";
-            menuItem.Command = CommandMoveToFront;
-            _contextMenu.Items.Add(menuItem);
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Move to back";
-            menuItem.InputGestureText = "End";
-            menuItem.Command = CommandMoveToBack;
-            _contextMenu.Items.Add(menuItem);
-
-            _contextMenu.Items.Add(new Separator());
-
-            //menuItem = new MenuItem();
-            //menuItem.Header = "Undo";
-            //menuItem.InputGestureText = "Ctrl+Z";
-            //menuItem.Command = _cmdUndo;
-            //_contextMenu.Items.Add(menuItem);
-
-            //menuItem = new MenuItem();
-            //menuItem.Header = "Redo";
-            //menuItem.InputGestureText = "Ctrl+Y";
-            //menuItem.Command = _cmdRedo;
-            //_contextMenu.Items.Add(menuItem);
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Reset rotation";
-            menuItem.Command = CommandResetRotation;
-            _contextMenu.Items.Add(menuItem);
-
-            _contextMenu.Items.Add(new Separator());
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Zoom to fit content";
-            menuItem.InputGestureText = "Ctrl+0";
-            menuItem.Command = CommandZoomPanAuto;
-            _contextMenu.Items.Add(menuItem);
-
-            menuItem = new MenuItem();
-            menuItem.Header = "Zoom to actual size";
-            menuItem.InputGestureText = "Ctrl+1";
-            menuItem.Command = CommandZoomPanActualSize;
-            _contextMenu.Items.Add(menuItem);
         }
 
         void CancelCurrentOperation()

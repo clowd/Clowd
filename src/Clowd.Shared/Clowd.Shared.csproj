@@ -12,6 +12,7 @@
     <PackageReference Include="RT.Serialization.Xml" Version="2.0.1713" />
     <PackageReference Include="RT.Util.Core" Version="2.0.1713" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.9" />
+    <PackageReference Include="DependencyPropertyGenerator" Version="1.0.3" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.PlatformUtil\Clowd.PlatformUtil.csproj" />

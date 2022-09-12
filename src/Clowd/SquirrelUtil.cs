@@ -130,7 +130,7 @@ namespace Clowd
                 }
             }
 
-            public RelayUICommand ClickCommand
+            public RelayCommand ClickCommand
             {
                 get => _clickCommand;
                 protected set => Set(ref _clickCommand, value);
@@ -156,7 +156,7 @@ namespace Clowd
 
             private ReleaseEntry _newVersion;
             private IDisposable _timer;
-            private RelayUICommand _clickCommand;
+            private RelayCommand _clickCommand;
             private string _clickCommandText;
             private string _description;
             private bool _isWorking;
@@ -166,7 +166,11 @@ namespace Clowd
 
             public SquirrelUpdateViewModel()
             {
-                ClickCommand = new RelayUICommand(OnClick, CanExecute);
+                ClickCommand = new RelayCommand()
+                {
+                    Executed = OnClick,
+                    CanExecute = CanExecute
+                };
                 _timer = DisposableTimer.Start(TimeSpan.FromMinutes(30), CheckForUpdateTimer);
                 UpdateStateText();
             }

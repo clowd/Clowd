@@ -25,7 +25,7 @@ namespace Clowd.UI.Pages
 
         public OpenSourceLibrary()
         {
-            ClickLicenseCommand = new RelayUICommand(OnClick);
+            ClickLicenseCommand = new RelayCommand() { Executed = OnClick };
         }
 
         private void OnClick(object obj)
