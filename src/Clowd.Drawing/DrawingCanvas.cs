@@ -809,6 +809,7 @@ namespace Clowd.Drawing
 
                 if (obj is GraphicText txt)
                 {
+                    TextFontFamilyName = txt.FontName;
                     TextFontWeight = txt.FontWeight;
                     TextFontStretch = txt.FontStretch;
                     TextFontSize = txt.FontSize;
