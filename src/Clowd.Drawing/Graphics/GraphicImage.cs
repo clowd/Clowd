@@ -9,6 +9,7 @@ using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("Filled Rectangle", Skills = Skill.Angle)]
     public class GraphicImage : GraphicRectangle
     {
         public string BitmapFilePath

@@ -4,6 +4,7 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("Numeric Step", Skills = Skill.Stroke | Skill.Color | Skill.Font | Skill.Angle)]
     public class GraphicCount : GraphicText
     {
         protected GraphicCount()

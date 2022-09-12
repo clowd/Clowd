@@ -7,8 +7,6 @@ namespace Clowd.Drawing.Tools
 {
     internal class ToolDraggable<T> : ToolBase where T : GraphicBase
     {
-        internal override ToolActionType ActionType => ToolActionType.Object;
-
         private readonly Func<Point, T> _create;
         private readonly Action<Point, T> _update;
         private readonly Action<T> _end;

@@ -11,6 +11,7 @@ using Clowd.Drawing.Graphics;
 using Clowd.UI.Helpers;
 using DependencyPropertyGenerator;
 using RT.Util.ExtensionMethods;
+using System.Reflection;
 
 namespace Clowd.Drawing
 {
@@ -18,6 +19,8 @@ namespace Clowd.Drawing
     [DependencyProperty<Color>("ArtworkBackground")]
     [DependencyProperty<double>("LineWidth", DefaultValue = 2d)]
     [DependencyProperty<Color>("ObjectColor")]
+    [DependencyProperty<double>("ObjectAngle")]
+    [DependencyProperty<Skill>("CurrentSkills")]
     [DependencyProperty<Color>("HandleColor")]
     [DependencyProperty<string>("TextFontFamilyName", DefaultValue = "Tahoma")]
     [DependencyProperty<FontStyle>("TextFontStyle")]
@@ -62,9 +65,15 @@ namespace Clowd.Drawing
         public IEnumerable<GraphicBase> SelectedItems => GraphicsList.Where(g => g.IsSelected);
 
         internal ToolPointer ToolPointer;
+        internal ToolText ToolText;
+
+        private ToolDesc CurrentTool;
+
+        private record struct ToolDesc(string Name, ToolBase Instance, Type ObjectType = null, Skill Skills = Skill.None);
+
+        private Dictionary<ToolType, ToolDesc> _toolStore;
 
         private GraphicCollection _graphicsList;
-        private ToolBase[] _tools;
         private Border _clickable;
         private UndoManager _undoManager;
 
@@ -87,46 +96,51 @@ namespace Clowd.Drawing
             _graphicsList = new GraphicCollection(this);
 
             // create array of drawing tools
-            _tools = new ToolBase[(int)ToolType.Max];
-
             ToolPointer = new ToolPointer();
-            _tools[(int)ToolType.None] = ToolPointer;
-            _tools[(int)ToolType.Pointer] = ToolPointer;
+            ToolText = new ToolText();
 
-            _tools[(int)ToolType.Rectangle] = new ToolDraggable<GraphicRectangle>(
+            var toolRectangle = new ToolDraggable<GraphicRectangle>(
                 Resource.CursorRectangle,
                 point => new GraphicRectangle(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
-            _tools[(int)ToolType.FilledRectangle] = new ToolDraggable<GraphicFilledRectangle>(
+            var toolFilledRectangle = new ToolDraggable<GraphicFilledRectangle>(
                 Resource.CursorRectangle,
                 point => new GraphicFilledRectangle(ObjectColor, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
-            _tools[(int)ToolType.Ellipse] = new ToolDraggable<GraphicEllipse>(
+            var toolEllipse = new ToolDraggable<GraphicEllipse>(
                 Resource.CursorEllipse,
                 point => new GraphicEllipse(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
-            _tools[(int)ToolType.Line] = new ToolDraggable<GraphicLine>(
+            var toolLine = new ToolDraggable<GraphicLine>(
                 Resource.CursorLine,
                 point => new GraphicLine(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
 
-            _tools[(int)ToolType.Arrow] = new ToolDraggable<GraphicArrow>(
+            var toolArrow = new ToolDraggable<GraphicArrow>(
                 Resource.CursorArrow,
                 point => new GraphicArrow(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
 
-            _tools[(int)ToolType.PolyLine] = new ToolPolyLine();
-            _tools[(int)ToolType.Text] = new ToolText();
-            _tools[(int)ToolType.Count] = new ToolCount();
-            _tools[(int)ToolType.Pixelate] = new ToolPixelate();
+            _toolStore = new Dictionary<ToolType, ToolDesc>();
+            _toolStore[ToolType.None] = new ToolDesc("Panning", ToolPointer, Skills: Skill.CanvasBackground);
+            _toolStore[ToolType.Pointer] = new ToolDesc("Pointer", ToolPointer, Skills: Skill.CanvasBackground);
+            _toolStore[ToolType.Rectangle] = new ToolDesc("Rectangle", toolRectangle, ObjectType: typeof(GraphicRectangle));
+            _toolStore[ToolType.FilledRectangle] = new ToolDesc("Filled Rectangle", toolFilledRectangle, ObjectType: typeof(GraphicFilledRectangle));
+            _toolStore[ToolType.Ellipse] = new ToolDesc("Ellipse", toolEllipse, ObjectType: typeof(GraphicEllipse));
+            _toolStore[ToolType.Line] = new ToolDesc("Line", toolLine, ObjectType: typeof(GraphicLine));
+            _toolStore[ToolType.Arrow] = new ToolDesc("Arrow", toolArrow, ObjectType: typeof(GraphicArrow));
+            _toolStore[ToolType.PolyLine] = new ToolDesc("Pencil", new ToolPolyLine(), ObjectType: typeof(GraphicPolyLine));
+            _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText));
+            _toolStore[ToolType.Count] = new ToolDesc("Numeric Step", new ToolCount(), ObjectType: typeof(GraphicCount));
+            _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate());
 
             _undoManager = new UndoManager(this);
             _undoManager.StateChanged += (_, _) => UpdateState();
@@ -268,22 +282,32 @@ namespace Clowd.Drawing
 
             SnapsToDevicePixels = false;
             UseLayoutRounding = false;
+
+            OnToolChanged(ToolType.Pointer);
         }
 
         partial void OnToolChanged(ToolType newValue)
         {
-            // Set cursor immediately - important when tool is selected from the menu
-            var tmp = _tools[(int)newValue];
-            if (tmp == null)
-                Cursor = Cursors.SizeAll;
-            else
-                tmp.SetCursor(this);
+            if (!_toolStore.ContainsKey(newValue)) newValue = ToolType.Pointer;
+
+            CurrentTool = _toolStore[newValue];
+
+            if (newValue == ToolType.None) Cursor = Cursors.SizeAll;
+            else CurrentTool.Instance.SetCursor(this);
+
+            UnselectAll();
         }
 
         partial void OnArtworkBackgroundChanged(Color newValue)
         {
             GraphicsList.BackgroundBrush = new SolidColorBrush(newValue);
         }
+
+        partial void OnHandleColorChanged(Color newValue)
+        {
+            GraphicBase.HandleBrush = new SolidColorBrush(newValue);
+        }
+
         partial void OnLineWidthChanged(double newValue)
         {
             ApplyGraphicPropertyChange<GraphicBase, double>(newValue, t => t.LineWidth, (t, v) => t.LineWidth = v);
@@ -294,9 +318,9 @@ namespace Clowd.Drawing
             ApplyGraphicPropertyChange<GraphicBase, Color>(newValue, t => t.ObjectColor, (t, v) => t.ObjectColor = v);
         }
 
-        partial void OnHandleColorChanged(Color newValue)
+        partial void OnObjectAngleChanged(double newValue)
         {
-            GraphicBase.HandleBrush = new SolidColorBrush(newValue);
+            ApplyGraphicPropertyChange<GraphicRectangle, double>(newValue, t => t.Angle, (t, v) => t.Angle = v);
         }
 
         partial void OnTextFontFamilyNameChanged(string newValue)
@@ -544,10 +568,6 @@ namespace Clowd.Drawing
             {
                 return _clickable;
             }
-            // else if (index == 1)
-            // {
-            //     return _artworkRectangle;
-            // }
             else if (index - 1 < GraphicsList.VisualCount)
             {
                 return GraphicsList.GetVisual(index - 1);
@@ -579,13 +599,13 @@ namespace Clowd.Drawing
                     if (clicked != null)
                         clicked.Activate(this);
                 }
-                else if (Tool == ToolType.None || _tools[(int)Tool] == null)
+                else if (Tool == ToolType.None)
                 {
                     StartPanning(e);
                 }
                 else
                 {
-                    _tools[(int)Tool].OnMouseDown(this, e);
+                    CurrentTool.Instance.OnMouseDown(this, e);
                 }
 
                 UpdateState();
@@ -623,15 +643,9 @@ namespace Clowd.Drawing
                 return;
             }
 
-            if (_tools[(int)Tool] == null)
-            {
-                return;
-            }
-
             if (e.MiddleButton == MouseButtonState.Released && e.RightButton == MouseButtonState.Released)
             {
-                _tools[(int)Tool].OnMouseMove(this, e);
-                UpdateState();
+                CurrentTool.Instance.OnMouseMove(this, e);
             }
             else
             {
@@ -647,14 +661,9 @@ namespace Clowd.Drawing
                 return;
             }
 
-            if (_tools[(int)Tool] == null)
-            {
-                return;
-            }
-
             if (e.ChangedButton == MouseButton.Left)
             {
-                _tools[(int)Tool].OnMouseUp(this, e);
+                CurrentTool.Instance.OnMouseUp(this, e);
                 UpdateState();
             }
         }
@@ -747,10 +756,10 @@ namespace Clowd.Drawing
                     }
                 }
             }
-            else if (Tool > ToolType.Pointer && Tool < ToolType.Max)
+            else
             {
                 // Delete last graphics object which is currently drawn
-                GetTool(Tool).AbortOperation(this);
+                CurrentTool.Instance.AbortOperation(this);
             }
 
             Tool = ToolType.Pointer;
@@ -767,12 +776,54 @@ namespace Clowd.Drawing
 
         void UpdateState()
         {
-            CommandManager.InvalidateRequerySuggested();
-        }
+            var selected = SelectedItems.ToArray();
 
-        internal ToolBase GetTool(ToolType type)
-        {
-            return _tools[(int)type];
+            // if there are no selected objects, use the tool skills
+            if (selected.Length == 0)
+            {
+                Skill skills = CurrentTool.Skills;
+                if (CurrentTool.ObjectType != null)
+                {
+                    var attr = CurrentTool.ObjectType.GetCustomAttribute<GraphicDescAttribute>();
+                    if (attr != null)
+                    {
+                        skills |= attr.Skills;
+                    }
+                }
+                CurrentSkills = skills;
+            }
+            // if there is 1 object selected, use the object skills
+            else if (selected.Length == 1)
+            {
+                var obj = selected[0];
+                var attr = obj.GetType().GetCustomAttribute<GraphicDescAttribute>();
+                var skills = attr?.Skills ?? Skill.None;
+
+                ObjectColor = obj.ObjectColor;
+                LineWidth = obj.LineWidth;
+
+                if (obj is GraphicRectangle rect)
+                {
+                    ObjectAngle = rect.Angle;
+                }
+
+                if (obj is GraphicText txt)
+                {
+                    TextFontWeight = txt.FontWeight;
+                    TextFontStretch = txt.FontStretch;
+                    TextFontSize = txt.FontSize;
+                    TextFontStyle = txt.FontStyle;
+                }
+
+                CurrentSkills = skills;
+            }
+            // if there are multiple objects selected
+            else
+            {
+                CurrentSkills = Skill.None;
+            }
+
+            CommandManager.InvalidateRequerySuggested();
         }
 
         partial void OnContentScaleChanged(double newValue)

@@ -6,8 +6,6 @@ namespace Clowd.Drawing.Tools
 {
     internal class ToolPolyLine : ToolBase
     {
-        internal override ToolActionType ActionType => ToolActionType.Object;
-
         private GraphicPolyLine _newPolyLine;
 
         public ToolPolyLine() : base(Resource.CursorPencil)

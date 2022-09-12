@@ -4,6 +4,7 @@ using System.Windows.Media;
 
 namespace Clowd.Drawing.Graphics
 {
+    [GraphicDesc("Filled Rectangle", Skills = Skill.Stroke | Skill.Color | Skill.Angle)]
     public class GraphicFilledRectangle : GraphicRectangle
     {
         protected GraphicFilledRectangle()

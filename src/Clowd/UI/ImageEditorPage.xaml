@@ -23,6 +23,8 @@
             <conv:ZoomScaleConverter x:Key="convZoomScale" />
             <conv:StringPixelConverter x:Key="convPixel2String" />
             <conv:ColorToBrushConverter x:Key="convColorToBrush" />
+            <conv:EnumMatchToVisibilityConverter x:Key="enumMatch" />
+            <conv:AngleConverter x:Key="convAngle" />
             <Style x:Key="ToolTextBox" TargetType="TextBox">
                 <Setter Property="Width" Value="60" />
                 <Setter Property="Height" Value="22" />
@@ -165,10 +167,11 @@
                 </Style>
             </controls:DockAndWrapPanel.Resources>
             <StackPanel>
-                <TextBlock VerticalAlignment="Center">
+                <!--<TextBlock VerticalAlignment="Center">
                     <Run Text="{Binding Capabilities.Description, Mode=OneWay}" />
                     <Run FontWeight="Bold" Text="{Binding Capabilities.Name, Mode=OneWay}" />
-                </TextBlock>
+                </TextBlock>-->
+                <TextBlock>TODO</TextBlock>
             </StackPanel>
             <!--  <controls:DPadControl  -->
             <!--  Width="22"  -->
@@ -191,7 +194,7 @@
             <!--  IconPath="{StaticResource IconCrop}"  -->
             <!--  ToolTip="Crop"  -->
             <!--  Visibility="{Binding Capabilities.CanStitchAndCrop, Converter={StaticResource Bool2Vis}}" />  -->
-            <StackPanel Visibility="{Binding Capabilities.CanCanvasZoom, Converter={StaticResource Bool2Vis}}">
+            <StackPanel>
                 <TextBlock VerticalAlignment="Center">
                     <Run>Zoom:</Run>
                 </TextBlock>
@@ -204,7 +207,7 @@
                     CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}"
                     DefaultValue="1" />
             </StackPanel>
-            <StackPanel Visibility="{Binding Capabilities.CanChangeCanvasBackground, Converter={StaticResource Bool2Vis}}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=CanvasBackground}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Canvas:</Run>
                 </TextBlock>
@@ -237,7 +240,7 @@
                     </Border>
                 </Border>
             </StackPanel>
-            <StackPanel Visibility="{Binding Capabilities.HasStroke, Converter={StaticResource Bool2Vis}}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Stroke}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Stroke:</Run>
                 </TextBlock>
@@ -247,7 +250,7 @@
                     SpinAmount="1"
                     Text="{Binding ElementName=drawingCanvas, Path=LineWidth, Mode=TwoWay, Converter={StaticResource convPixel2String}}" />
             </StackPanel>
-            <StackPanel Visibility="{Binding Capabilities.HasColor, Converter={StaticResource Bool2Vis}}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Color}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Color:</Run>
                 </TextBlock>
@@ -281,7 +284,7 @@
                     Margin="4,0,0,0"
                     VerticalAlignment="Center"
                     Orientation="Vertical"
-                    Visibility="{Binding Capabilities.HasAutoColor, Converter={StaticResource Bool2Vis}}">
+                    Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=AutoColor}">
                     <Viewbox Width="10" Height="10">
                         <CheckBox
                             x:Name="chkColorAuto"
@@ -294,7 +297,7 @@
                     <TextBlock HorizontalAlignment="Center" FontSize="8">Auto</TextBlock>
                 </StackPanel>
             </StackPanel>
-            <StackPanel Visibility="{Binding Capabilities.HasFont, Converter={StaticResource Bool2Vis}}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Font}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Font:</Run>
                 </TextBlock>
@@ -306,19 +309,19 @@
                     FontStyle="{Binding ElementName=drawingCanvas, Path=TextFontStyle, Mode=OneWay}"
                     Style="{StaticResource InnerToolButtonStyle}" />
             </StackPanel>
-            <StackPanel Visibility="{Binding Capabilities.HasAngle, Converter={StaticResource Bool2Vis}}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Angle}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Angle:</Run>
                 </TextBlock>
                 <controls:SpinnerTextBox
-                    x:Name="textObjectAngle"
                     Max="180"
                     Min="-180"
                     SnapToWholeNumber="True"
-                    SpinAmount="10" />
+                    SpinAmount="10"
+                    Text="{Binding ElementName=drawingCanvas, Path=ObjectAngle, Mode=TwoWay, Converter={StaticResource convAngle}}" />
                 <controls:ResetDefaultButton
-                    x:Name="resetObjectAngle"
                     Margin="4,0,0,0"
+                    CurrentValue="{Binding ElementName=drawingCanvas, Path=ObjectAngle, Mode=TwoWay}"
                     DefaultValue="0" />
             </StackPanel>
 
