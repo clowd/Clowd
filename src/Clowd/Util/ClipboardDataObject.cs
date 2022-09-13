@@ -13,6 +13,11 @@ using System.Windows.Media.Imaging;
 
 namespace Clowd.Util
 {
+
+    // https://chromium.googlesource.com/chromium/src/+/master/ui/base/clipboard/clipboard_win.cc
+    // https://github.com/chromium/chromium/blob/master/ui/base/clipboard/clipboard_format_type_win.cc
+    // https://docs.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/platform-apis/aa359736(v=vs.85)
+    // https://www.codeproject.com/Reference/1091137/Windows-Clipboard-Formats#_articleTop
     public class ClipboardDataObject
     {
         private static string[] _knownImageExt = new[]

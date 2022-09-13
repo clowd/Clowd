@@ -171,7 +171,7 @@ namespace Clowd.Drawing.Tools
             switch (_selectMode)
             {
                 case SelectionMode.Move:
-                    foreach (var o in drawingCanvas.SelectedItems)
+                    foreach (var o in drawingCanvas.GraphicsList.SelectedItems)
                         o.Move(dx, dy);
                     break;
 

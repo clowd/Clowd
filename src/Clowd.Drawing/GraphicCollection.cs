@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
@@ -20,6 +21,12 @@ namespace Clowd.Drawing
         public bool IsReadOnly => false;
 
         public DrawingVisual BackgroundVisual => _artworkBackground;
+
+        public GraphicBase[] SelectedItems
+        {
+            get => _selectedItems;
+            private set => Set(ref _selectedItems, value);
+        }
 
         public Rect ContentBounds
         {
@@ -61,7 +68,7 @@ namespace Clowd.Drawing
         private Rect _contentBounds;
         private Brush _backgroundBrush = Brushes.Transparent;
         private DpiScale _dpi;
-
+        private GraphicBase[] _selectedItems = new GraphicBase[0];
         private readonly List<GraphicBase> _graphics;
         private readonly VisualCollection _visuals;
         private readonly DrawingVisual _artworkBackground;
@@ -81,8 +88,10 @@ namespace Clowd.Drawing
             var vis = new DrawingVisual();
             _graphics.Add(graphic);
             _visuals.Add(vis);
-            graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
+            graphic.PropertyChanged += (sender, args) => GraphicPropertyChanged(graphic, vis, args);
             DrawGraphic(graphic, vis);
+            InvalidateBounds();
+            if (graphic.IsSelected) InvalidateSelected();
             OnPropertyChanged(nameof(Count));
         }
 
@@ -91,9 +100,20 @@ namespace Clowd.Drawing
             var vis = new DrawingVisual();
             _graphics.Insert(index, graphic);
             _visuals.Insert(index, vis);
-            graphic.PropertyChanged += (sender, args) => DrawGraphic(graphic, vis);
+            graphic.PropertyChanged += (sender, args) => GraphicPropertyChanged(graphic, vis, args);
             DrawGraphic(graphic, vis);
+            InvalidateBounds();
+            if (graphic.IsSelected) InvalidateSelected();
             OnPropertyChanged(nameof(Count));
+        }
+
+        private void GraphicPropertyChanged(GraphicBase graphic, DrawingVisual visual, PropertyChangedEventArgs e)
+        {
+            DrawGraphic(graphic, visual);
+            InvalidateBounds();
+
+            if (e.PropertyName == nameof(GraphicBase.IsSelected))
+                InvalidateSelected();
         }
 
         public bool Remove(GraphicBase graphic)
@@ -111,6 +131,7 @@ namespace Clowd.Drawing
             _graphics.RemoveAt(index);
             _visuals.RemoveAt(index);
             InvalidateBounds();
+            if (g.IsSelected) InvalidateSelected();
             OnPropertyChanged(nameof(Count));
         }
 
@@ -120,6 +141,7 @@ namespace Clowd.Drawing
             _graphics.Clear();
             _visuals.Clear();
             InvalidateBounds();
+            InvalidateSelected();
             OnPropertyChanged(nameof(Count));
         }
 
@@ -193,7 +215,7 @@ namespace Clowd.Drawing
             foreach (var g in gl)
             {
                 DrawingVisual v = new DrawingVisual();
-                DrawGraphic(g, v, true, false, transform);
+                DrawGraphic(g, v, true, transform);
                 bmp.Render(v);
             }
 
@@ -221,7 +243,7 @@ namespace Clowd.Drawing
         public IEnumerator<GraphicBase> GetEnumerator() => _graphics.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => _graphics.GetEnumerator();
 
-        private void DrawGraphic(GraphicBase g, DrawingVisual v, bool objectOnly = false, bool invalidate = true, Transform transform = null)
+        private void DrawGraphic(GraphicBase g, DrawingVisual v, bool objectOnly = false, Transform transform = null)
         {
             // update drop shadow effect
             if (g.DropShadowEffect && v.Effect == null)
@@ -252,9 +274,15 @@ namespace Clowd.Drawing
                 if (transform != null)
                     c.Pop();
             }
+        }
 
-            if (invalidate)
-                InvalidateBounds();
+        private void InvalidateSelected()
+        {
+            var selected = this.Where(g => g.IsSelected).ToArray();
+            if (!Enumerable.SequenceEqual(SelectedItems, selected))
+            {
+                SelectedItems = selected;
+            }
         }
 
         private void InvalidateBounds()

@@ -12,10 +12,11 @@ using Clowd.UI.Helpers;
 using DependencyPropertyGenerator;
 using RT.Util.ExtensionMethods;
 using System.Reflection;
+using System.ComponentModel;
 
 namespace Clowd.Drawing
 {
-    [DependencyProperty<ToolType>("Tool", DefaultValue = ToolType.Pointer)]
+    [DependencyProperty<ToolType>("Tool")]
     [DependencyProperty<Color>("ArtworkBackground")]
     [DependencyProperty<double>("LineWidth", DefaultValue = 2d)]
     [DependencyProperty<Color>("ObjectColor")]
@@ -42,8 +43,6 @@ namespace Clowd.Drawing
             }
         }
 
-        public int SelectionCount => SelectedItems.Count();
-
         public GraphicCollection GraphicsList
         {
             get => _graphicsList;
@@ -52,17 +51,19 @@ namespace Clowd.Drawing
                 if (_graphicsList != null)
                 {
                     RemoveVisualChild(_graphicsList.BackgroundVisual);
+                    _graphicsList.PropertyChanged -= GraphicsListPropertyChanged;
                     _graphicsList.Clear();
                 }
 
                 _graphicsList = value;
+                _graphicsList.PropertyChanged += GraphicsListPropertyChanged;
                 AddVisualChild(_graphicsList.BackgroundVisual);
             }
         }
 
-        public int Count => GraphicsList.Count;
+        public int SelectedCount => GraphicsList.SelectedItems.Length;
 
-        public IEnumerable<GraphicBase> SelectedItems => GraphicsList.Where(g => g.IsSelected);
+        public int Count => GraphicsList.Count;
 
         internal ToolPointer ToolPointer;
         internal ToolText ToolText;
@@ -93,7 +94,7 @@ namespace Clowd.Drawing
 
         public DrawingCanvas()
         {
-            _graphicsList = new GraphicCollection(this);
+            GraphicsList = new GraphicCollection(this);
 
             // create array of drawing tools
             ToolPointer = new ToolPointer();
@@ -143,7 +144,7 @@ namespace Clowd.Drawing
             _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate());
 
             _undoManager = new UndoManager(this);
-            _undoManager.StateChanged += (_, _) => UpdateState();
+            _undoManager.StateChanged += UndoManagerStateChanged;
 
             double parseDoubleOrDefault(object obj, double def)
             {
@@ -165,14 +166,14 @@ namespace Clowd.Drawing
             CommandUnselectAll = new RelayCommand()
             {
                 Executed = (obj) => CancelCurrentOperation(), // this resets the tool, unselects all, etc
-                CanExecute = (obj) => SelectedItems.Any(),
+                CanExecute = (obj) => SelectedCount > 0,
                 Text = "Unselect all",
                 Gesture = new SimpleKeyGesture(Key.Escape),
             };
             CommandDelete = new RelayCommand()
             {
                 Executed = (obj) => Delete(),
-                CanExecute = (obj) => SelectedItems.Any(),
+                CanExecute = (obj) => SelectedCount > 0,
                 Text = "_Delete",
                 Gesture = new SimpleKeyGesture(Key.Delete),
             };
@@ -185,35 +186,35 @@ namespace Clowd.Drawing
             CommandMoveToFront = new RelayCommand()
             {
                 Executed = (obj) => MoveToFront(),
-                CanExecute = (obj) => SelectedItems.Any(),
+                CanExecute = (obj) => SelectedCount > 0,
                 Text = "Move to front",
                 Gesture = new SimpleKeyGesture(Key.Home),
             };
             CommandMoveToBack = new RelayCommand()
             {
                 Executed = (obj) => MoveToBack(),
-                CanExecute = (obj) => SelectedItems.Any(),
+                CanExecute = (obj) => SelectedCount > 0,
                 Text = "Move to back",
                 Gesture = new SimpleKeyGesture(Key.End),
             };
             CommandMoveForward = new RelayCommand()
             {
                 Executed = (obj) => MoveForward(),
-                CanExecute = (obj) => SelectedItems.Any(),
+                CanExecute = (obj) => SelectedCount > 0,
                 Text = "Move forward",
                 Gesture = new SimpleKeyGesture(Key.Home, ModifierKeys.Control),
             };
             CommandMoveBackward = new RelayCommand()
             {
                 Executed = (obj) => MoveBackward(),
-                CanExecute = (obj) => SelectedItems.Any(),
+                CanExecute = (obj) => SelectedCount > 0,
                 Text = "Move backward",
                 Gesture = new SimpleKeyGesture(Key.End, ModifierKeys.Control),
             };
             CommandResetRotation = new RelayCommand()
             {
                 Executed = (obj) => ResetRotation(),
-                CanExecute = (obj) => SelectedItems.Any(),
+                CanExecute = (obj) => SelectedCount > 0,
                 Text = "Reset rotation",
             };
             CommandZoomPanAuto = new RelayCommand()
@@ -283,7 +284,7 @@ namespace Clowd.Drawing
             SnapsToDevicePixels = false;
             UseLayoutRounding = false;
 
-            OnToolChanged(ToolType.Pointer);
+            Tool = ToolType.Pointer;
         }
 
         partial void OnToolChanged(ToolType newValue)
@@ -296,6 +297,7 @@ namespace Clowd.Drawing
             else CurrentTool.Instance.SetCursor(this);
 
             UnselectAll();
+            SyncObjectState();
         }
 
         partial void OnArtworkBackgroundChanged(Color newValue)
@@ -352,7 +354,7 @@ namespace Clowd.Drawing
         {
             bool wasChange = false;
 
-            foreach (GraphicBase g in SelectedItems)
+            foreach (GraphicBase g in GraphicsList.SelectedItems)
             {
                 if (g is TType obj)
                 {
@@ -395,19 +397,15 @@ namespace Clowd.Drawing
             g.IsSelected = true;
             g.Normalize();
             this.GraphicsList.Add(g);
-
             AddCommandToHistory();
-            UpdateState();
         }
 
         public void SelectAll()
         {
-            for (int i = 0; i < this.Count; i++)
+            for (int i = 0; i < Count; i++)
             {
                 this[i].IsSelected = true;
             }
-
-            UpdateState();
         }
 
         public void UnselectAll()
@@ -416,18 +414,14 @@ namespace Clowd.Drawing
             {
                 this[i].IsSelected = false;
             }
-
-            UpdateState();
         }
 
         public void UnselectAllExcept(params GraphicBase[] excluded)
         {
-            foreach (var ob in this.SelectedItems.Except(excluded.Where(ex => ex != null)))
+            foreach (var ob in GraphicsList.SelectedItems.Except(excluded.Where(ex => ex != null)))
             {
                 ob.IsSelected = false;
             }
-
-            UpdateState();
         }
 
         public void Delete()
@@ -447,8 +441,6 @@ namespace Clowd.Drawing
             {
                 AddCommandToHistory();
             }
-
-            UpdateState();
         }
 
         public void DeleteAll()
@@ -458,15 +450,13 @@ namespace Clowd.Drawing
                 GraphicsList.Clear();
                 AddCommandToHistory();
             }
-
-            UpdateState();
         }
 
         public void Nudge(int offsetX, int offsetY)
         {
-            if (SelectedItems.Any() && (offsetX != 0 || offsetY != 0))
+            if (SelectedCount > 0 && (offsetX != 0 || offsetY != 0))
             {
-                foreach (var obj in SelectedItems)
+                foreach (var obj in GraphicsList.SelectedItems)
                 {
                     obj.Move(offsetX, offsetY);
                 }
@@ -532,8 +522,6 @@ namespace Clowd.Drawing
                 }
                 AddCommandToHistory();
             }
-
-            UpdateState();
         }
 
         public void ResetRotation()
@@ -544,13 +532,11 @@ namespace Clowd.Drawing
         public void Undo()
         {
             _undoManager.Undo();
-            UpdateState();
         }
 
         public void Redo()
         {
             _undoManager.Redo();
-            UpdateState();
         }
 
         protected override int VisualChildrenCount => (GraphicsList?.VisualCount ?? 0) + Children.Count;
@@ -581,6 +567,70 @@ namespace Clowd.Drawing
             throw new ArgumentOutOfRangeException("index");
         }
 
+        private void GraphicsListPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(GraphicCollection.SelectedItems))
+            {
+                SyncObjectState();
+            }
+
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        private void SyncObjectState()
+        {
+            var selected = GraphicsList.SelectedItems;
+            if (selected.Length == 0)
+            {
+                Skill skills = CurrentTool.Skills;
+                if (CurrentTool.ObjectType != null)
+                {
+                    var attr = CurrentTool.ObjectType.GetCustomAttribute<GraphicDescAttribute>();
+                    if (attr != null)
+                    {
+                        skills |= attr.Skills;
+                    }
+                }
+                CurrentSkills = skills;
+            }
+            // if there is 1 object selected, use the object skills
+            else if (selected.Length == 1)
+            {
+                var obj = selected[0];
+                var attr = obj.GetType().GetCustomAttribute<GraphicDescAttribute>();
+                var skills = attr?.Skills ?? Skill.None;
+
+                ObjectColor = obj.ObjectColor;
+                LineWidth = obj.LineWidth;
+
+                if (obj is GraphicRectangle rect)
+                {
+                    ObjectAngle = rect.Angle;
+                }
+
+                if (obj is GraphicText txt)
+                {
+                    TextFontFamilyName = txt.FontName;
+                    TextFontWeight = txt.FontWeight;
+                    TextFontStretch = txt.FontStretch;
+                    TextFontSize = txt.FontSize;
+                    TextFontStyle = txt.FontStyle;
+                }
+
+                CurrentSkills = skills;
+            }
+            // if there are multiple objects selected
+            else
+            {
+                CurrentSkills = Skill.None;
+            }
+        }
+
+        void UndoManagerStateChanged(object sender, EventArgs e)
+        {
+            CommandManager.InvalidateRequerySuggested();
+        }
+
         void DrawingCanvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (IsPanning)
@@ -607,8 +657,6 @@ namespace Clowd.Drawing
                 {
                     CurrentTool.Instance.OnMouseDown(this, e);
                 }
-
-                UpdateState();
             }
             else if (e.ChangedButton == MouseButton.Right)
             {
@@ -629,9 +677,6 @@ namespace Clowd.Drawing
                     UnselectAll();
                     hitObject.IsSelected = true;
                 }
-
-                // we must update the state as we may have changed the selection
-                UpdateState();
             }
         }
 
@@ -664,7 +709,6 @@ namespace Clowd.Drawing
             if (e.ChangedButton == MouseButton.Left)
             {
                 CurrentTool.Instance.OnMouseUp(this, e);
-                UpdateState();
             }
         }
 
@@ -704,7 +748,6 @@ namespace Clowd.Drawing
 
         void DrawingCanvas_Loaded(object sender, RoutedEventArgs e)
         {
-            AddVisualChild(_graphicsList.BackgroundVisual);
             this.Focusable = true; // to handle keyboard messages
             UpdateScaleTransform();
             UpdateClickableSurface();
@@ -715,7 +758,6 @@ namespace Clowd.Drawing
             if (this.IsMouseCaptured)
             {
                 CancelCurrentOperation();
-                UpdateState();
             }
         }
 
@@ -774,58 +816,60 @@ namespace Clowd.Drawing
             _undoManager.AddCommandStep();
         }
 
-        void UpdateState()
-        {
-            var selected = SelectedItems.ToArray();
+        //void UpdateState()
+        //{
+        //    asdasd; // skip this if the selection has not changed since last time.
 
-            // if there are no selected objects, use the tool skills
-            if (selected.Length == 0)
-            {
-                Skill skills = CurrentTool.Skills;
-                if (CurrentTool.ObjectType != null)
-                {
-                    var attr = CurrentTool.ObjectType.GetCustomAttribute<GraphicDescAttribute>();
-                    if (attr != null)
-                    {
-                        skills |= attr.Skills;
-                    }
-                }
-                CurrentSkills = skills;
-            }
-            // if there is 1 object selected, use the object skills
-            else if (selected.Length == 1)
-            {
-                var obj = selected[0];
-                var attr = obj.GetType().GetCustomAttribute<GraphicDescAttribute>();
-                var skills = attr?.Skills ?? Skill.None;
+        //    var selected = SelectedItems.ToArray();
 
-                ObjectColor = obj.ObjectColor;
-                LineWidth = obj.LineWidth;
+        //    // if there are no selected objects, use the tool skills
+        //    if (selected.Length == 0)
+        //    {
+        //        Skill skills = CurrentTool.Skills;
+        //        if (CurrentTool.ObjectType != null)
+        //        {
+        //            var attr = CurrentTool.ObjectType.GetCustomAttribute<GraphicDescAttribute>();
+        //            if (attr != null)
+        //            {
+        //                skills |= attr.Skills;
+        //            }
+        //        }
+        //        CurrentSkills = skills;
+        //    }
+        //    // if there is 1 object selected, use the object skills
+        //    else if (selected.Length == 1)
+        //    {
+        //        var obj = selected[0];
+        //        var attr = obj.GetType().GetCustomAttribute<GraphicDescAttribute>();
+        //        var skills = attr?.Skills ?? Skill.None;
 
-                if (obj is GraphicRectangle rect)
-                {
-                    ObjectAngle = rect.Angle;
-                }
+        //        ObjectColor = obj.ObjectColor;
+        //        LineWidth = obj.LineWidth;
 
-                if (obj is GraphicText txt)
-                {
-                    TextFontFamilyName = txt.FontName;
-                    TextFontWeight = txt.FontWeight;
-                    TextFontStretch = txt.FontStretch;
-                    TextFontSize = txt.FontSize;
-                    TextFontStyle = txt.FontStyle;
-                }
+        //        if (obj is GraphicRectangle rect)
+        //        {
+        //            ObjectAngle = rect.Angle;
+        //        }
 
-                CurrentSkills = skills;
-            }
-            // if there are multiple objects selected
-            else
-            {
-                CurrentSkills = Skill.None;
-            }
+        //        if (obj is GraphicText txt)
+        //        {
+        //            TextFontFamilyName = txt.FontName;
+        //            TextFontWeight = txt.FontWeight;
+        //            TextFontStretch = txt.FontStretch;
+        //            TextFontSize = txt.FontSize;
+        //            TextFontStyle = txt.FontStyle;
+        //        }
 
-            CommandManager.InvalidateRequerySuggested();
-        }
+        //        CurrentSkills = skills;
+        //    }
+        //    // if there are multiple objects selected
+        //    else
+        //    {
+        //        CurrentSkills = Skill.None;
+        //    }
+
+        //    CommandManager.InvalidateRequerySuggested();
+        //}
 
         partial void OnContentScaleChanged(double newValue)
         {
