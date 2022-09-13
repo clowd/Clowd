@@ -13,21 +13,22 @@ using DependencyPropertyGenerator;
 using RT.Util.ExtensionMethods;
 using System.Reflection;
 using System.ComponentModel;
+using System.Windows.Data;
 
 namespace Clowd.Drawing
 {
     [DependencyProperty<ToolType>("Tool")]
     [DependencyProperty<Color>("ArtworkBackground")]
-    [DependencyProperty<double>("LineWidth", DefaultValue = 2d)]
-    [DependencyProperty<Color>("ObjectColor")]
-    [DependencyProperty<double>("ObjectAngle")]
+    [DependencyProperty<double>("LineWidth", DefaultValue = 2d, DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<Color>("ObjectColor", DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<double>("ObjectAngle", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<Skill>("CurrentSkills")]
     [DependencyProperty<Color>("HandleColor")]
-    [DependencyProperty<string>("TextFontFamilyName", DefaultValue = "Tahoma")]
-    [DependencyProperty<FontStyle>("TextFontStyle")]
-    [DependencyProperty<FontWeight>("TextFontWeight")]
-    [DependencyProperty<FontStretch>("TextFontStretch")]
-    [DependencyProperty<double>("TextFontSize", DefaultValue = 12d)]
+    [DependencyProperty<string>("TextFontFamilyName", DefaultValue = "Tahoma", DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<FontStyle>("TextFontStyle", DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<FontWeight>("TextFontWeight", DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<FontStretch>("TextFontStretch", DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<double>("TextFontSize", DefaultValue = 12d, DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<bool>("IsPanning")]
     [DependencyProperty<Point>("ContentOffset")]
     [DependencyProperty<double>("ContentScale", DefaultValue = 1d)]
@@ -131,7 +132,7 @@ namespace Clowd.Drawing
                 snapMode: SnapMode.All);
 
             _toolStore = new Dictionary<ToolType, ToolDesc>();
-            _toolStore[ToolType.None] = new ToolDesc("Panning", ToolPointer, Skills: Skill.CanvasBackground);
+            _toolStore[ToolType.None] = new ToolDesc("Panning", new ToolPanning());
             _toolStore[ToolType.Pointer] = new ToolDesc("Pointer", ToolPointer, Skills: Skill.CanvasBackground);
             _toolStore[ToolType.Rectangle] = new ToolDesc("Rectangle", toolRectangle, ObjectType: typeof(GraphicRectangle));
             _toolStore[ToolType.FilledRectangle] = new ToolDesc("Filled Rectangle", toolFilledRectangle, ObjectType: typeof(GraphicFilledRectangle));
@@ -274,6 +275,7 @@ namespace Clowd.Drawing
             this.KeyUp += DrawingCanvas_KeyUp;
             this.LostMouseCapture += DrawingCanvas_LostMouseCapture;
             this.MouseWheel += DrawingCanvas_MouseWheel;
+            this.SourceUpdated += DrawingCanvas_SourceUpdated;
 
             InitializeZoom();
 
@@ -289,14 +291,8 @@ namespace Clowd.Drawing
 
         partial void OnToolChanged(ToolType newValue)
         {
-            if (!_toolStore.ContainsKey(newValue)) newValue = ToolType.Pointer;
-
             CurrentTool = _toolStore[newValue];
-
-            if (newValue == ToolType.None) Cursor = Cursors.SizeAll;
-            else CurrentTool.Instance.SetCursor(this);
-
-            UnselectAll();
+            CurrentTool.Instance.SetCursor(this);
             SyncObjectState();
         }
 
@@ -308,46 +304,6 @@ namespace Clowd.Drawing
         partial void OnHandleColorChanged(Color newValue)
         {
             GraphicBase.HandleBrush = new SolidColorBrush(newValue);
-        }
-
-        partial void OnLineWidthChanged(double newValue)
-        {
-            ApplyGraphicPropertyChange<GraphicBase, double>(newValue, t => t.LineWidth, (t, v) => t.LineWidth = v);
-        }
-
-        partial void OnObjectColorChanged(Color newValue)
-        {
-            ApplyGraphicPropertyChange<GraphicBase, Color>(newValue, t => t.ObjectColor, (t, v) => t.ObjectColor = v);
-        }
-
-        partial void OnObjectAngleChanged(double newValue)
-        {
-            ApplyGraphicPropertyChange<GraphicRectangle, double>(newValue, t => t.Angle, (t, v) => t.Angle = v);
-        }
-
-        partial void OnTextFontFamilyNameChanged(string newValue)
-        {
-            ApplyGraphicPropertyChange<GraphicText, string>(newValue, t => t.FontName, (t, v) => t.FontName = v);
-        }
-
-        partial void OnTextFontStyleChanged(FontStyle newValue)
-        {
-            ApplyGraphicPropertyChange<GraphicText, FontStyle>(newValue, t => t.FontStyle, (t, v) => t.FontStyle = v);
-        }
-
-        partial void OnTextFontWeightChanged(FontWeight newValue)
-        {
-            ApplyGraphicPropertyChange<GraphicText, FontWeight>(newValue, t => t.FontWeight, (t, v) => t.FontWeight = v);
-        }
-
-        partial void OnTextFontStretchChanged(FontStretch newValue)
-        {
-            ApplyGraphicPropertyChange<GraphicText, FontStretch>(newValue, t => t.FontStretch, (t, v) => t.FontStretch = v);
-        }
-
-        partial void OnTextFontSizeChanged(double newValue)
-        {
-            ApplyGraphicPropertyChange<GraphicText, double>(newValue, t => t.FontSize, (t, v) => t.FontSize = v);
         }
 
         private void ApplyGraphicPropertyChange<TType, T>(T newValue, Func<TType, T> getTextProp, Action<TType, T> setTextProp) where TType : GraphicBase
@@ -572,15 +528,38 @@ namespace Clowd.Drawing
             if (e.PropertyName == nameof(GraphicCollection.SelectedItems))
             {
                 SyncObjectState();
+                CommandManager.InvalidateRequerySuggested();
             }
-
-            CommandManager.InvalidateRequerySuggested();
+            else if (e.PropertyName == nameof(GraphicCollection.Count))
+            {
+                CommandManager.InvalidateRequerySuggested();
+            }
         }
 
         private void SyncObjectState()
         {
+            // this is only triggered when the current tool or the current selection changes.
+            // we connect the current "object config" properties on this class to the relevant object.
+
+            BindingOperations.ClearBinding(this, ObjectColorProperty);
+            BindingOperations.ClearBinding(this, LineWidthProperty);
+            BindingOperations.ClearBinding(this, ObjectAngleProperty);
+            BindingOperations.ClearBinding(this, TextFontFamilyNameProperty);
+            BindingOperations.ClearBinding(this, TextFontWeightProperty);
+            BindingOperations.ClearBinding(this, TextFontStretchProperty);
+            BindingOperations.ClearBinding(this, TextFontSizeProperty);
+            BindingOperations.ClearBinding(this, TextFontStyleProperty);
+
+            if (IsPanning)
+            {
+                CurrentSkills = Skill.None;
+                return;
+            }
+
             var selected = GraphicsList.SelectedItems;
-            if (selected.Length == 0)
+
+            // if we are not using the pointer, or if there are no objects selected, use tool skills
+            if (selected.Length == 0 || Tool != ToolType.Pointer)
             {
                 Skill skills = CurrentTool.Skills;
                 if (CurrentTool.ObjectType != null)
@@ -591,30 +570,33 @@ namespace Clowd.Drawing
                         skills |= attr.Skills;
                     }
                 }
+
+                // we do not allow the angle to be set in the tool.
+                skills &= ~Skill.Angle;
                 CurrentSkills = skills;
             }
-            // if there is 1 object selected, use the object skills
-            else if (selected.Length == 1)
+            // if there is precisely 1 object selected, use the object skills
+            else if (selected.Length == 1 && Tool == ToolType.Pointer)
             {
                 var obj = selected[0];
                 var attr = obj.GetType().GetCustomAttribute<GraphicDescAttribute>();
                 var skills = attr?.Skills ?? Skill.None;
 
-                ObjectColor = obj.ObjectColor;
-                LineWidth = obj.LineWidth;
+                this.SetBinding(ObjectColorProperty, new Binding(nameof(GraphicBase.ObjectColor)) { Source = obj, NotifyOnSourceUpdated = true });
+                this.SetBinding(LineWidthProperty, new Binding(nameof(GraphicBase.LineWidth)) { Source = obj, NotifyOnSourceUpdated = true });
 
                 if (obj is GraphicRectangle rect)
                 {
-                    ObjectAngle = rect.Angle;
+                    this.SetBinding(ObjectAngleProperty, new Binding(nameof(GraphicRectangle.Angle)) { Source = obj, NotifyOnSourceUpdated = true });
                 }
 
                 if (obj is GraphicText txt)
                 {
-                    TextFontFamilyName = txt.FontName;
-                    TextFontWeight = txt.FontWeight;
-                    TextFontStretch = txt.FontStretch;
-                    TextFontSize = txt.FontSize;
-                    TextFontStyle = txt.FontStyle;
+                    this.SetBinding(TextFontFamilyNameProperty, new Binding(nameof(GraphicText.FontName)) { Source = obj, NotifyOnSourceUpdated = true });
+                    this.SetBinding(TextFontWeightProperty, new Binding(nameof(GraphicText.FontWeight)) { Source = obj, NotifyOnSourceUpdated = true });
+                    this.SetBinding(TextFontStretchProperty, new Binding(nameof(GraphicText.FontStretch)) { Source = obj, NotifyOnSourceUpdated = true });
+                    this.SetBinding(TextFontSizeProperty, new Binding(nameof(GraphicText.FontSize)) { Source = obj, NotifyOnSourceUpdated = true });
+                    this.SetBinding(TextFontStyleProperty, new Binding(nameof(GraphicText.FontStyle)) { Source = obj, NotifyOnSourceUpdated = true });
                 }
 
                 CurrentSkills = skills;
@@ -629,6 +611,13 @@ namespace Clowd.Drawing
         void UndoManagerStateChanged(object sender, EventArgs e)
         {
             CommandManager.InvalidateRequerySuggested();
+        }
+
+        private void DrawingCanvas_SourceUpdated(object sender, DataTransferEventArgs e)
+        {
+            // this is only triggered on bindings with NotifyOnSourceUpdated, and 
+            // that is only enabled on our object property bindings in SyncObjectState.
+            AddCommandToHistory();
         }
 
         void DrawingCanvas_MouseDown(object sender, MouseButtonEventArgs e)
@@ -815,61 +804,6 @@ namespace Clowd.Drawing
         {
             _undoManager.AddCommandStep();
         }
-
-        //void UpdateState()
-        //{
-        //    asdasd; // skip this if the selection has not changed since last time.
-
-        //    var selected = SelectedItems.ToArray();
-
-        //    // if there are no selected objects, use the tool skills
-        //    if (selected.Length == 0)
-        //    {
-        //        Skill skills = CurrentTool.Skills;
-        //        if (CurrentTool.ObjectType != null)
-        //        {
-        //            var attr = CurrentTool.ObjectType.GetCustomAttribute<GraphicDescAttribute>();
-        //            if (attr != null)
-        //            {
-        //                skills |= attr.Skills;
-        //            }
-        //        }
-        //        CurrentSkills = skills;
-        //    }
-        //    // if there is 1 object selected, use the object skills
-        //    else if (selected.Length == 1)
-        //    {
-        //        var obj = selected[0];
-        //        var attr = obj.GetType().GetCustomAttribute<GraphicDescAttribute>();
-        //        var skills = attr?.Skills ?? Skill.None;
-
-        //        ObjectColor = obj.ObjectColor;
-        //        LineWidth = obj.LineWidth;
-
-        //        if (obj is GraphicRectangle rect)
-        //        {
-        //            ObjectAngle = rect.Angle;
-        //        }
-
-        //        if (obj is GraphicText txt)
-        //        {
-        //            TextFontFamilyName = txt.FontName;
-        //            TextFontWeight = txt.FontWeight;
-        //            TextFontStretch = txt.FontStretch;
-        //            TextFontSize = txt.FontSize;
-        //            TextFontStyle = txt.FontStyle;
-        //        }
-
-        //        CurrentSkills = skills;
-        //    }
-        //    // if there are multiple objects selected
-        //    else
-        //    {
-        //        CurrentSkills = Skill.None;
-        //    }
-
-        //    CommandManager.InvalidateRequerySuggested();
-        //}
 
         partial void OnContentScaleChanged(double newValue)
         {
