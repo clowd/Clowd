@@ -78,6 +78,7 @@ namespace Clowd.Drawing
         private GraphicCollection _graphicsList;
         private Border _clickable;
         private UndoManager _undoManager;
+        private bool _isToolMouseDown;
 
         public RelayCommand CommandSelectAll { get; }
         public RelayCommand CommandUnselectAll { get; }
@@ -291,8 +292,16 @@ namespace Clowd.Drawing
 
         partial void OnToolChanged(ToolType newValue)
         {
+            if (_isToolMouseDown)
+            {
+                // if there is an operation in progress while the tool changes, try to abort it
+                CurrentTool.Instance.AbortOperation(this);
+                _isToolMouseDown = false;
+            }
+
             CurrentTool = _toolStore[newValue];
             CurrentTool.Instance.SetCursor(this);
+
             SyncObjectState();
         }
 
@@ -622,11 +631,6 @@ namespace Clowd.Drawing
 
         void DrawingCanvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (IsPanning)
-                return;
-
-            this.Focus();
-
             if (e.ChangedButton == MouseButton.Left)
             {
                 if (e.ClickCount == 2)
@@ -638,12 +642,9 @@ namespace Clowd.Drawing
                     if (clicked != null)
                         clicked.Activate(this);
                 }
-                else if (Tool == ToolType.None)
-                {
-                    StartPanning(e);
-                }
                 else
                 {
+                    _isToolMouseDown = true;
                     CurrentTool.Instance.OnMouseDown(this, e);
                 }
             }
@@ -671,32 +672,17 @@ namespace Clowd.Drawing
 
         void DrawingCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (IsPanning)
-            {
-                ContinuePanning(e);
-                return;
-            }
-
             if (e.MiddleButton == MouseButtonState.Released && e.RightButton == MouseButtonState.Released)
             {
                 CurrentTool.Instance.OnMouseMove(this, e);
-            }
-            else
-            {
-                this.Cursor = HelperFunctions.DefaultCursor;
             }
         }
 
         void DrawingCanvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (IsPanning)
-            {
-                StopPanning(e);
-                return;
-            }
-
             if (e.ChangedButton == MouseButton.Left)
             {
+                _isToolMouseDown = false;
                 CurrentTool.Instance.OnMouseUp(this, e);
             }
         }
@@ -744,7 +730,7 @@ namespace Clowd.Drawing
 
         void DrawingCanvas_LostMouseCapture(object sender, MouseEventArgs e)
         {
-            if (this.IsMouseCaptured)
+            if (_isToolMouseDown)
             {
                 CancelCurrentOperation();
             }
@@ -794,6 +780,7 @@ namespace Clowd.Drawing
             }
 
             Tool = ToolType.Pointer;
+            _isToolMouseDown = false;
 
             this.ReleaseMouseCapture();
             this.Cursor = HelperFunctions.DefaultCursor;
@@ -887,27 +874,6 @@ namespace Clowd.Drawing
             group.Children.Add(_translateTransform);
             RenderTransform = group;
             RenderTransformOrigin = new Point(0.0, 0.0);
-        }
-
-        private Point panStart;
-
-        private void StartPanning(MouseEventArgs e)
-        {
-            IsPanning = true;
-            panStart = e.GetPosition(this);
-            CaptureMouse();
-        }
-
-        private void ContinuePanning(MouseEventArgs e)
-        {
-            ContentOffset += (e.GetPosition(this) - panStart) * ContentScale;
-            panStart = e.GetPosition(this);
-        }
-
-        private void StopPanning(MouseEventArgs e)
-        {
-            IsPanning = false;
-            ReleaseMouseCapture();
         }
 
         public void ZoomPanFit()
