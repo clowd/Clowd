@@ -32,6 +32,7 @@ namespace Clowd.Drawing
     [DependencyProperty<bool>("IsPanning")]
     [DependencyProperty<Point>("ContentOffset")]
     [DependencyProperty<double>("ContentScale", DefaultValue = 1d)]
+    [DependencyProperty<GraphicCollection>("GraphicsList")]
     public partial class DrawingCanvas : Canvas
     {
         public GraphicBase this[int index]
@@ -44,41 +45,9 @@ namespace Clowd.Drawing
             }
         }
 
-        public GraphicCollection GraphicsList
-        {
-            get => _graphicsList;
-            set
-            {
-                if (_graphicsList != null)
-                {
-                    RemoveVisualChild(_graphicsList.BackgroundVisual);
-                    _graphicsList.PropertyChanged -= GraphicsListPropertyChanged;
-                    _graphicsList.Clear();
-                }
-
-                _graphicsList = value;
-                _graphicsList.PropertyChanged += GraphicsListPropertyChanged;
-                AddVisualChild(_graphicsList.BackgroundVisual);
-            }
-        }
-
         public int SelectedCount => GraphicsList.SelectedItems.Length;
 
         public int Count => GraphicsList.Count;
-
-        internal ToolPointer ToolPointer;
-        internal ToolText ToolText;
-
-        private ToolDesc CurrentTool;
-
-        private record struct ToolDesc(string Name, ToolBase Instance, Type ObjectType = null, Skill Skills = Skill.None);
-
-        private Dictionary<ToolType, ToolDesc> _toolStore;
-
-        private GraphicCollection _graphicsList;
-        private Border _clickable;
-        private UndoManager _undoManager;
-        private bool _isToolMouseDown;
 
         public RelayCommand CommandSelectAll { get; }
         public RelayCommand CommandUnselectAll { get; }
@@ -93,6 +62,17 @@ namespace Clowd.Drawing
         public RelayCommand CommandRedo { get; }
         public RelayCommand CommandZoomPanAuto { get; }
         public RelayCommand CommandZoomPanActualSize { get; }
+
+        internal ToolPointer ToolPointer;
+        internal ToolText ToolText;
+        private ToolDesc CurrentTool;
+
+        private Dictionary<ToolType, ToolDesc> _toolStore;
+        private Border _clickable;
+        private UndoManager _undoManager;
+        private bool _isToolMouseDown;
+
+        private record struct ToolDesc(string Name, ToolBase Instance, Type ObjectType = null, Skill Skills = Skill.None);
 
         public DrawingCanvas()
         {
@@ -303,6 +283,19 @@ namespace Clowd.Drawing
             CurrentTool.Instance.SetCursor(this);
 
             SyncObjectState();
+        }
+
+        partial void OnGraphicsListChanged(GraphicCollection oldValue, GraphicCollection newValue)
+        {
+            if (oldValue != null)
+            {
+                RemoveVisualChild(oldValue.BackgroundVisual);
+                oldValue.PropertyChanged -= GraphicsListPropertyChanged;
+                oldValue.Clear();
+            }
+
+            newValue.PropertyChanged += GraphicsListPropertyChanged;
+            AddVisualChild(newValue.BackgroundVisual);
         }
 
         partial void OnArtworkBackgroundChanged(Color newValue)
