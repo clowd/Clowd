@@ -8,7 +8,7 @@ using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
-    [GraphicDesc("Numeric Step", Skills = Skill.Stroke | Skill.Color | Skill.AutoColor | Skill.Font | Skill.Angle)]
+    [GraphicDesc("Numeric Step", Skills = Skill.Color | Skill.AutoColor | Skill.Font | Skill.Angle)]
     public class GraphicText : GraphicRectangle
     {
         public const int TextPadding = 15;
