@@ -154,6 +154,8 @@ namespace Clowd.Drawing.Graphics
             Top = Math.Min(Top, p.Y);
             Bottom = Math.Max(Bottom, p.Y);
             
+            // If none of the above update actually change (eg. drawing a point inside the bounds)
+            // then it will not fire a PropertyChanged event, which is what triggers redraw.
             OnPropertyChanged(nameof(Bounds));
         }
     }
