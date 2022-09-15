@@ -22,6 +22,7 @@ namespace Clowd.Drawing.Tools
             _newText = new GraphicText(canvas, pt);
             _newText.IsSelected = true;
             canvas.GraphicsList.Add(_newText);
+            OnMouseMoveImpl(canvas, pt);
         }
 
         protected override void OnMouseMoveImpl(DrawingCanvas canvas, Point pt)
