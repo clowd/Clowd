@@ -80,7 +80,7 @@ namespace Clowd.Drawing.Graphics
             : this(_colors[_nextColor], canvas.LineWidth, point, _rnd.NextDouble() * 8 - 4)
         {
             _nextColor = (_nextColor + 1) % _colors.Length;
-            if (canvas.ObjectColor.A != 0)
+            if (!canvas.ObjectColorAuto)
                 ObjectColor = canvas.ObjectColor;
             FontName = canvas.TextFontFamilyName;
             FontSize = canvas.TextFontSize;
