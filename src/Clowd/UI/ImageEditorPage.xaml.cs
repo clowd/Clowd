@@ -20,7 +20,6 @@ namespace Clowd.UI
     public partial class ImageEditorPage : UserControl, INotifyPropertyChanged
     {
         private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
-        private PropertyChangeNotifier toolNotifier;
         private SettingsRoot _settings = SettingsRoot.Current;
         private SessionInfo _session;
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
@@ -35,10 +34,6 @@ namespace Clowd.UI
             drawingCanvas.HandleColor = AppStyles.AccentColor;
             drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
-
-            // register tool changed listener
-            //toolNotifier = new PropertyChangeNotifier(drawingCanvas, DrawingCanvas.ToolProperty);
-            //toolNotifier.ValueChanged += drawingCanvas_ToolChanged;
 
             this.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) drawingCanvas.CancelCurrentOperation(); };
             this.InputBindings.Add(drawingCanvas.CommandSelectAll.CreateKeyBinding());
@@ -250,8 +245,6 @@ namespace Clowd.UI
                 drawingCanvas.Tool = ToolType.None;
                 // i need to change a random property here so WPF updates. really weird, fix it some day?
                 buttonFocus.Opacity = 0.02;
-                //shiftIndicator.Background = (Brush)App.Current.Resources["AccentColorBrush"];
-                //shiftIndicator.Opacity = 1;
             }
         }
 
@@ -263,8 +256,6 @@ namespace Clowd.UI
                 _shiftPanPreviousTool = null;
                 // i need to change a random property here so WPF updates. really weird, fix it some day?
                 buttonFocus.Opacity = 0.03;
-                //shiftIndicator.Background = new SolidColorBrush(Color.FromRgb(112, 112, 112));
-                //shiftIndicator.Opacity = 0.8;
             }
         }
 
@@ -310,6 +301,7 @@ namespace Clowd.UI
             var oldColor = drawingCanvas.ArtworkBackground;
             var newColor = await NiceDialog.ShowColorPromptAsync(this, oldColor);
             drawingCanvas.ArtworkBackground = newColor;
+            _settings.Editor.CanvasBackground = newColor;
         }
 
         private async void font_Click(object sender, RoutedEventArgs e)

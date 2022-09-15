@@ -30,10 +30,10 @@ namespace Clowd
     {
         public class SavedToolSettings : SimpleNotifyObject
         {
-            public bool TextObjectColorIsAuto
+            public bool AutoColor
             {
-                get => _textObjectColorIsAuto;
-                set => Set(ref _textObjectColorIsAuto, value);
+                get => _autoColor;
+                set => Set(ref _autoColor, value);
             }
 
             public Color ObjectColor
@@ -85,7 +85,7 @@ namespace Clowd
             private string _fontFamily = "Segoe UI";
             private double _lineWidth = 2d;
             private Color _objectColor = Colors.Red;
-            private bool _textObjectColorIsAuto = true;
+            private bool _autoColor = true;
         }
 
         public class SettingsEditor : CategoryBase

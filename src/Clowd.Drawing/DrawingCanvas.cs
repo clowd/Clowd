@@ -14,6 +14,7 @@ using RT.Util.ExtensionMethods;
 using System.Reflection;
 using System.ComponentModel;
 using System.Windows.Data;
+using Clowd.Config;
 
 namespace Clowd.Drawing
 {
@@ -22,6 +23,7 @@ namespace Clowd.Drawing
     [DependencyProperty<double>("LineWidth", DefaultValue = 2d, DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<Color>("ObjectColor", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<double>("ObjectAngle", DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<bool>("ObjectColorAuto", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<Color>("HandleColor")]
     [DependencyProperty<string>("TextFontFamilyName", DefaultValue = "Tahoma", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<FontStyle>("TextFontStyle", DefaultBindingMode = DefaultBindingMode.TwoWay)]
@@ -550,8 +552,9 @@ namespace Clowd.Drawing
             // this is only triggered when the current tool or the current selection changes.
             // we connect the current "object config" properties on this class to the relevant object.
 
-            BindingOperations.ClearBinding(this, ObjectColorProperty);
             BindingOperations.ClearBinding(this, LineWidthProperty);
+            BindingOperations.ClearBinding(this, ObjectColorAutoProperty);
+            BindingOperations.ClearBinding(this, ObjectColorProperty);
             BindingOperations.ClearBinding(this, ObjectAngleProperty);
             BindingOperations.ClearBinding(this, TextFontFamilyNameProperty);
             BindingOperations.ClearBinding(this, TextFontWeightProperty);
@@ -584,6 +587,25 @@ namespace Clowd.Drawing
 
                 // we do not allow the angle to be set in the tool.
                 skills &= ~Skill.Angle;
+
+                var settings = SettingsRoot.Current.Editor.Tools[Tool];
+                void AddSettingBinding(Skill sk, DependencyProperty prop, string path)
+                {
+                    if (skills.HasFlag(sk))
+                    {
+                        this.SetBinding(prop, new Binding(path) { Source = settings });
+                    }
+                }
+
+                AddSettingBinding(Skill.AutoColor, ObjectColorAutoProperty, nameof(SavedToolSettings.AutoColor));
+                AddSettingBinding(Skill.Color, ObjectColorProperty, nameof(SavedToolSettings.ObjectColor));
+                AddSettingBinding(Skill.Stroke, LineWidthProperty, nameof(SavedToolSettings.LineWidth));
+                AddSettingBinding(Skill.Font, TextFontFamilyNameProperty, nameof(SavedToolSettings.FontFamily));
+                AddSettingBinding(Skill.Font, TextFontWeightProperty, nameof(SavedToolSettings.FontWeight));
+                AddSettingBinding(Skill.Font, TextFontStretchProperty, nameof(SavedToolSettings.FontStretch));
+                AddSettingBinding(Skill.Font, TextFontSizeProperty, nameof(SavedToolSettings.FontSize));
+                AddSettingBinding(Skill.Font, TextFontStyleProperty, nameof(SavedToolSettings.FontStyle));
+
                 SubjectType = "Tool";
                 SubjectName = CurrentTool.Name;
                 SubjectSkill = skills;
@@ -595,22 +617,22 @@ namespace Clowd.Drawing
                 var attr = obj.GetType().GetCustomAttribute<GraphicDescAttribute>();
                 var skills = attr?.Skills ?? Skill.None;
 
-                this.SetBinding(ObjectColorProperty, new Binding(nameof(GraphicBase.ObjectColor)) { Source = obj, NotifyOnSourceUpdated = true });
-                this.SetBinding(LineWidthProperty, new Binding(nameof(GraphicBase.LineWidth)) { Source = obj, NotifyOnSourceUpdated = true });
-
-                if (obj is GraphicRectangle rect)
+                void AddObjectBinding<T>(Skill sk, DependencyProperty prop, Func<T, string> getPath)
                 {
-                    this.SetBinding(ObjectAngleProperty, new Binding(nameof(GraphicRectangle.Angle)) { Source = obj, NotifyOnSourceUpdated = true });
+                    if (skills.HasFlag(sk) && obj is T x)
+                    {
+                        this.SetBinding(prop, new Binding(getPath(x)) { Source = obj, NotifyOnSourceUpdated = true });
+                    }
                 }
 
-                if (obj is GraphicText txt)
-                {
-                    this.SetBinding(TextFontFamilyNameProperty, new Binding(nameof(GraphicText.FontName)) { Source = obj, NotifyOnSourceUpdated = true });
-                    this.SetBinding(TextFontWeightProperty, new Binding(nameof(GraphicText.FontWeight)) { Source = obj, NotifyOnSourceUpdated = true });
-                    this.SetBinding(TextFontStretchProperty, new Binding(nameof(GraphicText.FontStretch)) { Source = obj, NotifyOnSourceUpdated = true });
-                    this.SetBinding(TextFontSizeProperty, new Binding(nameof(GraphicText.FontSize)) { Source = obj, NotifyOnSourceUpdated = true });
-                    this.SetBinding(TextFontStyleProperty, new Binding(nameof(GraphicText.FontStyle)) { Source = obj, NotifyOnSourceUpdated = true });
-                }
+                AddObjectBinding<GraphicBase>(Skill.Color, ObjectColorProperty, x => nameof(x.ObjectColor));
+                AddObjectBinding<GraphicBase>(Skill.Stroke, LineWidthProperty, x => nameof(x.LineWidth));
+                AddObjectBinding<GraphicRectangle>(Skill.Angle, ObjectAngleProperty, x => nameof(x.Angle));
+                AddObjectBinding<GraphicText>(Skill.Font, TextFontFamilyNameProperty, x => nameof(x.FontName));
+                AddObjectBinding<GraphicText>(Skill.Font, TextFontWeightProperty, x => nameof(x.FontWeight));
+                AddObjectBinding<GraphicText>(Skill.Font, TextFontStretchProperty, x => nameof(x.FontStretch));
+                AddObjectBinding<GraphicText>(Skill.Font, TextFontSizeProperty, x => nameof(x.FontSize));
+                AddObjectBinding<GraphicText>(Skill.Font, TextFontStyleProperty, x => nameof(x.FontStyle));
 
                 SubjectType = "Selection";
                 SubjectName = attr?.Name ?? "Unknown";
