@@ -290,6 +290,7 @@
                             Margin="0"
                             Padding="0"
                             HorizontalAlignment="Center"
+                            IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectColorAuto}"
                             Style="{x:Null}"
                             Visibility="Visible" />
                     </Viewbox>
