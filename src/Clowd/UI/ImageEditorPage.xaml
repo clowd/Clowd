@@ -167,11 +167,10 @@
                 </Style>
             </controls:DockAndWrapPanel.Resources>
             <StackPanel>
-                <!--<TextBlock VerticalAlignment="Center">
-                    <Run Text="{Binding Capabilities.Description, Mode=OneWay}" />
-                    <Run FontWeight="Bold" Text="{Binding Capabilities.Name, Mode=OneWay}" />
-                </TextBlock>-->
-                <TextBlock>TODO</TextBlock>
+                <TextBlock VerticalAlignment="Center">
+                    <Run Text="{Binding ElementName=drawingCanvas, Path=SubjectType, Mode=OneWay}" />
+                    <Run FontWeight="Bold" Text="{Binding ElementName=drawingCanvas, Path=SubjectName, Mode=OneWay}" />
+                </TextBlock>
             </StackPanel>
             <!--  <controls:DPadControl  -->
             <!--  Width="22"  -->
@@ -207,7 +206,7 @@
                     CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}"
                     DefaultValue="1" />
             </StackPanel>
-            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=CanvasBackground}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=CanvasBackground}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Canvas:</Run>
                 </TextBlock>
@@ -240,7 +239,7 @@
                     </Border>
                 </Border>
             </StackPanel>
-            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Stroke}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Stroke}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Stroke:</Run>
                 </TextBlock>
@@ -250,7 +249,7 @@
                     SpinAmount="1"
                     Text="{Binding ElementName=drawingCanvas, Path=LineWidth, Mode=TwoWay, Converter={StaticResource convPixel2String}}" />
             </StackPanel>
-            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Color}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Color}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Color:</Run>
                 </TextBlock>
@@ -284,7 +283,7 @@
                     Margin="4,0,0,0"
                     VerticalAlignment="Center"
                     Orientation="Vertical"
-                    Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=AutoColor}">
+                    Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=AutoColor}">
                     <Viewbox Width="10" Height="10">
                         <CheckBox
                             x:Name="chkColorAuto"
@@ -297,7 +296,7 @@
                     <TextBlock HorizontalAlignment="Center" FontSize="8">Auto</TextBlock>
                 </StackPanel>
             </StackPanel>
-            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Font}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Font}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Font:</Run>
                 </TextBlock>
@@ -309,7 +308,7 @@
                     FontStyle="{Binding ElementName=drawingCanvas, Path=TextFontStyle, Mode=OneWay}"
                     Style="{StaticResource InnerToolButtonStyle}" />
             </StackPanel>
-            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=CurrentSkills, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Angle}">
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Angle}">
                 <TextBlock VerticalAlignment="Center">
                     <Run>Angle:</Run>
                 </TextBlock>
