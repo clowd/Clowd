@@ -22,7 +22,6 @@ namespace Clowd.Drawing
     [DependencyProperty<double>("LineWidth", DefaultValue = 2d, DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<Color>("ObjectColor", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<double>("ObjectAngle", DefaultBindingMode = DefaultBindingMode.TwoWay)]
-    [DependencyProperty<Skill>("CurrentSkills")]
     [DependencyProperty<Color>("HandleColor")]
     [DependencyProperty<string>("TextFontFamilyName", DefaultValue = "Tahoma", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<FontStyle>("TextFontStyle", DefaultBindingMode = DefaultBindingMode.TwoWay)]
@@ -33,6 +32,9 @@ namespace Clowd.Drawing
     [DependencyProperty<Point>("ContentOffset")]
     [DependencyProperty<double>("ContentScale", DefaultValue = 1d)]
     [DependencyProperty<GraphicCollection>("GraphicsList")]
+    [DependencyProperty<Skill>("SubjectSkill")]
+    [DependencyProperty<string>("SubjectType")]
+    [DependencyProperty<string>("SubjectName")]
     public partial class DrawingCanvas : Canvas
     {
         public GraphicBase this[int index]
@@ -71,6 +73,7 @@ namespace Clowd.Drawing
         private Border _clickable;
         private UndoManager _undoManager;
         private bool _isToolMouseDown;
+        private bool _isAutoFit;
 
         private record struct ToolDesc(string Name, ToolBase Instance, Type ObjectType = null, Skill Skills = Skill.None);
 
@@ -121,7 +124,7 @@ namespace Clowd.Drawing
             _toolStore[ToolType.Line] = new ToolDesc("Line", toolLine, ObjectType: typeof(GraphicLine));
             _toolStore[ToolType.Arrow] = new ToolDesc("Arrow", toolArrow, ObjectType: typeof(GraphicArrow));
             _toolStore[ToolType.PolyLine] = new ToolDesc("Pencil", new ToolPolyLine(), ObjectType: typeof(GraphicPolyLine));
-            _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText));
+            _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText), Skills: Skill.AutoColor);
             _toolStore[ToolType.Count] = new ToolDesc("Numeric Step", new ToolCount(), ObjectType: typeof(GraphicCount));
             _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate());
 
@@ -536,6 +539,10 @@ namespace Clowd.Drawing
             {
                 CommandManager.InvalidateRequerySuggested();
             }
+            else if (e.PropertyName == nameof(GraphicCollection.ContentBounds))
+            {
+                _isAutoFit = false;
+            }
         }
 
         private void SyncObjectState()
@@ -554,7 +561,9 @@ namespace Clowd.Drawing
 
             if (IsPanning)
             {
-                CurrentSkills = Skill.None;
+                SubjectType = "Mode";
+                SubjectName = "Panning";
+                SubjectSkill = Skill.None;
                 return;
             }
 
@@ -575,7 +584,9 @@ namespace Clowd.Drawing
 
                 // we do not allow the angle to be set in the tool.
                 skills &= ~Skill.Angle;
-                CurrentSkills = skills;
+                SubjectType = "Tool";
+                SubjectName = CurrentTool.Name;
+                SubjectSkill = skills;
             }
             // if there is precisely 1 object selected, use the object skills
             else if (selected.Length == 1 && Tool == ToolType.Pointer)
@@ -601,12 +612,16 @@ namespace Clowd.Drawing
                     this.SetBinding(TextFontStyleProperty, new Binding(nameof(GraphicText.FontStyle)) { Source = obj, NotifyOnSourceUpdated = true });
                 }
 
-                CurrentSkills = skills;
+                SubjectType = "Selection";
+                SubjectName = attr?.Name ?? "Unknown";
+                SubjectSkill = skills;
             }
             // if there are multiple objects selected
             else
             {
-                CurrentSkills = Skill.None;
+                SubjectType = "Selection";
+                SubjectName = "Multiple";
+                SubjectSkill = Skill.None;
             }
         }
 
@@ -789,6 +804,7 @@ namespace Clowd.Drawing
         {
             UpdateScaleTransform();
             UpdateClickableSurface();
+            _isAutoFit = false;
         }
 
         partial void OnContentOffsetChanged(Point newValue)
@@ -797,6 +813,7 @@ namespace Clowd.Drawing
             _translateTransform.X = Math.Floor(newValue.X * dpiZoom) / dpiZoom;
             _translateTransform.Y = Math.Floor(newValue.Y * dpiZoom) / dpiZoom;
             UpdateClickableSurface();
+            _isAutoFit = false;
         }
 
         // public Point WorldOffset => new Point((ActualWidth / 2 - ContentOffset.X) / ContentScale,
@@ -902,7 +919,5 @@ namespace Clowd.Drawing
                 ZoomPanFit();
             _isAutoFit = true;
         }
-
-        private bool _isAutoFit = false;
     }
 }
