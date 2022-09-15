@@ -14,6 +14,7 @@ using Clowd.Util;
 using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
 using System.ComponentModel;
+using System.Windows.Controls.Primitives;
 
 namespace Clowd.UI
 {
@@ -35,7 +36,6 @@ namespace Clowd.UI
             drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
 
-            this.PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) drawingCanvas.CancelCurrentOperation(); };
             this.InputBindings.Add(drawingCanvas.CommandSelectAll.CreateKeyBinding());
             this.InputBindings.Add(drawingCanvas.CommandDelete.CreateKeyBinding());
             this.InputBindings.Add(drawingCanvas.CommandMoveToFront.CreateKeyBinding());
@@ -54,6 +54,37 @@ namespace Clowd.UI
             this.InputBindings.Add(new KeyBinding(drawingCanvas.CommandZoomPanActualSize, Key.NumPad3, ModifierKeys.Control) { CommandParameter = 3d });
 
             this.Loaded += ImageEditorPage2_Loaded;
+            this.PreviewKeyDown += ImageEditorPage_PreviewKeyDown;
+        }
+
+        private void ImageEditorPage_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+                drawingCanvas.CancelCurrentOperation();
+
+            if (e.OriginalSource is not TextBoxBase)
+            {
+                var distance = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl) ? 10 : 1;
+                switch (e.Key)
+                {
+                    case Key.Left:
+                        drawingCanvas.Nudge(-1 * distance, 0);
+                        e.Handled = true;
+                        break;
+                    case Key.Up:
+                        drawingCanvas.Nudge(0, -1 * distance);
+                        e.Handled = true;
+                        break;
+                    case Key.Right:
+                        drawingCanvas.Nudge(1 * distance, 0);
+                        e.Handled = true;
+                        break;
+                    case Key.Down:
+                        drawingCanvas.Nudge(0, 1 * distance);
+                        e.Handled = true;
+                        break;
+                }
+            }
         }
 
         private void ImageEditorPage2_Loaded(object sender, RoutedEventArgs e)
