@@ -129,6 +129,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (sender is ColorPaletteItem item && item.Background is SolidColorBrush brush)
             {
                 CurrentColor = brush.Color;
+                if (e.ClickCount >= 2)
+                {
+                    MyDialogResult = true;
+                    Close();
+                }
             }
         }
 
