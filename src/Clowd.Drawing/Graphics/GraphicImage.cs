@@ -6,6 +6,7 @@ using System.Security.RightsManagement;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Media3D;
 using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
@@ -13,6 +14,16 @@ namespace Clowd.Drawing.Graphics
     [GraphicDesc("Image", Skills = Skill.Angle)]
     public class GraphicImage : GraphicRectangle
     {
+        public bool Editing
+        {
+            get => _editingAnchor.Width > 0 && _editingAnchor.Height > 0;
+            set
+            {
+                if (Editing && !value) CommitCrop();
+                Set(ref _editingAnchor, value ? GetExtendedImageRect() : Rect.Empty);
+            }
+        }
+
         public string BitmapFilePath
         {
             get => _bitmapFilePath;
@@ -21,6 +32,16 @@ namespace Clowd.Drawing.Graphics
                 _imageObscured = null;
                 _imageSource = null;
                 Set(ref _bitmapFilePath, value);
+            }
+        }
+
+        public override bool IsSelected
+        {
+            get => base.IsSelected;
+            set
+            {
+                base.IsSelected = value;
+                if (!value) Editing = false;
             }
         }
 
@@ -68,6 +89,7 @@ namespace Clowd.Drawing.Graphics
         private ObscuredShape[] _obscuredShapes = new ObscuredShape[0];
         [ClassifyIgnore] private BitmapSource _imageSource;
         [ClassifyIgnore] private BitmapSource _imageObscured;
+        [ClassifyIgnore] private Rect _editingAnchor;
 
         protected GraphicImage()
         { }
@@ -107,15 +129,73 @@ namespace Clowd.Drawing.Graphics
             if (Right <= Left || Bottom <= Top)
                 drawingContext.PushTransform(new ScaleTransform(Right <= Left ? -1 : 1, Bottom <= Top ? -1 : 1, centerX, centerY));
 
-            drawingContext.DrawImage(new CroppedBitmap(_imageSource, Crop), r);
+            if (Editing)
+            {
+                drawingContext.PushOpacity(0.5);
+                drawingContext.DrawImage(_imageSource, _editingAnchor);
+                drawingContext.Pop();
 
-            if (_imageObscured != null || UpdateObscureCache())
-                drawingContext.DrawImage(new CroppedBitmap(_imageObscured, Crop), r);
+                drawingContext.PushClip(new RectangleGeometry(UnrotatedBounds));
+                drawingContext.DrawImage(_imageSource, _editingAnchor);
+                drawingContext.Pop();
+            }
+            else
+            {
+                drawingContext.DrawImage(new CroppedBitmap(_imageSource, Crop), r);
+                if (_imageObscured != null || UpdateObscureCache())
+                {
+                    drawingContext.DrawImage(new CroppedBitmap(_imageObscured, Crop), r);
+                }
+            }
 
             if (Right <= Left || Bottom <= Top)
                 drawingContext.Pop();
 
             drawingContext.Pop();
+        }
+
+        internal override void MoveHandleTo(Point point, int handleNumber)
+        {
+            base.MoveHandleTo(point, handleNumber);
+
+            if (Editing)
+            {
+                Left = Math.Max(Left, _editingAnchor.Left);
+                Top = Math.Max(Top, _editingAnchor.Top);
+                Right = Math.Min(Right, _editingAnchor.Right);
+                Bottom = Math.Min(Bottom, _editingAnchor.Bottom);
+            }
+        }
+
+        internal override void Move(double deltaX, double deltaY)
+        {
+            base.Move(deltaX, deltaY);
+
+            if (Editing)
+            {
+                Left = Math.Max(Left, _editingAnchor.Left);
+                Top = Math.Max(Top, _editingAnchor.Top);
+                Right = Math.Min(Right, _editingAnchor.Right);
+                Bottom = Math.Min(Bottom, _editingAnchor.Bottom);
+            }
+        }
+
+        private void CommitCrop()
+        {
+            if (_imageSource == null) UpdateImageCache();
+
+            var renderW = Right - Left;
+            var renderH = Bottom - Top;
+
+            var scaleX = _imageSource.PixelWidth / _editingAnchor.Width;
+            var scaleY = _imageSource.PixelHeight / _editingAnchor.Height;
+
+            var x = (Left - _editingAnchor.Left) * scaleX;
+            var y = (Top - _editingAnchor.Top) * scaleY;
+            var w = renderW * scaleX;
+            var h = renderH * scaleY;
+
+            Crop = new Int32Rect((int)x, (int)y, (int)w, (int)h);
         }
 
         internal override void Normalize()
@@ -133,6 +213,23 @@ namespace Clowd.Drawing.Graphics
 
             pts = pts.Select(TranslateUnrotatedPointToImageSpace).ToArray();
             ObscuredShapes = ObscuredShapes.Append(new ObscuredShape(pts[0], pts[1], pts[2], pts[3])).ToArray();
+        }
+
+        private Rect GetExtendedImageRect()
+        {
+            if (Crop.IsEmpty) return UnrotatedBounds;
+            if (_imageSource == null) UpdateImageCache();
+
+            var renderW = Right - Left;
+            var renderH = Bottom - Top;
+            var scaleX = Math.Abs(renderW / Crop.Width);
+            var scaleY = Math.Abs(renderH / Crop.Height);
+            return new Rect(Left - (Crop.X * scaleX), Top - (Crop.Y * scaleY), _imageSource.PixelWidth * scaleX, _imageSource.PixelHeight * scaleY);
+        }
+
+        internal override void Activate(DrawingCanvas canvas)
+        {
+            Editing = true;
         }
 
         private Point TranslateUnrotatedPointToImageSpace(Point p)

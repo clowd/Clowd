@@ -8,25 +8,25 @@ namespace Clowd.Drawing.Graphics
 {
     public abstract class GraphicBase : SimpleNotifyObject
     {
-        public Color ObjectColor
+        public virtual Color ObjectColor
         {
             get => _objectColor;
             set => Set(ref _objectColor, value);
         }
 
-        public double LineWidth
+        public virtual double LineWidth
         {
             get => _lineWidth;
             set => Set(ref _lineWidth, value);
         }
 
-        public bool DropShadowEffect
+        public virtual bool DropShadowEffect
         {
             get => _dropShadowEffect;
             set => Set(ref _dropShadowEffect, value);
         }
 
-        public bool IsSelected
+        public virtual bool IsSelected
         {
             get => _isSelected;
             set => Set(ref _isSelected, value);
