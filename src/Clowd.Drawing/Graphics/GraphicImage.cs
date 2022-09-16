@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.RightsManagement;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -47,22 +48,24 @@ namespace Clowd.Drawing.Graphics
             set => Set(ref _originalSize, value);
         }
 
-        public Int32Rect[] ObscuredRects
+        public ObscuredShape[] ObscuredShapes
         {
-            get => _obscuredRects;
+            get => _obscuredShapes;
             set
             {
                 _imageObscured = null;
-                Set(ref _obscuredRects, value);
+                Set(ref _obscuredShapes, value);
             }
         }
+
+        public record struct ObscuredShape(Point P0, Point P1, Point P2, Point P3);
 
         private string _bitmapFilePath;
         private int _scaleX = 1;
         private int _scaleY = 1;
         private Int32Rect _crop;
         private Size _originalSize;
-        private Int32Rect[] _obscuredRects = new Int32Rect[0];
+        private ObscuredShape[] _obscuredShapes = new ObscuredShape[0];
         [ClassifyIgnore] private BitmapSource _imageSource;
         [ClassifyIgnore] private BitmapSource _imageObscured;
 
@@ -124,30 +127,54 @@ namespace Clowd.Drawing.Graphics
 
         internal void AddObscuredArea(Rect rect)
         {
+            var pts = new Point[] { rect.TopLeft, rect.TopRight, rect.BottomRight, rect.BottomLeft }.Select(UnapplyRotation).ToArray();
+            if (!pts.Any(UnrotatedBounds.Contains))
+                return;
+
+            pts = pts.Select(TranslateUnrotatedPointToImageSpace).ToArray();
+            ObscuredShapes = ObscuredShapes.Append(new ObscuredShape(pts[0], pts[1], pts[2], pts[3])).ToArray();
+        }
+
+        private Point TranslateUnrotatedPointToImageSpace(Point p)
+        {
             if (_imageSource == null) UpdateImageCache();
-            
-            var bounds = UnrotatedBounds;
-            rect.Intersect(bounds);
-            if (rect.IsEmpty) return;
 
-            var l = rect.X - bounds.Left;
-            var t = rect.Y - bounds.Top;
-            var r = l + rect.Width;
-            var b = t + rect.Height;
+            var x = p.X;
+            var y = p.Y;
 
-            int translateX(double p) => Crop.IsEmpty 
-                ? (int)(p / bounds.Width * _imageSource.PixelWidth)
-                : (int)(p / bounds.Width * Crop.Width + Crop.X);
-            int translateY(double p) => Crop.IsEmpty
-                ? (int)(p / bounds.Height * _imageSource.PixelHeight)
-                : (int)(p / bounds.Height * Crop.Height + Crop.Y);
+            var renderW = Right - Left;
+            var renderH = Bottom - Top;
+            var cropW = Crop.IsEmpty ? _imageSource.PixelWidth : Crop.Width;
+            var cropH = Crop.IsEmpty ? _imageSource.PixelHeight : Crop.Height;
+            var offsetX = Crop.IsEmpty ? 0 : Crop.X;
+            var offsetY = Crop.IsEmpty ? 0 : Crop.Y;
 
-            var x = translateX(l);
-            var y = translateY(t);
-            var w = translateX(r) - x;
-            var h = translateY(b) - y;
+            x -= Left;
+            x /= renderW;
+            x *= cropW;
+            if (FlipX < 0) x = cropW - x;
+            x += offsetX;
 
-            ObscuredRects = ObscuredRects.Append(new Int32Rect(x, y, w, h)).ToArray();
+            y -= Top;
+            y /= renderH;
+            y *= cropH;
+            if (FlipY < 0) y = cropH - y;
+            y += offsetY;
+
+            return new Point(x, y);
+        }
+
+        private Geometry ShapeToGeometry(ObscuredShape obr)
+        {
+            StreamGeometry geo = new StreamGeometry();
+            using (var ctx = geo.Open())
+            {
+                ctx.BeginFigure(obr.P0, true, true);
+                ctx.LineTo(obr.P1, false, false);
+                ctx.LineTo(obr.P2, false, false);
+                ctx.LineTo(obr.P3, false, false);
+            }
+            return geo;
         }
 
         private void UpdateImageCache()
@@ -165,19 +192,16 @@ namespace Clowd.Drawing.Graphics
         {
             if (_imageSource == null) UpdateImageCache();
 
-            if (_obscuredRects?.Any() != true)
+            if (_obscuredShapes?.Any() != true)
             {
                 _imageObscured = null;
                 return false;
             }
 
-            var first = _obscuredRects[0];
-            Geometry clip = new RectangleGeometry(new Rect(first.X, first.Y, first.Width, first.Height));
-            foreach (var obr in _obscuredRects.Skip(1))
-            {
-                var next = new RectangleGeometry(new Rect(obr.X, obr.Y, obr.Width, obr.Height));
-                clip = new CombinedGeometry(GeometryCombineMode.Union, clip, next);
-            }
+            var first = _obscuredShapes[0];
+            Geometry geo = ShapeToGeometry(first);
+            foreach (var o in _obscuredShapes.Skip(1))
+                geo = new CombinedGeometry(GeometryCombineMode.Union, geo, ShapeToGeometry(o));
 
             // this "obscure" works by resizing the bitmap to 1/8th and then stretching it back to 
             // it's original size with the NearestNeighbor scaling algorithm.
@@ -185,7 +209,7 @@ namespace Clowd.Drawing.Graphics
             var drawing = new NearestNeighborDrawingVisual();
             using (var ctx = drawing.RenderOpen())
             {
-                ctx.PushClip(clip);
+                ctx.PushClip(geo);
                 ctx.DrawImage(resized, new Rect(0, 0, _imageSource.PixelWidth, _imageSource.PixelHeight));
                 ctx.Pop();
             }
