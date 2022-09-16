@@ -113,22 +113,34 @@ namespace Clowd.Drawing.Graphics
             _scaleY = flipY;
         }
 
-        internal override void DrawRectangle(DrawingContext drawingContext)
+        internal override void DrawObject(DrawingContext drawingContext)
         {
             if (_imageSource == null) UpdateImageCache();
 
-            Rect r = UnrotatedBounds;
+            var centerPt = CenterOfRotation;
 
-            var centerX = r.Left + (r.Width / 2);
-            var centerY = r.Top + (r.Height / 2);
+            // rotate
+            drawingContext.PushTransform(new RotateTransform(Angle, centerPt.X, centerPt.Y));
 
             // push current flip transform
-            drawingContext.PushTransform(new ScaleTransform(_scaleX, _scaleY, centerX, centerY));
+            drawingContext.PushTransform(new ScaleTransform(_scaleX, _scaleY, centerPt.X, centerPt.Y));
 
             // push any current/unrealized resizing/rendering transform
             if (Right <= Left || Bottom <= Top)
-                drawingContext.PushTransform(new ScaleTransform(Right <= Left ? -1 : 1, Bottom <= Top ? -1 : 1, centerX, centerY));
+                drawingContext.PushTransform(new ScaleTransform(Right <= Left ? -1 : 1, Bottom <= Top ? -1 : 1, centerPt.X, centerPt.Y));
 
+            DrawRectangle(drawingContext);
+
+            if (Right <= Left || Bottom <= Top)
+                drawingContext.Pop();
+
+            drawingContext.Pop();
+
+            // leave rotate on the transform stack for resize handles
+        }
+
+        internal override void DrawRectangle(DrawingContext drawingContext)
+        {
             if (Editing)
             {
                 drawingContext.PushOpacity(0.5);
@@ -141,16 +153,61 @@ namespace Clowd.Drawing.Graphics
             }
             else
             {
+                Rect r = UnrotatedBounds;
                 drawingContext.DrawImage(new CroppedBitmap(_imageSource, Crop), r);
                 if (_imageObscured != null || UpdateObscureCache())
                 {
                     drawingContext.DrawImage(new CroppedBitmap(_imageObscured, Crop), r);
                 }
             }
+        }
 
-            if (Right <= Left || Bottom <= Top)
-                drawingContext.Pop();
+        protected override Rect GetHandleRectangle(int handleNumber, DpiScale uiscale)
+        {
+            if (!Editing) return base.GetHandleRectangle(handleNumber, uiscale);
 
+            double longEdge = 30 * uiscale.DpiScaleX;
+            double longEdgeHalf = longEdge / 2;
+            double shortEdge = 6 * uiscale.DpiScaleX;
+            var pt = GetHandle(handleNumber, uiscale);
+
+            return handleNumber switch
+            {
+                1 => new Rect(pt, new Point(pt.X + longEdge, pt.Y + longEdge)),
+                2 => new Rect(pt.X - longEdgeHalf, pt.Y, longEdge, shortEdge),
+                3 => new Rect(pt.X - longEdge, pt.Y, longEdge, longEdge),
+                4 => new Rect(pt.X - shortEdge, pt.Y - longEdgeHalf, shortEdge, longEdge),
+                5 => new Rect(new Point(pt.X - longEdge, pt.Y - longEdge), pt),
+                6 => new Rect(pt.X - longEdgeHalf, pt.Y - shortEdge, longEdge, shortEdge),
+                7 => new Rect(pt.X, pt.Y - longEdge, longEdge, longEdge),
+                8 => new Rect(pt.X, pt.Y - longEdgeHalf, shortEdge, longEdge),
+                9 => new Rect(0, 0, 0, 0),
+                _ => base.GetHandleRectangle(handleNumber, uiscale),
+            };
+        }
+
+        protected override void DrawSingleTracker(DrawingContext drawingContext, int handleNum, DpiScale uiscale)
+        {
+            if (!Editing)
+            {
+                base.DrawSingleTracker(drawingContext, handleNum, uiscale);
+                return;
+            }
+
+            double edge = 6 * uiscale.DpiScaleX;
+            double buffer = 2 * uiscale.DpiScaleX;
+
+            var o = UnrotatedBounds;
+            var r = o;
+
+            r.Inflate(-edge, -edge);
+            drawingContext.PushClip(new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(o), new RectangleGeometry(r)));
+            drawingContext.DrawRectangle(Brushes.White, null, GetHandleRectangle(handleNum, uiscale));
+            drawingContext.Pop();
+
+            r.Inflate(buffer, buffer);
+            drawingContext.PushClip(new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(o), new RectangleGeometry(r)));
+            drawingContext.DrawRectangle(HandleBrush, null, GetHandleRectangle(handleNum, uiscale));
             drawingContext.Pop();
         }
 
@@ -169,14 +226,24 @@ namespace Clowd.Drawing.Graphics
 
         internal override void Move(double deltaX, double deltaY)
         {
-            base.Move(deltaX, deltaY);
-
             if (Editing)
             {
+                Matrix mx = Matrix.Identity;
+                mx.Rotate(-Angle);
+                var vector = mx.Transform(new Vector(deltaX, deltaY));
+
+                var centerPt = CenterOfRotation;
+                base.Move(vector.X, vector.Y);
+
                 Left = Math.Max(Left, _editingAnchor.Left);
                 Top = Math.Max(Top, _editingAnchor.Top);
                 Right = Math.Min(Right, _editingAnchor.Right);
                 Bottom = Math.Min(Bottom, _editingAnchor.Bottom);
+                CenterOfRotation = centerPt;
+            }
+            else
+            {
+                base.Move(deltaX, deltaY);
             }
         }
 
@@ -200,6 +267,7 @@ namespace Clowd.Drawing.Graphics
 
         internal override void Normalize()
         {
+            if (Editing) return;
             if (Right <= Left) _scaleX /= -1;
             if (Bottom <= Top) _scaleY /= -1;
             base.Normalize();
