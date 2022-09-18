@@ -18,14 +18,13 @@ using System.Windows.Controls.Primitives;
 
 namespace Clowd.UI
 {
-    public partial class ImageEditorPage : UserControl, INotifyPropertyChanged
+    public partial class ImageEditorPage : UserControl
     {
         private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private SettingsRoot _settings = SettingsRoot.Current;
         private SessionInfo _session;
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
-
-        public event PropertyChangedEventHandler PropertyChanged;
+        private int _nudgeRepeatCount;
 
         public ImageEditorPage(SessionInfo info)
         {
@@ -65,25 +64,31 @@ namespace Clowd.UI
 
             if (e.OriginalSource is not TextBoxBase)
             {
-                var distance = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl) ? 10 : 1;
-                switch (e.Key)
+                (int x, int y) = e.Key switch
                 {
-                    case Key.Left:
-                        drawingCanvas.Nudge(-1 * distance, 0);
-                        e.Handled = true;
-                        break;
-                    case Key.Up:
-                        drawingCanvas.Nudge(0, -1 * distance);
-                        e.Handled = true;
-                        break;
-                    case Key.Right:
-                        drawingCanvas.Nudge(1 * distance, 0);
-                        e.Handled = true;
-                        break;
-                    case Key.Down:
-                        drawingCanvas.Nudge(0, 1 * distance);
-                        e.Handled = true;
-                        break;
+                    Key.Left => (-1, 0),
+                    Key.Up => (0, -1),
+                    Key.Right => (1, 0),
+                    Key.Down => (0, 1),
+                    _ => (0, 0),
+                };
+
+                if (x != 0 || y != 0)
+                {
+                    e.Handled = true;
+
+                    var ctrl = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+                    if (!ctrl || !e.IsRepeat) _nudgeRepeatCount = 0;
+
+                    if (ctrl)
+                    {
+                        if (e.IsRepeat) _nudgeRepeatCount++;
+                        var distance = Math.Min(Math.Max(10, _nudgeRepeatCount * 2), 40);
+                        x *= distance;
+                        y *= distance;
+                    }
+
+                    drawingCanvas.Nudge(x, y);
                 }
             }
         }
