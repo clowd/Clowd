@@ -124,45 +124,34 @@ namespace Clowd.Drawing.Graphics
             _scaleY = flipY;
         }
 
+        internal override void Draw(DrawingContext ctx, DpiScale uiscale)
+        {
+            if (_imageSource == null) UpdateImageCache();
+
+            if (Editing)
+            {
+                DrawTransformed(ctx, () =>
+                {
+                    ctx.PushOpacity(0.5);
+                    ctx.DrawImage(_imageSource, _editingAnchor);
+                    ctx.Pop();
+                    ctx.PushClip(new RectangleGeometry(UnrotatedBounds));
+                    ctx.DrawImage(_imageSource, _editingAnchor);
+                    ctx.Pop();
+                    DrawTrackers(ctx, uiscale);
+                });
+            }
+            else
+            {
+                base.Draw(ctx, uiscale);
+            }
+        }
+
         internal override void DrawObject(DrawingContext drawingContext)
         {
             if (_imageSource == null) UpdateImageCache();
 
-            var centerPt = CenterOfRotation;
-
-            // rotate
-            drawingContext.PushTransform(new RotateTransform(Angle, centerPt.X, centerPt.Y));
-
-            // push current flip transform
-            drawingContext.PushTransform(new ScaleTransform(_scaleX, _scaleY, centerPt.X, centerPt.Y));
-
-            // push any current/unrealized resizing/rendering transform
-            if (Right <= Left || Bottom <= Top)
-                drawingContext.PushTransform(new ScaleTransform(Right <= Left ? -1 : 1, Bottom <= Top ? -1 : 1, centerPt.X, centerPt.Y));
-
-            DrawRectangle(drawingContext);
-
-            if (Right <= Left || Bottom <= Top)
-                drawingContext.Pop();
-
-            drawingContext.Pop();
-
-            // leave rotate on the transform stack for resize handles
-        }
-
-        internal override void DrawRectangle(DrawingContext drawingContext)
-        {
-            if (Editing)
-            {
-                drawingContext.PushOpacity(0.5);
-                drawingContext.DrawImage(_imageSource, _editingAnchor);
-                drawingContext.Pop();
-
-                drawingContext.PushClip(new RectangleGeometry(UnrotatedBounds));
-                drawingContext.DrawImage(_imageSource, _editingAnchor);
-                drawingContext.Pop();
-            }
-            else
+            DrawTransformed(drawingContext, () =>
             {
                 Rect r = UnrotatedBounds;
                 drawingContext.DrawImage(new CroppedBitmap(_imageSource, Crop), r);
@@ -170,7 +159,30 @@ namespace Clowd.Drawing.Graphics
                 {
                     drawingContext.DrawImage(new CroppedBitmap(_imageObscured, Crop), r);
                 }
-            }
+            });
+        }
+
+        private void DrawTransformed(DrawingContext ctx, Action fn)
+        {
+            var centerPt = CenterOfRotation;
+
+            // rotate
+            ctx.PushTransform(new RotateTransform(Angle, centerPt.X, centerPt.Y));
+
+            // push current flip transform
+            ctx.PushTransform(new ScaleTransform(_scaleX, _scaleY, centerPt.X, centerPt.Y));
+
+            // push any current/unrealized resizing/rendering transform
+            if (Right <= Left || Bottom <= Top)
+                ctx.PushTransform(new ScaleTransform(Right <= Left ? -1 : 1, Bottom <= Top ? -1 : 1, centerPt.X, centerPt.Y));
+
+            fn();
+
+            ctx.Pop();
+            ctx.Pop();
+
+            // this function leaves the rotate transform on the stack for resize handles
+            // so it should only be called once per draw
         }
 
         protected override Rect GetHandleRectangle(int handleNumber, DpiScale uiscale)
