@@ -183,16 +183,6 @@
             <!--  HoverBrush="#66FFFFFF"  -->
             <!--  ToolTip="Capture another screenshot and attach it to the selected side of this image"  -->
             <!--  Visibility="{Binding Capabilities.CanStitchAndCrop, Converter={StaticResource Bool2Vis}}" />  -->
-            <!--  <controls:ToolButton  -->
-            <!--  x:Name="btnCropImage"  -->
-            <!--  Width="22"  -->
-            <!--  Height="22"  -->
-            <!--  Margin="4,0"  -->
-            <!--  Padding="3"  -->
-            <!--  CanToggle="True"  -->
-            <!--  IconPath="{StaticResource IconCrop}"  -->
-            <!--  ToolTip="Crop"  -->
-            <!--  Visibility="{Binding Capabilities.CanStitchAndCrop, Converter={StaticResource Bool2Vis}}" />  -->
             <StackPanel>
                 <TextBlock VerticalAlignment="Center">
                     <Run>Zoom:</Run>
@@ -324,6 +314,12 @@
                     CurrentValue="{Binding ElementName=drawingCanvas, Path=ObjectAngle, Mode=TwoWay}"
                     DefaultValue="0" />
             </StackPanel>
+
+            <controls:ToolButton
+                Padding="6"
+                Command="{Binding ElementName=drawingCanvas, Path=CommandCropImage}"
+                IconPath="{StaticResource IconCrop}"
+                Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Crop}" />
 
             <controls:ToolButton
                 Padding="5"

@@ -17,6 +17,7 @@ namespace Clowd.Drawing
         Font = 1 << 3,
         Angle = 1 << 4,
         CanvasBackground = 1 << 5,
+        Crop = 1 << 6,
         //CanvasZoom = 1 << 6,
     }
 

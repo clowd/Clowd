@@ -66,6 +66,7 @@ namespace Clowd.Drawing
         public RelayCommand CommandRedo { get; }
         public RelayCommand CommandZoomPanAuto { get; }
         public RelayCommand CommandZoomPanActualSize { get; }
+        public RelayCommand CommandCropImage { get; }
 
         internal ToolPointer ToolPointer;
         internal ToolText ToolText;
@@ -232,6 +233,12 @@ namespace Clowd.Drawing
                 Text = "_Redo",
                 Gesture = new SimpleKeyGesture(Key.Y, ModifierKeys.Control),
             };
+            CommandCropImage = new RelayCommand()
+            {
+                Executed = (obj) => CropSelectedImage(),
+                CanExecute = (obj) => SelectedCount == 1 && GraphicsList.SelectedItems[0] is GraphicImage,
+                Text = "Crop",
+            };
 
             ContextMenu = new ContextMenu();
             ContextMenu.PlacementTarget = this;
@@ -273,6 +280,14 @@ namespace Clowd.Drawing
             UseLayoutRounding = false;
 
             Tool = ToolType.Pointer;
+        }
+
+        private void CropSelectedImage()
+        {
+            if (SelectedCount != 1) return;
+            var obj = GraphicsList.SelectedItems[0];
+            if (obj is not GraphicImage img) return;
+            img.Activate(this);
         }
 
         partial void OnToolChanged(ToolType newValue)
