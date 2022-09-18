@@ -37,6 +37,7 @@ namespace Clowd.UI
             drawingCanvas.MouseUp += drawingCanvas_MouseUp;
 
             this.InputBindings.Add(drawingCanvas.CommandSelectAll.CreateKeyBinding());
+            this.InputBindings.Add(drawingCanvas.CommandUnselectAll.CreateKeyBinding());
             this.InputBindings.Add(drawingCanvas.CommandDelete.CreateKeyBinding());
             this.InputBindings.Add(drawingCanvas.CommandMoveToFront.CreateKeyBinding());
             this.InputBindings.Add(drawingCanvas.CommandMoveToBack.CreateKeyBinding());

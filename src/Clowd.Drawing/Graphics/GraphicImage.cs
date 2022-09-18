@@ -11,16 +11,26 @@ using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
-    [GraphicDesc("Image", Skills = Skill.Angle)]
+    [GraphicDesc("Image", Skills = Skill.Angle | Skill.Crop)]
     public class GraphicImage : GraphicRectangle
     {
-        public bool Editing
+        public bool Editing => !_editingAnchor.IsEmpty && _editingAnchor.Width > 0 && _editingAnchor.Height > 0;
+
+        public int BitmapPixelWidth
         {
-            get => _editingAnchor.Width > 0 && _editingAnchor.Height > 0;
-            set
+            get
             {
-                if (Editing && !value) CommitCrop();
-                Set(ref _editingAnchor, value ? GetExtendedImageRect() : Rect.Empty);
+                if (_imageSource == null) UpdateImageCache();
+                return _imageSource.PixelWidth;
+            }
+        }
+
+        public int BitmapPixelHeight
+        {
+            get
+            {
+                if (_imageSource == null) UpdateImageCache();
+                return _imageSource.PixelHeight;
             }
         }
 
@@ -41,7 +51,7 @@ namespace Clowd.Drawing.Graphics
             set
             {
                 base.IsSelected = value;
-                if (!value) Editing = false;
+                if (!value) EndCrop();
             }
         }
 
@@ -90,6 +100,7 @@ namespace Clowd.Drawing.Graphics
         [ClassifyIgnore] private BitmapSource _imageSource;
         [ClassifyIgnore] private BitmapSource _imageObscured;
         [ClassifyIgnore] private Rect _editingAnchor;
+        [ClassifyIgnore] private DrawingCanvas _editingCanvas;
 
         protected GraphicImage()
         { }
@@ -247,15 +258,28 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
-        private void CommitCrop()
+        internal override void Activate(DrawingCanvas canvas)
         {
-            if (_imageSource == null) UpdateImageCache();
+            if (Editing)
+            {
+                EndCrop();
+                return;
+            }
+
+            _editingAnchor = GetExtendedImageRect();
+            _editingCanvas = canvas;
+
+            OnPropertyChanged(nameof(Editing));
+        }
+
+        private void EndCrop()
+        {
+            if (!Editing) return;
 
             var renderW = Right - Left;
             var renderH = Bottom - Top;
-
-            var scaleX = _imageSource.PixelWidth / _editingAnchor.Width;
-            var scaleY = _imageSource.PixelHeight / _editingAnchor.Height;
+            var scaleX = BitmapPixelWidth / _editingAnchor.Width;
+            var scaleY = BitmapPixelHeight / _editingAnchor.Height;
 
             var x = (Left - _editingAnchor.Left) * scaleX;
             var y = (Top - _editingAnchor.Top) * scaleY;
@@ -263,6 +287,12 @@ namespace Clowd.Drawing.Graphics
             var h = renderH * scaleY;
 
             Crop = new Int32Rect((int)x, (int)y, (int)w, (int)h);
+
+            _editingCanvas?.AddCommandToHistory();
+            _editingAnchor = Rect.Empty;
+            _editingCanvas = null;
+
+            OnPropertyChanged(nameof(Editing));
         }
 
         internal override void Normalize()
@@ -285,32 +315,25 @@ namespace Clowd.Drawing.Graphics
 
         private Rect GetExtendedImageRect()
         {
-            if (Crop.IsEmpty) return UnrotatedBounds;
-            if (_imageSource == null) UpdateImageCache();
+            if (Crop.IsEmpty)
+                return UnrotatedBounds;
 
             var renderW = Right - Left;
             var renderH = Bottom - Top;
             var scaleX = Math.Abs(renderW / Crop.Width);
             var scaleY = Math.Abs(renderH / Crop.Height);
-            return new Rect(Left - (Crop.X * scaleX), Top - (Crop.Y * scaleY), _imageSource.PixelWidth * scaleX, _imageSource.PixelHeight * scaleY);
-        }
-
-        internal override void Activate(DrawingCanvas canvas)
-        {
-            Editing = true;
+            return new Rect(Left - (Crop.X * scaleX), Top - (Crop.Y * scaleY), BitmapPixelWidth * scaleX, BitmapPixelHeight * scaleY);
         }
 
         private Point TranslateUnrotatedPointToImageSpace(Point p)
         {
-            if (_imageSource == null) UpdateImageCache();
-
             var x = p.X;
             var y = p.Y;
 
             var renderW = Right - Left;
             var renderH = Bottom - Top;
-            var cropW = Crop.IsEmpty ? _imageSource.PixelWidth : Crop.Width;
-            var cropH = Crop.IsEmpty ? _imageSource.PixelHeight : Crop.Height;
+            var cropW = Crop.IsEmpty ? BitmapPixelWidth : Crop.Width;
+            var cropH = Crop.IsEmpty ? BitmapPixelHeight : Crop.Height;
             var offsetX = Crop.IsEmpty ? 0 : Crop.X;
             var offsetY = Crop.IsEmpty ? 0 : Crop.Y;
 
