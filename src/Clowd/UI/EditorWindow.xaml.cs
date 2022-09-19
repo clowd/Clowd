@@ -32,8 +32,8 @@ namespace Clowd.UI
 
             InitializeComponent();
             drawingCanvas.HandleColor = AppStyles.AccentColor;
-            drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
             drawingCanvas.StateUpdated += drawingCanvas_StateUpdated;
+            drawingCanvas.ArtworkBackground = info.CanvasBackground;
 
             this.InputBindings.Add(drawingCanvas.CommandSelectAll.CreateKeyBinding());
             this.InputBindings.Add(drawingCanvas.CommandUnselectAll.CreateKeyBinding());
@@ -452,7 +452,7 @@ namespace Clowd.UI
             var oldColor = drawingCanvas.ArtworkBackground;
             var newColor = await NiceDialog.ShowColorPromptAsync(this, oldColor);
             drawingCanvas.ArtworkBackground = newColor;
-            _settings.Editor.CanvasBackground = newColor;
+            _session.CanvasBackground = newColor;
         }
 
         private async void font_Click(object sender, RoutedEventArgs e)
