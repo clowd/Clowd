@@ -11,11 +11,48 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using Clowd.UI.Helpers;
+using NLog;
 
 namespace Clowd.Util
 {
     public static class Extensions
     {
+        private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
+
+        public static void DispatchWithErrorHandling(this Dispatcher disp, Action task)
+        {
+            disp.InvokeAsync(() =>
+            {
+                try
+                {
+                    task();
+                }
+                catch (Exception e)
+                {
+                    _log.Error(e);
+                    NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.ToString(), "An error has occurred.");
+                }
+            });
+        }
+
+        public static void DispatchWithErrorHandling(this Dispatcher disp, Func<Task> task)
+        {
+            disp.InvokeAsync(async () =>
+            {
+                try
+                {
+                    await task();
+                }
+                catch (Exception e)
+                {
+                    _log.Error(e);
+                    NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.ToString(), "An error has occurred.");
+                }
+            });
+        }
+
         //http://stackoverflow.com/a/12618521/184746
         public static void RemoveRoutedEventHandlers(this UIElement element, RoutedEvent routedEvent)
         {

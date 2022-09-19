@@ -1,16 +1,20 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Clowd.PlatformUtil;
 using Clowd.PlatformUtil.Windows;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd.UI.Helpers
 {
@@ -44,7 +48,7 @@ namespace Clowd.UI.Helpers
         {
             return ShowDialogAsync(parent, icon, content, icon.ToString(), promptTxt, "Close");
         }
-        
+
         public static Task<bool> ShowPromptAsync(FrameworkElement parent, NiceDialogIcon icon, string content, string mainInstruction, string promptTxt)
         {
             return ShowDialogAsync(parent, icon, content, mainInstruction, promptTxt, "Close");
@@ -224,45 +228,67 @@ namespace Clowd.UI.Helpers
             return null;
         }
 
-        public static async Task<string> ShowSelectSaveFileDialog(FrameworkElement parent, string title, string directory, string defaultName, string extension)
+        public static async Task<string> ShowSaveImageDialog(FrameworkElement parent, BitmapFrame frame, string directory, string filePattern)
         {
             directory ??= Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            extension = "." + extension.Trim('.').Trim();
+            filePattern ??= "yyyy-MM-dd HH-mm-ss";
 
-            // generate unique file name (screenshot-1.png, screenshot-2.png etc)
-            string initialName = $"{defaultName}{extension}";
-            if (File.Exists(Path.Combine(directory, initialName)))
+            // if the pattern has an extension, we will use it for the default below.
+            var defaultExt = Path.GetExtension(filePattern);
+            if (string.IsNullOrWhiteSpace(defaultExt)) defaultExt = ".png";
+
+            filePattern = Path.GetFileNameWithoutExtension(filePattern);
+
+            var fileName = PathConstants.GetFreePatternFileName(directory, filePattern);
+
+            (string ExtName, string ExtFilter, Type EncoderType)[] encoders = new[]
             {
-                int i = 1;
-                do
-                {
-                    initialName = $"{defaultName}-{i}{extension}";
-                    i++;
-                } while (File.Exists(Path.Combine(directory, initialName)));
+                ("PNG", "*.png", typeof(PngBitmapEncoder)),
+                ("JPEG", "*.jpg; *.jpeg; *.jpe; *.jfif", typeof(JpegBitmapEncoder)),
+                ("BMP", "*.bmp", typeof(BmpBitmapEncoder)),
+                ("TIFF", "*.tiff; *.tif", typeof(TiffBitmapEncoder)),
+                ("GIF", "*.gif", typeof(GifBitmapEncoder)),
+            };
+
+            StringBuilder filter = new StringBuilder();
+            foreach (var enc in encoders)
+            {
+                // https://learn.microsoft.com/en-us/previous-versions/windows/silverlight/dotnet-windows-silverlight/dd459587(v=vs.95)
+                filter.Append($"{enc.ExtName} ({enc.ExtFilter})|{enc.ExtFilter}|");
             }
 
             using var dlg = new SaveFileDialog();
-
-            dlg.Title = title;
-            dlg.FileName = initialName; // Default file name
-            dlg.DefaultExt = extension; // Default file extension
-            dlg.Filter = $"{defaultName}|*{extension}"; // Filter files by extension
+            dlg.Title = "Save Image";
+            dlg.FileName = fileName;
+            dlg.Filter = filter.ToString().TrimEnd('|');
+            dlg.FilterIndex = Math.Max(encoders.IndexOf(e => e.ExtFilter.ContainsIgnoreCase(defaultExt)) + 1, 1);
             dlg.OverwritePrompt = true;
             dlg.InitialDirectory = directory;
+            dlg.AddExtension = true;
+            dlg.ValidateNames = true;
 
-            // Show save file dialog box
             Nullable<bool> result = await dlg.ShowAsNiceDialogAsync(parent);
 
-            if (result == true)
+            if (result != true) return null; // cancelled
+
+            var file = dlg.FileName;
+            var ext = Path.GetExtension(file);
+            var selected = encoders.SingleOrDefault(e => e.ExtFilter.ContainsIgnoreCase(ext));
+
+            if (selected == default)
             {
-                var file = dlg.FileName;
-                // OverwritePrompt is true so the user will have already been asked if they are happy to overwrite this file
-                if (File.Exists(file))
-                    File.Delete(file);
-                return file;
+                await ShowNoticeAsync(parent, NiceDialogIcon.Error, "Unsupported image extension: " + ext);
+                return null;
             }
 
-            return null;
+            BitmapEncoder encoder = (BitmapEncoder)Activator.CreateInstance(selected.EncoderType);
+            encoder.Frames.Add(frame);
+
+            // OverwritePrompt is true so the user will have already been asked if they are happy to overwrite this file
+            using (var fs = new FileStream(file, FileMode.Create, FileAccess.Write))
+                encoder.Save(fs);
+
+            return file;
         }
 
         public static async Task<bool> ShowAsNiceDialogAsync(this CommonDialog dialog, FrameworkElement parent)

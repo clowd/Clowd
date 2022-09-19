@@ -41,6 +41,12 @@ namespace Clowd.Config
             set => Set(ref _outputDirectory, value);
         }
 
+        public string FilenamePattern
+        {
+            get => _filenamePattern;
+            set => Set(ref _filenamePattern, value);
+        }
+
         public int Fps
         {
             get => _fps;
@@ -139,6 +145,7 @@ namespace Clowd.Config
             set => Set(ref _openFinishedInExplorer, value);
         }
 
+        private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private string _outputDirectory;
         private int _fps = 30;
         private int _maxResolutionWidth;

@@ -3,9 +3,12 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Helpers;
+using Clowd.Util;
 using Vanara.PInvoke;
 
 namespace Clowd.UI.Unmanaged
@@ -127,7 +130,7 @@ namespace Clowd.UI.Unmanaged
 
         private static void ColorCaptureImpl(byte r, byte g, byte b)
         {
-            App.Current.Dispatcher.InvokeAsync(() =>
+            App.Current.Dispatcher.DispatchWithErrorHandling(() =>
             {
                 NiceDialog.ShowColorViewer(Color.FromRgb(r, g, b));
             });
@@ -138,7 +141,7 @@ namespace Clowd.UI.Unmanaged
             var rect = ScreenRect.FromLTRB(captureRegion.Left, captureRegion.Top, captureRegion.Right, captureRegion.Bottom);
             if (!rect.IsEmpty())
             {
-                App.Current.Dispatcher.InvokeAsync(() =>
+                App.Current.Dispatcher.DispatchWithErrorHandling(() =>
                 {
                     PageManager.Current.CreateNewVideoCapturePage(rect);
                 });
@@ -147,24 +150,22 @@ namespace Clowd.UI.Unmanaged
 
         private static void SessionCaptureImpl(string sessionJsonPath, CaptureType captureType)
         {
-            App.Current.Dispatcher.InvokeAsync(async () =>
+            App.Current.Dispatcher.DispatchWithErrorHandling(async () =>
             {
                 var session = SessionManager.Current.GetSessionFromPath(sessionJsonPath);
                 if (session != null)
                 {
                     session.Name = "Screenshot";
-
                     if (captureType == CaptureType.Save)
                     {
-                        var filename = await NiceDialog.ShowSelectSaveFileDialog(null, "Save Screenshot", SettingsRoot.Current.General.LastSavePath, "screenshot", "png");
-                        if (filename != null)
+                        var frame = BitmapFrame.Create(new Uri(session.PreviewImgPath), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                        var savedPath = await NiceDialog.ShowSaveImageDialog(null, frame, SettingsRoot.Current.General.LastSavePath, SettingsRoot.Current.Capture.FilenamePattern);
+                        if (savedPath != null)
                         {
-                            File.Copy(session.PreviewImgPath, filename);
-                            if (SettingsRoot.Current.Capture.OpenSavedInExplorer)
-                                Platform.Current.RevealFileOrFolder(filename);
-                            SettingsRoot.Current.General.LastSavePath = Path.GetDirectoryName(filename);
-                            // delete only if saved as recovery is no longer needed
+                            SettingsRoot.Current.General.LastSavePath = Path.GetDirectoryName(savedPath);
                             SessionManager.Current.DeleteSession(session);
+                            if (SettingsRoot.Current.Capture.OpenSavedInExplorer)
+                                Platform.Current.RevealFileOrFolder(savedPath);
                         }
                     }
                     else if (captureType == CaptureType.Upload)
@@ -181,7 +182,7 @@ namespace Clowd.UI.Unmanaged
 
         private static void DisposedImpl(string errMessage)
         {
-            App.Current.Dispatcher.InvokeAsync(() =>
+            App.Current.Dispatcher.DispatchWithErrorHandling(() =>
             {
                 if (!String.IsNullOrEmpty(errMessage))
                 {
@@ -191,10 +192,10 @@ namespace Clowd.UI.Unmanaged
                 Disposed?.Invoke(null, new EventArgs());
             });
         }
-        
+
         private static void LoadedImpl(string primarygpu)
         {
-            App.Current.Dispatcher.InvokeAsync(() =>
+            App.Current.Dispatcher.DispatchWithErrorHandling(() =>
             {
                 Loaded?.Invoke(null, new CaptureWindowLoadedEventArgs(primarygpu));
             });

@@ -15,6 +15,7 @@ using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
 using System.ComponentModel;
 using System.Windows.Controls.Primitives;
+using Sentry;
 
 namespace Clowd.UI
 {
@@ -150,29 +151,12 @@ namespace Clowd.UI
             return true;
         }
 
-        private DrawingVisual GetRenderedVisual()
-        {
-            return drawingCanvas.DrawGraphicsToVisual();
-        }
-
-        private BitmapSource GetRenderedBitmap()
-        {
-            return drawingCanvas.DrawGraphicsToBitmap();
-        }
-
-        private PngBitmapEncoder GetRenderedPng()
-        {
-            var enc = new PngBitmapEncoder();
-            enc.Frames.Add(BitmapFrame.Create(GetRenderedBitmap()));
-            return enc;
-        }
-
         private void PrintCommand(object sender, ExecutedRoutedEventArgs e)
         {
             if (!VerifyArtworkExists())
                 return;
             PrintDialog dlg = new PrintDialog();
-            var image = GetRenderedVisual();
+            var image = drawingCanvas.DrawGraphicsToVisual();
             if (dlg.ShowDialog().GetValueOrDefault() != true)
             {
                 return;
@@ -191,19 +175,13 @@ namespace Clowd.UI
             if (!VerifyArtworkExists())
                 return;
 
-            var filename = await NiceDialog.ShowSelectSaveFileDialog(this, "Save Image", _settings.General.LastSavePath, "screenshot", "png");
-
-            if (String.IsNullOrWhiteSpace(filename))
+            var frame = BitmapFrame.Create(drawingCanvas.DrawGraphicsToBitmap());
+            var savedPath = await NiceDialog.ShowSaveImageDialog(null, frame, _settings.General.LastSavePath, _settings.Capture.FilenamePattern);
+            if (savedPath != null)
             {
-                return;
-            }
-            else
-            {
-                using (var fs = new FileStream(filename, FileMode.Create, FileAccess.Write))
-                    GetRenderedPng().Save(fs);
-
-                Platform.Current.RevealFileOrFolder(filename);
-                _settings.General.LastSavePath = System.IO.Path.GetDirectoryName(filename);
+                _settings.General.LastSavePath = Path.GetDirectoryName(savedPath);
+                if (_settings.Capture.OpenSavedInExplorer)
+                    Platform.Current.RevealFileOrFolder(savedPath);
             }
         }
 
@@ -212,7 +190,7 @@ namespace Clowd.UI
             if (!VerifyArtworkExists())
                 return;
 
-            var bitmap = GetRenderedBitmap();
+            var bitmap = drawingCanvas.DrawGraphicsToBitmap();
 
             var ms = new MemoryStream(drawingCanvas.SerializeGraphics(true));
 
@@ -298,27 +276,27 @@ namespace Clowd.UI
 
         private void drawingCanvas_MouseUp(object sender, MouseButtonEventArgs e)
         {
-            if (drawingCanvas.GraphicsList.Count == 0)
-                return;
+            //if (drawingCanvas.GraphicsList.Count == 0)
+            //    return;
 
-            // persist editor state to session file
-            var state = drawingCanvas.SerializeGraphics(false);
-            var newstream = Convert.ToBase64String(state);
-            if (newstream != _session.GraphicsStream)
-            {
-                _session.GraphicsStream = newstream;
+            //// persist editor state to session file
+            //var state = drawingCanvas.SerializeGraphics(false);
+            //var newstream = Convert.ToBase64String(state);
+            //if (newstream != _session.GraphicsStream)
+            //{
+            //    _session.GraphicsStream = newstream;
 
-                // save new preview image to file
-                var preview = GetRenderedBitmap();
-                if (preview != null)
-                {
-                    var newpreview = SaveImageToSessionDir(preview);
-                    var oldpreview = _session.PreviewImgPath;
-                    _session.PreviewImgPath = newpreview;
-                    if (File.Exists(oldpreview))
-                        File.Delete(oldpreview);
-                }
-            }
+            //    // save new preview image to file
+            //    var preview = GetRenderedBitmap();
+            //    if (preview != null)
+            //    {
+            //        var newpreview = SaveImageToSessionDir(preview);
+            //        var oldpreview = _session.PreviewImgPath;
+            //        _session.PreviewImgPath = newpreview;
+            //        if (File.Exists(oldpreview))
+            //            File.Delete(oldpreview);
+            //    }
+            //}
         }
 
         private string SaveImageToSessionDir(BitmapSource src)
