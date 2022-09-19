@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Clowd.Config;
 using Clowd.PlatformUtil;
@@ -10,6 +11,7 @@ using Clowd.UI;
 using Clowd.UI.Helpers;
 using Clowd.Util;
 using Newtonsoft.Json;
+using NLog;
 using WeakEvent;
 
 namespace Clowd
@@ -24,7 +26,7 @@ namespace Clowd
         public ScreenRect Position { get; init; }
     }
 
-    public class SessionOpenEditor
+    public record SessionOpenEditor
     {
         public Guid? VirtualDesktopId { get; init; }
         public bool IsTopMost { get; init; }
@@ -51,6 +53,12 @@ namespace Clowd
         public string DesktopImgPath
         {
             get => Get<string>();
+            set => Set(value);
+        }
+
+        public Color CanvasBackground
+        {
+            get => Get<Color>();
             set => Set(value);
         }
 
@@ -89,7 +97,7 @@ namespace Clowd
             get => Get<string>();
             set => Set(value);
         }
-        
+
         public string UploadFileKey
         {
             get => Get<string>();
@@ -101,7 +109,7 @@ namespace Clowd
             get => Get<string>();
             set => Set(value);
         }
-        
+
         // this does not need to be persisted
         public double UploadProgress
         {
@@ -136,6 +144,7 @@ namespace Clowd
         private FileSystemWatcher _fsw;
         private IDisposable _cleanupTimer;
         private TrulyObservableCollection<SessionInfo> _sessions;
+        private ILogger _log = LogManager.GetCurrentClassLogger();
 
         private SessionManager()
         {
@@ -143,8 +152,15 @@ namespace Clowd
             foreach (var d in Directory.EnumerateDirectories(PathConstants.SessionData))
             {
                 var jsonPath = Path.Combine(d, "session.json");
-                if (File.Exists(jsonPath))
-                    Sessions.Add(new SessionInfo(jsonPath));
+                try
+                {
+                    if (File.Exists(jsonPath))
+                        Sessions.Add(new SessionInfo(jsonPath));
+                }
+                catch (Exception e)
+                {
+                    _log.Warn(e, "Unable to load session: " + jsonPath);
+                }
             }
 
             _fsw = new FileSystemWatcher(PathConstants.SessionData);
@@ -264,6 +280,7 @@ namespace Clowd
             var session = new SessionInfo(jsonPath);
             session.Name = "Document";
             session.CreatedUtc = DateTime.UtcNow;
+            session.CanvasBackground = SettingsRoot.Current.Editor.CanvasBackground;
             Sessions.Add(session);
             return session;
         }

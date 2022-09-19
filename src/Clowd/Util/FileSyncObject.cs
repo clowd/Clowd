@@ -158,8 +158,9 @@ namespace Clowd.Util
             {
                 ThrowIfDisposed();
 
-                if (_store.TryGetValue(propertyName, out var stor) && Equals(stor, value))
-                    return false;
+                if (_store.TryGetValue(propertyName, out var stor))
+                    if (Equals(stor, value))
+                        return false;
 
                 _store[propertyName] = value;
 
