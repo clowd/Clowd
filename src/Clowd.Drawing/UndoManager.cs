@@ -3,13 +3,23 @@ using System.Collections.Generic;
 
 namespace Clowd.Drawing
 {
+    public class StateChangedEventArgs : EventArgs
+    {
+        public byte[] State { get; }
+
+        public StateChangedEventArgs(byte[] state)
+        {
+            State = state;
+        }
+    }
+
     internal class UndoManager
     {
         public bool CanUndo => _position > 0 && _position <= _historyList.Count - 1;
 
         public bool CanRedo => _position < _historyList.Count - 1;
 
-        public event EventHandler StateChanged;
+        public event EventHandler<StateChangedEventArgs> StateChanged;
 
         private readonly DrawingCanvas _drawingCanvas;
         private List<byte[]> _historyList;
@@ -27,7 +37,7 @@ namespace Clowd.Drawing
             _historyList = new List<byte[]>();
             _position = -1;
             _lastCommandWasNudge = false;
-            RaiseStateChangedEvent();
+            RaiseStateChangedEvent(new byte[0]);
         }
 
         public bool AddCommandStep()
@@ -39,7 +49,7 @@ namespace Clowd.Drawing
             this.TrimHistoryList();
             _historyList.Add(state);
             _position = _historyList.Count - 1;
-            RaiseStateChangedEvent();
+            RaiseStateChangedEvent(state);
             return true;
         }
 
@@ -88,7 +98,7 @@ namespace Clowd.Drawing
             var nextGraphics = new GraphicCollection(_drawingCanvas);
             nextGraphics.DeserializeObjectsInto(nextState);
             _drawingCanvas.GraphicsList = nextGraphics;
-            RaiseStateChangedEvent();
+            RaiseStateChangedEvent(nextState);
         }
 
         public void Redo()
@@ -101,7 +111,7 @@ namespace Clowd.Drawing
             var nextGraphics = new GraphicCollection(_drawingCanvas);
             nextGraphics.DeserializeObjectsInto(nextState);
             _drawingCanvas.GraphicsList = nextGraphics;
-            RaiseStateChangedEvent();
+            RaiseStateChangedEvent(nextState);
         }
 
         private void TrimHistoryList()
@@ -121,9 +131,9 @@ namespace Clowd.Drawing
                 _historyList.RemoveAt(i);
         }
 
-        private void RaiseStateChangedEvent()
+        private void RaiseStateChangedEvent(byte[] state)
         {
-            StateChanged?.Invoke(this, EventArgs.Empty);
+            StateChanged?.Invoke(this, new StateChangedEventArgs(state));
         }
 
         private static bool ByteArrayCompare(ReadOnlySpan<byte> a1, ReadOnlySpan<byte> a2)

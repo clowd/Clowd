@@ -53,6 +53,8 @@ namespace Clowd.Drawing
 
         public int Count => GraphicsList.Count;
 
+        public EventHandler<StateChangedEventArgs> StateUpdated;
+
         public RelayCommand CommandSelectAll { get; }
         public RelayCommand CommandUnselectAll { get; }
         public RelayCommand CommandDelete { get; }
@@ -662,9 +664,10 @@ namespace Clowd.Drawing
             }
         }
 
-        void UndoManagerStateChanged(object sender, EventArgs e)
+        void UndoManagerStateChanged(object sender, StateChangedEventArgs e)
         {
             CommandManager.InvalidateRequerySuggested();
+            StateUpdated?.Invoke(this, e);
         }
 
         private void DrawingCanvas_SourceUpdated(object sender, DataTransferEventArgs e)
