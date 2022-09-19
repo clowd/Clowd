@@ -42,6 +42,13 @@ namespace Clowd.Config
             set => Set(ref _openSavedInExplorer, value);
         }
 
+        public string FilenamePattern
+        {
+            get => _filenamePattern;
+            set => Set(ref _filenamePattern, value);
+        }
+
+        private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private bool _screenshotWithCursor;
         private bool _detectWindows = true;
         private bool _hideTipsPanel;

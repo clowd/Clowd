@@ -90,15 +90,7 @@ namespace Clowd.Video
                 if (!Directory.Exists(settings.OutputDirectory))
                     Directory.CreateDirectory(settings.OutputDirectory);
 
-                // find an available file name
-                for (int i = 0; i < 10; i++)
-                {
-                    var dateStr = DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
-                    if (i > 0) dateStr += $" ({i})";
-                    var fileName = dateStr + ".mp4";
-                    _filePath = Path.Combine(settings.OutputDirectory, fileName);
-                    if (!File.Exists(_filePath)) break;
-                }
+                _filePath = Path.Combine(settings.OutputDirectory, PathConstants.GetFreePatternFileName(settings.OutputDirectory, settings.FilenamePattern)) + ".mp4";
 
                 List<string> arguments = new()
                 {
@@ -260,7 +252,7 @@ namespace Clowd.Video
                 _instance = null;
                 _log.Info("Disposing ObsCapturer Instance");
                 try { _watch?.WriteToStdIn("q"); }
-                catch { ; }
+                catch {; }
 
                 _watch?.WaitTimeoutThenForceExit(5000);
             }

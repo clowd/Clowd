@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd
 {
@@ -48,6 +50,24 @@ namespace Clowd
             Path.Combine(Path.GetFullPath(directory), GetDatedFileName(name, extension));
 
         public static string GetDatedFileName(string name, string extension) => name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "." + extension;
+
+        public static string GetFreePatternFileName(string directory, string pattern)
+        {
+            var files = Directory.EnumerateFiles(directory).Select(Path.GetFileNameWithoutExtension).ToArray();
+
+            for (int i = 0; i < 100; i++)
+            {
+                var dateStr = DateTime.Now.ToString(pattern);
+                if (i > 0) dateStr += $" ({i})";
+
+                if (files.Any(f => f.EqualsIgnoreCase(dateStr)))
+                    continue;
+
+                return dateStr;
+            }
+
+            return DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+        }
 
         private static string GetClowdFolder(Environment.SpecialFolder dataDirectory, string dataName) =>
             GetClowdFolder(Environment.GetFolderPath(dataDirectory), dataName);
