@@ -178,7 +178,9 @@ namespace Clowd.Drawing.Graphics
 
             fn();
 
-            ctx.Pop();
+            if (Right <= Left || Bottom <= Top)
+                ctx.Pop();
+
             ctx.Pop();
 
             // this function leaves the rotate transform on the stack for resize handles
