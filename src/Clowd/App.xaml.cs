@@ -20,6 +20,7 @@ using Clowd.UI.Helpers;
 using Clowd.Util;
 using Hardcodet.Wpf.TaskbarNotification;
 using Microsoft.Toolkit.Uwp.Notifications;
+using Newtonsoft.Json;
 using NLog;
 using NLog.Config;
 using NLog.Targets;
@@ -55,6 +56,7 @@ namespace Clowd
 
                 await SetupMutex(appArgs);
                 await SetupSettings();
+                SetupNewtonsoft();
 
                 // theme
                 WPFUI.Appearance.Theme.Apply(WPFUI.Appearance.Theme.GetSystemTheme() == WPFUI.Appearance.SystemThemeType.Light
@@ -166,6 +168,14 @@ namespace Clowd
             //    }
             //};
             //setTheme();
+        }
+
+        private void SetupNewtonsoft()
+        {
+            JsonConvert.DefaultSettings = () => new JsonSerializerSettings
+            {
+                ContractResolver = new NewtonsoftWritablePropertiesOnlyResolver(),
+            };
         }
 
         private Logger SetupExceptionHandling(bool isInstalled)
