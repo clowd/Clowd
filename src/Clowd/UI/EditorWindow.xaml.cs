@@ -307,7 +307,10 @@ namespace Clowd.UI
             if (!VerifyArtworkExists())
                 return;
 
-            var frame = BitmapFrame.Create(drawingCanvas.DrawGraphicsToBitmap());
+            var bitmap = drawingCanvas.DrawGraphicsToBitmap();
+            UpdatePreview(bitmap);
+
+            var frame = BitmapFrame.Create(bitmap);
             var savedPath = await NiceDialog.ShowSaveImageDialog(null, frame, _settings.General.LastSavePath, _settings.Capture.FilenamePattern);
             if (savedPath != null)
             {
@@ -323,7 +326,6 @@ namespace Clowd.UI
                 return;
 
             var bitmap = drawingCanvas.DrawGraphicsToBitmap();
-
             UpdatePreview(bitmap);
 
             var ms = new MemoryStream(drawingCanvas.SerializeGraphics(true));
@@ -426,6 +428,7 @@ namespace Clowd.UI
 
             try
             {
+                // it could be locked by WPF
                 if (File.Exists(oldpreview))
                     File.Delete(oldpreview);
             }
