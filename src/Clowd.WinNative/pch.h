@@ -42,10 +42,6 @@
 #include <shellscalingapi.h>
 #include <comdef.h>
 
-//#include <msclr\marshal.h>
-//#include <msclr\marshal_cppstd.h>
-//#include <msclr\lock.h>
-
 #define NS_TO_MS_DIV (1000000)
 #define DEBUGBOX_SIZE (600)
 #define DEBUGBOX_MARGIN (50)
@@ -76,8 +72,6 @@ namespace System {
     using ObjectDisposedException = std::logic_error;
     using OutOfMemoryException = std::overflow_error;
 }
-
-//delegate LRESULT WndProcDel(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 struct free_calloc { void operator()(void* x) { free(x); } };
 struct free_gdiobject { void operator()(void* x) { DeleteObject(x); } };
@@ -135,21 +129,6 @@ inline std::wstring to_hex(HWND hWnd)
 		*reinterpret_cast<uint64_t*>(&hWnd) << std::endl;
 	return ss.str();
 }
-
-//std::wstring to_hex(unsigned char c) {
-//
-//	std::wstringstream ss;
-//
-//	// Set stream modes
-//	ss << std::uppercase << std::setw(2) << std::setfill('0') << std::hex;
-//
-//	// Stream in the character's ASCII code
-//	// (using `+` for promotion to `int`)
-//	ss << +c;
-//
-//	// Return resultant string content
-//	return ss.str();
-//}
 
 inline std::wstring s2ws(const std::string& str)
 {
@@ -244,7 +223,6 @@ public:
         if (ptr == nullptr)
         {
             std::string str = "DxRef<" + std::string(typeid(TT).name()) + ">";
-            //auto clrstr = msclr::interop::marshal_as<System::String^>(str);
             throw gcnew System::ObjectDisposedException(str.c_str());
         }
         return ptr;

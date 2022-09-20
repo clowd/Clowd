@@ -134,7 +134,6 @@ void Screens::MouseAnchorStart(POINTFF& position)
 	position.x = pt.x - _virtX;
 	position.y = pt.y - _virtY;
 	SetCursorPos(_anchor.x, _anchor.y);
-	//ShowCursor(false);
 }
 
 void Screens::MouseAnchorUpdate(POINTFF& position, POINT& sysPt, double zoom)
@@ -165,9 +164,6 @@ void Screens::MouseAnchorStop(POINTFF& position)
 	int y = ((int)floor(position.y)) + _virtY;
 
 	SetCursorPos(x, y);
-
-	//ShowCursor(true);
-	//ShowCursor(true); // this is not a mistake. 
 }
 
 POINTFF Screens::ToWorkspacePt(const POINT& systemPt)

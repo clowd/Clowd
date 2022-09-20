@@ -60,34 +60,3 @@ void __cdecl CaptureClose()
     delete capture;
     capture = 0;
 }
-
-//void __cdecl CaptureReset()
-//{
-//    std::lock_guard<std::mutex> guard(sync);
-//    if (!capture) return;
-//    capture->Reset();
-//}
-//
-//RECT __cdecl CaptureGetSelectedArea()
-//{
-//    std::lock_guard<std::mutex> guard(sync);
-//    if (!capture) return RECT();
-//
-//    RECT r;
-//    capture->GetSelectionRect(r);
-//    return r;
-//}
-
-//void __cdecl CaptureWriteSessionToFile(wchar_t* sessionDirectory, wchar_t* createdUtc)
-//{
-//    std::lock_guard<std::mutex> guard(sync);
-//    if (!capture) return;
-//    capture->SaveSession(std::wstring(sessionDirectory), std::wstring(createdUtc));
-//}
-//
-//void __cdecl CaptureWriteSessionToClipboard()
-//{
-//    std::lock_guard<std::mutex> guard(sync);
-//    if (!capture) return;
-//    capture->WriteToClipboard();
-//}

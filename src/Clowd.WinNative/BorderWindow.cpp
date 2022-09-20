@@ -38,8 +38,6 @@ inline void RGDI(const Gdiplus::Status status)
     throw std::exception(msg.c_str());
 }
 
-//using namespace System::ComponentModel;
-//using namespace System::Runtime::InteropServices;
 using namespace Gdiplus;
 
 BorderWindow::BorderWindow(System::Drawing::Color color, System::Drawing::Rectangle area)
@@ -49,10 +47,6 @@ BorderWindow::BorderWindow(System::Drawing::Color color, System::Drawing::Rectan
     _hInstance = GetModuleHandle(0);
     std::wstring clsName = L"ClowdBorderWindow-" + std::to_wstring(clock());
     const wchar_t* umClsName = clsName.c_str();
-
-    //_del = gcnew WndProcDel(this, &BorderWindow::WndProc);
-    //auto procPtr = Marshal::GetFunctionPointerForDelegate(_del);
-    //auto proc = static_cast<WNDPROC>(procPtr.ToPointer());
 
     WNDCLASS wc{};
     wc.lpfnWndProc = BorderWindow::WndProc;
@@ -167,9 +161,6 @@ void BorderWindow::UpdateLayer()
     // draw text
     if (!_overlayTxt.empty())
     {
-        //System::String^ clrstr = _overlayTxt;
-        //auto pszbuf = msclr::interop::marshal_as<std::wstring>(clrstr);
-
         Color gclr(255, _lineColor.GetR(), _lineColor.GetG(), _lineColor.GetB());
         SolidBrush gbrush(gclr);
         FontFamily gfont(FONT_ARIAL_BLACK);
