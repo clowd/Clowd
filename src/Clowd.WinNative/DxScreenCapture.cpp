@@ -199,19 +199,7 @@ DxScreenCapture::DxScreenCapture(captureArgs* options)
 {
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
     memcpy(&_options, options, sizeof(captureArgs));
-
-    //_options = options;
-    //windows = gcnew System::Collections::Generic::List<render_info>();
-    //errors = gcnew System::Collections::Generic::List<System::Exception^>();
-    //winmsgs = gcnew System::Collections::Generic::List<System::String^>();
-
     mainThread = (HANDLE)_beginthreadex(NULL, 0, MessagePumpProc, static_cast<LPVOID>(this), 0, &mainThreadId);
-
-    //main = gcnew Thread(gcnew ThreadStart(this, &DxScreenCapture::RunMessagePump));
-    //main->IsBackground = false;
-    //main->SetApartmentState(ApartmentState::STA);
-    //main->Priority = ThreadPriority::Highest;
-    //main->Start();
 }
 
 DxScreenCapture::~DxScreenCapture()
@@ -277,10 +265,6 @@ void DxScreenCapture::RunMessagePump()
         DxOutputDevice::EnumOutputs(native->monitors);
 
         // register wndproc
-        //_del = gcnew WndProcDel(this, &DxScreenCapture::WndProc);
-        //auto procPtr = Marshal::GetFunctionPointerForDelegate(_del);
-        //auto proc = static_cast<WNDPROC>(procPtr.ToPointer());
-
         WNDCLASS wc = { };
         wc.lpfnWndProc = DxScreenCapture::WndProc;
         wc.hInstance = hInstance;
@@ -348,17 +332,6 @@ void DxScreenCapture::RunMessagePump()
             wi.eventSignal = CreateEvent(NULL, FALSE, TRUE, NULL);
             wi.hWnd = hwnd;
             wi.threadHandle = (HANDLE)_beginthreadex(NULL, 0, DxScreenCapture::RenderThreadProc, static_cast<LPVOID>(&wi), 0, &wi.threadId);
-
-            //auto info = gcnew ParameterizedThreadStart(this, &DxScreenCapture::RunRenderThread);
-            //auto thread = gcnew Thread(info);
-            //thread->IsBackground = true;
-            //render_info wi{}; // = gcnew WndInfo();
-            //wi.hWnd = hwnd;
-            //wi.thread = thread;
-            //wi.signal = gcnew AutoResetEvent(true);
-            //windows->Add(wi);
-            //thread->Start(i);
-            //int a = 5;
         }
 
         native->t3 = std::chrono::high_resolution_clock::now();
@@ -437,32 +410,6 @@ unsigned int __stdcall DxScreenCapture::RenderThreadProc(void* lpParam)
 
     return 0;
 }
-
-//void DxScreenCapture::RunRenderThread(Object^ boxed_idx)
-//{
-//    try
-//    {
-//        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-//        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-//
-//        int idx = (int)boxed_idx;
-//        auto wi = windows[idx];
-//        DxDisplay& mon = native->monitors.at(idx);
-//        const ScreenInfo& myscreen = native->screens->ScreenFromHMONITOR(mon.Monitor);
-//
-//        RunRenderLoop(wi, mon, myscreen);
-//    }
-//    catch (System::Exception^ err)
-//    {
-//        // TODO, handle following responses from Present
-//        // DXGI_STATUS_OCCLUDED
-//        // DXGI_ERROR_DEVICE_REMOVED
-//        // DXGI_ERROR_DEVICE_RESET
-//
-//        errors->Add(err);
-//        Close();
-//    }
-//}
 
 void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon, const ScreenInfo& myscreen)
 {
@@ -2023,15 +1970,11 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
     if (!native->frame.captured)
         return nullptr;
 
-    //if (!System::IO::Directory::Exists(sessionDirectory))
-    //    throw gcnew System::InvalidOperationException("Session directory must exist");
-
     // converter - json lib only works with std::string not std::wstring
     using convert_type = std::codecvt_utf8<wchar_t>;
     std::wstring_convert<convert_type, wchar_t> converter;
 
     // write screenshot to file
-    //auto sessionDir = msclr::interop::marshal_as<wstring>(sessionDirectory);
     auto& sessionDir = sessionDirectory;
 
     fs::path stdDir{ sessionDir };
@@ -2083,8 +2026,6 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
         }
     }
 
-    //auto date = msclr::interop::marshal_as<string>(System::DateTime::UtcNow.ToString("o"));
-
     // write session to file
     json root;
     root["CreatedUtc"] = converter.to_bytes(createdUtc);
@@ -2106,15 +2047,4 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
     o << std::setw(4) << root << std::endl;
 
     return sp;
-    //return msclr::interop::marshal_as<System::String^>(sp);
 }
-
-//RECT DxScreenCapture::GetSelection()
-//{
-//    return native->frame.selection;
-//}
-//
-//bool DxScreenCapture::GetCaptured()
-//{
-//    return native->frame.sel
-//}

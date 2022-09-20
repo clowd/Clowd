@@ -18,7 +18,6 @@
 wchar_t wcClsName[WND_STRING_SIZE];
 wchar_t wcCaption[WND_STRING_SIZE];
 bool _initialized;
-//IVirtualDesktopManager* _vdManager;
 unordered_set<wstring> _clsBlacklist;
 
 //using namespace cv;

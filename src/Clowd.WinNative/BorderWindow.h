@@ -8,7 +8,6 @@ private:
     bool _disposed;
     HINSTANCE _hInstance;
     HWND _window;
-    //WndProcDel^ _del;
     uint16_t _lineWidth;
     System::Drawing::Color _lineColor;
     System::String _overlayTxt;
