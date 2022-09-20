@@ -154,8 +154,12 @@ namespace Clowd.UI
             filename = Path.Combine(Path.GetFullPath(_settings.OutputDirectory), filename);
 
             _capturer.WriteLogToFile(filename);
-            _log.Error("CapturerCriticalError: " + File.ReadAllText(filename));
-            File.AppendAllText(filename, Environment.NewLine + Environment.NewLine + e.Error);
+            File.AppendAllText(filename, Environment.NewLine + "--" + Environment.NewLine + e.Error);
+
+            _log.ForErrorEvent()
+                .Message("The capturer has crashed.")
+                .Property<string>("obs.log", File.ReadAllText(filename))
+                .Log();
 
             if (await NiceDialog.ShowPromptAsync(null,
                     NiceDialogIcon.Error,

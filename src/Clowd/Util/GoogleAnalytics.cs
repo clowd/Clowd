@@ -59,10 +59,7 @@ namespace Clowd.Util
                 var r = await http.PostAsync(url, new StringContent(query), CancellationToken.None).ConfigureAwait(false);
                 r.EnsureSuccessStatusCode();
             }
-            catch (Exception e)
-            {
-                _log.Error(e, "Failed to log metric to UA");
-            }
+            catch {; }
         }
 
         public void Event(string category, string action, bool interactive = false)
