@@ -59,6 +59,7 @@
     <EmbeddedResource Include="Images\Text.cur" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="WriteableBitmapEx" Version="1.6.8" />
     <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
     <PackageReference Include="DependencyPropertyGenerator" Version="1.0.3" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>

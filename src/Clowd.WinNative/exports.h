@@ -29,6 +29,7 @@ typedef struct
     wchar_t sessionDirectory[512];
     wchar_t createdUtc[128];
     RECT initialRect;
+    BOOL copyCursor;
 } captureArgs;
 
 extern "C"

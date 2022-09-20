@@ -326,7 +326,16 @@
                 Padding="6"
                 Command="{Binding ElementName=drawingCanvas, Path=CommandCropImage}"
                 IconPath="{StaticResource IconCrop}"
+                ToolTip="Crop Image"
                 Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Crop}" />
+
+            <controls:ToolButton
+                Padding="5"
+                CanToggle="True"
+                IconPath="{StaticResource IconToolPointerFilled}"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectCursorVisible}"
+                ToolTip="Toggle Captured Mouse Cursor"
+                Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Cursor}" />
 
             <controls:ToolButton
                 Padding="5"

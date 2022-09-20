@@ -13,7 +13,6 @@ namespace Clowd.Config
 {
     public class SettingsCapture : CategoryBase
     {
-        [Browsable(false)]
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]
         public bool ScreenshotWithCursor
@@ -49,7 +48,7 @@ namespace Clowd.Config
         }
 
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
-        private bool _screenshotWithCursor;
+        private bool _screenshotWithCursor = true;
         private bool _detectWindows = true;
         private bool _hideTipsPanel;
         private bool _openSavedInExplorer = true;

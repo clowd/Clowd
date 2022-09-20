@@ -56,6 +56,18 @@ namespace Clowd
             set => Set(value);
         }
 
+        public string CursorImgPath
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
+
+        public ScreenRect CursorPosition
+        {
+            get => Get<ScreenRect>();
+            set => Set(value);
+        }
+
         public Color CanvasBackground
         {
             get => Get<Color>();
