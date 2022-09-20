@@ -69,6 +69,9 @@ private:
     std::vector<std::exception> errors;
     HWND primaryWindow;
     mc_window_native* native;
+    CURSORINFO _cursorInfo;
+    POINT _cursorPt;
+    BOOL _cursorShowing;
 
     static unsigned int __stdcall MessagePumpProc(void* lpParam);
     void RunMessagePump();
@@ -83,9 +86,10 @@ private:
     void FrameSetCursor(mc_frame_data& data);
     void FrameUpdateHoveredWindow(mc_frame_data& data);
     System::Drawing::Color GetFrameHoveredColor(mc_frame_data* data);
-
-    std::unique_ptr<NativeDib> GetMergedBitmap(bool flipV, bool cropped);
-    void WriteToPointer(void* data, int dataSize);
+    void DrawCursorToDC(HDC hdc, const RECT& sel);
+    bool DrawCursor(RECT* pos, unique_ptr<NativeDib>& ptr);
+    std::unique_ptr<NativeDib> GetMergedBitmap(bool flipV, bool cropped, bool cursor);
+    //void WriteToPointer(void* data, int dataSize);
 
 public:
     DxScreenCapture(captureArgs* options);

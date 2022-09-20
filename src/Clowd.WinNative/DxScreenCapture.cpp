@@ -235,6 +235,17 @@ void DxScreenCapture::RunMessagePump()
         POINT pt;
         GetCursorPos(&pt);
 
+        // copy current cursor data
+        _cursorShowing = false;
+        _cursorPt = pt;
+        CURSORINFO cinfo{};
+        cinfo.cbSize = sizeof(CURSORINFO);
+        GetCursorInfo(&cinfo);
+        if (cinfo.flags == CURSOR_SHOWING) {
+            _cursorInfo = cinfo;
+            _cursorShowing = true;
+        }
+
         // misc stuff to create
         native->disposed = 0;
         native->screens = make_unique<Screens>();
@@ -285,7 +296,7 @@ void DxScreenCapture::RunMessagePump()
         }
         else
         {
-            FrameMakeSelection(native->frame, _options.initialRect, false);    
+            FrameMakeSelection(native->frame, _options.initialRect, false);
         }
 
         native->t2 = std::chrono::high_resolution_clock::now();
@@ -1013,7 +1024,7 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
             shown = true;
             ShowWindow(wi.hWnd, SW_SHOWNOACTIVATE);
             trender = std::chrono::high_resolution_clock::now();
-            
+
             if (myscreen.primary)
             {
                 // we have multiple windows, only want one to take focus
@@ -1581,7 +1592,77 @@ void DxScreenCapture::SetFrame(mc_frame_data* data)
     }
 }
 
-std::unique_ptr<NativeDib> DxScreenCapture::GetMergedBitmap(bool flipV, bool crop)
+BOOL GetIconDimensions(__in HICON hico, __out SIZE* psiz)
+{
+    ICONINFO ii;
+    BOOL fResult = GetIconInfo(hico, &ii);
+    if (fResult) {
+        BITMAP bm;
+        fResult = GetObject(ii.hbmMask, sizeof(bm), &bm) == sizeof(bm);
+        if (fResult) {
+            psiz->cx = bm.bmWidth;
+            psiz->cy = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
+        }
+        if (ii.hbmMask)  DeleteObject(ii.hbmMask);
+        if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    }
+    return fResult;
+}
+
+bool DxScreenCapture::DrawCursor(RECT* pos, unique_ptr<NativeDib>& ptr)
+{
+    // this does not account for Win10 scaling. Maybe we can sort something else using this
+    // https://stackoverflow.com/questions/63287678/extract-cursor-size-via-winapi-windows-10
+
+    if (!_cursorShowing) return false;
+
+    auto hIcon = CopyIcon(_cursorInfo.hCursor);
+
+    SIZE cursorSize;
+    if (GetIconDimensions(hIcon, &cursorSize)) {
+        ICONINFO ii{};
+        if (GetIconInfo(hIcon, &ii)) {
+            ptr = BitmapEx::Make24bppDib(cursorSize.cx, cursorSize.cy);
+
+            // probably need to subtract _vx and _vy
+            auto iconX = _cursorInfo.ptScreenPos.x - ii.xHotspot;
+            auto iconY = _cursorInfo.ptScreenPos.y - ii.yHotspot;
+            BitBlt(ptr->GetBitmapDC(), 0, 0, cursorSize.cx, cursorSize.cy, native->screenshot->GetBitmapDC(), iconX, iconY, SRCCOPY);
+            DrawIconEx(ptr->GetBitmapDC(), 0, 0, hIcon, 0, 0, 0, 0, DI_NORMAL | DI_DEFAULTSIZE);
+
+            pos->left = iconX;
+            pos->top = iconY;
+            pos->right = iconX + cursorSize.cx;
+            pos->bottom = iconY + cursorSize.cy;
+
+            if (ii.hbmMask)  DeleteObject(ii.hbmMask);
+            if (ii.hbmColor) DeleteObject(ii.hbmColor);
+        }
+    }
+
+    DestroyIcon(hIcon);
+}
+
+void DxScreenCapture::DrawCursorToDC(HDC hdc, const RECT& sel)
+{
+    if (!_cursorShowing) return;
+
+    auto hIcon = CopyIcon(_cursorInfo.hCursor);
+
+    ICONINFO iinfo{};
+    if (GetIconInfo(hIcon, &iinfo)) {
+        // probably need to subtract _vx and _vy
+        auto iconX = _cursorInfo.ptScreenPos.x - iinfo.xHotspot - sel.left;
+        auto iconY = _cursorInfo.ptScreenPos.y - iinfo.yHotspot - sel.top;
+        DrawIconEx(hdc, iconX, iconY, hIcon, 0, 0, 0, 0, DI_NORMAL | DI_DEFAULTSIZE);
+        DeleteObject(iinfo.hbmColor);
+        DeleteObject(iinfo.hbmMask);
+    }
+
+    DestroyIcon(hIcon);
+}
+
+std::unique_ptr<NativeDib> DxScreenCapture::GetMergedBitmap(bool flipV, bool crop, bool cursor)
 {
     mc_frame_data data{};
     GetFrame(&data);
@@ -1607,6 +1688,7 @@ std::unique_ptr<NativeDib> DxScreenCapture::GetMergedBitmap(bool flipV, bool cro
             BitBlt(cropped->GetBitmapDC(), 0, 0, w, abs(h), native->screenshot->GetBitmapDC(), sel.left, sel.top, SRCCOPY);
         }
 
+        if (cursor) DrawCursorToDC(cropped->GetBitmapDC(), sel);
         return cropped;
     }
     else
@@ -1626,6 +1708,7 @@ std::unique_ptr<NativeDib> DxScreenCapture::GetMergedBitmap(bool flipV, bool cro
             data.windowSelection.window->BitBltImage(merged->GetBitmapDC(), rcWin.left, rcWin.top);
         }
 
+        if (cursor) DrawCursorToDC(merged->GetBitmapDC(), sel);
         return merged;
     }
 }
@@ -1863,23 +1946,23 @@ void DxScreenCapture::Close(bool waitForExit)
         WaitForSingleObject(mainThread, 5000);
 }
 
-void DxScreenCapture::WriteToPointer(void* scan0, int dataSize)
-{
-    if (native == nullptr || native->disposed > 0)
-        throw gcnew System::ObjectDisposedException("DxScreenCapture");
-
-    void* pixels;
-    auto cropped = GetMergedBitmap(true, true);
-    if (cropped == nullptr) return;
-    int desiredSize = cropped->GetSize();
-    cropped->GetPixels(&pixels);
-
-    if (dataSize < desiredSize)
-        throw gcnew System::InvalidOperationException(string("Provided pointer does not have enough space. "
-            + to_string(desiredSize) + " bytes needed, but only " + to_string(dataSize) + " provided.").c_str());
-
-    memcpy(scan0, pixels, desiredSize);
-}
+//void DxScreenCapture::WriteToPointer(void* scan0, int dataSize)
+//{
+//    if (native == nullptr || native->disposed > 0)
+//        throw gcnew System::ObjectDisposedException("DxScreenCapture");
+//
+//    void* pixels;
+//    auto cropped = GetMergedBitmap(true, true);
+//    if (cropped == nullptr) return;
+//    int desiredSize = cropped->GetSize();
+//    cropped->GetPixels(&pixels);
+//
+//    if (dataSize < desiredSize)
+//        throw gcnew System::InvalidOperationException(string("Provided pointer does not have enough space. "
+//            + to_string(desiredSize) + " bytes needed, but only " + to_string(dataSize) + " provided.").c_str());
+//
+//    memcpy(scan0, pixels, desiredSize);
+//}
 
 void DxScreenCapture::WriteToClipboard()
 {
@@ -1890,7 +1973,7 @@ void DxScreenCapture::WriteToClipboard()
     HGLOBAL hGlobal;
     void* pixels;
 
-    auto cropped = GetMergedBitmap(false, true);
+    auto cropped = GetMergedBitmap(false, true, true);
     if (cropped == nullptr) return;
 
     cropped->GetDetails(&dib);
@@ -1982,12 +2065,21 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
         fs::create_directory(stdDir);
 
     auto ssPath = sessionDir + L"\\desktop.png";
-    auto merged = GetMergedBitmap(true, false);
+    auto merged = GetMergedBitmap(true, false, false); // do not render cursor (as this can be toggled on/off in editor)
     merged->WriteToFilePNG(ssPath);
+
+    // cursor
+    unique_ptr<NativeDib> cursorImg;
+    RECT cursorPos;
+    wstring cursorPath = L"";
+    if (DrawCursor(&cursorPos, cursorImg)) {
+        cursorPath = sessionDir + L"\\cursor.png";
+        cursorImg->WriteToFilePNG(cursorPath);
+    }
 
     // cropped image
     auto croppedPath = sessionDir + L"\\cropped.png";
-    auto cropped = GetMergedBitmap(true, true);
+    auto cropped = GetMergedBitmap(true, true, true);
     cropped->WriteToFilePNG(croppedPath);
 
     // write out window info
@@ -2034,6 +2126,11 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
     root["DesktopImgPath"] = converter.to_bytes(ssPath);
     root["PreviewImgPath"] = converter.to_bytes(croppedPath);
 
+    if (!cursorPath.empty()) {
+        root["CursorImgPath"] = converter.to_bytes(cursorPath);
+        root["CursorPosition"] = rect2json(cursorPos);
+    }
+
     RECT r = native->frame.selection;
     root["CroppedRect"] = rect2json(r);
     native->screens->TranslateToSystem(r);
@@ -2041,7 +2138,7 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
 
     if (native->frame.windowSelection.window != nullptr)
         root["SelectionWnd"] = native->frame.windowSelection.window->index;
-    
+
     auto sp = sessionDir + L"\\session.json";
     std::ofstream o(sp);
     o << std::setw(4) << root << std::endl;

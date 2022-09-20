@@ -250,12 +250,17 @@ namespace Clowd.UI
             if (!loaded && File.Exists(_session.DesktopImgPath))
             {
                 var sel = _session.CroppedRect;
+                var scursor = _session.CursorPosition;
                 var crop = new Int32Rect(sel.X, sel.Y, sel.Width, sel.Height);
+                var cursor = new Int32Rect(scursor.X, scursor.Y, scursor.Width, scursor.Height);
 
                 var graphic = new GraphicImage(
                     _session.DesktopImgPath,
                     new Rect(0, 0, crop.Width, crop.Height),
-                    crop);
+                    crop, 
+                    cursorFilePath: _session.CursorImgPath, 
+                    cursorPosition: cursor,
+                    cursorVisible: _settings.Capture.ScreenshotWithCursor);
 
                 // add image
                 drawingCanvas.AddGraphic(graphic);

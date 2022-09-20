@@ -114,6 +114,7 @@ namespace Clowd.UI
                     TipsDisabled = settings.HideTipsPanel,
                     InitialRect = captureArea,
                     ObstructedWindowDisabled = !settings.DetectWindows,
+                    CopyCursorToClipboard = settings.ScreenshotWithCursor,
                 });
             }
 

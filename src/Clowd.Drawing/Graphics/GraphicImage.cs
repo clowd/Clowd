@@ -2,19 +2,23 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Security.RightsManagement;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
+using Clowd.PlatformUtil;
 using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
-    [GraphicDesc("Image", Skills = Skill.Angle | Skill.Crop)]
+    [GraphicDesc("Image", Skills = Skill.Angle | Skill.Crop | Skill.Cursor)]
     public class GraphicImage : GraphicRectangle
     {
         public bool Editing => !_editingAnchor.IsEmpty && _editingAnchor.Width > 0 && _editingAnchor.Height > 0;
+
+        public bool HasCursor => !String.IsNullOrWhiteSpace(_cursorFilePath) && File.Exists(_cursorFilePath);
 
         public int BitmapPixelWidth
         {
@@ -42,6 +46,39 @@ namespace Clowd.Drawing.Graphics
                 _imageObscured = null;
                 _imageSource = null;
                 Set(ref _bitmapFilePath, value);
+            }
+        }
+
+        public string CursorFilePath
+        {
+            get => _cursorFilePath;
+            set
+            {
+                _imageObscured = null;
+                _imageSource = null;
+                Set(ref _cursorFilePath, value);
+            }
+        }
+
+        public Int32Rect CursorPosition
+        {
+            get => _cursorPosition;
+            set
+            {
+                _imageObscured = null;
+                _imageSource = null;
+                Set(ref _cursorPosition, value);
+            }
+        }
+
+        public bool CursorVisible
+        {
+            get => _cursorVisible;
+            set
+            {
+                _imageObscured = null;
+                _imageSource = null;
+                Set(ref _cursorVisible, value);
             }
         }
 
@@ -91,6 +128,9 @@ namespace Clowd.Drawing.Graphics
 
         public record struct ObscuredShape(Point P0, Point P1, Point P2, Point P3);
 
+        private string _cursorFilePath;
+        private Int32Rect _cursorPosition;
+        private bool _cursorVisible;
         private string _bitmapFilePath;
         private int _scaleX = 1;
         private int _scaleY = 1;
@@ -109,17 +149,21 @@ namespace Clowd.Drawing.Graphics
             : this(imageFilePath, new Rect(new Point(0, 0), imageSize), new Int32Rect())
         { }
 
-        public GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle = 0, int flipX = 1, int flipY = 1)
-            : this(imageFilePath, displayRect, crop, angle, flipX, flipY, displayRect.Size)
+        public GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle = 0, int flipX = 1, int flipY = 1,
+            string cursorFilePath = default, Int32Rect cursorPosition = default, bool cursorVisible = false)
+            : this(imageFilePath, displayRect, crop, angle, flipX, flipY, displayRect.Size, cursorFilePath, cursorPosition, cursorVisible)
         { }
 
-        protected GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle, int flipX, int flipY, Size originalSize)
+        protected GraphicImage(string imageFilePath, Rect displayRect, Int32Rect crop, double angle, int flipX, int flipY, Size originalSize,
+            string cursorFilePath, Int32Rect cursorPosition, bool cursorVisible)
             : base(Colors.Transparent, 0, displayRect, angle, false)
         {
+            _bitmapFilePath = imageFilePath;
+            _cursorFilePath = cursorFilePath;
+            _cursorPosition = cursorPosition;
+            _cursorVisible = cursorVisible;
             _originalSize = originalSize;
-            _crop = crop; // must set crop before bitmap due to property setters
-            BitmapFilePath = imageFilePath;
-            Crop = crop;
+            _crop = crop;
             _scaleX = flipX;
             _scaleY = flipY;
         }
@@ -381,11 +425,17 @@ namespace Clowd.Drawing.Graphics
 
         private void UpdateImageCache()
         {
-            BitmapImage bi = new BitmapImage();
-            bi.BeginInit();
-            bi.UriSource = new Uri(BitmapFilePath);
-            bi.CacheOption = BitmapCacheOption.OnLoad;
-            bi.EndInit();
+            using var bifs = File.OpenRead(_bitmapFilePath);
+            var bi = BitmapFactory.FromStream(bifs);
+
+            if (HasCursor && CursorVisible)
+            {
+                using var curfs = File.OpenRead(_cursorFilePath);
+                var wcursor = BitmapFactory.FromStream(curfs);
+                var r = new Rect(_cursorPosition.X, _cursorPosition.Y, _cursorPosition.Width, _cursorPosition.Height);
+                bi.Blit(r, wcursor, new Rect(0, 0, wcursor.PixelWidth, wcursor.PixelHeight));
+            }
+
             bi.Freeze();
             _imageSource = bi;
         }

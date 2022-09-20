@@ -20,6 +20,7 @@ namespace Clowd.UI.Unmanaged
         public bool ObstructedWindowDisabled { get; set; }
         public bool TipsDisabled { get; set; }
         public ScreenRect InitialRect { get; set; }
+        public bool CopyCursorToClipboard { get; set; }
     }
 
     enum CaptureType
@@ -69,14 +70,10 @@ namespace Clowd.UI.Unmanaged
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnSessionCapture lpfnSessionCapture;
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnDisposed lpfnDisposed;
             [MarshalAs(UnmanagedType.FunctionPtr)] public fnLoaded lpfnLoaded;
-
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)]
-            public string sessionDirectory;
-
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-            public string createdUtc;
-
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)] public string sessionDirectory;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string createdUtc;
             [MarshalAs(UnmanagedType.Struct)] public RECT initialRect;
+            [MarshalAs(UnmanagedType.Bool)] public bool copyCursor;
         };
 
         [DllImport(Constants.ClowdWinNativeLib)]
@@ -118,6 +115,7 @@ namespace Clowd.UI.Unmanaged
                 lpfnDisposed = delDisposed,
                 lpfnLoaded = delLoaded,
                 initialRect = options.InitialRect,
+                copyCursor = options.CopyCursorToClipboard,
             };
 
             CaptureShow(ref args);

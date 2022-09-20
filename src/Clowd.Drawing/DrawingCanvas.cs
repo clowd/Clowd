@@ -24,6 +24,7 @@ namespace Clowd.Drawing
     [DependencyProperty<Color>("ObjectColor", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<double>("ObjectAngle", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<bool>("ObjectColorAuto", DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<bool>("ObjectCursorVisible", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<Color>("HandleColor")]
     [DependencyProperty<string>("TextFontFamilyName", DefaultValue = "Tahoma", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<FontStyle>("TextFontStyle", DefaultBindingMode = DefaultBindingMode.TwoWay)]
@@ -578,6 +579,7 @@ namespace Clowd.Drawing
             BindingOperations.ClearBinding(this, TextFontStretchProperty);
             BindingOperations.ClearBinding(this, TextFontSizeProperty);
             BindingOperations.ClearBinding(this, TextFontStyleProperty);
+            BindingOperations.ClearBinding(this, ObjectCursorVisibleProperty);
 
             if (IsPanning)
             {
@@ -642,6 +644,9 @@ namespace Clowd.Drawing
                     }
                 }
 
+                // this is less than ideal. need to hide Cursor button if it was not captured.
+                if (obj is GraphicImage img && !img.HasCursor) skills &= ~Skill.Cursor;
+
                 AddObjectBinding<GraphicBase>(Skill.Color, ObjectColorProperty, x => nameof(x.ObjectColor));
                 AddObjectBinding<GraphicBase>(Skill.Stroke, LineWidthProperty, x => nameof(x.LineWidth));
                 AddObjectBinding<GraphicRectangle>(Skill.Angle, ObjectAngleProperty, x => nameof(x.Angle));
@@ -650,6 +655,7 @@ namespace Clowd.Drawing
                 AddObjectBinding<GraphicText>(Skill.Font, TextFontStretchProperty, x => nameof(x.FontStretch));
                 AddObjectBinding<GraphicText>(Skill.Font, TextFontSizeProperty, x => nameof(x.FontSize));
                 AddObjectBinding<GraphicText>(Skill.Font, TextFontStyleProperty, x => nameof(x.FontStyle));
+                AddObjectBinding<GraphicImage>(Skill.Cursor, ObjectCursorVisibleProperty, x => nameof(x.CursorVisible));
 
                 SubjectType = "Selection";
                 SubjectName = attr?.Name ?? "Unknown";
@@ -668,6 +674,7 @@ namespace Clowd.Drawing
         {
             CommandManager.InvalidateRequerySuggested();
             StateUpdated?.Invoke(this, e);
+            SyncObjectState();
         }
 
         private void DrawingCanvas_SourceUpdated(object sender, DataTransferEventArgs e)
