@@ -61,7 +61,7 @@ DxOutputDevice::DxOutputDevice(HWND hwnd, DxDisplay display)
     #if _DEBUG
             D2D1_DEBUG_LEVEL_INFORMATION
     #else
-            D2D1_DEBUG_LEVEL_ERROR
+            D2D1_DEBUG_LEVEL_NONE
     #endif
         };
 
