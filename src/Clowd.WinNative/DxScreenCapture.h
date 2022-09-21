@@ -87,8 +87,9 @@ private:
     void FrameUpdateHoveredWindow(mc_frame_data& data);
     System::Drawing::Color GetFrameHoveredColor(mc_frame_data* data);
     void DrawCursorToDC(HDC hdc, const RECT& sel);
-    bool DrawCursor(RECT* pos, unique_ptr<NativeDib>& ptr);
-    std::unique_ptr<NativeDib> GetMergedBitmap(bool flipV, bool cropped, bool cursor);
+    std::unique_ptr<NativeDib> GetCursorBitmap(RECT& pos);
+    std::unique_ptr<NativeDib> GetCombinedBitmap(const mc_frame_data& data, bool flipV, bool cursor, const RECT& selection);
+    std::unique_ptr<NativeDib> GetCombinedBitmap(bool flipV, bool cropped, bool cursor);
     //void WriteToPointer(void* data, int dataSize);
 
 public:

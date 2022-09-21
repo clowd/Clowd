@@ -1592,61 +1592,54 @@ void DxScreenCapture::SetFrame(mc_frame_data* data)
     }
 }
 
-BOOL GetIconDimensions(__in HICON hico, __out SIZE* psiz)
-{
-    ICONINFO ii;
-    BOOL fResult = GetIconInfo(hico, &ii);
-    if (fResult) {
-        BITMAP bm;
-        fResult = GetObject(ii.hbmMask, sizeof(bm), &bm) == sizeof(bm);
-        if (fResult) {
-            psiz->cx = bm.bmWidth;
-            psiz->cy = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
-        }
-        if (ii.hbmMask)  DeleteObject(ii.hbmMask);
-        if (ii.hbmColor) DeleteObject(ii.hbmColor);
-    }
-    return fResult;
-}
-
-bool DxScreenCapture::DrawCursor(RECT* pos, unique_ptr<NativeDib>& ptr)
+std::unique_ptr<NativeDib> DxScreenCapture::GetCursorBitmap(RECT& pos)
 {
     // this does not account for Win10 scaling. Maybe we can sort something else using this
     // https://stackoverflow.com/questions/63287678/extract-cursor-size-via-winapi-windows-10
 
-    if (!_cursorShowing) return false;
+    mc_frame_data data{};
+    GetFrame(&data);
 
+    if (!data.captured) return nullptr;
+    if (!_cursorShowing) return nullptr;
     auto hIcon = CopyIcon(_cursorInfo.hCursor);
 
-    SIZE cursorSize;
-    if (GetIconDimensions(hIcon, &cursorSize)) {
-        ICONINFO ii{};
-        if (GetIconInfo(hIcon, &ii)) {
-            ptr = BitmapEx::Make24bppDib(cursorSize.cx, cursorSize.cy);
+    std::unique_ptr<NativeDib> ret = nullptr;
+
+    ICONINFO ii{};
+    if (GetIconInfo(hIcon, &ii)) {
+        SIZE psiz;
+        BITMAP bm;
+        if (GetObject(ii.hbmMask, sizeof(bm), &bm) == sizeof(bm)) {
+            psiz.cx = bm.bmWidth;
+            psiz.cy = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
 
             // probably need to subtract _vx and _vy
             auto iconX = _cursorInfo.ptScreenPos.x - ii.xHotspot;
             auto iconY = _cursorInfo.ptScreenPos.y - ii.yHotspot;
-            BitBlt(ptr->GetBitmapDC(), 0, 0, cursorSize.cx, cursorSize.cy, native->screenshot->GetBitmapDC(), iconX, iconY, SRCCOPY);
-            DrawIconEx(ptr->GetBitmapDC(), 0, 0, hIcon, 0, 0, 0, 0, DI_NORMAL | DI_DEFAULTSIZE);
 
-            pos->left = iconX;
-            pos->top = iconY;
-            pos->right = iconX + cursorSize.cx;
-            pos->bottom = iconY + cursorSize.cy;
+            pos.left = iconX;
+            pos.top = iconY;
+            pos.right = iconX + psiz.cx;
+            pos.bottom = iconY + psiz.cy;
 
-            if (ii.hbmMask)  DeleteObject(ii.hbmMask);
-            if (ii.hbmColor) DeleteObject(ii.hbmColor);
+            ret = GetCombinedBitmap(data, true, true, pos);
         }
+
+        if (ii.hbmMask)  DeleteObject(ii.hbmMask);
+        if (ii.hbmColor) DeleteObject(ii.hbmColor);
     }
 
     DestroyIcon(hIcon);
+    return ret;
 }
 
 void DxScreenCapture::DrawCursorToDC(HDC hdc, const RECT& sel)
 {
-    if (!_cursorShowing) return;
+    // this does not account for Win10 scaling. Maybe we can sort something else using this
+    // https://stackoverflow.com/questions/63287678/extract-cursor-size-via-winapi-windows-10
 
+    if (!_cursorShowing) return;
     auto hIcon = CopyIcon(_cursorInfo.hCursor);
 
     ICONINFO iinfo{};
@@ -1662,7 +1655,29 @@ void DxScreenCapture::DrawCursorToDC(HDC hdc, const RECT& sel)
     DestroyIcon(hIcon);
 }
 
-std::unique_ptr<NativeDib> DxScreenCapture::GetMergedBitmap(bool flipV, bool crop, bool cursor)
+std::unique_ptr<NativeDib> DxScreenCapture::GetCombinedBitmap(const mc_frame_data& data, bool flipV, bool cursor, const RECT& sel)
+{
+    if (!data.captured) return nullptr;
+
+    int w = RECT_WIDTH(sel);
+    int h = RECT_HEIGHT(sel);
+    if (flipV) h *= -1; // <- note, height negative to flip the bitmap vertically
+
+    unique_ptr<NativeDib> cropped = BitmapEx::Make24bppDib(w, h);
+
+    BitBlt(cropped->GetBitmapDC(), 0, 0, w, abs(h), native->screenshot->GetBitmapDC(), sel.left, sel.top, SRCCOPY);
+
+    if (data.windowSelection.window != nullptr && data.windowSelection.window->captured)
+    {
+        const RECT& rcWin = data.windowSelection.window->rcWorkspace;
+        data.windowSelection.window->BitBltImage(cropped->GetBitmapDC(), rcWin.left - sel.left, rcWin.top - sel.top);
+    }
+
+    if (cursor) DrawCursorToDC(cropped->GetBitmapDC(), sel);
+    return cropped;
+}
+
+std::unique_ptr<NativeDib> DxScreenCapture::GetCombinedBitmap(bool flipV, bool crop, bool cursor)
 {
     mc_frame_data data{};
     GetFrame(&data);
@@ -1671,45 +1686,12 @@ std::unique_ptr<NativeDib> DxScreenCapture::GetMergedBitmap(bool flipV, bool cro
 
     if (crop)
     {
-        // produces a bitmap of only the user-cropped region, composed with a selected window on top (if exists)
-        const RECT& sel = data.selection;
-        int w = RECT_WIDTH(sel);
-        int h = RECT_HEIGHT(sel);
-        if (flipV) h *= -1; // <- note, height negative to flip the bitmap vertically
-
-        unique_ptr<NativeDib> cropped = BitmapEx::Make24bppDib(w, h);
-        if (data.windowSelection.window != nullptr && data.windowSelection.window->captured)
-        {
-            const RECT& rcWin = data.windowSelection.window->rcWorkspace;
-            data.windowSelection.window->BitBltImage(cropped->GetBitmapDC(), rcWin.left - sel.left, rcWin.top - sel.top);
-        }
-        else
-        {
-            BitBlt(cropped->GetBitmapDC(), 0, 0, w, abs(h), native->screenshot->GetBitmapDC(), sel.left, sel.top, SRCCOPY);
-        }
-
-        if (cursor) DrawCursorToDC(cropped->GetBitmapDC(), sel);
-        return cropped;
+        return GetCombinedBitmap(data, flipV, cursor, data.selection);
     }
     else
     {
-        // produces a bitmap of the entire desktop, composed with a selected window on top (if exists)
         auto sel = native->screens->WorkspaceBounds();
-        int w = RECT_WIDTH(sel);
-        int h = RECT_HEIGHT(sel);
-        if (flipV) h *= -1; // <- note, height negative to flip the bitmap vertically
-
-        unique_ptr<NativeDib> merged = BitmapEx::Make24bppDib(w, h);
-        BitBlt(merged->GetBitmapDC(), 0, 0, w, abs(h), native->screenshot->GetBitmapDC(), 0, 0, SRCCOPY);
-
-        if (data.windowSelection.window != nullptr && data.windowSelection.window->captured)
-        {
-            const RECT& rcWin = data.windowSelection.window->rcWorkspace;
-            data.windowSelection.window->BitBltImage(merged->GetBitmapDC(), rcWin.left, rcWin.top);
-        }
-
-        if (cursor) DrawCursorToDC(merged->GetBitmapDC(), sel);
-        return merged;
+        return GetCombinedBitmap(data, flipV, cursor, sel);
     }
 }
 
@@ -1973,7 +1955,7 @@ void DxScreenCapture::WriteToClipboard()
     HGLOBAL hGlobal;
     void* pixels;
 
-    auto cropped = GetMergedBitmap(false, true, true);
+    auto cropped = GetCombinedBitmap(false, true, true);
     if (cropped == nullptr) return;
 
     cropped->GetDetails(&dib);
@@ -2065,21 +2047,21 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
         fs::create_directory(stdDir);
 
     auto ssPath = sessionDir + L"\\desktop.png";
-    auto merged = GetMergedBitmap(true, false, false); // do not render cursor (as this can be toggled on/off in editor)
+    auto merged = GetCombinedBitmap(true, false, false); // do not render cursor (as this can be toggled on/off in editor)
     merged->WriteToFilePNG(ssPath);
 
     // cursor
-    unique_ptr<NativeDib> cursorImg;
     RECT cursorPos;
-    wstring cursorPath = L"";
-    if (DrawCursor(&cursorPos, cursorImg)) {
-        cursorPath = sessionDir + L"\\cursor.png";
+    unique_ptr<NativeDib> cursorImg = GetCursorBitmap(cursorPos);
+    wstring cursorPath = sessionDir + L"\\cursor.png";
+
+    if (cursorImg) {
         cursorImg->WriteToFilePNG(cursorPath);
     }
 
     // cropped image
     auto croppedPath = sessionDir + L"\\cropped.png";
-    auto cropped = GetMergedBitmap(true, true, true);
+    auto cropped = GetCombinedBitmap(true, true, true);
     cropped->WriteToFilePNG(croppedPath);
 
     // write out window info
@@ -2126,7 +2108,7 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
     root["DesktopImgPath"] = converter.to_bytes(ssPath);
     root["PreviewImgPath"] = converter.to_bytes(croppedPath);
 
-    if (!cursorPath.empty()) {
+    if (cursorImg) {
         root["CursorImgPath"] = converter.to_bytes(cursorPath);
         root["CursorPosition"] = rect2json(cursorPos);
     }
