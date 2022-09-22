@@ -1610,19 +1610,16 @@ std::unique_ptr<NativeDib> DxScreenCapture::GetCursorBitmap(RECT& pos)
     if (GetIconInfo(hIcon, &ii)) {
         SIZE psiz;
         BITMAP bm;
+
         if (GetObject(ii.hbmMask, sizeof(bm), &bm) == sizeof(bm)) {
             psiz.cx = bm.bmWidth;
             psiz.cy = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
-
-            // probably need to subtract _vx and _vy
-            auto iconX = _cursorInfo.ptScreenPos.x - ii.xHotspot;
-            auto iconY = _cursorInfo.ptScreenPos.y - ii.yHotspot;
-
+            auto iconX = _cursorInfo.ptScreenPos.x - ii.xHotspot - _vx;
+            auto iconY = _cursorInfo.ptScreenPos.y - ii.yHotspot - _vy;
             pos.left = iconX;
             pos.top = iconY;
             pos.right = iconX + psiz.cx;
             pos.bottom = iconY + psiz.cy;
-
             ret = GetCombinedBitmap(data, true, true, pos);
         }
 
@@ -1644,9 +1641,8 @@ void DxScreenCapture::DrawCursorToDC(HDC hdc, const RECT& sel)
 
     ICONINFO iinfo{};
     if (GetIconInfo(hIcon, &iinfo)) {
-        // probably need to subtract _vx and _vy
-        auto iconX = _cursorInfo.ptScreenPos.x - iinfo.xHotspot - sel.left;
-        auto iconY = _cursorInfo.ptScreenPos.y - iinfo.yHotspot - sel.top;
+        auto iconX = _cursorInfo.ptScreenPos.x - iinfo.xHotspot - sel.left - _vx;
+        auto iconY = _cursorInfo.ptScreenPos.y - iinfo.yHotspot - sel.top - _vy;
         DrawIconEx(hdc, iconX, iconY, hIcon, 0, 0, 0, 0, DI_NORMAL | DI_DEFAULTSIZE);
         DeleteObject(iinfo.hbmColor);
         DeleteObject(iinfo.hbmMask);
