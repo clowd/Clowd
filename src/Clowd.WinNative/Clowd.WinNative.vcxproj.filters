@@ -117,6 +117,9 @@
     <ClInclude Include="outline-text\TextOnlyOutlineStrategy.h">
       <Filter>Header Files\OutlineText</Filter>
     </ClInclude>
+    <ClInclude Include="CursorInfoEx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -205,6 +208,9 @@
     </ClCompile>
     <ClCompile Include="outline-text\TextOnlyOutlineStrategy.cpp">
       <Filter>Source Files\OutlineText</Filter>
+    </ClCompile>
+    <ClCompile Include="CursorInfoEx.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

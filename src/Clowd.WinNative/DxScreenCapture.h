@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "NativeBitmap.h"
 #include "Screens.h"
+#include "CursorInfoEx.h"
 #include "WindowWalker.h"
 #include "DxOutputDevice.h"
 #include "exports.h"
@@ -35,6 +36,7 @@ struct mc_window_native
     std::atomic<int> disposed;
     mc_frame_data frame;
     std::unique_ptr<NativeDib> screenshot;
+    std::unique_ptr<CursorData> cursor;
     std::vector<DxDisplay> monitors;
     std::unique_ptr<Screens> screens;
     std::unique_ptr<WindowWalker> walker;
@@ -69,9 +71,6 @@ private:
     std::vector<std::exception> errors;
     HWND primaryWindow;
     mc_window_native* native;
-    CURSORINFO _cursorInfo;
-    POINT _cursorPt;
-    BOOL _cursorShowing;
 
     static unsigned int __stdcall MessagePumpProc(void* lpParam);
     void RunMessagePump();
@@ -86,7 +85,6 @@ private:
     void FrameSetCursor(mc_frame_data& data);
     void FrameUpdateHoveredWindow(mc_frame_data& data);
     System::Drawing::Color GetFrameHoveredColor(mc_frame_data* data);
-    void DrawCursorToDC(HDC hdc, const RECT& sel);
     std::unique_ptr<NativeDib> GetCursorBitmap(RECT& pos);
     std::unique_ptr<NativeDib> GetCombinedBitmap(const mc_frame_data& data, bool flipV, bool cursor, const RECT& selection);
     std::unique_ptr<NativeDib> GetCombinedBitmap(bool flipV, bool cropped, bool cursor);
