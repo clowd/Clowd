@@ -82,6 +82,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="BorderWindow.h" />
+    <ClInclude Include="CursorInfoEx.h" />
     <ClInclude Include="DxOutputDevice.h" />
     <ClInclude Include="DxScreenCapture.h" />
     <ClInclude Include="exports.h" />
@@ -116,6 +117,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BorderWindow.cpp" />
+    <ClCompile Include="CursorInfoEx.cpp" />
     <ClCompile Include="DxOutputDevice.cpp" />
     <ClCompile Include="DxScreenCapture.cpp" />
     <ClCompile Include="exports.cpp" />

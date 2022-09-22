@@ -7,6 +7,8 @@
 #ifndef PCH_H
 #define PCH_H
 
+#define OEMRESOURCE
+
 #pragma comment(lib, "user32.lib") 
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -33,6 +35,8 @@
 #include <locale>
 #include <codecvt>
 #include <mutex>
+#include <unordered_set>
+#include <map>
 
 #include <time.h>
 #include <windows.h>

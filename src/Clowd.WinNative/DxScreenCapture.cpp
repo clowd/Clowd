@@ -234,22 +234,13 @@ void DxScreenCapture::RunMessagePump()
 
         POINT pt;
         GetCursorPos(&pt);
-
-        // copy current cursor data
-        _cursorShowing = false;
-        _cursorPt = pt;
-        CURSORINFO cinfo{};
-        cinfo.cbSize = sizeof(CURSORINFO);
-        GetCursorInfo(&cinfo);
-        if (cinfo.flags == CURSOR_SHOWING) {
-            _cursorInfo = cinfo;
-            _cursorShowing = true;
-        }
+        auto cursorInfo = make_unique<CursorInfoEx>();
 
         // misc stuff to create
         native->disposed = 0;
         native->screens = make_unique<Screens>();
         native->walker = make_unique<WindowWalker>(native->screens.get());
+        native->cursor = cursorInfo->SnapshotCurrent();
         native->frame.zoom = 1;
         native->frame.mouse = native->screens->ToWorkspacePt(pt);
         native->frame.tips = _options.tipsDisabled ? false : true;
@@ -1594,61 +1585,15 @@ void DxScreenCapture::SetFrame(mc_frame_data* data)
 
 std::unique_ptr<NativeDib> DxScreenCapture::GetCursorBitmap(RECT& pos)
 {
-    // this does not account for Win10 scaling. Maybe we can sort something else using this
-    // https://stackoverflow.com/questions/63287678/extract-cursor-size-via-winapi-windows-10
-
-    mc_frame_data data{};
-    GetFrame(&data);
-
-    if (!data.captured) return nullptr;
-    if (!_cursorShowing) return nullptr;
-    auto hIcon = CopyIcon(_cursorInfo.hCursor);
-
-    std::unique_ptr<NativeDib> ret = nullptr;
-
-    ICONINFO ii{};
-    if (GetIconInfo(hIcon, &ii)) {
-        SIZE psiz;
-        BITMAP bm;
-
-        if (GetObject(ii.hbmMask, sizeof(bm), &bm) == sizeof(bm)) {
-            psiz.cx = bm.bmWidth;
-            psiz.cy = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
-            auto iconX = _cursorInfo.ptScreenPos.x - ii.xHotspot - _vx;
-            auto iconY = _cursorInfo.ptScreenPos.y - ii.yHotspot - _vy;
-            pos.left = iconX;
-            pos.top = iconY;
-            pos.right = iconX + psiz.cx;
-            pos.bottom = iconY + psiz.cy;
-            ret = GetCombinedBitmap(data, true, true, pos);
-        }
-
-        if (ii.hbmMask)  DeleteObject(ii.hbmMask);
-        if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    if (native->cursor) {
+        mc_frame_data data{};
+        GetFrame(&data);
+        pos = native->cursor->Location;
+        native->screens->TranslateToWorkspace(pos);
+        return GetCombinedBitmap(data, true, true, pos);
     }
 
-    DestroyIcon(hIcon);
-    return ret;
-}
-
-void DxScreenCapture::DrawCursorToDC(HDC hdc, const RECT& sel)
-{
-    // this does not account for Win10 scaling. Maybe we can sort something else using this
-    // https://stackoverflow.com/questions/63287678/extract-cursor-size-via-winapi-windows-10
-
-    if (!_cursorShowing) return;
-    auto hIcon = CopyIcon(_cursorInfo.hCursor);
-
-    ICONINFO iinfo{};
-    if (GetIconInfo(hIcon, &iinfo)) {
-        auto iconX = _cursorInfo.ptScreenPos.x - iinfo.xHotspot - sel.left - _vx;
-        auto iconY = _cursorInfo.ptScreenPos.y - iinfo.yHotspot - sel.top - _vy;
-        DrawIconEx(hdc, iconX, iconY, hIcon, 0, 0, 0, 0, DI_NORMAL | DI_DEFAULTSIZE);
-        DeleteObject(iinfo.hbmColor);
-        DeleteObject(iinfo.hbmMask);
-    }
-
-    DestroyIcon(hIcon);
+    return nullptr;
 }
 
 std::unique_ptr<NativeDib> DxScreenCapture::GetCombinedBitmap(const mc_frame_data& data, bool flipV, bool cursor, const RECT& sel)
@@ -1669,7 +1614,12 @@ std::unique_ptr<NativeDib> DxScreenCapture::GetCombinedBitmap(const mc_frame_dat
         data.windowSelection.window->BitBltImage(cropped->GetBitmapDC(), rcWin.left - sel.left, rcWin.top - sel.top);
     }
 
-    if (cursor) DrawCursorToDC(cropped->GetBitmapDC(), sel);
+    if (cursor && native->cursor) {
+        auto iconX = native->cursor->Location.left - sel.left - _vx;
+        auto iconY = native->cursor->Location.top - sel.top - _vy;
+        native->cursor->DrawCursor(cropped->GetBitmapDC(), iconX, iconY);
+    }
+
     return cropped;
 }
 
