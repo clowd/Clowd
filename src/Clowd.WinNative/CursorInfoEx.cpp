@@ -48,14 +48,14 @@ SIZE GetCursorSizeForMonitor(const POINT& pt)
         dpiX = dpiY = 96;
     }
 
-    double dpiZoom = dpiX / 96.0;
+    auto cx = GetSystemMetricsForDpi(SM_CXCURSOR, dpiX) / (double)GetSystemMetricsForDpi(SM_CXCURSOR, 96);
+    auto cy = GetSystemMetricsForDpi(SM_CYCURSOR, dpiY) / (double)GetSystemMetricsForDpi(SM_CYCURSOR, 96);
 
     // try to get the cursor size from the registry
     if (GetCursorAccessibilityMultiplier() != 1) {
         DWORD data, type, size = sizeof(DWORD);
         if (ERROR_SUCCESS == RegGetValue(HKEY_CURRENT_USER, CURSORS_SUBKEY, CURSORBASESIZE, RRF_RT_REG_DWORD, &type, &data, &size)) {
-            auto s = (LONG)round(data * dpiZoom);
-            return { s, s };
+            return { (LONG)round(data*cx), (LONG)round(data*cy) };
         }
     }
 
@@ -104,14 +104,21 @@ unique_ptr<CursorData> CursorInfoEx::SnapshotCurrent()
         // get the path to the .cur file so we can load a custom file
         wstring cursorPath = GetCursorFilePath(search->second.regKeyName);
         if (!cursorPath.empty()) {
-            // https://marc.durdin.net/2016/05/loadiconwithscaledown-and-loadiconmetric-fail-when-loading-ico-for-the-sm_cxiconsm_cyicon-size/
-            //if (S_OK != LoadIconWithScaleDown(0, cursorPath.c_str(), cw, ch, &hico))
-
             HICON hico = (HICON)LoadImage(0, cursorPath.c_str(), IMAGE_CURSOR, sz.cx, sz.cy, LR_LOADFROMFILE);
             if (hico)
             {
                 if (GetIconInfo(hico, &ii))
                 {
+                    // this function can fail, but if it suceeds it can produce better bitmaps because in the absence of an exact match
+                    // it will grab the next biggest size and scale down, whereas LoadImage will grab the smaller size and upscale
+                    // https://marc.durdin.net/2016/05/loadiconwithscaledown-and-loadiconmetric-fail-when-loading-ico-for-the-sm_cxiconsm_cyicon-size/
+                    HICON hScaled;
+                    if (S_OK == LoadIconWithScaleDown(0, cursorPath.c_str(), sz.cx, sz.cy, &hScaled))
+                    {
+                        DestroyIcon(hico);
+                        hico = hScaled;
+                    }
+
                     auto x = ci.ptScreenPos.x - ii.xHotspot;
                     auto y = ci.ptScreenPos.y - ii.yHotspot;
                     RECT lc{ x, y, x + sz.cx, y + sz.cy };

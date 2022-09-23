@@ -18,6 +18,7 @@
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "msimg32.lib")
 #pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "comctl32.lib")
 
 #include <string>
 #include <iostream>
@@ -45,6 +46,7 @@
 #include <gdiplus.h>
 #include <shellscalingapi.h>
 #include <comdef.h>
+#include <commctrl.h>
 
 #define NS_TO_MS_DIV (1000000)
 #define DEBUGBOX_SIZE (600)
