@@ -22,7 +22,7 @@ namespace Clowd.Upload
         public CatBoxExpiry ExpireUploads
         {
             get => _expireUploads;
-            set => _expireUploads = value;
+            set => Set(ref _expireUploads, value);
         }
 
         private CatBoxExpiry _expireUploads;
