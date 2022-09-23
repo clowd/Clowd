@@ -12,6 +12,7 @@
     <EmbeddedResource Include="Embed\backblaze.png" />
     <EmbeddedResource Include="Embed\languages.yml" />
     <EmbeddedResource Include="Embed\mime-db.json" />
+    <EmbeddedResource Include="Embed\picsur.png" />
     <EmbeddedResource Include="Embed\vgyme.png" />
     <EmbeddedResource Include="Embed\catbox.png" />
     <EmbeddedResource Include="Embed\hastebin.png" />
