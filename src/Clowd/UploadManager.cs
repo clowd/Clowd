@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -42,7 +43,7 @@ namespace Clowd
                 });
             };
 
-            var fileName = RandomEx.GetCryptoUniqueString(10) + ".png";
+            var fileName = GetPatternFileName(Path.GetExtension(info.Name));
             var uploadTask = provider.UploadAsync(info.FullName, handler, fileName, view.CancelToken);
             var result = await HandleUploadResult(view, uploadTask);
 
@@ -55,26 +56,20 @@ namespace Clowd
             return result;
         }
         
-        public static async Task<UploadResult> UploadImage(BitmapSource image, string imgType)
+        public static async Task<UploadResult> UploadImage(BitmapSource image, string imgDisplayName)
         {
             var provider = await GetUploadProvider(SupportedUploadType.Image);
             if (provider == null)
                 return null;
+
+            Stream ms = image.ToStream(ImageFormat.Png);
+            var fileName = GetPatternFileName(".png");
         
-            var ms = new MemoryStream();
-            var enc = new PngBitmapEncoder();
-            enc.Frames.Add(BitmapFrame.Create(image));
-            enc.Save(ms);
-        
-            ms.Position = 0;
-        
-            var view = _view.CreateTask(imgType);
+            var view = _view.CreateTask(imgDisplayName);
             view.SetStatus("Uploading...");
             view.Show();
         
             UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, ms.Length, true);
-        
-            var fileName = RandomEx.GetCryptoUniqueString(10) + ".png";
             var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
             return await HandleUploadResult(view, uploadTask);
         }
@@ -98,10 +93,10 @@ namespace Clowd
             return await HandleUploadResult(view, uploadTask);
         }
 
-        public static async Task<UploadResult> UploadFile(string filePath, string fileNameOverride = null)
+        public static async Task<UploadResult> UploadFile(string filePath)
         {
             var fileInfo = new FileInfo(filePath);
-            var fileName = fileNameOverride ?? Path.GetFileName(filePath);
+            var fileName = Path.GetFileName(filePath);
             var extension = Path.GetExtension(filePath);
             var category = _mime.GetCategoryFromExtension(extension);
 
@@ -121,10 +116,8 @@ namespace Clowd
             view.SetStatus("Uploading...");
             view.Show();
 
-            var uniqueName = RandomEx.GetCryptoUniqueString(10) + "_" + fileName;
             UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, fileInfo.Length, true);
-
-            var uploadTask = provider.UploadAsync(filePath, handler, uniqueName, view.CancelToken);
+            var uploadTask = provider.UploadAsync(filePath, handler, fileName, view.CancelToken);
             return await HandleUploadResult(view, uploadTask);
         }
 
@@ -296,6 +289,14 @@ namespace Clowd
             }
 
             return null;
+        }
+
+        private static string GetPatternFileName(string extension)
+        {
+            var filePattern = SettingsRoot.Current.Capture.FilenamePattern;
+            filePattern ??= "yyyy-MM-dd HH-mm-ss";
+            filePattern = Path.GetFileNameWithoutExtension(filePattern);
+            return DateTime.Now.ToString(filePattern) + extension;
         }
     }
 }
