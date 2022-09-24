@@ -444,7 +444,7 @@ namespace Clowd.UI
         private string SaveImageToSessionDir(BitmapSource src)
         {
             var path = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
-            src.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            src.Save(path);
             return path;
         }
 

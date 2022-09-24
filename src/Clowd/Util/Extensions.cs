@@ -208,33 +208,14 @@ namespace Clowd.Util
             bi.EndInit();
         }
 
-        public static void Save(this BitmapSource source, string filePath, ImageFormat format)
-        {
-            using (var fs = File.Create(filePath))
-            {
-                source.Save(fs, format);
-            }
-        }
-
         public static void Save(this BitmapSource source, Stream stream, ImageFormat format)
         {
-            BitmapEncoder encoder;
+            ImageEncode.WriteBitmapToStream(BitmapFrame.Create(source), stream, format);
+        }
 
-            if (format.Equals(ImageFormat.Bmp))
-                encoder = new BmpBitmapEncoder();
-            else if (format.Equals(ImageFormat.Gif))
-                encoder = new GifBitmapEncoder();
-            else if (format.Equals(ImageFormat.Jpeg))
-                encoder = new JpegBitmapEncoder();
-            else if (format.Equals(ImageFormat.Tiff))
-                encoder = new TiffBitmapEncoder();
-            else if (format.Equals(ImageFormat.Png))
-                encoder = new PngBitmapEncoder();
-            else
-                throw new ArgumentOutOfRangeException(nameof(format));
-
-            encoder.Frames.Add(BitmapFrame.Create(source));
-            encoder.Save(stream);
+        public static void Save(this BitmapSource source, string filePath)
+        {
+            ImageEncode.WriteBitmapToFile(BitmapFrame.Create(source), filePath);
         }
 
         public static MemoryStream ToStream(this BitmapSource source, ImageFormat format)
