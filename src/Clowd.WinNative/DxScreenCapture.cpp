@@ -1901,7 +1901,7 @@ void DxScreenCapture::WriteToClipboard()
     HGLOBAL hGlobal;
     void* pixels;
 
-    auto cropped = GetCombinedBitmap(false, true, true);
+    auto cropped = GetCombinedBitmap(false, true, _options.copyCursor);
     if (cropped == nullptr) return;
 
     cropped->GetDetails(&dib);
@@ -2007,7 +2007,7 @@ System::String DxScreenCapture::SaveSession(System::String sessionDirectory, Sys
 
     // cropped image
     auto croppedPath = sessionDir + L"\\cropped.png";
-    auto cropped = GetCombinedBitmap(true, true, true);
+    auto cropped = GetCombinedBitmap(true, true, _options.copyCursor);
     cropped->WriteToFilePNG(croppedPath);
 
     // write out window info
