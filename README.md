@@ -1,4 +1,4 @@
-[![Discord](https://img.shields.io/discord/767856501477343282?style=flat-square&color=purple)](https://discord.gg/CjrCrNzd3F)
+[![Discord](https://img.shields.io/discord/767856501477343282?style=flat-square&color=purple)](https://discord.gg/M6he8ZPAAJ)
 [![Build](https://img.shields.io/github/workflow/status/clowd/Clowd/Build%20Clowd/master?style=flat-square)](https://github.com/clowd/Clowd/actions)
 
 ![73130051](https://user-images.githubusercontent.com/1287295/177045040-15601340-0380-418e-975a-cc1d0dd06ebc.png)
@@ -14,7 +14,7 @@ The latest "stable" release can always be downloaded from here. If you are looki
 
 I will respond to bug reports or questions in GitHub issues. Also feel free to bug me (@caesay) in the Clowd Discord server:
 
-[![discordimg2](https://user-images.githubusercontent.com/1287295/150318745-cbfcf5d0-3697-4bef-ac1a-b0d751f53b48.png)](https://discord.gg/CjrCrNzd3F)
+[![discordimg2](https://user-images.githubusercontent.com/1287295/150318745-cbfcf5d0-3697-4bef-ac1a-b0d751f53b48.png)](https://discord.gg/M6he8ZPAAJ)
 
 ----
 
