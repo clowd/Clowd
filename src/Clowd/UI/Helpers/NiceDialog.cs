@@ -231,7 +231,9 @@ namespace Clowd.UI.Helpers
 
         public static async Task<string> ShowSaveImageDialog(FrameworkElement parent, BitmapFrame frame, string directory, string filePattern)
         {
-            directory ??= Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            if (String.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                directory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+
             filePattern ??= "yyyy-MM-dd HH-mm-ss";
 
             // if the pattern has an extension, we will use it for the default below.
