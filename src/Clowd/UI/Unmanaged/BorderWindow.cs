@@ -8,13 +8,13 @@ namespace Clowd.UI.Unmanaged
 {
     public static unsafe class BorderWindow
     {
-        [DllImport(Constants.ClowdWinNativeLib)]
+        [DllImport(Constants.ClowdNativeLibName)]
         private static extern void BorderShow([MarshalAs(UnmanagedType.U1)] byte r, [MarshalAs(UnmanagedType.U1)] byte g, [MarshalAs(UnmanagedType.U1)] byte b, RECT* decoratedArea);
 
-        [DllImport(Constants.ClowdWinNativeLib)]
+        [DllImport(Constants.ClowdNativeLibName)]
         private static extern void BorderSetOverlayText([MarshalAs(UnmanagedType.LPWStr)] string overlayText);
 
-        [DllImport(Constants.ClowdWinNativeLib)]
+        [DllImport(Constants.ClowdNativeLibName)]
         private static extern void BorderClose();
 
         public static void Show(Color accentColor, ScreenRect area)

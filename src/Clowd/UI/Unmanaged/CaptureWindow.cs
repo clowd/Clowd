@@ -76,10 +76,10 @@ namespace Clowd.UI.Unmanaged
             [MarshalAs(UnmanagedType.Bool)] public bool copyCursor;
         };
 
-        [DllImport(Constants.ClowdWinNativeLib)]
+        [DllImport(Constants.ClowdNativeLibName)]
         private static extern void CaptureShow(ref captureArgs args);
 
-        [DllImport(Constants.ClowdWinNativeLib)]
+        [DllImport(Constants.ClowdNativeLibName)]
         private static extern void CaptureClose();
 
         private static fnColorCapture delColorCapture;

@@ -11,7 +11,7 @@ namespace Clowd
         public const string ClowdExeName = "Clowd.exe";
         public const string ClowdNamedPipe = "ClowdNamedPipe:02c1544e-7d60-435a-bce8-f61496bdbabe";
         public const string ClowdMutex = "ClowdMutex:02c1544e-7d60-435a-bce8-f61496bdbabe";
-        public const string ClowdWinNativeLib = "Clowd.WinNative";
+        public const string ClowdNativeLibName = "Clowd.Native";
         public const string ShortcutName = "Clowd.lnk";
         public const string PublishingCompany = "Caelan Sayler";
         public const string ContextMenuShellName = "Upload with Clowd";
