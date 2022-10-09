@@ -7,10 +7,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
-    <PackageReference Include="Vanara.PInvoke.DwmApi" Version="3.4.6" />
-    <PackageReference Include="Vanara.PInvoke.User32" Version="3.4.6" />
-    <PackageReference Include="Vanara.PInvoke.Shell32" Version="3.4.6" />
-    <PackageReference Include="Vanara.PInvoke.SHCore" Version="3.4.6" />
+    <PackageReference Include="Vanara.PInvoke.DwmApi" Version="3.4.9" />
+    <PackageReference Include="Vanara.PInvoke.User32" Version="3.4.9" />
+    <PackageReference Include="Vanara.PInvoke.Shell32" Version="3.4.9" />
+    <PackageReference Include="Vanara.PInvoke.SHCore" Version="3.4.9" />
   </ItemGroup>
 
 </Project>

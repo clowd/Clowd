@@ -20,6 +20,6 @@
   <ItemGroup>
     <PackageReference Include="B2Net" Version="0.7.5" />
     <PackageReference Include="WindowsAzure.Storage" Version="9.3.3" />
-    <PackageReference Include="YamlDotNet" Version="12.0.0" />
+    <PackageReference Include="YamlDotNet" Version="12.0.2" />
   </ItemGroup>
 </Project>

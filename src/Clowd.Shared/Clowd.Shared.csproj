@@ -7,10 +7,10 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="RT.Serialization" Version="2.0.1713" />
-    <PackageReference Include="RT.Serialization.Binary" Version="2.0.1713" />
-    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1713" />
-    <PackageReference Include="RT.Util.Core" Version="2.0.1713" />
+    <PackageReference Include="RT.Serialization" Version="2.0.1719" />
+    <PackageReference Include="RT.Serialization.Binary" Version="2.0.1719" />
+    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1719" />
+    <PackageReference Include="RT.Util.Core" Version="2.0.1719" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.9" />
     <PackageReference Include="DependencyPropertyGenerator" Version="1.0.3" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
