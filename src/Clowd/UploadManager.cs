@@ -22,9 +22,9 @@ namespace Clowd
         private static ITasksView _view => PageManager.Current.Tasks;
         private static readonly IMimeProvider _mime = new MimeProvider();
 
-        public static async Task<UploadResult> UploadSession(SessionInfo session)
+        public static async Task<UploadResult> UploadSession(SessionInfo session, IUploadProvider provider = null)
         {
-            var provider = await GetUploadProvider(SupportedUploadType.Image);
+            provider ??= await GetUploadProvider(SupportedUploadType.Image);
             if (provider == null)
                 return null;
 
@@ -55,7 +55,7 @@ namespace Clowd
 
             return result;
         }
-        
+
         public static async Task<UploadResult> UploadImage(BitmapSource image, string imgDisplayName)
         {
             var provider = await GetUploadProvider(SupportedUploadType.Image);
@@ -64,11 +64,11 @@ namespace Clowd
 
             Stream ms = image.ToStream(ImageFormat.Png);
             var fileName = GetPatternFileName(".png");
-        
+
             var view = _view.CreateTask(imgDisplayName);
             view.SetStatus("Uploading...");
             view.Show();
-        
+
             UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, ms.Length, true);
             var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
             return await HandleUploadResult(view, uploadTask);
@@ -253,7 +253,7 @@ namespace Clowd
 
                 return null;
             }
-            
+
             var dialog = new TaskDialogPage()
             {
                 Caption = $"{type} Upload",

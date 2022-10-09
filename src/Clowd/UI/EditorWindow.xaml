@@ -338,11 +338,13 @@
                 Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Cursor}" />
 
             <controls:ToolButton
+                x:Name="btnUpload"
                 Padding="5"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{StaticResource Commands.Upload}"
                 IconPath="{StaticResource IconClowd}"
-                ToolTip="Upload" />
+                MouseRightButtonDown="btnUpload_RightMouseDown"
+                ToolTip="Upload&#10;Right-click to choose upload destination." />
 
             <controls:ToolButton
                 Padding="5"
@@ -394,7 +396,7 @@
                     CommandParameter="None"
                     IconPath="{StaticResource IconToolNone}"
                     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=None}"
-                    ToolTip="Pan Tool (D)&#10;&#10;Can also hold SHIFT to enter Pan Mode." />
+                    ToolTip="Pan Tool (D)&#10;Can also hold SHIFT to enter Pan Mode." />
 
                 <controls:ToolButton
                     Command="{StaticResource Commands.SelectTool}"
