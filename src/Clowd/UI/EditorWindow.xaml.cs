@@ -11,6 +11,7 @@ using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
+using Clowd.Clipboard;
 using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
 using System.ComponentModel;
@@ -23,8 +24,10 @@ namespace Clowd.UI
         private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
         private SettingsRoot _settings = SettingsRoot.Current;
         private SessionInfo _session;
-        private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
         private int _nudgeRepeatCount;
+
+        private const string CANVAS_CLIPBOARD_FORMAT_GUID = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
+        private readonly static ClipboardFormat CANVAS_CLIPBOARD_FORMAT = ClipboardFormat.CreateCustomFormat(CANVAS_CLIPBOARD_FORMAT_GUID);
 
         public EditorWindow(SessionInfo info)
         {
@@ -258,8 +261,8 @@ namespace Clowd.UI
                 var graphic = new GraphicImage(
                     _session.DesktopImgPath,
                     new Rect(0, 0, crop.Width, crop.Height),
-                    crop, 
-                    cursorFilePath: _session.CursorImgPath, 
+                    crop,
+                    cursorFilePath: _session.CursorImgPath,
                     cursorPosition: cursor,
                     cursorVisible: _settings.Capture.ScreenshotWithCursor);
 
@@ -334,13 +337,13 @@ namespace Clowd.UI
             var bitmap = drawingCanvas.DrawGraphicsToBitmap();
             UpdatePreview(bitmap);
 
-            var ms = new MemoryStream(drawingCanvas.SerializeGraphics(true));
+            var graphics = drawingCanvas.SerializeGraphics(drawingCanvas.SelectedCount > 0);
 
-            var data = new ClipboardDataObject();
-            data.SetImage(bitmap);
-            data.SetDataFormat(CANVAS_CLIPBOARD_FORMAT, ms);
-
-            await data.SetClipboardData(this);
+            using (var ch = await ClipboardWpf.OpenAsync())
+            {
+                ch.SetImage(bitmap);
+                ch.SetFormat(CANVAS_CLIPBOARD_FORMAT, graphics);
+            }
         }
 
         private void CutCommand(object sender, ExecutedRoutedEventArgs e)
@@ -369,27 +372,27 @@ namespace Clowd.UI
 
         private async void PasteCommand(object sender, ExecutedRoutedEventArgs e)
         {
-            var data = await ClipboardDataObject.GetClipboardData(this);
-            if (data.ContainsDataFormat(CANVAS_CLIPBOARD_FORMAT))
+            BitmapSource clipImage;
+            byte[] clipGraphics;
+
+            using (var ch = await ClipboardWpf.OpenAsync())
             {
-                var ms = data.GetDataFormat<MemoryStream>(CANVAS_CLIPBOARD_FORMAT);
-                if (ms != null)
-                {
-                    drawingCanvas.DeserializeGraphics(ms.ToArray());
-                    return;
-                }
+                clipImage = ch.GetImage();
+                clipGraphics = ch.ContainsFormat(CANVAS_CLIPBOARD_FORMAT) ? ch.GetFormatBytes(CANVAS_CLIPBOARD_FORMAT) : null;
             }
-            else if (data.ContainsImage())
+
+            if (clipGraphics != null)
             {
-                var img = data.GetImage();
-                if (img != null)
-                {
-                    // save pasted image into session folder + add to canvas
-                    var imgPath = SaveImageToSessionDir(img);
-                    var graphic = new GraphicImage(imgPath, new Size(img.PixelWidth, img.PixelHeight));
-                    drawingCanvas.AddGraphic(graphic);
-                    return;
-                }
+                drawingCanvas.DeserializeGraphics(clipGraphics);
+                return;
+            }
+            else if (clipImage != null)
+            {
+                // save pasted image into session folder + add to canvas
+                var imgPath = SaveImageToSessionDir(clipImage);
+                var graphic = new GraphicImage(imgPath, new Size(clipImage.PixelWidth, clipImage.PixelHeight));
+                drawingCanvas.AddGraphic(graphic);
+                return;
             }
 
             await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "The clipboard does not contain an image.", "Failed to paste");

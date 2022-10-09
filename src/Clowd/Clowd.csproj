@@ -43,6 +43,7 @@
   
   <ItemGroup>
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.0.2" />
+    <PackageReference Include="Clowd.Clipboard.Wpf" Version="1.0.1" />
     <PackageReference Include="Clowd.Squirrel" Version="3.0.210-*" />
     <PackageReference Include="DotNetZip" Version="1.16.0" />
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
