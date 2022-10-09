@@ -115,15 +115,18 @@ namespace Clowd.Util
                 server.WaitForRemotePipeCloseAsync().ContinueWith(v => server.Dispose());
             }
 
+            int err = 0;
             while (!token.IsCancellationRequested)
             {
                 try
                 {
                     await AcceptConnection();
+                    err = 0;
                 }
                 catch (Exception ex)
                 {
                     _log.Error(ex, "Unable to receive named pipe connection request");
+                    if (err++ > 3) return; // exit if 3 errors in a row.
                 }
             }
         }
