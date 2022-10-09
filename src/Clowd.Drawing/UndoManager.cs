@@ -133,7 +133,7 @@ namespace Clowd.Drawing
 
         private void RaiseStateChangedEvent(byte[] state)
         {
-            StateChanged?.Invoke(this, new StateChangedEventArgs(state));
+            StateChanged?.Invoke(this, new StateChangedEventArgs(state ?? new byte[0]));
         }
 
         private static bool ByteArrayCompare(ReadOnlySpan<byte> a1, ReadOnlySpan<byte> a2)
