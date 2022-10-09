@@ -283,7 +283,7 @@ namespace Clowd.UI
         private bool VerifyArtworkExists()
         {
             var b = drawingCanvas.GraphicsList.ContentBounds;
-            if (b.Height < 10 || b.Width < 10)
+            if (b.Height < 1 || b.Width < 1)
             {
                 NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "This operation could not be completed because there are no objects on the canvas.", "Canvas Empty");
                 return false;
@@ -296,12 +296,14 @@ namespace Clowd.UI
         {
             if (!VerifyArtworkExists())
                 return;
-            PrintDialog dlg = new PrintDialog();
+
             var image = drawingCanvas.DrawGraphicsToVisual();
-            if (dlg.ShowDialog().GetValueOrDefault() != true)
-            {
+            if (image == null)
                 return;
-            }
+
+            PrintDialog dlg = new PrintDialog();
+            if (dlg.ShowDialog().GetValueOrDefault() != true)
+                return;
 
             dlg.PrintVisual(image, "Graphics");
         }
@@ -317,6 +319,9 @@ namespace Clowd.UI
                 return;
 
             var bitmap = drawingCanvas.DrawGraphicsToBitmap();
+            if (bitmap == null)
+                return;
+
             UpdatePreview(bitmap);
 
             var frame = BitmapFrame.Create(bitmap);
@@ -335,6 +340,9 @@ namespace Clowd.UI
                 return;
 
             var bitmap = drawingCanvas.DrawGraphicsToBitmap();
+            if (bitmap == null)
+                return;
+
             UpdatePreview(bitmap);
 
             var graphics = drawingCanvas.SerializeGraphics(drawingCanvas.SelectedCount > 0);
@@ -357,7 +365,11 @@ namespace Clowd.UI
             if (!VerifyArtworkExists())
                 return;
 
-            UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
+            var bitmap = drawingCanvas.DrawGraphicsToBitmap();
+            if (bitmap == null)
+                return;
+
+            UpdatePreview(bitmap);
             await UploadManager.UploadSession(_session);
         }
 
@@ -427,7 +439,7 @@ namespace Clowd.UI
 
         private void UpdatePreview(BitmapSource bitmap)
         {
-            if (drawingCanvas.GraphicsList.Count == 0)
+            if (bitmap == null || drawingCanvas.GraphicsList.Count == 0)
                 return;
 
             // save new preview image to file

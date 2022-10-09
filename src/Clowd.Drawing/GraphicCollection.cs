@@ -168,6 +168,9 @@ namespace Clowd.Drawing
             var bounds = ContentBounds;
             var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
 
+            if (bounds.Width < 1 || bounds.Height < 1)
+                return null;
+
             DrawingVisual vs = new DrawingVisual();
             using (DrawingContext dc = vs.RenderOpen())
             {
@@ -190,6 +193,9 @@ namespace Clowd.Drawing
             var gl = GetGraphicList(false);
             var bounds = ContentBounds;
             var transform = new TranslateTransform(-bounds.Left, -bounds.Top);
+
+            if (bounds.Width < 1 || bounds.Height < 1)
+                return null;
 
             RenderTargetBitmap bmp = new RenderTargetBitmap(
                 (int)bounds.Width,
