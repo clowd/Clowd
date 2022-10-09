@@ -16,6 +16,8 @@ using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
 using System.ComponentModel;
 using System.Windows.Controls.Primitives;
+using Clowd.Clipboard.Formats;
+using System.Collections.Generic;
 
 namespace Clowd.UI
 {
@@ -360,7 +362,12 @@ namespace Clowd.UI
             drawingCanvas.DeleteAll();
         }
 
-        private async void UploadCommand(object sender, ExecutedRoutedEventArgs e)
+        private void UploadCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            UploadCommandImpl();
+        }
+
+        private async void UploadCommandImpl(IUploadProvider provider = null)
         {
             if (!VerifyArtworkExists())
                 return;
@@ -370,7 +377,7 @@ namespace Clowd.UI
                 return;
 
             UpdatePreview(bitmap);
-            await UploadManager.UploadSession(_session);
+            await UploadManager.UploadSession(_session, provider);
         }
 
         private void SelectToolCommand(object sender, ExecutedRoutedEventArgs e)
@@ -492,6 +499,59 @@ namespace Clowd.UI
                 drawingCanvas.TextFontStyle = result.TextFontStyle;
                 drawingCanvas.TextFontWeight = result.TextFontWeight;
             }
+        }
+
+        public static IEnumerable<IUploadProvider> GetAvailableProviders(SupportedUploadType type)
+        {
+            var settings = SettingsRoot.Current.Uploads;
+            UploadProviderInfo provider = settings.GetDefaultProvider(type);
+
+            if (provider?.Provider != null)
+                yield return provider.Provider;
+
+            foreach (var p in settings.GetEnabledProviders(type).OrderBy(f => f?.Provider?.Name))
+                yield return p.Provider;
+        }
+
+        private void btnUpload_RightMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            var ctx = new ContextMenu();
+
+            ctx.Items.Add(new MenuItem()
+            {
+                Header = "Upload to:",
+                IsEnabled = false,
+            });
+
+            var providers = GetAvailableProviders(SupportedUploadType.Image).ToArray();
+            if (providers.Length < 2)
+            {
+                btnUpload.ContextMenu = null;
+                return;
+            }
+
+            for (var i = 0; i < providers.Length; i++)
+            {
+                var f = providers[i];
+                //var bitmap = new BitmapImage();
+                //bitmap.BeginInit();
+                //bitmap.StreamSource = f.Icon;
+                //bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                //bitmap.EndInit();
+                //bitmap.Freeze();
+
+                var mu = new MenuItem();
+                //mu.Icon = new System.Windows.Controls.Image() { Source = bitmap };
+                mu.Header = f.Name + (i == 0 ? " (default)" : "");
+                mu.Click += (s, ev) => UploadCommandImpl(f);
+
+                ctx.Items.Add(mu);
+
+                if (i == 0)
+                    ctx.Items.Add(new Separator());
+            }
+
+            btnUpload.ContextMenu = ctx;
         }
     }
 }
