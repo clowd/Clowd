@@ -71,13 +71,13 @@ if ($mode -eq "compile") {
 
 
     # build clowd native and copy to publish directory
-    Write-Host "Build Clowd.WinNative.vcxproj" -ForegroundColor Magenta
-    &$MSBuildPath "$PSScriptRoot\src\Clowd.WinNative\Clowd.WinNative.vcxproj" `
+    Write-Host "Build Clowd.Native.vcxproj" -ForegroundColor Magenta
+    &$MSBuildPath "$PSScriptRoot\src\Clowd.Native\Clowd.Native.vcxproj" `
     /v:minimal `
     /p:Configuration=Release `
     /p:Platform=x64 `
     /p:SolutionDir=$PSScriptRoot\
-    Copy-Item ".\bin\Release\Clowd.WinNative.dll" -Destination "$PSScriptRoot\publish"
+    Copy-Item ".\bin\Release\Clowd.Native.dll" -Destination "$PSScriptRoot\publish"
 
 
     # build obs-express only if we are in local mode, otherwise download

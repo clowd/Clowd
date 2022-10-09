@@ -73,7 +73,7 @@ https://user-images.githubusercontent.com/1287295/177044423-7f90f7b3-01fa-45a9-9
 
 # Building Clowd
 
-The Clowd.WinNative project must be compiled before Clowd. If using Visual Studio, this should be done automatically. If using Rider, you may need to edit the run configuration to build WinNative before starting the main project.
+The Clowd.Native project must be compiled before Clowd. If using Visual Studio, this should be done automatically when pressing F6. If using Rider, you may need to edit the run configuration to build Native before starting the main project.
 
 If having any troubles compiling with the IDE, you can replicate a CI build by running the following commands:
 

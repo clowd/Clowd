@@ -16,9 +16,9 @@
     <!--<TargetFramework>net5.0</TargetFramework>
     <CLRSupport>NetCore</CLRSupport>-->
     <Keyword>ManagedCProj</Keyword>
-    <RootNamespace>Clowd.WinNative</RootNamespace>
+    <RootNamespace>Clowd.Native</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>Clowd.WinNative</ProjectName>
+    <ProjectName>Clowd.Native</ProjectName>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
     <ConfigurationType>DynamicLibrary</ConfigurationType>
