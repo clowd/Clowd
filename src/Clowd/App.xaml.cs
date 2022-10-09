@@ -13,6 +13,7 @@ using System.Windows.Controls;
 using System.Windows.Forms;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Clowd.Clipboard;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI;
@@ -448,9 +449,9 @@ namespace Clowd
                 OnFilesReceived(result);
         }
 
-        public async void Paste()
+        public void Paste()
         {
-            var data = await ClipboardDataObject.GetClipboardData();
+            using var data = ClipboardWpf.Open();
 
             if (data.ContainsImage())
             {

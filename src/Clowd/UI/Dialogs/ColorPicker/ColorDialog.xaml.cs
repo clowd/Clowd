@@ -11,6 +11,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using Clowd.Clipboard;
 using Clowd.UI.Converters;
 using Clowd.UI.Helpers;
 using Clowd.Util;
@@ -169,19 +170,19 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private void CopyHexExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            Clipboard.SetText(ColorTextHelper.GetHex(CurrentColor));
+            ClipboardWpf.SetText(ColorTextHelper.GetHex(CurrentColor));
             Close();
         }
 
         private void CopyRgbExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            Clipboard.SetText(ColorTextHelper.GetRgb(CurrentColor));
+            ClipboardWpf.SetText(ColorTextHelper.GetRgb(CurrentColor));
             Close();
         }
 
         private void CopyHslExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            Clipboard.SetText(ColorTextHelper.GetHsl(CurrentColor));
+            ClipboardWpf.SetText(ColorTextHelper.GetHsl(CurrentColor));
             Close();
         }
 

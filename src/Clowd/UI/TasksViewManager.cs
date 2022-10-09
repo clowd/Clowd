@@ -5,6 +5,7 @@ using Windows.UI.Notifications;
 using Clowd.Util;
 using Microsoft.Toolkit.Uwp.Notifications;
 using NLog;
+using Clowd.Clipboard;
 
 namespace Clowd.UI
 {
@@ -123,13 +124,7 @@ namespace Clowd.UI
         public void SetCompleted(string uploadUrl)
         {
             Hide();
-
-            App.Current.Dispatcher.Invoke(async () =>
-            {
-                var data = new ClipboardDataObject();
-                data.SetText(uploadUrl);
-                await data.SetClipboardData();
-            });
+            ClipboardWpf.SetText(uploadUrl);
 
             new ToastContentBuilder()
                 .AddText($"{Name} Uploaded")

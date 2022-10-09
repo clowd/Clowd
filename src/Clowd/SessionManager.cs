@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Clowd.Clipboard;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI;
@@ -273,10 +274,7 @@ namespace Clowd
         {
             BitmapImage bi = new BitmapImage();
             bi.LoadCachedUri(session.PreviewImgPath);
-
-            var data = new ClipboardDataObject();
-            data.SetImage(bi);
-            data.SetClipboardData();
+            ClipboardWpf.SetImage(bi);
         }
 
         public string GetNextSessionDirectory()
