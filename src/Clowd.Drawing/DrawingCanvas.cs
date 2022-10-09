@@ -686,6 +686,7 @@ namespace Clowd.Drawing
 
         void DrawingCanvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
+            this.Focus();
             if (e.ChangedButton == MouseButton.Left)
             {
                 if (e.ClickCount == 2)
