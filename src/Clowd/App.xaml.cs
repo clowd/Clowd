@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Threading;
+using System.Threading.RateLimiting;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -42,6 +43,7 @@ namespace Clowd
         private TaskbarIcon _taskbarIcon;
         private MutexArgsForwarder _processor;
         private ILogger _log;
+        private SlidingWindowRateLimiter _sentryLimiter;
 
         protected override async void OnStartup(StartupEventArgs e)
         {
@@ -183,6 +185,16 @@ namespace Clowd
         {
             var config = new LoggingConfiguration();
 
+            _sentryLimiter = new SlidingWindowRateLimiter(new()
+            {
+                AutoReplenishment = true,
+                Window = TimeSpan.FromHours(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                SegmentsPerWindow = 1,
+                PermitLimit = 30,
+                QueueLimit = 0,
+            });
+
 #if !DEBUG
             config.AddSentry(o =>
             {
@@ -191,6 +203,17 @@ namespace Clowd
                 o.Dsn = "https://0a572df482544fc19cdc855d17602fa4:012770b74f37410199e1424faf7c51d3@sentry.io/260666";
                 o.AttachStacktrace = true;
                 o.SendDefaultPii = true;
+                o.AutoSessionTracking = true;
+                o.BeforeSend = (evIn) =>
+                {
+                    if (_sentryLimiter.AttemptAcquire()?.IsAcquired == true)
+                    {
+                        return evIn;
+                    }
+
+                    // returning null will cause this event to be discarded.
+                    return null;
+                };
                 o.IncludeEventDataOnBreadcrumbs = true;
                 o.ShutdownTimeoutSeconds = 5;
                 o.AddTag("logger", "${logger}");
@@ -219,8 +242,10 @@ namespace Clowd
             });
 
             config.AddRule(LogLevel.Debug, LogLevel.Fatal, "file");
-            SquirrelLogger.Register();
+
             LogManager.Configuration = config;
+
+            SquirrelLogger.Register();
 
             var log = LogManager.GetLogger("GlobalHandler");
 
@@ -421,7 +446,7 @@ namespace Clowd
                     vid.StartRecording();
                 }
             }
-            catch { ; } // don't really care if recorder is in a bad state.
+            catch {; } // don't really care if recorder is in a bad state.
         }
 
         public void StartCapture(ScreenRect region = null)
