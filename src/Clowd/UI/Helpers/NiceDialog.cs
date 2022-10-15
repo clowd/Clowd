@@ -318,7 +318,8 @@ namespace Clowd.UI.Helpers
             }
         }
 
-        public static Task<bool?> ShowAsNiceDialogAsync(this Window wnd, FrameworkElement parent)
+        public static Task<bool?> ShowAsNiceDialogAsync<T>(this T wnd, FrameworkElement parent)
+            where T : Window, IWpfNiceDialog
         {
             CaptureOwner(parent, out var ownerWindow, out var ownerHandle, out var isFake);
 
@@ -333,10 +334,10 @@ namespace Clowd.UI.Helpers
                 AutoPositionNativeWindowHandle(helper.Handle, ownerHandle, isFake);
             };
 
-            wnd.Closed += (s, e) =>
+            wnd.Closing += (s, e) =>
             {
                 ReleaseOwner(ownerWindow, isFake);
-                taskSource.SetResult((wnd as IWpfNiceDialog)?.MyDialogResult);
+                taskSource.SetResult(wnd.MyDialogResult);
             };
 
             wnd.Owner = ownerWindow;
@@ -357,7 +358,7 @@ namespace Clowd.UI.Helpers
                 form.Location = GetDialogPosition(new System.Drawing.Size(form.Width, form.Height), ownerHandle, isFake);
             };
 
-            form.Closed += (s, e) =>
+            form.Closing += (s, e) =>
             {
                 ReleaseOwner(ownerWindow, isFake);
                 taskSource.SetResult(form.DialogResult);
@@ -398,7 +399,7 @@ namespace Clowd.UI.Helpers
             {
                 ShowActivated = false,
                 Opacity = 0,
-                WindowStyle = System.Windows.WindowStyle.None,
+                WindowStyle = WindowStyle.None,
                 ResizeMode = ResizeMode.NoResize,
                 AllowsTransparency = true,
                 ShowInTaskbar = showInTaskbar,
