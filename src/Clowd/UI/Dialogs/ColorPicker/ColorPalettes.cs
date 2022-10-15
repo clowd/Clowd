@@ -308,7 +308,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                     Color.FromArgb(128, 255, 0, 220),
                     Color.FromArgb(128, 255, 0, 110),
                     //Color.FromArgb(128, 255, 255, 255),
-                    Color.FromArgb(0, 0, 0, 0),
+                    Color.FromArgb(0, 255, 255, 255),
                     Color.FromArgb(128, 128, 128, 128),
                     Color.FromArgb(128, 127, 0, 0),
                     Color.FromArgb(128, 127, 51, 0),

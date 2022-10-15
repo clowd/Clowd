@@ -1,0 +1,207 @@
+﻿<UserControl
+    x:Class="Clowd.UI.Dialogs.ColorPicker.MiniColorDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    DataContext="{Binding RelativeSource={RelativeSource Self}}"
+    mc:Ignorable="d">
+    <Border
+        Padding="8"
+        Background="#202124"
+        BorderBrush="#464648"
+        BorderThickness="1"
+        CornerRadius="8">
+        <Border.Effect>
+            <DropShadowEffect Opacity="0.5" ShadowDepth="2" />
+        </Border.Effect>
+        <Grid Width="192">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="120" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border
+                x:Name="CanvasBackground"
+                Grid.Row="0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                Background="Black"
+                CornerRadius="2">
+                <Border
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    CornerRadius="2"
+                    IsHitTestVisible="False">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                            <GradientStop Offset="0" Color="White" />
+                            <GradientStop Offset="1" Color="{Binding HueOnlyColor}" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Border.OpacityMask>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="White" />
+                            <GradientStop Offset="1" Color="Transparent" />
+                        </LinearGradientBrush>
+                    </Border.OpacityMask>
+                </Border>
+            </Border>
+
+            <Canvas
+                Grid.Row="0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                IsHitTestVisible="False">
+                <Border
+                    x:Name="CanvasPointer"
+                    Width="12"
+                    Height="12"
+                    BorderBrush="Black"
+                    BorderThickness="1"
+                    CornerRadius="10">
+                    <Border
+                        Width="10"
+                        Height="10"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        BorderBrush="White"
+                        BorderThickness="1"
+                        CornerRadius="10" />
+                </Border>
+            </Canvas>
+
+            <local:ColorSlider
+                Grid.Row="1"
+                Height="16"
+                Margin="0,8"
+                CornerRadius="2"
+                ValueMax="360"
+                Value="{Binding CurrentColor.Hue}">
+                <local:ColorSlider.SliderBrush>
+                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                        <GradientStop Offset="0" Color="Red" />
+                        <GradientStop Offset="0.1666" Color="Yellow" />
+                        <GradientStop Offset="0.3333" Color="Lime" />
+                        <GradientStop Offset="0.5" Color="Cyan" />
+                        <GradientStop Offset="0.6666" Color="Blue" />
+                        <GradientStop Offset="0.8333" Color="Magenta" />
+                        <GradientStop Offset="1" Color="Red" />
+                    </LinearGradientBrush>
+                </local:ColorSlider.SliderBrush>
+            </local:ColorSlider>
+
+            <Border
+                Grid.Row="2"
+                Margin="0,4"
+                Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
+                CornerRadius="2">
+                <local:ColorSlider
+                    Height="16"
+                    CornerRadius="2"
+                    ValueMax="1"
+                    Value="{Binding CurrentColor.Alpha}">
+                    <local:ColorSlider.SliderBrush>
+                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                            <GradientStop Offset="0" Color="Transparent" />
+                            <GradientStop Offset="1" Color="{Binding NoAlphaColor}" />
+                        </LinearGradientBrush>
+                    </local:ColorSlider.SliderBrush>
+                </local:ColorSlider>
+            </Border>
+
+            <TextBox
+                x:Name="txtHex"
+                Grid.Row="3"
+                Height="26"
+                Margin="0,8"
+                VerticalContentAlignment="Center"
+                Background="Transparent"
+                BorderBrush="#5A5A5A"
+                CaretBrush="White"
+                FontFamily="Consolas"
+                Foreground="White"
+                Style="{x:Null}"
+                TextAlignment="Center" />
+
+            <WrapPanel
+                Grid.Row="4"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Bottom"
+                Background="{StaticResource CheckeredMediumGrayBackgroundBrush}"
+                ItemHeight="16"
+                ItemWidth="16"
+                Orientation="Horizontal">
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Transparent" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Black" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#404040" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#808080" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#A0A0A0" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#C0C0C0" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="White" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Firebrick" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Red" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="OrangeRed" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Salmon" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Orange" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Yellow" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="GreenYellow" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Lime" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="LightSeaGreen" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Cyan" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#0094FF" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#0026FF" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#4800FF" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#B200FF" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#FF00DC" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="HotPink" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Pink" />
+            </WrapPanel>
+
+            <DockPanel
+                Grid.Row="5"
+                Margin="0,8,0,0"
+                HorizontalAlignment="Stretch">
+                <Border
+                    Margin="5"
+                    CornerRadius="10"
+                    DockPanel.Dock="Right">
+                    <Border.Background>
+                        <DrawingBrush
+                            TileMode="Tile"
+                            Viewport="0,0,13.4,13.4"
+                            ViewportUnits="Absolute">
+                            <DrawingBrush.Drawing>
+                                <GeometryDrawing Brush="#96969696" Geometry="M0,0 H1 V1 H2 V2 H1 V1 H0Z" />
+                            </DrawingBrush.Drawing>
+                        </DrawingBrush>
+                    </Border.Background>
+                    <Ellipse
+                        Width="20"
+                        Height="20"
+                        Fill="{Binding CurrentBrush}" />
+                </Border>
+                <controls:ToolButton
+                    Click="ButtonCheckClicked"
+                    DockPanel.Dock="Right"
+                    IconPath="{StaticResource IconCheckmark}" />
+                <controls:ToolButton
+                    Click="ButtonCancelClicked"
+                    DockPanel.Dock="Right"
+                    IconPath="{StaticResource IconThinClose}" />
+                <controls:ToolButton
+                    Click="ButtonPopoutClicked"
+                    DockPanel.Dock="Left"
+                    IconPath="{StaticResource IconPopout}" />
+                <Rectangle />
+            </DockPanel>
+        </Grid>
+    </Border>
+
+</UserControl>

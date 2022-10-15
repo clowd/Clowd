@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:clowd="clr-namespace:Clowd;assembly=Clowd.Shared"
+    xmlns:colors="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:conv="clr-namespace:Clowd.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -493,6 +494,17 @@
             </Border>
 
         </Grid>
+
+        <Popup
+            x:Name="miniColorPopup"
+            AllowsTransparency="True"
+            HorizontalOffset="-5"
+            Placement="MousePoint"
+            PopupAnimation="Fade"
+            StaysOpen="False"
+            VerticalOffset="-5">
+            <colors:MiniColorDialog x:Name="miniColor" Margin="10" />
+        </Popup>
 
         <Button
             x:Name="buttonFocus"

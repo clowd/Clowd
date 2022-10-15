@@ -18,6 +18,7 @@ using System.ComponentModel;
 using System.Windows.Controls.Primitives;
 using Clowd.Clipboard.Formats;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Clowd.UI
 {
@@ -64,6 +65,9 @@ namespace Clowd.UI
             this.Loaded += (_, _) => UpdateSessionInfo();
             this.Deactivated += (_, _) => UpdateSessionInfo();
             this.Activated += (_, _) => UpdateSessionInfo();
+
+            miniColor.ParentWindow = this;
+            miniColor.Cancelled += (_, _) => miniColorPopup.IsOpen = false;
         }
 
         private void UpdateSessionInfo()
@@ -472,15 +476,20 @@ namespace Clowd.UI
 
         private async void objectColor_Click(object sender, MouseButtonEventArgs e)
         {
-            drawingCanvas.ObjectColor = await NiceDialog.ShowColorPromptAsync(this, drawingCanvas.ObjectColor);
+            miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ObjectColor);
+            miniColor.ColorSelectFn = (c) => drawingCanvas.ObjectColor = c;
+            miniColorPopup.IsOpen = true;
         }
 
         private async void backgroundColor_Click(object sender, MouseButtonEventArgs e)
         {
-            var oldColor = drawingCanvas.ArtworkBackground;
-            var newColor = await NiceDialog.ShowColorPromptAsync(this, oldColor);
-            drawingCanvas.ArtworkBackground = newColor;
-            _session.CanvasBackground = newColor;
+            miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ArtworkBackground);
+            miniColor.ColorSelectFn = (c) =>
+            {
+                drawingCanvas.ArtworkBackground = c;
+                _session.CanvasBackground = c;
+            };
+            miniColorPopup.IsOpen = true;
         }
 
         private async void font_Click(object sender, RoutedEventArgs e)

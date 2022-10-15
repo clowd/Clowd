@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Clowd.Util;
+using DependencyPropertyGenerator;
 
 namespace Clowd.UI.Dialogs.ColorPicker
 {
@@ -19,20 +20,28 @@ namespace Clowd.UI.Dialogs.ColorPicker
         }
     }
 
-    public class ColorPaletteItem : Control
+    [DependencyProperty<Color>("Color", AffectsRender = true)]
+    public partial class ColorPaletteItem : Control
     {
         public event EventHandler<ColorSelectedEventArgs> Clicked;
 
         const double _penThicknes = 1;
-        private readonly Color _color;
         Pen _blackPen = new Pen(Brushes.Black, _penThicknes);
         Pen _whitePen = new Pen(Brushes.White, _penThicknes);
 
+        public ColorPaletteItem()
+        {
+        }
+
         public ColorPaletteItem(Color color)
         {
-            _color = color;
+            this.Color = color;
             IsTabStop = false;
-            Background = new SolidColorBrush(_color);
+        }
+
+        partial void OnColorChanged(Color newValue)
+        {
+            Background = new SolidColorBrush(newValue);
         }
 
         protected override void OnMouseEnter(MouseEventArgs e)
@@ -49,7 +58,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         protected override void OnMouseDown(MouseButtonEventArgs e)
         {
-            Clicked?.Invoke(this, new ColorSelectedEventArgs(_color, e.ClickCount));
+            Clicked?.Invoke(this, new ColorSelectedEventArgs(this.Color, e.ClickCount));
         }
 
         protected override void OnRender(DrawingContext drawingContext)
