@@ -17,10 +17,7 @@
     UseLayoutRounding="True"
     mc:Ignorable="d">
     <Window.Resources>
-        <conv:ColorToBrushConverter x:Key="color2brush" />
-        <conv:ColorToHexConverter x:Key="color2hex" />
-        <conv:ColorToRgbConverter x:Key="color2rgb" />
-        <conv:ColorToHslConverter x:Key="color2hsl" />
+        <conv:HslColorToBrushConverter x:Key="color2brush" />
         <RoutedUICommand x:Key="Commands.CopyHex" />
         <RoutedUICommand x:Key="Commands.CopyRgb" />
         <RoutedUICommand x:Key="Commands.CopyHsl" />
@@ -112,7 +109,7 @@
                 <Style TargetType="local:ColorSlider">
                     <Setter Property="CornerRadius" Value="4" />
                     <Setter Property="Height" Value="16" />
-                    <Setter Property="ThumbBrush" Value="{Binding RelativeSource={RelativeSource AncestorType={x:Type FrameworkElement}}, Path=(TextElement.Foreground)}" />
+                    <!--<Setter Property="ThumbBrush" Value="{Binding RelativeSource={RelativeSource AncestorType={x:Type FrameworkElement}}, Path=(TextElement.Foreground)}" />-->
                     <Setter Property="Background" Value="{StaticResource CheckeredMediumGrayBackgroundBrush}" />
                 </Style>
                 <Style TargetType="TextBox">
@@ -134,10 +131,10 @@
 
             <Label Grid.Row="0">HEX:</Label>
             <TextBox
+                x:Name="txtHex"
                 Grid.Column="1"
                 Margin="0"
-                helpers:SelectTextOnFocus.Active="True"
-                Text="{Binding CurrentColor, Converter={StaticResource color2hex}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                helpers:SelectTextOnFocus.Active="True" />
 
             <Button Grid.Column="2" Command="{StaticResource Commands.CopyHex}">
                 <AccessText>Copy HE_X</AccessText>
@@ -147,7 +144,7 @@
                 Grid.Row="2"
                 Grid.Column="1"
                 HorizontalAlignment="Left"
-                Content="{Binding CurrentColor, Converter={StaticResource color2rgb}}" />
+                Content="{Binding TextRgb}" />
 
             <Button
                 Grid.Row="2"
@@ -161,8 +158,10 @@
             <local:ColorSlider
                 Grid.Row="3"
                 Grid.Column="1"
-                ColorPart="R"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+                SliderBrush="{Binding SliderR}"
+                ValueMax="255"
+                Value="{Binding CurrentColor.R}" />
+
             <TextBox
                 x:Name="txtClrR"
                 Grid.Row="3"
@@ -173,8 +172,9 @@
             <local:ColorSlider
                 Grid.Row="4"
                 Grid.Column="1"
-                ColorPart="G"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+                SliderBrush="{Binding SliderG}"
+                ValueMax="255"
+                Value="{Binding CurrentColor.G}" />
             <TextBox
                 x:Name="txtClrG"
                 Grid.Row="4"
@@ -185,8 +185,9 @@
             <local:ColorSlider
                 Grid.Row="5"
                 Grid.Column="1"
-                ColorPart="B"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+                SliderBrush="{Binding SliderB}"
+                ValueMax="255"
+                Value="{Binding CurrentColor.B}" />
             <TextBox
                 x:Name="txtClrB"
                 Grid.Row="5"
@@ -197,8 +198,9 @@
             <local:ColorSlider
                 Grid.Row="6"
                 Grid.Column="1"
-                ColorPart="A"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+                SliderBrush="{Binding SliderA}"
+                ValueMax="1"
+                Value="{Binding CurrentColor.Alpha}" />
             <TextBox
                 x:Name="txtClrA"
                 Grid.Row="6"
@@ -209,7 +211,7 @@
                 Grid.Row="8"
                 Grid.Column="1"
                 HorizontalAlignment="Left"
-                Content="{Binding CurrentColor, Converter={StaticResource color2hsl}}" />
+                Content="{Binding TextHsl}" />
 
             <Button
                 Grid.Row="8"
@@ -222,8 +224,9 @@
             <local:ColorSlider
                 Grid.Row="9"
                 Grid.Column="1"
-                ColorPart="H"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+                SliderBrush="{Binding SliderH}"
+                ValueMax="360"
+                Value="{Binding CurrentColor.Hue}" />
             <TextBox
                 x:Name="txtClrH"
                 Grid.Row="9"
@@ -234,8 +237,9 @@
             <local:ColorSlider
                 Grid.Row="10"
                 Grid.Column="1"
-                ColorPart="S"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+                SliderBrush="{Binding SliderS}"
+                ValueMax="1"
+                Value="{Binding CurrentColor.Saturation}" />
             <TextBox
                 x:Name="txtClrS"
                 Grid.Row="10"
@@ -246,8 +250,9 @@
             <local:ColorSlider
                 Grid.Row="11"
                 Grid.Column="1"
-                ColorPart="L"
-                CurrentColor="{Binding CurrentColor, Mode=TwoWay}" />
+                SliderBrush="{Binding SliderL}"
+                ValueMax="1"
+                Value="{Binding CurrentColor.Lightness}" />
             <TextBox
                 x:Name="txtClrL"
                 Grid.Row="11"

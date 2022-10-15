@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Data;
 using System.Windows.Media;
 using Clowd.Util;
+using static Vanara.PInvoke.User32;
 
 namespace Clowd.UI.Converters
 {
@@ -15,10 +16,13 @@ namespace Clowd.UI.Converters
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is not Color c)
-                throw new InvalidOperationException("Must be type Color");
+            if (value is Color c)
+                return ColorTextHelper.GetHex(c);
 
-            return ColorTextHelper.GetHex(c);
+            if (value is HslRgbColor c2)
+                return ColorTextHelper.GetHex(c2);
+
+            throw new InvalidOperationException("Must be type Color");
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -28,28 +32,16 @@ namespace Clowd.UI.Converters
 
             try
             {
-                s = s.Trim().TrimStart('#');
+                var rgb = ColorTextHelper.FromHex(s);
 
-                if (s.Length is not 6 and not 8)
-                {
-                    throw new InvalidOperationException("Invalid hex color");
-                }
+                if (targetType == typeof(Color))
+                    return rgb;
 
-                byte r = 0, g = 0, b = 0, a = 255;
+                if (targetType == typeof(HslRgbColor))
+                    return HslRgbColor.FromColor(rgb);
 
-                if (s.Length >= 6)
-                {
-                    r = System.Convert.ToByte(s.Substring(0, 2), 16);
-                    g = System.Convert.ToByte(s.Substring(2, 2), 16);
-                    b = System.Convert.ToByte(s.Substring(4, 2), 16);
-                }
+                throw new InvalidOperationException("Target type must be Color or HslRgbColor");
 
-                if (s.Length == 8)
-                {
-                    a = System.Convert.ToByte(s.Substring(6, 2), 16);
-                }
-
-                return Color.FromArgb(a, r, g, b);
             }
             catch
             {
@@ -63,10 +55,13 @@ namespace Clowd.UI.Converters
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is not Color c)
-                throw new InvalidOperationException("Must be type Color");
+            if (value is Color c)
+                return ColorTextHelper.GetRgb(c);
 
-            return ColorTextHelper.GetRgb(c);
+            if (value is HslRgbColor c2)
+                return ColorTextHelper.GetRgb(c2);
+
+            throw new InvalidOperationException("Must be type Color");
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -80,10 +75,13 @@ namespace Clowd.UI.Converters
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is not Color c)
-                throw new InvalidOperationException("Must be type Color");
+            if (value is Color c)
+                return ColorTextHelper.GetHsl(c);
 
-            return ColorTextHelper.GetHsl(c);
+            if (value is HslRgbColor c2)
+                return ColorTextHelper.GetHsl(c2);
+
+            throw new InvalidOperationException("Must be type Color");
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -96,15 +94,15 @@ namespace Clowd.UI.Converters
     {
         public static string GetHsl(Color color)
         {
-            return GetHsl(HSLColor.FromRGB(color));
+            return GetHsl(HslRgbColor.FromColor(color));
         }
 
-        public static string GetHsl(HSLColor hsl)
+        public static string GetHsl(HslRgbColor hsl)
         {
-            if (hsl.Alpha == 1)
+            if (hsl.Alpha >= 1)
                 return $"hsl({hsl.Hue:0}, {hsl.Saturation * 100:0}%, {hsl.Lightness * 100:0}%)";
             else
-                return $"hsla({hsl.Hue:0}, {hsl.Saturation * 100:0}%, {hsl.Lightness * 100:0}%, {hsl.Alpha * 255d})";
+                return $"hsla({hsl.Hue:0}, {hsl.Saturation * 100:0}%, {hsl.Lightness * 100:0}%, {Math.Round(hsl.Alpha, 2)})";
         }
 
         public static string GetRgb(Color color)
@@ -112,7 +110,15 @@ namespace Clowd.UI.Converters
             if (color.A == 255)
                 return $"rgb({color.R}, {color.G}, {color.B})";
             else
-                return $"rgba({color.R}, {color.G}, {color.B}, {color.A})";
+                return $"rgba({color.R}, {color.G}, {color.B}, {Math.Round(color.A / 255d, 2)})";
+        }
+
+        public static string GetRgb(HslRgbColor color)
+        {
+            if (color.Alpha >= 1d)
+                return $"rgb({color.R}, {color.G}, {color.B})";
+            else
+                return $"rgba({color.R}, {color.G}, {color.B}, {Math.Round(color.Alpha, 2)})";
         }
 
         public static string GetHex(Color color)
@@ -121,6 +127,40 @@ namespace Clowd.UI.Converters
                 return string.Format("#{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
             else
                 return string.Format("#{0:X2}{1:X2}{2:X2}{3:X2}", color.R, color.G, color.B, color.A);
+        }
+
+        public static string GetHex(HslRgbColor color)
+        {
+            if (color.Alpha >= 1d)
+                return string.Format("#{0:X2}{1:X2}{2:X2}", color.R, color.G, color.B);
+            else
+                return string.Format("#{0:X2}{1:X2}{2:X2}{3:X2}", color.R, color.G, color.B, (int)Math.Round(color.Alpha * 255d));
+        }
+
+        public static Color FromHex(string s)
+        {
+            s = s.Trim().TrimStart('#');
+
+            if (s.Length is not 6 and not 8)
+            {
+                throw new InvalidOperationException("Invalid hex color");
+            }
+
+            byte r = 0, g = 0, b = 0, a = 255;
+
+            if (s.Length >= 6)
+            {
+                r = Convert.ToByte(s.Substring(0, 2), 16);
+                g = Convert.ToByte(s.Substring(2, 2), 16);
+                b = Convert.ToByte(s.Substring(4, 2), 16);
+            }
+
+            if (s.Length == 8)
+            {
+                a = Convert.ToByte(s.Substring(6, 2), 16);
+            }
+
+            return Color.FromArgb(a, r, g, b);
         }
     }
 }
