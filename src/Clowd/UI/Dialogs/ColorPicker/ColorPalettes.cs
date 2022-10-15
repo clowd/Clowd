@@ -307,7 +307,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
                     Color.FromArgb(128, 178, 0, 255),
                     Color.FromArgb(128, 255, 0, 220),
                     Color.FromArgb(128, 255, 0, 110),
-                    Color.FromArgb(128, 255, 255, 255),
+                    //Color.FromArgb(128, 255, 255, 255),
+                    Color.FromArgb(0, 0, 0, 0),
                     Color.FromArgb(128, 128, 128, 128),
                     Color.FromArgb(128, 127, 0, 0),
                     Color.FromArgb(128, 127, 51, 0),
@@ -892,10 +893,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
             {
                 foreach (Color color in topRow)
                 {
-                    HSLColor hsl = HSLColor.FromRGB(color);
+                    HslRgbColor hsl = HslRgbColor.FromColor(color);
                     hsl.Lightness = (5 + i + 16 * i) / 100D;
-                    var c = hsl.ToRGB();
-                    results.Add(Color.FromArgb(c.A, c.R, c.G, c.B));
+                    results.Add(hsl.ToDrawingColor());
                 }
             }
 

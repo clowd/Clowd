@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -6,27 +7,13 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using Clowd.Util;
+using DependencyPropertyGenerator;
 
 namespace Clowd.UI.Dialogs.ColorPicker
 {
-    public class ColorWheel : Canvas
+    [DependencyProperty<HslRgbColor>("CurrentColor", DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    public partial class ColorWheel : Canvas
     {
-        public Color CurrentColor
-        {
-            get { return (Color)GetValue(CurrentColorProperty); }
-            set { SetValue(CurrentColorProperty, value); }
-        }
-
-        public static readonly DependencyProperty CurrentColorProperty =
-            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorWheel), new PropertyMetadata(Colors.White, CurrentColorPropertyChanged));
-
-        private static void CurrentColorPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            if (e.OldValue == e.NewValue) return;
-            var me = (ColorWheel)d;
-            me.UpdateCursor();
-        }
-
         Path _border;
         Rectangle _inner;
         Border _cursor;
@@ -57,6 +44,23 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
             this.SizeChanged += (_, _) => Arrange();
             Arrange();
+        }
+
+        partial void OnCurrentColorChanged(HslRgbColor oldValue, HslRgbColor newValue)
+        {
+            if (oldValue != null)
+                newValue.PropertyChanged -= ColorPropertyChanged;
+
+            if (newValue != null)
+            {
+                newValue.PropertyChanged += ColorPropertyChanged;
+                UpdateCursor();
+            }
+        }
+
+        private void ColorPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            UpdateCursor();
         }
 
         protected override void OnMouseDown(MouseButtonEventArgs e)
@@ -107,19 +111,14 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private void UpdateCursor()
         {
-            _cursor.Background = new SolidColorBrush(Color.FromRgb(CurrentColor.R, CurrentColor.G, CurrentColor.B));
+            if (CurrentColor == null) return;
+            _cursor.Background = new SolidColorBrush(CurrentColor.ToColor());
             var lc = GetColorLocation(CurrentColor);
             SetLeft(_cursor, lc.X - HalfCursorSize);
             SetTop(_cursor, lc.Y - HalfCursorSize);
         }
 
-        protected Point GetColorLocation(Color color)
-        {
-            var h1 = HSLColor.FromRGB(color);
-            return GetColorLocation(h1);
-        }
-
-        protected virtual Point GetColorLocation(HSLColor color)
+        protected virtual Point GetColorLocation(HslRgbColor color)
         {
             double angle = color.Hue * Math.PI / 180;
             double radius = ActualWidth / 2;
@@ -172,8 +171,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 angle = 360 - angle;
             }
 
-            HSLColor newColor = new HSLColor() { Hue = angle, Lightness = lightness, Saturation = 1 };
-            CurrentColor = newColor.ToRGB();
+            CurrentColor = new HslRgbColor(angle, 1, lightness, CurrentColor.Alpha);
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -11,61 +12,51 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.TextFormatting;
 using Clowd.Clipboard;
 using Clowd.UI.Converters;
 using Clowd.UI.Helpers;
 using Clowd.Util;
+using DependencyPropertyGenerator;
 
 namespace Clowd.UI.Dialogs.ColorPicker
 {
+    [DependencyProperty<HslRgbColor>("CurrentColor")]
+    [DependencyProperty<HslRgbColor>("PreviousColor")]
+    [DependencyProperty<LinearGradientBrush>("SliderR")]
+    [DependencyProperty<LinearGradientBrush>("SliderG")]
+    [DependencyProperty<LinearGradientBrush>("SliderB")]
+    [DependencyProperty<LinearGradientBrush>("SliderH")]
+    [DependencyProperty<LinearGradientBrush>("SliderS")]
+    [DependencyProperty<LinearGradientBrush>("SliderL")]
+    [DependencyProperty<LinearGradientBrush>("SliderA")]
+    [DependencyProperty<string>("TextRgb")]
+    [DependencyProperty<string>("TextHsl")]
     public partial class ColorDialog : Window, IWpfNiceDialog
     {
-        public Color CurrentColor
-        {
-            get { return (Color)GetValue(CurrentColorProperty); }
-            set { SetValue(CurrentColorProperty, value); }
-        }
-
-        public static readonly DependencyProperty CurrentColorProperty =
-            DependencyProperty.Register("CurrentColor", typeof(Color), typeof(ColorDialog),
-                new PropertyMetadata(Colors.White, (d, e) => ((ColorDialog)d).OnCurrentColorChanged()));
-
-        public Color PreviousColor
-        {
-            get { return (Color)GetValue(PreviousColorProperty); }
-            set { SetValue(PreviousColorProperty, value); }
-        }
-
-        public static readonly DependencyProperty PreviousColorProperty =
-            DependencyProperty.Register("PreviousColor", typeof(Color), typeof(ColorDialog),
-                new PropertyMetadata(Colors.Transparent));
-
         public bool? MyDialogResult { get; private set; }
 
         protected bool HandleTextEvents { get; private set; }
 
         protected bool IsDialogMode { get; private set; }
 
-        public ColorDialog(Color? previousColor = null, bool asDialog = true)
+        public ColorDialog(HslRgbColor previousColor = null, bool asDialog = true)
         {
-            InitializeComponent();
-            CreateColorPalette();
-
-            HandleRgbSet(txtClrR, (c, i) => Color.FromArgb(c.A, i, c.G, c.B));
-            HandleRgbSet(txtClrG, (c, i) => Color.FromArgb(c.A, c.R, i, c.B));
-            HandleRgbSet(txtClrB, (c, i) => Color.FromArgb(c.A, c.R, c.G, i));
-            HandleRgbSet(txtClrA, (c, i) => Color.FromArgb(i, c.R, c.G, c.B));
-            HandleHslSet(txtClrH, (c, i) => c.Hue = i);
-            HandleHslSet(txtClrS, (c, i) => c.Saturation = i / 100d);
-            HandleHslSet(txtClrL, (c, i) => c.Lightness = i / 100d);
-
             IsDialogMode = asDialog;
 
-            if (previousColor.HasValue)
+            if (previousColor != null)
             {
-                PreviousColor = previousColor.Value;
-                CurrentColor = previousColor.Value;
+                PreviousColor = previousColor;
+                CurrentColor = previousColor;
             }
+            else
+            {
+                PreviousColor = HslRgbColor.Transparent;
+                CurrentColor = HslRgbColor.White;
+            }
+
+            InitializeComponent();
+            CreateColorPalette();
 
             if (!asDialog)
             {
@@ -78,7 +69,123 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 Title = "Clowd - Color Picker";
             }
 
-            OnCurrentColorChanged();
+            const double stop = 1d / 6d;
+            SliderH = new LinearGradientBrush()
+            {
+                StartPoint = new Point(0, 0.5),
+                EndPoint = new Point(1, 0.5),
+                GradientStops = new GradientStopCollection()
+                {
+                    new GradientStop(Colors.Red, 0),
+                    new GradientStop(Colors.Yellow, stop),
+                    new GradientStop(Colors.Lime, stop * 2),
+                    new GradientStop(Colors.Cyan, stop * 3),
+                    new GradientStop(Colors.Blue, stop * 4),
+                    new GradientStop(Colors.Magenta, stop * 5),
+                    new GradientStop(Colors.Red, stop * 6),
+                }
+            };
+
+            HandleSet(txtHex, ColorTextHelper.FromHex, (c) => CurrentColor = HslRgbColor.FromColor(c));
+            HandleSet(txtClrR, int.Parse, (c) => CurrentColor.R = c);
+            HandleSet(txtClrG, int.Parse, (c) => CurrentColor.G = c);
+            HandleSet(txtClrB, int.Parse, (c) => CurrentColor.B = c);
+            HandleSet(txtClrA, double.Parse, (c) => CurrentColor.Alpha = c / 100d);
+            HandleSet(txtClrH, double.Parse, (c) => CurrentColor.Hue = c);
+            HandleSet(txtClrS, double.Parse, (c) => CurrentColor.Saturation = c / 100d);
+            HandleSet(txtClrL, double.Parse, (c) => CurrentColor.Lightness = c / 100d);
+
+            UpdateBrushes();
+        }
+
+        partial void OnCurrentColorChanged(HslRgbColor oldValue, HslRgbColor newValue)
+        {
+            if (oldValue != null)
+                newValue.PropertyChanged -= ColorPropertyChanged;
+
+            if (newValue != null)
+                newValue.PropertyChanged += ColorPropertyChanged;
+
+            if (IsInitialized) UpdateBrushes();
+        }
+
+        private void ColorPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (IsInitialized) UpdateBrushes();
+        }
+
+        private void UpdateBrushes()
+        {
+            var rgb = CurrentColor.ToColor();
+
+            HslRgbColor hsl;
+            Color start, end;
+
+            // R
+            start = end = rgb;
+            start.R = 0;
+            end.R = 255;
+            SliderR = new LinearGradientBrush(start, end, 0);
+
+            // G
+            start = end = rgb;
+            start.G = 0;
+            end.G = 255;
+            SliderG = new LinearGradientBrush(start, end, 0);
+
+            // B
+            start = end = rgb;
+            start.B = 0;
+            end.B = 255;
+            SliderB = new LinearGradientBrush(start, end, 0);
+
+            // A
+            start = end = rgb;
+            start.A = 0;
+            end.A = 255;
+            SliderA = new LinearGradientBrush(start, end, 0);
+
+            // S
+            start = Color.FromArgb(rgb.A, 128, 128, 128);
+            hsl = CurrentColor.Clone();
+            hsl.Saturation = 1;
+            end = hsl.ToColor();
+            SliderS = new LinearGradientBrush(start, end, 0);
+
+            // L
+            hsl = CurrentColor.Clone();
+            hsl.Lightness = 0.5;
+            SliderL = new LinearGradientBrush()
+            {
+                StartPoint = new Point(0, 0.5),
+                EndPoint = new Point(1, 0.5),
+                GradientStops = new GradientStopCollection()
+                {
+                    new GradientStop(Color.FromArgb(rgb.A, 0, 0, 0), 0),
+                    new GradientStop(hsl.ToColor(), 0.5),
+                    new GradientStop(Color.FromArgb(rgb.A, 255, 255, 255), 1),
+                }
+            };
+
+            TextRgb = ColorTextHelper.GetRgb(CurrentColor);
+            TextHsl = ColorTextHelper.GetHsl(CurrentColor);
+            UpdateTextComponents();
+        }
+
+        private void UpdateTextComponents(bool skipFocused = true)
+        {
+            HandleTextEvents = false;
+            var clr = CurrentColor;
+            if (!skipFocused || !txtHex.IsFocused) txtHex.Text = ColorTextHelper.GetHex(clr);
+            if (!skipFocused || !txtClrR.IsFocused) txtClrR.Text = clr.R.ToString();
+            if (!skipFocused || !txtClrG.IsFocused) txtClrG.Text = clr.G.ToString();
+            if (!skipFocused || !txtClrB.IsFocused) txtClrB.Text = clr.B.ToString();
+            if (!skipFocused || !txtClrA.IsFocused) txtClrA.Text = Math.Round(clr.Alpha * 100).ToString();
+            if (!skipFocused || !txtClrH.IsFocused) txtClrH.Text = Math.Round(clr.Hue).ToString();
+            if (!skipFocused || !txtClrS.IsFocused) txtClrS.Text = Math.Round(clr.Saturation * 100).ToString();
+            if (!skipFocused || !txtClrL.IsFocused) txtClrL.Text = Math.Round(clr.Lightness * 100).ToString();
+            pathPrevColor.Cursor = (PreviousColor != HslRgbColor.Transparent && PreviousColor != clr) ? Cursors.Hand : Cursors.Arrow;
+            HandleTextEvents = true;
         }
 
         private void CopyCanExecute(object sender, CanExecuteRoutedEventArgs e)
@@ -98,73 +205,43 @@ namespace Clowd.UI.Dialogs.ColorPicker
             }
         }
 
-        protected void OnCurrentColorChanged()
-        {
-            HandleTextEvents = false;
-            var hsl = HSLColor.FromRGB(CurrentColor);
-            if (!txtClrR.IsFocused) txtClrR.Text = CurrentColor.R.ToString();
-            if (!txtClrG.IsFocused) txtClrG.Text = CurrentColor.G.ToString();
-            if (!txtClrB.IsFocused) txtClrB.Text = CurrentColor.B.ToString();
-            if (!txtClrA.IsFocused) txtClrA.Text = CurrentColor.A.ToString();
-            if (!txtClrH.IsFocused) txtClrH.Text = Math.Floor(hsl.Hue).ToString();
-            if (!txtClrS.IsFocused) txtClrS.Text = Math.Floor(hsl.Saturation * 100).ToString();
-            if (!txtClrL.IsFocused) txtClrL.Text = Math.Floor(hsl.Lightness * 100).ToString();
-            pathPrevColor.Cursor = (PreviousColor != Colors.Transparent && PreviousColor != CurrentColor) ? Cursors.Hand : Cursors.Arrow;
-            HandleTextEvents = true;
-        }
-
         private void CreateColorPalette()
         {
             ColorPalette.Children.Clear();
             var colors = ColorPalettes.PaintPalette.Select(c => Color.FromArgb(c.A, c.R, c.G, c.B));
             foreach (var c in colors)
             {
-                var item = new ColorPaletteItem { Background = new SolidColorBrush(c), IsTabStop = false };
-                item.MouseDown += ColorPaletteItemSelected;
+                var item = new ColorPaletteItem(c);
+                item.Clicked += ColorPaletteItemClicked;
                 ColorPalette.Children.Add(item);
             }
         }
 
-        private void ColorPaletteItemSelected(object sender, MouseButtonEventArgs e)
+        private void ColorPaletteItemClicked(object sender, ColorSelectedEventArgs e)
         {
-            if (sender is ColorPaletteItem item && item.Background is SolidColorBrush brush)
+            CurrentColor = HslRgbColor.FromColor(e.SelectedColor);
+            if (e.ClickCount >= 2)
             {
-                CurrentColor = brush.Color;
-                if (e.ClickCount >= 2)
-                {
-                    MyDialogResult = true;
-                    Close();
-                }
+                MyDialogResult = true;
+                Close();
             }
         }
 
-        private void HandleRgbSet(TextBox txt, Func<Color, byte, Color> thunk)
+        private void HandleSet<T>(TextBox txt, Func<string, T> parse, Action<T> set)
         {
             txt.TextChanged += (s, e) =>
             {
                 try
                 {
                     if (!HandleTextEvents) return;
-                    var i = int.Parse(txt.Text);
-                    if (i > 255 || i < 0) return;
-                    CurrentColor = thunk(CurrentColor, (byte)i);
+                    set(parse(txt.Text));
                 }
                 catch {; }
             };
-        }
 
-        private void HandleHslSet(TextBox txt, Action<HSLColor, double> thunk)
-        {
-            txt.TextChanged += (s, e) =>
+            txt.LostKeyboardFocus += (s, e) =>
             {
-                try
-                {
-                    if (!HandleTextEvents) return;
-                    var hsl = HSLColor.FromRGB(CurrentColor);
-                    thunk(hsl, double.Parse(txt.Text));
-                    CurrentColor = hsl.ToRGB();
-                }
-                catch {; }
+                UpdateTextComponents(false);
             };
         }
 
@@ -200,38 +277,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private void PrevColorClicked(object sender, MouseButtonEventArgs e)
         {
-            if (PreviousColor != Colors.Transparent)
+            if (PreviousColor != HslRgbColor.Transparent)
                 CurrentColor = PreviousColor;
-        }
-    }
-
-    public class ColorPaletteItem : Control
-    {
-        const double _penThicknes = 1;
-        Pen _blackPen = new Pen(Brushes.Black, _penThicknes);
-        Pen _whitePen = new Pen(Brushes.White, _penThicknes);
-
-        protected override void OnMouseEnter(MouseEventArgs e)
-        {
-            base.OnMouseEnter(e);
-            InvalidateVisual();
-        }
-
-        protected override void OnMouseLeave(MouseEventArgs e)
-        {
-            base.OnMouseLeave(e);
-            InvalidateVisual();
-        }
-
-        protected override void OnRender(DrawingContext drawingContext)
-        {
-            drawingContext.DrawRectangle(Background, null, new Rect(0, 0, ActualWidth, ActualHeight));
-
-            if (IsMouseOver)
-            {
-                drawingContext.DrawRectangle(null, _blackPen, new Rect(0.5, 0.5, ActualWidth - 1, ActualHeight - 1));
-                drawingContext.DrawRectangle(null, _whitePen, new Rect(1.5, 1.5, ActualWidth - 3, ActualHeight - 3));
-            }
         }
     }
 }

@@ -135,12 +135,12 @@ namespace Clowd.UI.Helpers
 
         public static async Task<Color> ShowColorPromptAsync(FrameworkElement parent, Color initial)
         {
-            var clr = new Dialogs.ColorPicker.ColorDialog(initial, true);
+            var clr = new Dialogs.ColorPicker.ColorDialog(HslRgbColor.FromColor(initial), true);
             await clr.ShowAsNiceDialogAsync(parent);
 
             if (clr.MyDialogResult == true)
             {
-                return clr.CurrentColor;
+                return clr.CurrentColor.ToColor();
             }
             else
             {
@@ -150,7 +150,11 @@ namespace Clowd.UI.Helpers
 
         public static void ShowColorViewer(Color? initial = null)
         {
-            var clr = new Dialogs.ColorPicker.ColorDialog(initial, false);
+            HslRgbColor color = null;
+            if (initial.HasValue)
+                color = HslRgbColor.FromColor(initial.Value);
+
+            var clr = new Dialogs.ColorPicker.ColorDialog(color, false);
             clr.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             clr.Show();
             clr.GetPlatformWindow().Activate();

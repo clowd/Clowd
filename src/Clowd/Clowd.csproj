@@ -17,6 +17,15 @@
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <DebugType>none</DebugType>
   </PropertyGroup>
+
+  <!-- Work around https://github.com/dotnet/wpf/issues/6792 -->
+  <Target Name="RemoveDuplicateAnalyzers" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <FilteredAnalyzer Include="@(Analyzer->Distinct())" />
+      <Analyzer Remove="@(Analyzer)" />
+      <Analyzer Include="@(FilteredAnalyzer)" />
+    </ItemGroup>
+  </Target>
   
   <ItemGroup>
     <Resource Include="Assets\Raleway.ttf" />
@@ -54,6 +63,7 @@
     <PackageReference Include="WPF-UI" Version="1.2.7" />
     <PackageReference Include="PipeMethodCalls" Version="3.2.0" />
     <PackageReference Include="PipeMethodCalls.NetJson" Version="3.0.0" />
+    <PackageReference Include="DependencyPropertyGenerator" Version="1.0.3" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <!-- uncomment to compile shaders -->
