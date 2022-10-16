@@ -118,7 +118,7 @@ namespace Clowd.Util
 
         public static HslRgbColor FromColor(System.Drawing.Color color)
         {
-            return new HslRgbColor(color.R, color.G, color.B, color.A);
+            return new HslRgbColor(color.R, color.G, color.B, color.A / 255d);
         }
 
         public Color ToColor()
@@ -128,7 +128,7 @@ namespace Clowd.Util
 
         public static HslRgbColor FromColor(Color color)
         {
-            return new HslRgbColor(color.R, color.G, color.B, color.A);
+            return new HslRgbColor(color.R, color.G, color.B, color.A / 255d);
         }
 
         private void UpdateRgb()
