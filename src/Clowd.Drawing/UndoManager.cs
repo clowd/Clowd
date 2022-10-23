@@ -58,12 +58,8 @@ namespace Clowd.Drawing
         public void ClearHistory(XElement initialState = null)
         {
             initialState ??= ClassifyXml.Serialize(new GraphicState { BackgroundColor = _drawingCanvas.ArtworkBackground });
-            _node = new SimpleLinkedListNode { Value = initialState };
             _canMergeNext = false;
-            var state = ClassifyXml.Deserialize<GraphicState>(initialState);
-            var nextGraphics = GetNextCollection(state);
-            _drawingCanvas.GraphicsList = nextGraphics;
-            RaiseStateChangedEvent(initialState);
+            SetState(new SimpleLinkedListNode { Value = initialState });
         }
 
         public void AddCommandStep(bool mergable)
@@ -104,12 +100,16 @@ namespace Clowd.Drawing
 
         public static string[] GetChangedXmlNodes(XElement element1, XElement element2)
         {
-            string GetElementName(XElement e)
+            string GetElementName(XElement e, int index)
             {
                 if (e.HasElements)
                 {
                     var id = e.Element("id");
                     if (id?.Value != null) return id.Value;
+                }
+                if (index >= 0 && e.Name.LocalName == "item")
+                {
+                    return e.Name.LocalName + "." + index;
                 }
                 return e.Name.LocalName;
             }
@@ -119,15 +119,16 @@ namespace Clowd.Drawing
                 Dictionary<string, XElement> dict = new();
 
                 // add all of prev properties to dictionary
-                foreach (var e in prev.Elements())
+                foreach (var e in prev.Elements().Select((Item, Index) => new { Index, Item }))
                 {
-                    dict.Add(GetElementName(e), e);
+                    dict.Add(GetElementName(e.Item, e.Index), e.Item);
                 }
 
                 // iterate next properties, find matches in dictionary
-                foreach (var eNext in next.Elements())
+                foreach (var e in next.Elements().Select((Item, Index) => new { Index, Item }))
                 {
-                    var elName = GetElementName(eNext);
+                    var eNext = e.Item;
+                    var elName = GetElementName(eNext, e.Index);
                     var elPath = path.Concat(elName);
 
                     if (!dict.TryGetValue(elName, out var ePrev))
@@ -184,12 +185,7 @@ namespace Clowd.Drawing
             if (!CanUndo)
                 return;
 
-            var nextNode = _node.Previous;
-            var state = ClassifyXml.Deserialize<GraphicState>(nextNode.Value);
-            var nextGraphics = GetNextCollection(state);
-            _drawingCanvas.GraphicsList = nextGraphics;
-            _node = nextNode;
-
+            SetState(_node.Previous);
             RaiseStateChangedEvent(_node.Value);
         }
 
@@ -198,31 +194,27 @@ namespace Clowd.Drawing
             if (!CanRedo)
                 return;
 
-            var nextNode = _node.Next;
-            var state = ClassifyXml.Deserialize<GraphicState>(nextNode.Value);
-            var nextGraphics = GetNextCollection(state);
-            _drawingCanvas.GraphicsList = nextGraphics;
-            _node = nextNode;
-
+            SetState(_node.Next);
             RaiseStateChangedEvent(_node.Value);
         }
 
         GraphicState GetNextState()
         {
-            var lst = _drawingCanvas.GraphicsList;
             return new()
             {
-                BackgroundColor = lst.BackgroundBrush.Color,
-                Graphics = lst.GetGraphicList(false),
+                BackgroundColor = _drawingCanvas.ArtworkBackground,
+                Graphics = _drawingCanvas.GraphicsList.GetGraphicList(false),
             };
         }
 
-        GraphicCollection GetNextCollection(GraphicState state)
+        void SetState(SimpleLinkedListNode node)
         {
+            var state = ClassifyXml.Deserialize<GraphicState>(node.Value);
             var nextGraphics = new GraphicCollection(_drawingCanvas);
             foreach (var s in state.Graphics) nextGraphics.Add(s);
-            nextGraphics.BackgroundBrush = new SolidColorBrush(state.BackgroundColor);
-            return nextGraphics;
+            _drawingCanvas.GraphicsList = nextGraphics;
+            _drawingCanvas.ArtworkBackground = state.BackgroundColor;
+            _node = node;
         }
 
         private void RaiseStateChangedEvent(XElement state)

@@ -78,6 +78,7 @@ namespace Clowd.Drawing
 
         private Dictionary<ToolType, ToolDesc> _toolStore;
         private Border _clickable;
+        private DrawingVisual _artworkBackground;
         private UndoManager _undoManager;
         private bool _isToolMouseDown;
         private bool _isAutoFit;
@@ -86,6 +87,9 @@ namespace Clowd.Drawing
 
         public DrawingCanvas()
         {
+            _artworkBackground = new DrawingVisual();
+            AddVisualChild(_artworkBackground);
+
             GraphicsList = new GraphicCollection(this);
 
             // create array of drawing tools
@@ -313,23 +317,22 @@ namespace Clowd.Drawing
         {
             if (oldValue != null)
             {
-                RemoveVisualChild(oldValue.BackgroundVisual);
                 oldValue.PropertyChanged -= GraphicsListPropertyChanged;
                 oldValue.Clear();
             }
 
             newValue.PropertyChanged += GraphicsListPropertyChanged;
-            AddVisualChild(newValue.BackgroundVisual);
-        }
-
-        partial void OnArtworkBackgroundChanged(Color newValue)
-        {
-            GraphicsList.BackgroundBrush = new SolidColorBrush(newValue);
+            InvalidateBackground();
         }
 
         partial void OnHandleColorChanged(Color newValue)
         {
             GraphicBase.HandleBrush = new SolidColorBrush(newValue);
+        }
+
+        partial void OnArtworkBackgroundChanged()
+        {
+            InvalidateBackground();
         }
 
         private void ApplyGraphicPropertyChange<TType, T>(T newValue, Func<TType, T> getTextProp, Action<TType, T> setTextProp) where TType : GraphicBase
@@ -354,17 +357,9 @@ namespace Clowd.Drawing
             }
         }
 
-        public BitmapSource DrawGraphicsToBitmap() => GraphicsList.DrawGraphicsToBitmap();
+        public BitmapSource DrawGraphicsToBitmap() => GraphicsList.DrawGraphicsToBitmap(new SolidColorBrush(ArtworkBackground));
 
-        public DrawingVisual DrawGraphicsToVisual() => GraphicsList.DrawGraphicsToVisual();
-
-        //public byte[] SerializeGraphics(bool selectedOnly) => GraphicsList.SerializeObjects(selectedOnly);
-
-        //public void DeserializeGraphics(byte[] graphics)
-        //{
-        //    GraphicsList.DeserializeObjectsInto(graphics);
-        //    _undoManager.AddCommandStep();
-        //}
+        public DrawingVisual DrawGraphicsToVisual() => GraphicsList.DrawGraphicsToVisual(new SolidColorBrush(ArtworkBackground));
 
         public void AddGraphic(GraphicBase g)
         {
@@ -412,6 +407,12 @@ namespace Clowd.Drawing
                 g.Normalize();
                 this.GraphicsList.Add(g);
             }
+            AddCommandToHistory(false);
+        }
+
+        public void SetBackgroundColor(Color clr)
+        {
+            ArtworkBackground = clr;
             AddCommandToHistory(false);
         }
 
@@ -559,29 +560,39 @@ namespace Clowd.Drawing
             _undoManager.Redo();
         }
 
-        protected override int VisualChildrenCount => (GraphicsList?.VisualCount ?? 0) + Children.Count;
+        protected override int VisualChildrenCount => (GraphicsList?.VisualCount ?? 0) + Children.Count + 1;
 
         internal void InternalAddVisualChild(Visual child) => AddVisualChild(child);
 
         internal void InternalRemoveVisualChild(Visual child) => RemoveVisualChild(child);
 
+        private void InvalidateBackground()
+        {
+            using var ctx = _artworkBackground.RenderOpen();
+            ctx.DrawRectangle(new SolidColorBrush(ArtworkBackground), null, GraphicsList.ContentBounds);
+        }
+
         protected override Visual GetVisualChild(int index)
         {
-            // _clickable and _artworkbounds come first,
+            // _clickable and _artworkBackground come first,
             // any other children come after.
 
             if (index == 0)
             {
                 return _clickable;
             }
-            else if (index - 1 < GraphicsList.VisualCount)
+            if (index == 1)
             {
-                return GraphicsList.GetVisual(index - 1);
+                return _artworkBackground;
             }
-            else if (index - 1 - GraphicsList.VisualCount < Children.Count)
+            else if (index - 2 < GraphicsList.VisualCount)
+            {
+                return GraphicsList.GetVisual(index - 2);
+            }
+            else if (index - 2 - GraphicsList.VisualCount < Children.Count)
             {
                 // any other children.
-                return Children[index - GraphicsList.VisualCount];
+                return Children[index - 1 - GraphicsList.VisualCount];
             }
 
             throw new ArgumentOutOfRangeException("index");
@@ -601,6 +612,7 @@ namespace Clowd.Drawing
             else if (e.PropertyName == nameof(GraphicCollection.ContentBounds))
             {
                 _isAutoFit = false;
+                InvalidateBackground();
             }
         }
 

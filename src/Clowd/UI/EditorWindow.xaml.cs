@@ -41,9 +41,11 @@ namespace Clowd.UI
             _session = info;
 
             InitializeComponent();
+
+            drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
             drawingCanvas.HandleColor = AppStyles.AccentColor;
             drawingCanvas.StateUpdated += drawingCanvas_StateUpdated;
-            drawingCanvas.ArtworkBackground = info.CanvasBackground;
+            LoadSessionState();
 
             this.InputBindings.Add(drawingCanvas.CommandSelectAll.CreateKeyBinding());
             this.InputBindings.Add(drawingCanvas.CommandUnselectAll.CreateKeyBinding());
@@ -241,24 +243,21 @@ namespace Clowd.UI
             }
         }
 
-        private void ImageEditorPage2_Loaded(object sender, RoutedEventArgs e)
+        private bool LoadSessionState()
         {
-            Keyboard.Focus(buttonFocus);
-
-            bool loaded = false;
 
             if (File.Exists(_graphicsPath))
             {
                 try
                 {
                     drawingCanvas.RestoreState(XElement.Load(_graphicsPath));
-                    loaded = true;
+                    return true;
                 }
                 catch { }
             }
 
 #pragma warning disable CS0612 // Type or member is obsolete
-            if (!loaded && !String.IsNullOrWhiteSpace(_session.GraphicsStream))
+            if (!String.IsNullOrWhiteSpace(_session.GraphicsStream))
             {
                 try
                 {
@@ -266,14 +265,14 @@ namespace Clowd.UI
                     foreach (var g in ClassifyBinary.Deserialize<GraphicBase[]>(state))
                         drawingCanvas.GraphicsList.Add(g);
                     drawingCanvas.UnselectAll();
-                    loaded = true;
+                    return true;
                 }
                 catch { }
             }
 #pragma warning restore CS0612 // Type or member is obsolete
 
             // if there is a desktop image, and we failed to load an existing set of graphics
-            if (!loaded && File.Exists(_session.DesktopImgPath))
+            if (File.Exists(_session.DesktopImgPath))
             {
                 var sel = _session.CroppedRect;
                 var crop = new Int32Rect(sel.X, sel.Y, sel.Width, sel.Height);
@@ -292,6 +291,13 @@ namespace Clowd.UI
                 // add image
                 drawingCanvas.AddGraphic(graphic);
             }
+
+            return false;
+        }
+
+        private void ImageEditorPage2_Loaded(object sender, RoutedEventArgs e)
+        {
+            Keyboard.Focus(buttonFocus);
 
             // if window is bigger than image, show at actual size. else, zoom to fit
             drawingCanvas.ZoomPanAuto();
@@ -528,11 +534,7 @@ namespace Clowd.UI
         private void backgroundColor_Click(object sender, MouseButtonEventArgs e)
         {
             miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ArtworkBackground);
-            miniColor.ColorSelectFn = (c) =>
-            {
-                drawingCanvas.ArtworkBackground = c;
-                _session.CanvasBackground = c;
-            };
+            miniColor.ColorSelectFn = (c) => drawingCanvas.SetBackgroundColor(c);
             miniColorPopup.IsOpen = true;
         }
 

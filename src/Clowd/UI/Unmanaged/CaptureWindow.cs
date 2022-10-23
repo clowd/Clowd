@@ -154,7 +154,6 @@ namespace Clowd.UI.Unmanaged
                 if (session != null)
                 {
                     session.Name = "Screenshot";
-                    session.CanvasBackground = SettingsRoot.Current.Editor.CanvasBackground;
                     if (captureType == CaptureType.Save)
                     {
                         var frame = BitmapFrame.Create(new Uri(session.PreviewImgPath), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
