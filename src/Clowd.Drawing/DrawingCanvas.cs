@@ -413,7 +413,7 @@ namespace Clowd.Drawing
         public void SetBackgroundColor(Color clr)
         {
             ArtworkBackground = clr;
-            AddCommandToHistory(false);
+            AddCommandToHistory(true);
         }
 
         public void SelectAll()
