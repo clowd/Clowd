@@ -14,13 +14,11 @@ namespace Clowd.Drawing
 {
     public sealed class GraphicCollection : SimpleNotifyObject, ICollection<GraphicBase>
     {
-        public int VisualCount => _visuals.Count + 1;
+        public int VisualCount => _visuals.Count;
 
         public int Count => _graphics.Count;
 
         public bool IsReadOnly => false;
-
-        public DrawingVisual BackgroundVisual => _artworkBackground;
 
         public GraphicBase[] SelectedItems
         {
@@ -31,25 +29,7 @@ namespace Clowd.Drawing
         public Rect ContentBounds
         {
             get => _contentBounds;
-            private set
-            {
-                if (Set(ref _contentBounds, value))
-                {
-                    InvalidateBackground();
-                }
-            }
-        }
-
-        internal SolidColorBrush BackgroundBrush
-        {
-            get => _backgroundBrush;
-            set
-            {
-                if (Set(ref _backgroundBrush, value))
-                {
-                    InvalidateBackground();
-                }
-            }
+            private set => Set(ref _contentBounds, value);
         }
 
         internal DpiScale Dpi
@@ -66,21 +46,16 @@ namespace Clowd.Drawing
         }
 
         private Rect _contentBounds;
-        private SolidColorBrush _backgroundBrush = Brushes.Transparent;
         private DpiScale _dpi;
         private GraphicBase[] _selectedItems = new GraphicBase[0];
         private readonly List<GraphicBase> _graphics;
         private readonly VisualCollection _visuals;
-        private readonly DrawingVisual _artworkBackground;
 
         internal GraphicCollection(DrawingCanvas parent)
         {
             _visuals = new VisualCollection(parent);
             _graphics = new List<GraphicBase>();
             _dpi = parent.CanvasUiElementScale;
-            _artworkBackground = new DrawingVisual();
-            _backgroundBrush = new SolidColorBrush(parent.ArtworkBackground);
-            InvalidateBackground();
         }
 
         public void Add(GraphicBase graphic)
@@ -153,7 +128,7 @@ namespace Clowd.Drawing
             OnPropertyChanged(nameof(Count));
         }
 
-        internal DrawingVisual DrawGraphicsToVisual()
+        internal DrawingVisual DrawGraphicsToVisual(Brush backgroundBrush)
         {
             // note, this method loses all bitmap effects,
             // but the alternative requires recursive painting with VisualBrush and produces really poor text rendering
@@ -173,8 +148,8 @@ namespace Clowd.Drawing
                 dc.PushTransform(transform);
 
                 // draw background
-                if (_backgroundBrush != null)
-                    dc.DrawRectangle(_backgroundBrush, null, bounds);
+                if (backgroundBrush != null)
+                    dc.DrawRectangle(backgroundBrush, null, bounds);
 
                 // draw all graphics (without any selection handles etc)
                 foreach (var g in gl)
@@ -184,7 +159,7 @@ namespace Clowd.Drawing
             return vs;
         }
 
-        internal BitmapSource DrawGraphicsToBitmap()
+        internal BitmapSource DrawGraphicsToBitmap(Brush backgroundBrush)
         {
             var gl = GetGraphicList(false);
             var bounds = ContentBounds;
@@ -201,13 +176,13 @@ namespace Clowd.Drawing
                 PixelFormats.Pbgra32);
 
             // draw background
-            if (_backgroundBrush != null)
+            if (backgroundBrush != null)
             {
                 DrawingVisual background = new DrawingVisual();
                 using (DrawingContext dc = background.RenderOpen())
                 {
                     dc.PushTransform(transform);
-                    dc.DrawRectangle(_backgroundBrush, null, bounds);
+                    dc.DrawRectangle(backgroundBrush, null, bounds);
                 }
 
                 bmp.Render(background);
@@ -224,17 +199,7 @@ namespace Clowd.Drawing
             return bmp;
         }
 
-        public Visual GetVisual(int index)
-        {
-            if (index == 0)
-            {
-                return _artworkBackground;
-            }
-            else
-            {
-                return _visuals[index - 1];
-            }
-        }
+        public Visual GetVisual(int index) => _visuals[index];
 
         public GraphicBase this[int index] => _graphics[index];
 
@@ -302,12 +267,6 @@ namespace Clowd.Drawing
                 if (g?.IsSelected == true && v != null)
                     DrawGraphic(g, v);
             }
-        }
-
-        private void InvalidateBackground()
-        {
-            using var ctx = _artworkBackground.RenderOpen();
-            ctx.DrawRectangle(_backgroundBrush, null, ContentBounds);
         }
 
         private Rect GetArtworkBounds()
