@@ -23,7 +23,7 @@ namespace Clowd.Drawing
         }
     }
 
-    public class UndoManager
+    internal class UndoManager
     {
         class SimpleLinkedListNode
         {
@@ -211,7 +211,11 @@ namespace Clowd.Drawing
         {
             var state = ClassifyXml.Deserialize<GraphicState>(node.Value);
             var nextGraphics = new GraphicCollection(_drawingCanvas);
-            foreach (var s in state.Graphics) nextGraphics.Add(s);
+            foreach (var s in state.Graphics)
+            {
+                s.Normalize();
+                nextGraphics.Add(s);
+            }
             _drawingCanvas.GraphicsList = nextGraphics;
             _drawingCanvas.ArtworkBackground = state.BackgroundColor;
             _node = node;

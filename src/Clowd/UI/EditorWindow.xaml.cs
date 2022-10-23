@@ -526,6 +526,7 @@ namespace Clowd.UI
 
         private void objectColor_Click(object sender, MouseButtonEventArgs e)
         {
+            miniColor.ColorSelectFn = null;
             miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ObjectColor);
             miniColor.ColorSelectFn = (c) => drawingCanvas.ObjectColor = c;
             miniColorPopup.IsOpen = true;
@@ -533,6 +534,7 @@ namespace Clowd.UI
 
         private void backgroundColor_Click(object sender, MouseButtonEventArgs e)
         {
+            miniColor.ColorSelectFn = null;
             miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ArtworkBackground);
             miniColor.ColorSelectFn = (c) => drawingCanvas.SetBackgroundColor(c);
             miniColorPopup.IsOpen = true;

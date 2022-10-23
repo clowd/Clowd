@@ -24,6 +24,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
     [DependencyProperty<SolidColorBrush>("CurrentBrush")]
     [DependencyProperty<Color>("NoAlphaColor")]
     [DependencyProperty<Color>("HueOnlyColor")]
+    [DependencyProperty<bool>("Realtime")]
     public partial class MiniColorDialog : UserControl
     {
         public event EventHandler Cancelled;
@@ -100,6 +101,12 @@ namespace Clowd.UI.Dialogs.ColorPicker
         {
             var hsl = CurrentColor;
             var rgb = hsl.ToColor();
+
+            if (Realtime && ColorSelectFn != null)
+            {
+                ColorSelectFn(rgb);
+            }
+
             CurrentBrush = new SolidColorBrush(rgb);
 
             rgb.A = 255;
