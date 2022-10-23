@@ -16,7 +16,7 @@ namespace Clowd.Drawing.Tools
                     g.AddObscuredArea(selectedArea);
                 }
 
-                canvas.AddCommandToHistory();
+                canvas.AddCommandToHistory(false);
             }
         }
     }

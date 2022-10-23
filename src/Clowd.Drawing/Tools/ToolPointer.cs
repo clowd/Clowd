@@ -259,7 +259,7 @@ namespace Clowd.Drawing.Tools
             drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
             _selectMode = SelectionMode.None;
             if (_wasEdit)
-                drawingCanvas.AddCommandToHistory();
+                drawingCanvas.AddCommandToHistory(false);
         }
 
         public override void SetCursor(DrawingCanvas drawingCanvas)

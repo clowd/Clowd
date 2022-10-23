@@ -180,7 +180,7 @@ namespace Clowd.Drawing.Tools
 
             if (newText != _oldText)
             {
-                drawingCanvas.AddCommandToHistory();
+                drawingCanvas.AddCommandToHistory(false);
             }
 
             _editText.Editing = false;
