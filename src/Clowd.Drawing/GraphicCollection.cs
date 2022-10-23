@@ -40,7 +40,7 @@ namespace Clowd.Drawing
             }
         }
 
-        internal Brush BackgroundBrush
+        internal SolidColorBrush BackgroundBrush
         {
             get => _backgroundBrush;
             set
@@ -66,7 +66,7 @@ namespace Clowd.Drawing
         }
 
         private Rect _contentBounds;
-        private Brush _backgroundBrush = Brushes.Transparent;
+        private SolidColorBrush _backgroundBrush = Brushes.Transparent;
         private DpiScale _dpi;
         private GraphicBase[] _selectedItems = new GraphicBase[0];
         private readonly List<GraphicBase> _graphics;
@@ -85,6 +85,10 @@ namespace Clowd.Drawing
 
         public void Add(GraphicBase graphic)
         {
+            // we should not ever allow duplicate object id's
+            if (this.Any(f => f.Id == graphic.Id))
+                graphic.Id = Guid.NewGuid().ToString();
+
             var vis = new DrawingVisual();
             _graphics.Add(graphic);
             _visuals.Add(vis);
@@ -97,6 +101,10 @@ namespace Clowd.Drawing
 
         public void Insert(int index, GraphicBase graphic)
         {
+            // we should not ever allow duplicate object id's
+            if (this.Any(f => f.Id == graphic.Id))
+                graphic.Id = Guid.NewGuid().ToString();
+
             var vis = new DrawingVisual();
             _graphics.Insert(index, graphic);
             _visuals.Insert(index, vis);
@@ -143,18 +151,6 @@ namespace Clowd.Drawing
             InvalidateBounds();
             InvalidateSelected();
             OnPropertyChanged(nameof(Count));
-        }
-
-        internal byte[] SerializeObjects(bool selectedOnly)
-        {
-            var gl = GetGraphicList(selectedOnly);
-            return ClassifyBinary.Serialize(gl);
-        }
-
-        internal void DeserializeObjectsInto(byte[] bytes)
-        {
-            foreach (var g in ClassifyBinary.Deserialize<GraphicBase[]>(bytes))
-                Add(g);
         }
 
         internal DrawingVisual DrawGraphicsToVisual()
@@ -343,7 +339,7 @@ namespace Clowd.Drawing
             return result;
         }
 
-        private GraphicBase[] GetGraphicList(bool selectedOnly)
+        public GraphicBase[] GetGraphicList(bool selectedOnly)
         {
             if (selectedOnly)
             {

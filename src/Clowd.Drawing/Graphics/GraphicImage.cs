@@ -346,7 +346,7 @@ namespace Clowd.Drawing.Graphics
 
             Crop = new Int32Rect((int)x, (int)y, (int)w, (int)h);
 
-            _editingCanvas?.AddCommandToHistory();
+            _editingCanvas?.AddCommandToHistory(false);
             _editingAnchor = Rect.Empty;
             _editingCanvas = null;
 

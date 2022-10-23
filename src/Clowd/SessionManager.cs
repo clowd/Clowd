@@ -105,10 +105,11 @@ namespace Clowd
             set => Set(value);
         }
 
+        [Obsolete]
         public string GraphicsStream
         {
             get => Get<string>();
-            set => Set(value);
+            //set => Set(value);
         }
 
         public string UploadFileKey

@@ -19,6 +19,9 @@ using System.Windows.Controls.Primitives;
 using Clowd.Clipboard.Formats;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using RT.Serialization;
+using static System.Net.Mime.MediaTypeNames;
+using System.Xml.Linq;
 
 namespace Clowd.UI
 {
@@ -28,6 +31,7 @@ namespace Clowd.UI
         private SettingsRoot _settings = SettingsRoot.Current;
         private SessionInfo _session;
         private int _nudgeRepeatCount;
+        private string _graphicsPath => Path.Combine(Path.GetDirectoryName(_session.FilePath), "graphics.xml");
 
         private const string CANVAS_CLIPBOARD_FORMAT_GUID = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
         private readonly static ClipboardFormat CANVAS_CLIPBOARD_FORMAT = ClipboardFormat.CreateCustomFormat(CANVAS_CLIPBOARD_FORMAT_GUID);
@@ -83,7 +87,7 @@ namespace Clowd.UI
             }
         }
 
-        private void EditorWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        private void EditorWindow_Closing(object sender, CancelEventArgs e)
         {
             UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
             _session.OpenEditor = null;
@@ -243,17 +247,30 @@ namespace Clowd.UI
 
             bool loaded = false;
 
-            if (!String.IsNullOrWhiteSpace(_session.GraphicsStream))
+            if (File.Exists(_graphicsPath))
+            {
+                try
+                {
+                    drawingCanvas.RestoreState(XElement.Load(_graphicsPath));
+                    loaded = true;
+                }
+                catch { }
+            }
+
+#pragma warning disable CS0612 // Type or member is obsolete
+            if (!loaded && !String.IsNullOrWhiteSpace(_session.GraphicsStream))
             {
                 try
                 {
                     var state = Convert.FromBase64String(_session.GraphicsStream);
-                    drawingCanvas.DeserializeGraphics(state);
+                    foreach (var g in ClassifyBinary.Deserialize<GraphicBase[]>(state))
+                        drawingCanvas.GraphicsList.Add(g);
                     drawingCanvas.UnselectAll();
                     loaded = true;
                 }
                 catch { }
             }
+#pragma warning restore CS0612 // Type or member is obsolete
 
             // if there is a desktop image, and we failed to load an existing set of graphics
             if (!loaded && File.Exists(_session.DesktopImgPath))
@@ -351,12 +368,13 @@ namespace Clowd.UI
 
             UpdatePreview(bitmap);
 
-            var graphics = drawingCanvas.SerializeGraphics(drawingCanvas.SelectedCount > 0);
+            var graphics = drawingCanvas.GraphicsList.GetGraphicList(drawingCanvas.SelectedCount > 0);
+            var bytes = ClassifyBinary.Serialize(graphics);
 
             using (var ch = await ClipboardWpf.OpenAsync())
             {
                 ch.SetImage(bitmap);
-                ch.SetFormat(CANVAS_CLIPBOARD_FORMAT, graphics);
+                ch.SetFormat(CANVAS_CLIPBOARD_FORMAT, bytes);
             }
         }
 
@@ -406,10 +424,27 @@ namespace Clowd.UI
 
             if (clipGraphics != null)
             {
-                drawingCanvas.DeserializeGraphics(clipGraphics);
+                var sessionDir = Path.GetDirectoryName(_session.FilePath);
+                var graphics = ClassifyBinary.Deserialize<GraphicBase[]>(clipGraphics);
+
+                // copy any pasted bitmaps into this session directory
+                foreach (var img in graphics.OfType<GraphicImage>())
+                {
+                    if (!img.CursorFilePath.StartsWith(sessionDir, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        img.CursorFilePath = CopyFileToSessionDir(img.CursorFilePath);
+                    }
+                    if (!img.BitmapFilePath.StartsWith(sessionDir, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        img.BitmapFilePath = CopyFileToSessionDir(img.BitmapFilePath);
+                    }
+                }
+
+                drawingCanvas.AddGraphics(graphics);
                 return;
             }
-            else if (clipImage != null)
+
+            if (clipImage != null)
             {
                 // save pasted image into session folder + add to canvas
                 var imgPath = SaveImageToSessionDir(clipImage);
@@ -445,7 +480,8 @@ namespace Clowd.UI
 
         private void drawingCanvas_StateUpdated(object sender, StateChangedEventArgs e)
         {
-            _session.GraphicsStream = Convert.ToBase64String(e.State);
+            using var fs = File.Create(_graphicsPath);
+            e.State?.Save(fs);
         }
 
         private void UpdatePreview(BitmapSource bitmap)
@@ -474,14 +510,22 @@ namespace Clowd.UI
             return path;
         }
 
-        private async void objectColor_Click(object sender, MouseButtonEventArgs e)
+        private string CopyFileToSessionDir(string src)
+        {
+            var ext = Path.GetExtension(src);
+            var path = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ext);
+            File.Copy(src, path, true);
+            return path;
+        }
+
+        private void objectColor_Click(object sender, MouseButtonEventArgs e)
         {
             miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ObjectColor);
             miniColor.ColorSelectFn = (c) => drawingCanvas.ObjectColor = c;
             miniColorPopup.IsOpen = true;
         }
 
-        private async void backgroundColor_Click(object sender, MouseButtonEventArgs e)
+        private void backgroundColor_Click(object sender, MouseButtonEventArgs e)
         {
             miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ArtworkBackground);
             miniColor.ColorSelectFn = (c) =>

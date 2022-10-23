@@ -15,6 +15,7 @@ using System.Reflection;
 using System.ComponentModel;
 using System.Windows.Data;
 using Clowd.Config;
+using System.Xml.Linq;
 
 namespace Clowd.Drawing
 {
@@ -349,7 +350,7 @@ namespace Clowd.Drawing
 
             if (wasChange)
             {
-                AddCommandToHistory();
+                AddCommandToHistory(true);
             }
         }
 
@@ -357,13 +358,13 @@ namespace Clowd.Drawing
 
         public DrawingVisual DrawGraphicsToVisual() => GraphicsList.DrawGraphicsToVisual();
 
-        public byte[] SerializeGraphics(bool selectedOnly) => GraphicsList.SerializeObjects(selectedOnly);
+        //public byte[] SerializeGraphics(bool selectedOnly) => GraphicsList.SerializeObjects(selectedOnly);
 
-        public void DeserializeGraphics(byte[] graphics)
-        {
-            GraphicsList.DeserializeObjectsInto(graphics);
-            _undoManager.AddCommandStep();
-        }
+        //public void DeserializeGraphics(byte[] graphics)
+        //{
+        //    GraphicsList.DeserializeObjectsInto(graphics);
+        //    _undoManager.AddCommandStep();
+        //}
 
         public void AddGraphic(GraphicBase g)
         {
@@ -378,7 +379,40 @@ namespace Clowd.Drawing
             g.IsSelected = true;
             g.Normalize();
             this.GraphicsList.Add(g);
-            AddCommandToHistory();
+            AddCommandToHistory(false);
+        }
+
+        public void AddGraphics(GraphicBase[] graphics)
+        {
+            if (graphics.Length is 0 or 1)
+            {
+                if (graphics.Length == 1)
+                {
+                    AddGraphic(graphics[0]);
+                }
+                return;
+            }
+
+            // center the collection of items in the current viewport
+            Rect bounds = graphics[0].Bounds;
+            for (int i = 1; i < graphics.Length; i++)
+                bounds.Union(graphics[i].Bounds);
+
+            var transformX = (-bounds.Left - bounds.Width / 2) + ((ActualWidth / 2 - ContentOffset.X) / ContentScale);
+            var transformY = (-bounds.Top - bounds.Height / 2) + ((ActualHeight / 2 - ContentOffset.Y) / ContentScale);
+
+            foreach (var g in graphics)
+                g.Move(transformX, transformY);
+
+            // only the newly added items should be selected
+            this.UnselectAll();
+            foreach (var g in graphics)
+            {
+                g.IsSelected = true;
+                g.Normalize();
+                this.GraphicsList.Add(g);
+            }
+            AddCommandToHistory(false);
         }
 
         public void SelectAll()
@@ -420,7 +454,7 @@ namespace Clowd.Drawing
 
             if (wasChange)
             {
-                AddCommandToHistory();
+                AddCommandToHistory(false);
             }
         }
 
@@ -429,8 +463,13 @@ namespace Clowd.Drawing
             if (GraphicsList.Count > 0)
             {
                 GraphicsList.Clear();
-                AddCommandToHistory();
+                AddCommandToHistory(false);
             }
+        }
+
+        public void RestoreState(XElement data)
+        {
+            _undoManager.ClearHistory(data);
         }
 
         public void Nudge(int offsetX, int offsetY)
@@ -441,7 +480,7 @@ namespace Clowd.Drawing
                 {
                     obj.Move(offsetX, offsetY);
                 }
-                _undoManager.AddCommandStepNudge();
+                _undoManager.AddCommandStep(true);
             }
         }
 
@@ -501,7 +540,7 @@ namespace Clowd.Drawing
                         GraphicsList.Insert(idx, g);
                     }
                 }
-                AddCommandToHistory();
+                AddCommandToHistory(false);
             }
         }
 
@@ -681,7 +720,7 @@ namespace Clowd.Drawing
         {
             // this is only triggered on bindings with NotifyOnSourceUpdated, and 
             // that is only enabled on our object property bindings in SyncObjectState.
-            AddCommandToHistory();
+            AddCommandToHistory(true);
         }
 
         void DrawingCanvas_MouseDown(object sender, MouseButtonEventArgs e)
@@ -825,7 +864,7 @@ namespace Clowd.Drawing
                     {
                         // Pointer tool moved or resized graphics object.
                         // Add this action to the history
-                        AddCommandToHistory();
+                        AddCommandToHistory(false);
                     }
                 }
             }
@@ -843,9 +882,9 @@ namespace Clowd.Drawing
             UnselectAll();
         }
 
-        internal void AddCommandToHistory()
+        internal void AddCommandToHistory(bool mergable)
         {
-            _undoManager.AddCommandStep();
+            _undoManager.AddCommandStep(mergable);
         }
 
         partial void OnContentScaleChanged(double newValue)

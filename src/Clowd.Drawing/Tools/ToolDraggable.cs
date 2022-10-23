@@ -42,7 +42,7 @@ namespace Clowd.Drawing.Tools
             {
                 _end?.Invoke(_instance);
                 _instance.Normalize();
-                canvas.AddCommandToHistory();
+                canvas.AddCommandToHistory(false);
                 _instance = null;
             }
         }
