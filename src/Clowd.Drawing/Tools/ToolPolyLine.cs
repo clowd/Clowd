@@ -8,7 +8,7 @@ namespace Clowd.Drawing.Tools
     {
         private GraphicPolyLine _newPolyLine;
 
-        public ToolPolyLine() : base(Resource.CursorPencil)
+        public ToolPolyLine() : base(CursorResources.Pen)
         { }
 
         protected override void OnMouseDownImpl(DrawingCanvas canvas, Point pt)

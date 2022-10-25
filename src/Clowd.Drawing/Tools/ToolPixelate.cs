@@ -6,6 +6,10 @@ namespace Clowd.Drawing.Tools
 {
     internal class ToolPixelate : ToolSelection
     {
+        public ToolPixelate() : base(CursorResources.Obscure)
+        {
+        }
+
         protected override void MakeSelection(DrawingCanvas canvas, Rect selectedArea)
         {
             var images = canvas.GraphicsList.OfType<GraphicImage>().ToArray();

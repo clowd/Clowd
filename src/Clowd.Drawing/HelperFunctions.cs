@@ -3,12 +3,11 @@ using System.Windows;
 using System.Windows.Input;
 using RT.Util.Geometry;
 
-
 namespace Clowd.Drawing
 {
     internal static class HelperFunctions
     {
-        public static Cursor DefaultCursor => Cursors.Arrow;
+        public static Cursor DefaultCursor => CursorResources.Default;
 
         public static Rect CreateRectSafe(double Left, double Top, double Right, double Bottom)
         {

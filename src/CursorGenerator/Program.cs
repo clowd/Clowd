@@ -52,7 +52,9 @@ internal class Program
 
         var sizes = new int[] { 32, 40, 48, 56, 64, 72, 128, 192, 256 };
         //sizes = new int[] { 32 };
-        var angles = Enumerable.Range(0, 32).Select(x => x * 11.25f).ToArray();
+
+        var numAngles = 36;
+        var angles = Enumerable.Range(0, numAngles).Select(x => x * (360f / numAngles)).ToArray();
         //angles = new float[] { 0, 22, 45, 60 };
 
         HtmlIndex.AppendLine("<html><body style=\"background-color: coral\">");
@@ -67,7 +69,7 @@ internal class Program
         CsEmbed.AppendLine("private const string RSX_NS = \"Clowd.Drawing.Cursors\";");
         CsEmbed.AppendLine("public CursorResources() : base(Assembly.GetExecutingAssembly(), RSX_NS) { }");
 
-        CsProjItems.AppendLine("<Project Sdk=\"Microsoft.NET.Sdk\">");
+        CsProjItems.AppendLine("<Project>");
         CsProjItems.AppendLine("<ItemGroup>");
 
         DrawSizes(sizes, "Default", DrawBaseCursor);

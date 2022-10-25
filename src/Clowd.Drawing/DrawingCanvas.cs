@@ -97,31 +97,31 @@ namespace Clowd.Drawing
             ToolText = new ToolText();
 
             var toolRectangle = new ToolDraggable<GraphicRectangle>(
-                Resource.CursorRectangle,
+                CursorResources.Rect,
                 point => new GraphicRectangle(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolFilledRectangle = new ToolDraggable<GraphicFilledRectangle>(
-                Resource.CursorRectangle,
+                CursorResources.Rect,
                 point => new GraphicFilledRectangle(ObjectColor, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolEllipse = new ToolDraggable<GraphicEllipse>(
-                Resource.CursorEllipse,
+                CursorResources.Ellipse,
                 point => new GraphicEllipse(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolLine = new ToolDraggable<GraphicLine>(
-                Resource.CursorLine,
+                CursorResources.Line,
                 point => new GraphicLine(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
 
             var toolArrow = new ToolDraggable<GraphicArrow>(
-                Resource.CursorArrow,
+                CursorResources.Arrow,
                 point => new GraphicArrow(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);

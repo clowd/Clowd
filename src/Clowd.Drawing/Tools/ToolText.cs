@@ -14,7 +14,7 @@ namespace Clowd.Drawing.Tools
         private TextBox _txtBox;
         private string _oldText;
 
-        public ToolText(Cursor cursor = null, SnapMode snapMode = SnapMode.None) : base(cursor ?? Resource.CursorText, snapMode)
+        public ToolText(Cursor cursor = null, SnapMode snapMode = SnapMode.None) : base(cursor ?? CursorResources.Text, snapMode)
         { }
 
         protected override void OnMouseDownImpl(DrawingCanvas canvas, Point pt)

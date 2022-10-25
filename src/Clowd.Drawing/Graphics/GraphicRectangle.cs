@@ -249,11 +249,11 @@ namespace Clowd.Drawing.Graphics
                 return HelperFunctions.DefaultCursor;
 
             if (handleNumber == 9)
-                return Resource.CursorRotate;
+                return CursorResources.Rotate;
 
             var cursorNum = (int)((45 * handleNumber + Angle + 272.5) / 5) % 36;
             if (_resizeCursors[cursorNum] == null)
-                _resizeCursors[cursorNum] = Resource.GetResizeCursor(cursorNum);
+                _resizeCursors[cursorNum] = CursorResources.GetResizeCursor(cursorNum);
             return _resizeCursors[cursorNum];
         }
 
