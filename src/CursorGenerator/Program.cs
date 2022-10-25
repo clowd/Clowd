@@ -54,7 +54,7 @@ internal class Program
         //sizes = new int[] { 32 };
 
         var numAngles = 36;
-        var angles = Enumerable.Range(0, numAngles).Select(x => x * (360f / numAngles)).ToArray();
+        var angles = Enumerable.Range(0, numAngles).Select(x => x * 5).ToArray();
         //angles = new float[] { 0, 22, 45, 60 };
 
         HtmlIndex.AppendLine("<html><body style=\"background-color: coral\">");
@@ -405,7 +405,7 @@ internal class Program
         g.DrawPath(p2, gp);
     }
 
-    private static void DrawRotate(float scale, int lineWidth, Graphics g)
+    private static Point DrawRotate(float scale, int lineWidth, Graphics g)
     {
         float offset = (lineWidth % 2) == 0 ? 0 : 0.5f;
         var max = floor(scale * 32);
@@ -434,6 +434,9 @@ internal class Program
 
         g.Clip = new Region(new RectangleF(center + lineWidth * 3, 0, max, max));
         g.DrawEllipse(p2, rect);
+
+        var halfmax = (int)(max / 2);
+        return new Point(halfmax, halfmax);
     }
 
     private static void DrawObscure(float scale, int lineWidth, Graphics g)

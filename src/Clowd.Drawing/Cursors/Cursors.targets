@@ -1,0 +1,52 @@
+<Project>
+<ItemGroup>
+<EmbeddedResource Include="Cursors\Default.cur" />
+<EmbeddedResource Include="Cursors\Rect.cur" />
+<EmbeddedResource Include="Cursors\Ellipse.cur" />
+<EmbeddedResource Include="Cursors\Line.cur" />
+<EmbeddedResource Include="Cursors\Arrow.cur" />
+<EmbeddedResource Include="Cursors\Text.cur" />
+<EmbeddedResource Include="Cursors\Numerical.cur" />
+<EmbeddedResource Include="Cursors\Pen.cur" />
+<EmbeddedResource Include="Cursors\Rotate.cur" />
+<EmbeddedResource Include="Cursors\Obscure.cur" />
+<EmbeddedResource Include="Cursors\Move.cur" />
+<EmbeddedResource Include="Cursors\SizeAll.cur" />
+<EmbeddedResource Include="Cursors\Size0.cur" />
+<EmbeddedResource Include="Cursors\Size1.cur" />
+<EmbeddedResource Include="Cursors\Size2.cur" />
+<EmbeddedResource Include="Cursors\Size3.cur" />
+<EmbeddedResource Include="Cursors\Size4.cur" />
+<EmbeddedResource Include="Cursors\Size5.cur" />
+<EmbeddedResource Include="Cursors\Size6.cur" />
+<EmbeddedResource Include="Cursors\Size7.cur" />
+<EmbeddedResource Include="Cursors\Size8.cur" />
+<EmbeddedResource Include="Cursors\Size9.cur" />
+<EmbeddedResource Include="Cursors\Size10.cur" />
+<EmbeddedResource Include="Cursors\Size11.cur" />
+<EmbeddedResource Include="Cursors\Size12.cur" />
+<EmbeddedResource Include="Cursors\Size13.cur" />
+<EmbeddedResource Include="Cursors\Size14.cur" />
+<EmbeddedResource Include="Cursors\Size15.cur" />
+<EmbeddedResource Include="Cursors\Size16.cur" />
+<EmbeddedResource Include="Cursors\Size17.cur" />
+<EmbeddedResource Include="Cursors\Size18.cur" />
+<EmbeddedResource Include="Cursors\Size19.cur" />
+<EmbeddedResource Include="Cursors\Size20.cur" />
+<EmbeddedResource Include="Cursors\Size21.cur" />
+<EmbeddedResource Include="Cursors\Size22.cur" />
+<EmbeddedResource Include="Cursors\Size23.cur" />
+<EmbeddedResource Include="Cursors\Size24.cur" />
+<EmbeddedResource Include="Cursors\Size25.cur" />
+<EmbeddedResource Include="Cursors\Size26.cur" />
+<EmbeddedResource Include="Cursors\Size27.cur" />
+<EmbeddedResource Include="Cursors\Size28.cur" />
+<EmbeddedResource Include="Cursors\Size29.cur" />
+<EmbeddedResource Include="Cursors\Size30.cur" />
+<EmbeddedResource Include="Cursors\Size31.cur" />
+<EmbeddedResource Include="Cursors\Size32.cur" />
+<EmbeddedResource Include="Cursors\Size33.cur" />
+<EmbeddedResource Include="Cursors\Size34.cur" />
+<EmbeddedResource Include="Cursors\Size35.cur" />
+</ItemGroup>
+</Project>
