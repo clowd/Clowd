@@ -8,6 +8,9 @@ namespace Clowd.Drawing.Tools
     {
         private GraphicSelectionRectangle _selection = new(new Rect(0, 0, 1, 1));
 
+        public ToolSelection(Cursor cursor) : base(cursor, SnapMode.Diagonal)
+        { }
+
         public ToolSelection() : base(Cursors.Cross, SnapMode.Diagonal)
         { }
 

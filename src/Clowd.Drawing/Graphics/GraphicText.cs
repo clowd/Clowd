@@ -107,7 +107,7 @@ namespace Clowd.Drawing.Graphics
 
         internal override Cursor GetHandleCursor(int handleNumber)
         {
-            return handleNumber == 1 ? Resource.CursorRotate : HelperFunctions.DefaultCursor;
+            return handleNumber == 1 ? CursorResources.Rotate : HelperFunctions.DefaultCursor;
         }
 
         internal override void MoveHandleTo(Point point, int handleNumber)

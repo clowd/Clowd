@@ -8,56 +8,9 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DefineConstants>TRACE;SYSTEM_WINDOWS_VECTOR;DEBUG</DefineConstants>
   </PropertyGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\Resize0.cur" />
-    <EmbeddedResource Include="Images\Resize1.cur" />
-    <EmbeddedResource Include="Images\Resize10.cur" />
-    <EmbeddedResource Include="Images\Resize11.cur" />
-    <EmbeddedResource Include="Images\Resize12.cur" />
-    <EmbeddedResource Include="Images\Resize13.cur" />
-    <EmbeddedResource Include="Images\Resize14.cur" />
-    <EmbeddedResource Include="Images\Resize15.cur" />
-    <EmbeddedResource Include="Images\Resize16.cur" />
-    <EmbeddedResource Include="Images\Resize17.cur" />
-    <EmbeddedResource Include="Images\Resize18.cur" />
-    <EmbeddedResource Include="Images\Resize19.cur" />
-    <EmbeddedResource Include="Images\Resize2.cur" />
-    <EmbeddedResource Include="Images\Resize20.cur" />
-    <EmbeddedResource Include="Images\Resize21.cur" />
-    <EmbeddedResource Include="Images\Resize22.cur" />
-    <EmbeddedResource Include="Images\Resize23.cur" />
-    <EmbeddedResource Include="Images\Resize24.cur" />
-    <EmbeddedResource Include="Images\Resize25.cur" />
-    <EmbeddedResource Include="Images\Resize26.cur" />
-    <EmbeddedResource Include="Images\Resize27.cur" />
-    <EmbeddedResource Include="Images\Resize28.cur" />
-    <EmbeddedResource Include="Images\Resize29.cur" />
-    <EmbeddedResource Include="Images\Resize3.cur" />
-    <EmbeddedResource Include="Images\Resize30.cur" />
-    <EmbeddedResource Include="Images\Resize31.cur" />
-    <EmbeddedResource Include="Images\Resize32.cur" />
-    <EmbeddedResource Include="Images\Resize33.cur" />
-    <EmbeddedResource Include="Images\Resize34.cur" />
-    <EmbeddedResource Include="Images\Resize35.cur" />
-    <EmbeddedResource Include="Images\Resize4.cur" />
-    <EmbeddedResource Include="Images\Resize5.cur" />
-    <EmbeddedResource Include="Images\Resize6.cur" />
-    <EmbeddedResource Include="Images\Resize7.cur" />
-    <EmbeddedResource Include="Images\Resize8.cur" />
-    <EmbeddedResource Include="Images\Resize9.cur" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Images\Arrow.cur" />
-    <EmbeddedResource Include="Images\Ellipse.cur" />
-    <EmbeddedResource Include="Images\Line.cur" />
-    <EmbeddedResource Include="Images\Pencil.cur" />
-    <EmbeddedResource Include="Images\PolyHandle.cur" />
-    <EmbeddedResource Include="Images\Rectangle.cur" />
-    <EmbeddedResource Include="Images\Resize.png" />
-    <EmbeddedResource Include="Images\Resize.svg" />
-    <EmbeddedResource Include="Images\Rotate.cur" />
-    <EmbeddedResource Include="Images\Text.cur" />
-  </ItemGroup>
+  
+  <Import Project="Cursors\Cursors.targets"/>
+  
   <ItemGroup>
     <PackageReference Include="WriteableBitmapEx" Version="1.6.8" />
     <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
