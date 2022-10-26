@@ -13,7 +13,7 @@ namespace Clowd.Drawing.Tools
 
         private T _instance;
 
-        public ToolDraggable(Cursor cursor, Func<Point, T> create, Action<Point, T> update, Action<T> end = null, SnapMode snapMode = SnapMode.None)
+        public ToolDraggable(Func<Cursor> cursor, Func<Point, T> create, Action<Point, T> update, Action<T> end = null, SnapMode snapMode = SnapMode.None)
             : base(cursor, snapMode)
         {
             _create = create;

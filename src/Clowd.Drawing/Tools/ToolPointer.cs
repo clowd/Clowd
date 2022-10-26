@@ -31,7 +31,7 @@ namespace Clowd.Drawing.Tools
 
         bool _wasEdit;
 
-        public ToolPointer() : base(HelperFunctions.DefaultCursor)
+        public ToolPointer() : base(() => HelperFunctions.DefaultCursor)
         { }
 
         public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)

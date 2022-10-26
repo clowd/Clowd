@@ -241,8 +241,6 @@ namespace Clowd.Drawing.Graphics
             OnPropertyChanged();
         }
 
-        private static Cursor[] _resizeCursors = new Cursor[36];
-
         internal override Cursor GetHandleCursor(int handleNumber)
         {
             if (handleNumber == 0 || handleNumber > 9)
@@ -252,9 +250,7 @@ namespace Clowd.Drawing.Graphics
                 return CursorResources.Rotate;
 
             var cursorNum = (int)((45 * handleNumber + Angle + 272.5) / 5) % 36;
-            if (_resizeCursors[cursorNum] == null)
-                _resizeCursors[cursorNum] = CursorResources.GetResizeCursor(cursorNum);
-            return _resizeCursors[cursorNum];
+            return CursorResources.GetResizeCursor(cursorNum);
         }
 
         internal override void Normalize()

@@ -61,16 +61,18 @@ internal class Program
         //sb.AppendLine("<html><body>");
 
         CsEmbed.AppendLine("using System;");
-        CsEmbed.AppendLine("using System.IO;");
-        CsEmbed.AppendLine("using System.Reflection;");
+        //CsEmbed.AppendLine("using System.IO;");
+        //CsEmbed.AppendLine("using System.Reflection;");
         CsEmbed.AppendLine("using System.Windows.Input;");
+        CsEmbed.AppendLine();
         CsEmbed.AppendLine("namespace Clowd.Drawing;");
-        CsEmbed.AppendLine("internal partial class CursorResources : EmbeddedResource {");
-        CsEmbed.AppendLine("private const string RSX_NS = \"Clowd.Drawing.Cursors\";");
-        CsEmbed.AppendLine("public CursorResources() : base(Assembly.GetExecutingAssembly(), RSX_NS) { }");
+        CsEmbed.AppendLine();
+        CsEmbed.AppendLine("internal partial class CursorResources {");
+        //CsEmbed.AppendLine("private const string RSX_NS = \"Clowd.Drawing.Cursors\";");
+        //CsEmbed.AppendLine("public CursorResources() : base(Assembly.GetExecutingAssembly(), RSX_NS) { }");
 
         CsProjItems.AppendLine("<Project>");
-        CsProjItems.AppendLine("<ItemGroup>");
+        CsProjItems.AppendLine("  <ItemGroup>");
 
         DrawSizes(sizes, "Default", DrawBaseCursor);
         DrawSizes(sizes, "Rect", DrawBaseCursor, DrawRect);
@@ -91,23 +93,17 @@ internal class Program
             DrawSizes(sizes, "Size" + i, (a1, a2, a3) => DrawResizeCursorNew(a1, a2, a3, f));
         }
 
-
-        CsEmbed.AppendLine("public static Cursor GetResizeCursor(int num) {");
-        CsEmbed.AppendLine("return num switch {");
-
+        CsEmbed.AppendLine("    public static Cursor GetResizeCursor(int num) {");
+        CsEmbed.AppendLine("        return num switch {");
         for (var i = 0; i < angles.Length; i++)
-        {
-            var name = "Size" + i;
-            CsEmbed.AppendLine($"{i} => {name},");
-        }
-
-        CsEmbed.AppendLine("_ => throw new ArgumentOutOfRangeException(),");
-        CsEmbed.AppendLine("};");
+            CsEmbed.AppendLine($"          {i} => Size{i},");
+        CsEmbed.AppendLine("          _ => throw new ArgumentOutOfRangeException(),");
+        CsEmbed.AppendLine("        };");
+        CsEmbed.AppendLine("    }");
         CsEmbed.AppendLine("}");
 
-        CsEmbed.AppendLine("}");
         HtmlIndex.AppendLine("</body></html>");
-        CsProjItems.AppendLine("</ItemGroup>");
+        CsProjItems.AppendLine("  </ItemGroup>");
         CsProjItems.AppendLine("</Project>");
 
         File.WriteAllText("index.html", HtmlIndex.ToString());
@@ -151,8 +147,9 @@ internal class Program
         var fileName = variation + ".cur";
         var file = Path.Combine(CursorFileDirectory, fileName);
         f.Save(file, format: IconFile.FileFormat.Cur);
-        CsEmbed.AppendLine("public static Cursor " + variation + " { get; } = new Cursor(GetStream(RSX_NS, \"" + fileName + "\"), true);");
-        CsProjItems.AppendLine("<EmbeddedResource Include=\"Cursors\\" + fileName + "\" />");
+        //CsEmbed.AppendLine("public static Cursor " + variation + " { get; } = new Cursor(GetStream(RSX_NS, \"" + fileName + "\"), true);");
+        CsEmbed.AppendLine("    public static Cursor " + variation + " => GetCursor(\"" + fileName + "\");");
+        CsProjItems.AppendLine("    <EmbeddedResource Include=\"Cursors\\" + fileName + "\" CopyToOutputDirectory=\"Always\" />");
     }
 
     private static void DrawSizes(int[] sizes, string variation, DrawSizeDelegate fn)
@@ -184,8 +181,8 @@ internal class Program
         var fileName = variation + ".cur";
         var file = Path.Combine(CursorFileDirectory, fileName);
         f.Save(file, format: IconFile.FileFormat.Cur);
-        CsEmbed.AppendLine("public static Cursor " + variation + " { get; } = new Cursor(GetStream(RSX_NS, \"" + fileName + "\"), true);");
-        CsProjItems.AppendLine("<EmbeddedResource Include=\"Cursors\\" + fileName + "\" />");
+        CsEmbed.AppendLine("    public static Cursor " + variation + " => GetCursor(\"" + fileName + "\");");
+        CsProjItems.AppendLine("    <EmbeddedResource Include=\"Cursors\\" + fileName + "\" CopyToOutputDirectory=\"Always\" />");
     }
 
     private static void DrawRect(float scale, int lineWidth, Graphics g)

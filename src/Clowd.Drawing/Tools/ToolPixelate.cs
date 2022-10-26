@@ -6,7 +6,7 @@ namespace Clowd.Drawing.Tools
 {
     internal class ToolPixelate : ToolSelection
     {
-        public ToolPixelate() : base(CursorResources.Obscure)
+        public ToolPixelate() : base(() => CursorResources.Obscure)
         {
         }
 
