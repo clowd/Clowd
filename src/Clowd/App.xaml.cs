@@ -74,8 +74,10 @@ namespace Clowd
                         new FrameworkPropertyMetadata(300));
 
                 // update registry if needed
+#if !DEBUG
                 SquirrelUtil.SetAutoStart(SettingsRoot.Current.General.RegisterAutoStart);
                 SquirrelUtil.SetExplorerMenu(SettingsRoot.Current.General.RegisterExplorerContextMenu);
+#endif
 
                 // start receiving command line arguments
                 _processor.Ready();
