@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -222,10 +222,11 @@ namespace Clowd
             });
 #endif
 
+#if DEBUG
+            // FYI this target is really slow.
             config.AddTarget(new DebuggerTarget("debugger"));
-            config.AddTarget(new ColoredConsoleTarget("console"));
-            config.AddRuleForAllLevels("console");
             config.AddRuleForAllLevels("debugger");
+#endif
 
             var logDir = isInstalled ? Path.Combine(SquirrelRuntimeInfo.BaseDirectory, "..") : SquirrelRuntimeInfo.BaseDirectory;
             var logFile = Path.Combine(logDir, "Clowd.log");

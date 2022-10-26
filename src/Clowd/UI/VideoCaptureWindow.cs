@@ -157,9 +157,6 @@ namespace Clowd.UI
             if (_hasStarted || _obsStarting || !_opened) return;
             _obsStarting = _obsValid = true;
 
-            _capturer?.Dispose();
-            _capturer = null;
-
             _btnReload.Visibility = Visibility.Collapsed;
             _btnStart.Visibility = Visibility.Visible;
             _btnStart.IsEnabled = false;
@@ -169,14 +166,18 @@ namespace Clowd.UI
 
             BorderWindow.SetText("Please Wait");
 
+            if (_capturer != null)
+            {
+                await _capturer.DisposeAsync();
+                _capturer = null;
+            }
+
             try
             {
                 var capturer = new ObsCapturer();
-                capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
                 capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
+                capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
                 await capturer.Initialize(_selection, _settings);
-
-                _obsStarting = false;
 
                 if (_obsValid)
                 {
@@ -187,6 +188,12 @@ namespace Clowd.UI
                     _btnClowd.Text = "READY";
                     BorderWindow.SetText("Press Start");
                 }
+                else
+                {
+                    await capturer.DisposeAsync();
+                }
+
+                _obsStarting = false;
             }
             catch (Exception ex)
             {
@@ -194,19 +201,22 @@ namespace Clowd.UI
             }
         }
 
-        private void InvalidateObs()
+        private async void InvalidateObs()
         {
             if (_hasStarted || !_opened) return;
 
             _obsValid = false;
-            _capturer?.Dispose();
-            _capturer = null;
-
             _btnReload.Visibility = Visibility.Visible;
             _btnStart.Visibility = Visibility.Collapsed;
             _btnClowd.Text = "Clowd";
 
             BorderWindow.SetText("Reload");
+
+            if (_capturer != null)
+            {
+                await _capturer.DisposeAsync();
+                _capturer = null;
+            }
         }
 
         private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
