@@ -333,8 +333,16 @@ namespace Clowd.UI
         {
             RefreshListeners();
 
-            if (e.PropertyName is nameof(SettingsVideo.OpenFinishedInExplorer) or nameof(SettingsVideo.OutputMode))
+            if (e.PropertyName is nameof(SettingsVideo.OpenFinishedInExplorer))
+            {
                 return;
+            }
+
+            if (e.PropertyName is nameof(SettingsVideo.OutputMode))
+            {
+                UpdateOutputIcon();
+                return;
+            }
 
             if (e.PropertyName is nameof(SettingsVideo.CaptureSpeaker) or nameof(SettingsVideo.CaptureMicrophone))
             {
@@ -427,14 +435,22 @@ namespace Clowd.UI
             {
                 case VideoOutputType.MP4:
                     _settings.OutputMode = VideoOutputType.GIF;
-                    _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoGIF);
                     break;
-                // case VideoOutputType.MKV:
-                //     _settings.OutputMode = VideoOutputType.GIF;
-                //     _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoGIF);
-                //     break;
                 default:
                     _settings.OutputMode = VideoOutputType.MP4;
+                    break;
+            }
+            UpdateOutputIcon();
+        }
+
+        private void UpdateOutputIcon()
+        {
+            switch (_settings.OutputMode)
+            {
+                case VideoOutputType.GIF:
+                    _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoGIF);
+                    break;
+                default:
                     _btnOutput.IconPath = AppStyles.GetIconElement(ResourceIcon.IconVideoMP4);
                     break;
             }
