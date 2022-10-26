@@ -76,10 +76,10 @@ namespace Clowd.Video
 #endif
 
             if (!Directory.Exists(LibraryDirPath))
-                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + LibraryDirPath);
+                throw new ArgumentException("Recorder does not exist (or is corrupt) at the path: " + LibraryDirPath);
 
             if (!File.Exists(ObsExpressExePath))
-                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + ObsExpressExePath);
+                throw new ArgumentException("Recorder does not exist (or is corrupt) at the path: " + ObsExpressExePath);
         }
 
         public override Task Initialize(ScreenRect captureRect, SettingsVideo settings)

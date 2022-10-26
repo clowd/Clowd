@@ -223,25 +223,50 @@ namespace Clowd.UI
         {
             this.Close();
 
-            var filename = "capture_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
-            filename = Path.Combine(Path.GetFullPath(_settings.OutputDirectory), filename);
-
-            _capturer.WriteLogToFile(filename);
-            File.AppendAllText(filename, Environment.NewLine + "--" + Environment.NewLine + e.Error);
-
-            _log.ForErrorEvent()
-                .Message("The capturer has crashed.")
-                .Property<string>("obs.log", File.ReadAllText(filename))
-                .Log();
-
-            if (await NiceDialog.ShowPromptAsync(null,
-                    NiceDialogIcon.Error,
-                    e.Error + Environment.NewLine + "A log file has been created in your video output directory for more information.",
-                    "An unexpected error was encountered while recording.",
-                    "Open Error Log"))
+            var capt = (sender as ObsCapturer) ?? _capturer;
+            if (capt != null)
             {
-                Process.Start("notepad.exe", filename);
+                try
+                {
+                    var filename = "capture_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
+                    if (_settings.OutputDirectory != null && Directory.Exists(_settings.OutputDirectory))
+                    {
+                        filename = Path.Combine(Path.GetFullPath(_settings.OutputDirectory), filename);
+                    }
+                    else
+                    {
+                        filename = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), filename);
+                    }
+
+                    capt.WriteLogToFile(filename);
+                    File.AppendAllText(filename, Environment.NewLine + "--" + Environment.NewLine + e.Error);
+
+                    _log.ForErrorEvent()
+                        .Message("The capturer has crashed.")
+                        .Property<string>("obs.log", File.ReadAllText(filename))
+                        .Log();
+
+                    if (await NiceDialog.ShowPromptAsync(null,
+                            NiceDialogIcon.Error,
+                            e.Error + Environment.NewLine + "A log file has been created in your video output directory for more information.",
+                            "An unexpected error was encountered while recording.",
+                            "Open Error Log"))
+                    {
+                        Process.Start("notepad.exe", filename);
+                    }
+
+                    return;
+                }
+                catch { }
             }
+
+            // if we reached here, we were unable to write a log file
+            _log.Error(e.Error);
+
+            NiceDialog.ShowNoticeAsync(null,
+                NiceDialogIcon.Error,
+                e.Error,
+                "An unexpected error was encountered while recording.");
         }
 
         private void CapturerStatusReceived(object sender, VideoStatusEventArgs e)
