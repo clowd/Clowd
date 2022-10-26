@@ -24,6 +24,7 @@ namespace Clowd.UI
         public bool IsRecording { get; private set; }
 
         private CaptureToolButton _btnClowd;
+        private CaptureToolButton _btnReload;
         private CaptureToolButton _btnStart;
         private CaptureToolButton _btnStop;
         private CaptureToolButton _btnMicrophone;
@@ -36,10 +37,11 @@ namespace Clowd.UI
         private bool _opened;
         private bool _disposed;
         private bool _hasStarted;
-        private bool _isCancelled;
+        private bool _obsStarting;
+        private bool _obsValid;
 
         private ScreenRect _selection;
-        private IVideoCapturer _capturer;
+        private ObsCapturer _capturer;
         private SettingsVideo _settings = SettingsRoot.Current.Video;
         private string _fileName;
         private FloatingButtonWindow _floating;
@@ -51,28 +53,32 @@ namespace Clowd.UI
 
         public VideoCaptureWindow()
         {
-            _capturer = new ObsCapturer();
-            _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
-            _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
-
             if (!Directory.Exists(_settings.OutputDirectory))
                 _settings.OutputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
 
             _btnClowd = new CaptureToolButton
             {
                 Primary = true,
-                Text = "Drag Me",
+                Text = "WAIT",
                 IconPath = AppStyles.GetIconElement(ResourceIcon.IconToolNone),
                 IsDragHandle = true,
             };
 
-            _btnStart = new CaptureToolButton
+            _btnReload = new CaptureToolButton
             {
                 Primary = true,
+                Text = "Reload",
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconUndo),
+                Executed = (s, e) => StartObs(),
+                Visibility = Visibility.Collapsed,
+            };
+
+            _btnStart = new CaptureToolButton
+            {
                 Text = "Start",
                 IconPath = AppStyles.GetIconElement(ResourceIcon.IconPlay),
-                PulseBackground = true,
                 Executed = (s, e) => StartRecording(),
+                IsEnabled = false,
             };
 
             _btnStop = new CaptureToolButton
@@ -141,9 +147,66 @@ namespace Clowd.UI
             };
 
             _floating = FloatingButtonWindow.Create(
-                new[] { _btnClowd, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnOutput, _btnSettings, _btnDraw, _btnCancel });
+                new[] { _btnClowd, _btnReload, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnOutput, _btnSettings, _btnDraw, _btnCancel });
 
             _settings.PropertyChanged += SettingChanged;
+        }
+
+        private async void StartObs()
+        {
+            if (_hasStarted || _obsStarting || !_opened) return;
+            _obsStarting = _obsValid = true;
+
+            _capturer?.Dispose();
+            _capturer = null;
+
+            _btnReload.Visibility = Visibility.Collapsed;
+            _btnStart.Visibility = Visibility.Visible;
+            _btnStart.IsEnabled = false;
+            _btnStart.PulseBackground = false;
+            _btnStart.Primary = false;
+            _btnClowd.Text = "WAIT";
+
+            BorderWindow.SetText("Please Wait");
+
+            try
+            {
+                var capturer = new ObsCapturer();
+                capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
+                capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
+                await capturer.Initialize(_selection, _settings);
+
+                _obsStarting = false;
+
+                if (_obsValid)
+                {
+                    _capturer = capturer;
+                    _btnStart.IsEnabled = true;
+                    _btnStart.PulseBackground = true;
+                    _btnStart.Primary = true;
+                    _btnClowd.Text = "READY";
+                    BorderWindow.SetText("Press Start");
+                }
+            }
+            catch (Exception ex)
+            {
+                CapturerCriticalError(this, new VideoCriticalErrorEventArgs(ex.ToString()));
+            }
+        }
+
+        private void InvalidateObs()
+        {
+            if (_hasStarted || !_opened) return;
+
+            _obsValid = false;
+            _capturer?.Dispose();
+            _capturer = null;
+
+            _btnReload.Visibility = Visibility.Visible;
+            _btnStart.Visibility = Visibility.Collapsed;
+            _btnClowd.Text = "Clowd";
+
+            BorderWindow.SetText("Reload");
         }
 
         private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
@@ -193,9 +256,9 @@ namespace Clowd.UI
 
             RefreshListeners();
             BorderWindow.Show(AppStyles.AccentColor, captureArea);
-            BorderWindow.SetText("Press Start");
 
             _floating.ShowPanel(captureArea);
+            Task.Delay(100).ContinueWith((t) => { StartObs(); }, TaskScheduler.FromCurrentSynchronizationContext());
         }
 
         public async Task StartRecording()
@@ -206,38 +269,16 @@ namespace Clowd.UI
             if (_hasStarted)
                 throw new InvalidOperationException("StartRecording can only be called once");
 
-            var initTask = _capturer.Initialize(_selection, _settings).ContinueWith(
-                t =>
-                {
-                    if (t.Exception != null)
-                        CapturerCriticalError(this, new VideoCriticalErrorEventArgs(t.Exception.ToString()));
-                    _btnClowd.Text = "READY";
-                },
-                TaskScheduler.FromCurrentSynchronizationContext());
-
             _hasStarted = true;
             _btnStart.IsEnabled = false;
-            _btnOutput.IsEnabled = false;
-            _btnMicrophone.IsEnabled = false;
-            _btnSpeaker.IsEnabled = false;
-
-            for (int i = 3; i >= 1; i--)
-            {
-                BorderWindow.SetText(i.ToString());
-
-                if (initTask.IsCompleted)
-                    _btnClowd.Text = "REC in " + i.ToString();
-
-                await Task.Delay(1000);
-                if (_isCancelled)
-                    return;
-            }
 
             BorderWindow.SetText(null);
             _btnClowd.Text = "Starting";
 
             try
             {
+                _capturer.SetMicrophoneMute(!_settings.CaptureMicrophone);
+                _capturer.SetSpeakerMute(!_settings.CaptureSpeaker);
                 _fileName = await _capturer.StartAsync();
                 IsRecording = true;
             }
@@ -258,7 +299,6 @@ namespace Clowd.UI
                 throw new ObjectDisposedException("This object is disposed.");
 
             var wasRecording = IsRecording;
-            _isCancelled = true;
 
             BorderWindow.Hide();
             _floating.Hide();
@@ -292,6 +332,19 @@ namespace Clowd.UI
         private void SettingChanged(object sender, PropertyChangedEventArgs e)
         {
             RefreshListeners();
+
+            if (e.PropertyName is nameof(SettingsVideo.OpenFinishedInExplorer) or nameof(SettingsVideo.OutputMode))
+                return;
+
+            if (e.PropertyName is nameof(SettingsVideo.CaptureSpeaker) or nameof(SettingsVideo.CaptureMicrophone))
+            {
+                _capturer?.SetMicrophoneMute(!_settings.CaptureMicrophone);
+                _capturer?.SetSpeakerMute(!_settings.CaptureSpeaker);
+            }
+            else
+            {
+                InvalidateObs();
+            }
         }
 
         private void RefreshListeners()
@@ -409,7 +462,6 @@ namespace Clowd.UI
 
         private async void OnCancel(object sender, EventArgs e)
         {
-            _isCancelled = true;
             BorderWindow.Hide();
             _floating.Hide();
             if (IsRecording)

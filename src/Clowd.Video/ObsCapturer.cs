@@ -26,6 +26,8 @@ namespace Clowd.Video
         private static readonly object _lock = new object();
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
+        private bool _started;
+        private bool _disposed;
         private WatchProcess _watch;
         private StringBuilder _output = new();
         private string _filePath;
@@ -33,9 +35,9 @@ namespace Clowd.Video
         private TaskCompletionSource<string> _signalStart = new();
         private TaskCompletionSource<bool> _signalStop = new();
 
+#if DEBUG
         static ObsCapturer()
         {
-#if DEBUG
             // if obs is missing, try to find obs in build cache, only if we're debugging.
             if (!Directory.Exists(LibraryDirPath))
             {
@@ -53,8 +55,8 @@ namespace Clowd.Video
                     di = di.Parent;
                 } while (di != null);
             }
-#endif
         }
+#endif
 
         public ObsCapturer()
         {
@@ -80,8 +82,10 @@ namespace Clowd.Video
                 throw new ArgumentException("OBS does not exist or is corrupt at the path: " + ObsExpressExePath);
         }
 
-        public override Task Initialize(ScreenRect captureRect, SettingsVideo settings)
+        public override async Task Initialize(ScreenRect captureRect, SettingsVideo settings)
         {
+            ThrowIfDisposed();
+
             try
             {
                 if (String.IsNullOrWhiteSpace(settings.OutputDirectory))
@@ -120,13 +124,13 @@ namespace Clowd.Video
                     arguments.Add("--noCursor");
                 }
 
-                if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice?.DeviceId != null)
+                if (settings.CaptureMicrophoneDevice?.DeviceId != null)
                 {
                     arguments.Add("--microphones");
                     arguments.Add(settings.CaptureMicrophoneDevice?.DeviceId);
                 }
 
-                if (settings.CaptureSpeaker && settings.CaptureSpeakerDevice?.DeviceId != null)
+                if (settings.CaptureSpeakerDevice?.DeviceId != null)
                 {
                     arguments.Add("--speakers");
                     arguments.Add(settings.CaptureSpeakerDevice?.DeviceId);
@@ -159,7 +163,7 @@ namespace Clowd.Video
                 _log.Error(ex);
             }
 
-            return _signalInit.Task;
+            await _signalInit.Task;
         }
 
         private void ProcessExited(object sender, WatchProcessExitedEventArgs e)
@@ -169,7 +173,7 @@ namespace Clowd.Video
 
             lock (_signalStop)
             {
-                if (_signalStop.Task.IsCompleted)
+                if (_signalStop.Task.IsCompleted || _disposed)
                     return;
 
                 // if the process exits before the stopped_recording event there is something wrong.
@@ -234,26 +238,53 @@ namespace Clowd.Video
 
         public override async Task<string> StartAsync()
         {
+            ThrowIfDisposed();
+            if (_started) await _signalStart.Task;
+
+            _started = true;
             await _signalInit.Task;
-            _watch.WriteToStdIn("");
-            return await _signalStart.Task;
+            _watch.WriteToStdIn("start");
+            var output = await _signalStart.Task;
+            return output;
         }
 
-        public override Task StopAsync()
+        public override async Task StopAsync()
         {
-            _watch.WriteToStdIn("q");
-            return _signalStop.Task;
+            if (!_started) return;
+            ThrowIfDisposed();
+            _watch?.WriteToStdIn("q");
+            await _signalStop.Task;
+        }
+
+        public void SetSpeakerMute(bool muted)
+        {
+            ThrowIfDisposed();
+            var cmd = muted ? "mute" : "unmute";
+            _watch?.WriteToStdIn($"{cmd} s 0");
+        }
+
+        public void SetMicrophoneMute(bool muted)
+        {
+            ThrowIfDisposed();
+            var cmd = muted ? "mute" : "unmute";
+            _watch?.WriteToStdIn($"{cmd} m 0");
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(ObsCapturer));
         }
 
         public override void Dispose()
         {
             lock (_lock)
             {
+                if (_disposed) return;
+                _disposed = true;
                 _instance = null;
                 _log.Info("Disposing ObsCapturer Instance");
                 try { _watch?.WriteToStdIn("q"); }
                 catch {; }
-
                 _watch?.WaitTimeoutThenForceExit(5000);
             }
         }
