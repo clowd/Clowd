@@ -224,8 +224,8 @@ namespace Clowd
 
 #if DEBUG
             // FYI this target is really slow.
-            config.AddTarget(new DebuggerTarget("debugger"));
-            config.AddRuleForAllLevels("debugger");
+            //config.AddTarget(new DebuggerTarget("debugger"));
+            //config.AddRuleForAllLevels("debugger");
 #endif
 
             var logDir = isInstalled ? Path.Combine(SquirrelRuntimeInfo.BaseDirectory, "..") : SquirrelRuntimeInfo.BaseDirectory;

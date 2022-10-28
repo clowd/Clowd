@@ -12,8 +12,8 @@ namespace Clowd
         event EventHandler<VideoStatusEventArgs> StatusReceived;
         string BusyStatus { get; }
         bool IsRecording { get; }
-        Task Initialize(ScreenRect captureRect, SettingsVideo settings);
-        Task<string> StartAsync();
+        Task Initialize(string outputFile, ScreenRect captureRect, SettingsVideo settings);
+        Task StartAsync();
         Task StopAsync();
         void WriteLogToFile(string fileName);
     }
@@ -70,13 +70,13 @@ namespace Clowd
 
         public abstract void Dispose();
 
-        public abstract Task<string> StartAsync();
+        public abstract Task StartAsync();
 
         public abstract Task StopAsync();
 
         public abstract void WriteLogToFile(string fileName);
 
-        public abstract Task Initialize(ScreenRect captureRect, SettingsVideo settings);
+        public abstract Task Initialize(string outputFile, ScreenRect captureRect, SettingsVideo settings);
     }
 
     public class VideoCriticalErrorEventArgs : EventArgs
