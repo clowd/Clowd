@@ -2,6 +2,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,6 +20,8 @@ using NLog;
 
 namespace Clowd.UI
 {
+
+
     internal sealed class VideoCaptureWindow : IVideoCapturePage
     {
         public event EventHandler Closed;
@@ -55,6 +59,8 @@ namespace Clowd.UI
         {
             if (!Directory.Exists(_settings.OutputDirectory))
                 _settings.OutputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+
+            _fileName = Path.Combine(_settings.OutputDirectory, PathConstants.GetDatedFileName("recording", "mp4"));
 
             _btnClowd = new CaptureToolButton
             {
@@ -177,7 +183,7 @@ namespace Clowd.UI
                 var capturer = new ObsCapturer();
                 capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
                 capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
-                await capturer.Initialize(_selection, _settings);
+                await capturer.Initialize(_fileName, _selection, _settings);
 
                 if (_obsValid)
                 {
@@ -314,7 +320,7 @@ namespace Clowd.UI
             {
                 _capturer.SetMicrophoneMute(!_settings.CaptureMicrophone);
                 _capturer.SetSpeakerMute(!_settings.CaptureSpeaker);
-                _fileName = await _capturer.StartAsync();
+                await _capturer.StartAsync();
                 IsRecording = true;
             }
             catch (Exception ex)
@@ -348,38 +354,63 @@ namespace Clowd.UI
 
             if (wasRecording)
             {
+                try
+                {
+                    // move file to user's desired location/name
+                    var pattern = String.IsNullOrWhiteSpace(_settings.FilenamePattern) ? "yyyy-MM-dd HH-mm-ss" : Path.GetFileNameWithoutExtension(_settings.FilenamePattern);
+                    var newPath = Path.Combine(_settings.OutputDirectory, PathConstants.GetFreePatternFileName(_settings.OutputDirectory, pattern)) + ".mp4";
+                    File.Move(_fileName, newPath);
+                    _fileName = newPath;
+                }
+                catch (Exception ex)
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
+                        $"It was saved to {_fileName} instead.{Environment.NewLine}{Environment.NewLine}Error:{Environment.NewLine}{ex.Message}",
+                        "Unable to save video to desired location.");
+                }
+
                 if (_settings.OutputMode == VideoOutputType.GIF)
                 {
                     _fileName = await EncodeGif(_fileName);
                 }
 
-                if (SettingsRoot.Current.Video.OpenFinishedInExplorer)
+                if (_settings.OpenFinishedInExplorer)
                 {
                     // this method of selecting a file will re-use an existing windows explorer window instead of opening a new one
-                    if (File.Exists(_fileName))
-                        Platform.Current.RevealFileOrFolder(_fileName);
-                    else
-                        Platform.Current.RevealFileOrFolder(_settings.OutputDirectory);
+                    Platform.Current.RevealFileOrFolder(File.Exists(_fileName) ? _fileName : _settings.OutputDirectory);
                 }
             }
         }
 
+        private string GetNewVideoName()
+        {
+            if (String.IsNullOrWhiteSpace(_settings.OutputDirectory))
+                throw new Exception("OutputDirectory must not be null");
+
+            if (!Directory.Exists(_settings.OutputDirectory))
+                Directory.CreateDirectory(_settings.OutputDirectory);
+
+            var pattern = String.IsNullOrWhiteSpace(_settings.FilenamePattern) ? "yyyy-MM-dd HH-mm-ss" : Path.GetFileNameWithoutExtension(_settings.FilenamePattern);
+            return Path.Combine(_settings.OutputDirectory, PathConstants.GetFreePatternFileName(_settings.OutputDirectory, pattern)) + ".mp4";
+        }
+
         private void SettingChanged(object sender, PropertyChangedEventArgs e)
         {
-            RefreshListeners();
+            if (_disposed) return;
 
-            if (e.PropertyName is nameof(SettingsVideo.OpenFinishedInExplorer))
+            if (e.PropertyName is nameof(SettingsVideo.OpenFinishedInExplorer) or nameof(SettingsVideo.FilenamePattern) or nameof(SettingsVideo.OutputDirectory))
             {
-                return;
+                // do nothing
             }
-
-            if (e.PropertyName is nameof(SettingsVideo.OutputMode))
+            else if (e.PropertyName is nameof(SettingsVideo.OutputMode))
             {
                 UpdateOutputIcon();
-                return;
             }
-
-            if (e.PropertyName is nameof(SettingsVideo.CaptureSpeaker) or nameof(SettingsVideo.CaptureMicrophone))
+            else if (e.PropertyName is nameof(SettingsVideo.CaptureSpeakerDevice) or nameof(SettingsVideo.CaptureMicrophoneDevice))
+            {
+                RefreshListeners();
+            }
+            else if (e.PropertyName is nameof(SettingsVideo.CaptureSpeaker) or nameof(SettingsVideo.CaptureMicrophone))
             {
                 _capturer?.SetMicrophoneMute(!_settings.CaptureMicrophone);
                 _capturer?.SetSpeakerMute(!_settings.CaptureSpeaker);
@@ -538,8 +569,8 @@ namespace Clowd.UI
             BorderWindow.Hide();
             _speakerLevel?.Dispose();
             _microphoneLevel?.Dispose();
-            _capturer?.Dispose();
             _floating.Close();
+            _capturer?.Dispose();
             Closed?.Invoke(this, new EventArgs());
         }
     }

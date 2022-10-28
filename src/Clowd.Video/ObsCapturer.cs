@@ -30,9 +30,8 @@ namespace Clowd.Video
         private bool _disposed;
         private WatchProcess _watch;
         private StringBuilder _output = new();
-        private string _filePath;
         private TaskCompletionSource<bool> _signalInit = new();
-        private TaskCompletionSource<string> _signalStart = new();
+        private TaskCompletionSource<bool> _signalStart = new();
         private TaskCompletionSource<bool> _signalStop = new();
 
 #if DEBUG
@@ -82,7 +81,7 @@ namespace Clowd.Video
                 throw new ArgumentException("Recorder does not exist (or is corrupt) at the path: " + ObsExpressExePath);
         }
 
-        public override Task Initialize(ScreenRect captureRect, SettingsVideo settings)
+        public override Task Initialize(string outputFile, ScreenRect captureRect, SettingsVideo settings)
         {
             ThrowIfDisposed();
 
@@ -90,13 +89,11 @@ namespace Clowd.Video
             {
                 try
                 {
-                    if (String.IsNullOrWhiteSpace(settings.OutputDirectory))
-                        throw new Exception("OutputDirectory must not be null");
+                    if (!outputFile.EndsWith(".mp4", StringComparison.InvariantCultureIgnoreCase))
+                        throw new Exception("Output file must end in .mp4 extension.");
 
-                    if (!Directory.Exists(settings.OutputDirectory))
-                        Directory.CreateDirectory(settings.OutputDirectory);
-
-                    _filePath = Path.Combine(settings.OutputDirectory, PathConstants.GetFreePatternFileName(settings.OutputDirectory, settings.FilenamePattern)) + ".mp4";
+                    if (!Directory.Exists(Path.GetDirectoryName(outputFile)))
+                        throw new Exception("Output file directory must exist.");
 
                     List<string> arguments = new()
                     {
@@ -106,7 +103,7 @@ namespace Clowd.Video
                         "--maxOutputWidth", settings.MaxResolutionWidth.ToString(),
                         "--maxOutputHeight", settings.MaxResolutionHeight.ToString(),
                         "--pause",
-                        "--output", _filePath,
+                        "--output", outputFile,
                     };
 
                     if (settings.ShowClickAnimation)
@@ -211,7 +208,7 @@ namespace Clowd.Video
                             _signalInit.SetResult(true);
                             break;
                         case "started_recording":
-                            _signalStart.SetResult(_filePath);
+                            _signalStart.SetResult(true);
                             break;
                         case "stopped_recording":
                             lock (_signalStop)
@@ -239,16 +236,19 @@ namespace Clowd.Video
             }
         }
 
-        public override async Task<string> StartAsync()
+        public override async Task StartAsync()
         {
             ThrowIfDisposed();
-            if (_started) await _signalStart.Task;
+            if (_started)
+            {
+                await _signalStart.Task;
+                return;
+            }
 
             _started = true;
             await _signalInit.Task;
             WriteCommand("start");
-            var output = await _signalStart.Task;
-            return output;
+            await _signalStart.Task;
         }
 
         public override async Task StopAsync()
