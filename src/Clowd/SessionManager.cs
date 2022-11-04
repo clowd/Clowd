@@ -31,7 +31,9 @@ namespace Clowd
     {
         public Guid? VirtualDesktopId { get; init; }
         public bool IsTopMost { get; init; }
-        public ScreenRect Position { get; init; }
+        public bool IsMinimized { get; init; }
+        public bool IsMaximized { get; init; }
+        public ScreenRect RestorePosition { get; init; }
     }
 
     public class SessionInfo : FileSyncObject

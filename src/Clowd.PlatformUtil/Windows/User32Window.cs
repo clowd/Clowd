@@ -55,6 +55,16 @@ namespace Clowd.PlatformUtil.Windows
             }
         }
 
+        public ScreenRect RestoreBounds
+        {
+            get
+            {
+                WINDOWPLACEMENT pl = new() { length = 44 };
+                GetWindowPlacement(Handle, ref pl);
+                return pl.rcNormalPosition;
+            }
+        }
+
         public ScreenRect ClientBounds
         {
             get
@@ -63,7 +73,7 @@ namespace Clowd.PlatformUtil.Windows
                 return ScreenRect.FromLTRB(rect.left, rect.top, rect.right, rect.bottom);
             }
         }
-        
+
         public ScreenRect DwmRenderBounds
         {
             get
@@ -289,6 +299,24 @@ namespace Clowd.PlatformUtil.Windows
             return CloseWindow(Handle);
         }
 
+        public bool Maximize()
+        {
+            return ShowWindow(Handle, ShowWindowCommand.SW_SHOWMAXIMIZED);
+        }
+
+        public bool Restore(ScreenRect rect, ShowWindowCommand cmd)
+        {
+            WINDOWPLACEMENT pl = new() { length = 44 };
+            pl.rcNormalPosition = rect;
+            pl.showCmd = cmd;
+            // This is called twice to work-around a WPF behavior. If this is being moved
+            // to a new monitor with a different DPI, WPF will then recieve a WM_DPICHHANGED
+            // message and re-size the window. The second MoveWindow then achieves our desired
+            // size.
+            SetWindowPlacement(Handle, ref pl);
+            return SetWindowPlacement(Handle, ref pl);
+        }
+
         public void Close()
         {
             // most reliable way I've found to close a window, could also try WM_DESTROY...
@@ -335,7 +363,7 @@ namespace Clowd.PlatformUtil.Windows
             AdjustWindowRectEx(ref r, wndStyle, false, wndExStyle);
             return r;
         }
-        
+
         public override string ToString()
         {
             return $"Window {((nint)Handle).ToString("X8")} {{'{Caption}/{ClassName}', {WindowBounds}}}";
