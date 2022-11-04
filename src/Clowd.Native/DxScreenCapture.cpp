@@ -287,6 +287,7 @@ void DxScreenCapture::RunMessagePump()
         }
         else
         {
+            native->screens->TranslateToWorkspace(_options.initialRect);
             FrameMakeSelection(native->frame, _options.initialRect, false);
         }
 
