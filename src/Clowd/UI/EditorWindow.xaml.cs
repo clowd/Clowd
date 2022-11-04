@@ -19,6 +19,7 @@ using System.Windows.Controls.Primitives;
 using Clowd.Clipboard.Formats;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using static Vanara.PInvoke.ShowWindowCommand;
 
 namespace Clowd.UI
 {
@@ -77,7 +78,9 @@ namespace Clowd.UI
                 _session.OpenEditor = new SessionOpenEditor()
                 {
                     IsTopMost = Topmost,
-                    Position = ScreenPosition,
+                    IsMaximized = PlatformWindow?.IsMaximized ?? false,
+                    IsMinimized = PlatformWindow?.IsMinimized ?? false,
+                    RestorePosition = PlatformWindow?.RestoreBounds,
                     VirtualDesktopId = PlatformWindow?.VirtualDesktopId,
                 };
             }
@@ -107,7 +110,7 @@ namespace Clowd.UI
 
             // it's possible for EnsureHandle to go off and trigger the Activate event which sets
             // OpenEditor to not null, all before we hit the if/else below
-            bool isExistingSession = session?.OpenEditor != null;
+            bool isExistingSession = session?.OpenEditor != null && session.OpenEditor.RestorePosition != null;
             bool canPlaceExactly = session?.OriginalBounds?.IsEmpty() == false;
 
             if (session == null)
@@ -129,8 +132,15 @@ namespace Clowd.UI
                 }
                 catch {; }
 
-                wnd.ScreenPosition = session.OpenEditor.Position;
+                // first a WPF show minimized (so it won't flicker), initializes gpu etc
+                wnd.WindowState = WindowState.Minimized;
                 wnd.Show();
+
+                // restore to the previous bounds / minimized / maximized state
+                var cmd = SW_SHOWNORMAL;
+                if (session.OpenEditor.IsMaximized) cmd = SW_SHOWMAXIMIZED;
+                else if (session.OpenEditor.IsMinimized) cmd = SW_SHOWMINNOACTIVE;
+                wnd.PlatformWindow.Restore(session.OpenEditor.RestorePosition, cmd);
             }
             else if (canPlaceExactly)
             {
