@@ -235,7 +235,7 @@ namespace Clowd.Video
         public override async Task<string> StartAsync()
         {
             await _signalInit.Task;
-            _watch.WriteToStdIn("");
+            _watch.WriteToStdIn("start");
             return await _signalStart.Task;
         }
 
