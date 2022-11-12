@@ -8,7 +8,7 @@
     <UseVSHostingProcess>false</UseVSHostingProcess>
     <PlatformTarget>x64</PlatformTarget>
     <NoWarn>CS4014,CA1416</NoWarn>
-    <ApplicationIcon>Images\default.ico</ApplicationIcon>
+    <ApplicationIcon>$(SolutionDir)artwork\clowd-default.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <OutputPath>..\..\bin\$(Configuration)</OutputPath>
     <StartupObject>Clowd.Program</StartupObject>
@@ -28,18 +28,7 @@
   </Target>
   
   <ItemGroup>
-    <Resource Include="Assets\Raleway.ttf" />
-    <Resource Include="Images\Checkmark-26.png" />
-    <Resource Include="Images\Clowd-250.png" />
-    <Resource Include="Images\Help-64.png" />
-    <Resource Include="Images\Visible-24.png" />
-    <Resource Include="Images\Settings-32.png" />
-    <Resource Include="Images\Help-25.png" />
-    <Resource Include="Images\Cross-26.png" />
-    <Resource Include="Images\default-white.ico" />
-    <Resource Include="Images\default.ico" />
-    <Resource Include="Images\cancel_24px.png" />
-    <Resource Include="Images\ok_48px.png" />
+    <Resource Include="$(ApplicationIcon)" />
     <Resource Include="UI\Dialogs\ColorPicker\ColorWheelShader.cso" />
   </ItemGroup>
 
