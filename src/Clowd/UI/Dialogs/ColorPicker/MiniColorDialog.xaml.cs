@@ -110,6 +110,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
             txtHex.Text = ColorTextHelper.GetHex(hsl);
             HandleTextEvents = true;
 
+            foreach (var item in pnlPalette.Children.OfType<ColorPaletteItem>())
+                item.IsSelected = item.Color == rgb;
+
             // convert HSL to HSB
             // https://stackoverflow.com/questions/3423214/convert-hsb-hsv-color-to-hsl
             var v = hsl.Saturation * Math.Min(hsl.Lightness, 1 - hsl.Lightness) + hsl.Lightness;

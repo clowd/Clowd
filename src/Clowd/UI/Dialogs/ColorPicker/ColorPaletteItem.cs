@@ -21,6 +21,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
     }
 
     [DependencyProperty<Color>("Color", AffectsRender = true)]
+    [DependencyProperty<bool>("IsSelected", AffectsRender = true)]
     public partial class ColorPaletteItem : Control
     {
         public event EventHandler<ColorSelectedEventArgs> Clicked;
@@ -69,6 +70,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
             {
                 drawingContext.DrawRectangle(null, _blackPen, new Rect(0.5, 0.5, ActualWidth - 1, ActualHeight - 1));
                 drawingContext.DrawRectangle(null, _whitePen, new Rect(1.5, 1.5, ActualWidth - 3, ActualHeight - 3));
+            }
+            else if (IsSelected)
+            {
+                drawingContext.DrawRectangle(null, _whitePen, new Rect(0.5, 0.5, ActualWidth - 1, ActualHeight - 1));
+                drawingContext.DrawRectangle(null, _blackPen, new Rect(1.5, 1.5, ActualWidth - 3, ActualHeight - 3));
             }
         }
     }

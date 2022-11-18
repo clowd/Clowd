@@ -131,6 +131,7 @@
                 TextAlignment="Center" />
 
             <WrapPanel
+                x:Name="pnlPalette"
                 Grid.Row="4"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Bottom"
