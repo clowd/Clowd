@@ -185,6 +185,7 @@ namespace Clowd.UI
             {
                 _capturer?.SetMicrophoneMute(!_settings.CaptureMicrophone);
                 _capturer?.SetSpeakerMute(!_settings.CaptureSpeaker);
+                ListenerChanged?.Invoke(this, new EventArgs());
             }
             else if (Initialized || !Started)
             {
