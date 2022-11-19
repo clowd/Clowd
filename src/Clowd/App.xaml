@@ -270,14 +270,18 @@
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter TargetName="contentGrid" Property="Opacity" Value="0.5" />
                                 </Trigger>
-                                <Trigger Property="PulseBackground" Value="True">
-                                    <Trigger.EnterActions>
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="PulseBackground" Value="True" />
+                                        <Condition Property="IsEnabled" Value="True" />
+                                    </MultiTrigger.Conditions>
+                                    <MultiTrigger.EnterActions>
                                         <BeginStoryboard x:Name="AnimationBeginStoryboard" Storyboard="{StaticResource PulseAnimation}" />
-                                    </Trigger.EnterActions>
-                                    <Trigger.ExitActions>
+                                    </MultiTrigger.EnterActions>
+                                    <MultiTrigger.ExitActions>
                                         <RemoveStoryboard BeginStoryboardName="AnimationBeginStoryboard" />
-                                    </Trigger.ExitActions>
-                                </Trigger>
+                                    </MultiTrigger.ExitActions>
+                                </MultiTrigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>

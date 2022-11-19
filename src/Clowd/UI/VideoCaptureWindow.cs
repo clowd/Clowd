@@ -11,6 +11,7 @@ using System.Windows.Data;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Controls;
+using Clowd.UI.Converters;
 using Clowd.UI.Helpers;
 using Clowd.UI.Unmanaged;
 using Clowd.Util;
@@ -20,15 +21,224 @@ using NLog;
 
 namespace Clowd.UI
 {
+    class ObsInitWrapper : SimpleNotifyObject, IDisposable
+    {
+        public ScreenRect Selection { get; }
+
+        public string FileName { get; }
+
+        public string PrimaryText
+        {
+            get
+            {
+                if (_initializing) return "WAIT...";
+                return _initialized ? "START" : "RELOAD";
+            }
+        }
+
+        public bool CanPrimary => MustReload || CanStart;
+
+        public bool MustReload => !Started && !Initialized && !Initializing;
+
+        private bool CanStart => !Started && Initialized;
+
+        public bool Initialized
+        {
+            get => _initialized;
+            private set => Set(ref _initialized, value, nameof(Initialized), nameof(MustReload), nameof(PrimaryText), nameof(CanPrimary));
+        }
+
+        public bool Initializing
+        {
+            get => _initializing;
+            private set => Set(ref _initializing, value, nameof(Initializing), nameof(MustReload), nameof(PrimaryText), nameof(CanPrimary));
+        }
+
+        public bool Started
+        {
+            get => _started;
+            private set => Set(ref _started, value, nameof(Started), nameof(CanPrimary));
+        }
+
+        public bool Recording
+        {
+            get => _recording;
+            private set => Set(ref _recording, value, nameof(Recording));
+        }
+
+        public event EventHandler OutputChanged;
+        public event EventHandler ListenerChanged;
+        public event EventHandler<VideoCriticalErrorEventArgs> CriticalError;
+        public event EventHandler<VideoStatusEventArgs> StatusReceived;
+
+        private bool _disposed;
+        private bool _initialized;
+        private bool _initializing;
+        private bool _started;
+        private bool _recording;
+        private SettingsVideo _settings = SettingsRoot.Current.Video;
+        private ObsCapturer _capturer;
+        private SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+
+        public ObsInitWrapper(string outputFile, ScreenRect selection)
+        {
+            Selection = selection;
+            FileName = outputFile;
+            _settings.PropertyChanged += SettingChanged;
+        }
+
+        public async Task Initialize()
+        {
+            await _semaphore.WaitAsync();
+            try
+            {
+                if (_disposed || Started || Initialized) return;
+
+                Initializing = true;
+                Initialized = false;
+
+                if (_capturer != null)
+                    await _capturer.DisposeAsync();
+
+                _capturer = new ObsCapturer();
+                _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
+                _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
+                await _capturer.Initialize(FileName, Selection, _settings);
+
+                Initialized = true;
+                Initializing = false;
+            }
+            catch (Exception e)
+            {
+                CapturerCriticalError(_capturer, new VideoCriticalErrorEventArgs(e.ToString()));
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+        }
+
+        private void CapturerStatusReceived(object sender, VideoStatusEventArgs e)
+        {
+            StatusReceived?.Invoke(sender, e);
+        }
+
+        private void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
+        {
+            CriticalError?.Invoke(sender, e);
+        }
+
+        public async Task Start()
+        {
+            await _semaphore.WaitAsync();
+            try
+            {
+                if (_disposed || Started || !Initialized) return;
+                Started = true;
+                await _capturer.StartAsync();
+                Recording = true;
+            }
+            catch (Exception e)
+            {
+                CapturerCriticalError(_capturer, new VideoCriticalErrorEventArgs(e.ToString()));
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+        }
+
+        public async Task Stop()
+        {
+            await _semaphore.WaitAsync();
+            try
+            {
+                if (_disposed || !Recording) return;
+                await _capturer.StopAsync();
+                Recording = false;
+            }
+            catch (Exception e)
+            {
+                CapturerCriticalError(_capturer, new VideoCriticalErrorEventArgs(e.ToString()));
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+        }
+
+        private void SettingChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(SettingsVideo.OpenFinishedInExplorer) or nameof(SettingsVideo.FilenamePattern) or nameof(SettingsVideo.OutputDirectory))
+            {
+                // do nothing
+            }
+            else if (e.PropertyName is nameof(SettingsVideo.OutputMode))
+            {
+                OutputChanged?.Invoke(this, new EventArgs());
+            }
+            else if (e.PropertyName is nameof(SettingsVideo.CaptureSpeakerDevice) or nameof(SettingsVideo.CaptureMicrophoneDevice))
+            {
+                ListenerChanged?.Invoke(this, new EventArgs());
+            }
+            else if (e.PropertyName is nameof(SettingsVideo.CaptureSpeaker) or nameof(SettingsVideo.CaptureMicrophone))
+            {
+                _capturer?.SetMicrophoneMute(!_settings.CaptureMicrophone);
+                _capturer?.SetSpeakerMute(!_settings.CaptureSpeaker);
+            }
+            else if (Initialized || !Started)
+            {
+                Invalidate();
+            }
+        }
+
+        private async void Invalidate()
+        {
+            await _semaphore.WaitAsync();
+            try
+            {
+                if (_disposed || Started || !Initialized) return;
+
+                if (_capturer != null)
+                {
+                    await _capturer.DisposeAsync();
+                    _capturer = null;
+                }
+
+                Initialized = false;
+            }
+            catch (Exception e)
+            {
+                CapturerCriticalError(_capturer, new VideoCriticalErrorEventArgs(e.ToString()));
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _settings.PropertyChanged -= SettingChanged;
+            _semaphore.WaitAsync(3000).ContinueWith((t) =>
+            {
+                _semaphore.Dispose();
+                _capturer?.Dispose();
+                _capturer = null;
+            });
+        }
+    }
 
 
     internal sealed class VideoCaptureWindow : IVideoCapturePage
     {
         public event EventHandler Closed;
-        public bool IsRecording { get; private set; }
+
+        public bool IsRecording => _obs?.Recording ?? false;
 
         private CaptureToolButton _btnClowd;
-        private CaptureToolButton _btnReload;
         private CaptureToolButton _btnStart;
         private CaptureToolButton _btnStop;
         private CaptureToolButton _btnMicrophone;
@@ -40,14 +250,10 @@ namespace Clowd.UI
 
         private bool _opened;
         private bool _disposed;
-        private bool _hasStarted;
-        private bool _obsStarting;
-        private bool _obsValid;
 
-        private ScreenRect _selection;
-        private ObsCapturer _capturer;
-        private SettingsVideo _settings = SettingsRoot.Current.Video;
         private string _fileName;
+        private ObsInitWrapper _obs;
+        private SettingsVideo _settings = SettingsRoot.Current.Video;
         private FloatingButtonWindow _floating;
 
         private IAudioLevelListener _speakerLevel;
@@ -55,182 +261,11 @@ namespace Clowd.UI
 
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
-        public VideoCaptureWindow()
-        {
-            if (!Directory.Exists(_settings.OutputDirectory))
-                _settings.OutputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
-
-            _fileName = Path.Combine(_settings.OutputDirectory, PathConstants.GetDatedFileName("recording", "mp4"));
-
-            _btnClowd = new CaptureToolButton
-            {
-                Primary = true,
-                Text = "WAIT",
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconToolNone),
-                IsDragHandle = true,
-            };
-
-            _btnReload = new CaptureToolButton
-            {
-                Primary = true,
-                Text = "Reload",
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconUndo),
-                Executed = (s, e) => StartObs(),
-                Visibility = Visibility.Collapsed,
-            };
-
-            _btnStart = new CaptureToolButton
-            {
-                Text = "Start",
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconPlay),
-                Executed = (s, e) => StartRecording(),
-                IsEnabled = false,
-            };
-
-            _btnStop = new CaptureToolButton
-            {
-                Primary = true,
-                Text = "Finish",
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconStop),
-                Executed = (s, e) => StopRecording(),
-                Visibility = Visibility.Collapsed,
-            };
-
-            _btnMicrophone = new CaptureToolButton
-            {
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconMicrophoneDisabled),
-                IconPathAlternate = AppStyles.GetIconElement(ResourceIcon.IconMicrophoneEnabled),
-                Executed = OnMicrophoneToggle,
-                Text = "Mic",
-            };
-            _btnMicrophone.SetBinding(
-                CaptureToolButton.ShowAlternateIconProperty,
-                new Binding(nameof(SettingsVideo.CaptureMicrophone)) { Source = _settings, Mode = BindingMode.OneWay });
-
-            _btnSpeaker = new CaptureToolButton
-            {
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconSpeakerDisabled),
-                IconPathAlternate = AppStyles.GetIconElement(ResourceIcon.IconSpeakerEnabled),
-                Executed = OnSpeakerToggle,
-                Text = "Spk",
-            };
-            _btnSpeaker.SetBinding(
-                CaptureToolButton.ShowAlternateIconProperty,
-                new Binding(nameof(SettingsVideo.CaptureSpeaker)) { Source = _settings, Mode = BindingMode.OneWay });
-
-            _btnOutput = new CaptureToolButton
-            {
-                Text = "Output",
-                Executed = OnChangeOutput,
-                IconPath = _settings.OutputMode switch
-                {
-                    // VideoOutputType.MKV => AppStyles.GetIconElement(ResourceIcon.IconVideoMKV),
-                    VideoOutputType.MP4 => AppStyles.GetIconElement(ResourceIcon.IconVideoMP4),
-                    VideoOutputType.GIF => AppStyles.GetIconElement(ResourceIcon.IconVideoGIF),
-                    _ => throw new ArgumentOutOfRangeException()
-                },
-            };
-
-            _btnSettings = new CaptureToolButton
-            {
-                Text = "Settings",
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconSettings),
-                Executed = OnSettings,
-            };
-
-            _btnDraw = new CaptureToolButton
-            {
-                Text = "Draw",
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconDrawing),
-                Executed = OnDraw,
-            };
-
-            _btnCancel = new CaptureToolButton
-            {
-                Text = "Cancel",
-                IconPath = AppStyles.GetIconElement(ResourceIcon.IconClose),
-                Executed = OnCancel,
-            };
-
-            _floating = FloatingButtonWindow.Create(
-                new[] { _btnClowd, _btnReload, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnOutput, _btnSettings, _btnDraw, _btnCancel });
-
-            _settings.PropertyChanged += SettingChanged;
-        }
-
-        private async void StartObs()
-        {
-            if (_hasStarted || _obsStarting || !_opened) return;
-            _obsStarting = _obsValid = true;
-
-            _btnReload.Visibility = Visibility.Collapsed;
-            _btnStart.Visibility = Visibility.Visible;
-            _btnStart.IsEnabled = false;
-            _btnStart.PulseBackground = false;
-            _btnStart.Primary = false;
-            _btnClowd.Text = "WAIT";
-
-            BorderWindow.SetText("Please Wait");
-
-            if (_capturer != null)
-            {
-                await _capturer.DisposeAsync();
-                _capturer = null;
-            }
-
-            try
-            {
-                var capturer = new ObsCapturer();
-                capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
-                capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
-                await capturer.Initialize(_fileName, _selection, _settings);
-
-                if (_obsValid)
-                {
-                    _capturer = capturer;
-                    _btnStart.IsEnabled = true;
-                    _btnStart.PulseBackground = true;
-                    _btnStart.Primary = true;
-                    _btnClowd.Text = "READY";
-                    BorderWindow.SetText("Press Start");
-                }
-                else
-                {
-                    await capturer.DisposeAsync();
-                }
-
-                _obsStarting = false;
-            }
-            catch (Exception ex)
-            {
-                CapturerCriticalError(this, new VideoCriticalErrorEventArgs(ex.ToString()));
-            }
-        }
-
-        private async void InvalidateObs()
-        {
-            if (_hasStarted || !_opened) return;
-
-            _obsValid = false;
-            _btnReload.Visibility = Visibility.Visible;
-            _btnStart.Visibility = Visibility.Collapsed;
-            _btnClowd.Text = "Clowd";
-
-            BorderWindow.SetText("Reload");
-
-            if (_capturer != null)
-            {
-                await _capturer.DisposeAsync();
-                _capturer = null;
-            }
-        }
-
         private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
         {
             this.Close();
 
-            var capt = (sender as ObsCapturer) ?? _capturer;
-            if (capt != null)
+            if (sender is ObsCapturer capt)
             {
                 try
                 {
@@ -287,57 +322,136 @@ namespace Clowd.UI
             }
         }
 
-        public void Open(ScreenRect captureArea)
+        public async void Open(ScreenRect captureArea)
         {
             if (_opened || _disposed)
                 throw new InvalidOperationException("Video capture can only be opened once");
 
             _opened = true;
-            _selection = captureArea;
+
+            if (!Directory.Exists(_settings.OutputDirectory))
+                _settings.OutputDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+
+            _settings.CaptureMicrophoneDevice = AudioDeviceManager.VerifyMicrophoneOrDefault(_settings.CaptureMicrophoneDevice);
+            _settings.CaptureSpeakerDevice = AudioDeviceManager.VerifySpeakerOrDefault(_settings.CaptureSpeakerDevice);
+
+            _fileName = Path.Combine(_settings.OutputDirectory, PathConstants.GetDatedFileName("recording", "mp4"));
+            _obs = new ObsInitWrapper(_fileName, captureArea);
+            _obs.CriticalError += CapturerCriticalError;
+            _obs.StatusReceived += CapturerStatusReceived;
+            _obs.ListenerChanged += (s, e) => RefreshListeners();
+            _obs.OutputChanged += (s, e) => UpdateOutputIcon();
+
+            _btnClowd = new CaptureToolButton
+            {
+                Primary = true,
+                Text = "DRAG ME",
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconToolNone),
+                IsDragHandle = true,
+            };
+
+            _btnStart = new CaptureToolButton
+            {
+                Primary = true,
+                Text = "Start",
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconPlay),
+                IconPathAlternate = AppStyles.GetIconElement(ResourceIcon.IconUndo),
+                Executed = (s, e) => StartRecording(),
+                PulseBackground = true,
+            };
+            _btnStart.SetBinding(CaptureToolButton.TextProperty, new Binding(nameof(ObsInitWrapper.PrimaryText)) { Source = _obs });
+            _btnStart.SetBinding(CaptureToolButton.ShowAlternateIconProperty, new Binding(nameof(ObsInitWrapper.MustReload)) { Source = _obs });
+            _btnStart.SetBinding(CaptureToolButton.VisibilityProperty, new Binding(nameof(ObsInitWrapper.Recording)) { Source = _obs, Converter = new BoolToInverseVisibilityConverter() });
+            _btnStart.SetBinding(CaptureToolButton.IsEnabledProperty, new Binding(nameof(ObsInitWrapper.CanPrimary)) { Source = _obs });
+            //_btnStart.SetBinding(CaptureToolButton.PulseBackgroundProperty, new Binding(nameof(ObsInitWrapper.CanPrimary)) { Source = _obs });
+
+            _btnStop = new CaptureToolButton
+            {
+                Primary = true,
+                Text = "Finish",
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconStop),
+                Executed = (s, e) => StopRecording(),
+            };
+            _btnStop.SetBinding(CaptureToolButton.VisibilityProperty, new Binding(nameof(ObsInitWrapper.Recording)) { Source = _obs, Converter = new BoolToVisibilityConverter2() });
+
+            _btnMicrophone = new CaptureToolButton
+            {
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconMicrophoneDisabled),
+                IconPathAlternate = AppStyles.GetIconElement(ResourceIcon.IconMicrophoneEnabled),
+                Executed = OnMicrophoneToggle,
+                Text = "Mic",
+            };
+            _btnMicrophone.SetBinding(
+                CaptureToolButton.ShowAlternateIconProperty,
+                new Binding(nameof(SettingsVideo.CaptureMicrophone)) { Source = _settings, Mode = BindingMode.OneWay });
+
+            _btnSpeaker = new CaptureToolButton
+            {
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconSpeakerDisabled),
+                IconPathAlternate = AppStyles.GetIconElement(ResourceIcon.IconSpeakerEnabled),
+                Executed = OnSpeakerToggle,
+                Text = "Spk",
+            };
+            _btnSpeaker.SetBinding(
+                CaptureToolButton.ShowAlternateIconProperty,
+                new Binding(nameof(SettingsVideo.CaptureSpeaker)) { Source = _settings, Mode = BindingMode.OneWay });
+
+            _btnOutput = new CaptureToolButton
+            {
+                Text = "Output",
+                Executed = OnChangeOutput,
+                IconPath = _settings.OutputMode switch
+                {
+                    VideoOutputType.MP4 => AppStyles.GetIconElement(ResourceIcon.IconVideoMP4),
+                    VideoOutputType.GIF => AppStyles.GetIconElement(ResourceIcon.IconVideoGIF),
+                    _ => throw new ArgumentOutOfRangeException()
+                },
+            };
+
+            _btnSettings = new CaptureToolButton
+            {
+                Text = "Settings",
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconSettings),
+                Executed = OnSettings,
+            };
+
+            _btnDraw = new CaptureToolButton
+            {
+                Text = "Draw",
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconDrawing),
+                Executed = OnDraw,
+            };
+
+            _btnCancel = new CaptureToolButton
+            {
+                Text = "Cancel",
+                IconPath = AppStyles.GetIconElement(ResourceIcon.IconClose),
+                Executed = OnCancel,
+            };
+
+            _floating = FloatingButtonWindow.Create(
+                new[] { _btnClowd, _btnStart, _btnStop, _btnMicrophone, _btnSpeaker, _btnOutput, _btnSettings, _btnDraw, _btnCancel });
 
             RefreshListeners();
             BorderWindow.Show(AppStyles.AccentColor, captureArea);
 
             _floating.ShowPanel(captureArea);
-            Task.Delay(100).ContinueWith((t) => { StartObs(); }, TaskScheduler.FromCurrentSynchronizationContext());
+            await _obs.Initialize();
         }
 
         public async Task StartRecording()
         {
-            if (_disposed)
-                throw new ObjectDisposedException("This object is disposed.");
+            if (!_opened) return;
+            if (_disposed) throw new ObjectDisposedException("This object is disposed.");
 
-            if (_hasStarted)
-                throw new InvalidOperationException("StartRecording can only be called once");
-
-            _hasStarted = true;
-            _btnStart.IsEnabled = false;
-
-            BorderWindow.SetText(null);
-            _btnClowd.Text = "Starting";
-
-            try
-            {
-                _capturer.SetMicrophoneMute(!_settings.CaptureMicrophone);
-                _capturer.SetSpeakerMute(!_settings.CaptureSpeaker);
-                await _capturer.StartAsync();
-                IsRecording = true;
-            }
-            catch (Exception ex)
-            {
-                CapturerCriticalError(this, new VideoCriticalErrorEventArgs(ex.ToString()));
-            }
-
-            _btnClowd.Text = "Started";
-            _btnClowd.IconPath = AppStyles.GetIconElement(ResourceIcon.IconClowd);
-            _btnStart.Visibility = Visibility.Collapsed;
-            _btnStop.Visibility = Visibility.Visible;
+            if (_obs.MustReload) await _obs.Initialize();
+            else if (_obs.CanPrimary) await _obs.Start();
         }
 
         public async Task StopRecording()
         {
-            if (_disposed)
-                throw new ObjectDisposedException("This object is disposed.");
+            if (!_opened) return;
+            if (_disposed) throw new ObjectDisposedException("This object is disposed.");
 
             var wasRecording = IsRecording;
 
@@ -346,8 +460,7 @@ namespace Clowd.UI
 
             if (IsRecording)
             {
-                IsRecording = false;
-                await _capturer.StopAsync();
+                await _obs.Stop();
             }
 
             this.Close();
@@ -392,33 +505,6 @@ namespace Clowd.UI
 
             var pattern = String.IsNullOrWhiteSpace(_settings.FilenamePattern) ? "yyyy-MM-dd HH-mm-ss" : Path.GetFileNameWithoutExtension(_settings.FilenamePattern);
             return Path.Combine(_settings.OutputDirectory, PathConstants.GetFreePatternFileName(_settings.OutputDirectory, pattern)) + ".mp4";
-        }
-
-        private void SettingChanged(object sender, PropertyChangedEventArgs e)
-        {
-            if (_disposed) return;
-
-            if (e.PropertyName is nameof(SettingsVideo.OpenFinishedInExplorer) or nameof(SettingsVideo.FilenamePattern) or nameof(SettingsVideo.OutputDirectory))
-            {
-                // do nothing
-            }
-            else if (e.PropertyName is nameof(SettingsVideo.OutputMode))
-            {
-                UpdateOutputIcon();
-            }
-            else if (e.PropertyName is nameof(SettingsVideo.CaptureSpeakerDevice) or nameof(SettingsVideo.CaptureMicrophoneDevice))
-            {
-                RefreshListeners();
-            }
-            else if (e.PropertyName is nameof(SettingsVideo.CaptureSpeaker) or nameof(SettingsVideo.CaptureMicrophone))
-            {
-                _capturer?.SetMicrophoneMute(!_settings.CaptureMicrophone);
-                _capturer?.SetSpeakerMute(!_settings.CaptureSpeaker);
-            }
-            else
-            {
-                InvalidateObs();
-            }
         }
 
         private void RefreshListeners()
@@ -546,10 +632,10 @@ namespace Clowd.UI
         {
             BorderWindow.Hide();
             _floating.Hide();
+
             if (IsRecording)
             {
-                IsRecording = false;
-                await _capturer.StopAsync();
+                await _obs.Stop();
             }
 
             this.Close();
@@ -565,12 +651,11 @@ namespace Clowd.UI
                 return;
 
             _disposed = true;
-            _settings.PropertyChanged -= SettingChanged;
             BorderWindow.Hide();
             _speakerLevel?.Dispose();
             _microphoneLevel?.Dispose();
             _floating.Close();
-            _capturer?.Dispose();
+            _obs?.Dispose();
             Closed?.Invoke(this, new EventArgs());
         }
     }
