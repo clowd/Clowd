@@ -115,6 +115,8 @@ namespace Clowd.UI.Helpers
             {
                 if (_disposed || Started || !Initialized) return;
                 Started = true;
+                _capturer.SetMicrophoneMute(!_settings.CaptureMicrophone);
+                _capturer.SetSpeakerMute(!_settings.CaptureSpeaker);
                 await _capturer.StartAsync();
                 Recording = true;
             }
