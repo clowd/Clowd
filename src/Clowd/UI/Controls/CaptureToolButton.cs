@@ -5,88 +5,21 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using DependencyPropertyGenerator;
 
 namespace Clowd.UI.Controls
 {
-    public class CaptureToolButton : Button
+    [DependencyProperty<UIElement>("IconPath")]
+    [DependencyProperty<UIElement>("IconPathAlternate")]
+    [DependencyProperty<UIElement>("Overlay")]
+    [DependencyProperty<bool>("PulseBackground")]
+    [DependencyProperty<bool>("ShowAlternateIcon")]
+    [DependencyProperty<bool>("ShowHover", DefaultValue = true)]
+    [DependencyProperty<double>("IconSize", DefaultValue = 26d)]
+    [DependencyProperty<string>("Text")]
+    [DependencyProperty<bool>("Primary")]
+    public partial class CaptureToolButton : Button
     {
-        public UIElement IconPath
-        {
-            get { return (UIElement)GetValue(IconPathProperty); }
-            set { SetValue(IconPathProperty, value); }
-        }
-
-        public static readonly DependencyProperty IconPathProperty = DependencyProperty.Register("IconPath", typeof(UIElement), typeof(CaptureToolButton), new PropertyMetadata(null));
-
-        public UIElement IconPathAlternate
-        {
-            get { return (UIElement)GetValue(IconPathAlternateProperty); }
-            set { SetValue(IconPathAlternateProperty, value); }
-        }
-
-        public static readonly DependencyProperty IconPathAlternateProperty = DependencyProperty.Register("IconPathAlternate", typeof(UIElement), typeof(CaptureToolButton), new PropertyMetadata(null));
-
-        public UIElement Overlay
-        {
-            get { return (UIElement)GetValue(OverlayProperty); }
-            set { SetValue(OverlayProperty, value); }
-        }
-
-        public static readonly DependencyProperty OverlayProperty = DependencyProperty.Register("Overlay", typeof(UIElement), typeof(CaptureToolButton), new PropertyMetadata(null));
-
-        public bool PulseBackground
-        {
-            get { return (bool)GetValue(PulseBackgroundProperty); }
-            set { SetValue(PulseBackgroundProperty, value); }
-        }
-
-        public static readonly DependencyProperty PulseBackgroundProperty = DependencyProperty.Register("PulseBackground", typeof(bool), typeof(CaptureToolButton), new PropertyMetadata(false));
-
-        public bool ShowAlternateIcon
-        {
-            get { return (bool)GetValue(ShowAlternateIconProperty); }
-            set { SetValue(ShowAlternateIconProperty, value); }
-        }
-
-        public static readonly DependencyProperty ShowAlternateIconProperty = DependencyProperty.Register("ShowAlternateIcon", typeof(bool), typeof(CaptureToolButton), new PropertyMetadata(false));
-
-        public bool ShowHover
-        {
-            get { return (bool)GetValue(ShowHoverProperty); }
-            set { SetValue(ShowHoverProperty, value); }
-        }
-
-        public static readonly DependencyProperty ShowHoverProperty = DependencyProperty.Register("ShowHover", typeof(bool), typeof(CaptureToolButton), new PropertyMetadata(true));
-
-        public double IconSize
-        {
-            get { return (double)GetValue(IconSizeProperty); }
-            set { SetValue(IconSizeProperty, value); }
-        }
-
-        public static readonly DependencyProperty IconSizeProperty = DependencyProperty.Register("IconSize", typeof(double), typeof(CaptureToolButton), new PropertyMetadata(26d));
-
-        public string Text
-        {
-            get => _lastText;
-            set => UpdateText(value);
-        }
-
-        public bool Primary
-        {
-            set
-            {
-                if (value)
-                {
-                    this.Background = AppStyles.AccentBackgroundBrush;
-                }
-                else
-                {
-                    this.Background = AppStyles.IdealBackgroundBrush;
-                }
-            }
-        }
-
         public bool IsDragHandle { get; set; }
 
         public List<SimpleKeyGesture> Gestures { get; set; } = new List<SimpleKeyGesture>();
@@ -104,11 +37,6 @@ namespace Clowd.UI.Controls
             this.Click += CaptureToolButton_Click;
         }
 
-        private void CaptureToolButton_Click(object sender, RoutedEventArgs e)
-        {
-            Executed?.Invoke(this, e);
-        }
-
         public bool ProcessKeyState(ModifierKeys modifier, Key key)
         {
             foreach (var g in Gestures)
@@ -123,11 +51,20 @@ namespace Clowd.UI.Controls
             return false;
         }
 
-        private string _lastText;
-
-        public void UpdateText(string setTxt)
+        partial void OnPrimaryChanged(bool newValue)
         {
-            _lastText = setTxt;
+            if (newValue)
+            {
+                Background = AppStyles.AccentBackgroundBrush;
+            }
+            else
+            {
+                Background = AppStyles.IdealBackgroundBrush;
+            }
+        }
+
+        partial void OnTextChanged(string newValue)
+        {
             var tb = new TextBlock();
             tb.HorizontalAlignment = HorizontalAlignment.Center;
             tb.VerticalAlignment = VerticalAlignment.Bottom;
@@ -135,9 +72,9 @@ namespace Clowd.UI.Controls
             tb.FontWeight = FontWeights.DemiBold;
             tb.Foreground = Brushes.White;
 
-            if (setTxt != null)
+            if (newValue != null)
             {
-                var upper = setTxt.ToUpper();
+                var upper = newValue.ToUpper();
                 var idx = upper.IndexOf('_');
                 if (idx >= 0)
                 {
@@ -152,6 +89,11 @@ namespace Clowd.UI.Controls
 
                 this.Content = tb;
             }
+        }
+
+        private void CaptureToolButton_Click(object sender, RoutedEventArgs e)
+        {
+            Executed?.Invoke(this, e);
         }
     }
 }

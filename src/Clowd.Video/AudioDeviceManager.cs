@@ -1,6 +1,7 @@
 ﻿using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
@@ -27,6 +28,32 @@ namespace Clowd.Video
             yield return GetDefaultMicrophone();
             foreach (var d in GetDevices(DataFlow.Capture, TYPE_MICROPHONE))
                 yield return d;
+        }
+
+        public static AudioDeviceInfo VerifyMicrophoneOrDefault(AudioDeviceInfo device)
+        {
+            if (device != null && device.DeviceType.EqualsIgnoreCase(TYPE_MICROPHONE))
+            {
+                if (GetMicrophones().Any(m => m.DeviceId.Equals(device.DeviceId)))
+                {
+                    return device;
+                }
+            }
+
+            return GetDefaultMicrophone();
+        }
+
+        public static AudioDeviceInfo VerifySpeakerOrDefault(AudioDeviceInfo device)
+        {
+            if (device != null && device.DeviceType.EqualsIgnoreCase(TYPE_SPEAKER))
+            {
+                if (GetSpeakers().Any(m => m.DeviceId.Equals(device.DeviceId)))
+                {
+                    return device;
+                }
+            }
+
+            return GetDefaultSpeaker();
         }
 
         public static AudioDeviceInfo GetDefaultMicrophone()
@@ -96,7 +123,7 @@ namespace Clowd.Video
             using var enumerator = new MMDeviceEnumerator();
             return enumerator.GetDevice(info.DeviceId);
         }
-        
+
         private static IEnumerable<AudioDeviceInfo> GetDevices(DataFlow flow, string type)
         {
             using (MMDeviceEnumerator enumerator = new MMDeviceEnumerator())

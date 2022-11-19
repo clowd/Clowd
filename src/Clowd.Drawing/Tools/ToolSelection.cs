@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System;
+using System.Windows;
 using System.Windows.Input;
 using Clowd.Drawing.Graphics;
 
@@ -8,7 +9,7 @@ namespace Clowd.Drawing.Tools
     {
         private GraphicSelectionRectangle _selection = new(new Rect(0, 0, 1, 1));
 
-        public ToolSelection() : base(Cursors.Cross, SnapMode.Diagonal)
+        public ToolSelection(Func<Cursor> cursor) : base(cursor, SnapMode.Diagonal)
         { }
 
         protected override void OnMouseDownImpl(DrawingCanvas canvas, Point pt)

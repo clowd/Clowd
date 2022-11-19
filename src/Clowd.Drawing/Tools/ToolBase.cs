@@ -16,12 +16,12 @@ namespace Clowd.Drawing.Tools
         protected Point LastMouseDownPt { get; set; }
         protected Point LastMouseMovePt { get; set; }
 
-        protected readonly Cursor Cursor;
+        protected readonly Func<Cursor> CursorFn;
         private readonly SnapMode _snapMode;
 
-        protected ToolBase(Cursor cursor, SnapMode snapMode = SnapMode.None)
+        protected ToolBase(Func<Cursor> cursorFn, SnapMode snapMode = SnapMode.None)
         {
-            Cursor = cursor;
+            CursorFn = cursorFn;
             _snapMode = snapMode;
         }
 
@@ -86,7 +86,7 @@ namespace Clowd.Drawing.Tools
 
         public virtual void SetCursor(DrawingCanvas canvas)
         {
-            canvas.Cursor = Cursor;
+            canvas.Cursor = CursorFn();
         }
     }
 }

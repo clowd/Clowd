@@ -31,7 +31,7 @@ namespace Clowd.Drawing.Tools
 
         bool _wasEdit;
 
-        public ToolPointer() : base(HelperFunctions.DefaultCursor)
+        public ToolPointer() : base(() => HelperFunctions.DefaultCursor)
         { }
 
         public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
@@ -112,7 +112,7 @@ namespace Clowd.Drawing.Tools
                 else
                 {
                     _selectMode = SelectionMode.Move;
-                    drawingCanvas.Cursor = Cursors.SizeAll;
+                    drawingCanvas.Cursor = CursorResources.Move;
                 }
 
                 graphic.IsSelected = true;
@@ -126,6 +126,20 @@ namespace Clowd.Drawing.Tools
 
                 _selectMode = SelectionMode.GroupSelection;
             }
+        }
+
+        private void SetHitTest(DrawingCanvas drawingCanvas, Point point)
+        {
+            int handleNumber;
+            var graphic = MakeHitTest(drawingCanvas, point, out handleNumber);
+
+            if (handleNumber < 0) // hit no objects
+                drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
+            else if (handleNumber == 0) // hit body of object
+                                        //drawingCanvas.Cursor = graphic.IsSelected ? CursorResources.Default : CursorResources.Rect;
+                drawingCanvas.Cursor = CursorResources.Move;
+            else // hit resize handle
+                drawingCanvas.Cursor = graphic.GetHandleCursor(handleNumber);
         }
 
         /// <summary>
@@ -147,13 +161,7 @@ namespace Clowd.Drawing.Tools
             // Set cursor when left button is not pressed
             if (e.LeftButton == MouseButtonState.Released)
             {
-                int handleNumber;
-                var graphic = MakeHitTest(drawingCanvas, point, out handleNumber);
-                drawingCanvas.Cursor =
-                    handleNumber < 0 ? HelperFunctions.DefaultCursor :
-                    handleNumber == 0 ? Cursors.Hand :
-                    graphic.GetHandleCursor(handleNumber);
-
+                SetHitTest(drawingCanvas, point);
                 return;
             }
 
@@ -183,7 +191,7 @@ namespace Clowd.Drawing.Tools
                         var lineGraphic = _handleGrabbedObject as GraphicLine;
                         var rotatableGraphic = _handleGrabbedObject as GraphicRectangle;
                         var rotatableDestRect = GetTransformedRect(
-                            rotatableGraphic?.UnrotatedBounds ?? Rect.Empty, 
+                            rotatableGraphic?.UnrotatedBounds ?? Rect.Empty,
                             _handleGrabbed,
                             rotatableGraphic?.UnapplyRotation(point) ?? default(Point));
                         if (shiftPressed && rotatableGraphic != null && _handleRatio != 0 && !rotatableDestRect.IsEmpty)
@@ -256,10 +264,14 @@ namespace Clowd.Drawing.Tools
             }
 
             drawingCanvas.ReleaseMouseCapture();
-            drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
+
+            Point point = e.GetPosition(drawingCanvas);
+            SetHitTest(drawingCanvas, point);
+            //drawingCanvas.Cursor = HelperFunctions.DefaultCursor;
+
             _selectMode = SelectionMode.None;
             if (_wasEdit)
-                drawingCanvas.AddCommandToHistory();
+                drawingCanvas.AddCommandToHistory(false);
         }
 
         public override void SetCursor(DrawingCanvas drawingCanvas)

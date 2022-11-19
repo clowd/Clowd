@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -8,6 +9,12 @@ namespace Clowd.Drawing.Graphics
 {
     public abstract class GraphicBase : SimpleNotifyObject
     {
+        public string Id
+        {
+            get => _id;
+            internal set => Set(ref _id, value);
+        }
+
         public virtual Color ObjectColor
         {
             get => _objectColor;
@@ -32,6 +39,7 @@ namespace Clowd.Drawing.Graphics
             set => Set(ref _isSelected, value);
         }
 
+        private string _id = Guid.NewGuid().ToString();
         private Color _objectColor;
         private double _lineWidth;
         private bool _dropShadowEffect;

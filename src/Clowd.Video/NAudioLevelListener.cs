@@ -12,7 +12,7 @@ namespace Clowd.Video
         public double PeakLevel
         {
             get => _peakLevel;
-            set => Set(ref _peakLevel, value);
+            private set => Set(ref _peakLevel, value);
         }
 
         private readonly SynchronizationContext _context;
@@ -30,6 +30,11 @@ namespace Clowd.Video
             _thread = new Thread(ThreadProc);
             _thread.SetApartmentState(ApartmentState.STA);
             _thread.Start();
+        }
+
+        ~NAudioLevelListener()
+        {
+            Dispose();
         }
 
         private void ThreadProc()

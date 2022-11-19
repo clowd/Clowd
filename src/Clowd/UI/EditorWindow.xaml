@@ -503,7 +503,10 @@
             PopupAnimation="Fade"
             StaysOpen="False"
             VerticalOffset="-5">
-            <colors:MiniColorDialog x:Name="miniColor" Margin="10" />
+            <colors:MiniColorDialog
+                x:Name="miniColor"
+                Margin="10"
+                Realtime="True" />
         </Popup>
 
         <Button

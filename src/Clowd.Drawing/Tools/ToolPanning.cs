@@ -8,7 +8,7 @@ namespace Clowd.Drawing.Tools
     {
         private Point _panStart;
 
-        public ToolPanning() : base(Cursors.SizeAll, SnapMode.None)
+        public ToolPanning() : base(() => Cursors.SizeAll, SnapMode.None)
         {
         }
 

@@ -61,7 +61,7 @@ namespace Clowd.Drawing.Graphics
             else LineEnd = point;
         }
 
-        internal override Cursor GetHandleCursor(int handleNumber) => Cursors.SizeAll;
+        internal override Cursor GetHandleCursor(int handleNumber) => CursorResources.SizeAll;
 
         internal override void DrawObject(DrawingContext ctx)
         {

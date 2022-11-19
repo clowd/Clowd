@@ -62,8 +62,7 @@ namespace Clowd
 
         public static bool IsDarkTheme => WPFUI.Appearance.Theme.GetAppTheme() == WPFUI.Appearance.ThemeType.Dark;
 
-        public static Stream AppIconDarkThemeStream => Application.GetResourceStream(new Uri("pack://application:,,,/Images/default-white.ico")).Stream;
-        public static Stream AppIconLightThemeStream => Application.GetResourceStream(new Uri("pack://application:,,,/Images/default.ico")).Stream;
+        public static Stream AppIconStream => Application.GetResourceStream(new Uri("pack://application:,,,/clowd-default.ico")).Stream;
 
         public static string UiDateTimePattern
             => System.Threading.Thread.CurrentThread.CurrentCulture.DateTimeFormat.ShortDatePattern + " " +
@@ -76,8 +75,8 @@ namespace Clowd
                 var desiredSize = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
                 var avaliableSizes = new[] { 64, 48, 40, 32, 24, 20, 16 };
                 var nearest = avaliableSizes.OrderBy(x => Math.Abs(x - desiredSize)).First();
-                var stream = IsDarkTheme ? AppIconDarkThemeStream : AppIconLightThemeStream;
-                return new Icon(stream, new System.Drawing.Size(nearest, nearest));
+                //var stream = IsDarkTheme ? AppIconDarkThemeStream : AppIconLightThemeStream;
+                return new Icon(AppIconStream, new System.Drawing.Size(nearest, nearest));
             }
         }
 
@@ -85,8 +84,8 @@ namespace Clowd
         {
             get
             {
-                var stream = IsDarkTheme ? AppIconDarkThemeStream : AppIconLightThemeStream;
-                BitmapDecoder decoder = IconBitmapDecoder.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                //var stream = IsDarkTheme ? AppIconDarkThemeStream : AppIconLightThemeStream;
+                BitmapDecoder decoder = IconBitmapDecoder.Create(AppIconStream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
                 return decoder.Frames[0];
             }
         }

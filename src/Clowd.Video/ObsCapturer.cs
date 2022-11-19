@@ -26,16 +26,17 @@ namespace Clowd.Video
         private static readonly object _lock = new object();
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
 
+        private bool _started;
+        private bool _disposed;
         private WatchProcess _watch;
         private StringBuilder _output = new();
-        private string _filePath;
         private TaskCompletionSource<bool> _signalInit = new();
-        private TaskCompletionSource<string> _signalStart = new();
+        private TaskCompletionSource<bool> _signalStart = new();
         private TaskCompletionSource<bool> _signalStop = new();
 
+#if DEBUG
         static ObsCapturer()
         {
-#if DEBUG
             // if obs is missing, try to find obs in build cache, only if we're debugging.
             if (!Directory.Exists(LibraryDirPath))
             {
@@ -53,8 +54,8 @@ namespace Clowd.Video
                     di = di.Parent;
                 } while (di != null);
             }
-#endif
         }
+#endif
 
         public ObsCapturer()
         {
@@ -74,90 +75,93 @@ namespace Clowd.Video
 #endif
 
             if (!Directory.Exists(LibraryDirPath))
-                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + LibraryDirPath);
+                throw new ArgumentException("Recorder does not exist (or is corrupt) at the path: " + LibraryDirPath);
 
             if (!File.Exists(ObsExpressExePath))
-                throw new ArgumentException("OBS does not exist or is corrupt at the path: " + ObsExpressExePath);
+                throw new ArgumentException("Recorder does not exist (or is corrupt) at the path: " + ObsExpressExePath);
         }
 
-        public override Task Initialize(ScreenRect captureRect, SettingsVideo settings)
+        public override Task Initialize(string outputFile, ScreenRect captureRect, SettingsVideo settings)
         {
-            try
+            ThrowIfDisposed();
+
+            ThreadPool.QueueUserWorkItem((_) =>
             {
-                if (String.IsNullOrWhiteSpace(settings.OutputDirectory))
-                    throw new Exception("OutputDirectory must not be null");
-
-                if (!Directory.Exists(settings.OutputDirectory))
-                    Directory.CreateDirectory(settings.OutputDirectory);
-
-                _filePath = Path.Combine(settings.OutputDirectory, PathConstants.GetFreePatternFileName(settings.OutputDirectory, settings.FilenamePattern)) + ".mp4";
-
-                List<string> arguments = new()
+                try
                 {
-                    "--captureRegion", $"{captureRect.X},{captureRect.Y},{captureRect.Width},{captureRect.Height}",
-                    "--fps", settings.Fps.ToString(),
-                    "--crf", ((int)settings.Quality).ToString(),
-                    "--maxOutputWidth", settings.MaxResolutionWidth.ToString(),
-                    "--maxOutputHeight", settings.MaxResolutionHeight.ToString(),
-                    "--pause",
-                    "--output", _filePath,
-                };
+                    if (!outputFile.EndsWith(".mp4", StringComparison.InvariantCultureIgnoreCase))
+                        throw new Exception("Output file must end in .mp4 extension.");
 
-                if (settings.ShowClickAnimation)
-                {
-                    arguments.Add("--trackerEnabled");
-                    arguments.Add("--trackerColor");
-                    arguments.Add($"{settings.ClickAnimationColor.R},{settings.ClickAnimationColor.G},{settings.ClickAnimationColor.B}");
+                    if (!Directory.Exists(Path.GetDirectoryName(outputFile)))
+                        throw new Exception("Output file directory must exist.");
+
+                    List<string> arguments = new()
+                    {
+                        "--captureRegion", $"{captureRect.X},{captureRect.Y},{captureRect.Width},{captureRect.Height}",
+                        "--fps", settings.Fps.ToString(),
+                        "--crf", ((int)settings.Quality).ToString(),
+                        "--maxOutputWidth", settings.MaxResolutionWidth.ToString(),
+                        "--maxOutputHeight", settings.MaxResolutionHeight.ToString(),
+                        "--pause",
+                        "--output", outputFile,
+                    };
+
+                    if (settings.ShowClickAnimation)
+                    {
+                        arguments.Add("--trackerEnabled");
+                        arguments.Add("--trackerColor");
+                        arguments.Add($"{settings.ClickAnimationColor.R},{settings.ClickAnimationColor.G},{settings.ClickAnimationColor.B}");
+                    }
+
+                    if (settings.HardwareAccelerated)
+                    {
+                        arguments.Add("--hwAccel");
+                    }
+
+                    if (!settings.ShowMouseCursor)
+                    {
+                        arguments.Add("--noCursor");
+                    }
+
+                    if (settings.CaptureMicrophoneDevice?.DeviceId != null)
+                    {
+                        arguments.Add("--microphones");
+                        arguments.Add(settings.CaptureMicrophoneDevice?.DeviceId);
+                    }
+
+                    if (settings.CaptureSpeakerDevice?.DeviceId != null)
+                    {
+                        arguments.Add("--speakers");
+                        arguments.Add(settings.CaptureSpeakerDevice?.DeviceId);
+                    }
+
+                    var obsexpress = new ProcessStartInfo()
+                    {
+                        FileName = ObsExpressExePath,
+                        UseShellExecute = false,
+                        WorkingDirectory = BinDirPath,
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        RedirectStandardInput = true,
+                        CreateNoWindow = true,
+                    };
+
+                    foreach (var a in arguments)
+                        obsexpress.ArgumentList.Add(a);
+
+                    _log.Info("Starting obs child processes");
+
+                    _watch = WatchProcess.StartAndWatch(obsexpress);
+                    _watch.OutputReceived += OutputReceived;
+                    _watch.ProcessExited += ProcessExited;
                 }
-
-                if (settings.HardwareAccelerated)
+                catch (Exception ex)
                 {
-                    arguments.Add("--hwAccel");
+                    _signalInit.SetException(ex);
+                    _log.Error(ex);
                 }
-
-                if (!settings.ShowMouseCursor)
-                {
-                    arguments.Add("--noCursor");
-                }
-
-                if (settings.CaptureMicrophone && settings.CaptureMicrophoneDevice?.DeviceId != null)
-                {
-                    arguments.Add("--microphones");
-                    arguments.Add(settings.CaptureMicrophoneDevice?.DeviceId);
-                }
-
-                if (settings.CaptureSpeaker && settings.CaptureSpeakerDevice?.DeviceId != null)
-                {
-                    arguments.Add("--speakers");
-                    arguments.Add(settings.CaptureSpeakerDevice?.DeviceId);
-                }
-
-                var obsexpress = new ProcessStartInfo()
-                {
-                    FileName = ObsExpressExePath,
-                    UseShellExecute = false,
-                    WorkingDirectory = BinDirPath,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    RedirectStandardInput = true,
-                    CreateNoWindow = true,
-                };
-
-                foreach (var a in arguments)
-                    obsexpress.ArgumentList.Add(a);
-
-                _log.Info("Starting obs child processes");
-
-                _watch = WatchProcess.StartAndWatch(obsexpress);
-                _watch.OutputReceived += OutputReceived;
-                _watch.ProcessExited += ProcessExited;
-            }
-            catch (Exception ex)
-            {
-                _signalInit.SetException(ex);
-                _log.Error(ex);
-            }
+            });
 
             return _signalInit.Task;
         }
@@ -169,7 +173,7 @@ namespace Clowd.Video
 
             lock (_signalStop)
             {
-                if (_signalStop.Task.IsCompleted)
+                if (_signalStop.Task.IsCompleted || _disposed)
                     return;
 
                 // if the process exits before the stopped_recording event there is something wrong.
@@ -204,7 +208,7 @@ namespace Clowd.Video
                             _signalInit.SetResult(true);
                             break;
                         case "started_recording":
-                            _signalStart.SetResult(_filePath);
+                            _signalStart.SetResult(true);
                             break;
                         case "stopped_recording":
                             lock (_signalStop)
@@ -232,30 +236,70 @@ namespace Clowd.Video
             }
         }
 
-        public override async Task<string> StartAsync()
+        public override async Task StartAsync()
         {
+            ThrowIfDisposed();
+            if (_started)
+            {
+                await _signalStart.Task;
+                return;
+            }
+
+            _started = true;
             await _signalInit.Task;
-            _watch.WriteToStdIn("start");
-            return await _signalStart.Task;
+            WriteCommand("start");
+            await _signalStart.Task;
         }
 
-        public override Task StopAsync()
+        public override async Task StopAsync()
         {
-            _watch.WriteToStdIn("q");
-            return _signalStop.Task;
+            if (!_started) return;
+            ThrowIfDisposed();
+            WriteCommand("q");
+            await _signalStop.Task;
+        }
+
+        public void SetSpeakerMute(bool muted)
+        {
+            ThrowIfDisposed();
+            var cmd = muted ? "mute" : "unmute";
+            WriteCommand($"{cmd} s 0");
+        }
+
+        public void SetMicrophoneMute(bool muted)
+        {
+            ThrowIfDisposed();
+            var cmd = muted ? "mute" : "unmute";
+            WriteCommand($"{cmd} m 0");
+        }
+
+        private void WriteCommand(string command)
+        {
+            _watch?.WriteToStdIn(command);
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(ObsCapturer));
         }
 
         public override void Dispose()
         {
             lock (_lock)
             {
+                if (_disposed) return;
+                _disposed = true;
                 _instance = null;
                 _log.Info("Disposing ObsCapturer Instance");
                 try { _watch?.WriteToStdIn("q"); }
                 catch {; }
-
                 _watch?.WaitTimeoutThenForceExit(5000);
             }
+        }
+
+        public Task DisposeAsync()
+        {
+            return Task.Run(Dispose);
         }
 
         public override void WriteLogToFile(string fileName)

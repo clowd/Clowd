@@ -15,6 +15,7 @@ using System.Reflection;
 using System.ComponentModel;
 using System.Windows.Data;
 using Clowd.Config;
+using System.Xml.Linq;
 
 namespace Clowd.Drawing
 {
@@ -77,6 +78,7 @@ namespace Clowd.Drawing
 
         private Dictionary<ToolType, ToolDesc> _toolStore;
         private Border _clickable;
+        private DrawingVisual _artworkBackground;
         private UndoManager _undoManager;
         private bool _isToolMouseDown;
         private bool _isAutoFit;
@@ -85,6 +87,9 @@ namespace Clowd.Drawing
 
         public DrawingCanvas()
         {
+            _artworkBackground = new DrawingVisual();
+            AddVisualChild(_artworkBackground);
+
             GraphicsList = new GraphicCollection(this);
 
             // create array of drawing tools
@@ -92,31 +97,31 @@ namespace Clowd.Drawing
             ToolText = new ToolText();
 
             var toolRectangle = new ToolDraggable<GraphicRectangle>(
-                Resource.CursorRectangle,
+                () => CursorResources.Rect,
                 point => new GraphicRectangle(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolFilledRectangle = new ToolDraggable<GraphicFilledRectangle>(
-                Resource.CursorRectangle,
+                () => CursorResources.Rect,
                 point => new GraphicFilledRectangle(ObjectColor, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolEllipse = new ToolDraggable<GraphicEllipse>(
-                Resource.CursorEllipse,
+                () => CursorResources.Ellipse,
                 point => new GraphicEllipse(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolLine = new ToolDraggable<GraphicLine>(
-                Resource.CursorLine,
+                () => CursorResources.Line,
                 point => new GraphicLine(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
 
             var toolArrow = new ToolDraggable<GraphicArrow>(
-                Resource.CursorArrow,
+                () => CursorResources.Arrow,
                 point => new GraphicArrow(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
@@ -312,23 +317,22 @@ namespace Clowd.Drawing
         {
             if (oldValue != null)
             {
-                RemoveVisualChild(oldValue.BackgroundVisual);
                 oldValue.PropertyChanged -= GraphicsListPropertyChanged;
                 oldValue.Clear();
             }
 
             newValue.PropertyChanged += GraphicsListPropertyChanged;
-            AddVisualChild(newValue.BackgroundVisual);
-        }
-
-        partial void OnArtworkBackgroundChanged(Color newValue)
-        {
-            GraphicsList.BackgroundBrush = new SolidColorBrush(newValue);
+            InvalidateBackground();
         }
 
         partial void OnHandleColorChanged(Color newValue)
         {
             GraphicBase.HandleBrush = new SolidColorBrush(newValue);
+        }
+
+        partial void OnArtworkBackgroundChanged()
+        {
+            InvalidateBackground();
         }
 
         private void ApplyGraphicPropertyChange<TType, T>(T newValue, Func<TType, T> getTextProp, Action<TType, T> setTextProp) where TType : GraphicBase
@@ -349,21 +353,13 @@ namespace Clowd.Drawing
 
             if (wasChange)
             {
-                AddCommandToHistory();
+                AddCommandToHistory(true);
             }
         }
 
-        public BitmapSource DrawGraphicsToBitmap() => GraphicsList.DrawGraphicsToBitmap();
+        public BitmapSource DrawGraphicsToBitmap() => GraphicsList.DrawGraphicsToBitmap(new SolidColorBrush(ArtworkBackground));
 
-        public DrawingVisual DrawGraphicsToVisual() => GraphicsList.DrawGraphicsToVisual();
-
-        public byte[] SerializeGraphics(bool selectedOnly) => GraphicsList.SerializeObjects(selectedOnly);
-
-        public void DeserializeGraphics(byte[] graphics)
-        {
-            GraphicsList.DeserializeObjectsInto(graphics);
-            _undoManager.AddCommandStep();
-        }
+        public DrawingVisual DrawGraphicsToVisual() => GraphicsList.DrawGraphicsToVisual(new SolidColorBrush(ArtworkBackground));
 
         public void AddGraphic(GraphicBase g)
         {
@@ -378,7 +374,46 @@ namespace Clowd.Drawing
             g.IsSelected = true;
             g.Normalize();
             this.GraphicsList.Add(g);
-            AddCommandToHistory();
+            AddCommandToHistory(false);
+        }
+
+        public void AddGraphics(GraphicBase[] graphics)
+        {
+            if (graphics.Length is 0 or 1)
+            {
+                if (graphics.Length == 1)
+                {
+                    AddGraphic(graphics[0]);
+                }
+                return;
+            }
+
+            // center the collection of items in the current viewport
+            Rect bounds = graphics[0].Bounds;
+            for (int i = 1; i < graphics.Length; i++)
+                bounds.Union(graphics[i].Bounds);
+
+            var transformX = (-bounds.Left - bounds.Width / 2) + ((ActualWidth / 2 - ContentOffset.X) / ContentScale);
+            var transformY = (-bounds.Top - bounds.Height / 2) + ((ActualHeight / 2 - ContentOffset.Y) / ContentScale);
+
+            foreach (var g in graphics)
+                g.Move(transformX, transformY);
+
+            // only the newly added items should be selected
+            this.UnselectAll();
+            foreach (var g in graphics)
+            {
+                g.IsSelected = true;
+                g.Normalize();
+                this.GraphicsList.Add(g);
+            }
+            AddCommandToHistory(false);
+        }
+
+        public void SetBackgroundColor(Color clr)
+        {
+            ArtworkBackground = clr;
+            AddCommandToHistory(true);
         }
 
         public void SelectAll()
@@ -420,7 +455,7 @@ namespace Clowd.Drawing
 
             if (wasChange)
             {
-                AddCommandToHistory();
+                AddCommandToHistory(false);
             }
         }
 
@@ -429,8 +464,13 @@ namespace Clowd.Drawing
             if (GraphicsList.Count > 0)
             {
                 GraphicsList.Clear();
-                AddCommandToHistory();
+                AddCommandToHistory(false);
             }
+        }
+
+        public void RestoreState(XElement data)
+        {
+            _undoManager.ClearHistory(data);
         }
 
         public void Nudge(int offsetX, int offsetY)
@@ -441,7 +481,7 @@ namespace Clowd.Drawing
                 {
                     obj.Move(offsetX, offsetY);
                 }
-                _undoManager.AddCommandStepNudge();
+                _undoManager.AddCommandStep(true);
             }
         }
 
@@ -501,7 +541,7 @@ namespace Clowd.Drawing
                         GraphicsList.Insert(idx, g);
                     }
                 }
-                AddCommandToHistory();
+                AddCommandToHistory(false);
             }
         }
 
@@ -520,29 +560,39 @@ namespace Clowd.Drawing
             _undoManager.Redo();
         }
 
-        protected override int VisualChildrenCount => (GraphicsList?.VisualCount ?? 0) + Children.Count;
+        protected override int VisualChildrenCount => (GraphicsList?.VisualCount ?? 0) + Children.Count + 1;
 
         internal void InternalAddVisualChild(Visual child) => AddVisualChild(child);
 
         internal void InternalRemoveVisualChild(Visual child) => RemoveVisualChild(child);
 
+        private void InvalidateBackground()
+        {
+            using var ctx = _artworkBackground.RenderOpen();
+            ctx.DrawRectangle(new SolidColorBrush(ArtworkBackground), null, GraphicsList.ContentBounds);
+        }
+
         protected override Visual GetVisualChild(int index)
         {
-            // _clickable and _artworkbounds come first,
+            // _clickable and _artworkBackground come first,
             // any other children come after.
 
             if (index == 0)
             {
                 return _clickable;
             }
-            else if (index - 1 < GraphicsList.VisualCount)
+            if (index == 1)
             {
-                return GraphicsList.GetVisual(index - 1);
+                return _artworkBackground;
             }
-            else if (index - 1 - GraphicsList.VisualCount < Children.Count)
+            else if (index - 2 < GraphicsList.VisualCount)
+            {
+                return GraphicsList.GetVisual(index - 2);
+            }
+            else if (index - 2 - GraphicsList.VisualCount < Children.Count)
             {
                 // any other children.
-                return Children[index - GraphicsList.VisualCount];
+                return Children[index - 1 - GraphicsList.VisualCount];
             }
 
             throw new ArgumentOutOfRangeException("index");
@@ -562,6 +612,7 @@ namespace Clowd.Drawing
             else if (e.PropertyName == nameof(GraphicCollection.ContentBounds))
             {
                 _isAutoFit = false;
+                InvalidateBackground();
             }
         }
 
@@ -681,7 +732,7 @@ namespace Clowd.Drawing
         {
             // this is only triggered on bindings with NotifyOnSourceUpdated, and 
             // that is only enabled on our object property bindings in SyncObjectState.
-            AddCommandToHistory();
+            AddCommandToHistory(true);
         }
 
         void DrawingCanvas_MouseDown(object sender, MouseButtonEventArgs e)
@@ -825,7 +876,7 @@ namespace Clowd.Drawing
                     {
                         // Pointer tool moved or resized graphics object.
                         // Add this action to the history
-                        AddCommandToHistory();
+                        AddCommandToHistory(false);
                     }
                 }
             }
@@ -843,9 +894,9 @@ namespace Clowd.Drawing
             UnselectAll();
         }
 
-        internal void AddCommandToHistory()
+        internal void AddCommandToHistory(bool mergable)
         {
-            _undoManager.AddCommandStep();
+            _undoManager.AddCommandStep(mergable);
         }
 
         partial void OnContentScaleChanged(double newValue)
