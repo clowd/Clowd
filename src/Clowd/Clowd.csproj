@@ -53,6 +53,7 @@
     <PackageReference Include="PipeMethodCalls" Version="3.2.0" />
     <PackageReference Include="PipeMethodCalls.NetJson" Version="3.0.0" />
     <PackageReference Include="DependencyPropertyGenerator" Version="1.0.3" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="PropertyChanged.SourceGenerator" Version="1.0.6" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers" />
   </ItemGroup>
 
   <!-- uncomment to compile shaders -->
