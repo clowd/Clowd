@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -74,8 +74,10 @@ namespace Clowd
                         new FrameworkPropertyMetadata(300));
 
                 // update registry if needed
+#if !DEBUG
                 SquirrelUtil.SetAutoStart(SettingsRoot.Current.General.RegisterAutoStart);
                 SquirrelUtil.SetExplorerMenu(SettingsRoot.Current.General.RegisterExplorerContextMenu);
+#endif
 
                 // start receiving command line arguments
                 _processor.Ready();
@@ -220,10 +222,11 @@ namespace Clowd
             });
 #endif
 
-            config.AddTarget(new DebuggerTarget("debugger"));
-            config.AddTarget(new ColoredConsoleTarget("console"));
-            config.AddRuleForAllLevels("console");
-            config.AddRuleForAllLevels("debugger");
+#if DEBUG
+            // FYI this target is really slow.
+            //config.AddTarget(new DebuggerTarget("debugger"));
+            //config.AddRuleForAllLevels("debugger");
+#endif
 
             var logDir = isInstalled ? Path.Combine(SquirrelRuntimeInfo.BaseDirectory, "..") : SquirrelRuntimeInfo.BaseDirectory;
             var logFile = Path.Combine(logDir, "Clowd.log");

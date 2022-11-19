@@ -71,12 +71,6 @@ namespace Clowd
             set => Set(value);
         }
 
-        public Color CanvasBackground
-        {
-            get => Get<Color>();
-            set => Set(value);
-        }
-
         public ScreenRect CroppedRect
         {
             get => Get<ScreenRect>();
@@ -107,10 +101,11 @@ namespace Clowd
             set => Set(value);
         }
 
+        [Obsolete]
         public string GraphicsStream
         {
             get => Get<string>();
-            set => Set(value);
+            //set => Set(value);
         }
 
         public string UploadFileKey
@@ -292,7 +287,6 @@ namespace Clowd
             var session = new SessionInfo(jsonPath);
             session.Name = "Document";
             session.CreatedUtc = DateTime.UtcNow;
-            session.CanvasBackground = SettingsRoot.Current.Editor.CanvasBackground;
             Sessions.Add(session);
             return session;
         }

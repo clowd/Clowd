@@ -44,12 +44,12 @@ namespace Clowd
             return d;
         }
 
-        public static string GetFilePath(string name, string extension, string directory) => Path.Combine(Path.GetFullPath(directory), name + "." + extension);
+        public static string GetFilePath(string name, string extension, string directory) => Path.Combine(Path.GetFullPath(directory), name + "." + extension.TrimStart('.'));
 
         public static string GetDatedFilePath(string name, string extension, string directory) =>
             Path.Combine(Path.GetFullPath(directory), GetDatedFileName(name, extension));
 
-        public static string GetDatedFileName(string name, string extension) => name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "." + extension;
+        public static string GetDatedFileName(string name, string extension) => name + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "." + extension.TrimStart('.');
 
         public static string GetFreePatternFileName(string directory, string pattern)
         {

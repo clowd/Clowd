@@ -11,7 +11,7 @@ namespace Clowd.Drawing.Tools
         private GraphicArrow _currentArrow;
         private GraphicCount _currentCount;
 
-        public ToolCount() : base(Resource.CursorText, SnapMode.All)
+        public ToolCount() : base(() => CursorResources.Numerical, SnapMode.All)
         { }
 
         protected override void OnMouseDownImpl(DrawingCanvas canvas, Point pt)
