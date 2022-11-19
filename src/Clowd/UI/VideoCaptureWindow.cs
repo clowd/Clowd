@@ -1,9 +1,7 @@
 ﻿using System;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,225 +12,12 @@ using Clowd.UI.Controls;
 using Clowd.UI.Converters;
 using Clowd.UI.Helpers;
 using Clowd.UI.Unmanaged;
-using Clowd.Util;
 using Clowd.Video;
 using Clowd.Video.FFmpeg;
 using NLog;
 
 namespace Clowd.UI
 {
-    class ObsInitWrapper : SimpleNotifyObject, IDisposable
-    {
-        public ScreenRect Selection { get; }
-
-        public string FileName { get; }
-
-        public string PrimaryText
-        {
-            get
-            {
-                if (_initializing) return "WAIT...";
-                return _initialized ? "START" : "RELOAD";
-            }
-        }
-
-        public bool CanPrimary => MustReload || CanStart;
-
-        public bool MustReload => !Started && !Initialized && !Initializing;
-
-        private bool CanStart => !Started && Initialized;
-
-        public bool Initialized
-        {
-            get => _initialized;
-            private set => Set(ref _initialized, value, nameof(Initialized), nameof(MustReload), nameof(PrimaryText), nameof(CanPrimary));
-        }
-
-        public bool Initializing
-        {
-            get => _initializing;
-            private set => Set(ref _initializing, value, nameof(Initializing), nameof(MustReload), nameof(PrimaryText), nameof(CanPrimary));
-        }
-
-        public bool Started
-        {
-            get => _started;
-            private set => Set(ref _started, value, nameof(Started), nameof(CanPrimary));
-        }
-
-        public bool Recording
-        {
-            get => _recording;
-            private set => Set(ref _recording, value, nameof(Recording));
-        }
-
-        public event EventHandler OutputChanged;
-        public event EventHandler ListenerChanged;
-        public event EventHandler<VideoCriticalErrorEventArgs> CriticalError;
-        public event EventHandler<VideoStatusEventArgs> StatusReceived;
-
-        private bool _disposed;
-        private bool _initialized;
-        private bool _initializing;
-        private bool _started;
-        private bool _recording;
-        private SettingsVideo _settings = SettingsRoot.Current.Video;
-        private ObsCapturer _capturer;
-        private SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
-
-        public ObsInitWrapper(string outputFile, ScreenRect selection)
-        {
-            Selection = selection;
-            FileName = outputFile;
-            _settings.PropertyChanged += SettingChanged;
-        }
-
-        public async Task Initialize()
-        {
-            await _semaphore.WaitAsync();
-            try
-            {
-                if (_disposed || Started || Initialized) return;
-
-                Initializing = true;
-                Initialized = false;
-
-                if (_capturer != null)
-                    await _capturer.DisposeAsync();
-
-                _capturer = new ObsCapturer();
-                _capturer.CriticalError += SynchronizationContextEventHandler.CreateDelegate<VideoCriticalErrorEventArgs>(CapturerCriticalError);
-                _capturer.StatusReceived += SynchronizationContextEventHandler.CreateDelegate<VideoStatusEventArgs>(CapturerStatusReceived);
-                await _capturer.Initialize(FileName, Selection, _settings);
-
-                Initialized = true;
-                Initializing = false;
-            }
-            catch (Exception e)
-            {
-                CapturerCriticalError(_capturer, new VideoCriticalErrorEventArgs(e.ToString()));
-            }
-            finally
-            {
-                _semaphore.Release();
-            }
-        }
-
-        private void CapturerStatusReceived(object sender, VideoStatusEventArgs e)
-        {
-            StatusReceived?.Invoke(sender, e);
-        }
-
-        private void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
-        {
-            CriticalError?.Invoke(sender, e);
-        }
-
-        public async Task Start()
-        {
-            await _semaphore.WaitAsync();
-            try
-            {
-                if (_disposed || Started || !Initialized) return;
-                Started = true;
-                await _capturer.StartAsync();
-                Recording = true;
-            }
-            catch (Exception e)
-            {
-                CapturerCriticalError(_capturer, new VideoCriticalErrorEventArgs(e.ToString()));
-            }
-            finally
-            {
-                _semaphore.Release();
-            }
-        }
-
-        public async Task Stop()
-        {
-            await _semaphore.WaitAsync();
-            try
-            {
-                if (_disposed || !Recording) return;
-                await _capturer.StopAsync();
-                Recording = false;
-            }
-            catch (Exception e)
-            {
-                CapturerCriticalError(_capturer, new VideoCriticalErrorEventArgs(e.ToString()));
-            }
-            finally
-            {
-                _semaphore.Release();
-            }
-        }
-
-        private void SettingChanged(object sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName is nameof(SettingsVideo.OpenFinishedInExplorer) or nameof(SettingsVideo.FilenamePattern) or nameof(SettingsVideo.OutputDirectory))
-            {
-                // do nothing
-            }
-            else if (e.PropertyName is nameof(SettingsVideo.OutputMode))
-            {
-                OutputChanged?.Invoke(this, new EventArgs());
-            }
-            else if (e.PropertyName is nameof(SettingsVideo.CaptureSpeakerDevice) or nameof(SettingsVideo.CaptureMicrophoneDevice))
-            {
-                ListenerChanged?.Invoke(this, new EventArgs());
-            }
-            else if (e.PropertyName is nameof(SettingsVideo.CaptureSpeaker) or nameof(SettingsVideo.CaptureMicrophone))
-            {
-                _capturer?.SetMicrophoneMute(!_settings.CaptureMicrophone);
-                _capturer?.SetSpeakerMute(!_settings.CaptureSpeaker);
-                ListenerChanged?.Invoke(this, new EventArgs());
-            }
-            else if (Initialized || !Started)
-            {
-                Invalidate();
-            }
-        }
-
-        private async void Invalidate()
-        {
-            await _semaphore.WaitAsync();
-            try
-            {
-                if (_disposed || Started || !Initialized) return;
-
-                if (_capturer != null)
-                {
-                    await _capturer.DisposeAsync();
-                    _capturer = null;
-                }
-
-                Initialized = false;
-            }
-            catch (Exception e)
-            {
-                CapturerCriticalError(_capturer, new VideoCriticalErrorEventArgs(e.ToString()));
-            }
-            finally
-            {
-                _semaphore.Release();
-            }
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            _settings.PropertyChanged -= SettingChanged;
-            _semaphore.WaitAsync(3000).ContinueWith((t) =>
-            {
-                _semaphore.Dispose();
-                _capturer?.Dispose();
-                _capturer = null;
-            });
-        }
-    }
-
-
     internal sealed class VideoCaptureWindow : IVideoCapturePage
     {
         public event EventHandler Closed;
@@ -253,7 +38,7 @@ namespace Clowd.UI
         private bool _disposed;
 
         private string _fileName;
-        private ObsInitWrapper _obs;
+        private ObsViewWrapper _obs;
         private SettingsVideo _settings = SettingsRoot.Current.Video;
         private FloatingButtonWindow _floating;
 
@@ -261,67 +46,6 @@ namespace Clowd.UI
         private IAudioLevelListener _microphoneLevel;
 
         private static readonly ILogger _log = LogManager.GetCurrentClassLogger();
-
-        private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
-        {
-            this.Close();
-
-            if (sender is ObsCapturer capt)
-            {
-                try
-                {
-                    var filename = "capture_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
-                    if (_settings.OutputDirectory != null && Directory.Exists(_settings.OutputDirectory))
-                    {
-                        filename = Path.Combine(Path.GetFullPath(_settings.OutputDirectory), filename);
-                    }
-                    else
-                    {
-                        filename = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), filename);
-                    }
-
-                    capt.WriteLogToFile(filename);
-                    File.AppendAllText(filename, Environment.NewLine + "--" + Environment.NewLine + e.Error);
-
-                    _log.ForErrorEvent()
-                        .Message("The capturer has crashed.")
-                        .Property<string>("obs.log", File.ReadAllText(filename))
-                        .Log();
-
-                    if (await NiceDialog.ShowPromptAsync(null,
-                            NiceDialogIcon.Error,
-                            e.Error + Environment.NewLine + "A log file has been created in your video output directory for more information.",
-                            "An unexpected error was encountered while recording.",
-                            "Open Error Log"))
-                    {
-                        Process.Start("notepad.exe", filename);
-                    }
-
-                    return;
-                }
-                catch { }
-            }
-
-            // if we reached here, we were unable to write a log file
-            _log.Error(e.Error);
-
-            NiceDialog.ShowNoticeAsync(null,
-                NiceDialogIcon.Error,
-                e.Error,
-                "An unexpected error was encountered while recording.");
-        }
-
-        private void CapturerStatusReceived(object sender, VideoStatusEventArgs e)
-        {
-            if (e.AvgFps != 0 && (e.TotalTime == default(TimeSpan) || DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0))
-            {
-                _btnClowd.Text = e.AvgFps + " FPS";
-            }
-            else if (e.TotalTime != default(TimeSpan))
-            {
-                _btnClowd.Text = $"{((int)e.TotalTime.TotalMinutes):D2}:{((int)e.TotalTime.Seconds):D2}";
-            }
-        }
 
         public async void Open(ScreenRect captureArea)
         {
@@ -337,7 +61,7 @@ namespace Clowd.UI
             _settings.CaptureSpeakerDevice = AudioDeviceManager.VerifySpeakerOrDefault(_settings.CaptureSpeakerDevice);
 
             _fileName = Path.Combine(_settings.OutputDirectory, PathConstants.GetDatedFileName("recording", "mp4"));
-            _obs = new ObsInitWrapper(_fileName, captureArea);
+            _obs = new ObsViewWrapper(_fileName, captureArea);
             _obs.CriticalError += CapturerCriticalError;
             _obs.StatusReceived += CapturerStatusReceived;
             _obs.ListenerChanged += (s, e) => RefreshListeners();
@@ -360,10 +84,10 @@ namespace Clowd.UI
                 Executed = (s, e) => StartRecording(),
                 PulseBackground = true,
             };
-            _btnStart.SetBinding(CaptureToolButton.TextProperty, new Binding(nameof(ObsInitWrapper.PrimaryText)) { Source = _obs });
-            _btnStart.SetBinding(CaptureToolButton.ShowAlternateIconProperty, new Binding(nameof(ObsInitWrapper.MustReload)) { Source = _obs });
-            _btnStart.SetBinding(CaptureToolButton.VisibilityProperty, new Binding(nameof(ObsInitWrapper.Recording)) { Source = _obs, Converter = new BoolToInverseVisibilityConverter() });
-            _btnStart.SetBinding(CaptureToolButton.IsEnabledProperty, new Binding(nameof(ObsInitWrapper.CanPrimary)) { Source = _obs });
+            _btnStart.SetBinding(CaptureToolButton.TextProperty, new Binding(nameof(ObsViewWrapper.PrimaryText)) { Source = _obs });
+            _btnStart.SetBinding(CaptureToolButton.ShowAlternateIconProperty, new Binding(nameof(ObsViewWrapper.MustReload)) { Source = _obs });
+            _btnStart.SetBinding(CaptureToolButton.VisibilityProperty, new Binding(nameof(ObsViewWrapper.Recording)) { Source = _obs, Converter = new BoolToInverseVisibilityConverter() });
+            _btnStart.SetBinding(CaptureToolButton.IsEnabledProperty, new Binding(nameof(ObsViewWrapper.CanPrimary)) { Source = _obs });
             //_btnStart.SetBinding(CaptureToolButton.PulseBackgroundProperty, new Binding(nameof(ObsInitWrapper.CanPrimary)) { Source = _obs });
 
             _btnStop = new CaptureToolButton
@@ -373,7 +97,7 @@ namespace Clowd.UI
                 IconPath = AppStyles.GetIconElement(ResourceIcon.IconStop),
                 Executed = (s, e) => StopRecording(),
             };
-            _btnStop.SetBinding(CaptureToolButton.VisibilityProperty, new Binding(nameof(ObsInitWrapper.Recording)) { Source = _obs, Converter = new BoolToVisibilityConverter2() });
+            _btnStop.SetBinding(CaptureToolButton.VisibilityProperty, new Binding(nameof(ObsViewWrapper.Recording)) { Source = _obs, Converter = new BoolToVisibilityConverter2() });
 
             _btnMicrophone = new CaptureToolButton
             {
@@ -435,6 +159,7 @@ namespace Clowd.UI
 
             RefreshListeners();
             BorderWindow.Show(AppStyles.AccentColor, captureArea);
+            _obs.PrimaryTextChanged += (s, e) => BorderWindow.SetText(_obs.PrimaryText);
 
             _floating.ShowPanel(captureArea);
             await _obs.Initialize();
@@ -496,18 +221,6 @@ namespace Clowd.UI
             }
         }
 
-        private string GetNewVideoName()
-        {
-            if (String.IsNullOrWhiteSpace(_settings.OutputDirectory))
-                throw new Exception("OutputDirectory must not be null");
-
-            if (!Directory.Exists(_settings.OutputDirectory))
-                Directory.CreateDirectory(_settings.OutputDirectory);
-
-            var pattern = String.IsNullOrWhiteSpace(_settings.FilenamePattern) ? "yyyy-MM-dd HH-mm-ss" : Path.GetFileNameWithoutExtension(_settings.FilenamePattern);
-            return Path.Combine(_settings.OutputDirectory, PathConstants.GetFreePatternFileName(_settings.OutputDirectory, pattern)) + ".mp4";
-        }
-
         private void RefreshListeners()
         {
             if (_disposed) return;
@@ -534,6 +247,67 @@ namespace Clowd.UI
                 _speakerLevel?.Dispose();
                 _speakerLevel = AudioDeviceManager.GetAudioListener(_settings.CaptureSpeakerDevice);
                 _btnSpeaker.Overlay = GetLevelVisual(_speakerLevel, nameof(_settings.CaptureSpeaker));
+            }
+        }
+
+        private async void CapturerCriticalError(object sender, VideoCriticalErrorEventArgs e)
+        {
+            this.Close();
+
+            if (sender is ObsCapturer capt)
+            {
+                try
+                {
+                    var filename = "capture_error_log_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
+                    if (_settings.OutputDirectory != null && Directory.Exists(_settings.OutputDirectory))
+                    {
+                        filename = Path.Combine(Path.GetFullPath(_settings.OutputDirectory), filename);
+                    }
+                    else
+                    {
+                        filename = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), filename);
+                    }
+
+                    capt.WriteLogToFile(filename);
+                    File.AppendAllText(filename, Environment.NewLine + "--" + Environment.NewLine + e.Error);
+
+                    _log.ForErrorEvent()
+                        .Message("The capturer has crashed.")
+                        .Property<string>("obs.log", File.ReadAllText(filename))
+                        .Log();
+
+                    if (await NiceDialog.ShowPromptAsync(null,
+                            NiceDialogIcon.Error,
+                            e.Error + Environment.NewLine + "A log file has been created in your video output directory for more information.",
+                            "An unexpected error was encountered while recording.",
+                            "Open Error Log"))
+                    {
+                        Process.Start("notepad.exe", filename);
+                    }
+
+                    return;
+                }
+                catch { }
+            }
+
+            // if we reached here, we were unable to write a log file
+            _log.Error(e.Error);
+
+            NiceDialog.ShowNoticeAsync(null,
+                NiceDialogIcon.Error,
+                e.Error,
+                "An unexpected error was encountered while recording.");
+        }
+
+        private void CapturerStatusReceived(object sender, VideoStatusEventArgs e)
+        {
+            if (e.AvgFps != 0 && (e.TotalTime == default(TimeSpan) || DateTime.Now.Ticks / (4 * TimeSpan.TicksPerSecond) % 2 == 0))
+            {
+                _btnClowd.Text = e.AvgFps + " FPS";
+            }
+            else if (e.TotalTime != default(TimeSpan))
+            {
+                _btnClowd.Text = $"{((int)e.TotalTime.TotalMinutes):D2}:{((int)e.TotalTime.Seconds):D2}";
             }
         }
 
