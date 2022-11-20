@@ -27,7 +27,7 @@ namespace Clowd.Drawing.Tools
         private double _handleRatio;
 
         // Keep state about last and current point (used to edit objects via dragging, e.g. move and resize)
-        private Point _lastPoint = new Point(0, 0);
+        private Point _lastPointScr = new Point(0, 0);
 
         bool _wasEdit;
 
@@ -70,9 +70,11 @@ namespace Clowd.Drawing.Tools
         /// </summary>
         public override void OnMouseDown(DrawingCanvas drawingCanvas, MouseButtonEventArgs e)
         {
-            _lastPoint = e.GetPosition(drawingCanvas);
+            var wpfPt = e.GetPosition(drawingCanvas);
+            _lastPointScr = drawingCanvas.PointToScreen(e.GetPosition(drawingCanvas));
+
             int handleNumber;
-            var graphic = MakeHitTest(drawingCanvas, _lastPoint, out handleNumber);
+            var graphic = MakeHitTest(drawingCanvas, wpfPt, out handleNumber);
 
             // Capture mouse until MouseUp event is received
             drawingCanvas.CaptureMouse();
@@ -120,7 +122,7 @@ namespace Clowd.Drawing.Tools
             else
             {
                 // Click on background — start a selection rectangle for group selection.
-                var rect = HelperFunctions.CreateRectSafe(_lastPoint.X, _lastPoint.Y, _lastPoint.X + 1, _lastPoint.Y + 1);
+                var rect = HelperFunctions.CreateRectSafe(wpfPt.X, wpfPt.Y, wpfPt.X + 1, wpfPt.Y + 1);
                 var gsr = new GraphicSelectionRectangle(rect);
                 drawingCanvas.GraphicsList.Add(gsr);
 
@@ -156,12 +158,15 @@ namespace Clowd.Drawing.Tools
                 return;
             }
 
-            Point point = e.GetPosition(drawingCanvas);
+            var wpfPt = e.GetPosition(drawingCanvas);
+            var lastWpfPt = drawingCanvas.PointFromScreen(_lastPointScr);
+
+            //Point point = e.GetPosition(drawingCanvas);
 
             // Set cursor when left button is not pressed
             if (e.LeftButton == MouseButtonState.Released)
             {
-                SetHitTest(drawingCanvas, point);
+                SetHitTest(drawingCanvas, wpfPt);
                 return;
             }
 
@@ -171,10 +176,10 @@ namespace Clowd.Drawing.Tools
             _wasEdit = true;
 
             // Find difference between previous and current position
-            double dx = point.X - _lastPoint.X;
-            double dy = point.Y - _lastPoint.Y;
+            double dx = wpfPt.X - lastWpfPt.X;
+            double dy = wpfPt.Y - lastWpfPt.Y;
 
-            _lastPoint = point;
+            _lastPointScr = drawingCanvas.PointToScreen(wpfPt);
 
             switch (_selectMode)
             {
@@ -193,7 +198,7 @@ namespace Clowd.Drawing.Tools
                         var rotatableDestRect = GetTransformedRect(
                             rotatableGraphic?.UnrotatedBounds ?? Rect.Empty,
                             _handleGrabbed,
-                            rotatableGraphic?.UnapplyRotation(point) ?? default(Point));
+                            rotatableGraphic?.UnapplyRotation(wpfPt) ?? default(Point));
                         if (shiftPressed && rotatableGraphic != null && _handleRatio != 0 && !rotatableDestRect.IsEmpty)
                         {
                             var sourceRatio = _handleRatio;
@@ -207,12 +212,12 @@ namespace Clowd.Drawing.Tools
                         else if (shiftPressed && lineGraphic != null)
                         {
                             var anchor = _handleGrabbed == 1 ? lineGraphic.LineEnd : lineGraphic.LineStart;
-                            point = HelperFunctions.SnapPointToCommonAngle(anchor, point, false);
-                            _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
+                            wpfPt = HelperFunctions.SnapPointToCommonAngle(anchor, wpfPt, false);
+                            _handleGrabbedObject.MoveHandleTo(wpfPt, _handleGrabbed);
                         }
                         else
                         {
-                            _handleGrabbedObject.MoveHandleTo(point, _handleGrabbed);
+                            _handleGrabbedObject.MoveHandleTo(wpfPt, _handleGrabbed);
                         }
                         drawingCanvas.Cursor = _handleGrabbedObject.GetHandleCursor(_handleGrabbed);
                     }
@@ -221,7 +226,7 @@ namespace Clowd.Drawing.Tools
 
                 case SelectionMode.GroupSelection:
                     // Resize selection rectangle
-                    drawingCanvas[drawingCanvas.Count - 1].MoveHandleTo(point, 5);
+                    drawingCanvas[drawingCanvas.Count - 1].MoveHandleTo(wpfPt, 5);
                     break;
             }
         }
