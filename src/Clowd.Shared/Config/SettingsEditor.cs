@@ -28,71 +28,72 @@ namespace Clowd
 
     namespace Config
     {
+        [ClassifyIgnoreIfDefault, ClassifyIgnoreIfEmpty]
         public class SavedToolSettings : SimpleNotifyObject
         {
             public bool AutoColor
             {
-                get => _autoColor;
+                get => _autoColor ?? true;
                 set => Set(ref _autoColor, value);
             }
 
             public Color ObjectColor
             {
-                get => _objectColor;
+                get => _objectColor ?? Colors.Red;
                 set => Set(ref _objectColor, value);
             }
 
             public double LineWidth
             {
-                get => _lineWidth;
+                get => _lineWidth ?? 2d;
                 set => Set(ref _lineWidth, value);
             }
 
             public string FontFamily
             {
-                get => _fontFamily;
+                get => _fontFamily ?? "Segoe UI";
                 set => Set(ref _fontFamily, value);
             }
 
             public double FontSize
             {
-                get => _fontSize;
+                get => _fontSize ?? 12d;
                 set => Set(ref _fontSize, value);
             }
 
             public FontStyle FontStyle
             {
-                get => _fontStyle;
+                get => _fontStyle ?? FontStyles.Normal;
                 set => Set(ref _fontStyle, value);
             }
 
             public FontWeight FontWeight
             {
-                get => _fontWeight;
+                get => _fontWeight ?? FontWeights.Normal;
                 set => Set(ref _fontWeight, value);
             }
 
             public FontStretch FontStretch
             {
-                get => _fontStretch;
+                get => _fontStretch ?? FontStretches.Normal;
                 set => Set(ref _fontStretch, value);
             }
 
             public double BlurRadius
             {
-                get => _blurRadius;
+                get => _blurRadius ?? 8d;
                 set => Set(ref _blurRadius, value);
             }
 
-            private FontStretch _fontStretch = FontStretches.Normal;
-            private FontWeight _fontWeight = FontWeights.Normal;
-            private FontStyle _fontStyle = FontStyles.Normal;
-            private double _fontSize = 12d;
-            private string _fontFamily = "Segoe UI";
-            private double _lineWidth = 2d;
-            private Color _objectColor = Colors.Red;
-            private bool _autoColor = true;
-            private double _blurRadius = 8d;
+            private FontStretch? _fontStretch;
+            private FontWeight? _fontWeight;
+            private FontStyle? _fontStyle;
+            private double? _fontSize;
+            private string _fontFamily;
+            private double? _lineWidth;
+            private Color? _objectColor;
+            private bool? _autoColor;
+            private double? _blurRadius;
         }
 
         public class SettingsEditor : CategoryBase
