@@ -2,13 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection.Metadata;
-using System.Security.RightsManagement;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Media.Media3D;
-using Clowd.PlatformUtil;
 using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
@@ -126,7 +122,7 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
-        public record struct ObscuredShape(Point P0, Point P1, Point P2, Point P3);
+        public record struct ObscuredShape(Point P0, Point P1, Point P2, Point P3, double BlurRadius);
 
         private string _cursorFilePath;
         private Int32Rect _cursorPosition;
@@ -361,14 +357,14 @@ namespace Clowd.Drawing.Graphics
             base.Normalize();
         }
 
-        internal void AddObscuredArea(Rect rect)
+        internal void AddObscuredArea(Rect rect, double blurRadius)
         {
             var pts = new Point[] { rect.TopLeft, rect.TopRight, rect.BottomRight, rect.BottomLeft }.Select(UnapplyRotation).ToArray();
             if (!pts.Any(UnrotatedBounds.Contains))
                 return;
 
             pts = pts.Select(TranslateUnrotatedPointToImageSpace).ToArray();
-            ObscuredShapes = ObscuredShapes.Append(new ObscuredShape(pts[0], pts[1], pts[2], pts[3])).ToArray();
+            ObscuredShapes = ObscuredShapes.Append(new ObscuredShape(pts[0], pts[1], pts[2], pts[3], blurRadius)).ToArray();
         }
 
         private Rect GetExtendedImageRect()
@@ -450,20 +446,26 @@ namespace Clowd.Drawing.Graphics
                 return false;
             }
 
-            var first = _obscuredShapes[0];
-            Geometry geo = ShapeToGeometry(first);
-            foreach (var o in _obscuredShapes.Skip(1))
-                geo = new CombinedGeometry(GeometryCombineMode.Union, geo, ShapeToGeometry(o));
+            double blurScale = 0;
+            TransformedBitmap blurCache = null;
 
-            // this "obscure" works by resizing the bitmap to 1/8th and then stretching it back to 
-            // it's original size with the NearestNeighbor scaling algorithm.
-            var resized = new TransformedBitmap(_imageSource, new ScaleTransform(0.125, 0.125));
             var drawing = new NearestNeighborDrawingVisual();
             using (var ctx = drawing.RenderOpen())
             {
-                ctx.PushClip(geo);
-                ctx.DrawImage(resized, new Rect(0, 0, _imageSource.PixelWidth, _imageSource.PixelHeight));
-                ctx.Pop();
+                foreach (var o in _obscuredShapes)
+                {
+                    var sc = o.BlurRadius > 0 ? 1 / o.BlurRadius : 0.125;
+
+                    if (sc != blurScale)
+                    {
+                        blurScale = sc;
+                        blurCache = new TransformedBitmap(_imageSource, new ScaleTransform(sc, sc));
+                    }
+
+                    ctx.PushClip(ShapeToGeometry(o));
+                    ctx.DrawImage(blurCache, new Rect(0, 0, _imageSource.PixelWidth, _imageSource.PixelHeight));
+                    ctx.Pop();
+                }
             }
 
             var obscured = new RenderTargetBitmap(_imageSource.PixelWidth, _imageSource.PixelHeight, 96, 96, PixelFormats.Pbgra32);

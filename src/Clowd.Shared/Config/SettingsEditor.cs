@@ -78,6 +78,12 @@ namespace Clowd
                 set => Set(ref _fontStretch, value);
             }
 
+            public double BlurRadius
+            {
+                get => _blurRadius;
+                set => Set(ref _blurRadius, value);
+            }
+
             private FontStretch _fontStretch = FontStretches.Normal;
             private FontWeight _fontWeight = FontWeights.Normal;
             private FontStyle _fontStyle = FontStyles.Normal;
@@ -86,6 +92,7 @@ namespace Clowd
             private double _lineWidth = 2d;
             private Color _objectColor = Colors.Red;
             private bool _autoColor = true;
+            private double _blurRadius = 8d;
         }
 
         public class SettingsEditor : CategoryBase

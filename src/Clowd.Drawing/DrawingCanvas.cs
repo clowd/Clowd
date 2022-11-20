@@ -32,6 +32,7 @@ namespace Clowd.Drawing
     [DependencyProperty<FontWeight>("TextFontWeight", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<FontStretch>("TextFontStretch", DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<double>("TextFontSize", DefaultValue = 12d, DefaultBindingMode = DefaultBindingMode.TwoWay)]
+    [DependencyProperty<double>("BlurRadius", DefaultValue = 8d, DefaultBindingMode = DefaultBindingMode.TwoWay)]
     [DependencyProperty<bool>("IsPanning")]
     [DependencyProperty<Point>("ContentOffset")]
     [DependencyProperty<double>("ContentScale", DefaultValue = 1d)]
@@ -137,7 +138,7 @@ namespace Clowd.Drawing
             _toolStore[ToolType.PolyLine] = new ToolDesc("Pencil", new ToolPolyLine(), ObjectType: typeof(GraphicPolyLine));
             _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText), Skills: Skill.AutoColor);
             _toolStore[ToolType.Count] = new ToolDesc("Numeric Step", new ToolCount(), ObjectType: typeof(GraphicCount));
-            _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate());
+            _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate(), Skills: Skill.BlurRadius);
 
             _undoManager = new UndoManager(this);
             _undoManager.StateChanged += UndoManagerStateChanged;
@@ -675,6 +676,7 @@ namespace Clowd.Drawing
                 AddSettingBinding(Skill.Font, TextFontStretchProperty, nameof(SavedToolSettings.FontStretch));
                 AddSettingBinding(Skill.Font, TextFontSizeProperty, nameof(SavedToolSettings.FontSize));
                 AddSettingBinding(Skill.Font, TextFontStyleProperty, nameof(SavedToolSettings.FontStyle));
+                AddSettingBinding(Skill.BlurRadius, BlurRadiusProperty, nameof(SavedToolSettings.BlurRadius));
 
                 SubjectType = "Tool";
                 SubjectName = CurrentTool.Name;
