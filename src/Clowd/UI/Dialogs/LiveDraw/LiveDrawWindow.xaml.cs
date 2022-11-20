@@ -136,6 +136,9 @@ namespace Clowd.UI.Dialogs.LiveDraw
                 case DrawMode.Rectangle:
                     editingMode = InkCanvasEditingMode.None;
                     break;
+                case DrawMode.FilledRectangle:
+                    editingMode = InkCanvasEditingMode.None;
+                    break;
                 case DrawMode.Circle:
                     editingMode = InkCanvasEditingMode.None;
                     break;
@@ -173,6 +176,7 @@ namespace Clowd.UI.Dialogs.LiveDraw
             LineButton.IsActivated = _enable == true && _mode == DrawMode.Line;
             ArrowButton.IsActivated = _enable == true && _mode == DrawMode.Arrow;
             RectangleButton.IsActivated = _enable == true && _mode == DrawMode.Rectangle;
+            FilledRectangleButton.IsActivated = _enable == true && _mode == DrawMode.FilledRectangle;
             CircleButton.IsActivated = _enable == true && _mode == DrawMode.Circle;
             EraserButton.IsActivated = _enable == true && _mode == DrawMode.Erase;
         }
@@ -424,8 +428,7 @@ namespace Clowd.UI.Dialogs.LiveDraw
                 StylusPointCollection point = new StylusPointCollection(pointList);
 
                 drawingAttributes.FitToCurve = false; //must be false,other wise rectangle can not be drawed correct
-
-                stroke = new Stroke(point) { DrawingAttributes = drawingAttributes, };
+                stroke = new Stroke(point) { DrawingAttributes = drawingAttributes };
             }
             else if (_mode == DrawMode.Rectangle)
             {
@@ -439,9 +442,28 @@ namespace Clowd.UI.Dialogs.LiveDraw
                 };
 
                 drawingAttributes.FitToCurve = false; //must be false,other wise rectangle can not be drawed correct
+                StylusPointCollection point = new StylusPointCollection(pointList);
+                stroke = new Stroke(point) { DrawingAttributes = drawingAttributes };
+            }
+            else if (_mode == DrawMode.FilledRectangle)
+            {
+                var startX = Math.Min(_drawerIntPos.X, endP.X);
+                var endX = Math.Max(_drawerIntPos.X, endP.X);
+                var lineY = (endP.Y - _drawerIntPos.Y) / 2 + _drawerIntPos.Y;
+                var height = Math.Max(1, Math.Abs(_drawerIntPos.Y - endP.Y));
+
+                var pointList = new List<Point>()
+                {
+                    new Point(startX, lineY),
+                    new Point(endX, lineY),
+                };
 
                 StylusPointCollection point = new StylusPointCollection(pointList);
-                stroke = new Stroke(point) { DrawingAttributes = drawingAttributes, };
+
+                drawingAttributes.FitToCurve = false; //must be false,other wise rectangle can not be drawed correct
+                drawingAttributes.Width = 1;
+                drawingAttributes.Height = height;
+                stroke = new Stroke(point) { DrawingAttributes = drawingAttributes };
             }
             else if (_mode == DrawMode.Circle)
             {
@@ -603,6 +625,11 @@ namespace Clowd.UI.Dialogs.LiveDraw
         private void RectangleButton_Click(object sender, RoutedEventArgs e)
         {
             SetEnable(true, DrawMode.Rectangle);
+        }
+
+        private void FilledRectangleButton_Click(object sender, RoutedEventArgs e)
+        {
+            SetEnable(true, DrawMode.FilledRectangle);
         }
 
         private void CircleButton_Click(object sender, RoutedEventArgs e)

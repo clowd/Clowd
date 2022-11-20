@@ -32,6 +32,7 @@ namespace Clowd.UI.Dialogs.LiveDraw
         Line,
         Arrow,
         Rectangle,
+        FilledRectangle,
         Circle,
         Erase
     }

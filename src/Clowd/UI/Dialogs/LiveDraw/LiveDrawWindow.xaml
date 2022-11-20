@@ -266,6 +266,12 @@
                         <Path Data="{DynamicResource IconRectangle}" />
                     </local:ActivatableButton>
                     <local:ActivatableButton
+                        x:Name="FilledRectangleButton"
+                        Click="FilledRectangleButton_Click"
+                        ToolTip="Filled Rectangle">
+                        <Rectangle Width="16" Height="12" Fill="White" />
+                    </local:ActivatableButton>
+                    <local:ActivatableButton
                         x:Name="CircleButton"
                         Click="CircleButton_Click"
                         ToolTip="Circle">
