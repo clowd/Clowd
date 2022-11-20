@@ -148,8 +148,8 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
     csq pack `
     -f net6 `
     -r "$PSScriptRoot\releases" `
-    -i="$PSScriptRoot\artwork\default-setup.ico" `
-    --appIcon="$PSScriptRoot\artwork\default.ico" `
+    -i="$PSScriptRoot\artwork\clowd-setup.ico" `
+    --appIcon="$PSScriptRoot\artwork\clowd-default.ico" `
     --splashImage="$PSScriptRoot\artwork\splash.gif" `
     --packId=Clowd `
     --packVersion=$version `

@@ -8,7 +8,7 @@
     <UseVSHostingProcess>false</UseVSHostingProcess>
     <PlatformTarget>x64</PlatformTarget>
     <NoWarn>CS4014,CA1416</NoWarn>
-    <ApplicationIcon>$(SolutionDir)artwork\clowd-default.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\artwork\clowd-default.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <OutputPath>..\..\bin\$(Configuration)</OutputPath>
     <StartupObject>Clowd.Program</StartupObject>
