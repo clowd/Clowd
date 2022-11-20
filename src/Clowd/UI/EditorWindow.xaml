@@ -322,6 +322,16 @@
                     CurrentValue="{Binding ElementName=drawingCanvas, Path=ObjectAngle, Mode=TwoWay}"
                     DefaultValue="0" />
             </StackPanel>
+            <StackPanel Visibility="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=BlurRadius}">
+                <TextBlock VerticalAlignment="Center">
+                    <Run>Blur:</Run>
+                </TextBlock>
+                <controls:SpinnerTextBox
+                    Min="1"
+                    SnapToWholeNumber="True"
+                    SpinAmount="1"
+                    Text="{Binding ElementName=drawingCanvas, Path=BlurRadius, Mode=TwoWay, Converter={StaticResource convPixel2String}}" />
+            </StackPanel>
 
             <controls:ToolButton
                 Padding="6"
