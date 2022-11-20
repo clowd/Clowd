@@ -130,22 +130,34 @@ namespace Clowd.UI
                 // this session was not closed properly, restore it to its previous location
                 wnd.Topmost = session.OpenEditor.IsTopMost;
                 wnd.ShowActivated = false;
+
+                // Set the HWND properties to the previously saved bounds / state
+                wnd.PlatformWindow.Restore(session.OpenEditor.RestorePosition, SW_HIDE);
+                var wndCommand = session.OpenEditor.IsMaximized ? WindowState.Maximized : session.OpenEditor.IsMinimized ? WindowState.Minimized : WindowState.Normal;
+
+                // if this was open on a different virtual desktop, try to move it there.
                 try
                 {
-                    if (session.OpenEditor.VirtualDesktopId != null && SettingsRoot.Current.Editor.RestoreToSameVirtualDesktop)
-                        wnd.PlatformWindow.MoveToDesktop(session.OpenEditor.VirtualDesktopId.Value);
+                    if (session.OpenEditor.VirtualDesktopId != null)
+                    {
+                        var currentDesktopId = wnd.PlatformWindow.VirtualDesktopId;
+                        if (currentDesktopId != session.OpenEditor.VirtualDesktopId.Value)
+                        {
+                            // if this is being opened on the non-current desktop, opening it as minimized prevents windows from switching desktops
+                            wndCommand = WindowState.Minimized;
+                            wnd.PlatformWindow.MoveToDesktop(session.OpenEditor.VirtualDesktopId.Value);
+                        }
+                    }
                 }
                 catch {; }
 
-                // first a WPF show minimized (so it won't flicker), initializes gpu etc
-                wnd.WindowState = WindowState.Minimized;
-                wnd.Show();
 
-                // restore to the previous bounds / minimized / maximized state
-                var cmd = SW_SHOWNORMAL;
-                if (session.OpenEditor.IsMaximized) cmd = SW_SHOWMAXIMIZED;
-                else if (session.OpenEditor.IsMinimized) cmd = SW_SHOWMINNOACTIVE;
-                wnd.PlatformWindow.Restore(session.OpenEditor.RestorePosition, cmd);
+                // this is a stupid WPF limitation
+                if (wndCommand == WindowState.Maximized)
+                    wnd.ShowActivated = true;
+
+                wnd.WindowState = wndCommand;
+                wnd.Show();
             }
             else if (canPlaceExactly)
             {

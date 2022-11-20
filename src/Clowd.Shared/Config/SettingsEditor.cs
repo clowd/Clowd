@@ -104,12 +104,6 @@ namespace Clowd
                 set => Set(ref _restoreSessionsOnClowdStart, value);
             }
 
-            public bool RestoreToSameVirtualDesktop
-            {
-                get => _restoreToSameVirtualDesktop;
-                set => Set(ref _restoreToSameVirtualDesktop, value);
-            }
-
             public Color CanvasBackground
             {
                 get => _canvasBackground;
@@ -141,7 +135,6 @@ namespace Clowd
             private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
             private AutoDictionary<ToolType, SavedToolSettings> _tools = new AutoDictionary<ToolType, SavedToolSettings>();
             private bool _restoreSessionsOnClowdStart = true;
-            private bool _restoreToSameVirtualDesktop = true;
 
             public SettingsEditor()
             {
