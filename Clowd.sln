@@ -31,7 +31,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{E12FDD
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Clowd.Native", "src\Clowd.Native\Clowd.Native.vcxproj", "{847EFAFA-F061-4350-81A8-A1D211AAC62B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CursorGenerator", "src\CursorGenerator\CursorGenerator.csproj", "{5B38965C-3C62-40B5-86C3-B5353C6FBC58}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CursorGenerator", "src\CursorGenerator\CursorGenerator.csproj", "{5B38965C-3C62-40B5-86C3-B5353C6FBC58}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Avalonia", "src\Clowd.Avalonia\Clowd.Avalonia.csproj", "{27BAA919-3A18-4C8E-9B75-05161FEAFED1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -105,6 +107,14 @@ Global
 		{5B38965C-3C62-40B5-86C3-B5353C6FBC58}.Release|Any CPU.Build.0 = Release|Any CPU
 		{5B38965C-3C62-40B5-86C3-B5353C6FBC58}.Release|x64.ActiveCfg = Release|Any CPU
 		{5B38965C-3C62-40B5-86C3-B5353C6FBC58}.Release|x64.Build.0 = Release|Any CPU
+		{27BAA919-3A18-4C8E-9B75-05161FEAFED1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{27BAA919-3A18-4C8E-9B75-05161FEAFED1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{27BAA919-3A18-4C8E-9B75-05161FEAFED1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{27BAA919-3A18-4C8E-9B75-05161FEAFED1}.Debug|x64.Build.0 = Debug|Any CPU
+		{27BAA919-3A18-4C8E-9B75-05161FEAFED1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{27BAA919-3A18-4C8E-9B75-05161FEAFED1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{27BAA919-3A18-4C8E-9B75-05161FEAFED1}.Release|x64.ActiveCfg = Release|Any CPU
+		{27BAA919-3A18-4C8E-9B75-05161FEAFED1}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

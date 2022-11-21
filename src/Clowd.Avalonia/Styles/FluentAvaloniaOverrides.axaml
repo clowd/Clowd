@@ -1,0 +1,104 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                            xmlns:wnd="clr-namespace:FluentAvalonia.UI.Windowing;assembly=FluentAvalonia.UI.Windowing"
+        xmlns:ui="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia">
+  <ControlTheme TargetType="Button" x:Key="FA_SystemCaptionButton_New">
+    <Setter Property="Background" Value="{DynamicResource FATitle_SysCaptionBackground}" />
+    <Setter Property="BorderBrush" Value="{x:Null}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Width" Value="46" />
+    <Setter Property="Foreground" Value="{DynamicResource FATitle_SysCaptionForeground}" />
+    <Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="FontFamily" Value="{StaticResource SymbolThemeFontFamily}" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}">
+          <Viewbox Width="10" Height="10">
+            <ui:IconSourceElement IconSource="{TemplateBinding Content}" />
+          </Viewbox>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:inactive">
+      <Style Selector="^ /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource FATitle_SysCaptionBackgroundInactive}" />
+      </Style>
+      <Style Selector="^ /template/ ui|FontIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FATitle_SysCaptionForegroundInactive}" />
+      </Style>
+    </Style>
+
+    <Style Selector="^:pointerover">
+      <Style Selector="^ /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource FATitle_SysCaptionBackgroundHover}" />
+      </Style>
+      <Style Selector="^ /template/ ui|FontIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FATitle_SysCaptionForegroundHover}" />
+      </Style>
+    </Style>
+
+    <Style Selector="^:pressed">
+      <Style Selector="^ /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource FATitle_SysCaptionBackgroundPressed}" />
+      </Style>
+      <Style Selector="^ /template/ ui|FontIcon">
+        <Setter Property="Foreground" Value="{DynamicResource FATitle_SysCaptionForegroundPressed}" />
+      </Style>
+    </Style>
+
+    <Style Selector="^.Close">
+      <Style Selector="^:pointerover /template/ Border">
+        <Setter Property="Background" Value="#e81123" />
+      </Style>
+      <Style Selector="^:pointerover /template/ ui|FontIcon">
+        <Setter Property="Foreground" Value="White" />
+      </Style>
+      <Style Selector="^:pressed /template/ Border">
+        <Setter Property="Background" Value="#f1707a" />
+      </Style>
+      <Style Selector="^:pressed /template/ ui|FontIcon">
+        <Setter Property="Foreground" Value="White" />
+      </Style>
+    </Style>
+
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme TargetType="wnd:MinMaxCloseControl" x:Key="{x:Type wnd:MinMaxCloseControl}">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <StackPanel Orientation="Horizontal">
+          <Button Name="MinimizeButton" Theme="{StaticResource FA_SystemCaptionButton_New}">
+            <Button.Content>
+              <ui:PathIconSource Data="M0,0 H10 V1 H0 Z" />
+            </Button.Content>
+          </Button>
+          <Button Name="MaxRestoreButton" Theme="{StaticResource FA_SystemCaptionButton_New}">
+            <Button.Content>
+              <ui:PathIconSource Data="M0,0 H10 V10 H0 V0 M1,1 H9 V9 H1 V1 Z" />
+            </Button.Content>
+          </Button>
+          <Button Name="CloseButton" Theme="{StaticResource FA_SystemCaptionButton_New}" Classes="Close">
+            <Button.Content>
+              <!--<ui:PathIconSource Data="M0,0 H1 L5,4 L9,0 H10 V1 L6,5 L10,9 V10 H9 L5,6 L1,10 H0 V9 L4,5 L0,1 Z" />-->
+              <ui:PathIconSource Data="M0,0 H0.5 L5,4.5 L9.5,0 H10 V0.5 L5.5,5 L10,9.5 V10 H9.5 L5,5.5 L0.5,10 H0 V9.5 L4.5,5 L0,0.5 Z" />
+            </Button.Content>
+          </Button>
+        </StackPanel>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:maximized /template/ Button#MaxRestoreButton">
+      <Setter Property="Content">
+        <Setter.Value>
+          <ui:PathIconSource Data="M0,2 H8 V10 H0 V2 M1,3 H7 V9 H1 V3 M3,2 H2 V0 H10 V8 H8 V7 H9 V1 H3 Z" />
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </ControlTheme>
+</ResourceDictionary>
