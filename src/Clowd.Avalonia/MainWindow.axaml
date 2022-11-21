@@ -1,32 +1,41 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:wnd="clr-namespace:FluentAvalonia.UI.Windowing;assembly=FluentAvalonia.UI.Windowing"
-        xmlns:ui="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-        x:Class="Clowd.Avalonia.MainWindow"
-        TransparencyLevelHint="Mica"
-        TransparencyBackgroundFallback="{DynamicResource SolidBackgroundFillColorBase}"
-        Background="Transparent"
-        ExtendClientAreaToDecorationsHint="True"
-        ExtendClientAreaChromeHints="PreferSystemChrome"
-        Title="TestClowdAvalonia">
-  <Panel>
-    <Border x:Name="BackgroundOverlay" Background="Transparent" IsHitTestVisible="False">
-      <Border.Transitions>
-        <Transitions>
-          <BrushTransition Property="Background" Duration="0:0:0.2" />
-          <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
-        </Transitions>
-      </Border.Transitions>
-    </Border>
+<Window
+    x:Class="Clowd.Avalonia.MainWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
+    xmlns:wnd="clr-namespace:FluentAvalonia.UI.Windowing;assembly=FluentAvalonia.UI.Windowing"
+    Title="TestClowdAvalonia"
+    d:DesignHeight="450"
+    d:DesignWidth="800"
+    Background="Transparent"
+    ExtendClientAreaChromeHints="PreferSystemChrome"
+    ExtendClientAreaToDecorationsHint="True"
+    TransparencyBackgroundFallback="{DynamicResource SolidBackgroundFillColorBase}"
+    TransparencyLevelHint="Mica"
+    mc:Ignorable="d">
+    <Panel>
+        <Border
+            x:Name="BackgroundOverlay"
+            Background="Transparent"
+            IsHitTestVisible="False">
+            <Border.Transitions>
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.2" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                </Transitions>
+            </Border.Transitions>
+        </Border>
 
-    <Button Click="Clicked">
-      <StackPanel Orientation="Horizontal">
-        <ui:SymbolIcon Symbol="Clear" Foreground="Red" FontSize="18" />
-        <TextBlock>Change Theme</TextBlock>
-      </StackPanel>
-    </Button>
-  </Panel>
+        <Button Click="Clicked">
+            <StackPanel Orientation="Horizontal">
+                <ui:SymbolIcon
+                    FontSize="18"
+                    Foreground="Red"
+                    Symbol="Clear" />
+                <TextBlock>Change Theme</TextBlock>
+            </StackPanel>
+        </Button>
+    </Panel>
 </Window>
