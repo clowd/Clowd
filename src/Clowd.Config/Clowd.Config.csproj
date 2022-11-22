@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RT.Serialization" Version="2.0.1719" />
+    <PackageReference Include="RT.Serialization.Binary" Version="2.0.1719" />
+    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1719" />
+    <PackageReference Include="RT.Util.Core" Version="2.0.1719" />
+  </ItemGroup>
+</Project>

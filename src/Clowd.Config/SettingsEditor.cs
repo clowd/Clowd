@@ -1,13 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Reflection;
-using System.Windows;
-using System.Windows.Input;
-using System.Windows.Media;
+﻿using System.ComponentModel;
 using RT.Serialization;
-using RT.Util;
 
 namespace Clowd
 {
@@ -26,6 +18,13 @@ namespace Clowd
         Pixelate,
     };
 
+    public enum FontStyleType
+    {
+        Normal = 0,
+        Oblique = 1,
+        Italic = 2,
+    }
+
     namespace Config
     {
         [ClassifyIgnoreIfDefault, ClassifyIgnoreIfEmpty]
@@ -37,9 +36,9 @@ namespace Clowd
                 set => Set(ref _autoColor, value);
             }
 
-            public Color ObjectColor
+            public ColorOption ObjectColor
             {
-                get => _objectColor ?? Colors.Red;
+                get => _objectColor ?? new ColorOption(255, 0, 0);
                 set => Set(ref _objectColor, value);
             }
 
@@ -61,22 +60,16 @@ namespace Clowd
                 set => Set(ref _fontSize, value);
             }
 
-            public FontStyle FontStyle
+            public FontStyleType FontStyle
             {
-                get => _fontStyle ?? FontStyles.Normal;
+                get => _fontStyle ?? FontStyleType.Normal;
                 set => Set(ref _fontStyle, value);
             }
 
-            public FontWeight FontWeight
+            public int FontWeight
             {
-                get => _fontWeight ?? FontWeights.Normal;
+                get => _fontWeight ?? 400;
                 set => Set(ref _fontWeight, value);
-            }
-
-            public FontStretch FontStretch
-            {
-                get => _fontStretch ?? FontStretches.Normal;
-                set => Set(ref _fontStretch, value);
             }
 
             public double BlurRadius
@@ -85,13 +78,12 @@ namespace Clowd
                 set => Set(ref _blurRadius, value);
             }
 
-            private FontStretch? _fontStretch;
-            private FontWeight? _fontWeight;
-            private FontStyle? _fontStyle;
+            private int? _fontWeight;
+            private FontStyleType? _fontStyle;
             private double? _fontSize;
             private string _fontFamily;
             private double? _lineWidth;
-            private Color? _objectColor;
+            private ColorOption? _objectColor;
             private bool? _autoColor;
             private double? _blurRadius;
         }
@@ -104,7 +96,7 @@ namespace Clowd
                 set => Set(ref _restoreSessionsOnClowdStart, value);
             }
 
-            public Color CanvasBackground
+            public ColorOption CanvasBackground
             {
                 get => _canvasBackground;
                 set => Set(ref _canvasBackground, value);
@@ -130,7 +122,7 @@ namespace Clowd
                 set => Set(ref _deleteSessionsAfter, value);
             }
 
-            private Color _canvasBackground = Colors.Transparent;
+            private ColorOption _canvasBackground = new ColorOption(0, 0, 0, 0);
             private int _startupPadding = 30;
             private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
             private AutoDictionary<ToolType, SavedToolSettings> _tools = new AutoDictionary<ToolType, SavedToolSettings>();
