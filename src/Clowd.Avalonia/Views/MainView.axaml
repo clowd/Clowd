@@ -1,4 +1,4 @@
-<UserControl
+﻿<UserControl
     x:Class="Clowd.Avalonia.Views.MainView"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -11,18 +11,36 @@
     mc:Ignorable="d">
     <ui:NavigationView
         x:Name="Nav"
-        Classes="SampleAppNav"
+        Margin="0,20,0,0"
         ExpandedModeThresholdWidth="0"
         IsPaneToggleButtonVisible="False"
         IsSettingsVisible="False"
         OpenPaneLength="260">
         <ui:NavigationView.MenuItems>
-            <ui:NavigationViewItem Content="Recent" Icon="List" />
+            <ui:NavigationViewItem Content="Home" Icon="Home" />
+            <ui:NavigationViewItem
+                Content="Sessions"
+                Icon="List"
+                IsSelected="True"
+                Tag="SessionsPage" />
+            <ui:NavigationViewItem
+                Content="Uploads"
+                Icon="Upload"
+                Tag="UploadsPage" />
             <ui:NavigationViewItemSeparator />
             <ui:NavigationViewItemHeader Content="Settings" />
-            <ui:NavigationViewItem Content="General" Icon="Settings" />
-            <ui:NavigationViewItem Content="Hotkeys" Icon="Keyboard" />
-            <ui:NavigationViewItem Content="Capture" Icon="Camera" />
+            <ui:NavigationViewItem
+                Content="General"
+                Icon="Settings"
+                Tag="GeneralSettingsPage" />
+            <ui:NavigationViewItem
+                Content="Hotkeys"
+                Icon="Keyboard"
+                Tag="HotkeySettingsPage" />
+            <ui:NavigationViewItem
+                Content="Capture"
+                Icon="Camera"
+                Tag="CaptureSettingsPage" />
             <ui:NavigationViewItem Content="Editor" Icon="Edit" />
             <ui:NavigationViewItem Content="Uploads" Icon="Globe" />
             <ui:NavigationViewItem Content="Video" Icon="Video" />

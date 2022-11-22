@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -23,6 +23,10 @@
     <PackageReference Include="FluentAvaloniaUI" Version="2.0.0-preview4" />
     <PackageReference Include="FluentAvalonia.UI.Windowing" Version="2.0.0-preview4" />
     <!--<PackageReference Include="Vanara.PInvoke.DwmApi" Version="$(VanaraVersion)" />-->
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Clowd.Config\Clowd.Config.csproj" />
   </ItemGroup>
 
 </Project>
