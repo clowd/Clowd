@@ -31,6 +31,8 @@ public partial class MainWindow : AppWindow
         faTheme.PreferSystemTheme = true;
         IsDarkTheme = faTheme.RequestedTheme == FluentAvaloniaTheme.DarkModeString;
         UpdateBackground(true);
+        Width = 800;
+        Height = 600;
     }
 
     private void MainWindow_Deactivated(object sender, EventArgs e)
@@ -54,7 +56,7 @@ public partial class MainWindow : AppWindow
     {
         if (ActualTransparencyLevel >= WindowTransparencyLevel.AcrylicBlur && isActive)
         {
-            BackgroundOverlay.Opacity = 0.9;
+            BackgroundOverlay.Opacity = 0.875;
             BackgroundOverlay.Background = IsDarkTheme ? THEME_DARK_ACTIVE : THEME_LIGHT_ACTIVE;
         }
         else

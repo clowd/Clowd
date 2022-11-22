@@ -10,6 +10,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--<AvaloniaResource Include="..\..\artwork\clowd-default.ico" />-->
+    <AvaloniaResource Include="borderless.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <!--<PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />-->
