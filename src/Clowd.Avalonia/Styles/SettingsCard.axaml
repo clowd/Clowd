@@ -1,0 +1,144 @@
+﻿<ResourceDictionary
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Clowd.Avalonia.Controls"
+    xmlns:ui="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia">
+
+    <ControlTheme x:Key="{x:Type controls:SettingsCard}" TargetType="controls:SettingsCard">
+        <Setter Property="Background" Value="{DynamicResource ExpanderHeaderBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ExpanderHeaderBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="20" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="20" />
+                            <RowDefinition MinHeight="30" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="20" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="20" />
+                        </Grid.ColumnDefinitions>
+                        <Viewbox
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Width="30"
+                            Height="30"
+                            Margin="0,0,20,0"
+                            VerticalAlignment="Center"
+                            IsVisible="{TemplateBinding Icon,
+                                                        Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <ContentPresenter
+                                Name="IconContentPresenter"
+                                Content="{TemplateBinding Icon}"
+                                Foreground="{DynamicResource NavigationViewItemForeground}" />
+                        </Viewbox>
+
+                        <StackPanel
+                            Grid.Row="1"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Orientation="Vertical">
+                            <TextBlock Text="{TemplateBinding Title}" Theme="{DynamicResource BodyTextBlockStyle}" />
+                            <TextBlock
+                                IsVisible="{TemplateBinding Description,
+                                                            Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                Opacity="0.7"
+                                Text="{TemplateBinding Description}"
+                                Theme="{DynamicResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+
+                        <ContentPresenter
+                            Name="RightContentPresenter"
+                            Grid.Row="1"
+                            Grid.Column="3"
+                            HorizontalAlignment="Right"
+                            HorizontalContentAlignment="Right"
+                            Content="{TemplateBinding ActionContent}" />
+
+                        <ContentPresenter
+                            Name="BottomContentPresenter"
+                            Grid.Row="2"
+                            Grid.Column="2"
+                            Grid.ColumnSpan="2"
+                            Content="{TemplateBinding BottomContent}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type controls:ExpandingSettingsCard}" TargetType="controls:ExpandingSettingsCard">
+        <Setter Property="Background" Value="{DynamicResource ExpanderHeaderBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ExpanderHeaderBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="20" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Expander Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}">
+                    <Expander.Header>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="20" />
+                                <RowDefinition MinHeight="30" />
+                                <RowDefinition Height="20" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="5" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Width="30"
+                                Height="30"
+                                Margin="0,0,20,0"
+                                VerticalAlignment="Center"
+                                IsVisible="{TemplateBinding Icon,
+                                                            Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <ContentPresenter
+                                    Name="IconContentPresenter"
+                                    Content="{TemplateBinding Icon}"
+                                    Foreground="{DynamicResource NavigationViewItemForeground}" />
+                            </Viewbox>
+
+                            <StackPanel
+                                Grid.Row="1"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Orientation="Vertical">
+                                <TextBlock Text="{TemplateBinding Title}" Theme="{DynamicResource BodyTextBlockStyle}" />
+                                <TextBlock
+                                    IsVisible="{TemplateBinding Description,
+                                                                Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                    Opacity="0.7"
+                                    Text="{TemplateBinding Description}"
+                                    Theme="{DynamicResource CaptionTextBlockStyle}" />
+                            </StackPanel>
+                        </Grid>
+                    </Expander.Header>
+                </Expander>
+            </ControlTemplate>
+        </Setter>
+
+    </ControlTheme>
+
+</ResourceDictionary>

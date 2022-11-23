@@ -1,6 +1,7 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.ReactiveUI;
 using FluentAvalonia.UI.Windowing;
 using System;
 
@@ -17,7 +18,8 @@ internal class Program
         .LogToTrace()
         .With(new Win32PlatformOptions
         {
-            UseWindowsUIComposition = true
+            UseWindowsUIComposition = true,
         })
-        .UseFAWindowing();
+        .UseFAWindowing()
+        .UseReactiveUI();
 }

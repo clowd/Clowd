@@ -1,9 +1,10 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Chrome;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Clowd.Config;
 using FluentAvalonia.Styling;
 using FluentAvalonia.UI.Windowing;
 using System;
@@ -12,7 +13,7 @@ namespace Clowd.Avalonia;
 
 public partial class MainWindow : AppWindow
 {
-    public IntPtr Handle => PlatformImpl.Handle.Handle;
+    //public IntPtr Handle => PlatformImpl.Handle.Handle;
 
     public bool IsDarkTheme { get; private set; }
 
@@ -23,6 +24,8 @@ public partial class MainWindow : AppWindow
 
     public MainWindow()
     {
+        SettingsRoot.LoadDefault();
+
         TitleBar.ExtendsContentIntoTitleBar = true;
         this.Activated += MainWindow_Activated;
         this.Deactivated += MainWindow_Deactivated;
@@ -31,8 +34,8 @@ public partial class MainWindow : AppWindow
         faTheme.PreferSystemTheme = true;
         IsDarkTheme = faTheme.RequestedTheme == FluentAvaloniaTheme.DarkModeString;
         UpdateBackground(true);
-        Width = 800;
-        Height = 600;
+        Width = 900;
+        Height = 700;
     }
 
     private void MainWindow_Deactivated(object sender, EventArgs e)
@@ -56,7 +59,7 @@ public partial class MainWindow : AppWindow
     {
         if (ActualTransparencyLevel >= WindowTransparencyLevel.AcrylicBlur && isActive)
         {
-            BackgroundOverlay.Opacity = 0.875;
+            BackgroundOverlay.Opacity = IsDarkTheme ? 0.875 : 0.8;
             BackgroundOverlay.Background = IsDarkTheme ? THEME_DARK_ACTIVE : THEME_LIGHT_ACTIVE;
         }
         else
@@ -66,7 +69,7 @@ public partial class MainWindow : AppWindow
         }
     }
 
-    private void Clicked(object sender, RoutedEventArgs e)
+    private void ThemeSwitchClicked(object sender, RoutedEventArgs e)
     {
         var faTheme = AvaloniaLocator.Current.GetService<FluentAvaloniaTheme>();
         faTheme.RequestedTheme = IsDarkTheme ? FluentAvaloniaTheme.LightModeString : FluentAvaloniaTheme.DarkModeString;
