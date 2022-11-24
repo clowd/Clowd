@@ -3,8 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
-    <AvaloniaVersion>11.0.0-preview4</AvaloniaVersion>
-    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!--<SatelliteResourceLanguages>en</SatelliteResourceLanguages>-->
     <!--<VanaraVersion>3.4.11</VanaraVersion>-->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DefineConstants>$(DefineConstants);HAS_AVALONIA</DefineConstants>
@@ -31,6 +30,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Config\Clowd.Config.csproj" />
+    <ProjectReference Include="..\Clowd.Localization\Clowd.Localization.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="**/*.resx">
+      <UseVocaDbResManager>false</UseVocaDbResManager>
+      <!--<GenerateResource>false</GenerateResource>-->
+      <PublicClass>true</PublicClass>
+      <PartialClass>true</PartialClass>
+      <StaticClass>false</StaticClass>
+      <StaticMembers>false</StaticMembers>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--<PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />-->
+    <PackageReference Include="ReswPlusLib" Version="2.0.0" />
+    <PackageReference Include="VocaDb.ResXFileCodeGenerator" Version="3.2.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Clowd.Config\Clowd.Config.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using Clowd.Localization;
 
 namespace Clowd.Config;
 
@@ -56,6 +57,12 @@ public class SettingsGeneral : CategoryBase
         set => Set(ref _confirmClose, value);
     }
 
+    public LanguageInfo Language
+    {
+        get => _language;
+        set => Set(ref _language, value);
+    }
+
     private string _clientId = Guid.NewGuid().ToString().ToLower();
     private string _lastUploadPath;
     private string _lastSavePath;
@@ -63,4 +70,5 @@ public class SettingsGeneral : CategoryBase
     private bool _experimentalUpdateChannel;
     private bool _registerExplorerContextMenu = true;
     private bool _registerAutoStart = true;
+    private LanguageInfo _language = LanguageInfo.GetDefault();
 }

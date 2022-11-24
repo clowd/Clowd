@@ -37,6 +37,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Avalonia", "src\Clowd
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Config", "src\Clowd.Config\Clowd.Config.csproj", "{33F09DE3-1763-4815-811A-F2F7C2DDF184}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Localization", "src\Clowd.Localization\Clowd.Localization.csproj", "{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -125,6 +127,14 @@ Global
 		{33F09DE3-1763-4815-811A-F2F7C2DDF184}.Release|Any CPU.Build.0 = Release|Any CPU
 		{33F09DE3-1763-4815-811A-F2F7C2DDF184}.Release|x64.ActiveCfg = Release|Any CPU
 		{33F09DE3-1763-4815-811A-F2F7C2DDF184}.Release|x64.Build.0 = Release|Any CPU
+		{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}.Debug|x64.Build.0 = Debug|Any CPU
+		{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}.Release|x64.ActiveCfg = Release|Any CPU
+		{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
