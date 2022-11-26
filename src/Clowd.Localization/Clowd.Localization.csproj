@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <!--<PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />-->
+    <PackageReference Include="DynamicData" Version="7.12.11" />
     <PackageReference Include="ReswPlusLib" Version="2.0.0" />
     <PackageReference Include="VocaDb.ResXFileCodeGenerator" Version="3.2.1">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

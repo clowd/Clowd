@@ -21,35 +21,26 @@ namespace Clowd.Localization.Resources
         private IPluralProvider _pluralProvider;
         private Dictionary<string, PluralableString> _cache = new();
 
-        private Strings() {
+        private Strings()
+        {
             _pluralProvider = CreatePluralProvider("en");
         }
 
         public void SetCulture(CultureInfo culture)
         {
+            _pluralProvider = CreatePluralProvider(culture.TwoLetterISOLanguageName);
             CultureInfo = culture;
             OnPropertyChanged(nameof(CultureInfo));
             OnPropertyChanged("Item");
             OnPropertyChanged("Item[]");
 
-            _pluralProvider = CreatePluralProvider(culture.TwoLetterISOLanguageName);
 
             foreach (var item in _cache.Values)
             {
                 item.Invalidate();
             }
-
-            //foreach (var prop in this.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
-            //{
-            //    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop.Name));
-            //}
-
-            //Strings.Instance.GetPlural(nameof(Strings.SettingsNav_RecentSessions), 5d);
         }
 
-        //public string GetString(string name) => ResourceManager.GetString(name, CultureInfo);
-
-        //public string GetPlural(string name, double value) => ResourceManager.GetPlural(name, value);
 
         public PluralableString this[string key]
         {
@@ -61,8 +52,6 @@ namespace Clowd.Localization.Resources
                 return p;
             }
         }
-
-        //public PluralString this[double value] => new PluralString(this, value);
 
         protected void OnPropertyChanged(string propertyName)
         {
@@ -138,20 +127,20 @@ namespace Clowd.Localization.Resources
 
             public void Invalidate()
             {
-                OnPropertyChanged("Item");
-                OnPropertyChanged("Item[]");
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item"));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
+            }
+
+            public string GetPluralForValue(double value)
+            {
+                return Parent.GetPluralInternal(Key, value);
             }
 
             public string this[double value] => Parent.GetPluralInternal(Key, value);
 
-            public override string ToString() => ResourceManager.GetString(Key, Parent.CultureInfo);
+            public override string ToString() => ResourceManager.GetString(Key, Parent.CultureInfo) ?? Parent.GetPluralInternal(Key, 0d);
 
             public static implicit operator string(PluralableString plural) => plural.ToString();
-
-            protected void OnPropertyChanged(string propertyName)
-            {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-            }
         }
     }
 }

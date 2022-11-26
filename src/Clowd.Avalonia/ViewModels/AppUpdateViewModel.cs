@@ -4,6 +4,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
+using DynamicData.Binding;
 using FluentAvalonia.UI.Controls;
 using PropertyChanged.SourceGenerator;
 using ReactiveUI;
