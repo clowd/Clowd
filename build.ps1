@@ -142,6 +142,10 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
         --pathPrefix $channel
     }
 
+    $signCommand = ""
+    if ($channel -eq "stable") {
+        $signCommand = "-n `"/n \`"Open Source Developer, Caelan Sayler\`" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256`""
+    }
 
     # releasify
     Write-Host "Create Nuget & Releasify Package" -ForegroundColor Magenta
@@ -154,7 +158,7 @@ if ($mode -eq "compile" -Or $mode -eq "pack") {
     --packId=Clowd `
     --packVersion=$version `
     --packAuthors="Caelan Sayler" `
-    --packDirectory="$PSScriptRoot\publish"
+    --packDirectory="$PSScriptRoot\publish" $signCommand
 
     Write-Host "Done. Run .\upload.cmd to release" -ForegroundColor Magenta
 
