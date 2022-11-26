@@ -1,13 +1,11 @@
 ﻿using System;
+using Avalonia;
 using Avalonia.Data;
+using Avalonia.Data.Converters;
 using Avalonia.Markup.Xaml;
 using Clowd.Localization.Resources;
-using Avalonia.Data.Converters;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using static Clowd.Localization.Resources.Strings;
-using Avalonia.Markup.Xaml.MarkupExtensions;
 
 namespace Clowd.Avalonia.Markup
 {
@@ -24,49 +22,35 @@ namespace Clowd.Avalonia.Markup
 
         public override object ProvideValue(IServiceProvider serviceProvider)
         {
-            var expr = new ReflectionBindingExtension($"[{Key}]")
-            {
-                Mode = BindingMode.OneWay,
-                Source = Strings.Instance,
-            };
-            return expr.ProvideValue(serviceProvider);
+            var m = new MultiBinding();
+            m.Bindings.Add(Strings.GetCultureChangedObservable().ToBinding());
 
-
-            if (String.IsNullOrEmpty(PluralPath))
+            if (!String.IsNullOrEmpty(PluralPath))
             {
-               
+                m.Bindings.Add(new Binding(PluralPath) { Mode = BindingMode.OneWay });
             }
 
-            var localStringBinding = new Binding($"[{Key}]")
-            {
-                Mode = BindingMode.OneWay,
-                Source = Strings.Instance,
-            };
-
-            var valueBinding = new Binding(PluralPath) { Mode = BindingMode.OneWay };
-
-            var m = new MultiBinding();
-            m.Bindings.Add(localStringBinding);
-            m.Bindings.Add(valueBinding);
             m.Converter = new MultiPluralValueConverter();
+            m.ConverterParameter = Key;
             return m;
         }
 
-        public class MultiPluralValueConverter : IMultiValueConverter
+        private class MultiPluralValueConverter : IMultiValueConverter
         {
             public object Convert(IList<object> values, Type targetType, object parameter, CultureInfo culture)
             {
                 try
                 {
-                    var format = values.First();
-                    if (format is PluralableString plural)
+                    var key = (string)parameter;
+                    if (values.Count > 1)
                     {
-                        var v = System.Convert.ToDouble(values[1]);
-                        return plural[v];
+                        var cultu = values[0] as string;
+                        var value = System.Convert.ToDouble(values[1]);
+                        return Strings.GetPlural(key, value);
                     }
                     else
                     {
-                        return String.Format(format.ToString(), values.Skip(1));
+                        return Strings.GetString(key);
                     }
                 }
                 catch

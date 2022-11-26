@@ -2,63 +2,43 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Reflection;
 using System.Resources;
-using System.Text;
-using System.Xml.Linq;
 using ReswPlusLib;
 using ReswPlusLib.Interfaces;
 
 namespace Clowd.Localization.Resources
 {
-    partial class Strings : INotifyPropertyChanged
+    partial class Strings
     {
-        public event PropertyChangedEventHandler PropertyChanged;
+        private static ReplaySubject<CultureInfo> _culture;
+        private static IPluralProvider _pluralProvider;
 
-        public static Strings Instance => _instance ?? (_instance = new Strings());
-        private static Strings _instance;
-
-        private IPluralProvider _pluralProvider;
-        private Dictionary<string, PluralableString> _cache = new();
-
-        private Strings()
+        static Strings()
         {
-            _pluralProvider = CreatePluralProvider("en");
-        }
-
-        public void SetCulture(CultureInfo culture)
-        {
-            _pluralProvider = CreatePluralProvider(culture.TwoLetterISOLanguageName);
-            CultureInfo = culture;
-            OnPropertyChanged(nameof(CultureInfo));
-            OnPropertyChanged("Item");
-            OnPropertyChanged("Item[]");
-
-
-            foreach (var item in _cache.Values)
+            _culture = new ReplaySubject<CultureInfo>(1);
+            _culture.Subscribe(v =>
             {
-                item.Invalidate();
-            }
+                CultureInfo = v;
+                _pluralProvider = CreatePluralProvider(v.TwoLetterISOLanguageName);
+            });
+
+            _culture.OnNext(new CultureInfo("en-US"));
         }
 
+        public static void SetCulture(CultureInfo culture) => _culture.OnNext(culture);
 
-        public PluralableString this[string key]
-        {
-            get
-            {
-                if (_cache.TryGetValue(key, out var v)) return v;
-                var p = new PluralableString(this, key);
-                _cache[key] = p;
-                return p;
-            }
-        }
+        public static IObservable<string> GetCultureChangedObservable() => _culture.Select(c => c.ToString());
 
-        protected void OnPropertyChanged(string propertyName)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+        public static string GetString(string resourceKey) => ResourceManager.GetString(resourceKey, CultureInfo);
 
-        private string GetPluralInternal(string key, double number)
+        public static string GetPlural(string resourceKey, double value) => GetPluralInternal(resourceKey, value);
+
+        public static IObservable<string> AsObservable(string key) => _culture.Select(c => GetString(key));
+
+        private static string GetPluralInternal(string key, double number)
         {
             string getString(string k)
             {
@@ -109,38 +89,6 @@ namespace Clowd.Localization.Resources
             Type t = typeof(ResourceLoaderExtension).Assembly.GetType("ReswPlusLib.Utils.PluralHelper");
             var pluralChooserMth = t.GetMethod("GetPluralChooser", BindingFlags.Static | BindingFlags.Public);
             return pluralChooserMth.Invoke(null, new object[] { twoLetterIsoCultureName }) as IPluralProvider;
-        }
-
-        public class PluralableString : INotifyPropertyChanged
-        {
-            public string Key { get; }
-
-            public Strings Parent { get; }
-
-            public PluralableString(Strings parent, string key)
-            {
-                Parent = parent;
-                Key = key;
-            }
-
-            public event PropertyChangedEventHandler PropertyChanged;
-
-            public void Invalidate()
-            {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item"));
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
-            }
-
-            public string GetPluralForValue(double value)
-            {
-                return Parent.GetPluralInternal(Key, value);
-            }
-
-            public string this[double value] => Parent.GetPluralInternal(Key, value);
-
-            public override string ToString() => ResourceManager.GetString(Key, Parent.CultureInfo) ?? Parent.GetPluralInternal(Key, 0d);
-
-            public static implicit operator string(PluralableString plural) => plural.ToString();
         }
     }
 }

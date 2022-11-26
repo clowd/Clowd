@@ -10,14 +10,13 @@
       <!--<GenerateResource>false</GenerateResource>-->
       <PublicClass>true</PublicClass>
       <PartialClass>true</PartialClass>
-      <StaticClass>false</StaticClass>
-      <StaticMembers>false</StaticMembers>
+      <StaticClass>true</StaticClass>
+      <StaticMembers>true</StaticMembers>
     </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
-    <!--<PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />-->
-    <PackageReference Include="DynamicData" Version="7.12.11" />
+    <PackageReference Include="System.Reactive" Version="5.0.0" />
     <PackageReference Include="ReswPlusLib" Version="2.0.0" />
     <PackageReference Include="VocaDb.ResXFileCodeGenerator" Version="3.2.1">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

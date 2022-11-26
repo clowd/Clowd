@@ -17,7 +17,7 @@ namespace Clowd.Localization
         {
             var culture = String.IsNullOrEmpty(lang.CultureName) ? CultureInfo.DefaultThreadCurrentUICulture : lang.ToCultureInfo();
             Thread.CurrentThread.CurrentUICulture = culture;
-            Resources.Strings.Instance.SetCulture(culture);
+            Resources.Strings.SetCulture(culture);
         }
     }
 }
