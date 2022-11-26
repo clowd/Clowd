@@ -1,13 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
+using Clowd.Localization.Resources;
 
 namespace Clowd.Localization
 {
     public static class Languages
     {
-        public static IEnumerable<LanguageInfo> Supported 
+        public static IEnumerable<LanguageInfo> Supported
             => new LanguageInfo[] { LanguageInfo.GetDefault() }.Concat(_languages.Select(k => new LanguageInfo(k.Value, k.Key)));
 
         public static LanguageInfo GetSystemDefault() => LanguageInfo.GetDefault();
@@ -20,5 +22,33 @@ namespace Clowd.Localization
             { "ru-RU", "Russian" },
         };
 
+        static CultureInfo _defaultCulture;
+        static CultureInfo _defaultUiCulture;
+
+        static Languages()
+        {
+            _defaultCulture = CultureInfo.CurrentCulture;
+            _defaultUiCulture = CultureInfo.CurrentUICulture;
+        }
+
+        public static CultureInfo GetDefaultUiCulture() => _defaultUiCulture;
+
+        public static void SetLangauge(LanguageInfo info)
+        {
+            if (String.IsNullOrWhiteSpace(info.CultureName))
+            {
+                Strings.SetCulture(_defaultUiCulture);
+            }
+
+            try
+            {
+                var cu = new CultureInfo(info.CultureName);
+                Strings.SetCulture(cu);
+            }
+            catch
+            {
+                Strings.SetCulture(_defaultUiCulture);
+            }
+        }
     }
 }

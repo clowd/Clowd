@@ -6,6 +6,8 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Reflection;
 using System.Resources;
+using System.Text.RegularExpressions;
+using System.Threading;
 using ReswPlusLib;
 using ReswPlusLib.Interfaces;
 
@@ -23,12 +25,13 @@ namespace Clowd.Localization.Resources
             {
                 CultureInfo = v;
                 _pluralProvider = CreatePluralProvider(v.TwoLetterISOLanguageName);
+                Thread.CurrentThread.CurrentUICulture = v;
             });
 
-            _culture.OnNext(new CultureInfo("en-US"));
+            _culture.OnNext(Languages.GetDefaultUiCulture());
         }
 
-        public static void SetCulture(CultureInfo culture) => _culture.OnNext(culture);
+        internal static void SetCulture(CultureInfo culture) => _culture.OnNext(culture);
 
         public static IObservable<string> GetCultureChangedObservable() => _culture.Select(c => c.ToString());
 

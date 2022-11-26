@@ -5,6 +5,8 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Clowd.Config;
+using Clowd.Localization;
+using DynamicData.Binding;
 using FluentAvalonia.Styling;
 using FluentAvalonia.UI.Windowing;
 using System;
@@ -25,6 +27,10 @@ public partial class MainWindow : AppWindow
     public MainWindow()
     {
         SettingsRoot.LoadDefault();
+        SettingsRoot.Current.General.WhenPropertyChanged(g => g.Language).Subscribe(lang =>
+        {
+            Languages.SetLangauge(lang.Value);
+        });
 
         TitleBar.ExtendsContentIntoTitleBar = true;
         this.Activated += MainWindow_Activated;

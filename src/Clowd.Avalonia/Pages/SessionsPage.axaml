@@ -10,7 +10,7 @@
     mc:Ignorable="d">
     <StackPanel Orientation="Vertical" Spacing="20">
         <!--<TextBlock Text="{mx:Localize HazCookies, PluralValue={Binding NumberOfCookies}}" />-->
-        <TextBlock Text="{mx:Localize HazCookies, PluralPath=NumberOfCookies}" />
+        <TextBlock Text="{mx:Localize HazCookies, ValuePath=NumberOfCookies}" />
         <Button Name="MoreCookies" Content="GIVE MOAR!" />
     </StackPanel>
 </UserControl>

@@ -13,7 +13,7 @@ namespace Clowd.Avalonia.Markup
     {
         public string Key { get; set; }
 
-        public string PluralPath { get; set; }
+        public string ValuePath { get; set; }
 
         public LocalizeExtension(string key)
         {
@@ -25,9 +25,9 @@ namespace Clowd.Avalonia.Markup
             var m = new MultiBinding();
             m.Bindings.Add(Strings.GetCultureChangedObservable().ToBinding());
 
-            if (!String.IsNullOrEmpty(PluralPath))
+            if (!String.IsNullOrEmpty(ValuePath))
             {
-                m.Bindings.Add(new Binding(PluralPath) { Mode = BindingMode.OneWay });
+                m.Bindings.Add(new Binding(ValuePath) { Mode = BindingMode.OneWay });
             }
 
             m.Converter = new MultiPluralValueConverter();
