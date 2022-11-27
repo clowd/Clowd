@@ -160,7 +160,7 @@
     <value>Recherche de mises à jour...</value>
   </data>
   <data name="SettingsUpdate_CheckUpdatesBtn" xml:space="preserve">
-    <value>Vérifier m.à.j</value>
+    <value>Mises à jour</value>
   </data>
   <data name="SettingsUpdate_NoAvailableUpdates" xml:space="preserve">
     <value>Aucune mise à jour disponible</value>
