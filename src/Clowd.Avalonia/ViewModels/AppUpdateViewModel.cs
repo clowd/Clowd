@@ -30,9 +30,9 @@ internal partial class AppUpdateViewModel : CultureAwareViewModel
 
     public Symbol IconSymbol => Working ? Symbol.CloudSync : LocalVersionReady != null ? Symbol.CloudBackupFilled : Symbol.CloudSyncComplete;
 
-    [Notify] private int _progressPercent;
-    [Notify] private string _localVersionReady;
-    [Notify] private bool _working;
+    [Notify(Setter.Private)] private int _progressPercent;
+    [Notify(Setter.Private)] private string _localVersionReady;
+    [Notify(Setter.Private)] private bool _working;
 
     private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
 
