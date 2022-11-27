@@ -25,6 +25,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "config", "config", "{E12FDD
 		.gitignore = .gitignore
 		build.ps1 = build.ps1
 		.github\workflows\build.yml = .github\workflows\build.yml
+		crowdin.yml = crowdin.yml
 		src\Directory.Build.props = src\Directory.Build.props
 		version.json = version.json
 	EndProjectSection
@@ -35,9 +36,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CursorGenerator", "src\Curs
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Avalonia", "src\Clowd.Avalonia\Clowd.Avalonia.csproj", "{27BAA919-3A18-4C8E-9B75-05161FEAFED1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Config", "src\Clowd.Config\Clowd.Config.csproj", "{33F09DE3-1763-4815-811A-F2F7C2DDF184}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Config", "src\Clowd.Config\Clowd.Config.csproj", "{33F09DE3-1763-4815-811A-F2F7C2DDF184}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clowd.Localization", "src\Clowd.Localization\Clowd.Localization.csproj", "{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clowd.Localization", "src\Clowd.Localization\Clowd.Localization.csproj", "{FBDAA6AF-D00B-4D19-9D87-9DC02B26C82A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
