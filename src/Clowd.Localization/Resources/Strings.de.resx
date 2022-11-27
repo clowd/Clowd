@@ -123,4 +123,10 @@
   <data name="SettingsNav_RecentUploads" xml:space="preserve">
     <value>Hochladen</value>
   </data>
+  <data name="SettingsNav_SettingsHeader" xml:space="preserve">
+    <value>Einstellungen</value>
+  </data>
+  <data name="SettingsUpdate_CheckUpdatesBtn" xml:space="preserve">
+    <value>Auf Updates prüfen</value>
+  </data>
 </root>
