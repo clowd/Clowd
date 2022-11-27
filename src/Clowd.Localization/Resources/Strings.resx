@@ -123,6 +123,36 @@
   <data name="HazCookies_Other" xml:space="preserve">
     <value>You have {0} cookies!!!!</value>
   </data>
+  <data name="SettingsGeneral_AskToClose" xml:space="preserve">
+    <value>Ask/confirm before closing Clowd</value>
+  </data>
+  <data name="SettingsGeneral_BehaviorDesc" xml:space="preserve">
+    <value>Experimental updates, language, startup/shutdown</value>
+  </data>
+  <data name="SettingsGeneral_BehaviorTitle" xml:space="preserve">
+    <value>Behavior</value>
+  </data>
+  <data name="SettingsGeneral_ColorScheme" xml:space="preserve">
+    <value>Choose your color scheme</value>
+  </data>
+  <data name="SettingsGeneral_ExperimentalUpdates" xml:space="preserve">
+    <value>Enable experimental features / updates</value>
+  </data>
+  <data name="SettingsGeneral_Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="SettingsGeneral_LanguageHelp" xml:space="preserve">
+    <value>Speak a language not listed? Help us translate!</value>
+  </data>
+  <data name="SettingsGeneral_ThemeDesc" xml:space="preserve">
+    <value>Accent color, transparency effects, color scheme</value>
+  </data>
+  <data name="SettingsGeneral_ThemeTitle" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="SettingsGeneral_TransparencyEffects" xml:space="preserve">
+    <value>Enable window transparency effects</value>
+  </data>
   <data name="SettingsNav_About" xml:space="preserve">
     <value>About</value>
   </data>

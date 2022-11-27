@@ -45,8 +45,8 @@
         </controls:SettingsCard>
 
         <controls:ExpandingSettingsCard
-            Title="Behavior"
-            Description="Experimental updates, language, startup/shutdown"
+            Title="{mx:Localize SettingsGeneral_BehaviorTitle}"
+            Description="{mx:Localize SettingsGeneral_BehaviorDesc}"
             Icon="Directions">
             <StackPanel>
                 <DockPanel>
@@ -62,13 +62,16 @@
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                     <StackPanel Orientation="Vertical">
-                        <TextBlock>Language</TextBlock>
-                        <TextBlock Opacity="0.7" Theme="{DynamicResource CaptionTextBlockStyle}">Speak a language not listed? Help us translate!</TextBlock>
+                        <TextBlock Text="{mx:Localize SettingsGeneral_Language}" />
+                        <TextBlock
+                            Opacity="0.7"
+                            Text="{mx:Localize SettingsGeneral_LanguageHelp}"
+                            Theme="{DynamicResource CaptionTextBlockStyle}" />
                     </StackPanel>
                 </DockPanel>
                 <DockPanel>
                     <ToggleSwitch IsChecked="{Binding General.ExperimentalUpdateChannel}" />
-                    <TextBlock>Enable experimental features / updates</TextBlock>
+                    <TextBlock Text="{mx:Localize SettingsGeneral_ExperimentalUpdates}" />
                 </DockPanel>
                 <DockPanel>
                     <ToggleSwitch IsChecked="{Binding General.ConfirmClose}" />
