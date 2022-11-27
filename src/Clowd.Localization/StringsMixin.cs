@@ -1,12 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Globalization;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Reflection;
 using System.Resources;
-using System.Text.RegularExpressions;
 using System.Threading;
 using ReswPlusLib;
 using ReswPlusLib.Interfaces;
@@ -15,37 +12,38 @@ namespace Clowd.Localization.Resources
 {
     partial class Strings
     {
-        private static ReplaySubject<CultureInfo> _culture;
+        private static CultureInfo _culture;
+        private static ReplaySubject<CultureInfo> _cultureSubject;
         private static IPluralProvider _pluralProvider;
 
         static Strings()
         {
-            _culture = new ReplaySubject<CultureInfo>(1);
-            _culture.Subscribe(v =>
+            _cultureSubject = new ReplaySubject<CultureInfo>(1);
+            _cultureSubject.Subscribe(v =>
             {
                 CultureInfo = v;
+                _culture = v;
                 _pluralProvider = CreatePluralProvider(v.TwoLetterISOLanguageName);
                 Thread.CurrentThread.CurrentUICulture = v;
+                CultureInfo.DefaultThreadCurrentUICulture = v;
             });
 
-            _culture.OnNext(Languages.GetDefaultUiCulture());
+            _cultureSubject.OnNext(Languages.GetDefaultUiCulture());
         }
 
-        internal static void SetCulture(CultureInfo culture) => _culture.OnNext(culture);
+        internal static void SetCulture(CultureInfo culture) => _cultureSubject.OnNext(culture);
 
-        public static IObservable<string> GetCultureChangedObservable() => _culture.Select(c => c.ToString());
+        public static IObservable<CultureInfo> GetCultureChangedObservable() => _cultureSubject;
 
-        public static string GetString(string resourceKey) => ResourceManager.GetString(resourceKey, CultureInfo);
+        public static string GetString(string resourceKey) => ResourceManager.GetString(resourceKey, _culture);
 
         public static string GetPlural(string resourceKey, double value) => GetPluralInternal(resourceKey, value);
-
-        public static IObservable<string> AsObservable(string key) => _culture.Select(c => GetString(key));
 
         private static string GetPluralInternal(string key, double number)
         {
             string getString(string k)
             {
-                return ResourceManager.GetString(k, CultureInfo);
+                return ResourceManager.GetString(k, _culture);
             }
 
             string text = null;

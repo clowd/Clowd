@@ -4,24 +4,29 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
+using Clowd.Localization.Resources;
 using DynamicData.Binding;
 using FluentAvalonia.UI.Controls;
 using PropertyChanged.SourceGenerator;
 using ReactiveUI;
+using ReswPlusLib;
+using RT.Util.ExtensionMethods;
 
 namespace Clowd.Avalonia.ViewModels;
 
-internal partial class AppUpdateViewModel
+internal partial class AppUpdateViewModel : CultureAwareViewModel
 {
     public ReactiveCommand<Unit, Unit> PrimaryActionCommand { get; }
 
     public bool ProgressIndeterminate => Working && ProgressPercent < 1;
 
-    public string Title => Working ? "Checking for updates..." : LocalVersionReady != null ? "Update ready to be installed" : "You're up to date";
+    public string Title => Working ? Strings.SettingsUpdate_CheckingForUpdates : LocalVersionReady != null
+        ? Strings.SettingsUpdate_UpdateAvailableTitle : Strings.SettingsUpdate_UpToDate;
 
-    public string Description => Working ? $"Working {ProgressPercent}%" : LocalVersionReady != null ? $"v{LocalVersionReady} will be installed when you restart" : "No updates are available";
+    public string Description => Working ? Strings.SettingsUpdate_Working.Fmt(ProgressPercent) : LocalVersionReady != null
+        ? Strings.SettingsUpdate_UpdateAvailableDesc.Fmt(LocalVersionReady) : Strings.SettingsUpdate_NoAvailableUpdates;
 
-    public string ActionButtonText => LocalVersionReady != null ? "Restart" : "Check for Updates";
+    public string ActionButtonText => LocalVersionReady != null ? Strings.SettingsUpdate_RestartBtn : Strings.SettingsUpdate_CheckUpdatesBtn;
 
     public Symbol IconSymbol => Working ? Symbol.CloudSync : LocalVersionReady != null ? Symbol.CloudBackupFilled : Symbol.CloudSyncComplete;
 

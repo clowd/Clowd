@@ -156,4 +156,28 @@
   <data name="SettingsNav_Video" xml:space="preserve">
     <value>Video</value>
   </data>
+  <data name="SettingsUpdate_CheckingForUpdates" xml:space="preserve">
+    <value>Checking for updates...</value>
+  </data>
+  <data name="SettingsUpdate_CheckUpdatesBtn" xml:space="preserve">
+    <value>Check for Updates</value>
+  </data>
+  <data name="SettingsUpdate_NoAvailableUpdates" xml:space="preserve">
+    <value>No updates are available</value>
+  </data>
+  <data name="SettingsUpdate_RestartBtn" xml:space="preserve">
+    <value>Restart</value>
+  </data>
+  <data name="SettingsUpdate_UpdateAvailableDesc" xml:space="preserve">
+    <value>v{0} will be installed when you restart</value>
+  </data>
+  <data name="SettingsUpdate_UpdateAvailableTitle" xml:space="preserve">
+    <value>Update ready to be installed</value>
+  </data>
+  <data name="SettingsUpdate_UpToDate" xml:space="preserve">
+    <value>You're up to date</value>
+  </data>
+  <data name="SettingsUpdate_Working" xml:space="preserve">
+    <value>Working {0}%</value>
+  </data>
 </root>

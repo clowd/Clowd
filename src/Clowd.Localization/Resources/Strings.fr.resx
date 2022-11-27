@@ -153,4 +153,7 @@
   <data name="SettingsNav_Video" xml:space="preserve">
     <value>Vidéo</value>
   </data>
+  <data name="SettingsUpdate_RestartBtn" xml:space="preserve">
+    <value>Redémarrer</value>
+  </data>
 </root>
