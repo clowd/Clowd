@@ -52,7 +52,7 @@
             VerticalAlignment="Center"
             Text="Clowd"
             Theme="{DynamicResource CaptionTextBlockStyle}" />
-        <Button
+        <!--<Button
             Grid.Row="1"
             Grid.Column="1"
             Margin="20"
@@ -64,6 +64,6 @@
             <Button.Content>
                 <ui:SymbolIcon Symbol="ColorLineFilled" />
             </Button.Content>
-        </Button>
+        </Button>-->
     </Grid>
 </Window>

@@ -27,17 +27,35 @@ public partial class MainWindow : AppWindow
     public MainWindow()
     {
         SettingsRoot.LoadDefault();
+
+        var faTheme = AvaloniaLocator.Current.GetService<FluentAvaloniaTheme>();
+
         SettingsRoot.Current.General.WhenPropertyChanged(g => g.Language).Subscribe(lang =>
         {
             Languages.SetLangauge(lang.Value);
         });
 
+        SettingsRoot.Current.General.WhenPropertyChanged(g => g.ColorScheme).Subscribe(scheme =>
+        {
+            switch (scheme.Value)
+            {
+                case ColorScheme.System:
+                    faTheme.RequestedTheme = null;
+                    break;
+                case ColorScheme.Dark:
+                    faTheme.RequestedTheme = FluentAvaloniaTheme.DarkModeString;
+                    break;
+                case ColorScheme.Light:
+                    faTheme.RequestedTheme = FluentAvaloniaTheme.LightModeString;
+                    break;
+            }
+        });
+
+
         TitleBar.ExtendsContentIntoTitleBar = true;
         this.Activated += MainWindow_Activated;
         this.Deactivated += MainWindow_Deactivated;
         InitializeComponent();
-        var faTheme = AvaloniaLocator.Current.GetService<FluentAvaloniaTheme>();
-        faTheme.PreferSystemTheme = true;
         IsDarkTheme = faTheme.RequestedTheme == FluentAvaloniaTheme.DarkModeString;
         UpdateBackground(true);
         Width = 900;
@@ -75,9 +93,9 @@ public partial class MainWindow : AppWindow
         }
     }
 
-    private void ThemeSwitchClicked(object sender, RoutedEventArgs e)
-    {
-        var faTheme = AvaloniaLocator.Current.GetService<FluentAvaloniaTheme>();
-        faTheme.RequestedTheme = IsDarkTheme ? FluentAvaloniaTheme.LightModeString : FluentAvaloniaTheme.DarkModeString;
-    }
+    //private void ThemeSwitchClicked(object sender, RoutedEventArgs e)
+    //{
+    //    var faTheme = AvaloniaLocator.Current.GetService<FluentAvaloniaTheme>();
+    //    faTheme.RequestedTheme = IsDarkTheme ? FluentAvaloniaTheme.LightModeString : FluentAvaloniaTheme.DarkModeString;
+    //}
 }
