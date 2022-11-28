@@ -18,6 +18,17 @@ public enum StringsKeys
     SettingsGeneral_ThemeDesc,
     SettingsGeneral_ThemeTitle,
     SettingsGeneral_TransparencyEffects,
+    SettingsHotkey_CaptureMonitor,
+    SettingsHotkey_CaptureRegion,
+    SettingsHotkey_CaptureWindow,
+    SettingsHotkey_DrawOnScreen,
+    SettingsHotkey_InvalidGesture,
+    SettingsHotkey_NotRegistered,
+    SettingsHotkey_Registered,
+    SettingsHotkey_StartStopRec,
+    SettingsHotkey_Unset,
+    SettingsHotkey_UploadClipboard,
+    SettingsHotkey_UploadFile,
     SettingsNav_About,
     SettingsNav_Capture,
     SettingsNav_Editor,
@@ -70,6 +81,17 @@ partial class Strings
     public static string SettingsGeneral_ThemeDesc => GetString(nameof(SettingsGeneral_ThemeDesc));
     public static string SettingsGeneral_ThemeTitle => GetString(nameof(SettingsGeneral_ThemeTitle));
     public static string SettingsGeneral_TransparencyEffects => GetString(nameof(SettingsGeneral_TransparencyEffects));
+    public static string SettingsHotkey_CaptureMonitor => GetString(nameof(SettingsHotkey_CaptureMonitor));
+    public static string SettingsHotkey_CaptureRegion => GetString(nameof(SettingsHotkey_CaptureRegion));
+    public static string SettingsHotkey_CaptureWindow => GetString(nameof(SettingsHotkey_CaptureWindow));
+    public static string SettingsHotkey_DrawOnScreen => GetString(nameof(SettingsHotkey_DrawOnScreen));
+    public static string SettingsHotkey_InvalidGesture => GetString(nameof(SettingsHotkey_InvalidGesture));
+    public static string SettingsHotkey_NotRegistered => GetString(nameof(SettingsHotkey_NotRegistered));
+    public static string SettingsHotkey_Registered => GetString(nameof(SettingsHotkey_Registered));
+    public static string SettingsHotkey_StartStopRec => GetString(nameof(SettingsHotkey_StartStopRec));
+    public static string SettingsHotkey_Unset => GetString(nameof(SettingsHotkey_Unset));
+    public static string SettingsHotkey_UploadClipboard => GetString(nameof(SettingsHotkey_UploadClipboard));
+    public static string SettingsHotkey_UploadFile => GetString(nameof(SettingsHotkey_UploadFile));
     public static string SettingsNav_About => GetString(nameof(SettingsNav_About));
     public static string SettingsNav_Capture => GetString(nameof(SettingsNav_Capture));
     public static string SettingsNav_Editor => GetString(nameof(SettingsNav_Editor));
@@ -105,10 +127,16 @@ partial class Strings
     {
         string keyName = resourceKey switch
         {
-            "ColorScheme" => $"{resourceKey}_E{value}_{((ColorScheme)value).ToString()}",
+            "ColorScheme" => value switch
+            {
+                0 => "ColorScheme_E0_System",
+                1 => "ColorScheme_E1_Dark",
+                2 => "ColorScheme_E2_Light",
+                _ => null
+            },
             _ => null,
         };
         if (keyName is null) return "";
-        return GetString(keyName);
+        return GetString(keyName) ?? "";
     }
 }

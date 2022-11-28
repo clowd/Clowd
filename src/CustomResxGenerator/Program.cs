@@ -93,9 +93,10 @@ try
                   where match.Success
                   select new
                   {
+                      wholekey = key,
                       enumName = match.Groups["enumname"].Value,
                       optionName = match.Groups["optionname"].Value,
-                      optionValue = match.Groups["optionvalue"].Value,
+                      optionValue = int.Parse(match.Groups["optionvalue"].Value),
                   } into v
                   group v by v.enumName into g
                   select g;
@@ -191,12 +192,24 @@ try
     sb.AppendLine("        {");
     foreach (var line in yesEnum)
     {
-        sb.AppendLine($"            \"{line.Key}\" => $\"{{resourceKey}}_E{{value}}_{{(({line.Key})value).ToString()}}\",");
+        sb.AppendLine($"            \"{line.Key}\" => value switch");
+        sb.AppendLine("            {");
+
+        foreach (var option in line)
+        {
+            sb.AppendLine($"                {option.optionValue} => \"{option.wholekey}\",");
+
+        }
+
+        //sb.AppendLine($"            \"{line.Key}\" => $\"{{resourceKey}}_E{{value:D2}}_{{(({line.Key})value).ToString()}}\",");
+        sb.AppendLine("                _ => null");
+        sb.AppendLine("            },");
+
     }
     sb.AppendLine("            _ => null,");
     sb.AppendLine("        };");
     sb.AppendLine("        if (keyName is null) return \"\";");
-    sb.AppendLine("        return GetString(keyName);");
+    sb.AppendLine("        return GetString(keyName) ?? \"\";");
     sb.AppendLine("    }");
 
 

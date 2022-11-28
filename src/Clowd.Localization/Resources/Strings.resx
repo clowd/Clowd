@@ -118,10 +118,10 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="ColorScheme_E0_System" xml:space="preserve">
-    <value>System (ha!)</value>
+    <value>System (eng)</value>
   </data>
   <data name="ColorScheme_E1_Dark" xml:space="preserve">
-    <value>Dark</value>
+    <value>Dark (ha!)</value>
   </data>
   <data name="ColorScheme_E2_Light" xml:space="preserve">
     <value>Light</value>
@@ -167,6 +167,39 @@
   </data>
   <data name="SettingsGeneral_TransparencyEffects" xml:space="preserve">
     <value>Enable window transparency effects</value>
+  </data>
+  <data name="SettingsHotkey_CaptureMonitor" xml:space="preserve">
+    <value>Capture Active Screen</value>
+  </data>
+  <data name="SettingsHotkey_CaptureRegion" xml:space="preserve">
+    <value>Capture Region</value>
+  </data>
+  <data name="SettingsHotkey_CaptureWindow" xml:space="preserve">
+    <value>Capture Active Window</value>
+  </data>
+  <data name="SettingsHotkey_DrawOnScreen" xml:space="preserve">
+    <value>Draw on Screen</value>
+  </data>
+  <data name="SettingsHotkey_InvalidGesture" xml:space="preserve">
+    <value>Invalid key combination</value>
+  </data>
+  <data name="SettingsHotkey_NotRegistered" xml:space="preserve">
+    <value>Not registered</value>
+  </data>
+  <data name="SettingsHotkey_Registered" xml:space="preserve">
+    <value>Registered</value>
+  </data>
+  <data name="SettingsHotkey_StartStopRec" xml:space="preserve">
+    <value>Start / Stop Recording</value>
+  </data>
+  <data name="SettingsHotkey_Unset" xml:space="preserve">
+    <value>Not set</value>
+  </data>
+  <data name="SettingsHotkey_UploadClipboard" xml:space="preserve">
+    <value>Upload from Clipboard</value>
+  </data>
+  <data name="SettingsHotkey_UploadFile" xml:space="preserve">
+    <value>Upload from File</value>
   </data>
   <data name="SettingsNav_About" xml:space="preserve">
     <value>About</value>
