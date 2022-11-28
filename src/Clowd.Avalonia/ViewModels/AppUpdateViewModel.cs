@@ -4,7 +4,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
-using Clowd.Localization.Resources;
+using Clowd.Localization;
 using DynamicData.Binding;
 using FluentAvalonia.UI.Controls;
 using PropertyChanged.SourceGenerator;
@@ -23,8 +23,8 @@ internal partial class AppUpdateViewModel : CultureAwareViewModel
     public string Title => Working ? Strings.SettingsUpdate_CheckingForUpdates : LocalVersionReady != null
         ? Strings.SettingsUpdate_UpdateAvailableTitle : Strings.SettingsUpdate_UpToDate;
 
-    public string Description => Working ? Strings.SettingsUpdate_Working.Fmt(ProgressPercent) : LocalVersionReady != null
-        ? Strings.SettingsUpdate_UpdateAvailableDesc.Fmt(LocalVersionReady) : Strings.SettingsUpdate_NoAvailableUpdates;
+    public string Description => Working ? Strings.SettingsUpdate_Working(ProgressPercent) : LocalVersionReady != null
+        ? Strings.SettingsUpdate_UpdateAvailableDesc(LocalVersionReady) : Strings.SettingsUpdate_NoAvailableUpdates;
 
     public string ActionButtonText => LocalVersionReady != null ? Strings.SettingsUpdate_RestartBtn : Strings.SettingsUpdate_CheckUpdatesBtn;
 

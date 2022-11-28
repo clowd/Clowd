@@ -8,20 +8,21 @@ using System.Threading;
 using ReswPlusLib;
 using ReswPlusLib.Interfaces;
 
-namespace Clowd.Localization.Resources
+namespace Clowd.Localization
 {
-    partial class Strings
+    public static partial class Strings
     {
+        private static ResourceManager _resourceManager;
         private static CultureInfo _culture;
         private static ReplaySubject<CultureInfo> _cultureSubject;
         private static IPluralProvider _pluralProvider;
 
         static Strings()
         {
+            _resourceManager = new ResourceManager("Clowd.Localization.Resources.Strings", typeof(Strings).Assembly);
             _cultureSubject = new ReplaySubject<CultureInfo>(1);
             _cultureSubject.Subscribe(v =>
             {
-                CultureInfo = v;
                 _culture = v;
                 _pluralProvider = CreatePluralProvider(v.TwoLetterISOLanguageName);
                 Thread.CurrentThread.CurrentUICulture = v;
@@ -35,52 +36,53 @@ namespace Clowd.Localization.Resources
 
         public static IObservable<CultureInfo> GetCultureChangedObservable() => _cultureSubject;
 
-        public static string GetString(string resourceKey) => ResourceManager.GetString(resourceKey, _culture);
+        public static string GetString(StringsKeys resourceKey) => GetString(resourceKey.ToString());
+
+        public static string GetString(string resourceKey) => _resourceManager.GetString(resourceKey, _culture);
+
+        public static string GetPlural(StringsPluralKeys resourceKey, double value) => GetPlural(resourceKey.ToString(), value);
 
         public static string GetPlural(string resourceKey, double value) => GetPluralInternal(resourceKey, value);
 
         private static string GetPluralInternal(string key, double number)
         {
-            string getString(string k)
-            {
-                return ResourceManager.GetString(k, _culture);
-            }
-
             string text = null;
-            PluralTypeEnum pluralTypeEnum = _pluralProvider.ComputePlural(number);
             try
             {
+                PluralTypeEnum pluralTypeEnum = _pluralProvider.ComputePlural(number);
                 switch (pluralTypeEnum)
                 {
                     case PluralTypeEnum.ZERO:
-                        text = getString(key + "_Zero");
+                        text = GetString(key + "_Zero");
                         break;
                     case PluralTypeEnum.ONE:
-                        text = getString(key + "_One");
+                        text = GetString(key + "_One");
                         break;
                     case PluralTypeEnum.OTHER:
-                        text = getString(key + "_Other");
+                        text = GetString(key + "_Other");
                         break;
                     case PluralTypeEnum.TWO:
-                        text = getString(key + "_Two");
+                        text = GetString(key + "_Two");
                         break;
                     case PluralTypeEnum.FEW:
-                        text = getString(key + "_Few");
+                        text = GetString(key + "_Few");
                         break;
                     case PluralTypeEnum.MANY:
-                        text = getString(key + "_Many");
+                        text = GetString(key + "_Many");
                         break;
                 }
-
-                if (String.IsNullOrEmpty(text))
-                    text = getString(key + "_Other");
-
-                if (String.IsNullOrEmpty(text))
-                    text = getString(key);
             }
-            catch
+            catch { }
+
+            try
             {
+                if (String.IsNullOrEmpty(text))
+                    text = GetString(key + "_Other");
+
+                if (String.IsNullOrEmpty(text))
+                    text = GetString(key);
             }
+            catch { }
 
             return String.Format(text ?? "", number);
         }

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls.Documents;
 using Avalonia.Utilities;
 using Clowd.Avalonia.Reactive;
-using Clowd.Localization.Resources;
+using Clowd.Localization;
 using ReactiveUI;
 
 namespace Clowd.Avalonia.ViewModels

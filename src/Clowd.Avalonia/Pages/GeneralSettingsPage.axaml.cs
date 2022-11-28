@@ -1,6 +1,4 @@
 ﻿using Avalonia.Controls;
-using Clowd.Localization;
-using Clowd.Localization.Resources;
 
 namespace Clowd.Avalonia.Pages
 {

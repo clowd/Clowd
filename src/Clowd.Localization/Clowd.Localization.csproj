@@ -1,31 +1,25 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk" InitialTargets="GenResx">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Update="**/*.resx">
-      <UseVocaDbResManager>false</UseVocaDbResManager>
-      <!--<GenerateResource>false</GenerateResource>-->
-      <PublicClass>true</PublicClass>
-      <PartialClass>true</PartialClass>
-      <StaticClass>true</StaticClass>
-      <StaticMembers>true</StaticMembers>
-    </EmbeddedResource>
+    <EmbeddedResource Update="**/*.resx" />
+    <None Include="Strings.g.cs" DependentUpon="Strings.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Reactive" Version="5.0.0" />
     <PackageReference Include="ReswPlusLib" Version="2.0.0" />
-    <PackageReference Include="VocaDb.ResXFileCodeGenerator" Version="3.2.1">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Config\Clowd.Config.csproj" />
   </ItemGroup>
+
+  <Target Name="GenResx">
+    <Exec Command="dotnet run --project &quot;..\CustomResxGenerator\CustomResxGenerator.csproj&quot; Strings Resources\Strings.resx Strings.g.cs" ContinueOnError="false" WorkingDirectory="$(MSBuildThisFileDirectory)" />
+  </Target>
 
 </Project>

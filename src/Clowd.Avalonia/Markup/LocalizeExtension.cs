@@ -3,7 +3,7 @@ using Avalonia;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Markup.Xaml;
-using Clowd.Localization.Resources;
+using Clowd.Localization;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -11,11 +11,9 @@ namespace Clowd.Avalonia.Markup
 {
     public class LocalizeExtension : MarkupExtension
     {
-        public string Key { get; set; }
+        public StringsKeys Key { get; set; }
 
-        public string ValuePath { get; set; }
-
-        public LocalizeExtension(string key)
+        public LocalizeExtension(StringsKeys key)
         {
             Key = key;
         }
@@ -24,40 +22,56 @@ namespace Clowd.Avalonia.Markup
         {
             var m = new MultiBinding();
             m.Bindings.Add(Strings.GetCultureChangedObservable().ToBinding());
-
-            if (!String.IsNullOrEmpty(ValuePath))
-            {
-                m.Bindings.Add(new Binding(ValuePath) { Mode = BindingMode.OneWay });
-            }
-
             m.Converter = new MultiPluralValueConverter();
-            m.ConverterParameter = Key;
+            m.ConverterParameter = Key.ToString();
             return m;
         }
+    }
 
-        private class MultiPluralValueConverter : IMultiValueConverter
+    public class LocalizePluralExtension : MarkupExtension
+    {
+        public StringsPluralKeys Key { get; set; }
+
+        public string ValuePath { get; set; }
+
+        public LocalizePluralExtension(StringsPluralKeys key)
         {
-            public object Convert(IList<object> values, Type targetType, object parameter, CultureInfo culture)
-            {
-                try
-                {
-                    var key = (string)parameter;
-                    if (values.Count > 1)
-                    {
-                        var cultu = values[0] as string;
-                        var value = System.Convert.ToDouble(values[1]);
-                        return Strings.GetPlural(key, value);
-                    }
-                    else
-                    {
-                        return Strings.GetString(key);
-                    }
-                }
-                catch
-                { }
+            Key = key;
+        }
 
-                return BindingOperations.DoNothing;
+        public override object ProvideValue(IServiceProvider serviceProvider)
+        {
+            var m = new MultiBinding();
+            m.Bindings.Add(Strings.GetCultureChangedObservable().ToBinding());
+            m.Bindings.Add(new Binding(ValuePath) { Mode = BindingMode.OneWay });
+            m.Converter = new MultiPluralValueConverter();
+            m.ConverterParameter = Key.ToString();
+            return m;
+        }
+    }
+
+    public class MultiPluralValueConverter : IMultiValueConverter
+    {
+        public object Convert(IList<object> values, Type targetType, object parameter, CultureInfo culture)
+        {
+            try
+            {
+                var key = (string)parameter;
+                if (values.Count > 1)
+                {
+                    var cultu = values[0] as string;
+                    var value = System.Convert.ToDouble(values[1]);
+                    return Strings.GetPlural(key, value);
+                }
+                else
+                {
+                    return Strings.GetString(key);
+                }
             }
+            catch
+            { }
+
+            return BindingOperations.DoNothing;
         }
     }
 }
