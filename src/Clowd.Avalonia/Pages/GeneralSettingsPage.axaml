@@ -74,15 +74,23 @@
                     <TextBlock Text="{mx:Localize SettingsGeneral_ExperimentalUpdates}" />
                 </DockPanel>
                 <DockPanel>
+                    <ToggleSwitch IsChecked="{Binding General.RegisterExplorerContextMenu}" />
+                    <TextBlock Text="{mx:Localize SettingsGeneral_AddToExplorer}" />
+                </DockPanel>
+                <DockPanel>
+                    <ToggleSwitch IsChecked="{Binding General.RegisterAutoStart}" />
+                    <TextBlock Text="{mx:Localize SettingsGeneral_StartWithWindows}" />
+                </DockPanel>
+                <DockPanel>
                     <ToggleSwitch IsChecked="{Binding General.ConfirmClose}" />
-                    <TextBlock>Ask/confirm before closing Clowd</TextBlock>
+                    <TextBlock Text="{mx:Localize SettingsGeneral_AskToClose}" />
                 </DockPanel>
             </StackPanel>
         </controls:ExpandingSettingsCard>
 
         <controls:ExpandingSettingsCard
-            Title="Theme"
-            Description="Accent color, transparency effects, color scheme"
+            Title="{mx:Localize SettingsGeneral_ThemeTitle}"
+            Description="{mx:Localize SettingsGeneral_ThemeDesc}"
             Icon="ColorBackground">
             <StackPanel>
                 <DockPanel>
@@ -91,27 +99,11 @@
                         <ComboBoxItem>Dark</ComboBoxItem>
                         <ComboBoxItem>Light</ComboBoxItem>
                     </ComboBox>
-                    <TextBlock>Choose your color scheme</TextBlock>
+                    <TextBlock Text="{mx:Localize SettingsGeneral_ColorScheme}" />
                 </DockPanel>
                 <DockPanel>
                     <ToggleSwitch />
-                    <TextBlock>Enable window transparency effects</TextBlock>
-                </DockPanel>
-            </StackPanel>
-        </controls:ExpandingSettingsCard>
-
-        <controls:ExpandingSettingsCard
-            Title="Windows Shell"
-            Description="Explorer context menu, start with Windows"
-            Icon="OpenFolder">
-            <StackPanel>
-                <DockPanel>
-                    <ToggleSwitch IsChecked="{Binding General.RegisterExplorerContextMenu}" />
-                    <TextBlock>Add context menu to Explorer</TextBlock>
-                </DockPanel>
-                <DockPanel>
-                    <ToggleSwitch IsChecked="{Binding General.RegisterAutoStart}" />
-                    <TextBlock>Start Clowd when you log in to Windows</TextBlock>
+                    <TextBlock Text="{mx:Localize SettingsGeneral_TransparencyEffects}" />
                 </DockPanel>
             </StackPanel>
         </controls:ExpandingSettingsCard>

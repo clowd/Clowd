@@ -123,6 +123,9 @@
   <data name="HazCookies_Other" xml:space="preserve">
     <value>You have {0} cookies!!!!</value>
   </data>
+  <data name="SettingsGeneral_AddToExplorer" xml:space="preserve">
+    <value>Add context menu to Explorer</value>
+  </data>
   <data name="SettingsGeneral_AskToClose" xml:space="preserve">
     <value>Ask/confirm before closing Clowd</value>
   </data>
@@ -143,6 +146,9 @@
   </data>
   <data name="SettingsGeneral_LanguageHelp" xml:space="preserve">
     <value>Speak a language not listed? Help us translate!</value>
+  </data>
+  <data name="SettingsGeneral_StartWithWindows" xml:space="preserve">
+    <value>Start when you log in to Windows</value>
   </data>
   <data name="SettingsGeneral_ThemeDesc" xml:space="preserve">
     <value>Accent color, transparency effects, color scheme</value>

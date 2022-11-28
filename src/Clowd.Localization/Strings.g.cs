@@ -4,6 +4,7 @@ namespace Clowd.Localization;
 
 public enum StringsKeys
 {
+    SettingsGeneral_AddToExplorer,
     SettingsGeneral_AskToClose,
     SettingsGeneral_BehaviorDesc,
     SettingsGeneral_BehaviorTitle,
@@ -11,6 +12,7 @@ public enum StringsKeys
     SettingsGeneral_ExperimentalUpdates,
     SettingsGeneral_Language,
     SettingsGeneral_LanguageHelp,
+    SettingsGeneral_StartWithWindows,
     SettingsGeneral_ThemeDesc,
     SettingsGeneral_ThemeTitle,
     SettingsGeneral_TransparencyEffects,
@@ -42,6 +44,7 @@ public enum StringsPluralKeys
 
 partial class Strings
 {
+    public static string SettingsGeneral_AddToExplorer => GetString(nameof(SettingsGeneral_AddToExplorer));
     public static string SettingsGeneral_AskToClose => GetString(nameof(SettingsGeneral_AskToClose));
     public static string SettingsGeneral_BehaviorDesc => GetString(nameof(SettingsGeneral_BehaviorDesc));
     public static string SettingsGeneral_BehaviorTitle => GetString(nameof(SettingsGeneral_BehaviorTitle));
@@ -49,6 +52,7 @@ partial class Strings
     public static string SettingsGeneral_ExperimentalUpdates => GetString(nameof(SettingsGeneral_ExperimentalUpdates));
     public static string SettingsGeneral_Language => GetString(nameof(SettingsGeneral_Language));
     public static string SettingsGeneral_LanguageHelp => GetString(nameof(SettingsGeneral_LanguageHelp));
+    public static string SettingsGeneral_StartWithWindows => GetString(nameof(SettingsGeneral_StartWithWindows));
     public static string SettingsGeneral_ThemeDesc => GetString(nameof(SettingsGeneral_ThemeDesc));
     public static string SettingsGeneral_ThemeTitle => GetString(nameof(SettingsGeneral_ThemeTitle));
     public static string SettingsGeneral_TransparencyEffects => GetString(nameof(SettingsGeneral_TransparencyEffects));
