@@ -5,8 +5,6 @@ using System.Reactive.Subjects;
 using System.Reflection;
 using System.Resources;
 using System.Threading;
-using ReswPlusLib;
-using ReswPlusLib.Interfaces;
 
 namespace Clowd.Localization
 {
@@ -24,7 +22,7 @@ namespace Clowd.Localization
             _cultureSubject.Subscribe(v =>
             {
                 _culture = v;
-                _pluralProvider = CreatePluralProvider(v.TwoLetterISOLanguageName);
+                _pluralProvider = PluralHelper.GetPluralChooser(v.TwoLetterISOLanguageName);
                 Thread.CurrentThread.CurrentUICulture = v;
                 CultureInfo.DefaultThreadCurrentUICulture = v;
             });
@@ -85,13 +83,6 @@ namespace Clowd.Localization
             catch { }
 
             return String.Format(text ?? "", number);
-        }
-
-        private static IPluralProvider CreatePluralProvider(string twoLetterIsoCultureName)
-        {
-            Type t = typeof(ResourceLoaderExtension).Assembly.GetType("ReswPlusLib.Utils.PluralHelper");
-            var pluralChooserMth = t.GetMethod("GetPluralChooser", BindingFlags.Static | BindingFlags.Public);
-            return pluralChooserMth.Invoke(null, new object[] { twoLetterIsoCultureName }) as IPluralProvider;
         }
     }
 }
