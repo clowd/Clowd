@@ -37,6 +37,7 @@ namespace Clowd.Localization
             if (String.IsNullOrWhiteSpace(info.CultureName))
             {
                 Strings.SetCulture(_defaultUiCulture);
+                return;
             }
 
             try

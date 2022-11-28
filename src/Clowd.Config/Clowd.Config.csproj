@@ -11,4 +11,8 @@
     <PackageReference Include="RT.Serialization.Xml" Version="2.0.1719" />
     <PackageReference Include="RT.Util.Core" Version="2.0.1719" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Clowd.Localization\Clowd.Localization.csproj" />
+  </ItemGroup>
 </Project>

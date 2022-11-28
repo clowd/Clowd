@@ -21,19 +21,30 @@ try
 
     StringBuilder sb = new StringBuilder();
 
-    sb.AppendLine("using System;");
+    sb.AppendLine("/////////////////////////////////");
+    sb.AppendLine("// THIS FILE IS AUTO-GENERATED //");
+    sb.AppendLine("/////////////////////////////////");
+
+    //sb.AppendLine();
+    //sb.AppendLine("using System;");
+    //sb.AppendLine("using Clowd.Config;");
     //sb.AppendLine("using System.Globalization;");
     //sb.AppendLine("using System.Resources;");
 
     sb.AppendLine();
     sb.AppendLine("namespace Clowd.Localization;");
-    
+
     sb.AppendLine();
     sb.AppendLine($"public enum {name}Keys");
     sb.AppendLine("{");
 
-    var nonPlural = from l in ReadResxFile(resxFile)
+    var resxLines = ReadResxFile(resxFile).ToArray();
+
+    Regex enumRegex = new Regex(@"^(?<enumname>\w+)_E(?<optionvalue>\d+)_(?<optionname>\w+)$", RegexOptions.Compiled);
+
+    var nonPlural = from l in resxLines
                     let key = l.key
+                    where !enumRegex.IsMatch(key)
                     where !key.EndsWith("_Zero", StringComparison.InvariantCulture)
                     where !key.EndsWith("_One", StringComparison.InvariantCulture)
                     where !key.EndsWith("_Other", StringComparison.InvariantCulture)
@@ -54,15 +65,16 @@ try
     sb.AppendLine($"public enum {name}PluralKeys");
     sb.AppendLine("{");
 
-    var yesPlural = from l in ReadResxFile(resxFile)
+    var yesPlural = from l in resxLines
                     let key = l.key
+                    where !enumRegex.IsMatch(key)
                     where key.EndsWith("_Zero", StringComparison.InvariantCulture)
                        || key.EndsWith("_One", StringComparison.InvariantCulture)
                        || key.EndsWith("_Other", StringComparison.InvariantCulture)
                        || key.EndsWith("_Two", StringComparison.InvariantCulture)
                        || key.EndsWith("_Few", StringComparison.InvariantCulture)
                        || key.EndsWith("_Many", StringComparison.InvariantCulture)
-                    let idx = key.IndexOf('_')
+                    let idx = key.LastIndexOf('_')
                     let trimmed = key.Substring(0, idx)
                     group l by trimmed into g
                     select new { key = g.Key, g.FirstOrDefault(z => z.key.EndsWith("Other")).value };
@@ -73,8 +85,43 @@ try
     }
 
     sb.AppendLine("}");
-
     sb.AppendLine();
+
+    var yesEnum = from l in resxLines
+                  let key = l.key
+                  let match = enumRegex.Match(key)
+                  where match.Success
+                  select new
+                  {
+                      enumName = match.Groups["enumname"].Value,
+                      optionName = match.Groups["optionname"].Value,
+                      optionValue = match.Groups["optionvalue"].Value,
+                  } into v
+                  group v by v.enumName into g
+                  select g;
+
+    sb.AppendLine($"public enum {name}EnumKeys");
+    sb.AppendLine("{");
+
+    foreach (var line in yesEnum)
+    {
+        sb.AppendLine($"    {line.Key},");
+    }
+
+    sb.AppendLine("}");
+    sb.AppendLine();
+
+    foreach (var line in yesEnum)
+    {
+        sb.AppendLine($"public enum {line.Key}");
+        sb.AppendLine("{");
+        foreach (var gv in line)
+        {
+            sb.AppendLine($"    {gv.optionName} = {gv.optionValue},");
+        }
+        sb.AppendLine("}");
+        sb.AppendLine();
+    }
 
     sb.AppendLine($"partial class {name}");
     sb.AppendLine("{");
@@ -116,6 +163,29 @@ try
             sb.AppendLine($"    public static string {line.key}(double PV) => GetPlural(nameof({line.key}), PV);");
         }
     }
+
+    foreach (var line in yesEnum)
+    {
+        var values = String.Join(", ", line.Select(g => $"{line.Key}.{g.optionName}"));
+        sb.AppendLine($"    public static {line.Key}[] {line.Key}EnumValues => new {line.Key}[] {{ {values} }};");
+    }
+
+    sb.AppendLine("    public static string GetEnum(string resourceKey, int value)");
+    sb.AppendLine("    {");
+    sb.AppendLine("        string keyName = resourceKey switch");
+    sb.AppendLine("        {");
+
+    foreach (var line in yesEnum)
+    {
+        sb.AppendLine($"            \"{line.Key}\" => $\"{{resourceKey}}_E{{value}}_{{(({line.Key})value).ToString()}}\",");
+    }
+
+    sb.AppendLine("            _ => null,");
+    sb.AppendLine("        };");
+    sb.AppendLine("        if (keyName is null) return \"\";");
+    sb.AppendLine("        return GetString(keyName);");
+    sb.AppendLine("    }");
+
 
     sb.AppendLine("}");
 

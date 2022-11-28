@@ -63,6 +63,12 @@ public class SettingsGeneral : CategoryBase
         set => Set(ref _language, value);
     }
 
+    public ColorScheme ColorScheme
+    {
+        get => _colorScheme;
+        set => Set(ref _colorScheme, value);
+    }
+
     private string _clientId = Guid.NewGuid().ToString().ToLower();
     private string _lastUploadPath;
     private string _lastSavePath;
@@ -71,4 +77,5 @@ public class SettingsGeneral : CategoryBase
     private bool _registerExplorerContextMenu = true;
     private bool _registerAutoStart = true;
     private LanguageInfo _language = LanguageInfo.GetDefault();
+    private ColorScheme _colorScheme;
 }

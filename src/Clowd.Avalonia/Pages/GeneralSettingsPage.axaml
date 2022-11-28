@@ -21,28 +21,30 @@
         Orientation="Vertical"
         Spacing="4">
 
-        <controls:SettingsCard
-            Title="{Binding Title}"
-            x:DataType="models:AppUpdateViewModel"
-            Description="{Binding Description}"
-            Icon="{Binding IconSymbol}">
-            <controls:SettingsCard.DataContext>
+        <Border>
+            <Border.DataContext>
                 <models:AppUpdateViewModel />
-            </controls:SettingsCard.DataContext>
-            <controls:SettingsCard.BottomContent>
-                <ProgressBar
-                    Margin="0,10,0,0"
-                    IsIndeterminate="{Binding ProgressIndeterminate}"
-                    IsVisible="{Binding Working}"
-                    Value="{Binding ProgressPercent}" />
-            </controls:SettingsCard.BottomContent>
-            <controls:SettingsCard.ActionContent>
-                <Button
-                    Classes="accent"
-                    Command="{Binding PrimaryActionCommand}"
-                    Content="{Binding ActionButtonText}" />
-            </controls:SettingsCard.ActionContent>
-        </controls:SettingsCard>
+            </Border.DataContext>
+            <controls:SettingsCard
+                Title="{Binding Title}"
+                x:DataType="models:AppUpdateViewModel"
+                Description="{Binding Description}"
+                Icon="{Binding IconSymbol}">
+                <controls:SettingsCard.BottomContent>
+                    <ProgressBar
+                        Margin="0,10,0,0"
+                        IsIndeterminate="{Binding ProgressIndeterminate}"
+                        IsVisible="{Binding Working}"
+                        Value="{Binding ProgressPercent}" />
+                </controls:SettingsCard.BottomContent>
+                <controls:SettingsCard.ActionContent>
+                    <Button
+                        Classes="accent"
+                        Command="{Binding PrimaryActionCommand}"
+                        Content="{Binding ActionButtonText}" />
+                </controls:SettingsCard.ActionContent>
+            </controls:SettingsCard>
+        </Border>
 
         <controls:ExpandingSettingsCard
             Title="{mx:Localize SettingsGeneral_BehaviorTitle}"
@@ -94,10 +96,12 @@
             Icon="ColorBackground">
             <StackPanel>
                 <DockPanel>
-                    <ComboBox SelectedIndex="0">
-                        <ComboBoxItem>System</ComboBoxItem>
-                        <ComboBoxItem>Dark</ComboBoxItem>
-                        <ComboBoxItem>Light</ComboBoxItem>
+                    <ComboBox Items="{x:Static l10n:Strings.ColorSchemeEnumValues}" SelectedItem="{Binding General.ColorScheme}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{mx:LocalizeEnum ColorScheme}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
                     </ComboBox>
                     <TextBlock Text="{mx:Localize SettingsGeneral_ColorScheme}" />
                 </DockPanel>

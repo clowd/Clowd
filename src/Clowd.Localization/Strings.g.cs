@@ -1,4 +1,6 @@
-using System;
+/////////////////////////////////
+// THIS FILE IS AUTO-GENERATED //
+/////////////////////////////////
 
 namespace Clowd.Localization;
 
@@ -42,6 +44,18 @@ public enum StringsPluralKeys
     HazCookies,
 }
 
+public enum StringsEnumKeys
+{
+    ColorScheme,
+}
+
+public enum ColorScheme
+{
+    System = 0,
+    Dark = 1,
+    Light = 2,
+}
+
 partial class Strings
 {
     public static string SettingsGeneral_AddToExplorer => GetString(nameof(SettingsGeneral_AddToExplorer));
@@ -76,4 +90,15 @@ partial class Strings
     public static string SettingsUpdate_UpToDate => GetString(nameof(SettingsUpdate_UpToDate));
     public static string SettingsUpdate_Working(object A0) => String.Format(GetString(nameof(SettingsUpdate_Working)), A0);
     public static string HazCookies(double PV) => GetPlural(nameof(HazCookies), PV);
+    public static ColorScheme[] ColorSchemeEnumValues => new ColorScheme[] { ColorScheme.System, ColorScheme.Dark, ColorScheme.Light };
+    public static string GetEnum(string resourceKey, int value)
+    {
+        string keyName = resourceKey switch
+        {
+            "ColorScheme" => $"{resourceKey}_E{value}_{((ColorScheme)value).ToString()}",
+            _ => null,
+        };
+        if (keyName is null) return "";
+        return GetString(keyName);
+    }
 }

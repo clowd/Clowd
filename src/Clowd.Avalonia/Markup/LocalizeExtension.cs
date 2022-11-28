@@ -23,7 +23,7 @@ namespace Clowd.Avalonia.Markup
             var m = new MultiBinding();
             m.Bindings.Add(Strings.GetCultureChangedObservable().ToBinding());
             m.Converter = new MultiPluralValueConverter();
-            m.ConverterParameter = Key.ToString();
+            m.ConverterParameter = Key;
             return m;
         }
     }
@@ -45,7 +45,38 @@ namespace Clowd.Avalonia.Markup
             m.Bindings.Add(Strings.GetCultureChangedObservable().ToBinding());
             m.Bindings.Add(new Binding(ValuePath) { Mode = BindingMode.OneWay });
             m.Converter = new MultiPluralValueConverter();
-            m.ConverterParameter = Key.ToString();
+            m.ConverterParameter = Key;
+            return m;
+        }
+    }
+
+    public class LocalizeEnumExtension : MarkupExtension
+    {
+        public StringsEnumKeys Key { get; set; }
+
+        public string ValuePath { get; set; }
+
+        public LocalizeEnumExtension(StringsEnumKeys key)
+        {
+            Key = key;
+        }
+
+        public override object ProvideValue(IServiceProvider serviceProvider)
+        {
+            var m = new MultiBinding();
+            m.Bindings.Add(Strings.GetCultureChangedObservable().ToBinding());
+
+            if (String.IsNullOrEmpty(ValuePath))
+            {
+                m.Bindings.Add(new Binding() { Mode = BindingMode.OneWay });
+            }
+            else
+            {
+                m.Bindings.Add(new Binding(ValuePath) { Mode = BindingMode.OneWay });
+            }
+
+            m.Converter = new MultiPluralValueConverter();
+            m.ConverterParameter = Key;
             return m;
         }
     }
@@ -56,16 +87,25 @@ namespace Clowd.Avalonia.Markup
         {
             try
             {
-                var key = (string)parameter;
-                if (values.Count > 1)
+                if (parameter is StringsEnumKeys ek)
                 {
-                    var cultu = values[0] as string;
-                    var value = System.Convert.ToDouble(values[1]);
-                    return Strings.GetPlural(key, value);
+                    if (values.Count > 1 && values[1] is not UnsetValueType)
+                    {
+                        var value = System.Convert.ToInt32(values[1]);
+                        return Strings.GetEnum(ek, value);
+                    }
                 }
-                else
+                else if (parameter is StringsPluralKeys ep)
                 {
-                    return Strings.GetString(key);
+                    if (values.Count > 1 && values[1] is not UnsetValueType)
+                    {
+                        var value = System.Convert.ToDouble(values[1]);
+                        return Strings.GetPlural(ep, value);
+                    }
+                }
+                else if (parameter is StringsKeys sk)
+                {
+                    return Strings.GetString(sk);
                 }
             }
             catch
