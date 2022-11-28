@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using static Vanara.PInvoke.User32;
 using static Vanara.PInvoke.Kernel32;
+using Clowd.Config;
 
 namespace Clowd.PlatformUtil.Windows
 {
@@ -75,6 +76,11 @@ namespace Clowd.PlatformUtil.Windows
             long now = GetTickCount();
             long idleTime = now - info.dwTime;
             return idleTime > 0 ? TimeSpan.FromMilliseconds(idleTime) : TimeSpan.FromMilliseconds(1);
+        }
+
+        public override IDisposable RegisterHotKey(GestureKey key, GestureModifierKeys modifiers, Action execute)
+        {
+            return User32Hotkey.Create(key, modifiers, execute);
         }
 
         public override IWindow GetWindowFromHandle(nint handle)

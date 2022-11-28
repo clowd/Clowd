@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Clowd.Config;
 
 namespace Clowd.PlatformUtil
 {
@@ -39,10 +40,13 @@ namespace Clowd.PlatformUtil
         public abstract IScreen GetScreenFromPoint(ScreenPoint pt);
         public abstract IScreen GetScreenFromRect(ScreenRect rect);
 
-        // window / general
+        // window
         public abstract IWindow GetWindowFromHandle(nint handle);
         public abstract IWindow GetForegroundWindow();
+
+        // general
         public abstract TimeSpan GetSystemIdleTime();
+        public abstract IDisposable RegisterHotKey(GestureKey key, GestureModifierKeys modifiers, Action execute);
 
         // screen capture
         public abstract IBitmap CaptureDesktop(bool drawCursor);
