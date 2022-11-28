@@ -91,6 +91,16 @@ partial class Strings
     public static string SettingsUpdate_Working(object A0) => String.Format(GetString(nameof(SettingsUpdate_Working)), A0);
     public static string HazCookies(double PV) => GetPlural(nameof(HazCookies), PV);
     public static ColorScheme[] ColorSchemeEnumValues => new ColorScheme[] { ColorScheme.System, ColorScheme.Dark, ColorScheme.Light };
+    public static System.Collections.IEnumerable GetEnumValues(StringsEnumKeys resourceKey) => GetEnumValues(resourceKey.ToString());
+    public static System.Collections.IEnumerable GetEnumValues(string resourceKey)
+    {
+        return resourceKey switch
+        {
+            "ColorScheme" => ColorSchemeEnumValues,
+            _ => new object[0],
+        };
+    }
+    public static string GetEnum(StringsEnumKeys resourceKey, int value) => GetEnum(resourceKey.ToString(), value);
     public static string GetEnum(string resourceKey, int value)
     {
         string keyName = resourceKey switch

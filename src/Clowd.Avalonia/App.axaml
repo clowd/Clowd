@@ -10,13 +10,20 @@
                 <ResourceInclude Source="/Styles/FluentAvaloniaOverrides.axaml" />
                 <ResourceInclude Source="/Styles/SettingsCard.axaml" />
             </ResourceDictionary.MergedDictionaries>
+            <ControlTheme
+                x:Key="{x:Type controls:LocalizedEnumComboBox}"
+                BasedOn="{StaticResource {x:Type ComboBox}}"
+                TargetType="controls:LocalizedEnumComboBox" />
         </ResourceDictionary>
     </Application.Resources>
     <Application.Styles>
         <sty:FluentAvaloniaTheme />
         <StyleInclude Source="avares://FluentAvalonia.UI.Windowing/Styles/FAWindowingStyles.axaml" />
         <Style Selector="ComboBox">
-            <Setter Property="MinWidth" Value="130" />
+            <Setter Property="MinWidth" Value="140" />
+        </Style>
+        <Style Selector="controls|LocalizedEnumComboBox">
+            <Setter Property="MinWidth" Value="140" />
         </Style>
     </Application.Styles>
     <!--<TrayIcon.Icons>

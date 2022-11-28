@@ -42,8 +42,6 @@ namespace Clowd.Localization
 
         public static string GetPlural(string resourceKey, double value) => GetPluralInternal(resourceKey, value);
 
-        public static string GetEnum(StringsEnumKeys resourceKey, int value) => GetEnum(resourceKey.ToString(), value);
-
         private static string GetPluralInternal(string key, double number)
         {
             string text = null;

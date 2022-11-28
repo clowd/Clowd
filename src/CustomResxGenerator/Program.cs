@@ -170,16 +170,29 @@ try
         sb.AppendLine($"    public static {line.Key}[] {line.Key}EnumValues => new {line.Key}[] {{ {values} }};");
     }
 
+    sb.AppendLine($"    public static System.Collections.IEnumerable GetEnumValues({name}EnumKeys resourceKey) => GetEnumValues(resourceKey.ToString());");
+    sb.AppendLine("    public static System.Collections.IEnumerable GetEnumValues(string resourceKey)");
+    sb.AppendLine("    {");
+    sb.AppendLine("        return resourceKey switch");
+    sb.AppendLine("        {");
+    foreach (var line in yesEnum)
+    {
+        sb.AppendLine($"            \"{line.Key}\" => {line.Key}EnumValues,");
+    }
+    sb.AppendLine("            _ => new object[0],");
+    sb.AppendLine("        };");
+    sb.AppendLine("    }");
+
+
+    sb.AppendLine($"    public static string GetEnum({name}EnumKeys resourceKey, int value) => GetEnum(resourceKey.ToString(), value);");
     sb.AppendLine("    public static string GetEnum(string resourceKey, int value)");
     sb.AppendLine("    {");
     sb.AppendLine("        string keyName = resourceKey switch");
     sb.AppendLine("        {");
-
     foreach (var line in yesEnum)
     {
         sb.AppendLine($"            \"{line.Key}\" => $\"{{resourceKey}}_E{{value}}_{{(({line.Key})value).ToString()}}\",");
     }
-
     sb.AppendLine("            _ => null,");
     sb.AppendLine("        };");
     sb.AppendLine("        if (keyName is null) return \"\";");

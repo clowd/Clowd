@@ -96,13 +96,7 @@
             Icon="ColorBackground">
             <StackPanel>
                 <DockPanel>
-                    <ComboBox Items="{x:Static l10n:Strings.ColorSchemeEnumValues}" SelectedItem="{Binding General.ColorScheme}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{mx:LocalizeEnum ColorScheme}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
+                    <controls:LocalizedEnumComboBox ResourceKey="ColorScheme" SelectedItem="{Binding General.ColorScheme}" />
                     <TextBlock Text="{mx:Localize SettingsGeneral_ColorScheme}" />
                 </DockPanel>
                 <DockPanel>
