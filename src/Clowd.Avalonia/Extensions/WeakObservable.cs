@@ -5,7 +5,7 @@ using System.Reactive.Disposables;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Clowd.Avalonia.Reactive;
+namespace Clowd.Avalonia.Extensions;
 
 internal class WeakObservable<T> : IObservable<T>
 {
@@ -17,7 +17,7 @@ internal class WeakObservable<T> : IObservable<T>
     /// Initializes a new instance of the <see cref="WeakObservable{T}"/> class.
     /// </summary>
     /// <param name="source">The source.</param>
-    /// <exception cref="System.ArgumentNullException">source</exception>
+    /// <exception cref="ArgumentNullException">source</exception>
     public WeakObservable(IObservable<T> source)
     {
         #region Validation
@@ -41,11 +41,11 @@ internal class WeakObservable<T> : IObservable<T>
     /// <returns></returns>
     public IDisposable Subscribe(IObserver<T> observer)
     {
-        IObservable<T> source = _source;
+        var source = _source;
         if (source == null)
             return Disposable.Empty;
         var weakObserver = new WeakObserver<T>(observer);
-        IDisposable disp = source.Subscribe(weakObserver);
+        var disp = source.Subscribe(weakObserver);
         return disp;
     }
 
@@ -62,7 +62,7 @@ internal class WeakObserver<T> : IObserver<T>
     /// Initializes a new instance of the <see cref="WeakObserver{T}"/> class.
     /// </summary>
     /// <param name="target">The target.</param>
-    /// <exception cref="System.ArgumentNullException">target</exception>
+    /// <exception cref="ArgumentNullException">target</exception>
     public WeakObserver(IObserver<T> target)
     {
         #region Validation
@@ -107,7 +107,7 @@ internal class WeakObserver<T> : IObserver<T>
     /// </summary>
     public void OnCompleted()
     {
-        IObserver<T> target = Target;
+        var target = Target;
         if (target == null)
             return;
 
@@ -124,7 +124,7 @@ internal class WeakObserver<T> : IObserver<T>
     /// <param name="error">An object that provides additional information about the error.</param>
     public void OnError(Exception error)
     {
-        IObserver<T> target = Target;
+        var target = Target;
         if (target == null)
             return;
 
@@ -141,7 +141,7 @@ internal class WeakObserver<T> : IObserver<T>
     /// <param name="value">The current notification information.</param>
     public void OnNext(T value)
     {
-        IObserver<T> target = Target;
+        var target = Target;
         if (target == null)
             return;
 

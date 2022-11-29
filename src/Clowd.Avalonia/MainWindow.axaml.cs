@@ -26,8 +26,6 @@ public partial class MainWindow : AppWindow
 
     public MainWindow()
     {
-        SettingsRoot.LoadDefault();
-
         var faTheme = AvaloniaLocator.Current.GetService<FluentAvaloniaTheme>();
 
         SettingsRoot.Current.General.WhenPropertyChanged(g => g.Language).Subscribe(lang =>

@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Config\Clowd.Config.csproj" />
+    <ProjectReference Include="..\Clowd.PlatformUtil\Clowd.PlatformUtil.csproj" />
   </ItemGroup>
 
 </Project>

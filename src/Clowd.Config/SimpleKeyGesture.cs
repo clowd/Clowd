@@ -2,6 +2,8 @@
 
 public class SimpleKeyGesture : IEquatable<SimpleKeyGesture>
 {
+    public bool IsEmpty => Key == GestureKey.None;
+
     public GestureKey Key { get; }
 
     public GestureModifierKeys Modifiers { get; }

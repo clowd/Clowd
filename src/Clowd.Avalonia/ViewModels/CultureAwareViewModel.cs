@@ -7,13 +7,13 @@ using System.Text;
 using System.Threading.Tasks;
 using Avalonia.Controls.Documents;
 using Avalonia.Utilities;
-using Clowd.Avalonia.Reactive;
+using Clowd.Avalonia.Extensions;
 using Clowd.Localization;
 using ReactiveUI;
 
 namespace Clowd.Avalonia.ViewModels
 {
-    internal class CultureAwareViewModel : ReactiveObject, IObserver<CultureInfo>
+    public class CultureAwareViewModel : ReactiveObject, IObserver<CultureInfo>
     {
         PropertyInfo[] _properties;
 
