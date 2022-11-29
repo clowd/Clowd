@@ -117,34 +117,4 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="SettingsNav_About" xml:space="preserve">
-    <value>О программе</value>
-  </data>
-  <data name="SettingsNav_Editor" xml:space="preserve">
-    <value>Редактор</value>
-  </data>
-  <data name="SettingsNav_General" xml:space="preserve">
-    <value>Общие</value>
-  </data>
-  <data name="SettingsNav_Home" xml:space="preserve">
-    <value>Главная</value>
-  </data>
-  <data name="SettingsNav_SettingsHeader" xml:space="preserve">
-    <value>Настройки</value>
-  </data>
-  <data name="SettingsNav_Uploads" xml:space="preserve">
-    <value>Загрузки</value>
-  </data>
-  <data name="SettingsNav_Video" xml:space="preserve">
-    <value>Видео</value>
-  </data>
-  <data name="SettingsUpdate_RestartBtn" xml:space="preserve">
-    <value>Перезапустить</value>
-  </data>
-  <data name="SettingsUpdate_UpToDate" xml:space="preserve">
-    <value>Вы используете последнюю версию</value>
-  </data>
-  <data name="SettingsUpdate_Working" xml:space="preserve">
-    <value>Обновление {0}%</value>
-  </data>
 </root>
