@@ -117,6 +117,9 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="ColorScheme_E0_System" xml:space="preserve">
+    <value>System (fr!!!)</value>
+  </data>
   <data name="HazCookies_One" xml:space="preserve">
     <value>Vous avez {0} cookie.</value>
   </data>
