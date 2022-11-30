@@ -10,6 +10,7 @@ using Clowd.Avalonia.ViewModels;
 using Clowd.Config;
 using Clowd.Localization;
 using Clowd.PlatformUtil;
+using Clowd.PlatformUtil.Windows;
 using DynamicData.Binding;
 using PropertyChanged.SourceGenerator;
 
@@ -76,7 +77,7 @@ namespace Clowd.Avalonia.Services
     {
         public string Name => Strings.GetString(_name);
 
-        public string KeyGestureText => IsUnset ? Strings.SettingsHotkey_Unset : Gesture.ToString();
+        public string KeyGestureText => IsUnset ? Strings.SettingsHotkey_Unset : KeyInterop.GetShortString(Gesture);
 
         public bool IsUnset => Gesture == null || Gesture.IsEmpty;
 

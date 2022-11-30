@@ -1,18 +1,17 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reactive.Linq;
-using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml.MarkupExtensions;
+using Clowd.Avalonia.Converters;
 using Clowd.Avalonia.Extensions;
 using Clowd.Avalonia.Services;
 using Clowd.Config;
+using Clowd.PlatformUtil.Windows;
 using DependencyPropertyGenerator;
+using FluentAvalonia.UI.Controls;
 using ReactiveUI;
 
 namespace Clowd.Avalonia.Controls
@@ -32,28 +31,62 @@ namespace Clowd.Avalonia.Controls
         {
             DataContext = Hotkey;
 
-            _card = new SettingsCard();
-            _card.Bind(SettingsCard.TitleProperty, new Binding(nameof(HotkeyRegistration.Name)));
+            _hotkey = new Button()
+            {
+                [!Button.ContentProperty] = new Binding(nameof(HotkeyRegistration.KeyGestureText)),
+                HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Stretch,
+            };
 
-            _hotkey = new Button();
-            _hotkey.MinWidth = 250;
-            _hotkey.Bind(Button.ContentProperty, new Binding(nameof(HotkeyRegistration.KeyGestureText)));
             _hotkey.KeyDown += hotkey_KeyDown;
             _hotkey.KeyUp += hotkey_KeyUp;
             _hotkey.Click += hotkey_Click;
+            _hotkey.LostFocus += hotkey_LostFocus;
 
-            _error = new TextBlock();
-            _error.Bind(TextBlock.TextProperty, new Binding(nameof(HotkeyRegistration.Error)));
-            _error[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SystemFillColorCriticalBrush");
-            _error.Bind(TextBlock.IsVisibleProperty, new Binding(nameof(HotkeyRegistration.Error)) { Converter = StringConverters.IsNotNullOrEmpty });
-            _error.Margin = new Thickness(0, 8, 0, 0);
+            _refresh = new Button()
+            {
+                Content = new SymbolIcon() { Symbol = Symbol.RefreshFilled },
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Stretch,
+                [!Button.IsVisibleProperty] = new Binding(nameof(HotkeyRegistration.Status)) { Converter = new EnumMatchToBooleanConverter(), ConverterParameter = nameof(HotkeyRegistrationStatus.Error) },
+            };
 
-            _card.ActionContent = _hotkey;
-            _card.BottomContent = _error;
+            _refresh.Click += refresh_Click;
+
+            DockPanel.SetDock(_refresh, Dock.Right);
+
+            var sp = new DockPanel();
+            sp.MinWidth = 250;
+            sp.Children.Add(_refresh);
+            sp.Children.Add(_hotkey);
+
+            _error = new TextBlock()
+            {
+                [!TextBlock.TextProperty] = new Binding(nameof(HotkeyRegistration.Error)),
+                [!TextBlock.IsVisibleProperty] = new Binding(nameof(HotkeyRegistration.Error)) { Converter = StringConverters.IsNotNullOrEmpty },
+                [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SystemFillColorCriticalBrush"),
+                Margin = new Thickness(0, 8, 0, 0),
+            };
+
+            _card = new SettingsCard()
+            {
+                [!SettingsCard.TitleProperty] = new Binding(nameof(HotkeyRegistration.Name)),
+                ActionContent = sp,
+                BottomContent = _error,
+            };
 
             Content = _card;
 
             UpdateBackground();
+        }
+
+        private void refresh_Click(object sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Hotkey?.Retry();
+        }
+
+        private void hotkey_LostFocus(object sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            IsEditing = false;
         }
 
         private void hotkey_KeyUp(object sender, KeyEventArgs e)
@@ -78,15 +111,7 @@ namespace Clowd.Avalonia.Controls
             var keyCode = (int)e.Key;
             if (keyCode == 70 || keyCode == 71 || (keyCode >= 116 && keyCode <= 121))
             {
-                StringBuilder key = new StringBuilder();
-                foreach (var en in GetUniqueFlags(e.KeyModifiers))
-                {
-                    key.Append(((KeyModifiers)en).ToString().Replace("Control", "Ctrl"));
-                    key.Append('+');
-                }
-
-                key.Append(" ...");
-                _hotkey.Content = key.ToString();
+                _hotkey.Content = KeyInterop.GetShortString(GestureKey.None, (GestureModifierKeys)e.KeyModifiers);
             }
             else
             {
@@ -96,37 +121,26 @@ namespace Clowd.Avalonia.Controls
 
         private void FinishEditing(Key key, KeyModifiers keyModifiers)
         {
-            Hotkey.Gesture = new SimpleKeyGesture((GestureKey)key, (GestureModifierKeys)keyModifiers);
             IsEditing = false;
-        }
-
-        private IEnumerable<Enum> GetUniqueFlags(Enum flags)
-        {
-            ulong flag = 1;
-            foreach (var value in Enum.GetValues(flags.GetType()).Cast<Enum>())
+            if (key != Key.Escape)
             {
-                ulong bits = Convert.ToUInt64(value);
-                while (flag < bits)
-                {
-                    flag <<= 1;
-                }
-
-                if (flag == bits && flags.HasFlag(value))
-                {
-                    yield return value;
-                }
+                Hotkey.Gesture = new SimpleKeyGesture((GestureKey)key, (GestureModifierKeys)keyModifiers);
+            }
+            else
+            {
+                Hotkey.Gesture = new SimpleKeyGesture();
             }
         }
 
-        public void OnCompleted()
+        void IObserver<IReactivePropertyChangedEventArgs<IReactiveObject>>.OnCompleted()
         {
         }
 
-        public void OnError(Exception error)
+        void IObserver<IReactivePropertyChangedEventArgs<IReactiveObject>>.OnError(Exception error)
         {
         }
 
-        public void OnNext(IReactivePropertyChangedEventArgs<IReactiveObject> value)
+        void IObserver<IReactivePropertyChangedEventArgs<IReactiveObject>>.OnNext(IReactivePropertyChangedEventArgs<IReactiveObject> value)
         {
             UpdateBackground();
         }

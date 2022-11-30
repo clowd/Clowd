@@ -1,13 +1,87 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Clowd.Config;
+using static Vanara.PInvoke.User32;
 using NativeMethods = Vanara.PInvoke.User32.VK;
 
 namespace Clowd.PlatformUtil.Windows
 {
-    internal static class KeyInterop
+    public static class KeyInterop
     {
+        public static string GetShortString(SimpleKeyGesture gesture) => GetShortString(gesture.Key, gesture.Modifiers);
+
+        public static string GetShortString(GestureKey key, GestureModifierKeys modifiers)
+        {
+            var strBinding = "";
+            if (modifiers != GestureModifierKeys.None)
+            {
+                strBinding += modifiers.ToString();
+                if (strBinding != string.Empty)
+                {
+                    strBinding += '+';
+                }
+            }
+
+            if (key == GestureKey.None)
+            {
+                strBinding += " ...";
+            }
+            else
+            {
+                var keyStr = key.ToString();
+                if (keyStr.Contains("Oem"))
+                    keyStr = GetCharFromKey(key).ToString();
+                if (String.IsNullOrWhiteSpace(keyStr))
+                    key.ToString();
+
+                strBinding += keyStr;
+            }
+
+            return string.Join("+", strBinding.Split('+', ',').Select(c => c.Trim()))
+                .Replace("Snapshot", "PrtScr")
+                .Replace("PrintScreen", "PrtScr")
+                .Replace("Control", "Ctrl")
+                .Replace("Delete", "Del")
+                .Replace("Windows", "Win")
+                .Replace("Escape", "Esc")
+                .Replace("Prior", "PgUp")
+                .Replace("Next", "PgDn");
+        }
+
+        public static char GetCharFromKey(GestureKey key)
+        {
+            char ch = ' ';
+
+            int virtualKey = KeyInterop.VirtualKeyFromKey(key);
+            byte[] keyboardState = new byte[256];
+            //GetKeyboardState(keyboardState);
+
+            uint scanCode = MapVirtualKey((uint)virtualKey, MAPVK.MAPVK_VK_TO_VSC);
+            StringBuilder stringBuilder = new StringBuilder(2);
+
+            int result = ToUnicode((uint)virtualKey, scanCode, keyboardState, stringBuilder, stringBuilder.Capacity, 0);
+            switch (result)
+            {
+                case -1:
+                    break;
+                case 0:
+                    break;
+                case 1:
+                    {
+                        ch = stringBuilder[0];
+                        break;
+                    }
+                default:
+                    {
+                        ch = stringBuilder[0];
+                        break;
+                    }
+            }
+            return ch;
+        }
+
         public static GestureKey KeyFromVirtualKey(int virtualKeyInt)
         {
             GestureKey key = GestureKey.None;
