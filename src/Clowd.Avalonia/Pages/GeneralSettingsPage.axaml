@@ -52,26 +52,6 @@
             Icon="Directions">
             <StackPanel>
                 <DockPanel>
-                    <ComboBox
-                        Name="SelectLanguageBox"
-                        VerticalAlignment="Center"
-                        Items="{x:Static l10n:Languages.Supported}"
-                        SelectedItem="{Binding General.Language}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Name}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <StackPanel Orientation="Vertical">
-                        <TextBlock Text="{mx:Localize SettingsGeneral_Language}" />
-                        <TextBlock
-                            Opacity="0.7"
-                            Text="{mx:Localize SettingsGeneral_LanguageHelp}"
-                            Theme="{DynamicResource CaptionTextBlockStyle}" />
-                    </StackPanel>
-                </DockPanel>
-                <DockPanel>
                     <ToggleSwitch IsChecked="{Binding General.ExperimentalUpdateChannel}" />
                     <TextBlock Text="{mx:Localize SettingsGeneral_ExperimentalUpdates}" />
                 </DockPanel>
@@ -105,5 +85,24 @@
                 </DockPanel>
             </StackPanel>
         </controls:ExpandingSettingsCard>
+
+        <controls:SettingsCard
+            Title="{mx:Localize SettingsGeneral_Language}"
+            Description="{mx:Localize SettingsGeneral_LanguageHelp}"
+            Icon="Character">
+            <controls:SettingsCard.ActionContent>
+                <ComboBox
+                    Name="SelectLanguageBox"
+                    VerticalAlignment="Center"
+                    Items="{x:Static l10n:Languages.Supported}"
+                    SelectedItem="{Binding General.Language}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </controls:SettingsCard.ActionContent>
+        </controls:SettingsCard>
     </StackPanel>
 </UserControl>

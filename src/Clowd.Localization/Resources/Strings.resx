@@ -139,7 +139,7 @@
     <value>Ask/confirm before closing Clowd</value>
   </data>
   <data name="SettingsGeneral_BehaviorDesc" xml:space="preserve">
-    <value>Experimental updates, language, startup/shutdown</value>
+    <value>Experimental updates, startup/shutdown preferences</value>
   </data>
   <data name="SettingsGeneral_BehaviorTitle" xml:space="preserve">
     <value>Behavior</value>
