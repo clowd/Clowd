@@ -1,13 +1,9 @@
 mod event_handler;
 
-use std::cmp;
-
 use anyhow::{anyhow, Result};
 use nannou::{
-    color::{self, ConvertInto, IntoLinSrgba},
-    draw::{primitive::texture, properties::ColorScalar},
-    event,
-    image::{DynamicImage, RgbaImage},
+    color::{self},
+    image::{self, DynamicImage, ImageBuffer, RgbaImage},
     prelude::*,
     winit::{
         dpi::{PhysicalPosition, PhysicalSize},
@@ -15,14 +11,12 @@ use nannou::{
         window::WindowBuilder,
     },
 };
-use text::cursor::xy_at;
-use wgpu::{BindGroupLayoutEntry, SamplerBuilder, WithDeviceQueuePair};
-use window::SurfaceConfigurationBuilder;
+use wgpu::{SamplerBuilder, Texture, WithDeviceQueuePair};
 use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
 
 fn main() {
     nannou::app(model)
-        .loop_mode(LoopMode::Wait)
+        .loop_mode(LoopMode::RefreshSync)
         .update(update)
         .run();
 }
@@ -33,6 +27,10 @@ struct Model {
     shown: bool,
     debug: bool,
     zoom: f32,
+    accent_light: Rgb,
+    accent_dark: Rgb,
+    dash_black_white: Texture,
+    dash_white_accent: Texture,
 }
 
 #[allow(dead_code)]
@@ -102,7 +100,7 @@ fn create_model(app: &App) -> Result<Model> {
         let window = app
             .new_window()
             .window(WindowBuilder::new().with_visible(false))
-            .surface_conf_builder(SurfaceConfigurationBuilder::new().present_mode(wgpu::PresentMode::AutoNoVsync))
+            .surface_conf_builder(window::SurfaceConfigurationBuilder::new().present_mode(wgpu::PresentMode::AutoNoVsync))
             .clear_color(color::rgb(0u8, 0u8, 0u8))
             .title("Clowd Capture")
             .event(event_handler::get_event(i))
@@ -153,7 +151,26 @@ fn create_model(app: &App) -> Result<Model> {
         });
     }
 
-    Ok(Model { renderers, windows: desktop_windows, shown: false, debug: false, zoom: 1.0 })
+    let bw_buf = ImageBuffer::from_fn(2, 2, |x, _y| if x == 0 { image::Rgba([255, 255, 255, 255]) } else { image::Rgba([0, 0, 0, 255]) });
+    let bw_img = image::DynamicImage::ImageRgba8(bw_buf);
+    let bw_tex = wgpu::Texture::from_image(app, &bw_img);
+
+    let aw_buf =
+        ImageBuffer::from_fn(2, 2, |x, _y| if x == 0 { image::Rgba([255, 255, 255, 255]) } else { image::Rgba([0, 125, 180, 255]) });
+    let aw_img = image::DynamicImage::ImageRgba8(aw_buf);
+    let aw_tex = wgpu::Texture::from_image(app, &aw_img);
+
+    Ok(Model {
+        renderers,
+        windows: desktop_windows,
+        shown: false,
+        debug: false,
+        zoom: 1.0,
+        accent_light: rgb(0.0, 175.0 / 255.0, 240.0 / 255.0),
+        accent_dark: rgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
+        dash_black_white: bw_tex,
+        dash_white_accent: aw_tex,
+    })
 }
 
 fn model(app: &App) -> Model {
@@ -220,34 +237,99 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
     }
 }
 
-fn draw_dashed_line_polyline(draw: &Draw, start: Vec2, end: Vec2, weight: f32, dash_length: f32, color1: Rgba, color2: Rgba) {
+fn draw_dashed_line_polyline(draw: &Draw, start: Vec2, end: Vec2, weight: f32, dash_length: f32, texture: &Texture, time: f32) {
     let total_distance = start.distance(end);
     let direction = (end - start).normalize();
 
-    let mut current_distance = 0.0;
+    let dash_offset = (time * 50.0) % (dash_length * 2.0);
+
+    let mut current_distance = dash_offset;
     let mut points_colored = Vec::new();
-    let mut toggle_color = true;
+    let mut toggle = true;
 
     while current_distance < total_distance {
         let dash_start = start + direction * current_distance;
         let dash_end = start + direction * (current_distance + dash_length).min(total_distance);
 
-        points_colored.push((dash_start, if toggle_color { color1 } else { color2 }));
-        points_colored.push((dash_end, if toggle_color { color1 } else { color2 }));
+        let texture_coords = if toggle { [0.0, 0.0] } else { [1.0, 1.0] };
+        points_colored.push((dash_start, texture_coords));
+        points_colored.push((dash_end, texture_coords));
 
-        toggle_color = !toggle_color;
-        if toggle_color {
-            current_distance += dash_length * 2.0;
-        } else {
-            current_distance += dash_length;
-        }
-        // current_distance += dash_length * 2.0; // Include the gap length
+        toggle = !toggle;
+        current_distance += dash_length;
     }
 
     draw.polyline()
         .weight(weight)
-        .join_round()
-        .points_colored(points_colored);
+        .points_textured(&texture, points_colored);
+}
+
+fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: f32, texture: &Texture, time: f32) {
+    let draw = draw.scissor(rect.pad(-1.0));
+
+    // let mut points_colored = Vec::new();
+    // let mut toggle = true;
+
+    let x = vec2(dash_length * 4.0, 0.0);
+    let y = vec2(0.0, dash_length * 4.0);
+
+    draw_dashed_line_polyline(&draw, rect.top_left() - x, rect.top_right() + x, weight, dash_length, texture, time);
+    draw_dashed_line_polyline(&draw, rect.top_right() + y, rect.bottom_right() - y, weight, dash_length, texture, time);
+    draw_dashed_line_polyline(&draw, rect.bottom_right() + x, rect.bottom_left() - x, weight, dash_length, texture, time);
+    draw_dashed_line_polyline(&draw, rect.bottom_left() - y, rect.top_left() + y, weight, dash_length, texture, time);
+
+    draw.line()
+        .start(rect.top_left() + vec2(-1.0, 1.0))
+        .end(rect.top_left())
+        .weight(weight)
+        .color(BLACK);
+
+    draw.line()
+        .start(rect.top_right() + vec2(1.0, 1.0))
+        .end(rect.top_right())
+        .weight(weight)
+        .color(BLACK);
+
+    draw.line()
+        .start(rect.bottom_right() + vec2(1.0, -1.0))
+        .end(rect.bottom_right())
+        .weight(weight)
+        .color(BLACK);
+
+    draw.line()
+        .start(rect.bottom_left() + vec2(-1.0, -1.0))
+        .end(rect.bottom_left())
+        .weight(weight)
+        .color(BLACK);
+
+    // let mut do_side = |start: Vec2, end: Vec2| {
+    //     let mut current_distance = dash_offset;
+    //     let total_distance = start.distance(end);
+    //     let direction = (end - start).normalize();
+
+    //     while current_distance < total_distance {
+    //         let dash_start = start + direction * current_distance;
+    //         let dash_end = start + direction * (current_distance + dash_length).min(total_distance);
+
+    //         let texture_coords = if toggle { [0.0, 0.0] } else { [1.0, 1.0] };
+    //         points_colored.push((dash_start, texture_coords));
+    //         points_colored.push((dash_end, texture_coords));
+
+    //         toggle = !toggle;
+    //         current_distance += dash_length * 1.5; // Include the gap length
+    //     }
+    // };
+
+    // do_side(rect.top_left(), rect.top_right());
+    // do_side(rect.top_right(), rect.bottom_right());
+    // do_side(rect.bottom_right(), rect.bottom_left());
+    // do_side(rect.bottom_left(), rect.top_left());
+
+    // draw.polyline()
+    //     .weight(weight)
+    //     .start_cap_round()
+    //     .end_cap_round()
+    //     .points_textured(&texture, points_colored);
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
@@ -280,33 +362,143 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .wh(win.wh())
         .rgba(0.0, 0.0, 0.0, 0.5);
 
-    // crosshair at mouse
+    let selection = Rect::from_x_y_w_h(0.0, 0.0, 500.0, 500.0);
+    let cropped_draw = draw.scissor(selection);
+    // .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
+    // .scale(zoom);
+
+    cropped_draw.texture(&renderer.color_texture);
+
+    // frame.command_encoder()
+    // draw.path().stroke().points_textured(view, points)
+
+    draw_dashed_rectangle(&draw, selection, 2.0, 20.0, &model.dash_white_accent, app.time);
+
+    draw_crosshair(app, model, win, &draw);
+
+    if model.debug {
+        draw_debug(app, model, &draw, window);
+    }
+
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn draw_debug(app: &App, model: &Model, draw: &Draw, window: std::cell::Ref<'_, Window>) {
+    let win = window.rect();
+
+    // Crosshair at window center
+    let crosshair_color = rgba(1.0, 1.0, 1.0, 1.0);
+    let ends = [win.mid_top(), win.mid_right(), win.mid_bottom(), win.mid_left()];
+    for &end in &ends {
+        draw.arrow()
+            .weight(0.5)
+            .start_cap_round()
+            .head_length(16.0)
+            .head_width(8.0)
+            .color(crosshair_color)
+            .end(end - vec2(-0.5, -0.5))
+            .start(vec2(0.5, 0.5));
+    }
+
+    let top = format!("{:.1}", win.top());
+    let bottom = format!("{:.1}", win.bottom());
+    let left = format!("{:.1}", win.left());
+    let right = format!("{:.1}", win.right());
+    let x_off = 30.0;
+    let y_off = 20.0;
+    draw.text("0.0")
+        .x_y(15.0, 15.0)
+        .color(crosshair_color)
+        .font_size(14);
+    draw.text(&top)
+        .h(win.h())
+        .font_size(14)
+        .align_text_top()
+        .color(crosshair_color)
+        .x(x_off);
+    draw.text(&bottom)
+        .h(win.h())
+        .font_size(14)
+        .align_text_bottom()
+        .color(crosshair_color)
+        .x(x_off);
+    draw.text(&left)
+        .w(win.w())
+        .font_size(14)
+        .left_justify()
+        .color(crosshair_color)
+        .y(y_off);
+    draw.text(&right)
+        .w(win.w())
+        .font_size(14)
+        .right_justify()
+        .color(crosshair_color)
+        .y(y_off);
+
+    // Debug window and monitor details.
+    if let Some(monitor) = window.current_monitor() {
+        let w_scale_factor = window.scale_factor();
+        let m_scale_factor = monitor.scale_factor();
+        let mon_phys = monitor.size();
+        let mon = mon_phys.to_logical(w_scale_factor as f64);
+        let mon_w: f32 = mon.width;
+        let mon_h: f32 = mon.height;
+        let text = format!(
+            "
+            Window size: [{:.0}, {:.0}]
+            Window ratio: {:.2}
+            Window scale factor: {:.2}
+            Monitor size: [{:.0}, {:.0}]
+            Monitor ratio: {:.2}
+            Monitor scale factor: {:.2}
+            World Zoom: {:.2}
+            ",
+            win.w(),
+            win.h(),
+            win.w() / win.h(),
+            w_scale_factor,
+            mon_w,
+            mon_h,
+            mon_w / mon_h,
+            m_scale_factor,
+            model.zoom
+        );
+        let pad = 6.0;
+        draw.text(&text)
+            .h(win.pad(pad).h())
+            .w(win.pad(pad).w())
+            .line_spacing(pad)
+            .font_size(14)
+            .align_text_bottom()
+            .color(crosshair_color)
+            .left_justify();
+    }
+
+    // Ellipse at mouse.
+    draw.ellipse()
+        .wh([5.0; 2].into())
+        .xy(app.mouse.position());
+
+    // Mouse position text.
+    let mouse = app.mouse.position();
+    let pos = format!("[{:.1}, {:.1}]", mouse.x, mouse.y);
+    draw.text(&pos)
+        .xy(mouse + vec2(0.0, 20.0))
+        .font_size(14)
+        .color(WHITE);
+}
+
+fn draw_crosshair(app: &App, model: &Model, win: Rect, draw: &Draw) {
     let mouse = app.mouse.position() - pt2(-0.5, 0.5);
     let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
     let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
 
-    draw_dashed_line_polyline(
-        &draw,
-        mouse_dashed_horiz.0,
-        mouse_dashed_horiz.1,
-        1.0,
-        5.0,
-        rgba(0.0, 0.0, 0.0, 1.0),
-        rgba(1.0, 1.0, 1.0, 1.0),
-    );
+    draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white, 0.0);
 
-    draw_dashed_line_polyline(
-        &draw,
-        mouse_dashed_vert.0,
-        mouse_dashed_vert.1,
-        1.0,
-        5.0,
-        rgba(0.0, 0.0, 0.0, 1.0),
-        rgba(1.0, 1.0, 1.0, 1.0),
-    );
+    draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white, 0.0);
 
     let accent_size = 100.0;
-    let accent_color = rgb(0.0, 175.0 / 255.0, 240.0 / 255.0);
+    let accent_color = model.accent_light;
     let mouse_accent_horiz = (pt2(mouse.x - accent_size, mouse.y), pt2(mouse.x + accent_size, mouse.y));
     let mouse_accent_vert = (pt2(mouse.x, mouse.y - accent_size), pt2(mouse.x, mouse.y + accent_size));
 
@@ -353,152 +545,28 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .end(mouse_handle_bottom.1)
         .stroke_weight(handle_weight)
         .color(accent_color);
-
-    // draw.line()
-    //     .start(mouse_dashed_horiz_start - mouse_offset)
-    //     .end(mouse_dashed_horiz_end - mouse_offset)
-    //     .stroke_weight(1.0)
-    //     .color(BLACK);
-    // draw.line()
-    //     .start(mouse_dashed_vert_start - mouse_offset)
-    //     .end(mouse_dashed_vert_end - mouse_offset)
-    //     .stroke_weight(1.0)
-    //     .color(BLACK);
-
-    // mouse.
-
-    // app.mouse.re
-
-    // // 100-step and 10-step grids.
-    // draw_grid(&draw, &win, 100.0, 1.0);
-    // draw_grid(&draw, &win, 25.0, 0.5);
-
-    if model.debug {
-        // Crosshair at window center
-        let crosshair_color = rgba(1.0, 1.0, 1.0, 1.0);
-        let ends = [win.mid_top(), win.mid_right(), win.mid_bottom(), win.mid_left()];
-        for &end in &ends {
-            draw.arrow()
-                .weight(0.5)
-                .start_cap_round()
-                .head_length(16.0)
-                .head_width(8.0)
-                .color(crosshair_color)
-                .end(end - vec2(-0.5, -0.5))
-                .start(vec2(0.5, 0.5));
-        }
-
-        let top = format!("{:.1}", win.top());
-        let bottom = format!("{:.1}", win.bottom());
-        let left = format!("{:.1}", win.left());
-        let right = format!("{:.1}", win.right());
-        let x_off = 30.0;
-        let y_off = 20.0;
-        draw.text("0.0")
-            .x_y(15.0, 15.0)
-            .color(crosshair_color)
-            .font_size(14);
-        draw.text(&top)
-            .h(win.h())
-            .font_size(14)
-            .align_text_top()
-            .color(crosshair_color)
-            .x(x_off);
-        draw.text(&bottom)
-            .h(win.h())
-            .font_size(14)
-            .align_text_bottom()
-            .color(crosshair_color)
-            .x(x_off);
-        draw.text(&left)
-            .w(win.w())
-            .font_size(14)
-            .left_justify()
-            .color(crosshair_color)
-            .y(y_off);
-        draw.text(&right)
-            .w(win.w())
-            .font_size(14)
-            .right_justify()
-            .color(crosshair_color)
-            .y(y_off);
-
-        // Debug window and monitor details.
-        if let Some(monitor) = window.current_monitor() {
-            let w_scale_factor = window.scale_factor();
-            let m_scale_factor = monitor.scale_factor();
-            let mon_phys = monitor.size();
-            let mon = mon_phys.to_logical(w_scale_factor as f64);
-            let mon_w: f32 = mon.width;
-            let mon_h: f32 = mon.height;
-            let text = format!(
-                "
-            Window size: [{:.0}, {:.0}]
-            Window ratio: {:.2}
-            Window scale factor: {:.2}
-            Monitor size: [{:.0}, {:.0}]
-            Monitor ratio: {:.2}
-            Monitor scale factor: {:.2}
-            World Zoom: {:.2}
-            ",
-                win.w(),
-                win.h(),
-                win.w() / win.h(),
-                w_scale_factor,
-                mon_w,
-                mon_h,
-                mon_w / mon_h,
-                m_scale_factor,
-                model.zoom
-            );
-            let pad = 6.0;
-            draw.text(&text)
-                .h(win.pad(pad).h())
-                .w(win.pad(pad).w())
-                .line_spacing(pad)
-                .font_size(14)
-                .align_text_bottom()
-                .color(crosshair_color)
-                .left_justify();
-        }
-
-        // Ellipse at mouse.
-        draw.ellipse()
-            .wh([5.0; 2].into())
-            .xy(app.mouse.position());
-
-        // Mouse position text.
-        let mouse = app.mouse.position();
-        let pos = format!("[{:.1}, {:.1}]", mouse.x, mouse.y);
-        draw.text(&pos)
-            .xy(mouse + vec2(0.0, 20.0))
-            .font_size(14)
-            .color(WHITE);
-    }
-
-    draw.to_frame(app, &frame).unwrap();
 }
 
-fn draw_grid(draw: &Draw, win: &Rect, step: f32, weight: f32) {
-    let step_by = || (0..).map(|i| i as f32 * step);
-    let r_iter = step_by().take_while(|&f| f < win.right());
-    let l_iter = step_by()
-        .map(|f| -f)
-        .take_while(|&f| f > win.left());
-    let x_iter = r_iter.chain(l_iter);
-    for x in x_iter {
-        draw.line()
-            .weight(weight)
-            .points(pt2(x, win.bottom()), pt2(x, win.top()));
-    }
-    let t_iter = step_by().take_while(|&f| f < win.top());
-    let b_iter = step_by()
-        .map(|f| -f)
-        .take_while(|&f| f > win.bottom());
-    let y_iter = t_iter.chain(b_iter);
-    for y in y_iter {
-        draw.line()
-            .weight(weight)
-            .points(pt2(win.left(), y), pt2(win.right(), y));
-    }
-}
+// fn draw_grid(draw: &Draw, win: &Rect, step: f32, weight: f32) {
+//     let step_by = || (0..).map(|i| i as f32 * step);
+//     let r_iter = step_by().take_while(|&f| f < win.right());
+//     let l_iter = step_by()
+//         .map(|f| -f)
+//         .take_while(|&f| f > win.left());
+//     let x_iter = r_iter.chain(l_iter);
+//     for x in x_iter {
+//         draw.line()
+//             .weight(weight)
+//             .points(pt2(x, win.bottom()), pt2(x, win.top()));
+//     }
+//     let t_iter = step_by().take_while(|&f| f < win.top());
+//     let b_iter = step_by()
+//         .map(|f| -f)
+//         .take_while(|&f| f > win.bottom());
+//     let y_iter = t_iter.chain(b_iter);
+//     for y in y_iter {
+//         draw.line()
+//             .weight(weight)
+//             .points(pt2(win.left(), y), pt2(win.right(), y));
+//     }
+// }
