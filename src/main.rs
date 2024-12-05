@@ -1,0 +1,411 @@
+mod event_handler;
+
+use anyhow::{anyhow, Result};
+use nannou::{
+    color::{self, IntoLinSrgba},
+    draw::{primitive::texture, properties::ColorScalar},
+    event,
+    image::{DynamicImage, RgbaImage},
+    prelude::*,
+    winit::{
+        dpi::{PhysicalPosition, PhysicalSize},
+        monitor::MonitorHandle,
+        window::WindowBuilder,
+    },
+};
+use window::SurfaceConfigurationBuilder;
+use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
+
+fn main() {
+    nannou::app(model)
+        .loop_mode(LoopMode::Wait)
+        .update(update)
+        .run();
+}
+
+struct Model {
+    renderers: Vec<RendererInfo>,
+    windows: Vec<DesktopWindowInfo>,
+    shown: bool,
+    debug: bool,
+}
+
+struct RendererInfo {
+    pub window: WindowId,
+    pub monitor: MonitorHandle,
+    pub color_image: DynamicImage,
+    pub color_texture: wgpu::Texture,
+    pub gray_image: DynamicImage,
+    pub gray_texture: wgpu::Texture,
+    pub position: PhysicalPosition<i32>,
+    pub size: PhysicalSize<u32>,
+    pub ready: bool,
+}
+
+struct DesktopWindowInfo {
+    pub title: String,
+    pub position: PhysicalPosition<i32>,
+    pub size: PhysicalSize<u32>,
+    pub capture: Option<RgbaImage>,
+}
+
+impl Model {
+    fn is_all_ready(&self) -> bool {
+        self.renderers.iter().all(|r| r.ready)
+    }
+
+    fn show_all(&mut self, app: &App) {
+        self.renderers.iter_mut().for_each(|r| {
+            let window = app.window(r.window).unwrap();
+            window.set_fullscreen_with(Some(Fullscreen::Borderless(Some(r.monitor.clone()))));
+            window.set_visible(true);
+        });
+    }
+}
+
+fn convert_image<T>(buffer: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, T>) -> nannou::image::ImageBuffer<nannou::image::Rgba<u8>, T>
+where
+    T: std::ops::Deref<Target = [u8]> + std::ops::DerefMut<Target = [u8]> + 'static,
+{
+    nannou::image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw()).expect("Conversion failed")
+}
+
+fn create_model(app: &App) -> Result<Model> {
+    let mut renderers = Vec::new();
+    let mut desktop_windows = Vec::new();
+
+    event_handler::init_event_handler(handle_event);
+
+    let monitors = app.available_monitors();
+    let windows = XCapWindow::all()?;
+
+    for (i, monitor) in monitors.iter().enumerate() {
+        let position = monitor.position();
+        let size = monitor.size();
+
+        // Try to create a monitor capturer and handle errors.
+        let monitor_capturer = XCapMonitor::from_point(position.x + 10, position.y + 10)?;
+        let capture: RgbaImage = convert_image(monitor_capturer.capture_image()?);
+        let color_image = DynamicImage::ImageRgba8(capture);
+
+        // TODO optimise this, can we just use a shader?
+        let gray_image_intermediate = DynamicImage::ImageLuma8(color_image.to_luma8());
+        let gray_image = DynamicImage::ImageRgba8(gray_image_intermediate.to_rgba8());
+
+        // Try to create a new window and handle errors.
+        let window = app
+            .new_window()
+            .window(WindowBuilder::new().with_visible(false))
+            .surface_conf_builder(SurfaceConfigurationBuilder::new().present_mode(wgpu::PresentMode::AutoNoVsync))
+            .clear_color(color::rgb(0u8, 0u8, 0u8))
+            .title("Clowd Capture")
+            .event(event_handler::get_event(i))
+            .view(view)
+            .build()
+            .map_err(|e| anyhow!("{:?}", e))?;
+
+        let window_handle = app.window(window).unwrap();
+        let color_texture = wgpu::Texture::from_image(&window_handle, &color_image);
+        let gray_texture = wgpu::Texture::from_image(&window_handle, &gray_image);
+
+        renderers.push(RendererInfo {
+            window,
+            monitor: monitor.clone(),
+            color_image,
+            color_texture,
+            gray_image,
+            gray_texture,
+            position,
+            size,
+            ready: false,
+        });
+    }
+
+    for window in windows {
+        desktop_windows.push(DesktopWindowInfo {
+            title: window.title().to_string(),
+            position: PhysicalPosition { x: window.x(), y: window.y() },
+            size: PhysicalSize { width: window.width(), height: window.height() },
+            // capture: window.capture_image().ok(),
+            capture: None,
+        });
+    }
+
+    Ok(Model { renderers, windows: desktop_windows, shown: false, debug: false })
+}
+
+fn model(app: &App) -> Model {
+    match create_model(app) {
+        Ok(model) => model,
+        Err(e) => {
+            eprintln!("Fatal Error: {:?}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn update(_app: &App, _model: &mut Model, _update: Update) {
+    println!("update: {:?}", _update);
+}
+
+fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
+    println!("window a: {:?}, {:?}", event, idx);
+    // let window = _app.window(_model.window).unwrap();
+    // window.set_fullscreen(true);
+    // window.set_visible(true);
+
+    // app.window(model.)
+    // app.main_window()
+    // model.show_all(app);
+
+    let renderer = &mut model.renderers[idx];
+    renderer.ready = true;
+
+    if model.is_all_ready() && !model.shown {
+        model.show_all(app);
+        model.shown = true;
+    }
+
+    if event == WindowEvent::KeyPressed(Key::D) {
+        model.debug = !model.debug;
+    }
+}
+
+fn draw_dashed_line_polyline(draw: &Draw, start: Vec2, end: Vec2, weight: f32, dash_length: f32, color1: Rgba, color2: Rgba) {
+    let total_distance = start.distance(end);
+    let direction = (end - start).normalize();
+
+    let mut current_distance = 0.0;
+    let mut points_colored = Vec::new();
+    let mut toggle_color = true;
+
+    while current_distance < total_distance {
+        let dash_start = start + direction * current_distance;
+        let dash_end = start + direction * (current_distance + dash_length).min(total_distance);
+
+        points_colored.push((dash_start, if toggle_color { color1 } else { color2 }));
+        points_colored.push((dash_end, if toggle_color { color1 } else { color2 }));
+
+        toggle_color = !toggle_color;
+        if toggle_color {
+            current_distance += dash_length * 2.0;
+        } else {
+            current_distance += dash_length;
+        }
+        // current_distance += dash_length * 2.0; // Include the gap length
+    }
+
+    draw.polyline()
+        .weight(weight)
+        .join_round()
+        .points_colored(points_colored);
+}
+
+fn view(app: &App, model: &Model, frame: Frame) {
+    let draw = app.draw();
+    let window = app.window(frame.window_id()).unwrap();
+    let renderer = model
+        .renderers
+        .iter()
+        .find(|r| r.window == frame.window_id())
+        .unwrap();
+    let win = window.rect();
+
+    draw.texture(&renderer.gray_texture);
+    draw.rect()
+        .wh(win.wh())
+        .rgba(0.0, 0.0, 0.0, 0.5);
+
+    // crosshair at mouse
+    let mouse = app.mouse.position() - pt2(-0.5, 0.5);
+    let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
+    let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
+
+    draw_dashed_line_polyline(
+        &draw,
+        mouse_dashed_horiz.0,
+        mouse_dashed_horiz.1,
+        1.0,
+        5.0,
+        rgba(0.0, 0.0, 0.0, 1.0),
+        rgba(1.0, 1.0, 1.0, 1.0),
+    );
+
+    draw_dashed_line_polyline(
+        &draw,
+        mouse_dashed_vert.0,
+        mouse_dashed_vert.1,
+        1.0,
+        5.0,
+        rgba(0.0, 0.0, 0.0, 1.0),
+        rgba(1.0, 1.0, 1.0, 1.0),
+    );
+
+    let accent_size = 100.0;
+    let accent_color = rgb(0.0, 175.0 / 255.0, 240.0 / 255.0);
+    let mouse_accent_horiz = (pt2(mouse.x - accent_size, mouse.y), pt2(mouse.x + accent_size, mouse.y));
+    let mouse_accent_vert = (pt2(mouse.x, mouse.y - accent_size), pt2(mouse.x, mouse.y + accent_size));
+
+    // let accent_half = accent_size / 2.0;
+    // let mouse_handle_left
+    // let mouse_handle_horiz_start = pt2(mouse.x - accent_half, mouse.y);
+    // let mouse_handle_horiz_end = pt2(mouse.x + accent_half, mouse.y);
+
+    draw.line()
+        .start(mouse_accent_horiz.0)
+        .end(mouse_accent_horiz.1)
+        .stroke_weight(1.0)
+        .color(accent_color);
+
+    draw.line()
+        .start(mouse_accent_vert.0)
+        .end(mouse_accent_vert.1)
+        .stroke_weight(1.0)
+        .color(accent_color);
+
+    // draw.line()
+    //     .start(mouse_dashed_horiz_start - mouse_offset)
+    //     .end(mouse_dashed_horiz_end - mouse_offset)
+    //     .stroke_weight(1.0)
+    //     .color(BLACK);
+    // draw.line()
+    //     .start(mouse_dashed_vert_start - mouse_offset)
+    //     .end(mouse_dashed_vert_end - mouse_offset)
+    //     .stroke_weight(1.0)
+    //     .color(BLACK);
+
+    // mouse.
+
+    // app.mouse.re
+
+    // // 100-step and 10-step grids.
+    // draw_grid(&draw, &win, 100.0, 1.0);
+    // draw_grid(&draw, &win, 25.0, 0.5);
+
+    if model.debug {
+        // Crosshair at window center
+        let crosshair_color = rgba(1.0, 1.0, 1.0, 1.0);
+        let ends = [win.mid_top(), win.mid_right(), win.mid_bottom(), win.mid_left()];
+        for &end in &ends {
+            draw.arrow()
+                .weight(0.5)
+                .start_cap_round()
+                .head_length(16.0)
+                .head_width(8.0)
+                .color(crosshair_color)
+                .end(end - vec2(-0.5, -0.5))
+                .start(vec2(0.5, 0.5));
+        }
+
+        let top = format!("{:.1}", win.top());
+        let bottom = format!("{:.1}", win.bottom());
+        let left = format!("{:.1}", win.left());
+        let right = format!("{:.1}", win.right());
+        let x_off = 30.0;
+        let y_off = 20.0;
+        draw.text("0.0")
+            .x_y(15.0, 15.0)
+            .color(crosshair_color)
+            .font_size(14);
+        draw.text(&top)
+            .h(win.h())
+            .font_size(14)
+            .align_text_top()
+            .color(crosshair_color)
+            .x(x_off);
+        draw.text(&bottom)
+            .h(win.h())
+            .font_size(14)
+            .align_text_bottom()
+            .color(crosshair_color)
+            .x(x_off);
+        draw.text(&left)
+            .w(win.w())
+            .font_size(14)
+            .left_justify()
+            .color(crosshair_color)
+            .y(y_off);
+        draw.text(&right)
+            .w(win.w())
+            .font_size(14)
+            .right_justify()
+            .color(crosshair_color)
+            .y(y_off);
+
+        // Debug window and monitor details.
+        if let Some(monitor) = window.current_monitor() {
+            let w_scale_factor = window.scale_factor();
+            let m_scale_factor = monitor.scale_factor();
+            let mon_phys = monitor.size();
+            let mon = mon_phys.to_logical(w_scale_factor as f64);
+            let mon_w: f32 = mon.width;
+            let mon_h: f32 = mon.height;
+            let text = format!(
+                "
+            Window size: [{:.0}, {:.0}]
+            Window ratio: {:.2}
+            Window scale factor: {:.2}
+            Monitor size: [{:.0}, {:.0}]
+            Monitor ratio: {:.2}
+            Monitor scale factor: {:.2}
+            ",
+                win.w(),
+                win.h(),
+                win.w() / win.h(),
+                w_scale_factor,
+                mon_w,
+                mon_h,
+                mon_w / mon_h,
+                m_scale_factor
+            );
+            let pad = 6.0;
+            draw.text(&text)
+                .h(win.pad(pad).h())
+                .w(win.pad(pad).w())
+                .line_spacing(pad)
+                .font_size(14)
+                .align_text_bottom()
+                .color(crosshair_color)
+                .left_justify();
+        }
+
+        // Ellipse at mouse.
+        draw.ellipse()
+            .wh([5.0; 2].into())
+            .xy(app.mouse.position());
+
+        // Mouse position text.
+        let mouse = app.mouse.position();
+        let pos = format!("[{:.1}, {:.1}]", mouse.x, mouse.y);
+        draw.text(&pos)
+            .xy(mouse + vec2(0.0, 20.0))
+            .font_size(14)
+            .color(WHITE);
+    }
+
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn draw_grid(draw: &Draw, win: &Rect, step: f32, weight: f32) {
+    let step_by = || (0..).map(|i| i as f32 * step);
+    let r_iter = step_by().take_while(|&f| f < win.right());
+    let l_iter = step_by()
+        .map(|f| -f)
+        .take_while(|&f| f > win.left());
+    let x_iter = r_iter.chain(l_iter);
+    for x in x_iter {
+        draw.line()
+            .weight(weight)
+            .points(pt2(x, win.bottom()), pt2(x, win.top()));
+    }
+    let t_iter = step_by().take_while(|&f| f < win.top());
+    let b_iter = step_by()
+        .map(|f| -f)
+        .take_while(|&f| f > win.bottom());
+    let y_iter = t_iter.chain(b_iter);
+    for y in y_iter {
+        draw.line()
+            .weight(weight)
+            .points(pt2(win.left(), y), pt2(win.right(), y));
+    }
+}
