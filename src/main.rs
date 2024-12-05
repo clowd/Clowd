@@ -1,8 +1,10 @@
 mod event_handler;
 
+use std::cmp;
+
 use anyhow::{anyhow, Result};
 use nannou::{
-    color::{self, IntoLinSrgba},
+    color::{self, ConvertInto, IntoLinSrgba},
     draw::{primitive::texture, properties::ColorScalar},
     event,
     image::{DynamicImage, RgbaImage},
@@ -13,6 +15,8 @@ use nannou::{
         window::WindowBuilder,
     },
 };
+use text::cursor::xy_at;
+use wgpu::{BindGroupLayoutEntry, SamplerBuilder, WithDeviceQueuePair};
 use window::SurfaceConfigurationBuilder;
 use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
 
@@ -28,8 +32,10 @@ struct Model {
     windows: Vec<DesktopWindowInfo>,
     shown: bool,
     debug: bool,
+    zoom: f32,
 }
 
+#[allow(dead_code)]
 struct RendererInfo {
     pub window: WindowId,
     pub monitor: MonitorHandle,
@@ -105,8 +111,24 @@ fn create_model(app: &App) -> Result<Model> {
             .map_err(|e| anyhow!("{:?}", e))?;
 
         let window_handle = app.window(window).unwrap();
-        let color_texture = wgpu::Texture::from_image(&window_handle, &color_image);
-        let gray_texture = wgpu::Texture::from_image(&window_handle, &gray_image);
+        let (color_texture, gray_texture) = window_handle.with_device_queue_pair(|device, queue| {
+            let usage = wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT;
+            // let usage = wgpu::TextureUsages::all();
+            (
+                wgpu::Texture::load_from_image(device, queue, usage, &color_image),
+                wgpu::Texture::load_from_image(device, queue, usage, &gray_image),
+            )
+        });
+
+        // println!("color_texture: {:?}", color_texture.sample_type());
+        // println!("gray_texture: {:?}", gray_texture.sample_type());
+        // panic!();
+
+        // let color_texture = wgpu::Texture::from_image(&window_handle, &color_image);
+        // let gray_texture = wgpu::Texture::load_from_image(&window_handle, &gray_image);
 
         renderers.push(RendererInfo {
             window,
@@ -131,7 +153,7 @@ fn create_model(app: &App) -> Result<Model> {
         });
     }
 
-    Ok(Model { renderers, windows: desktop_windows, shown: false, debug: false })
+    Ok(Model { renderers, windows: desktop_windows, shown: false, debug: false, zoom: 1.0 })
 }
 
 fn model(app: &App) -> Model {
@@ -166,8 +188,35 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
         model.shown = true;
     }
 
-    if event == WindowEvent::KeyPressed(Key::D) {
-        model.debug = !model.debug;
+    if let WindowEvent::KeyPressed(key_pressed) = event {
+        match key_pressed {
+            Key::D => model.debug = !model.debug,
+            Key::Escape => app.quit(),
+            _ => (),
+        }
+    } else if let WindowEvent::MouseWheel(scroll_delta, _) = event {
+        let delta = match scroll_delta {
+            MouseScrollDelta::LineDelta(_, y) => y,
+            MouseScrollDelta::PixelDelta(pt) => pt.y as f32,
+        };
+
+        let mut zoom = model.zoom;
+
+        if app.keys.mods.shift() || app.keys.mods.ctrl() {
+            if delta > 0.0 {
+                zoom *= 1.05;
+            } else {
+                zoom /= 1.05;
+            }
+        } else {
+            if delta > 0.0 {
+                zoom *= 2.0;
+            } else {
+                zoom /= 2.0;
+            }
+        }
+
+        model.zoom = zoom.max(1.0).min(256.0);
     }
 }
 
@@ -202,8 +251,15 @@ fn draw_dashed_line_polyline(draw: &Draw, start: Vec2, end: Vec2, weight: f32, d
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
-    let draw = app.draw();
+    let desc = SamplerBuilder::new()
+        .mag_filter(wgpu::FilterMode::Nearest)
+        .min_filter(wgpu::FilterMode::Nearest)
+        .mipmap_filter(wgpu::FilterMode::Nearest)
+        .into_descriptor();
+
+    let draw = app.draw().sampler(desc);
     let window = app.window(frame.window_id()).unwrap();
+
     let renderer = model
         .renderers
         .iter()
@@ -211,8 +267,16 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .unwrap();
     let win = window.rect();
 
-    draw.texture(&renderer.gray_texture);
-    draw.rect()
+    let cursor_pos = app.mouse.position();
+    let zoom = model.zoom;
+
+    let texture_draw = draw
+        .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
+        .scale(zoom);
+
+    texture_draw.texture(&renderer.gray_texture);
+    texture_draw
+        .rect()
         .wh(win.wh())
         .rgba(0.0, 0.0, 0.0, 0.5);
 
@@ -246,11 +310,6 @@ fn view(app: &App, model: &Model, frame: Frame) {
     let mouse_accent_horiz = (pt2(mouse.x - accent_size, mouse.y), pt2(mouse.x + accent_size, mouse.y));
     let mouse_accent_vert = (pt2(mouse.x, mouse.y - accent_size), pt2(mouse.x, mouse.y + accent_size));
 
-    // let accent_half = accent_size / 2.0;
-    // let mouse_handle_left
-    // let mouse_handle_horiz_start = pt2(mouse.x - accent_half, mouse.y);
-    // let mouse_handle_horiz_end = pt2(mouse.x + accent_half, mouse.y);
-
     draw.line()
         .start(mouse_accent_horiz.0)
         .end(mouse_accent_horiz.1)
@@ -261,6 +320,38 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .start(mouse_accent_vert.0)
         .end(mouse_accent_vert.1)
         .stroke_weight(1.0)
+        .color(accent_color);
+
+    let handle_size = accent_size / 2.0;
+    let handle_weight = 5.0;
+
+    let mouse_handle_left = (pt2(mouse.x - handle_size - 0.5, mouse.y), pt2(mouse.x - accent_size - 0.5, mouse.y));
+    let mouse_handle_right = (pt2(mouse.x + handle_size + 0.5, mouse.y), pt2(mouse.x + accent_size + 0.5, mouse.y));
+    let mouse_handle_top = (pt2(mouse.x, mouse.y - handle_size - 0.5), pt2(mouse.x, mouse.y - accent_size - 0.5));
+    let mouse_handle_bottom = (pt2(mouse.x, mouse.y + handle_size + 0.5), pt2(mouse.x, mouse.y + accent_size + 0.5));
+
+    draw.line()
+        .start(mouse_handle_left.0)
+        .end(mouse_handle_left.1)
+        .stroke_weight(handle_weight)
+        .color(accent_color);
+
+    draw.line()
+        .start(mouse_handle_right.0)
+        .end(mouse_handle_right.1)
+        .stroke_weight(handle_weight)
+        .color(accent_color);
+
+    draw.line()
+        .start(mouse_handle_top.0)
+        .end(mouse_handle_top.1)
+        .stroke_weight(handle_weight)
+        .color(accent_color);
+
+    draw.line()
+        .start(mouse_handle_bottom.0)
+        .end(mouse_handle_bottom.1)
+        .stroke_weight(handle_weight)
         .color(accent_color);
 
     // draw.line()
@@ -348,6 +439,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
             Monitor size: [{:.0}, {:.0}]
             Monitor ratio: {:.2}
             Monitor scale factor: {:.2}
+            World Zoom: {:.2}
             ",
                 win.w(),
                 win.h(),
@@ -356,7 +448,8 @@ fn view(app: &App, model: &Model, frame: Frame) {
                 mon_w,
                 mon_h,
                 mon_w / mon_h,
-                m_scale_factor
+                m_scale_factor,
+                model.zoom
             );
             let pad = 6.0;
             draw.text(&text)
