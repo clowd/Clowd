@@ -1,0 +1,19 @@
+[package]
+name = "clowd-rust"
+version = "0.0.0-local"
+edition = "2021"
+
+[dependencies]
+active-win-pos-rs = "0.8"
+xcap = "0.0.14"
+nannou = "0.19"
+anyhow = "1.0"
+# image = "0.25"
+lazy_static = "1.4"
+
+# [patch.crates-io]
+# image = "0.25"
+
+[build-dependencies]
+winres = "0.1"
+semver = "1.0"
