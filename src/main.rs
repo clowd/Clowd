@@ -1,18 +1,27 @@
+mod dashed;
 mod event_handler;
 
 use anyhow::{anyhow, Result};
+use bracket_geometry::prelude::{PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
+use mouse_rs::Mouse;
 use nannou::{
     color::{self},
     image::{self, DynamicImage, ImageBuffer, RgbaImage},
     prelude::*,
     winit::{
-        dpi::{PhysicalPosition, PhysicalSize},
+        dpi::{LogicalPosition, PhysicalPosition, PhysicalSize},
         monitor::MonitorHandle,
         window::WindowBuilder,
     },
 };
 use wgpu::{SamplerBuilder, Texture, WithDeviceQueuePair};
 use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
+
+fn distance2d_pythagoras_squared(start: BgPointF, end: BgPointF) -> f32 {
+    let dx = start.x.max(end.x) - start.x.min(end.x);
+    let dy = start.y.max(end.y) - start.y.min(end.y);
+    (dx * dx) + (dy * dy)
+}
 
 fn main() {
     nannou::app(model)
@@ -21,6 +30,7 @@ fn main() {
         .run();
 }
 
+#[allow(dead_code)]
 struct Model {
     renderers: Vec<RendererInfo>,
     windows: Vec<DesktopWindowInfo>,
@@ -31,19 +41,24 @@ struct Model {
     accent_dark: Rgb,
     dash_black_white: Texture,
     dash_white_accent: Texture,
+    selection: Option<BgRect>,
+    mouse_pt: BgPointF,
+    mouse_anchor_pt: (i32, i32),
+    mouse_anchored: bool,
+    mouse: Mouse,
 }
 
 #[allow(dead_code)]
 struct RendererInfo {
     pub window: WindowId,
-    pub monitor: MonitorHandle,
+    pub monitor_handle: MonitorHandle,
+    pub monitor_bounds: BgRectF,
     pub color_image: DynamicImage,
     pub color_texture: wgpu::Texture,
     pub gray_image: DynamicImage,
     pub gray_texture: wgpu::Texture,
-    pub position: PhysicalPosition<i32>,
-    pub size: PhysicalSize<u32>,
     pub ready: bool,
+    pub scale_factor: f64,
 }
 
 struct DesktopWindowInfo {
@@ -61,10 +76,131 @@ impl Model {
     fn show_all(&mut self, app: &App) {
         self.renderers.iter_mut().for_each(|r| {
             let window = app.window(r.window).unwrap();
-            window.set_fullscreen_with(Some(Fullscreen::Borderless(Some(r.monitor.clone()))));
+            window.set_fullscreen_with(Some(Fullscreen::Borderless(Some(r.monitor_handle.clone()))));
             window.set_visible(true);
         });
     }
+
+    fn set_anchored(&mut self, anchored: bool) {
+        if anchored && !self.mouse_anchored {
+            self.mouse_anchored = true;
+            let _ = self
+                .mouse
+                .move_to(self.mouse_anchor_pt.0, self.mouse_anchor_pt.1);
+        } else if !anchored && self.mouse_anchored {
+            self.mouse_anchored = false;
+            let _ = self
+                .mouse
+                .move_to(self.mouse_pt.x as i32, self.mouse_pt.y as i32);
+        }
+    }
+
+    fn get_nearest_renderer(&self, pt: BgPointF) -> &RendererInfo {
+        self.renderers
+            .iter()
+            .find(|r| r.monitor_bounds.point_in_rect(pt))
+            .or_else(|| {
+                self.renderers.iter().min_by(|a, b| {
+                    let a_dist = distance2d_pythagoras_squared(a.monitor_bounds.center(), pt);
+                    let b_dist = distance2d_pythagoras_squared(b.monitor_bounds.center(), pt);
+                    a_dist.partial_cmp(&b_dist).unwrap()
+                })
+            })
+            .unwrap()
+    }
+
+    fn handle_mouse_event(&mut self, pt: BgPointF) {
+        if self.mouse_anchored {
+            if self.mouse_anchor_pt != (pt.x as i32, pt.y as i32) {
+                let x_delta = (pt.x - self.mouse_anchor_pt.0 as f32) / self.zoom;
+                let y_delta = (pt.y - self.mouse_anchor_pt.1 as f32) / self.zoom;
+
+                let mut mx = self.mouse_pt.x + x_delta;
+                let mut my = self.mouse_pt.y + y_delta;
+
+                let bounds = self
+                    .get_nearest_renderer(BgPointF::new(mx, my))
+                    .monitor_bounds;
+
+                // clip cursor to nearest monitor
+                let left = bounds.x1;
+                let right = bounds.x2;
+                let top = bounds.y1;
+                let bottom = bounds.y2;
+
+                mx = mx.max(left).min(right - 0.001);
+                my = my.max(top).min(bottom - 0.001);
+
+                self.mouse_pt = BgPointF::new(mx, my);
+                let _ = self
+                    .mouse
+                    .move_to(self.mouse_anchor_pt.0, self.mouse_anchor_pt.1);
+            }
+        } else {
+            self.mouse_pt = pt;
+        }
+    }
+}
+
+impl RendererInfo {
+    fn cartesian_bounds(&self) -> Rect {
+        Rect::from_w_h(self.monitor_bounds.width() as f32, self.monitor_bounds.height() as f32)
+    }
+
+    // fn window_pt_to_screen(&self, app: &App, pt: Vec2) -> Vec2 {
+    //     let win = app.window(self.window).unwrap().rect();
+    //     let win_w = win.w() as f64;
+    //     let win_h = win.h() as f64;
+    //     let reverse_tx = |x: f32| x as f64 + win_w / 2.0;
+    //     let reverse_ty = |y: f32| -(y as f64) + win_h / 2.0;
+    //     let monitor_pos = self.monitor.position();
+    //     let x = reverse_tx(pt.x) + monitor_pos.x as f64;
+    //     let y = reverse_ty(pt.y) + monitor_pos.y as f64;
+    //     vec2(x as f32, y as f32)
+    // }
+
+    fn logical_pt_to_screen(&self, app: &App, pt: Vec2) -> BgPointF {
+        let win = app.window(self.window).unwrap().rect();
+        let win_w = win.w() as f64;
+        let win_h = win.h() as f64;
+        let reverse_tx = |x: f32| x as f64 + win_w / 2.0;
+        let reverse_ty = |y: f32| -(y as f64) + win_h / 2.0;
+        let x = reverse_tx(pt.x);
+        let y = reverse_ty(pt.y);
+        let logical = LogicalPosition::new(x, y);
+        let physical: PhysicalPosition<f32> = logical.to_physical(self.scale_factor);
+        let monitor_pos = self.monitor_bounds;
+        let x = physical.x + monitor_pos.x1 as f32;
+        let y = physical.y + monitor_pos.y1 as f32;
+        BgPointF::new(x, y)
+    }
+
+    fn screen_pt_to_window(&self, pt: BgPointF) -> Vec2 {
+        let monitor_pos = self.monitor_bounds;
+        let (win_w, win_h) = (self.monitor_bounds.width() as f32, self.monitor_bounds.height() as f32);
+        let x = pt.x - monitor_pos.x1 as f32;
+        let y = pt.y - monitor_pos.y1 as f32;
+        let tx = |x: f32| (x - win_w / 2.0) as f32;
+        let ty = |y: f32| (-(y - win_h / 2.0)) as f32;
+        let x = tx(x);
+        let y = ty(y);
+        vec2(x as f32, y as f32)
+    }
+
+    // fn screen_pt_to_logical(&self, app: &App, pt: PhysicalPosition<i32>) -> Vec2 {
+    //     let window = app.window(self.window).unwrap();
+    //     let win = window.rect();
+    //     let win_w = win.w() as f64;
+    //     let win_h = win.h() as f64;
+    //     let tx = |x: f64| (x - win_w / 2.0) as f32;
+    //     let ty = |y: f64| (-(y - win_h / 2.0)) as f32;
+    //     let (new_x, new_y) = pt
+    //         .to_logical::<f64>(window.scale_factor().into())
+    //         .into();
+    //     let x = tx(new_x);
+    //     let y = ty(new_y);
+    //     vec2(x as f32, y as f32)
+    // }
 }
 
 fn convert_image<T>(buffer: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, T>) -> nannou::image::ImageBuffer<nannou::image::Rgba<u8>, T>
@@ -82,6 +218,15 @@ fn create_model(app: &App) -> Result<Model> {
 
     let monitors = app.available_monitors();
     let windows = XCapWindow::all()?;
+
+    let primary = app.primary_monitor().unwrap();
+    let primary_position = primary.position();
+    let primary_size = primary.size();
+
+    let mouse_anchor_pt = (
+        (primary_position.x as f64 + (primary_size.width as f64 / 2.0)) as i32,
+        (primary_position.y as f64 + (primary_size.height as f64 / 2.0)) as i32,
+    );
 
     for (i, monitor) in monitors.iter().enumerate() {
         let position = monitor.position();
@@ -114,30 +259,22 @@ fn create_model(app: &App) -> Result<Model> {
                 | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::RENDER_ATTACHMENT;
-            // let usage = wgpu::TextureUsages::all();
             (
                 wgpu::Texture::load_from_image(device, queue, usage, &color_image),
                 wgpu::Texture::load_from_image(device, queue, usage, &gray_image),
             )
         });
 
-        // println!("color_texture: {:?}", color_texture.sample_type());
-        // println!("gray_texture: {:?}", gray_texture.sample_type());
-        // panic!();
-
-        // let color_texture = wgpu::Texture::from_image(&window_handle, &color_image);
-        // let gray_texture = wgpu::Texture::load_from_image(&window_handle, &gray_image);
-
         renderers.push(RendererInfo {
             window,
-            monitor: monitor.clone(),
+            monitor_handle: monitor.clone(),
+            monitor_bounds: BgRectF::with_size(position.x as f32, position.y as f32, size.width as f32, size.height as f32),
             color_image,
             color_texture,
             gray_image,
             gray_texture,
-            position,
-            size,
             ready: false,
+            scale_factor: monitor.scale_factor(),
         });
     }
 
@@ -170,6 +307,11 @@ fn create_model(app: &App) -> Result<Model> {
         accent_dark: rgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
         dash_black_white: bw_tex,
         dash_white_accent: aw_tex,
+        selection: None,
+        mouse_pt: BgPointF::zero(),
+        mouse_anchor_pt,
+        mouse_anchored: false,
+        mouse: Mouse::new(),
     })
 }
 
@@ -184,19 +326,10 @@ fn model(app: &App) -> Model {
 }
 
 fn update(_app: &App, _model: &mut Model, _update: Update) {
-    println!("update: {:?}", _update);
+    // println!("update: {:?}", _update);
 }
 
 fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
-    println!("window a: {:?}, {:?}", event, idx);
-    // let window = _app.window(_model.window).unwrap();
-    // window.set_fullscreen(true);
-    // window.set_visible(true);
-
-    // app.window(model.)
-    // app.main_window()
-    // model.show_all(app);
-
     let renderer = &mut model.renderers[idx];
     renderer.ready = true;
 
@@ -211,6 +344,10 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
             Key::Escape => app.quit(),
             _ => (),
         }
+    } else if let WindowEvent::MouseMoved(pt) = event {
+        let renderer = &model.renderers[idx];
+        let pt = renderer.logical_pt_to_screen(app, pt);
+        model.handle_mouse_event(pt);
     } else if let WindowEvent::MouseWheel(scroll_delta, _) = event {
         let delta = match scroll_delta {
             MouseScrollDelta::LineDelta(_, y) => y,
@@ -234,102 +371,8 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
         }
 
         model.zoom = zoom.max(1.0).min(256.0);
+        model.set_anchored(zoom > 1.0);
     }
-}
-
-fn draw_dashed_line_polyline(draw: &Draw, start: Vec2, end: Vec2, weight: f32, dash_length: f32, texture: &Texture, time: f32) {
-    let total_distance = start.distance(end);
-    let direction = (end - start).normalize();
-
-    let dash_offset = (time * 50.0) % (dash_length * 2.0);
-
-    let mut current_distance = dash_offset;
-    let mut points_colored = Vec::new();
-    let mut toggle = true;
-
-    while current_distance < total_distance {
-        let dash_start = start + direction * current_distance;
-        let dash_end = start + direction * (current_distance + dash_length).min(total_distance);
-
-        let texture_coords = if toggle { [0.0, 0.0] } else { [1.0, 1.0] };
-        points_colored.push((dash_start, texture_coords));
-        points_colored.push((dash_end, texture_coords));
-
-        toggle = !toggle;
-        current_distance += dash_length;
-    }
-
-    draw.polyline()
-        .weight(weight)
-        .points_textured(&texture, points_colored);
-}
-
-fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: f32, texture: &Texture, time: f32) {
-    let draw = draw.scissor(rect.pad(-1.0));
-
-    // let mut points_colored = Vec::new();
-    // let mut toggle = true;
-
-    let x = vec2(dash_length * 4.0, 0.0);
-    let y = vec2(0.0, dash_length * 4.0);
-
-    draw_dashed_line_polyline(&draw, rect.top_left() - x, rect.top_right() + x, weight, dash_length, texture, time);
-    draw_dashed_line_polyline(&draw, rect.top_right() + y, rect.bottom_right() - y, weight, dash_length, texture, time);
-    draw_dashed_line_polyline(&draw, rect.bottom_right() + x, rect.bottom_left() - x, weight, dash_length, texture, time);
-    draw_dashed_line_polyline(&draw, rect.bottom_left() - y, rect.top_left() + y, weight, dash_length, texture, time);
-
-    draw.line()
-        .start(rect.top_left() + vec2(-1.0, 1.0))
-        .end(rect.top_left())
-        .weight(weight)
-        .color(BLACK);
-
-    draw.line()
-        .start(rect.top_right() + vec2(1.0, 1.0))
-        .end(rect.top_right())
-        .weight(weight)
-        .color(BLACK);
-
-    draw.line()
-        .start(rect.bottom_right() + vec2(1.0, -1.0))
-        .end(rect.bottom_right())
-        .weight(weight)
-        .color(BLACK);
-
-    draw.line()
-        .start(rect.bottom_left() + vec2(-1.0, -1.0))
-        .end(rect.bottom_left())
-        .weight(weight)
-        .color(BLACK);
-
-    // let mut do_side = |start: Vec2, end: Vec2| {
-    //     let mut current_distance = dash_offset;
-    //     let total_distance = start.distance(end);
-    //     let direction = (end - start).normalize();
-
-    //     while current_distance < total_distance {
-    //         let dash_start = start + direction * current_distance;
-    //         let dash_end = start + direction * (current_distance + dash_length).min(total_distance);
-
-    //         let texture_coords = if toggle { [0.0, 0.0] } else { [1.0, 1.0] };
-    //         points_colored.push((dash_start, texture_coords));
-    //         points_colored.push((dash_end, texture_coords));
-
-    //         toggle = !toggle;
-    //         current_distance += dash_length * 1.5; // Include the gap length
-    //     }
-    // };
-
-    // do_side(rect.top_left(), rect.top_right());
-    // do_side(rect.top_right(), rect.bottom_right());
-    // do_side(rect.bottom_right(), rect.bottom_left());
-    // do_side(rect.bottom_left(), rect.top_left());
-
-    // draw.polyline()
-    //     .weight(weight)
-    //     .start_cap_round()
-    //     .end_cap_round()
-    //     .points_textured(&texture, points_colored);
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
@@ -339,17 +382,32 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .mipmap_filter(wgpu::FilterMode::Nearest)
         .into_descriptor();
 
-    let draw = app.draw().sampler(desc);
     let window = app.window(frame.window_id()).unwrap();
+    let draw = app
+        .draw()
+        .scale(1.0 / window.scale_factor())
+        .sampler(desc);
 
     let renderer = model
         .renderers
         .iter()
         .find(|r| r.window == frame.window_id())
         .unwrap();
-    let win = window.rect();
 
-    let cursor_pos = app.mouse.position();
+    draw_texture(app, model, &draw, renderer);
+
+    draw_crosshair(app, model, &draw, renderer);
+
+    if model.debug {
+        draw_debug(app, model, &draw, renderer);
+    }
+
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn draw_texture(app: &App, model: &Model, draw: &Draw, renderer: &RendererInfo) {
+    let win = renderer.cartesian_bounds();
+    let cursor_pos = renderer.screen_pt_to_window(model.mouse_pt);
     let zoom = model.zoom;
 
     let texture_draw = draw
@@ -357,34 +415,19 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .scale(zoom);
 
     texture_draw.texture(&renderer.gray_texture);
-    texture_draw
-        .rect()
+    draw.rect()
         .wh(win.wh())
         .rgba(0.0, 0.0, 0.0, 0.5);
 
-    let selection = Rect::from_x_y_w_h(0.0, 0.0, 500.0, 500.0);
-    let cropped_draw = draw.scissor(selection);
-    // .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
-    // .scale(zoom);
-
-    cropped_draw.texture(&renderer.color_texture);
-
-    // frame.command_encoder()
-    // draw.path().stroke().points_textured(view, points)
-
-    draw_dashed_rectangle(&draw, selection, 2.0, 20.0, &model.dash_white_accent, app.time);
-
-    draw_crosshair(app, model, win, &draw);
-
-    if model.debug {
-        draw_debug(app, model, &draw, window);
-    }
-
-    draw.to_frame(app, &frame).unwrap();
+    // if let Some(selection) = model.selection {
+    //     let cropped_draw = draw.scissor(selection);
+    //     cropped_draw.texture(&renderer.color_texture);
+    //     dashed::draw_dashed_rectangle(&draw, selection, 2.0, 20.0, &model.dash_white_accent, app.time);
+    // }
 }
 
-fn draw_debug(app: &App, model: &Model, draw: &Draw, window: std::cell::Ref<'_, Window>) {
-    let win = window.rect();
+fn draw_debug(app: &App, model: &Model, draw: &Draw, renderer: &RendererInfo) {
+    let win = renderer.cartesian_bounds();
 
     // Crosshair at window center
     let crosshair_color = rgba(1.0, 1.0, 1.0, 1.0);
@@ -436,66 +479,71 @@ fn draw_debug(app: &App, model: &Model, draw: &Draw, window: std::cell::Ref<'_, 
         .y(y_off);
 
     // Debug window and monitor details.
-    if let Some(monitor) = window.current_monitor() {
-        let w_scale_factor = window.scale_factor();
-        let m_scale_factor = monitor.scale_factor();
-        let mon_phys = monitor.size();
-        let mon = mon_phys.to_logical(w_scale_factor as f64);
-        let mon_w: f32 = mon.width;
-        let mon_h: f32 = mon.height;
-        let text = format!(
-            "
-            Window size: [{:.0}, {:.0}]
-            Window ratio: {:.2}
-            Window scale factor: {:.2}
-            Monitor size: [{:.0}, {:.0}]
-            Monitor ratio: {:.2}
-            Monitor scale factor: {:.2}
-            World Zoom: {:.2}
-            ",
-            win.w(),
-            win.h(),
-            win.w() / win.h(),
-            w_scale_factor,
-            mon_w,
-            mon_h,
-            mon_w / mon_h,
-            m_scale_factor,
-            model.zoom
-        );
-        let pad = 6.0;
-        draw.text(&text)
-            .h(win.pad(pad).h())
-            .w(win.pad(pad).w())
-            .line_spacing(pad)
-            .font_size(14)
-            .align_text_bottom()
-            .color(crosshair_color)
-            .left_justify();
-    }
+    let m_scale_factor = renderer.scale_factor;
+    let mon_phys_size = renderer.monitor_handle.size();
+    let mon_log_size = mon_phys_size.to_logical::<f32>(m_scale_factor as f64);
+    let mon_phys_pos = renderer.monitor_handle.position();
+    let mon_log_pos = mon_phys_pos.to_logical::<f32>(m_scale_factor as f64);
+    let text = format!(
+        "
+        Monitor logical: [{:.0}, {:.0}, {:.0}, {:.0}]
+        Monitor phsical: [{:.0}, {:.0}, {:.0}, {:.0}]
+        Monitor ratio: {:.2}
+        Monitor scale factor: {:.2}
+        World zoom: {:.2}
+        World mouse: {:?}
+        Mouse relative to window: {:.2}
+        Artificial mouse: {:?}
+        ",
+        mon_log_pos.x,
+        mon_log_pos.y,
+        mon_log_size.width,
+        mon_log_size.height,
+        mon_phys_pos.x,
+        mon_phys_pos.y,
+        mon_phys_size.width,
+        mon_phys_size.height,
+        mon_log_size.width / mon_log_size.height,
+        m_scale_factor,
+        model.zoom,
+        model.mouse_pt,
+        renderer.screen_pt_to_window(model.mouse_pt),
+        model.mouse_anchored,
+    );
+    let pad = 6.0;
+    draw.text(&text)
+        .h(win.pad(pad).h())
+        .w(win.pad(pad).w())
+        .line_spacing(pad)
+        .font_size(14)
+        .align_text_bottom()
+        .color(crosshair_color)
+        .left_justify();
 
     // Ellipse at mouse.
+    let mouse_pos = renderer.screen_pt_to_window(model.mouse_pt);
     draw.ellipse()
         .wh([5.0; 2].into())
-        .xy(app.mouse.position());
+        .xy(mouse_pos);
 
     // Mouse position text.
-    let mouse = app.mouse.position();
-    let pos = format!("[{:.1}, {:.1}]", mouse.x, mouse.y);
+    let pos = format!("[{:.1}, {:.1}]", mouse_pos.x, mouse_pos.y);
     draw.text(&pos)
-        .xy(mouse + vec2(0.0, 20.0))
+        .xy(mouse_pos + vec2(0.0, 20.0))
         .font_size(14)
         .color(WHITE);
 }
 
-fn draw_crosshair(app: &App, model: &Model, win: Rect, draw: &Draw) {
-    let mouse = app.mouse.position() - pt2(-0.5, 0.5);
+fn draw_crosshair(app: &App, model: &Model, draw: &Draw, renderer: &RendererInfo) {
+    let win = renderer.cartesian_bounds();
+    let mouse_pos = renderer.screen_pt_to_window(model.mouse_pt);
+    let mouse = mouse_pos - pt2(-0.5, 0.5);
     let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
     let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
 
-    draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white, 0.0);
+    dashed::draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white, 0.0);
 
-    draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white, 0.0);
+    dashed::draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white, 0.0);
 
     let accent_size = 100.0;
     let accent_color = model.accent_light;
@@ -546,27 +594,3 @@ fn draw_crosshair(app: &App, model: &Model, win: Rect, draw: &Draw) {
         .stroke_weight(handle_weight)
         .color(accent_color);
 }
-
-// fn draw_grid(draw: &Draw, win: &Rect, step: f32, weight: f32) {
-//     let step_by = || (0..).map(|i| i as f32 * step);
-//     let r_iter = step_by().take_while(|&f| f < win.right());
-//     let l_iter = step_by()
-//         .map(|f| -f)
-//         .take_while(|&f| f > win.left());
-//     let x_iter = r_iter.chain(l_iter);
-//     for x in x_iter {
-//         draw.line()
-//             .weight(weight)
-//             .points(pt2(x, win.bottom()), pt2(x, win.top()));
-//     }
-//     let t_iter = step_by().take_while(|&f| f < win.top());
-//     let b_iter = step_by()
-//         .map(|f| -f)
-//         .take_while(|&f| f > win.bottom());
-//     let y_iter = t_iter.chain(b_iter);
-//     for y in y_iter {
-//         draw.line()
-//             .weight(weight)
-//             .points(pt2(win.left(), y), pt2(win.right(), y));
-//     }
-// }

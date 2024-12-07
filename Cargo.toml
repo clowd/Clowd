@@ -10,6 +10,8 @@ nannou = "0.19"
 anyhow = "1.0"
 # image = "0.25"
 lazy_static = "1.4"
+mouse-rs = "0.4"
+bracket-geometry = "0.8.7"
 
 # [patch.crates-io]
 # image = "0.25"
