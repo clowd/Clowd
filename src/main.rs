@@ -190,7 +190,7 @@ impl Model {
         if let Some(selection) = self.selection {
             let renderer = self.get_nearest_renderer(selection.center().to_vec2());
             self.button_panel
-                .update(renderer.monitor_bounds.to_int(), renderer.scale_factor as f32, selection);
+                .update(renderer.monitor_bounds.to_int(), renderer.scale_factor, selection);
         }
     }
 
@@ -513,10 +513,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
                 .monitor_bounds
                 .point_in_rect(selection.center().to_vec2())
         {
-            model
-                .button_panel
-                .draw(model, &draw, renderer);
-
+            model.button_panel.draw(&draw, renderer);
             draw.rect().w_h(50.0, 50.0).color(RED);
         }
     }
@@ -722,7 +719,6 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         World mouse: {:?}
         Mouse relative to window: {:.2}
         Artificial mouse: {:?}
-        Buttons: {:?}
         ",
         mon_log_pos.x,
         mon_log_pos.y,
@@ -739,7 +735,6 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         model.mouse_pt,
         renderer.screen_pt_to_window(model.mouse_pt),
         model.mouse_anchored,
-        model.button_panel.button_positions,
     );
     let pad = 6.0;
     draw.text(&text)
