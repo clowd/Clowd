@@ -5,7 +5,7 @@ mod ui;
 mod util;
 
 use anyhow::{anyhow, Result};
-use euclid::{SideOffsets2D, Size2D};
+use euclid::{SideOffsets2D, Size2D, Transform2D};
 // use bracket_geometry::prelude::{Point as BgPoint, PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
 use geometry::*;
 use mouse_rs::Mouse;
@@ -493,6 +493,12 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
     if let WindowEvent::KeyPressed(key_pressed) = event {
         match key_pressed {
             Key::D => model.debug = !model.debug,
+            Key::R => {
+                model.zoom = 1.0;
+                model.set_anchored(false);
+                model.captured = false;
+                model.selection = None;
+            }
             Key::Escape => app.quit(),
             _ => (),
         }
@@ -581,13 +587,13 @@ fn view(app: &App, model: &Model, frame: Frame) {
 }
 
 fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) {
-    fn zoom_point(original_point: ScreenPointF, zoom_point: ScreenPointF, scale: f64) -> ScreenPointF {
-        // Calculate the new point after applying the zoom transformation
-        ScreenPointF::new(
-            zoom_point.x + (original_point.x - zoom_point.x) * scale,
-            zoom_point.y + (original_point.y - zoom_point.y) * scale,
-        )
-    }
+    // fn zoom_point(original_point: ScreenPointF, zoom_point: ScreenPointF, scale: f64) -> ScreenPointF {
+    //     // Calculate the new point after applying the zoom transformation
+    //     ScreenPointF::new(
+    //         zoom_point.x + (original_point.x - zoom_point.x) * scale,
+    //         zoom_point.y + (original_point.y - zoom_point.y) * scale,
+    //     )
+    // }
 
     let pixel_size = renderer.scale_factor.floor() as f32;
 
@@ -618,65 +624,141 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         .rgba(0.0, 0.0, 0.0, 0.5);
 
     if let Some(screen_selection) = model.selection {
-        let top_left = screen_selection.top_left().to_f64();
-        let bottom_right = screen_selection.bottom_right().to_f64();
-        let top_left = zoom_point(top_left, model.mouse_pt, model.zoom);
-        let bottom_right = zoom_point(bottom_right, model.mouse_pt, model.zoom);
+        // let reference_rect = screen_selection
+        //     .to_window_rect(renderer.monitor_bounds)
+        //     .to_nannou();
+        // texture_draw
+        //     .rect()
+        //     .xy(reference_rect.xy())
+        //     .wh(reference_rect.wh())
+        //     .color(RED);
 
-        let top_left = top_left
-            .to_window_point(renderer.monitor_bounds)
+        let mouse_pt = model
+            .mouse_pt
+            .to_window_point(renderer.monitor_bounds);
+
+        #[rustfmt::skip]
+        let base_transform = Transform2D::<f64, ScreenUnit, ScreenUnit>::identity()
+            // Translate units into cartesian space
+            .then_translate(-renderer.monitor_bounds.to_f64().center().to_vector())
+            .then_scale(1.0, -1.0)
+            .with_destination::<WindowUnit>()
+            // Move mouse to origin relative to this new coordinate system
+            .then_translate(-mouse_pt.to_vector())
+            // Scale about the mouse
+            .then_scale(zoom.into(), zoom.into())
+            // Move origin back to window center
+            .then_translate(mouse_pt.to_vector());
+
+        let scissor_transform = base_transform
+            // scissor is scaled by dpi so we need to undo this
+            .then_scale(1.0 / renderer.scale_factor, -1.0 / renderer.scale_factor);
+
+        let scissor_rect = scissor_transform
+            .outer_transformed_rect(&screen_selection.to_f64())
             .to_nannou();
-        let bottom_right = bottom_right
-            .to_window_point(renderer.monitor_bounds)
-            .to_nannou();
 
-        let selection = Rect::from_corners(top_left, bottom_right);
+        // let scissor_top_left = scissor_transform
+        //     .transform_point(screen_selection.top_left().to_f64())
+        //     .to_nannou();
+        // let scissor_bottom_right = scissor_transform
+        //     .transform_point(screen_selection.bottom_right().to_f64())
+        //     .to_nannou();
 
-        // not sure why I have to do this, but it works
-        let flipped_top_left = pt2(top_left.x, -top_left.y);
-        let flipped_bottom_right = pt2(bottom_right.x, -bottom_right.y);
-        let flipped_selection = Rect::from_corners(flipped_top_left, flipped_bottom_right);
+        // let scissor_rect = Rect::from_corners(scissor_top_left, scissor_bottom_right);
 
-        let cropped_draw = texture_draw.scissor(flipped_selection);
+        // draw.rect()
+        //     .xy(transformed_rect.xy())
+        //     .wh(transformed_rect.wh())
+        //     .color(GREEN);
+
+        let cropped_draw = texture_draw.scissor(scissor_rect);
+        // .x_y(x_diff * zoom, y_diff * zoom)
+        // .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
+        // .scale(zoom);
         cropped_draw.texture(&model.desktop_color_texture);
 
-        let outline_draw = draw.scissor(flipped_selection.pad(-2.0 * pixel_size));
+        let outline_weight = pixel_size * 2.0;
+        let outline_rect = base_transform
+            .outer_transformed_rect(&screen_selection.to_f64())
+            .to_nannou()
+            .pad(if zoom < 1.5 { outline_weight / 2.0 } else { 0.0 });
+
         util::draw_dashed_rectangle(
-            &outline_draw,
-            selection.pad(-2.0 * pixel_size),
-            pixel_size * 4.0,
+            &draw,
+            outline_rect, //.pad(-2.0 * pixel_size),
+            pixel_size * 2.0,
             pixel_size * 20.0,
             &model.dash_white_accent,
             time,
         );
 
-        for handle in HitTest::resize_handles() {
-            let pos = handle
-                .handle_position(screen_selection.outer_rect(SideOffsets2D::new(1, 1, 1, 1)))
-                .to_f64();
-            let pos = zoom_point(pos, model.mouse_pt, model.zoom);
-            let pos = pos
-                .to_window_point(renderer.monitor_bounds)
-                .to_nannou();
+        // let top_left = screen_selection.top_left().to_f64();
+        // let bottom_right = screen_selection.bottom_right().to_f64();
+        // let top_left = zoom_point(top_left, model.mouse_pt, model.zoom);
+        // let bottom_right = zoom_point(bottom_right, model.mouse_pt, model.zoom);
 
-            let rect = point_to_widened_rect_n(6.0 * pixel_size, pos);
-            draw.ellipse()
-                .xy(rect.xy())
-                .wh(rect.wh())
-                .color(model.accent_light);
+        // let top_left = top_left
+        //     .to_window_point(renderer.monitor_bounds)
+        //     .to_nannou();
+        // let bottom_right = bottom_right
+        //     .to_window_point(renderer.monitor_bounds)
+        //     .to_nannou();
 
-            let rect = point_to_widened_rect_n(5.0 * pixel_size, pos);
-            draw.ellipse()
-                .xy(rect.xy())
-                .wh(rect.wh())
-                .color(WHITE);
+        // let selection = Rect::from_corners(top_left, bottom_right);
 
-            let rect = point_to_widened_rect_n(4.0 * pixel_size, pos);
-            draw.ellipse()
-                .xy(rect.xy())
-                .wh(rect.wh())
-                .color(model.accent_light);
-        }
+        // not sure why I have to do this, but it works
+        // let flipped_top_left = pt2(top_left.x, -top_left.y);
+        // let flipped_bottom_right = pt2(bottom_right.x, -bottom_right.y);
+        // let flipped_selection = Rect::from_corners(flipped_top_left, flipped_bottom_right);
+
+        // let cropped_draw = draw
+        //     .scissor(flipped_selection)
+        //     .x_y(x_diff * zoom, y_diff * zoom)
+        //     .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
+        //     .scale(zoom);
+        // cropped_draw.texture(&model.desktop_color_texture);
+
+        // let outline_draw = draw.scissor(flipped_selection.pad(-2.0 * pixel_size));
+        // util::draw_dashed_rectangle(
+        //     &outline_draw,
+        //     selection.pad(-2.0 * pixel_size),
+        //     pixel_size * 4.0,
+        //     pixel_size * 20.0,
+        //     &model.dash_white_accent,
+        //     time,
+        // );
+
+        // let min_size_for_handles = (6.0 * pixel_size * 5.0) as i32;
+        // if model.captured && screen_selection.width() > min_size_for_handles && screen_selection.height() > min_size_for_handles {
+        //     for handle in HitTest::resize_handles() {
+        //         let pos = handle
+        //             .handle_position(screen_selection.outer_rect(SideOffsets2D::new(1, 1, 1, 1)))
+        //             .to_f64();
+        //         let pos = zoom_point(pos, model.mouse_pt, model.zoom);
+        //         let pos = pos
+        //             .to_window_point(renderer.monitor_bounds)
+        //             .to_nannou();
+
+        //         let rect = point_to_widened_rect_n(6.0 * pixel_size, pos);
+        //         draw.ellipse()
+        //             .xy(rect.xy())
+        //             .wh(rect.wh())
+        //             .color(model.accent_light);
+
+        //         let rect = point_to_widened_rect_n(5.0 * pixel_size, pos);
+        //         draw.ellipse()
+        //             .xy(rect.xy())
+        //             .wh(rect.wh())
+        //             .color(WHITE);
+
+        //         let rect = point_to_widened_rect_n(4.0 * pixel_size, pos);
+        //         draw.ellipse()
+        //             .xy(rect.xy())
+        //             .wh(rect.wh())
+        //             .color(model.accent_light);
+        //     }
+        // }
     }
 }
 
