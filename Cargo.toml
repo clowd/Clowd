@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 active-win-pos-rs = "0.8"
+log = "0.4"
 xcap = "0.0.14"
 nannou = "0.19"
 anyhow = "1.0"
@@ -12,6 +13,11 @@ anyhow = "1.0"
 lazy_static = "1.4"
 mouse-rs = "0.4"
 bracket-geometry = "0.8.7"
+windows = { version = "0.58", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi"
+]}
+sysinfo = "0.33"
 
 # [patch.crates-io]
 # image = "0.25"
