@@ -29,7 +29,7 @@ pub fn draw_dashed_line_polyline(draw: &Draw, start: Vec2, end: Vec2, weight: f3
 }
 
 pub fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: f32, texture: &Texture, time: f32) {
-    let draw = draw.scissor(rect.pad(-1.0));
+    // let draw = draw.scissor(rect.pad(-1.0));
 
     let x = vec2(dash_length * 4.0, 0.0);
     let y = vec2(0.0, dash_length * 4.0);
@@ -39,27 +39,27 @@ pub fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: 
     draw_dashed_line_polyline(&draw, rect.bottom_right() + x, rect.bottom_left() - x, weight, dash_length, texture, time);
     draw_dashed_line_polyline(&draw, rect.bottom_left() - y, rect.top_left() + y, weight, dash_length, texture, time);
 
-    draw.line()
-        .start(rect.top_left() + vec2(-1.0, 1.0))
-        .end(rect.top_left())
-        .weight(weight)
-        .color(BLACK);
+    // draw.line()
+    //     .start(rect.top_left() + vec2(-1.0, 1.0))
+    //     .end(rect.top_left())
+    //     .weight(weight)
+    //     .color(BLACK);
 
-    draw.line()
-        .start(rect.top_right() + vec2(1.0, 1.0))
-        .end(rect.top_right())
-        .weight(weight)
-        .color(BLACK);
+    // draw.line()
+    //     .start(rect.top_right() + vec2(1.0, 1.0))
+    //     .end(rect.top_right())
+    //     .weight(weight)
+    //     .color(BLACK);
 
-    draw.line()
-        .start(rect.bottom_right() + vec2(1.0, -1.0))
-        .end(rect.bottom_right())
-        .weight(weight)
-        .color(BLACK);
+    // draw.line()
+    //     .start(rect.bottom_right() + vec2(1.0, -1.0))
+    //     .end(rect.bottom_right())
+    //     .weight(weight)
+    //     .color(BLACK);
 
-    draw.line()
-        .start(rect.bottom_left() + vec2(-1.0, -1.0))
-        .end(rect.bottom_left())
-        .weight(weight)
-        .color(BLACK);
+    // draw.line()
+    //     .start(rect.bottom_left() + vec2(-1.0, -1.0))
+    //     .end(rect.bottom_left())
+    //     .weight(weight)
+    //     .color(BLACK);
 }
