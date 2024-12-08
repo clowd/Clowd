@@ -1,5 +1,6 @@
 mod dashed;
 mod event_handler;
+mod screenshot;
 
 use anyhow::{anyhow, Result};
 use bracket_geometry::prelude::{PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
@@ -14,8 +15,15 @@ use nannou::{
         window::WindowBuilder,
     },
 };
-use wgpu::{SamplerBuilder, Texture, WithDeviceQueuePair};
-use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
+use screenshot::capture_desktop;
+use wgpu::{SamplerBuilder, Texture};
+use xcap::Window as XCapWindow;
+
+#[macro_use]
+extern crate log;
+
+#[macro_use]
+extern crate anyhow;
 
 fn distance2d_pythagoras_squared(start: BgPointF, end: BgPointF) -> f32 {
     let dx = start.x.max(end.x) - start.x.min(end.x);
@@ -33,6 +41,11 @@ fn main() {
 #[allow(dead_code)]
 struct Model {
     renderers: Vec<RendererInfo>,
+    desktop_bounds: BgRect,
+    desktop_color_texture: wgpu::Texture,
+    desktop_gray_texture: wgpu::Texture,
+    desktop_color_image: DynamicImage,
+    desktop_gray_image: DynamicImage,
     windows: Vec<DesktopWindowInfo>,
     shown: bool,
     debug: bool,
@@ -50,22 +63,18 @@ struct Model {
 
 #[allow(dead_code)]
 struct RendererInfo {
-    pub window: WindowId,
-    pub monitor_handle: MonitorHandle,
-    pub monitor_bounds: BgRectF,
-    pub color_image: DynamicImage,
-    pub color_texture: wgpu::Texture,
-    pub gray_image: DynamicImage,
-    pub gray_texture: wgpu::Texture,
-    pub ready: bool,
-    pub scale_factor: f64,
+    window: WindowId,
+    monitor_handle: MonitorHandle,
+    monitor_bounds: BgRectF,
+    ready: bool,
+    scale_factor: f64,
 }
 
 struct DesktopWindowInfo {
-    pub title: String,
-    pub position: PhysicalPosition<i32>,
-    pub size: PhysicalSize<u32>,
-    pub capture: Option<RgbaImage>,
+    title: String,
+    position: PhysicalPosition<i32>,
+    size: PhysicalSize<u32>,
+    capture: Option<RgbaImage>,
 }
 
 impl Model {
@@ -203,13 +212,6 @@ impl RendererInfo {
     // }
 }
 
-fn convert_image<T>(buffer: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, T>) -> nannou::image::ImageBuffer<nannou::image::Rgba<u8>, T>
-where
-    T: std::ops::Deref<Target = [u8]> + std::ops::DerefMut<Target = [u8]> + 'static,
-{
-    nannou::image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw()).expect("Conversion failed")
-}
-
 fn create_model(app: &App) -> Result<Model> {
     let mut renderers = Vec::new();
     let mut desktop_windows = Vec::new();
@@ -228,18 +230,16 @@ fn create_model(app: &App) -> Result<Model> {
         (primary_position.y as f64 + (primary_size.height as f64 / 2.0)) as i32,
     );
 
+    let (desktop_bounds, desktop_capture) = capture_desktop()?;
+    let desktop_color_image = DynamicImage::ImageRgba8(desktop_capture);
+
+    // TODO optimise this, can we just use a shader?
+    let gray_image_intermediate = DynamicImage::ImageLuma8(desktop_color_image.to_luma8());
+    let desktop_gray_image = DynamicImage::ImageRgba8(gray_image_intermediate.to_rgba8());
+
     for (i, monitor) in monitors.iter().enumerate() {
         let position = monitor.position();
         let size = monitor.size();
-
-        // Try to create a monitor capturer and handle errors.
-        let monitor_capturer = XCapMonitor::from_point(position.x + 10, position.y + 10)?;
-        let capture: RgbaImage = convert_image(monitor_capturer.capture_image()?);
-        let color_image = DynamicImage::ImageRgba8(capture);
-
-        // TODO optimise this, can we just use a shader?
-        let gray_image_intermediate = DynamicImage::ImageLuma8(color_image.to_luma8());
-        let gray_image = DynamicImage::ImageRgba8(gray_image_intermediate.to_rgba8());
 
         // Try to create a new window and handle errors.
         let window = app
@@ -253,26 +253,10 @@ fn create_model(app: &App) -> Result<Model> {
             .build()
             .map_err(|e| anyhow!("{:?}", e))?;
 
-        let window_handle = app.window(window).unwrap();
-        let (color_texture, gray_texture) = window_handle.with_device_queue_pair(|device, queue| {
-            let usage = wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT;
-            (
-                wgpu::Texture::load_from_image(device, queue, usage, &color_image),
-                wgpu::Texture::load_from_image(device, queue, usage, &gray_image),
-            )
-        });
-
         renderers.push(RendererInfo {
             window,
             monitor_handle: monitor.clone(),
             monitor_bounds: BgRectF::with_size(position.x as f32, position.y as f32, size.width as f32, size.height as f32),
-            color_image,
-            color_texture,
-            gray_image,
-            gray_texture,
             ready: false,
             scale_factor: monitor.scale_factor(),
         });
@@ -297,8 +281,16 @@ fn create_model(app: &App) -> Result<Model> {
     let aw_img = image::DynamicImage::ImageRgba8(aw_buf);
     let aw_tex = wgpu::Texture::from_image(app, &aw_img);
 
+    let desktop_color_texture = Texture::from_image(app, &desktop_color_image);
+    let desktop_gray_texture = Texture::from_image(app, &desktop_gray_image);
+
     Ok(Model {
         renderers,
+        desktop_bounds,
+        desktop_color_texture,
+        desktop_gray_texture,
+        desktop_color_image,
+        desktop_gray_image,
         windows: desktop_windows,
         shown: false,
         debug: false,
@@ -394,27 +386,35 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .find(|r| r.window == frame.window_id())
         .unwrap();
 
-    draw_texture(app, model, &draw, renderer);
+    draw_texture(model, &draw, renderer);
 
-    draw_crosshair(app, model, &draw, renderer);
+    draw_crosshair(model, &draw, renderer);
 
     if model.debug {
-        draw_debug(app, model, &draw, renderer);
+        draw_debug(model, &draw, renderer);
     }
 
     draw.to_frame(app, &frame).unwrap();
 }
 
-fn draw_texture(app: &App, model: &Model, draw: &Draw, renderer: &RendererInfo) {
+fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo) {
     let win = renderer.cartesian_bounds();
     let cursor_pos = renderer.screen_pt_to_window(model.mouse_pt);
     let zoom = model.zoom;
 
+    let monitor_center = renderer.monitor_bounds.center();
+    let desktop_center = model.desktop_bounds.center().to_vec2();
+    let x_diff = desktop_center.x - monitor_center.x;
+    let y_diff = desktop_center.y - monitor_center.y;
+
     let texture_draw = draw
+        .x_y(x_diff * zoom, y_diff * zoom)
         .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
         .scale(zoom);
 
-    texture_draw.texture(&renderer.gray_texture);
+    texture_draw.texture(&model.desktop_gray_texture);
+
+    // dark overlay
     draw.rect()
         .wh(win.wh())
         .rgba(0.0, 0.0, 0.0, 0.5);
@@ -426,7 +426,7 @@ fn draw_texture(app: &App, model: &Model, draw: &Draw, renderer: &RendererInfo) 
     // }
 }
 
-fn draw_debug(app: &App, model: &Model, draw: &Draw, renderer: &RendererInfo) {
+fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
     let win = renderer.cartesian_bounds();
 
     // Crosshair at window center
@@ -534,7 +534,7 @@ fn draw_debug(app: &App, model: &Model, draw: &Draw, renderer: &RendererInfo) {
         .color(WHITE);
 }
 
-fn draw_crosshair(app: &App, model: &Model, draw: &Draw, renderer: &RendererInfo) {
+fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
     let win = renderer.cartesian_bounds();
     let mouse_pos = renderer.screen_pt_to_window(model.mouse_pt);
     let mouse = mouse_pos - pt2(-0.5, 0.5);
