@@ -1,8 +1,7 @@
-use std::{mem, ops::Deref, ptr};
-
+use crate::geometry::*;
 use anyhow::Result;
-use bracket_geometry::prelude::Rect;
 use nannou::image::{self, RgbaImage};
+use std::{mem, ops::Deref, ptr};
 use sysinfo::System;
 use windows::{
     core::PCWSTR,
@@ -49,7 +48,10 @@ impl Drop for BoxHDC {
 
 impl BoxHDC {
     pub fn new(hdc: HDC, hwnd: Option<HWND>) -> Self {
-        BoxHDC { hdc, hwnd }
+        BoxHDC {
+            hdc,
+            hwnd,
+        }
     }
 }
 
@@ -128,9 +130,15 @@ fn to_rgba_image(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, heig
     let mut buffer = vec![0u8; buffer_size as usize];
 
     unsafe {
-        let is_success =
-            GetDIBits(*box_hdc_mem, *box_h_bitmap, 0, height as u32, Some(buffer.as_mut_ptr().cast()), &mut bitmap_info, DIB_RGB_COLORS)
-                == 0;
+        let is_success = GetDIBits(
+            *box_hdc_mem,
+            *box_h_bitmap,
+            0,
+            height as u32,
+            Some(buffer.as_mut_ptr().cast()),
+            &mut bitmap_info,
+            DIB_RGB_COLORS,
+        ) == 0;
 
         if is_success {
             bail!("Get RGBA data failed");
@@ -149,21 +157,21 @@ fn to_rgba_image(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, heig
     RgbaImage::from_raw(width as u32, height as u32, buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))
 }
 
-pub fn virtual_desktop() -> Rect {
+pub fn virtual_desktop() -> ScreenRect {
     unsafe {
         let vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
         let vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
         let vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
         let vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-        Rect::with_size(vx, vy, vw, vh)
+        ScreenRect::from_exact(vx, vy, vw, vh)
     }
 }
 
-pub fn capture_desktop() -> Result<(Rect, image::RgbaImage)> {
+pub fn capture_desktop() -> Result<(ScreenRect, image::RgbaImage)> {
     unsafe {
         let rect = virtual_desktop();
-        let vx = rect.x1;
-        let vy = rect.y1;
+        let vx = rect.min_x();
+        let vy = rect.min_y();
         let vw = rect.width();
         let vh = rect.height();
 

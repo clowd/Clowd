@@ -1,10 +1,13 @@
 mod event_handler;
+mod geometry;
 mod screenshot;
 mod ui;
 mod util;
 
 use anyhow::{anyhow, Result};
-use bracket_geometry::prelude::{Point as BgPoint, PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
+use euclid::{SideOffsets2D, Size2D};
+// use bracket_geometry::prelude::{Point as BgPoint, PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
+use geometry::*;
 use mouse_rs::Mouse;
 use nannou::{
     color::{self},
@@ -38,16 +41,16 @@ fn main() {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum MouseState {
     Up,
-    StartSelection(BgPointF),
-    MakingSelection(BgPointF),
+    StartSelection(ScreenPointF),
+    MakingSelection(ScreenPointF),
     SizingSelection(HitTest),
-    MovingSelection(BgRect, BgPointF),
+    MovingSelection(ScreenRect, ScreenPointF),
 }
 
 #[allow(dead_code)]
 struct Model {
     renderers: Vec<RendererInfo>,
-    desktop_bounds: BgRect,
+    desktop_bounds: ScreenRect,
     desktop_color_texture: wgpu::Texture,
     desktop_gray_texture: wgpu::Texture,
     desktop_color_image: DynamicImage,
@@ -55,16 +58,16 @@ struct Model {
     windows: Vec<DesktopWindowInfo>,
     shown: bool,
     debug: bool,
-    zoom: f32,
+    zoom: f64,
     accent_light: Rgb,
     accent_dark: Rgb,
     dash_black_white: Texture,
     dash_white_accent: Texture,
-    selection: Option<BgRect>,
+    selection: Option<ScreenRect>,
     captured: bool,
-    mouse_pt: BgPointF,
+    mouse_pt: ScreenPointF,
     mouse_state: MouseState,
-    mouse_anchor_pt: BgPoint,
+    mouse_anchor_pt: ScreenPoint,
     mouse_anchored: bool,
     mouse: Mouse,
     button_panel: ui::ButtonPanel,
@@ -74,7 +77,7 @@ struct Model {
 struct RendererInfo {
     window: WindowId,
     monitor_handle: MonitorHandle,
-    monitor_bounds: BgRectF,
+    monitor_bounds: ScreenRect,
     is_primary: bool,
     ready: bool,
     scale_factor: f64,
@@ -123,49 +126,58 @@ impl Model {
                 .move_to(self.mouse_anchor_pt.x, self.mouse_anchor_pt.y);
         } else if !anchored && self.mouse_anchored {
             self.mouse_anchored = false;
-            let _ = self
-                .mouse
-                .move_to(self.mouse_pt.x as i32, self.mouse_pt.y as i32);
+            let pt = self.mouse_pt.to_i32();
+            let _ = self.mouse.move_to(pt.x, pt.y);
         }
     }
 
-    fn get_nearest_renderer(&self, pt: BgPointF) -> &RendererInfo {
+    fn get_nearest_renderer(&self, pt: ScreenPointF) -> &RendererInfo {
         self.renderers
             .iter()
-            .find(|r| r.monitor_bounds.point_in_rect(pt))
+            .find(|r| r.monitor_bounds.to_f64().contains(pt))
             .or_else(|| {
                 self.renderers.iter().min_by(|a, b| {
-                    let a_dist = distance2d_pythagoras_squared_f(a.monitor_bounds.center(), pt);
-                    let b_dist = distance2d_pythagoras_squared_f(b.monitor_bounds.center(), pt);
+                    let a_dist = a
+                        .monitor_bounds
+                        .center()
+                        .to_f64()
+                        .distance_to(pt);
+                    let b_dist = b
+                        .monitor_bounds
+                        .center()
+                        .to_f64()
+                        .distance_to(pt);
                     a_dist.partial_cmp(&b_dist).unwrap()
                 })
             })
             .unwrap()
     }
 
-    fn handle_mouse_move(&mut self, app: &App, pt: BgPointF) {
+    fn handle_mouse_move(&mut self, app: &App, pt: ScreenPointF) {
         if self.mouse_anchored {
-            if self.mouse_anchor_pt != BgPoint::new(pt.x as i32, pt.y as i32) {
-                let x_delta = (pt.x - self.mouse_anchor_pt.x as f32) / self.zoom;
-                let y_delta = (pt.y - self.mouse_anchor_pt.y as f32) / self.zoom;
+            if self.mouse_anchor_pt != pt.to_i32() {
+                let anchor_f = self.mouse_anchor_pt.to_f64();
+                let x_delta = (pt.x - anchor_f.x) / self.zoom;
+                let y_delta = (pt.y - anchor_f.y) / self.zoom;
 
                 let mut mx = self.mouse_pt.x + x_delta;
                 let mut my = self.mouse_pt.y + y_delta;
 
                 let bounds = self
-                    .get_nearest_renderer(BgPointF::new(mx, my))
-                    .monitor_bounds;
+                    .get_nearest_renderer(ScreenPointF::new(mx, my))
+                    .monitor_bounds
+                    .to_f64();
 
                 // clip cursor to nearest monitor
-                let left = bounds.x1;
-                let right = bounds.x2;
-                let top = bounds.y1;
-                let bottom = bounds.y2;
+                let left = bounds.left();
+                let right = bounds.right();
+                let top = bounds.top();
+                let bottom = bounds.bottom();
 
                 mx = mx.max(left).min(right - 0.001);
                 my = my.max(top).min(bottom - 0.001);
 
-                self.mouse_pt = BgPointF::new(mx, my);
+                self.mouse_pt = ScreenPointF::new(mx, my);
                 let _ = self
                     .mouse
                     .move_to(self.mouse_anchor_pt.x, self.mouse_anchor_pt.y);
@@ -178,26 +190,22 @@ impl Model {
         match self.mouse_state {
             MouseState::Up => (),
             MouseState::StartSelection(start) => {
-                let dist = distance2d_diagonal_f(start, pt);
+                let dist = start.distance_to(pt);
                 let drag_threshold = 10.0 / self.zoom;
                 if dist > drag_threshold {
                     self.mouse_state = MouseState::MakingSelection(start);
-                    let (x1, y1, x2, y2) = round_px_selection(start.x as f64, start.y as f64, pt.x as f64, pt.y as f64);
-                    self.selection = Some(BgRect::with_exact(x1, y1, x2, y2))
+                    self.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
                 }
             }
-            MouseState::MakingSelection(start) => {
-                let (x1, y1, x2, y2) = round_px_selection(start.x as f64, start.y as f64, pt.x as f64, pt.y as f64);
-                self.selection = Some(BgRect::with_exact(x1, y1, x2, y2))
-            }
+            MouseState::MakingSelection(start) => self.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y)),
             MouseState::MovingSelection(orig_rect, orig_point) => {
-                let dx = pt.x - orig_point.x;
-                let dy = pt.y - orig_point.y;
-                let x1 = orig_rect.x1 + dx as i32;
-                let y1 = orig_rect.y1 + dy as i32;
-                let x2 = orig_rect.x2 + dx as i32;
-                let y2 = orig_rect.y2 + dy as i32;
-                self.selection = Some(BgRect::with_exact(x1, y1, x2, y2));
+                let dx = (pt.x - orig_point.x) as i32;
+                let dy = (pt.y - orig_point.y) as i32;
+                let x1 = orig_rect.min_x() + dx;
+                let y1 = orig_rect.min_y() + dy;
+                let x2 = orig_rect.max_x() + dx;
+                let y2 = orig_rect.max_y() + dy;
+                self.selection = Some(ScreenRect::from_exact(x1, y1, x2, y2));
                 self.update_buttons();
             }
             MouseState::SizingSelection(hit) => {
@@ -207,7 +215,6 @@ impl Model {
                 }
                 self.update_buttons();
             }
-            _ => (),
         }
 
         if self.captured {
@@ -222,7 +229,7 @@ impl Model {
         }
     }
 
-    fn handle_mouse_down(&mut self, pt: BgPointF) {
+    fn handle_mouse_down(&mut self, pt: ScreenPointF) {
         if self.captured {
             let hit = self.button_panel.hit_test(pt);
             if hit.is_size_handle() {
@@ -235,7 +242,7 @@ impl Model {
         }
     }
 
-    fn handle_mouse_up(&mut self, pt: BgPointF) {
+    fn handle_mouse_up(&mut self, pt: ScreenPointF) {
         match self.mouse_state {
             MouseState::StartSelection(_) => {
                 self.selection = None;
@@ -244,8 +251,7 @@ impl Model {
                 self.zoom = 1.0;
                 self.set_anchored(false);
                 self.captured = true;
-                let (x1, y1, x2, y2) = round_px_selection(start.x as f64, start.y as f64, pt.x as f64, pt.y as f64);
-                self.selection = Some(BgRect::with_exact(x1, y1, x2, y2));
+                self.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y));
                 self.update_buttons();
             }
             _ => (),
@@ -255,9 +261,9 @@ impl Model {
 
     fn update_buttons(&mut self) {
         if let Some(selection) = self.selection {
-            let renderer = self.get_nearest_renderer(selection.center().to_vec2());
+            let renderer = self.get_nearest_renderer(selection.center().to_f64());
             self.button_panel
-                .update(renderer.monitor_bounds.to_int(), renderer.scale_factor, selection);
+                .update(renderer.monitor_bounds, renderer.scale_factor, selection);
         }
     }
 }
@@ -279,23 +285,23 @@ impl RendererInfo {
     //     vec2(x as f32, y as f32)
     // }
 
-    fn screen_rect_to_window_f(&self, rect: BgRectF) -> Rect {
-        let top_left = BgPointF::new(rect.x1 as f32, rect.y1 as f32);
-        let bottom_right = BgPointF::new(rect.x2 as f32, rect.y2 as f32);
-        let top_left = self.screen_pt_to_window(top_left);
-        let bottom_right = self.screen_pt_to_window(bottom_right);
-        Rect::from_corners(top_left, bottom_right)
-    }
+    // fn screen_rect_to_window_f(&self, rect: BgRectF) -> Rect {
+    //     let top_left = BgPointF::new(rect.x1 as f32, rect.y1 as f32);
+    //     let bottom_right = BgPointF::new(rect.x2 as f32, rect.y2 as f32);
+    //     let top_left = self.screen_pt_to_window(top_left);
+    //     let bottom_right = self.screen_pt_to_window(bottom_right);
+    //     Rect::from_corners(top_left, bottom_right)
+    // }
 
-    fn screen_rect_to_window(&self, rect: BgRect) -> Rect {
-        let top_left = BgPointF::new(rect.x1 as f32, rect.y1 as f32);
-        let bottom_right = BgPointF::new(rect.x2 as f32, rect.y2 as f32);
-        let top_left = self.screen_pt_to_window(top_left);
-        let bottom_right = self.screen_pt_to_window(bottom_right);
-        Rect::from_corners(top_left, bottom_right)
-    }
+    // fn screen_rect_to_window(&self, rect: BgRect) -> Rect {
+    //     let top_left = BgPointF::new(rect.x1 as f32, rect.y1 as f32);
+    //     let bottom_right = BgPointF::new(rect.x2 as f32, rect.y2 as f32);
+    //     let top_left = self.screen_pt_to_window(top_left);
+    //     let bottom_right = self.screen_pt_to_window(bottom_right);
+    //     Rect::from_corners(top_left, bottom_right)
+    // }
 
-    fn logical_pt_to_screen(&self, app: &App, pt: Vec2) -> BgPointF {
+    fn logical_pt_to_screen(&self, app: &App, pt: Vec2) -> ScreenPointF {
         let win = app.window(self.window).unwrap().rect();
         let win_w = win.w() as f64;
         let win_h = win.h() as f64;
@@ -304,24 +310,24 @@ impl RendererInfo {
         let x = reverse_tx(pt.x);
         let y = reverse_ty(pt.y);
         let logical = LogicalPosition::new(x, y);
-        let physical: PhysicalPosition<f32> = logical.to_physical(self.scale_factor);
-        let monitor_pos = self.monitor_bounds;
-        let x = physical.x + monitor_pos.x1 as f32;
-        let y = physical.y + monitor_pos.y1 as f32;
-        BgPointF::new(x, y)
+        let physical: PhysicalPosition<f64> = logical.to_physical(self.scale_factor);
+        let monitor_pos = self.monitor_bounds.to_f64();
+        let x = physical.x + monitor_pos.min_x();
+        let y = physical.y + monitor_pos.min_y();
+        ScreenPointF::new(x, y)
     }
 
-    fn screen_pt_to_window(&self, pt: BgPointF) -> Vec2 {
-        let monitor_pos = self.monitor_bounds;
-        let (win_w, win_h) = (self.monitor_bounds.width() as f32, self.monitor_bounds.height() as f32);
-        let x = pt.x - monitor_pos.x1 as f32;
-        let y = pt.y - monitor_pos.y1 as f32;
-        let tx = |x: f32| (x - win_w / 2.0) as f32;
-        let ty = |y: f32| (-(y - win_h / 2.0)) as f32;
-        let x = tx(x);
-        let y = ty(y);
-        vec2(x as f32, y as f32)
-    }
+    // fn screen_pt_to_window(&self, pt: BgPointF) -> Vec2 {
+    //     let monitor_pos = self.monitor_bounds;
+    //     let (win_w, win_h) = (self.monitor_bounds.width() as f32, self.monitor_bounds.height() as f32);
+    //     let x = pt.x - monitor_pos.x1 as f32;
+    //     let y = pt.y - monitor_pos.y1 as f32;
+    //     let tx = |x: f32| (x - win_w / 2.0) as f32;
+    //     let ty = |y: f32| (-(y - win_h / 2.0)) as f32;
+    //     let x = tx(x);
+    //     let y = ty(y);
+    //     vec2(x as f32, y as f32)
+    // }
 
     // fn screen_pt_to_logical(&self, app: &App, pt: PhysicalPosition<i32>) -> Vec2 {
     //     let window = app.window(self.window).unwrap();
@@ -351,11 +357,12 @@ fn create_model(app: &App) -> Result<Model> {
     let primary = app.primary_monitor().unwrap();
     let primary_position = primary.position();
     let primary_size = primary.size();
-
-    let mouse_anchor_pt = BgPoint::new(
-        (primary_position.x as f64 + (primary_size.width as f64 / 2.0)) as i32,
-        (primary_position.y as f64 + (primary_size.height as f64 / 2.0)) as i32,
+    let primary_bounds = ScreenRect::new(
+        ScreenPoint::new(primary_position.x, primary_position.y),
+        Size2D::new(primary_size.width as i32, primary_size.height as i32),
     );
+
+    let mouse_anchor_pt = primary_bounds.center();
 
     let (desktop_bounds, desktop_capture) = capture_desktop()?;
     let desktop_color_image = DynamicImage::ImageRgba8(desktop_capture);
@@ -380,7 +387,10 @@ fn create_model(app: &App) -> Result<Model> {
             .build()
             .map_err(|e| anyhow!("{:?}", e))?;
 
-        let monitor_bounds = BgRectF::with_size(position.x as f32, position.y as f32, size.width as f32, size.height as f32);
+        let monitor_bounds = ScreenRect::new(
+            ScreenPoint::new(position.x, position.y),
+            Size2D::new(size.width as i32, size.height as i32),
+        );
 
         renderers.push(RendererInfo {
             window,
@@ -388,7 +398,7 @@ fn create_model(app: &App) -> Result<Model> {
             monitor_bounds,
             ready: false,
             scale_factor: monitor.scale_factor(),
-            is_primary: monitor_bounds.point_in_rect(mouse_anchor_pt.to_vec2()),
+            is_primary: monitor_bounds.contains(mouse_anchor_pt),
         });
     }
 
@@ -448,7 +458,7 @@ fn create_model(app: &App) -> Result<Model> {
         dash_white_accent: aw_tex,
         selection: None,
         captured: false,
-        mouse_pt: BgPointF::zero(),
+        mouse_pt: ScreenPointF::zero(),
         mouse_state: MouseState::Up,
         mouse_anchor_pt,
         mouse_anchored: false,
@@ -560,7 +570,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
         if model.captured
             && renderer
                 .monitor_bounds
-                .point_in_rect(selection.center().to_vec2())
+                .contains(selection.center())
         {
             model.button_panel.draw(&draw, renderer);
             draw.rect().w_h(50.0, 50.0).color(RED);
@@ -571,9 +581,9 @@ fn view(app: &App, model: &Model, frame: Frame) {
 }
 
 fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) {
-    fn zoom_point(original_point: BgPointF, zoom_point: BgPointF, scale: f32) -> BgPointF {
+    fn zoom_point(original_point: ScreenPointF, zoom_point: ScreenPointF, scale: f64) -> ScreenPointF {
         // Calculate the new point after applying the zoom transformation
-        BgPointF::new(
+        ScreenPointF::new(
             zoom_point.x + (original_point.x - zoom_point.x) * scale,
             zoom_point.y + (original_point.y - zoom_point.y) * scale,
         )
@@ -582,11 +592,17 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
     let pixel_size = renderer.scale_factor.floor() as f32;
 
     let win = renderer.cartesian_bounds();
-    let cursor_pos = renderer.screen_pt_to_window(model.mouse_pt);
-    let zoom = model.zoom;
+    let cursor_pos = model
+        .mouse_pt
+        .to_window_point(renderer.monitor_bounds)
+        .to_nannou();
+    let zoom = model.zoom as f32;
 
-    let monitor_center = renderer.monitor_bounds.center();
-    let desktop_center = model.desktop_bounds.center().to_vec2();
+    let monitor_center = renderer
+        .monitor_bounds
+        .center()
+        .to_f32();
+    let desktop_center = model.desktop_bounds.center().to_f32();
     let x_diff = desktop_center.x - monitor_center.x;
     let y_diff = desktop_center.y - monitor_center.y;
 
@@ -602,12 +618,17 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         .rgba(0.0, 0.0, 0.0, 0.5);
 
     if let Some(screen_selection) = model.selection {
-        let top_left = BgPointF::new(screen_selection.x1 as f32, screen_selection.y1 as f32);
-        let bottom_right = BgPointF::new(screen_selection.x2 as f32, screen_selection.y2 as f32);
-        let top_left = zoom_point(top_left, model.mouse_pt, zoom);
-        let bottom_right = zoom_point(bottom_right, model.mouse_pt, zoom);
-        let top_left = renderer.screen_pt_to_window(top_left);
-        let bottom_right = renderer.screen_pt_to_window(bottom_right);
+        let top_left = screen_selection.top_left().to_f64();
+        let bottom_right = screen_selection.bottom_right().to_f64();
+        let top_left = zoom_point(top_left, model.mouse_pt, model.zoom);
+        let bottom_right = zoom_point(bottom_right, model.mouse_pt, model.zoom);
+
+        let top_left = top_left
+            .to_window_point(renderer.monitor_bounds)
+            .to_nannou();
+        let bottom_right = bottom_right
+            .to_window_point(renderer.monitor_bounds)
+            .to_nannou();
 
         let selection = Rect::from_corners(top_left, bottom_right);
 
@@ -631,10 +652,12 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
 
         for handle in HitTest::resize_handles() {
             let pos = handle
-                .handle_position(screen_selection.expand(1))
-                .to_vec2();
-            let pos = zoom_point(pos, model.mouse_pt, zoom);
-            let pos = renderer.screen_pt_to_window(pos);
+                .handle_position(screen_selection.outer_rect(SideOffsets2D::new(1, 1, 1, 1)))
+                .to_f64();
+            let pos = zoom_point(pos, model.mouse_pt, model.zoom);
+            let pos = pos
+                .to_window_point(renderer.monitor_bounds)
+                .to_nannou();
 
             let rect = point_to_widened_rect_n(6.0 * pixel_size, pos);
             draw.ellipse()
@@ -659,7 +682,10 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
 
 fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
     let win = renderer.cartesian_bounds();
-    let mouse_pos = renderer.screen_pt_to_window(model.mouse_pt);
+    let mouse_pos = model
+        .mouse_pt
+        .to_window_point(renderer.monitor_bounds)
+        .to_nannou();
     let mouse = mouse_pos - pt2(-0.5, 0.5);
     let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
     let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
@@ -786,6 +812,11 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         .color(crosshair_color)
         .y(y_off);
 
+    let mouse_pos = model
+        .mouse_pt
+        .to_window_point(renderer.monitor_bounds)
+        .to_nannou();
+
     // Debug window and monitor details.
     let m_scale_factor = renderer.scale_factor;
     let mon_phys_size = renderer.monitor_handle.size();
@@ -817,7 +848,7 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         renderer.is_primary,
         model.zoom,
         model.mouse_pt,
-        renderer.screen_pt_to_window(model.mouse_pt),
+        mouse_pos,
         model.mouse_anchored,
     );
     let pad = 6.0;
@@ -831,7 +862,6 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         .left_justify();
 
     // Ellipse at mouse.
-    let mouse_pos = renderer.screen_pt_to_window(model.mouse_pt);
     draw.ellipse()
         .wh([5.0; 2].into())
         .xy(mouse_pos);

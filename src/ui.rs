@@ -1,5 +1,5 @@
-use crate::{util::*, RendererInfo};
-use bracket_geometry::prelude::{Point, PointF, Rect};
+use crate::{geometry::*, RendererInfo};
+// use bracket_geometry::prelude::{Point, PointF, Rect};
 use nannou::{color::GREEN, event::Key, winit::window::CursorIcon, Draw};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -47,33 +47,33 @@ impl HitTest {
         Self::resize_handles().contains(self)
     }
 
-    pub fn handle_position(&self, rect: Rect) -> Point {
+    pub fn handle_position(&self, rect: ScreenRect) -> ScreenPoint {
         match self {
             HitTest::TopLeft => rect.top_left(),
             HitTest::TopRight => rect.top_right(),
             HitTest::BottomLeft => rect.bottom_left(),
             HitTest::BottomRight => rect.bottom_right(),
-            HitTest::Left => Point::new(rect.left(), rect.center().y),
-            HitTest::Right => Point::new(rect.right(), rect.center().y),
-            HitTest::Top => Point::new(rect.center().x, rect.top()),
-            HitTest::Bottom => Point::new(rect.center().x, rect.bottom()),
+            HitTest::Left => ScreenPoint::new(rect.left(), rect.center().y),
+            HitTest::Right => ScreenPoint::new(rect.right(), rect.center().y),
+            HitTest::Top => ScreenPoint::new(rect.center().x, rect.top()),
+            HitTest::Bottom => ScreenPoint::new(rect.center().x, rect.bottom()),
             _ => panic!("Not a size handle"),
         }
     }
 
-    pub fn resize_rect(&self, pt: PointF, selection: Rect) -> Rect {
-        let (x1, y1, x2, y2) = match self {
-            HitTest::TopLeft => round_px_selection(pt.x as f64, pt.y as f64, selection.x2 as f64, selection.y2 as f64),
-            HitTest::TopRight => round_px_selection(selection.x1 as f64, pt.y as f64, pt.x as f64, selection.y2 as f64),
-            HitTest::BottomLeft => round_px_selection(pt.x as f64, selection.y1 as f64, selection.x2 as f64, pt.y as f64),
-            HitTest::BottomRight => round_px_selection(selection.x1 as f64, selection.y1 as f64, pt.x as f64, pt.y as f64),
-            HitTest::Left => round_px_selection(pt.x as f64, selection.y1 as f64, selection.x2 as f64, selection.y2 as f64),
-            HitTest::Right => round_px_selection(selection.x1 as f64, selection.y1 as f64, pt.x as f64, selection.y2 as f64),
-            HitTest::Top => round_px_selection(selection.x1 as f64, pt.y as f64, selection.x2 as f64, selection.y2 as f64),
-            HitTest::Bottom => round_px_selection(selection.x1 as f64, selection.y1 as f64, selection.x2 as f64, pt.y as f64),
-            _ => (selection.x1, selection.y1, selection.x2, selection.y2),
-        };
-        Rect::with_exact(x1, y1, x2, y2)
+    pub fn resize_rect(&self, pt: ScreenPointF, selection: ScreenRect) -> ScreenRect {
+        let sf = selection.to_f64();
+        match self {
+            HitTest::TopLeft => ScreenRect::from_rounded_threshold(pt.x, pt.y, sf.max_x(), sf.max_y()),
+            HitTest::TopRight => ScreenRect::from_rounded_threshold(sf.min_x(), pt.y, pt.x, sf.max_y()),
+            HitTest::BottomLeft => ScreenRect::from_rounded_threshold(pt.x, sf.min_y(), sf.max_x(), pt.y),
+            HitTest::BottomRight => ScreenRect::from_rounded_threshold(sf.min_x(), sf.min_y(), pt.x, pt.y),
+            HitTest::Left => ScreenRect::from_rounded_threshold(pt.x, sf.min_y(), sf.max_x(), sf.max_y()),
+            HitTest::Right => ScreenRect::from_rounded_threshold(sf.min_x(), sf.min_y(), pt.x, sf.max_y()),
+            HitTest::Top => ScreenRect::from_rounded_threshold(sf.min_x(), pt.y, sf.max_x(), sf.max_y()),
+            HitTest::Bottom => ScreenRect::from_rounded_threshold(sf.min_x(), sf.min_y(), sf.max_x(), pt.y),
+            _ => selection,
+        }
     }
 }
 
@@ -85,10 +85,10 @@ pub struct ButtonDescription {
     primary: bool,
 }
 
-const UNSCALED_BUTTON_SIZE: f32 = 50.0;
-const UNSCALED_BUTTON_ICON_SIZE: f32 = 26.0;
-const UNSCALED_BUTTON_PADDING: f32 = 2.0;
-const UNSCALED_DRAG_HANDLE_SIZE: f32 = 10.0;
+const UNSCALED_BUTTON_SIZE: f64 = 50.0;
+const UNSCALED_BUTTON_ICON_SIZE: f64 = 26.0;
+const UNSCALED_BUTTON_PADDING: f64 = 2.0;
+const UNSCALED_DRAG_HANDLE_SIZE: f64 = 10.0;
 
 pub enum Orientation {
     Vertical,
@@ -97,11 +97,10 @@ pub enum Orientation {
 
 pub struct ButtonPanel {
     buttons: Vec<ButtonDescription>,
-    anchor: PointF,
+    anchor: ScreenPointF,
     orientation: Orientation,
-    // monitor_bounds: Vec<RectF>,
-    selection: Rect,
-    button_positions: Vec<Rect>,
+    selection: ScreenRect,
+    button_positions: Vec<ScreenRect>,
     scale: f64,
 }
 
@@ -109,16 +108,15 @@ impl ButtonPanel {
     pub fn new() -> Self {
         ButtonPanel {
             buttons: get_default_buttons(),
-            anchor: PointF::new(0.0, 0.0),
+            anchor: ScreenPointF::zero(),
             orientation: Orientation::Horizontal,
-            // monitor_bounds,
-            selection: Rect::with_exact(0, 0, 0, 0),
+            selection: ScreenRect::zero(),
             button_positions: Vec::new(),
             scale: 1.0,
         }
     }
 
-    pub fn update(&mut self, screen_bounds: Rect, dpi_zoom: f64, selection: Rect) {
+    pub fn update(&mut self, screen_bounds: ScreenRect, dpi_zoom: f64, selection: ScreenRect) {
         self.selection = selection;
         self.scale = dpi_zoom;
 
@@ -128,14 +126,16 @@ impl ButtonPanel {
         let min_distance = (2.0 * dpi_zoom).ceil() as i32;
         let max_distance = (15.0 * dpi_zoom).ceil() as i32;
         let button_spacing = (3.0 * dpi_zoom).ceil() as i32;
-        let svg_button_size = (UNSCALED_BUTTON_SIZE as f64 * dpi_zoom).floor() as i32;
+        let svg_button_size = (UNSCALED_BUTTON_SIZE * dpi_zoom).floor() as i32;
         let area_size = svg_button_size; // same as `int areaSize = (int)floor(svgButtonSize);`
 
         let long_edge_px = svg_button_size * (num_svg_buttons as i32) + (button_spacing * 2) + area_size;
         let short_edge_px = svg_button_size;
 
         // Clip selection to monitor
-        let selection_clipped = selection.intersect_with(&screen_bounds);
+        let selection_clipped = selection
+            .intersection(&screen_bounds)
+            .unwrap_or(selection);
 
         // Compute spaces around the selection
         let bottom_space = (screen_bounds.bottom() - selection_clipped.bottom()).max(0) - min_distance;
@@ -185,12 +185,12 @@ impl ButtonPanel {
         }
 
         // Construct the desired bounding rect for the panel
-        let desired_rect = Rect::with_exact(ind_left, ind_top, ind_left + horizontal_size, ind_top + vertical_size);
+        let desired_rect = ScreenRect::from_exact(ind_left, ind_top, ind_left + horizontal_size, ind_top + vertical_size);
 
         // We'll now position the buttons. We assume button_positions has the same length as buttons.
         self.button_positions.clear();
         self.button_positions
-            .resize(self.buttons.len(), Rect::with_exact(0, 0, 0, 0));
+            .resize(self.buttons.len(), ScreenRect::from_exact(0, 0, 0, 0));
 
         // Move along the main orientation axis
         // If vertical: increment along left (x)
@@ -232,7 +232,7 @@ impl ButtonPanel {
                 btn_top = vchange;
             }
 
-            self.button_positions[i] = Rect::with_exact(btn_left, btn_top, btn_left + svg_button_size, btn_top + svg_button_size);
+            self.button_positions[i] = ScreenRect::from_exact(btn_left, btn_top, btn_left + svg_button_size, btn_top + svg_button_size);
 
             // Advance vchange by svg_button_size
             vchange += svg_button_size;
@@ -258,7 +258,9 @@ impl ButtonPanel {
 
         // Draw the panel
         for button in self.button_positions.iter() {
-            let button = renderer.screen_rect_to_window(*button);
+            let button = (*button)
+                .to_window_rect(renderer.monitor_bounds)
+                .to_nannou();
 
             draw.rect()
                 .xy(button.xy())
@@ -267,49 +269,49 @@ impl ButtonPanel {
         }
     }
 
-    pub fn hit_test(&self, point: PointF) -> HitTest {
+    pub fn hit_test(&self, point: ScreenPointF) -> HitTest {
         for (i, button) in self.button_positions.iter().enumerate() {
-            if button.to_float().point_in_rect(point) {
+            if button.to_f64().contains(point) {
                 return HitTest::Button(i);
             }
         }
 
-        let radius = (UNSCALED_DRAG_HANDLE_SIZE * self.scale as f32).floor();
-        let selection = self.selection.to_float();
+        let radius = (UNSCALED_DRAG_HANDLE_SIZE * self.scale).floor();
+        let selection = self.selection.to_f64();
 
-        if point_to_widened_rect_f(radius, selection.top_left()).point_in_rect(point) {
+        if point_to_widened_rect_f(radius, selection.top_left()).contains(point) {
             return HitTest::TopLeft;
         }
 
-        if point_to_widened_rect_f(radius, selection.top_right()).point_in_rect(point) {
+        if point_to_widened_rect_f(radius, selection.top_right()).contains(point) {
             return HitTest::TopRight;
         }
 
-        if point_to_widened_rect_f(radius, selection.bottom_left()).point_in_rect(point) {
+        if point_to_widened_rect_f(radius, selection.bottom_left()).contains(point) {
             return HitTest::BottomLeft;
         }
 
-        if point_to_widened_rect_f(radius, selection.bottom_right()).point_in_rect(point) {
+        if point_to_widened_rect_f(radius, selection.bottom_right()).contains(point) {
             return HitTest::BottomRight;
         }
 
-        if line_to_widened_rect_f(radius, selection.top_left(), selection.top_right()).point_in_rect(point) {
+        if line_to_widened_rect_f(radius, selection.top_left(), selection.top_right()).contains(point) {
             return HitTest::Top;
         }
 
-        if line_to_widened_rect_f(radius, selection.top_right(), selection.bottom_right()).point_in_rect(point) {
+        if line_to_widened_rect_f(radius, selection.top_right(), selection.bottom_right()).contains(point) {
             return HitTest::Right;
         }
 
-        if line_to_widened_rect_f(radius, selection.bottom_right(), selection.bottom_left()).point_in_rect(point) {
+        if line_to_widened_rect_f(radius, selection.bottom_right(), selection.bottom_left()).contains(point) {
             return HitTest::Bottom;
         }
 
-        if line_to_widened_rect_f(radius, selection.bottom_left(), selection.top_left()).point_in_rect(point) {
+        if line_to_widened_rect_f(radius, selection.bottom_left(), selection.top_left()).contains(point) {
             return HitTest::Left;
         }
 
-        if selection.point_in_rect(point) {
+        if selection.contains(point) {
             return HitTest::Content;
         }
 
