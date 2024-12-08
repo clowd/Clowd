@@ -13,10 +13,11 @@ use nannou::{
     winit::{
         dpi::{LogicalPosition, PhysicalPosition, PhysicalSize},
         monitor::MonitorHandle,
-        window::WindowBuilder,
+        window::{CursorIcon, WindowBuilder},
     },
 };
 use screenshot::capture_desktop;
+use ui::HitTest;
 use util::*;
 use wgpu::{SamplerBuilder, Texture};
 use xcap::Window as XCapWindow;
@@ -34,10 +35,13 @@ fn main() {
         .run();
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum MouseState {
     Up,
     StartSelection(BgPointF),
     MakingSelection(BgPointF),
+    SizingSelection(HitTest),
+    MovingSelection(BgRect, BgPointF),
 }
 
 #[allow(dead_code)]
@@ -99,6 +103,18 @@ impl Model {
         });
     }
 
+    fn set_cursor(&mut self, app: &App, cursor: Option<CursorIcon>) {
+        self.renderers.iter_mut().for_each(|r| {
+            let window = app.window(r.window).unwrap();
+            if let Some(cur) = cursor {
+                window.set_cursor_visible(true);
+                window.set_cursor_icon(cur);
+            } else {
+                window.set_cursor_visible(false);
+            }
+        });
+    }
+
     fn set_anchored(&mut self, anchored: bool) {
         if anchored && !self.mouse_anchored {
             self.mouse_anchored = true;
@@ -127,7 +143,7 @@ impl Model {
             .unwrap()
     }
 
-    fn handle_mouse_move(&mut self, pt: BgPointF) {
+    fn handle_mouse_move(&mut self, app: &App, pt: BgPointF) {
         if self.mouse_anchored {
             if self.mouse_anchor_pt != BgPoint::new(pt.x as i32, pt.y as i32) {
                 let x_delta = (pt.x - self.mouse_anchor_pt.x as f32) / self.zoom;
@@ -174,23 +190,48 @@ impl Model {
                 let (x1, y1, x2, y2) = round_px_selection(start.x as f64, start.y as f64, pt.x as f64, pt.y as f64);
                 self.selection = Some(BgRect::with_exact(x1, y1, x2, y2))
             }
+            MouseState::MovingSelection(orig_rect, orig_point) => {
+                let dx = pt.x - orig_point.x;
+                let dy = pt.y - orig_point.y;
+                let x1 = orig_rect.x1 + dx as i32;
+                let y1 = orig_rect.y1 + dy as i32;
+                let x2 = orig_rect.x2 + dx as i32;
+                let y2 = orig_rect.y2 + dy as i32;
+                self.selection = Some(BgRect::with_exact(x1, y1, x2, y2));
+                self.update_buttons();
+            }
+            MouseState::SizingSelection(hit) => {
+                if let Some(selection) = self.selection {
+                    let rect = hit.resize_rect(pt, selection);
+                    self.selection = Some(rect);
+                }
+                self.update_buttons();
+            }
             _ => (),
+        }
+
+        if self.captured {
+            self.set_cursor(
+                app,
+                Some(
+                    self.button_panel
+                        .hit_test(pt)
+                        .to_cursor(),
+                ),
+            );
         }
     }
 
     fn handle_mouse_down(&mut self, pt: BgPointF) {
         if self.captured {
-            // TODO
+            let hit = self.button_panel.hit_test(pt);
+            if hit.is_size_handle() {
+                self.mouse_state = MouseState::SizingSelection(hit);
+            } else if hit == HitTest::Content {
+                self.mouse_state = MouseState::MovingSelection(self.selection.unwrap(), pt);
+            }
         } else {
             self.mouse_state = MouseState::StartSelection(pt);
-        }
-    }
-
-    fn update_buttons(&mut self) {
-        if let Some(selection) = self.selection {
-            let renderer = self.get_nearest_renderer(selection.center().to_vec2());
-            self.button_panel
-                .update(renderer.monitor_bounds.to_int(), renderer.scale_factor, selection);
         }
     }
 
@@ -210,6 +251,14 @@ impl Model {
             _ => (),
         }
         self.mouse_state = MouseState::Up;
+    }
+
+    fn update_buttons(&mut self) {
+        if let Some(selection) = self.selection {
+            let renderer = self.get_nearest_renderer(selection.center().to_vec2());
+            self.button_panel
+                .update(renderer.monitor_bounds.to_int(), renderer.scale_factor, selection);
+        }
     }
 }
 
@@ -440,7 +489,7 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
     } else if let WindowEvent::MouseMoved(pt) = event {
         let renderer = &model.renderers[idx];
         let pt = renderer.logical_pt_to_screen(app, pt);
-        model.handle_mouse_move(pt);
+        model.handle_mouse_move(app, pt);
     } else if let WindowEvent::MousePressed(button) = event {
         if button == MouseButton::Left {
             model.handle_mouse_down(model.mouse_pt);
@@ -530,6 +579,8 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         )
     }
 
+    let pixel_size = renderer.scale_factor.floor() as f32;
+
     let win = renderer.cartesian_bounds();
     let cursor_pos = renderer.screen_pt_to_window(model.mouse_pt);
     let zoom = model.zoom;
@@ -550,9 +601,9 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         .wh(win.wh())
         .rgba(0.0, 0.0, 0.0, 0.5);
 
-    if let Some(selection) = model.selection {
-        let top_left = BgPointF::new(selection.x1 as f32, selection.y1 as f32);
-        let bottom_right = BgPointF::new(selection.x2 as f32, selection.y2 as f32);
+    if let Some(screen_selection) = model.selection {
+        let top_left = BgPointF::new(screen_selection.x1 as f32, screen_selection.y1 as f32);
+        let bottom_right = BgPointF::new(screen_selection.x2 as f32, screen_selection.y2 as f32);
         let top_left = zoom_point(top_left, model.mouse_pt, zoom);
         let bottom_right = zoom_point(bottom_right, model.mouse_pt, zoom);
         let top_left = renderer.screen_pt_to_window(top_left);
@@ -568,8 +619,41 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         let cropped_draw = texture_draw.scissor(flipped_selection);
         cropped_draw.texture(&model.desktop_color_texture);
 
-        let outline_draw = draw.scissor(flipped_selection.pad(-2.0));
-        util::draw_dashed_rectangle(&outline_draw, selection.pad(-2.0), 4.0, 20.0, &model.dash_white_accent, time);
+        let outline_draw = draw.scissor(flipped_selection.pad(-2.0 * pixel_size));
+        util::draw_dashed_rectangle(
+            &outline_draw,
+            selection.pad(-2.0 * pixel_size),
+            pixel_size * 4.0,
+            pixel_size * 20.0,
+            &model.dash_white_accent,
+            time,
+        );
+
+        for handle in HitTest::resize_handles() {
+            let pos = handle
+                .handle_position(screen_selection.expand(1))
+                .to_vec2();
+            let pos = zoom_point(pos, model.mouse_pt, zoom);
+            let pos = renderer.screen_pt_to_window(pos);
+
+            let rect = point_to_widened_rect_n(6.0 * pixel_size, pos);
+            draw.ellipse()
+                .xy(rect.xy())
+                .wh(rect.wh())
+                .color(model.accent_light);
+
+            let rect = point_to_widened_rect_n(5.0 * pixel_size, pos);
+            draw.ellipse()
+                .xy(rect.xy())
+                .wh(rect.wh())
+                .color(WHITE);
+
+            let rect = point_to_widened_rect_n(4.0 * pixel_size, pos);
+            draw.ellipse()
+                .xy(rect.xy())
+                .wh(rect.wh())
+                .color(model.accent_light);
+        }
     }
 }
 
