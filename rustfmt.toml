@@ -1,6 +1,8 @@
 max_width = 140
-use_small_heuristics = "Max"
+# use_small_heuristics = "Max"
 indent_style = "Visual"
 unstable_features = true
 format_strings = true
 chain_width = 40
+struct_lit_width = 0
+# struct_variant_width = 0

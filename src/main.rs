@@ -1,5 +1,6 @@
 mod event_handler;
 mod screenshot;
+mod ui;
 mod util;
 
 use anyhow::{anyhow, Result};
@@ -62,6 +63,7 @@ struct Model {
     mouse_anchor_pt: BgPoint,
     mouse_anchored: bool,
     mouse: Mouse,
+    button_panel: ui::ButtonPanel,
 }
 
 #[allow(dead_code)]
@@ -184,6 +186,14 @@ impl Model {
         }
     }
 
+    fn update_buttons(&mut self) {
+        if let Some(selection) = self.selection {
+            let renderer = self.get_nearest_renderer(selection.center().to_vec2());
+            self.button_panel
+                .update(renderer.monitor_bounds.to_int(), renderer.scale_factor as f32, selection);
+        }
+    }
+
     fn handle_mouse_up(&mut self, pt: BgPointF) {
         match self.mouse_state {
             MouseState::StartSelection(_) => {
@@ -194,7 +204,8 @@ impl Model {
                 self.set_anchored(false);
                 self.captured = true;
                 let (x1, y1, x2, y2) = round_px_selection(start.x as f64, start.y as f64, pt.x as f64, pt.y as f64);
-                self.selection = Some(BgRect::with_exact(x1, y1, x2, y2))
+                self.selection = Some(BgRect::with_exact(x1, y1, x2, y2));
+                self.update_buttons();
             }
             _ => (),
         }
@@ -218,6 +229,22 @@ impl RendererInfo {
     //     let y = reverse_ty(pt.y) + monitor_pos.y as f64;
     //     vec2(x as f32, y as f32)
     // }
+
+    fn screen_rect_to_window_f(&self, rect: BgRectF) -> Rect {
+        let top_left = BgPointF::new(rect.x1 as f32, rect.y1 as f32);
+        let bottom_right = BgPointF::new(rect.x2 as f32, rect.y2 as f32);
+        let top_left = self.screen_pt_to_window(top_left);
+        let bottom_right = self.screen_pt_to_window(bottom_right);
+        Rect::from_corners(top_left, bottom_right)
+    }
+
+    fn screen_rect_to_window(&self, rect: BgRect) -> Rect {
+        let top_left = BgPointF::new(rect.x1 as f32, rect.y1 as f32);
+        let bottom_right = BgPointF::new(rect.x2 as f32, rect.y2 as f32);
+        let top_left = self.screen_pt_to_window(top_left);
+        let bottom_right = self.screen_pt_to_window(bottom_right);
+        Rect::from_corners(top_left, bottom_right)
+    }
 
     fn logical_pt_to_screen(&self, app: &App, pt: Vec2) -> BgPointF {
         let win = app.window(self.window).unwrap().rect();
@@ -319,19 +346,36 @@ fn create_model(app: &App) -> Result<Model> {
     for window in windows {
         desktop_windows.push(DesktopWindowInfo {
             title: window.title().to_string(),
-            position: PhysicalPosition { x: window.x(), y: window.y() },
-            size: PhysicalSize { width: window.width(), height: window.height() },
+            position: PhysicalPosition {
+                x: window.x(),
+                y: window.y(),
+            },
+            size: PhysicalSize {
+                width: window.width(),
+                height: window.height(),
+            },
             // capture: window.capture_image().ok(),
             capture: None,
         });
     }
 
-    let bw_buf = ImageBuffer::from_fn(2, 2, |x, _y| if x == 0 { image::Rgba([255, 255, 255, 255]) } else { image::Rgba([0, 0, 0, 255]) });
+    let bw_buf = ImageBuffer::from_fn(2, 2, |x, _y| {
+        if x == 0 {
+            image::Rgba([255, 255, 255, 255])
+        } else {
+            image::Rgba([0, 0, 0, 255])
+        }
+    });
     let bw_img = image::DynamicImage::ImageRgba8(bw_buf);
     let bw_tex = wgpu::Texture::from_image(app, &bw_img);
 
-    let aw_buf =
-        ImageBuffer::from_fn(2, 2, |x, _y| if x == 0 { image::Rgba([255, 255, 255, 255]) } else { image::Rgba([0, 125, 180, 255]) });
+    let aw_buf = ImageBuffer::from_fn(2, 2, |x, _y| {
+        if x == 0 {
+            image::Rgba([255, 255, 255, 255])
+        } else {
+            image::Rgba([0, 125, 180, 255])
+        }
+    });
     let aw_img = image::DynamicImage::ImageRgba8(aw_buf);
     let aw_tex = wgpu::Texture::from_image(app, &aw_img);
 
@@ -360,6 +404,7 @@ fn create_model(app: &App) -> Result<Model> {
         mouse_anchor_pt,
         mouse_anchored: false,
         mouse: Mouse::new(),
+        button_panel: ui::ButtonPanel::new(),
     })
 }
 
@@ -405,29 +450,31 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
             model.handle_mouse_up(model.mouse_pt);
         }
     } else if let WindowEvent::MouseWheel(scroll_delta, _) = event {
-        let delta = match scroll_delta {
-            MouseScrollDelta::LineDelta(_, y) => y,
-            MouseScrollDelta::PixelDelta(pt) => pt.y as f32,
-        };
+        if !model.captured {
+            let delta = match scroll_delta {
+                MouseScrollDelta::LineDelta(_, y) => y,
+                MouseScrollDelta::PixelDelta(pt) => pt.y as f32,
+            };
 
-        let mut zoom = model.zoom;
+            let mut zoom = model.zoom;
 
-        if app.keys.mods.shift() || app.keys.mods.ctrl() {
-            if delta > 0.0 {
-                zoom *= 1.05;
+            if app.keys.mods.shift() || app.keys.mods.ctrl() {
+                if delta > 0.0 {
+                    zoom *= 1.05;
+                } else {
+                    zoom /= 1.05;
+                }
             } else {
-                zoom /= 1.05;
+                if delta > 0.0 {
+                    zoom *= 2.0;
+                } else {
+                    zoom /= 2.0;
+                }
             }
-        } else {
-            if delta > 0.0 {
-                zoom *= 2.0;
-            } else {
-                zoom /= 2.0;
-            }
+
+            model.zoom = zoom.max(1.0).min(256.0);
+            model.set_anchored(zoom > 1.0);
         }
-
-        model.zoom = zoom.max(1.0).min(256.0);
-        model.set_anchored(zoom > 1.0);
     }
 }
 
@@ -460,13 +507,30 @@ fn view(app: &App, model: &Model, frame: Frame) {
         draw_debug(model, &draw, renderer);
     }
 
+    if let Some(selection) = model.selection {
+        if model.captured
+            && renderer
+                .monitor_bounds
+                .point_in_rect(selection.center().to_vec2())
+        {
+            model
+                .button_panel
+                .draw(model, &draw, renderer);
+
+            draw.rect().w_h(50.0, 50.0).color(RED);
+        }
+    }
+
     draw.to_frame(app, &frame).unwrap();
 }
 
 fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) {
     fn zoom_point(original_point: BgPointF, zoom_point: BgPointF, scale: f32) -> BgPointF {
         // Calculate the new point after applying the zoom transformation
-        BgPointF::new(zoom_point.x + (original_point.x - zoom_point.x) * scale, zoom_point.y + (original_point.y - zoom_point.y) * scale)
+        BgPointF::new(
+            zoom_point.x + (original_point.x - zoom_point.x) * scale,
+            zoom_point.y + (original_point.y - zoom_point.y) * scale,
+        )
     }
 
     let win = renderer.cartesian_bounds();
@@ -494,7 +558,6 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         let bottom_right = BgPointF::new(selection.x2 as f32, selection.y2 as f32);
         let top_left = zoom_point(top_left, model.mouse_pt, zoom);
         let bottom_right = zoom_point(bottom_right, model.mouse_pt, zoom);
-
         let top_left = renderer.screen_pt_to_window(top_left);
         let bottom_right = renderer.screen_pt_to_window(bottom_right);
 
@@ -520,9 +583,25 @@ fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
     let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
     let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
 
-    util::draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white, 0.0);
+    util::draw_dashed_line_polyline(
+        &draw,
+        mouse_dashed_horiz.0,
+        mouse_dashed_horiz.1,
+        1.0,
+        8.0,
+        &model.dash_black_white,
+        0.0,
+    );
 
-    util::draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white, 0.0);
+    util::draw_dashed_line_polyline(
+        &draw,
+        mouse_dashed_vert.0,
+        mouse_dashed_vert.1,
+        1.0,
+        8.0,
+        &model.dash_black_white,
+        0.0,
+    );
 
     let accent_size = 100.0;
     let accent_color = model.accent_light;
@@ -643,6 +722,7 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         World mouse: {:?}
         Mouse relative to window: {:.2}
         Artificial mouse: {:?}
+        Buttons: {:?}
         ",
         mon_log_pos.x,
         mon_log_pos.y,
@@ -659,6 +739,7 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         model.mouse_pt,
         renderer.screen_pt_to_window(model.mouse_pt),
         model.mouse_anchored,
+        model.button_panel.button_positions,
     );
     let pad = 6.0;
     draw.text(&text)
