@@ -3,7 +3,7 @@ mod event_handler;
 mod screenshot;
 
 use anyhow::{anyhow, Result};
-use bracket_geometry::prelude::{PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
+use bracket_geometry::prelude::{Point as BgPoint, PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
 use mouse_rs::Mouse;
 use nannou::{
     color::{self},
@@ -56,7 +56,7 @@ struct Model {
     dash_white_accent: Texture,
     selection: Option<BgRect>,
     mouse_pt: BgPointF,
-    mouse_anchor_pt: (i32, i32),
+    mouse_anchor_pt: BgPoint,
     mouse_anchored: bool,
     mouse: Mouse,
 }
@@ -66,6 +66,7 @@ struct RendererInfo {
     window: WindowId,
     monitor_handle: MonitorHandle,
     monitor_bounds: BgRectF,
+    is_primary: bool,
     ready: bool,
     scale_factor: f64,
 }
@@ -87,6 +88,9 @@ impl Model {
             let window = app.window(r.window).unwrap();
             window.set_fullscreen_with(Some(Fullscreen::Borderless(Some(r.monitor_handle.clone()))));
             window.set_visible(true);
+            if r.is_primary {
+                window.winit_window().focus_window();
+            }
         });
     }
 
@@ -95,7 +99,7 @@ impl Model {
             self.mouse_anchored = true;
             let _ = self
                 .mouse
-                .move_to(self.mouse_anchor_pt.0, self.mouse_anchor_pt.1);
+                .move_to(self.mouse_anchor_pt.x, self.mouse_anchor_pt.y);
         } else if !anchored && self.mouse_anchored {
             self.mouse_anchored = false;
             let _ = self
@@ -120,9 +124,9 @@ impl Model {
 
     fn handle_mouse_event(&mut self, pt: BgPointF) {
         if self.mouse_anchored {
-            if self.mouse_anchor_pt != (pt.x as i32, pt.y as i32) {
-                let x_delta = (pt.x - self.mouse_anchor_pt.0 as f32) / self.zoom;
-                let y_delta = (pt.y - self.mouse_anchor_pt.1 as f32) / self.zoom;
+            if self.mouse_anchor_pt != BgPoint::new(pt.x as i32, pt.y as i32) {
+                let x_delta = (pt.x - self.mouse_anchor_pt.x as f32) / self.zoom;
+                let y_delta = (pt.y - self.mouse_anchor_pt.y as f32) / self.zoom;
 
                 let mut mx = self.mouse_pt.x + x_delta;
                 let mut my = self.mouse_pt.y + y_delta;
@@ -143,7 +147,7 @@ impl Model {
                 self.mouse_pt = BgPointF::new(mx, my);
                 let _ = self
                     .mouse
-                    .move_to(self.mouse_anchor_pt.0, self.mouse_anchor_pt.1);
+                    .move_to(self.mouse_anchor_pt.x, self.mouse_anchor_pt.y);
             }
         } else {
             self.mouse_pt = pt;
@@ -225,7 +229,7 @@ fn create_model(app: &App) -> Result<Model> {
     let primary_position = primary.position();
     let primary_size = primary.size();
 
-    let mouse_anchor_pt = (
+    let mouse_anchor_pt = BgPoint::new(
         (primary_position.x as f64 + (primary_size.width as f64 / 2.0)) as i32,
         (primary_position.y as f64 + (primary_size.height as f64 / 2.0)) as i32,
     );
@@ -253,12 +257,15 @@ fn create_model(app: &App) -> Result<Model> {
             .build()
             .map_err(|e| anyhow!("{:?}", e))?;
 
+        let monitor_bounds = BgRectF::with_size(position.x as f32, position.y as f32, size.width as f32, size.height as f32);
+
         renderers.push(RendererInfo {
             window,
             monitor_handle: monitor.clone(),
-            monitor_bounds: BgRectF::with_size(position.x as f32, position.y as f32, size.width as f32, size.height as f32),
+            monitor_bounds,
             ready: false,
             scale_factor: monitor.scale_factor(),
+            is_primary: monitor_bounds.point_in_rect(mouse_anchor_pt.to_vec2()),
         });
     }
 
@@ -299,7 +306,7 @@ fn create_model(app: &App) -> Result<Model> {
         accent_dark: rgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
         dash_black_white: bw_tex,
         dash_white_accent: aw_tex,
-        selection: None,
+        selection: Some(BgRect::with_size(200, 200, 500, 500)),
         mouse_pt: BgPointF::zero(),
         mouse_anchor_pt,
         mouse_anchored: false,
@@ -386,7 +393,7 @@ fn view(app: &App, model: &Model, frame: Frame) {
         .find(|r| r.window == frame.window_id())
         .unwrap();
 
-    draw_texture(model, &draw, renderer);
+    draw_texture(model, &draw, renderer, app.time);
 
     draw_crosshair(model, &draw, renderer);
 
@@ -397,7 +404,36 @@ fn view(app: &App, model: &Model, frame: Frame) {
     draw.to_frame(app, &frame).unwrap();
 }
 
-fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo) {
+fn zoom_rect(original: Rect, zoom_point: Vec2, zoom_percent: f32) -> Rect {
+    // Ensure zoom_percent is in decimal form (e.g., 50% zoom = 1.5, -50% zoom = 0.5)
+    let scale = 1.0 + zoom_percent / 100.0;
+
+    // Calculate the new dimensions
+    let new_width = original.w() * scale;
+    let new_height = original.h() * scale;
+
+    // Compute the offsets for translation, ensuring zoom happens around `zoom_point`
+    let dx = (original.x() - zoom_point.x) * (scale - 1.0);
+    let dy = (original.y() - zoom_point.y) * (scale - 1.0);
+
+    // Define the new rectangle, translated and resized
+    Rect::from_x_y_w_h(
+        original.x() - dx, // Translate X
+        original.y() - dy, // Translate Y
+        new_width,         // New width
+        new_height,        // New height
+    )
+}
+
+fn zoom_point(original_point: BgPointF, zoom_point: BgPointF, zoom_percent: f32) -> BgPointF {
+    // Ensure zoom_percent is in decimal form (e.g., 50% zoom = 1.5, -50% zoom = 0.5)
+    let scale = zoom_percent;
+
+    // Calculate the new point after applying the zoom transformation
+    BgPointF::new(zoom_point.x + (original_point.x - zoom_point.x) * scale, zoom_point.y + (original_point.y - zoom_point.y) * scale)
+}
+
+fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) {
     let win = renderer.cartesian_bounds();
     let cursor_pos = renderer.screen_pt_to_window(model.mouse_pt);
     let zoom = model.zoom;
@@ -414,16 +450,41 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo) {
 
     texture_draw.texture(&model.desktop_gray_texture);
 
-    // dark overlay
     draw.rect()
         .wh(win.wh())
         .rgba(0.0, 0.0, 0.0, 0.5);
 
-    // if let Some(selection) = model.selection {
-    //     let cropped_draw = draw.scissor(selection);
-    //     cropped_draw.texture(&renderer.color_texture);
-    //     dashed::draw_dashed_rectangle(&draw, selection, 2.0, 20.0, &model.dash_white_accent, app.time);
-    // }
+    if let Some(selection) = model.selection {
+        let top_left = BgPointF::new(selection.x1 as f32, selection.y1 as f32);
+        let bottom_right = BgPointF::new(selection.x2 as f32, selection.y2 as f32);
+        let top_left = zoom_point(top_left, model.mouse_pt, zoom);
+        let bottom_right = zoom_point(bottom_right, model.mouse_pt, zoom);
+
+        let top_left = renderer.screen_pt_to_window(top_left);
+        let bottom_right = renderer.screen_pt_to_window(bottom_right);
+
+        println!("top_left: {:?}, bottom_right: {:?}", top_left, bottom_right);
+
+        let selection = Rect::from_corners(top_left, bottom_right);
+        // let selection = zoom_rect(selection, cursor_pos, zoom);
+
+        // draw.rect()
+        //     .xy(selection.xy())
+        //     .wh(selection.wh())
+        //     .stroke_weight(2.0)
+        //     .stroke(RED);
+
+        // not sure why I have to do this, but it works
+        let flipped_top_left = pt2(top_left.x, -top_left.y);
+        let flipped_bottom_right = pt2(bottom_right.x, -bottom_right.y);
+        let flipped_selection = Rect::from_corners(flipped_top_left, flipped_bottom_right);
+
+        let cropped_draw = texture_draw.scissor(flipped_selection);
+        cropped_draw.texture(&model.desktop_color_texture);
+
+        let outline_draw = draw.scissor(flipped_selection.pad(-1.0));
+        dashed::draw_dashed_rectangle(&outline_draw, selection, 2.0, 20.0, &model.dash_white_accent, time);
+    }
 }
 
 fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
@@ -490,6 +551,7 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         Monitor phsical: [{:.0}, {:.0}, {:.0}, {:.0}]
         Monitor ratio: {:.2}
         Monitor scale factor: {:.2}
+        Monitor primary: {:?}
         World zoom: {:.2}
         World mouse: {:?}
         Mouse relative to window: {:.2}
@@ -505,6 +567,7 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         mon_phys_size.height,
         mon_log_size.width / mon_log_size.height,
         m_scale_factor,
+        renderer.is_primary,
         model.zoom,
         model.mouse_pt,
         renderer.screen_pt_to_window(model.mouse_pt),
