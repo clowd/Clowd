@@ -1,7 +1,8 @@
 use crate::{util::*, RendererInfo};
-use bracket_geometry::prelude::{PointF, Rect};
-use nannou::{color::GREEN, event::Key, Draw};
+use bracket_geometry::prelude::{Point, PointF, Rect};
+use nannou::{color::GREEN, event::Key, winit::window::CursorIcon, Draw};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum HitTest {
     None,
     Button(usize),
@@ -14,6 +15,66 @@ pub enum HitTest {
     Right,
     Top,
     Content,
+}
+
+impl HitTest {
+    pub fn resize_handles() -> [HitTest; 8] {
+        [
+            HitTest::TopLeft,
+            HitTest::TopRight,
+            HitTest::BottomLeft,
+            HitTest::BottomRight,
+            HitTest::Left,
+            HitTest::Bottom,
+            HitTest::Right,
+            HitTest::Top,
+        ]
+    }
+
+    pub fn to_cursor(&self) -> CursorIcon {
+        match self {
+            HitTest::TopLeft | HitTest::BottomRight => CursorIcon::NwResize,
+            HitTest::TopRight | HitTest::BottomLeft => CursorIcon::NeResize,
+            HitTest::Left | HitTest::Right => CursorIcon::EwResize,
+            HitTest::Top | HitTest::Bottom => CursorIcon::NsResize,
+            HitTest::Content => CursorIcon::Move,
+            HitTest::Button(_) => CursorIcon::Hand,
+            _ => CursorIcon::Default,
+        }
+    }
+
+    pub fn is_size_handle(&self) -> bool {
+        Self::resize_handles().contains(self)
+    }
+
+    pub fn handle_position(&self, rect: Rect) -> Point {
+        match self {
+            HitTest::TopLeft => rect.top_left(),
+            HitTest::TopRight => rect.top_right(),
+            HitTest::BottomLeft => rect.bottom_left(),
+            HitTest::BottomRight => rect.bottom_right(),
+            HitTest::Left => Point::new(rect.left(), rect.center().y),
+            HitTest::Right => Point::new(rect.right(), rect.center().y),
+            HitTest::Top => Point::new(rect.center().x, rect.top()),
+            HitTest::Bottom => Point::new(rect.center().x, rect.bottom()),
+            _ => panic!("Not a size handle"),
+        }
+    }
+
+    pub fn resize_rect(&self, pt: PointF, selection: Rect) -> Rect {
+        let (x1, y1, x2, y2) = match self {
+            HitTest::TopLeft => round_px_selection(pt.x as f64, pt.y as f64, selection.x2 as f64, selection.y2 as f64),
+            HitTest::TopRight => round_px_selection(selection.x1 as f64, pt.y as f64, pt.x as f64, selection.y2 as f64),
+            HitTest::BottomLeft => round_px_selection(pt.x as f64, selection.y1 as f64, selection.x2 as f64, pt.y as f64),
+            HitTest::BottomRight => round_px_selection(selection.x1 as f64, selection.y1 as f64, pt.x as f64, pt.y as f64),
+            HitTest::Left => round_px_selection(pt.x as f64, selection.y1 as f64, selection.x2 as f64, selection.y2 as f64),
+            HitTest::Right => round_px_selection(selection.x1 as f64, selection.y1 as f64, pt.x as f64, selection.y2 as f64),
+            HitTest::Top => round_px_selection(selection.x1 as f64, pt.y as f64, selection.x2 as f64, selection.y2 as f64),
+            HitTest::Bottom => round_px_selection(selection.x1 as f64, selection.y1 as f64, selection.x2 as f64, pt.y as f64),
+            _ => (selection.x1, selection.y1, selection.x2, selection.y2),
+        };
+        Rect::with_exact(x1, y1, x2, y2)
+    }
 }
 
 pub struct ButtonDescription {

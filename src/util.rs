@@ -203,6 +203,10 @@ pub fn point_to_widened_rect_f(radius: f32, pt: PointF) -> RectF {
     RectF::with_size(pt.x - radius, pt.y - radius, radius * 2.0, radius * 2.0)
 }
 
+pub fn point_to_widened_rect_n(radius: f32, pt: Vec2) -> NRect {
+    NRect::from_x_y_w_h(pt.x, pt.y, radius * 2.0, radius * 2.0)
+}
+
 pub fn line_to_widened_rect(radius: i32, start: Point, end: Point) -> Rect {
     let x1 = start.x.min(end.x) - radius;
     let y1 = start.y.min(end.y) - radius;
@@ -229,6 +233,7 @@ pub trait RectExt<TRect, TPoint, T> {
     fn top(&self) -> T;
     fn bottom(&self) -> T;
     fn intersect_with(&self, other: &TRect) -> TRect;
+    fn expand(&self, amount: T) -> TRect;
 }
 
 impl RectExt<RectF, PointF, f32> for RectF {
@@ -272,6 +277,15 @@ impl RectExt<RectF, PointF, f32> for RectF {
             self.bottom().min(other.bottom()),
         )
     }
+
+    fn expand(&self, amount: f32) -> RectF {
+        RectF::with_exact(
+            self.left() - amount,
+            self.top() - amount,
+            self.right() + amount,
+            self.bottom() + amount,
+        )
+    }
 }
 
 impl RectExt<Rect, Point, i32> for Rect {
@@ -313,6 +327,15 @@ impl RectExt<Rect, Point, i32> for Rect {
             self.top().max(other.top()),
             self.right().min(other.right()),
             self.bottom().min(other.bottom()),
+        )
+    }
+
+    fn expand(&self, amount: i32) -> Rect {
+        Rect::with_exact(
+            self.left() - amount,
+            self.top() - amount,
+            self.right() + amount,
+            self.bottom() + amount,
         )
     }
 }
