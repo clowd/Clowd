@@ -1,6 +1,6 @@
-mod dashed;
 mod event_handler;
 mod screenshot;
+mod util;
 
 use anyhow::{anyhow, Result};
 use bracket_geometry::prelude::{Point as BgPoint, PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
@@ -16,6 +16,7 @@ use nannou::{
     },
 };
 use screenshot::capture_desktop;
+use util::*;
 use wgpu::{SamplerBuilder, Texture};
 use xcap::Window as XCapWindow;
 
@@ -25,17 +26,17 @@ extern crate log;
 #[macro_use]
 extern crate anyhow;
 
-fn distance2d_pythagoras_squared(start: BgPointF, end: BgPointF) -> f32 {
-    let dx = start.x.max(end.x) - start.x.min(end.x);
-    let dy = start.y.max(end.y) - start.y.min(end.y);
-    (dx * dx) + (dy * dy)
-}
-
 fn main() {
     nannou::app(model)
         .loop_mode(LoopMode::RefreshSync)
         .update(update)
         .run();
+}
+
+enum MouseState {
+    Up,
+    StartSelection(BgPointF),
+    MakingSelection(BgPointF),
 }
 
 #[allow(dead_code)]
@@ -55,7 +56,9 @@ struct Model {
     dash_black_white: Texture,
     dash_white_accent: Texture,
     selection: Option<BgRect>,
+    captured: bool,
     mouse_pt: BgPointF,
+    mouse_state: MouseState,
     mouse_anchor_pt: BgPoint,
     mouse_anchored: bool,
     mouse: Mouse,
@@ -114,15 +117,15 @@ impl Model {
             .find(|r| r.monitor_bounds.point_in_rect(pt))
             .or_else(|| {
                 self.renderers.iter().min_by(|a, b| {
-                    let a_dist = distance2d_pythagoras_squared(a.monitor_bounds.center(), pt);
-                    let b_dist = distance2d_pythagoras_squared(b.monitor_bounds.center(), pt);
+                    let a_dist = distance2d_pythagoras_squared_f(a.monitor_bounds.center(), pt);
+                    let b_dist = distance2d_pythagoras_squared_f(b.monitor_bounds.center(), pt);
                     a_dist.partial_cmp(&b_dist).unwrap()
                 })
             })
             .unwrap()
     }
 
-    fn handle_mouse_event(&mut self, pt: BgPointF) {
+    fn handle_mouse_move(&mut self, pt: BgPointF) {
         if self.mouse_anchored {
             if self.mouse_anchor_pt != BgPoint::new(pt.x as i32, pt.y as i32) {
                 let x_delta = (pt.x - self.mouse_anchor_pt.x as f32) / self.zoom;
@@ -152,6 +155,50 @@ impl Model {
         } else {
             self.mouse_pt = pt;
         }
+
+        let pt = self.mouse_pt;
+        match self.mouse_state {
+            MouseState::Up => (),
+            MouseState::StartSelection(start) => {
+                let dist = distance2d_diagonal_f(start, pt);
+                let drag_threshold = 10.0 / self.zoom;
+                if dist > drag_threshold {
+                    self.mouse_state = MouseState::MakingSelection(start);
+                    let (x1, y1, x2, y2) = round_px_selection(start.x as f64, start.y as f64, pt.x as f64, pt.y as f64);
+                    self.selection = Some(BgRect::with_exact(x1, y1, x2, y2))
+                }
+            }
+            MouseState::MakingSelection(start) => {
+                let (x1, y1, x2, y2) = round_px_selection(start.x as f64, start.y as f64, pt.x as f64, pt.y as f64);
+                self.selection = Some(BgRect::with_exact(x1, y1, x2, y2))
+            }
+            _ => (),
+        }
+    }
+
+    fn handle_mouse_down(&mut self, pt: BgPointF) {
+        if self.captured {
+            // TODO
+        } else {
+            self.mouse_state = MouseState::StartSelection(pt);
+        }
+    }
+
+    fn handle_mouse_up(&mut self, pt: BgPointF) {
+        match self.mouse_state {
+            MouseState::StartSelection(_) => {
+                self.selection = None;
+            }
+            MouseState::MakingSelection(start) => {
+                self.zoom = 1.0;
+                self.set_anchored(false);
+                self.captured = true;
+                let (x1, y1, x2, y2) = round_px_selection(start.x as f64, start.y as f64, pt.x as f64, pt.y as f64);
+                self.selection = Some(BgRect::with_exact(x1, y1, x2, y2))
+            }
+            _ => (),
+        }
+        self.mouse_state = MouseState::Up;
     }
 }
 
@@ -306,8 +353,10 @@ fn create_model(app: &App) -> Result<Model> {
         accent_dark: rgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
         dash_black_white: bw_tex,
         dash_white_accent: aw_tex,
-        selection: Some(BgRect::with_size(200, 200, 500, 500)),
+        selection: None,
+        captured: false,
         mouse_pt: BgPointF::zero(),
+        mouse_state: MouseState::Up,
         mouse_anchor_pt,
         mouse_anchored: false,
         mouse: Mouse::new(),
@@ -346,7 +395,15 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
     } else if let WindowEvent::MouseMoved(pt) = event {
         let renderer = &model.renderers[idx];
         let pt = renderer.logical_pt_to_screen(app, pt);
-        model.handle_mouse_event(pt);
+        model.handle_mouse_move(pt);
+    } else if let WindowEvent::MousePressed(button) = event {
+        if button == MouseButton::Left {
+            model.handle_mouse_down(model.mouse_pt);
+        }
+    } else if let WindowEvent::MouseReleased(button) = event {
+        if button == MouseButton::Left {
+            model.handle_mouse_up(model.mouse_pt);
+        }
     } else if let WindowEvent::MouseWheel(scroll_delta, _) = event {
         let delta = match scroll_delta {
             MouseScrollDelta::LineDelta(_, y) => y,
@@ -395,7 +452,9 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     draw_texture(model, &draw, renderer, app.time);
 
-    draw_crosshair(model, &draw, renderer);
+    if !model.captured {
+        draw_crosshair(model, &draw, renderer);
+    }
 
     if model.debug {
         draw_debug(model, &draw, renderer);
@@ -439,8 +498,6 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         let top_left = renderer.screen_pt_to_window(top_left);
         let bottom_right = renderer.screen_pt_to_window(bottom_right);
 
-        println!("top_left: {:?}, bottom_right: {:?}", top_left, bottom_right);
-
         let selection = Rect::from_corners(top_left, bottom_right);
 
         // not sure why I have to do this, but it works
@@ -451,8 +508,8 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         let cropped_draw = texture_draw.scissor(flipped_selection);
         cropped_draw.texture(&model.desktop_color_texture);
 
-        let outline_draw = draw.scissor(flipped_selection.pad(-1.0));
-        dashed::draw_dashed_rectangle(&outline_draw, selection, 2.0, 20.0, &model.dash_white_accent, time);
+        let outline_draw = draw.scissor(flipped_selection.pad(-2.0));
+        util::draw_dashed_rectangle(&outline_draw, selection.pad(-2.0), 4.0, 20.0, &model.dash_white_accent, time);
     }
 }
 
@@ -463,9 +520,9 @@ fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
     let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
     let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
 
-    dashed::draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white, 0.0);
+    util::draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white, 0.0);
 
-    dashed::draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white, 0.0);
+    util::draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white, 0.0);
 
     let accent_size = 100.0;
     let accent_color = model.accent_light;
