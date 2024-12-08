@@ -404,36 +404,12 @@ fn view(app: &App, model: &Model, frame: Frame) {
     draw.to_frame(app, &frame).unwrap();
 }
 
-fn zoom_rect(original: Rect, zoom_point: Vec2, zoom_percent: f32) -> Rect {
-    // Ensure zoom_percent is in decimal form (e.g., 50% zoom = 1.5, -50% zoom = 0.5)
-    let scale = 1.0 + zoom_percent / 100.0;
-
-    // Calculate the new dimensions
-    let new_width = original.w() * scale;
-    let new_height = original.h() * scale;
-
-    // Compute the offsets for translation, ensuring zoom happens around `zoom_point`
-    let dx = (original.x() - zoom_point.x) * (scale - 1.0);
-    let dy = (original.y() - zoom_point.y) * (scale - 1.0);
-
-    // Define the new rectangle, translated and resized
-    Rect::from_x_y_w_h(
-        original.x() - dx, // Translate X
-        original.y() - dy, // Translate Y
-        new_width,         // New width
-        new_height,        // New height
-    )
-}
-
-fn zoom_point(original_point: BgPointF, zoom_point: BgPointF, zoom_percent: f32) -> BgPointF {
-    // Ensure zoom_percent is in decimal form (e.g., 50% zoom = 1.5, -50% zoom = 0.5)
-    let scale = zoom_percent;
-
-    // Calculate the new point after applying the zoom transformation
-    BgPointF::new(zoom_point.x + (original_point.x - zoom_point.x) * scale, zoom_point.y + (original_point.y - zoom_point.y) * scale)
-}
-
 fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) {
+    fn zoom_point(original_point: BgPointF, zoom_point: BgPointF, scale: f32) -> BgPointF {
+        // Calculate the new point after applying the zoom transformation
+        BgPointF::new(zoom_point.x + (original_point.x - zoom_point.x) * scale, zoom_point.y + (original_point.y - zoom_point.y) * scale)
+    }
+
     let win = renderer.cartesian_bounds();
     let cursor_pos = renderer.screen_pt_to_window(model.mouse_pt);
     let zoom = model.zoom;
@@ -466,13 +442,6 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         println!("top_left: {:?}, bottom_right: {:?}", top_left, bottom_right);
 
         let selection = Rect::from_corners(top_left, bottom_right);
-        // let selection = zoom_rect(selection, cursor_pos, zoom);
-
-        // draw.rect()
-        //     .xy(selection.xy())
-        //     .wh(selection.wh())
-        //     .stroke_weight(2.0)
-        //     .stroke(RED);
 
         // not sure why I have to do this, but it works
         let flipped_top_left = pt2(top_left.x, -top_left.y);
@@ -485,6 +454,67 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         let outline_draw = draw.scissor(flipped_selection.pad(-1.0));
         dashed::draw_dashed_rectangle(&outline_draw, selection, 2.0, 20.0, &model.dash_white_accent, time);
     }
+}
+
+fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
+    let win = renderer.cartesian_bounds();
+    let mouse_pos = renderer.screen_pt_to_window(model.mouse_pt);
+    let mouse = mouse_pos - pt2(-0.5, 0.5);
+    let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
+    let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
+
+    dashed::draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white, 0.0);
+
+    dashed::draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white, 0.0);
+
+    let accent_size = 100.0;
+    let accent_color = model.accent_light;
+    let mouse_accent_horiz = (pt2(mouse.x - accent_size, mouse.y), pt2(mouse.x + accent_size, mouse.y));
+    let mouse_accent_vert = (pt2(mouse.x, mouse.y - accent_size), pt2(mouse.x, mouse.y + accent_size));
+
+    draw.line()
+        .start(mouse_accent_horiz.0)
+        .end(mouse_accent_horiz.1)
+        .stroke_weight(1.0)
+        .color(accent_color);
+
+    draw.line()
+        .start(mouse_accent_vert.0)
+        .end(mouse_accent_vert.1)
+        .stroke_weight(1.0)
+        .color(accent_color);
+
+    let handle_size = accent_size / 2.0;
+    let handle_weight = 5.0;
+
+    let mouse_handle_left = (pt2(mouse.x - handle_size - 0.5, mouse.y), pt2(mouse.x - accent_size - 0.5, mouse.y));
+    let mouse_handle_right = (pt2(mouse.x + handle_size + 0.5, mouse.y), pt2(mouse.x + accent_size + 0.5, mouse.y));
+    let mouse_handle_top = (pt2(mouse.x, mouse.y - handle_size - 0.5), pt2(mouse.x, mouse.y - accent_size - 0.5));
+    let mouse_handle_bottom = (pt2(mouse.x, mouse.y + handle_size + 0.5), pt2(mouse.x, mouse.y + accent_size + 0.5));
+
+    draw.line()
+        .start(mouse_handle_left.0)
+        .end(mouse_handle_left.1)
+        .stroke_weight(handle_weight)
+        .color(accent_color);
+
+    draw.line()
+        .start(mouse_handle_right.0)
+        .end(mouse_handle_right.1)
+        .stroke_weight(handle_weight)
+        .color(accent_color);
+
+    draw.line()
+        .start(mouse_handle_top.0)
+        .end(mouse_handle_top.1)
+        .stroke_weight(handle_weight)
+        .color(accent_color);
+
+    draw.line()
+        .start(mouse_handle_bottom.0)
+        .end(mouse_handle_bottom.1)
+        .stroke_weight(handle_weight)
+        .color(accent_color);
 }
 
 fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
@@ -595,65 +625,4 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         .xy(mouse_pos + vec2(0.0, 20.0))
         .font_size(14)
         .color(WHITE);
-}
-
-fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
-    let win = renderer.cartesian_bounds();
-    let mouse_pos = renderer.screen_pt_to_window(model.mouse_pt);
-    let mouse = mouse_pos - pt2(-0.5, 0.5);
-    let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
-    let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
-
-    dashed::draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white, 0.0);
-
-    dashed::draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white, 0.0);
-
-    let accent_size = 100.0;
-    let accent_color = model.accent_light;
-    let mouse_accent_horiz = (pt2(mouse.x - accent_size, mouse.y), pt2(mouse.x + accent_size, mouse.y));
-    let mouse_accent_vert = (pt2(mouse.x, mouse.y - accent_size), pt2(mouse.x, mouse.y + accent_size));
-
-    draw.line()
-        .start(mouse_accent_horiz.0)
-        .end(mouse_accent_horiz.1)
-        .stroke_weight(1.0)
-        .color(accent_color);
-
-    draw.line()
-        .start(mouse_accent_vert.0)
-        .end(mouse_accent_vert.1)
-        .stroke_weight(1.0)
-        .color(accent_color);
-
-    let handle_size = accent_size / 2.0;
-    let handle_weight = 5.0;
-
-    let mouse_handle_left = (pt2(mouse.x - handle_size - 0.5, mouse.y), pt2(mouse.x - accent_size - 0.5, mouse.y));
-    let mouse_handle_right = (pt2(mouse.x + handle_size + 0.5, mouse.y), pt2(mouse.x + accent_size + 0.5, mouse.y));
-    let mouse_handle_top = (pt2(mouse.x, mouse.y - handle_size - 0.5), pt2(mouse.x, mouse.y - accent_size - 0.5));
-    let mouse_handle_bottom = (pt2(mouse.x, mouse.y + handle_size + 0.5), pt2(mouse.x, mouse.y + accent_size + 0.5));
-
-    draw.line()
-        .start(mouse_handle_left.0)
-        .end(mouse_handle_left.1)
-        .stroke_weight(handle_weight)
-        .color(accent_color);
-
-    draw.line()
-        .start(mouse_handle_right.0)
-        .end(mouse_handle_right.1)
-        .stroke_weight(handle_weight)
-        .color(accent_color);
-
-    draw.line()
-        .start(mouse_handle_top.0)
-        .end(mouse_handle_top.1)
-        .stroke_weight(handle_weight)
-        .color(accent_color);
-
-    draw.line()
-        .start(mouse_handle_bottom.0)
-        .end(mouse_handle_bottom.1)
-        .stroke_weight(handle_weight)
-        .color(accent_color);
 }
