@@ -195,6 +195,30 @@ impl ToIntRect for RectF {
     }
 }
 
+pub fn point_to_widened_rect(radius: i32, pt: Point) -> Rect {
+    Rect::with_size(pt.x - radius, pt.y - radius, radius * 2, radius * 2)
+}
+
+pub fn point_to_widened_rect_f(radius: f32, pt: PointF) -> RectF {
+    RectF::with_size(pt.x - radius, pt.y - radius, radius * 2.0, radius * 2.0)
+}
+
+pub fn line_to_widened_rect(radius: i32, start: Point, end: Point) -> Rect {
+    let x1 = start.x.min(end.x) - radius;
+    let y1 = start.y.min(end.y) - radius;
+    let x2 = start.x.max(end.x) + radius;
+    let y2 = start.y.max(end.y) + radius;
+    Rect::with_exact(x1, y1, x2, y2)
+}
+
+pub fn line_to_widened_rect_f(radius: f32, start: PointF, end: PointF) -> RectF {
+    let x1 = start.x.min(end.x) - radius;
+    let y1 = start.y.min(end.y) - radius;
+    let x2 = start.x.max(end.x) + radius;
+    let y2 = start.y.max(end.y) + radius;
+    RectF::with_exact(x1, y1, x2, y2)
+}
+
 pub trait RectExt<TRect, TPoint, T> {
     fn top_left(&self) -> TPoint;
     fn top_right(&self) -> TPoint;

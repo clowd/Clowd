@@ -1,5 +1,5 @@
-use crate::{util::*, Model, RendererInfo};
-use bracket_geometry::prelude::{PointF, Rect, RectF};
+use crate::{util::*, RendererInfo};
+use bracket_geometry::prelude::{PointF, Rect};
 use nannou::{color::GREEN, event::Key, Draw};
 
 pub enum HitTest {
@@ -27,6 +27,7 @@ pub struct ButtonDescription {
 const UNSCALED_BUTTON_SIZE: f32 = 50.0;
 const UNSCALED_BUTTON_ICON_SIZE: f32 = 26.0;
 const UNSCALED_BUTTON_PADDING: f32 = 2.0;
+const UNSCALED_DRAG_HANDLE_SIZE: f32 = 10.0;
 
 pub enum Orientation {
     Vertical,
@@ -39,7 +40,8 @@ pub struct ButtonPanel {
     orientation: Orientation,
     // monitor_bounds: Vec<RectF>,
     selection: Rect,
-    pub button_positions: Vec<Rect>,
+    button_positions: Vec<Rect>,
+    scale: f64,
 }
 
 impl ButtonPanel {
@@ -51,11 +53,13 @@ impl ButtonPanel {
             // monitor_bounds,
             selection: Rect::with_exact(0, 0, 0, 0),
             button_positions: Vec::new(),
+            scale: 1.0,
         }
     }
 
-    pub fn update(&mut self, screen_bounds: Rect, dpi_zoom: f32, selection: Rect) {
+    pub fn update(&mut self, screen_bounds: Rect, dpi_zoom: f64, selection: Rect) {
         self.selection = selection;
+        self.scale = dpi_zoom;
 
         let num_svg_buttons = self.buttons.len() - 1; // last is area indicator
 
@@ -63,7 +67,7 @@ impl ButtonPanel {
         let min_distance = (2.0 * dpi_zoom).ceil() as i32;
         let max_distance = (15.0 * dpi_zoom).ceil() as i32;
         let button_spacing = (3.0 * dpi_zoom).ceil() as i32;
-        let svg_button_size = (UNSCALED_BUTTON_SIZE * dpi_zoom).floor() as i32;
+        let svg_button_size = (UNSCALED_BUTTON_SIZE as f64 * dpi_zoom).floor() as i32;
         let area_size = svg_button_size; // same as `int areaSize = (int)floor(svgButtonSize);`
 
         let long_edge_px = svg_button_size * (num_svg_buttons as i32) + (button_spacing * 2) + area_size;
@@ -79,7 +83,7 @@ impl ButtonPanel {
 
         let vert: bool;
         let mut ind_left: i32;
-        let mut ind_top: i32;
+        let ind_top: i32;
 
         if bottom_space >= short_edge_px {
             // Vertically oriented panel below the selection
@@ -157,8 +161,8 @@ impl ButtonPanel {
 
         // Now place the SVG buttons
         for i in 0..num_svg_buttons {
-            let mut btn_left = desired_rect.left();
-            let mut btn_top = desired_rect.top();
+            let btn_left;
+            let btn_top;
             if vert {
                 btn_left = vchange;
                 btn_top = desired_rect.top();
@@ -182,7 +186,7 @@ impl ButtonPanel {
         self.orientation = if vert { Orientation::Vertical } else { Orientation::Horizontal };
     }
 
-    pub fn draw(&self, model: &Model, draw: &Draw, renderer: &RendererInfo) {
+    pub fn draw(&self, draw: &Draw, renderer: &RendererInfo) {
         // if let Some(selection) = model.selection {
         //     if selection != self.selection {
         //         self.update(renderer.monitor_bounds.to_int(), renderer.scale_factor as f32, selection);
@@ -201,24 +205,56 @@ impl ButtonPanel {
                 .color(GREEN);
         }
     }
+
+    pub fn hit_test(&self, point: PointF) -> HitTest {
+        for (i, button) in self.button_positions.iter().enumerate() {
+            if button.to_float().point_in_rect(point) {
+                return HitTest::Button(i);
+            }
+        }
+
+        let radius = (UNSCALED_DRAG_HANDLE_SIZE * self.scale as f32).floor();
+        let selection = self.selection.to_float();
+
+        if point_to_widened_rect_f(radius, selection.top_left()).point_in_rect(point) {
+            return HitTest::TopLeft;
+        }
+
+        if point_to_widened_rect_f(radius, selection.top_right()).point_in_rect(point) {
+            return HitTest::TopRight;
+        }
+
+        if point_to_widened_rect_f(radius, selection.bottom_left()).point_in_rect(point) {
+            return HitTest::BottomLeft;
+        }
+
+        if point_to_widened_rect_f(radius, selection.bottom_right()).point_in_rect(point) {
+            return HitTest::BottomRight;
+        }
+
+        if line_to_widened_rect_f(radius, selection.top_left(), selection.top_right()).point_in_rect(point) {
+            return HitTest::Top;
+        }
+
+        if line_to_widened_rect_f(radius, selection.top_right(), selection.bottom_right()).point_in_rect(point) {
+            return HitTest::Right;
+        }
+
+        if line_to_widened_rect_f(radius, selection.bottom_right(), selection.bottom_left()).point_in_rect(point) {
+            return HitTest::Bottom;
+        }
+
+        if line_to_widened_rect_f(radius, selection.bottom_left(), selection.top_left()).point_in_rect(point) {
+            return HitTest::Left;
+        }
+
+        if selection.point_in_rect(point) {
+            return HitTest::Content;
+        }
+
+        HitTest::None
+    }
 }
-
-// pub fn get_button_positions(anchor: PointF, vertical: bool, scale: f32) {
-//     let button_size = UNSCALED_BUTTON_SIZE * scale;
-// }
-
-// pub fn get_panel_bounds(anchor: PointF, vertical: bool, scale: f32) {
-//     let button_size = 50.0;
-//     let padding = 10.0 * scale;
-//     let button_spacing = 5.0 * scale;
-//     let button_count = 7;
-//     let panel_size = button_size + padding * 2.0;
-//     let panel_width = if vertical {
-//         panel_size
-//     } else {
-//         panel_size + button_count as f32 * (button_size + button_spacing)
-//     };
-// }
 
 fn get_default_buttons() -> Vec<ButtonDescription> {
     vec![
