@@ -11,7 +11,7 @@ use geometry::*;
 use ui::*;
 
 use anyhow::{anyhow, Result};
-use euclid::{SideOffsets2D, Transform2D, Vector2D};
+use euclid::{SideOffsets2D, Transform2D};
 use mouse_rs::Mouse;
 use nannou::{
     color::{self},
@@ -53,6 +53,7 @@ enum MouseState {
 struct Model {
     renderers: Vec<RendererInfo>,
     desktop_bounds: ScreenRect,
+    desktop_virtual_origin: ScreenPoint,
     desktop_color_texture: wgpu::Texture,
     desktop_gray_texture: wgpu::Texture,
     desktop_color_image: DynamicImage,
@@ -129,7 +130,8 @@ impl Model {
         } else if !anchored && self.mouse_anchored {
             self.mouse_anchored = false;
             let pt = self.mouse_pt.to_i32();
-            let _ = self.mouse.move_to(pt.x, pt.y);
+            let relative = pt + self.desktop_virtual_origin.to_vector();
+            let _ = self.mouse.move_to(relative.x, relative.y);
         }
     }
 
@@ -157,8 +159,9 @@ impl Model {
 
     fn handle_mouse_move(&mut self, app: &App, pt: ScreenPointF) {
         if self.mouse_anchored {
-            if self.mouse_anchor_pt != pt.to_i32() {
-                let anchor_f = self.mouse_anchor_pt.to_f64();
+            let relative_anchor = self.mouse_anchor_pt - self.desktop_virtual_origin.to_vector();
+            if relative_anchor != pt.to_i32() {
+                let anchor_f = relative_anchor.to_f64();
                 let x_delta = (pt.x - anchor_f.x) / self.zoom;
                 let y_delta = (pt.y - anchor_f.y) / self.zoom;
 
@@ -293,8 +296,8 @@ fn create_model(app: &App) -> Result<Model> {
 
     info!("[TIME] Captured: {:?}", Duration::from_millis(sw.ms() as u64));
 
-    let vd_transform =
-        Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(Vector2D::new(-desktop_bounds.left(), -desktop_bounds.top()));
+    let desktop_virtual_origin = desktop_bounds.top_left();
+    let vd_transform = Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop_virtual_origin.to_vector());
 
     let desktop_bounds = vd_transform.outer_transformed_rect(&desktop_bounds);
 
@@ -375,6 +378,7 @@ fn create_model(app: &App) -> Result<Model> {
     Ok(Model {
         renderers,
         desktop_bounds,
+        desktop_virtual_origin,
         desktop_color_texture,
         desktop_gray_texture,
         desktop_color_image,
