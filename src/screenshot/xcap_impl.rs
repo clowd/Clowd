@@ -3,6 +3,7 @@ use xcap::Monitor as XCapMonitor;
 use crate::{RectExt, ScreenRect};
 use anyhow::Result;
 use nannou::image::{DynamicImage, GenericImage, ImageBuffer, Rgba};
+use rayon::prelude::*;
 
 pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
     let monitors = XCapMonitor::all()?;
@@ -57,15 +58,31 @@ pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
             .expect("Failed to copy monitor image into desktop image");
     }
 
-    desktop_image
-        .save("screenshot.png")
-        .expect("Failed to save screenshot");
+    let buffer = desktop_image.into_raw();
 
-    // Convert to a DynamicImage
-    let dynamic_image = DynamicImage::ImageRgba8(desktop_image);
+    let mut gray_rgba_buffer = vec![0u8; (desktop_width * desktop_height * 4) as usize];
+    gray_rgba_buffer
+        .par_chunks_exact_mut(4)
+        .enumerate()
+        .for_each(|(i, rgba)| {
+            let idx = i * 4;
+            let b = buffer[idx] as f32;
+            let g = buffer[idx + 1] as f32;
+            let r = buffer[idx + 2] as f32;
+            let a = buffer[idx + 3];
+            let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
 
-    let gray_intermediate = DynamicImage::ImageLuma8(dynamic_image.to_luma8());
-    let gray_image = DynamicImage::ImageRgba8(gray_intermediate.to_rgba8());
+            rgba[0] = gray;
+            rgba[1] = gray;
+            rgba[2] = gray;
+            rgba[3] = a;
+        });
 
-    Ok((desktop_bounds, dynamic_image, gray_image))
+    let bgra_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(desktop_width as u32, desktop_height as u32, buffer)
+        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
+
+    let gray_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(desktop_width as u32, desktop_height as u32, gray_rgba_buffer)
+        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
+
+    Ok((desktop_bounds, DynamicImage::ImageRgba8(bgra_image), DynamicImage::ImageRgba8(gray_image)))
 }
