@@ -36,6 +36,7 @@ fn main() {
     let _ = logging::setup_logging("capture", None, true, false);
     nannou::app(model)
         .loop_mode(LoopMode::RefreshSync)
+        // .backends(wgpu::Backends::DX12)
         .update(update)
         .run();
 }
@@ -312,13 +313,15 @@ fn create_model(app: &App) -> Result<Model> {
         let mut descriptor = default_device_descriptor();
         descriptor.limits.max_texture_dimension_1d = texture_size_limit;
         descriptor.limits.max_texture_dimension_2d = texture_size_limit;
-        descriptor.limits.max_texture_dimension_3d = texture_size_limit;
+        // descriptor.limits.max_texture_dimension_3d = texture_size_limit;
+
+        let surface_config = window::SurfaceConfigurationBuilder::new().present_mode(wgpu::PresentMode::Immediate);
 
         // Try to create a new window and handle errors.
         let window = app
             .new_window()
             .window(WindowBuilder::new().with_visible(false))
-            .surface_conf_builder(window::SurfaceConfigurationBuilder::new().present_mode(wgpu::PresentMode::AutoNoVsync))
+            .surface_conf_builder(surface_config)
             .clear_color(color::rgb(0u8, 0u8, 0u8))
             .title("Clowd Capture")
             .event(event_handler::get_event(i))

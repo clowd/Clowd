@@ -219,11 +219,4 @@ pub fn capture_desktop() -> Result<(ScreenRect, image::DynamicImage, image::Dyna
     }
 }
 
-pub fn convert_image_to_nannou<T>(
-    buffer: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, T>,
-) -> nannou::image::ImageBuffer<nannou::image::Rgba<u8>, T>
-where
-    T: std::ops::Deref<Target = [u8]> + std::ops::DerefMut<Target = [u8]> + 'static,
-{
-    nannou::image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw()).expect("Conversion failed")
-}
+
