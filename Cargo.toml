@@ -25,6 +25,7 @@ simplelog = "0.12"
 time = "0.3"
 file-rotate = "0.7"
 log-panics = "2.0"
+rayon = "1.5"
 
 # [patch.crates-io]
 # image = "0.25"

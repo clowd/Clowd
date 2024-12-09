@@ -471,6 +471,7 @@ dependencies = [
  "log-panics",
  "mouse-rs",
  "nannou",
+ "rayon",
  "semver 1.0.23",
  "simple-stopwatch",
  "simplelog",

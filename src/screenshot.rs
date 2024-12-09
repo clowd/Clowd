@@ -2,7 +2,8 @@
 
 use crate::geometry::*;
 use anyhow::Result;
-use nannou::image::{self, RgbaImage};
+use nannou::image::{self, Bgra, DynamicImage, ImageBuffer};
+use rayon::prelude::*;
 use std::{mem, ops::Deref, ptr};
 use sysinfo::System;
 use windows::{
@@ -113,7 +114,7 @@ pub(super) fn get_os_major_version() -> u8 {
         .unwrap_or(0)
 }
 
-fn to_rgba_image(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, height: i32) -> Result<RgbaImage> {
+fn to_rgba_image(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, height: i32) -> Result<(DynamicImage, DynamicImage)> {
     let buffer_size = width * height * 4;
     let mut bitmap_info = BITMAPINFO {
         bmiHeader: BITMAPINFOHEADER {
@@ -147,16 +148,42 @@ fn to_rgba_image(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, heig
         }
     };
 
-    let is_old_version = get_os_major_version() < 8;
-    for src in buffer.chunks_exact_mut(4) {
-        src.swap(0, 2);
-        // fix https://github.com/nashaofu/xcap/issues/92#issuecomment-1910014951
-        if src[3] == 0 && is_old_version {
-            src[3] = 255;
-        }
-    }
+    // let is_old_version = get_os_major_version() < 8;
+    // for src in buffer.chunks_exact_mut(4) {
+    //     src.swap(0, 2);
+    //     // fix https://github.com/nashaofu/xcap/issues/92#issuecomment-1910014951
+    //     if src[3] == 0 && is_old_version {
+    //         src[3] = 255;
+    //     }
+    // }
 
-    RgbaImage::from_raw(width as u32, height as u32, buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))
+    let mut gray_rgba_buffer = vec![0u8; (width * height * 4) as usize];
+    gray_rgba_buffer
+        .par_chunks_exact_mut(4)
+        .enumerate()
+        .for_each(|(i, rgba)| {
+            let idx = i * 4;
+            let b = buffer[idx] as f32;
+            let g = buffer[idx + 1] as f32;
+            let r = buffer[idx + 2] as f32;
+            let a = buffer[idx + 3];
+            let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+
+            rgba[0] = gray;
+            rgba[1] = gray;
+            rgba[2] = gray;
+            rgba[3] = a;
+        });
+
+    let bgra_image = ImageBuffer::<Bgra<u8>, Vec<u8>>::from_raw(width as u32, height as u32, buffer)
+        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
+
+    let gray_image = ImageBuffer::<Bgra<u8>, Vec<u8>>::from_raw(width as u32, height as u32, gray_rgba_buffer)
+        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
+
+    Ok((DynamicImage::ImageBgra8(bgra_image), DynamicImage::ImageBgra8(gray_image)))
+
+    // RgbaImage::from_raw(width as u32, height as u32, buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))
 }
 
 pub fn virtual_desktop() -> ScreenRect {
@@ -169,7 +196,7 @@ pub fn virtual_desktop() -> ScreenRect {
     }
 }
 
-pub fn capture_desktop() -> Result<(ScreenRect, image::RgbaImage)> {
+pub fn capture_desktop() -> Result<(ScreenRect, image::DynamicImage, image::DynamicImage)> {
     unsafe {
         let rect = virtual_desktop();
         let vx = rect.min_x();
@@ -187,7 +214,8 @@ pub fn capture_desktop() -> Result<(ScreenRect, image::RgbaImage)> {
 
         BitBlt(*box_hdc_mem, 0, 0, vw, vh, *box_hdc_desktop_window, vx, vy, SRCCOPY | CAPTUREBLT)?;
 
-        Ok((rect, to_rgba_image(box_hdc_mem, box_h_bitmap, vw, vh)?))
+        let capture = to_rgba_image(box_hdc_mem, box_h_bitmap, vw, vh)?;
+        Ok((rect, capture.0, capture.1))
     }
 }
 

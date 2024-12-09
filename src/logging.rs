@@ -3,6 +3,7 @@ use simplelog::*;
 use std::path::PathBuf;
 use time::format_description::{modifier, Component, FormatItem};
 
+#[allow(dead_code)]
 pub fn trace_logger() {
     TermLogger::init(LevelFilter::Trace, get_config(None), TerminalMode::Mixed, ColorChoice::Never).unwrap();
 }

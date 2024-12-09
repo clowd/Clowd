@@ -265,7 +265,7 @@ impl Model {
 
 fn create_model(app: &App) -> Result<Model> {
     let sw = simple_stopwatch::Stopwatch::start_new();
-    info!("Start: {:?}", Duration::from_millis(sw.ms() as u64));
+    info!("[TIME] Start: {:?}", Duration::from_millis(sw.ms() as u64));
 
     let mut renderers = Vec::new();
     let mut desktop_windows = Vec::new();
@@ -287,24 +287,16 @@ fn create_model(app: &App) -> Result<Model> {
 
     let mouse_anchor_pt = primary_bounds.center();
 
-    info!("Capturing: {:?}", Duration::from_millis(sw.ms() as u64));
+    info!("[TIME] Capturing: {:?}", Duration::from_millis(sw.ms() as u64));
 
-    let (desktop_bounds, desktop_capture) = capture_desktop()?;
-    let desktop_color_image = DynamicImage::ImageRgba8(desktop_capture);
+    let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop()?;
 
-    info!("Captured: {:?}", Duration::from_millis(sw.ms() as u64));
+    info!("[TIME] Captured: {:?}", Duration::from_millis(sw.ms() as u64));
 
     let vd_transform =
         Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(Vector2D::new(-desktop_bounds.left(), -desktop_bounds.top()));
 
     let desktop_bounds = vd_transform.outer_transformed_rect(&desktop_bounds);
-    // println!("Desktop: {:?}", desktop_bounds);
-
-    // TODO optimise this, can we just use a shader?
-    let gray_image_intermediate = DynamicImage::ImageLuma8(desktop_color_image.to_luma8());
-    let desktop_gray_image = DynamicImage::ImageRgba8(gray_image_intermediate.to_rgba8());
-
-    // desktop_gray_image.save_with_format("testimg.png", image::ImageFormat::Png)?;
 
     for (i, monitor) in monitors.iter().enumerate() {
         let position = monitor.position();
@@ -346,6 +338,8 @@ fn create_model(app: &App) -> Result<Model> {
             scale_factor: monitor.scale_factor(),
             is_primary: monitor_bounds.contains(mouse_anchor_pt),
         });
+
+        info!("[TIME] Monitor Build: {:?}", Duration::from_millis(sw.ms() as u64));
     }
 
     for window in windows {
@@ -360,6 +354,8 @@ fn create_model(app: &App) -> Result<Model> {
         });
     }
 
+    info!("[TIME] Windows Captured: {:?}", Duration::from_millis(sw.ms() as u64));
+
     let bw_buf = ImageBuffer::from_fn(2, 2, |x, _y| {
         if x == 0 {
             image::Rgba([255, 255, 255, 255])
@@ -372,6 +368,9 @@ fn create_model(app: &App) -> Result<Model> {
 
     let desktop_color_texture = Texture::from_image(app, &desktop_color_image);
     let desktop_gray_texture = Texture::from_image(app, &desktop_gray_image);
+
+    info!("[TIME] Textures Loaded: {:?}", Duration::from_millis(sw.ms() as u64));
+    info!("[TIME] Done: {:?}", Duration::from_millis(sw.ms() as u64));
 
     Ok(Model {
         renderers,
