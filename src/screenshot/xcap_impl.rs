@@ -1,26 +1,8 @@
-use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
+use xcap::Monitor as XCapMonitor;
 
 use crate::{RectExt, ScreenRect};
 use anyhow::Result;
-use nannou::image::{self, DynamicImage, GenericImage, ImageBuffer, Rgba};
-
-pub fn virtual_desktop() -> ScreenRect {
-    let monitors = XCapMonitor::all().unwrap();
-
-    let mut min_x = std::i32::MAX;
-    let mut min_y = std::i32::MAX;
-    let mut max_x = std::i32::MIN;
-    let mut max_y = std::i32::MIN;
-
-    for monitor in monitors {
-        min_x = min_x.min(monitor.x());
-        min_y = min_y.min(monitor.y());
-        max_x = max_x.max(monitor.x() + monitor.width() as i32);
-        max_y = max_y.max(monitor.y() + monitor.height() as i32);
-    }
-
-    ScreenRect::from_exact(min_x, min_y, max_x, max_y)
-}
+use nannou::image::{DynamicImage, GenericImage, ImageBuffer, Rgba};
 
 pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
     let monitors = XCapMonitor::all()?;
@@ -37,7 +19,7 @@ pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
         min_y = min_y.min((monitor.y() as f32 * scale) as i32);
         max_x = max_x.max(((monitor.x() + monitor.width() as i32) as f32 * scale) as i32);
         max_y = max_y.max(((monitor.y() + monitor.height() as i32) as f32 * scale) as i32);
-        
+
         //max_x = max_x.max(monitor.x() + monitor.width() as i32);
         //max_y = max_y.max(monitor.y() + monitor.height() as i32);
     }
@@ -74,8 +56,10 @@ pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
             .copy_from(&monitor_image, offset_x, offset_y)
             .expect("Failed to copy monitor image into desktop image");
     }
-    
-    desktop_image.save("screenshot.png").expect("Failed to save screenshot");
+
+    desktop_image
+        .save("screenshot.png")
+        .expect("Failed to save screenshot");
 
     // Convert to a DynamicImage
     let dynamic_image = DynamicImage::ImageRgba8(desktop_image);
