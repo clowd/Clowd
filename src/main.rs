@@ -4,24 +4,22 @@ mod geometry;
 mod screenshot;
 mod ui;
 
-use anyhow::{anyhow, Result};
-use euclid::{SideOffsets2D, Size2D, Transform2D};
-// use bracket_geometry::prelude::{Point as BgPoint, PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
-use draw_ex::*;
 use geometry::*;
+use ui::*;
+
+use anyhow::{anyhow, Result};
+use euclid::SideOffsets2D;
 use mouse_rs::Mouse;
 use nannou::{
     color::{self},
     image::{self, DynamicImage, ImageBuffer, RgbaImage},
     prelude::*,
     winit::{
-        dpi::{LogicalPosition, PhysicalPosition, PhysicalSize},
         monitor::MonitorHandle,
         window::{CursorIcon, WindowBuilder},
     },
 };
 use screenshot::capture_desktop;
-use ui::HitTest;
 use wgpu::{SamplerBuilder, Texture};
 use xcap::Window as XCapWindow;
 
@@ -87,8 +85,7 @@ struct RendererInfo {
 
 struct DesktopWindowInfo {
     title: String,
-    position: PhysicalPosition<i32>,
-    size: PhysicalSize<u32>,
+    window_bounds: ScreenRect,
     capture: Option<RgbaImage>,
 }
 
@@ -275,9 +272,11 @@ fn create_model(app: &App) -> Result<Model> {
     let primary = app.primary_monitor().unwrap();
     let primary_position = primary.position();
     let primary_size = primary.size();
-    let primary_bounds = ScreenRect::new(
-        ScreenPoint::new(primary_position.x, primary_position.y),
-        Size2D::new(primary_size.width as i32, primary_size.height as i32),
+    let primary_bounds = ScreenRect::from_xy_size(
+        primary_position.x,
+        primary_position.y,
+        primary_size.width as i32,
+        primary_size.height as i32,
     );
 
     let mouse_anchor_pt = primary_bounds.center();
@@ -305,11 +304,7 @@ fn create_model(app: &App) -> Result<Model> {
             .build()
             .map_err(|e| anyhow!("{:?}", e))?;
 
-        let monitor_bounds = ScreenRect::new(
-            ScreenPoint::new(position.x, position.y),
-            Size2D::new(size.width as i32, size.height as i32),
-        );
-
+        let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
         renderers.push(RendererInfo {
             window,
             monitor_handle: monitor.clone(),
@@ -325,14 +320,7 @@ fn create_model(app: &App) -> Result<Model> {
     for window in windows {
         desktop_windows.push(DesktopWindowInfo {
             title: window.title().to_string(),
-            position: PhysicalPosition {
-                x: window.x(),
-                y: window.y(),
-            },
-            size: PhysicalSize {
-                width: window.width(),
-                height: window.height(),
-            },
+            window_bounds: ScreenRect::from_xy_size(window.x(), window.y(), window.width() as i32, window.height() as i32),
             // capture: window.capture_image().ok(),
             capture: None,
         });
