@@ -1,14 +1,17 @@
 mod draw_ex;
 mod event_handler;
 mod geometry;
+mod logging;
 mod screenshot;
 mod ui;
+
+use std::time::Duration;
 
 use geometry::*;
 use ui::*;
 
 use anyhow::{anyhow, Result};
-use euclid::SideOffsets2D;
+use euclid::{SideOffsets2D, Transform2D, Vector2D};
 use mouse_rs::Mouse;
 use nannou::{
     color::{self},
@@ -20,7 +23,7 @@ use nannou::{
     },
 };
 use screenshot::capture_desktop;
-use wgpu::{SamplerBuilder, Texture};
+use wgpu::{default_device_descriptor, SamplerBuilder, Texture};
 use xcap::Window as XCapWindow;
 
 #[macro_use]
@@ -30,6 +33,7 @@ extern crate log;
 extern crate anyhow;
 
 fn main() {
+    let _ = logging::setup_logging("capture", None, true, false);
     nannou::app(model)
         .loop_mode(LoopMode::RefreshSync)
         .update(update)
@@ -60,7 +64,6 @@ struct Model {
     accent_light: Rgb,
     accent_dark: Rgb,
     dash_black_white: Texture,
-    dash_white_accent: Texture,
     selection: Option<ScreenRect>,
     captured: bool,
     mouse_pt: ScreenPointF,
@@ -76,7 +79,7 @@ struct RendererInfo {
     window: WindowId,
     monitor_handle: MonitorHandle,
     monitor_bounds: ScreenRect,
-    cartesian_bounds: Rect,
+    size_vec2: Vec2,
     transform: TransformUnit,
     is_primary: bool,
     ready: bool,
@@ -261,6 +264,9 @@ impl Model {
 }
 
 fn create_model(app: &App) -> Result<Model> {
+    let sw = simple_stopwatch::Stopwatch::start_new();
+    info!("Start: {:?}", Duration::from_millis(sw.ms() as u64));
+
     let mut renderers = Vec::new();
     let mut desktop_windows = Vec::new();
 
@@ -281,16 +287,37 @@ fn create_model(app: &App) -> Result<Model> {
 
     let mouse_anchor_pt = primary_bounds.center();
 
+    info!("Capturing: {:?}", Duration::from_millis(sw.ms() as u64));
+
     let (desktop_bounds, desktop_capture) = capture_desktop()?;
     let desktop_color_image = DynamicImage::ImageRgba8(desktop_capture);
+
+    info!("Captured: {:?}", Duration::from_millis(sw.ms() as u64));
+
+    let vd_transform =
+        Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(Vector2D::new(-desktop_bounds.left(), -desktop_bounds.top()));
+
+    let desktop_bounds = vd_transform.outer_transformed_rect(&desktop_bounds);
+    // println!("Desktop: {:?}", desktop_bounds);
 
     // TODO optimise this, can we just use a shader?
     let gray_image_intermediate = DynamicImage::ImageLuma8(desktop_color_image.to_luma8());
     let desktop_gray_image = DynamicImage::ImageRgba8(gray_image_intermediate.to_rgba8());
 
+    // desktop_gray_image.save_with_format("testimg.png", image::ImageFormat::Png)?;
+
     for (i, monitor) in monitors.iter().enumerate() {
         let position = monitor.position();
         let size = monitor.size();
+
+        let texture_size_limit = 8192
+            .max(desktop_bounds.width() as u32)
+            .max(desktop_bounds.height() as u32);
+
+        let mut descriptor = default_device_descriptor();
+        descriptor.limits.max_texture_dimension_1d = texture_size_limit;
+        descriptor.limits.max_texture_dimension_2d = texture_size_limit;
+        descriptor.limits.max_texture_dimension_3d = texture_size_limit;
 
         // Try to create a new window and handle errors.
         let window = app
@@ -300,16 +327,20 @@ fn create_model(app: &App) -> Result<Model> {
             .clear_color(color::rgb(0u8, 0u8, 0u8))
             .title("Clowd Capture")
             .event(event_handler::get_event(i))
+            .device_descriptor(descriptor)
             .view(view)
             .build()
             .map_err(|e| anyhow!("{:?}", e))?;
 
         let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
+        let monitor_bounds = vd_transform.outer_transformed_rect(&monitor_bounds);
+
         renderers.push(RendererInfo {
             window,
             monitor_handle: monitor.clone(),
             monitor_bounds,
-            cartesian_bounds: Rect::from_w_h(monitor_bounds.width() as f32, monitor_bounds.height() as f32),
+            // cartesian_bounds: Rect::from_w_h(monitor_bounds.width() as f32, monitor_bounds.height() as f32),
+            size_vec2: Vec2::new(monitor_bounds.width() as f32, monitor_bounds.height() as f32),
             transform: TransformUnit::new(monitor_bounds, monitor.scale_factor()),
             ready: false,
             scale_factor: monitor.scale_factor(),
@@ -318,9 +349,12 @@ fn create_model(app: &App) -> Result<Model> {
     }
 
     for window in windows {
+        let window_bounds = ScreenRect::from_xy_size(window.x(), window.y(), window.width() as i32, window.height() as i32);
+        let window_bounds = vd_transform.outer_transformed_rect(&window_bounds);
+
         desktop_windows.push(DesktopWindowInfo {
             title: window.title().to_string(),
-            window_bounds: ScreenRect::from_xy_size(window.x(), window.y(), window.width() as i32, window.height() as i32),
+            window_bounds,
             // capture: window.capture_image().ok(),
             capture: None,
         });
@@ -335,16 +369,6 @@ fn create_model(app: &App) -> Result<Model> {
     });
     let bw_img = image::DynamicImage::ImageRgba8(bw_buf);
     let bw_tex = wgpu::Texture::from_image(app, &bw_img);
-
-    let aw_buf = ImageBuffer::from_fn(2, 2, |x, _y| {
-        if x == 0 {
-            image::Rgba([255, 255, 255, 255])
-        } else {
-            image::Rgba([0, 125, 180, 255])
-        }
-    });
-    let aw_img = image::DynamicImage::ImageRgba8(aw_buf);
-    let aw_tex = wgpu::Texture::from_image(app, &aw_img);
 
     let desktop_color_texture = Texture::from_image(app, &desktop_color_image);
     let desktop_gray_texture = Texture::from_image(app, &desktop_gray_image);
@@ -363,7 +387,6 @@ fn create_model(app: &App) -> Result<Model> {
         accent_light: rgb(0.0, 175.0 / 255.0, 240.0 / 255.0),
         accent_dark: rgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
         dash_black_white: bw_tex,
-        dash_white_accent: aw_tex,
         selection: None,
         captured: false,
         mouse_pt: ScreenPointF::zero(),
@@ -488,7 +511,6 @@ fn view(app: &App, model: &Model, frame: Frame) {
                 .contains(selection.center())
         {
             model.button_panel.draw(&draw, renderer);
-            draw.rect().w_h(50.0, 50.0).color(RED);
         }
     }
 
@@ -496,7 +518,6 @@ fn view(app: &App, model: &Model, frame: Frame) {
 }
 
 fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) {
-    let win = renderer.cartesian_bounds;
     let cursor_pos = renderer
         .transform
         .pt_to_window(model.mouse_pt)
@@ -507,7 +528,7 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
     let monitor_center = renderer.monitor_bounds.center().to_f32();
     let desktop_center = model.desktop_bounds.center().to_f32();
     let x_diff = desktop_center.x - monitor_center.x;
-    let y_diff = desktop_center.y - monitor_center.y;
+    let y_diff = -(desktop_center.y - monitor_center.y);
 
     let texture_draw = draw
         .x_y(x_diff * zoom_f32, y_diff * zoom_f32)
@@ -517,7 +538,7 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
     texture_draw.texture(&model.desktop_gray_texture);
 
     draw.rect()
-        .wh(win.wh())
+        .wh(renderer.size_vec2)
         .rgba(0.0, 0.0, 0.0, 0.5);
 
     if let Some(screen_selection) = model.selection {
@@ -554,7 +575,8 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
             outline_rect.to_nannou(),
             outline_weight,
             pixel_size * 20.0,
-            &model.dash_white_accent,
+            WHITE,
+            model.accent_dark,
             time,
         );
 
@@ -596,7 +618,10 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
 }
 
 fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
-    let rc_win = renderer.cartesian_bounds;
+    let rc_win = renderer
+        .transform
+        .rect_to_window(renderer.monitor_bounds)
+        .to_nannou();
     let mouse_pos = renderer
         .transform
         .pt_to_window(model.mouse_pt)
@@ -605,25 +630,9 @@ fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
     let mouse_dashed_horiz = (pt2(rc_win.left(), mouse.y), pt2(rc_win.right(), mouse.y));
     let mouse_dashed_vert = (pt2(mouse.x, rc_win.bottom()), pt2(mouse.x, rc_win.top()));
 
-    draw_ex::draw_dashed_line_polyline(
-        &draw,
-        mouse_dashed_horiz.0,
-        mouse_dashed_horiz.1,
-        1.0,
-        8.0,
-        &model.dash_black_white,
-        0.0,
-    );
+    draw_ex::draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white);
 
-    draw_ex::draw_dashed_line_polyline(
-        &draw,
-        mouse_dashed_vert.0,
-        mouse_dashed_vert.1,
-        1.0,
-        8.0,
-        &model.dash_black_white,
-        0.0,
-    );
+    draw_ex::draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white);
 
     let accent_size = 100.0;
     let accent_color = model.accent_light;
@@ -676,7 +685,10 @@ fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
 }
 
 fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
-    let win = renderer.cartesian_bounds;
+    let win = renderer
+        .transform
+        .rect_to_window(renderer.monitor_bounds)
+        .to_nannou();
 
     // Crosshair at window center
     let crosshair_color = rgba(1.0, 1.0, 1.0, 1.0);

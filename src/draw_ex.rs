@@ -1,9 +1,4 @@
-use nannou::{
-    glam::Vec2,
-    prelude::{vec2, Rect},
-    wgpu::Texture,
-    Draw,
-};
+use nannou::{color::IntoLinSrgba, draw::properties::ColorScalar, glam::Vec2, prelude::Rect, wgpu::Texture, Draw};
 
 pub fn draw_dashed_line_polyline(draw: &Draw, start: Vec2, end: Vec2, weight: f32, dash_length: f32, texture: &Texture) {
     let total_distance = start.distance(end);
@@ -46,8 +41,21 @@ fn position_along_perimeter(edges: &[(Vec2, Vec2)], dist: f32) -> Vec2 {
     edges[0].0
 }
 
-pub fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: f32, texture: &Texture, time: f32) {
+pub fn draw_dashed_rectangle<C1, C2>(draw: &Draw, rect: Rect, weight: f32, dash_length: f32, color1: C1, color2: C2, time: f32)
+where
+    C1: IntoLinSrgba<ColorScalar> + Copy,
+    C2: IntoLinSrgba<ColorScalar> + Copy,
+{
     let dash_offset = (time * 30.0) % (dash_length * 2.0);
+
+    draw.rect()
+        .xy(rect.xy())
+        .wh(rect.wh())
+        .no_fill()
+        .caps_round()
+        .join_round()
+        .stroke_weight(weight)
+        .stroke_color(color1);
 
     // Extract corners and form edges in order: top, right, bottom, left
     let top_left = rect.top_left();
@@ -103,10 +111,12 @@ pub fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: 
         cycle_length - dash_offset
     };
 
-    let mut points_colored = Vec::new();
+    // let mut points_colored = Vec::new();
 
     let mut traveled = 0.0;
     let mut current_segment_length = initial_segment_length;
+
+    // let mut corner_segments = Vec::new();
 
     while traveled < perimeter {
         let end_segment = (traveled + current_segment_length).min(perimeter);
@@ -124,8 +134,6 @@ pub fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: 
         sub_segment_starts.push(end_segment);
 
         // Now draw sub-segments from these breakpoints
-        let texture_coords = if toggle { [0.0, 0.0] } else { [1.0, 1.0] };
-
         for w in 0..(sub_segment_starts.len() - 1) {
             let seg_start = sub_segment_starts[w];
             let seg_end = sub_segment_starts[w + 1];
@@ -135,8 +143,15 @@ pub fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: 
 
             // Push the points for this sub-segment
             // Ensure we don't duplicate points unnecessarily. But it's usually fine if we do.
-            points_colored.push((start_pos, texture_coords));
-            points_colored.push((end_pos, texture_coords));
+            //     points_colored.push((start_pos, texture_coords));
+            //     points_colored.push((end_pos, texture_coords));
+            if toggle {
+                draw.line()
+                    .weight(weight)
+                    .start(start_pos)
+                    .end(end_pos)
+                    .color(color2);
+            }
         }
 
         // Move forward
@@ -149,7 +164,15 @@ pub fn draw_dashed_rectangle(draw: &Draw, rect: Rect, weight: f32, dash_length: 
     }
 
     // Draw the resulting polyline
-    draw.polyline()
-        .weight(weight)
-        .points_textured(texture, points_colored);
+    // draw.polyline()
+    //     .weight(weight)
+    //     .points_textured(texture, points_colored);
+
+    // for (start, end) in corner_segments {
+    //     draw.line()
+    //         .weight(weight)
+    //         .start(start)
+    //         .end(end)
+    //         .color(nannou::color::RED);
+    // }
 }

@@ -165,7 +165,7 @@ pub fn virtual_desktop() -> ScreenRect {
         let vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
         let vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
         let vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-        ScreenRect::from_exact(vx, vy, vw, vh)
+        ScreenRect::from_xy_size(vx, vy, vw, vh)
     }
 }
 
