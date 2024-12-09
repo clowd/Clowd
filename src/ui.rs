@@ -258,8 +258,9 @@ impl ButtonPanel {
 
         // Draw the panel
         for button in self.button_positions.iter() {
-            let button = (*button)
-                .to_window_rect(renderer.monitor_bounds)
+            let button = renderer
+                .transform
+                .rect_to_window(*button)
                 .to_nannou();
 
             draw.rect()
@@ -279,36 +280,68 @@ impl ButtonPanel {
         let radius = (UNSCALED_DRAG_HANDLE_SIZE * self.scale).floor();
         let selection = self.selection.to_f64();
 
-        if point_to_widened_rect_f(radius, selection.top_left()).contains(point) {
+        if selection
+            .top_left()
+            .to_widened_rect(radius)
+            .contains(point)
+        {
             return HitTest::TopLeft;
         }
 
-        if point_to_widened_rect_f(radius, selection.top_right()).contains(point) {
+        if selection
+            .top_right()
+            .to_widened_rect(radius)
+            .contains(point)
+        {
             return HitTest::TopRight;
         }
 
-        if point_to_widened_rect_f(radius, selection.bottom_left()).contains(point) {
-            return HitTest::BottomLeft;
-        }
-
-        if point_to_widened_rect_f(radius, selection.bottom_right()).contains(point) {
+        if selection
+            .bottom_right()
+            .to_widened_rect(radius)
+            .contains(point)
+        {
             return HitTest::BottomRight;
         }
 
-        if line_to_widened_rect_f(radius, selection.top_left(), selection.top_right()).contains(point) {
-            return HitTest::Top;
+        if selection
+            .bottom_left()
+            .to_widened_rect(radius)
+            .contains(point)
+        {
+            return HitTest::BottomLeft;
         }
 
-        if line_to_widened_rect_f(radius, selection.top_right(), selection.bottom_right()).contains(point) {
+        if selection
+            .left_line()
+            .to_widened_rect(radius)
+            .contains(point)
+        {
+            return HitTest::Left;
+        }
+
+        if selection
+            .right_line()
+            .to_widened_rect(radius)
+            .contains(point)
+        {
             return HitTest::Right;
         }
 
-        if line_to_widened_rect_f(radius, selection.bottom_right(), selection.bottom_left()).contains(point) {
-            return HitTest::Bottom;
+        if selection
+            .top_line()
+            .to_widened_rect(radius)
+            .contains(point)
+        {
+            return HitTest::Top;
         }
 
-        if line_to_widened_rect_f(radius, selection.bottom_left(), selection.top_left()).contains(point) {
-            return HitTest::Left;
+        if selection
+            .bottom_line()
+            .to_widened_rect(radius)
+            .contains(point)
+        {
+            return HitTest::Bottom;
         }
 
         if selection.contains(point) {
