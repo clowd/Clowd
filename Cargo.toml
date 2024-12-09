@@ -20,6 +20,11 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Gdi",
 ] }
 sysinfo = "0.33"
+simple-stopwatch = "0.1.4"
+simplelog = "0.12"
+time = "0.3"
+file-rotate = "0.7"
+log-panics = "2.0"
 
 # [patch.crates-io]
 # image = "0.25"
