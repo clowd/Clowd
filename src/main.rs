@@ -1,12 +1,13 @@
+mod draw_ex;
 mod event_handler;
 mod geometry;
 mod screenshot;
 mod ui;
-mod util;
 
 use anyhow::{anyhow, Result};
 use euclid::{SideOffsets2D, Size2D, Transform2D};
 // use bracket_geometry::prelude::{Point as BgPoint, PointF as BgPointF, Rect as BgRect, RectF as BgRectF};
+use draw_ex::*;
 use geometry::*;
 use mouse_rs::Mouse;
 use nannou::{
@@ -21,7 +22,6 @@ use nannou::{
 };
 use screenshot::capture_desktop;
 use ui::HitTest;
-use util::*;
 use wgpu::{SamplerBuilder, Texture};
 use xcap::Window as XCapWindow;
 
@@ -78,6 +78,8 @@ struct RendererInfo {
     window: WindowId,
     monitor_handle: MonitorHandle,
     monitor_bounds: ScreenRect,
+    cartesian_bounds: Rect,
+    transform: TransformUnit,
     is_primary: bool,
     ready: bool,
     scale_factor: f64,
@@ -218,14 +220,7 @@ impl Model {
         }
 
         if self.captured {
-            self.set_cursor(
-                app,
-                Some(
-                    self.button_panel
-                        .hit_test(pt)
-                        .to_cursor(),
-                ),
-            );
+            self.set_cursor(app, Some(self.button_panel.hit_test(pt).to_cursor()));
         }
     }
 
@@ -266,83 +261,6 @@ impl Model {
                 .update(renderer.monitor_bounds, renderer.scale_factor, selection);
         }
     }
-}
-
-impl RendererInfo {
-    fn cartesian_bounds(&self) -> Rect {
-        Rect::from_w_h(self.monitor_bounds.width() as f32, self.monitor_bounds.height() as f32)
-    }
-
-    // fn window_pt_to_screen(&self, app: &App, pt: Vec2) -> Vec2 {
-    //     let win = app.window(self.window).unwrap().rect();
-    //     let win_w = win.w() as f64;
-    //     let win_h = win.h() as f64;
-    //     let reverse_tx = |x: f32| x as f64 + win_w / 2.0;
-    //     let reverse_ty = |y: f32| -(y as f64) + win_h / 2.0;
-    //     let monitor_pos = self.monitor.position();
-    //     let x = reverse_tx(pt.x) + monitor_pos.x as f64;
-    //     let y = reverse_ty(pt.y) + monitor_pos.y as f64;
-    //     vec2(x as f32, y as f32)
-    // }
-
-    // fn screen_rect_to_window_f(&self, rect: BgRectF) -> Rect {
-    //     let top_left = BgPointF::new(rect.x1 as f32, rect.y1 as f32);
-    //     let bottom_right = BgPointF::new(rect.x2 as f32, rect.y2 as f32);
-    //     let top_left = self.screen_pt_to_window(top_left);
-    //     let bottom_right = self.screen_pt_to_window(bottom_right);
-    //     Rect::from_corners(top_left, bottom_right)
-    // }
-
-    // fn screen_rect_to_window(&self, rect: BgRect) -> Rect {
-    //     let top_left = BgPointF::new(rect.x1 as f32, rect.y1 as f32);
-    //     let bottom_right = BgPointF::new(rect.x2 as f32, rect.y2 as f32);
-    //     let top_left = self.screen_pt_to_window(top_left);
-    //     let bottom_right = self.screen_pt_to_window(bottom_right);
-    //     Rect::from_corners(top_left, bottom_right)
-    // }
-
-    fn logical_pt_to_screen(&self, app: &App, pt: Vec2) -> ScreenPointF {
-        let win = app.window(self.window).unwrap().rect();
-        let win_w = win.w() as f64;
-        let win_h = win.h() as f64;
-        let reverse_tx = |x: f32| x as f64 + win_w / 2.0;
-        let reverse_ty = |y: f32| -(y as f64) + win_h / 2.0;
-        let x = reverse_tx(pt.x);
-        let y = reverse_ty(pt.y);
-        let logical = LogicalPosition::new(x, y);
-        let physical: PhysicalPosition<f64> = logical.to_physical(self.scale_factor);
-        let monitor_pos = self.monitor_bounds.to_f64();
-        let x = physical.x + monitor_pos.min_x();
-        let y = physical.y + monitor_pos.min_y();
-        ScreenPointF::new(x, y)
-    }
-
-    // fn screen_pt_to_window(&self, pt: BgPointF) -> Vec2 {
-    //     let monitor_pos = self.monitor_bounds;
-    //     let (win_w, win_h) = (self.monitor_bounds.width() as f32, self.monitor_bounds.height() as f32);
-    //     let x = pt.x - monitor_pos.x1 as f32;
-    //     let y = pt.y - monitor_pos.y1 as f32;
-    //     let tx = |x: f32| (x - win_w / 2.0) as f32;
-    //     let ty = |y: f32| (-(y - win_h / 2.0)) as f32;
-    //     let x = tx(x);
-    //     let y = ty(y);
-    //     vec2(x as f32, y as f32)
-    // }
-
-    // fn screen_pt_to_logical(&self, app: &App, pt: PhysicalPosition<i32>) -> Vec2 {
-    //     let window = app.window(self.window).unwrap();
-    //     let win = window.rect();
-    //     let win_w = win.w() as f64;
-    //     let win_h = win.h() as f64;
-    //     let tx = |x: f64| (x - win_w / 2.0) as f32;
-    //     let ty = |y: f64| (-(y - win_h / 2.0)) as f32;
-    //     let (new_x, new_y) = pt
-    //         .to_logical::<f64>(window.scale_factor().into())
-    //         .into();
-    //     let x = tx(new_x);
-    //     let y = ty(new_y);
-    //     vec2(x as f32, y as f32)
-    // }
 }
 
 fn create_model(app: &App) -> Result<Model> {
@@ -396,6 +314,8 @@ fn create_model(app: &App) -> Result<Model> {
             window,
             monitor_handle: monitor.clone(),
             monitor_bounds,
+            cartesian_bounds: Rect::from_w_h(monitor_bounds.width() as f32, monitor_bounds.height() as f32),
+            transform: TransformUnit::new(monitor_bounds, monitor.scale_factor()),
             ready: false,
             scale_factor: monitor.scale_factor(),
             is_primary: monitor_bounds.contains(mouse_anchor_pt),
@@ -504,7 +424,8 @@ fn handle_event(app: &App, model: &mut Model, event: WindowEvent, idx: usize) {
         }
     } else if let WindowEvent::MouseMoved(pt) = event {
         let renderer = &model.renderers[idx];
-        let pt = renderer.logical_pt_to_screen(app, pt);
+        let transform = renderer.transform.with_logical_units();
+        let pt = transform.pt_to_screen(pt.to_window_point());
         model.handle_mouse_move(app, pt);
     } else if let WindowEvent::MousePressed(button) = event {
         if button == MouseButton::Left {
@@ -587,35 +508,23 @@ fn view(app: &App, model: &Model, frame: Frame) {
 }
 
 fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) {
-    // fn zoom_point(original_point: ScreenPointF, zoom_point: ScreenPointF, scale: f64) -> ScreenPointF {
-    //     // Calculate the new point after applying the zoom transformation
-    //     ScreenPointF::new(
-    //         zoom_point.x + (original_point.x - zoom_point.x) * scale,
-    //         zoom_point.y + (original_point.y - zoom_point.y) * scale,
-    //     )
-    // }
-
-    let pixel_size = renderer.scale_factor.floor() as f32;
-
-    let win = renderer.cartesian_bounds();
-    let cursor_pos = model
-        .mouse_pt
-        .to_window_point(renderer.monitor_bounds)
+    let win = renderer.cartesian_bounds;
+    let cursor_pos = renderer
+        .transform
+        .pt_to_window(model.mouse_pt)
         .to_nannou();
-    let zoom = model.zoom as f32;
 
-    let monitor_center = renderer
-        .monitor_bounds
-        .center()
-        .to_f32();
+    let zoom_f32 = model.zoom as f32;
+
+    let monitor_center = renderer.monitor_bounds.center().to_f32();
     let desktop_center = model.desktop_bounds.center().to_f32();
     let x_diff = desktop_center.x - monitor_center.x;
     let y_diff = desktop_center.y - monitor_center.y;
 
     let texture_draw = draw
-        .x_y(x_diff * zoom, y_diff * zoom)
-        .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
-        .scale(zoom);
+        .x_y(x_diff * zoom_f32, y_diff * zoom_f32)
+        .x_y(-cursor_pos.x * (zoom_f32 - 1.0), -cursor_pos.y * (zoom_f32 - 1.0))
+        .scale(zoom_f32);
 
     texture_draw.texture(&model.desktop_gray_texture);
 
@@ -624,155 +533,91 @@ fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) 
         .rgba(0.0, 0.0, 0.0, 0.5);
 
     if let Some(screen_selection) = model.selection {
-        // let reference_rect = screen_selection
-        //     .to_window_rect(renderer.monitor_bounds)
-        //     .to_nannou();
-        // texture_draw
-        //     .rect()
-        //     .xy(reference_rect.xy())
-        //     .wh(reference_rect.wh())
-        //     .color(RED);
+        let zoom_transform = renderer
+            .transform
+            .with_zoom(model.mouse_pt, model.zoom);
 
-        let mouse_pt = model
-            .mouse_pt
-            .to_window_point(renderer.monitor_bounds);
-
-        #[rustfmt::skip]
-        let base_transform = Transform2D::<f64, ScreenUnit, ScreenUnit>::identity()
-            // Translate units into cartesian space
-            .then_translate(-renderer.monitor_bounds.to_f64().center().to_vector())
-            .then_scale(1.0, -1.0)
-            .with_destination::<WindowUnit>()
-            // Move mouse to origin relative to this new coordinate system
-            .then_translate(-mouse_pt.to_vector())
-            // Scale about the mouse
-            .then_scale(zoom.into(), zoom.into())
-            // Move origin back to window center
-            .then_translate(mouse_pt.to_vector());
-
-        let scissor_transform = base_transform
-            // scissor is scaled by dpi so we need to undo this
-            .then_scale(1.0 / renderer.scale_factor, -1.0 / renderer.scale_factor);
+        let scissor_transform = zoom_transform.with_scissor();
 
         let scissor_rect = scissor_transform
-            .outer_transformed_rect(&screen_selection.to_f64())
+            .rect_to_window(screen_selection.to_f64())
             .to_nannou();
 
-        // let scissor_top_left = scissor_transform
-        //     .transform_point(screen_selection.top_left().to_f64())
-        //     .to_nannou();
-        // let scissor_bottom_right = scissor_transform
-        //     .transform_point(screen_selection.bottom_right().to_f64())
-        //     .to_nannou();
-
-        // let scissor_rect = Rect::from_corners(scissor_top_left, scissor_bottom_right);
-
-        // draw.rect()
-        //     .xy(transformed_rect.xy())
-        //     .wh(transformed_rect.wh())
-        //     .color(GREEN);
-
         let cropped_draw = texture_draw.scissor(scissor_rect);
-        // .x_y(x_diff * zoom, y_diff * zoom)
-        // .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
-        // .scale(zoom);
+
         cropped_draw.texture(&model.desktop_color_texture);
 
+        let pixel_size = renderer.scale_factor.floor() as f32;
         let outline_weight = pixel_size * 2.0;
-        let outline_rect = base_transform
-            .outer_transformed_rect(&screen_selection.to_f64())
-            .to_nannou()
-            .pad(if zoom < 1.5 { outline_weight / 2.0 } else { 0.0 });
+        let outline_offset = if model.zoom < 1.5 {
+            SideOffsets2D::new(1, 1, 1, 1)
+        } else {
+            SideOffsets2D::new(0, 0, 0, 0)
+        };
 
-        util::draw_dashed_rectangle(
+        let outline_rect = zoom_transform.rect_to_window(
+            screen_selection
+                .outer_rect(outline_offset)
+                .to_f64(),
+        );
+
+        draw_ex::draw_dashed_rectangle(
             &draw,
-            outline_rect, //.pad(-2.0 * pixel_size),
-            pixel_size * 2.0,
+            outline_rect.to_nannou(),
+            outline_weight,
             pixel_size * 20.0,
             &model.dash_white_accent,
             time,
         );
 
-        // let top_left = screen_selection.top_left().to_f64();
-        // let bottom_right = screen_selection.bottom_right().to_f64();
-        // let top_left = zoom_point(top_left, model.mouse_pt, model.zoom);
-        // let bottom_right = zoom_point(bottom_right, model.mouse_pt, model.zoom);
+        let min_size_for_handles = (6.0 * pixel_size * 5.0) as i32;
+        if model.captured && screen_selection.width() > min_size_for_handles && screen_selection.height() > min_size_for_handles {
+            for handle in HitTest::resize_handles() {
+                let pos = handle
+                    .handle_position(screen_selection.outer_rect(outline_offset))
+                    .to_f64();
 
-        // let top_left = top_left
-        //     .to_window_point(renderer.monitor_bounds)
-        //     .to_nannou();
-        // let bottom_right = bottom_right
-        //     .to_window_point(renderer.monitor_bounds)
-        //     .to_nannou();
+                let pos = zoom_transform.pt_to_window(pos);
 
-        // let selection = Rect::from_corners(top_left, bottom_right);
+                let rect = pos
+                    .to_widened_rect(6.0 * pixel_size as f64)
+                    .to_nannou();
+                draw.ellipse()
+                    .xy(rect.xy())
+                    .wh(rect.wh())
+                    .color(model.accent_light);
 
-        // not sure why I have to do this, but it works
-        // let flipped_top_left = pt2(top_left.x, -top_left.y);
-        // let flipped_bottom_right = pt2(bottom_right.x, -bottom_right.y);
-        // let flipped_selection = Rect::from_corners(flipped_top_left, flipped_bottom_right);
+                let rect = pos
+                    .to_widened_rect(5.0 * pixel_size as f64)
+                    .to_nannou();
+                draw.ellipse()
+                    .xy(rect.xy())
+                    .wh(rect.wh())
+                    .color(WHITE);
 
-        // let cropped_draw = draw
-        //     .scissor(flipped_selection)
-        //     .x_y(x_diff * zoom, y_diff * zoom)
-        //     .x_y(-cursor_pos.x * (zoom - 1.0), -cursor_pos.y * (zoom - 1.0))
-        //     .scale(zoom);
-        // cropped_draw.texture(&model.desktop_color_texture);
-
-        // let outline_draw = draw.scissor(flipped_selection.pad(-2.0 * pixel_size));
-        // util::draw_dashed_rectangle(
-        //     &outline_draw,
-        //     selection.pad(-2.0 * pixel_size),
-        //     pixel_size * 4.0,
-        //     pixel_size * 20.0,
-        //     &model.dash_white_accent,
-        //     time,
-        // );
-
-        // let min_size_for_handles = (6.0 * pixel_size * 5.0) as i32;
-        // if model.captured && screen_selection.width() > min_size_for_handles && screen_selection.height() > min_size_for_handles {
-        //     for handle in HitTest::resize_handles() {
-        //         let pos = handle
-        //             .handle_position(screen_selection.outer_rect(SideOffsets2D::new(1, 1, 1, 1)))
-        //             .to_f64();
-        //         let pos = zoom_point(pos, model.mouse_pt, model.zoom);
-        //         let pos = pos
-        //             .to_window_point(renderer.monitor_bounds)
-        //             .to_nannou();
-
-        //         let rect = point_to_widened_rect_n(6.0 * pixel_size, pos);
-        //         draw.ellipse()
-        //             .xy(rect.xy())
-        //             .wh(rect.wh())
-        //             .color(model.accent_light);
-
-        //         let rect = point_to_widened_rect_n(5.0 * pixel_size, pos);
-        //         draw.ellipse()
-        //             .xy(rect.xy())
-        //             .wh(rect.wh())
-        //             .color(WHITE);
-
-        //         let rect = point_to_widened_rect_n(4.0 * pixel_size, pos);
-        //         draw.ellipse()
-        //             .xy(rect.xy())
-        //             .wh(rect.wh())
-        //             .color(model.accent_light);
-        //     }
-        // }
+                let rect = pos
+                    .to_widened_rect(4.0 * pixel_size as f64)
+                    .to_nannou();
+                draw.ellipse()
+                    .xy(rect.xy())
+                    .wh(rect.wh())
+                    .color(model.accent_light);
+            }
+        }
     }
 }
 
 fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
-    let win = renderer.cartesian_bounds();
-    let mouse_pos = model
-        .mouse_pt
-        .to_window_point(renderer.monitor_bounds)
+    let rc_win = renderer.cartesian_bounds;
+    let mouse_pos = renderer
+        .transform
+        .pt_to_window(model.mouse_pt)
         .to_nannou();
     let mouse = mouse_pos - pt2(-0.5, 0.5);
-    let mouse_dashed_horiz = (pt2(win.left(), mouse.y), pt2(win.right(), mouse.y));
-    let mouse_dashed_vert = (pt2(mouse.x, win.bottom()), pt2(mouse.x, win.top()));
+    let mouse_dashed_horiz = (pt2(rc_win.left(), mouse.y), pt2(rc_win.right(), mouse.y));
+    let mouse_dashed_vert = (pt2(mouse.x, rc_win.bottom()), pt2(mouse.x, rc_win.top()));
 
-    util::draw_dashed_line_polyline(
+    draw_ex::draw_dashed_line_polyline(
         &draw,
         mouse_dashed_horiz.0,
         mouse_dashed_horiz.1,
@@ -782,7 +627,7 @@ fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         0.0,
     );
 
-    util::draw_dashed_line_polyline(
+    draw_ex::draw_dashed_line_polyline(
         &draw,
         mouse_dashed_vert.0,
         mouse_dashed_vert.1,
@@ -843,7 +688,7 @@ fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
 }
 
 fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
-    let win = renderer.cartesian_bounds();
+    let win = renderer.cartesian_bounds;
 
     // Crosshair at window center
     let crosshair_color = rgba(1.0, 1.0, 1.0, 1.0);
@@ -894,9 +739,9 @@ fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
         .color(crosshair_color)
         .y(y_off);
 
-    let mouse_pos = model
-        .mouse_pt
-        .to_window_point(renderer.monitor_bounds)
+    let mouse_pos = renderer
+        .transform
+        .pt_to_window(model.mouse_pt)
         .to_nannou();
 
     // Debug window and monitor details.

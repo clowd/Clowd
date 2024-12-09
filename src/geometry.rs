@@ -1,6 +1,12 @@
-use euclid::{Point2D, Rect, Size2D};
+#![allow(dead_code)]
 
+use euclid::{Point2D, Rect, Size2D, Transform2D};
+use std::ops;
+
+// Type aliases for screen and window units
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ScreenUnit;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WindowUnit;
 pub type ScreenRect = Rect<i32, ScreenUnit>;
 pub type ScreenRectF = Rect<f64, ScreenUnit>;
@@ -9,24 +15,21 @@ pub type ScreenPointF = Point2D<f64, ScreenUnit>;
 pub type WindowRectF = Rect<f64, WindowUnit>;
 pub type WindowPointF = Point2D<f64, WindowUnit>;
 
+// Conversions between WindowUnit and Nannou
 pub trait WindowRectExt {
-    // fn to_screen_rect(&self, window_bounds: ScreenRect) -> ScreenRect;
-    // fn to_screen_rect_f(&self, window_bounds: ScreenRect) -> ScreenRectF;
     fn to_nannou(&self) -> nannou::geom::Rect;
 }
 
 pub trait WindowPointExt {
-    // fn to_screen_point(&self, window_bounds: ScreenRect) -> ScreenPoint;
-    // fn to_screen_point_f(&self, window_bounds: ScreenRect) -> ScreenPointF;
     fn to_nannou(&self) -> nannou::geom::Vec2;
 }
 
-pub trait ScreenRectExt {
-    fn to_window_rect(&self, window_bounds: ScreenRect) -> WindowRectF;
+pub trait NannouRectExt {
+    fn to_window_rect(&self) -> WindowRectF;
 }
 
-pub trait ScreenPointExt {
-    fn to_window_point(&self, window_bounds: ScreenRect) -> WindowPointF;
+pub trait NannouPointExt {
+    fn to_window_point(&self) -> WindowPointF;
 }
 
 impl WindowRectExt for WindowRectF {
@@ -42,36 +45,125 @@ impl WindowPointExt for WindowPointF {
     }
 }
 
-impl ScreenRectExt for ScreenRect {
-    fn to_window_rect(&self, window_bounds: ScreenRect) -> WindowRectF {
-        let top_left = self.top_left();
-        let bottom_right = self.bottom_right();
-        let top_left = top_left.to_window_point(window_bounds);
-        let bottom_right = bottom_right.to_window_point(window_bounds);
-        WindowRectF::from_corners(top_left, bottom_right)
+impl NannouRectExt for nannou::geom::Rect {
+    fn to_window_rect(&self) -> WindowRectF {
+        let size = Size2D::new(self.w() as f64, self.h() as f64);
+        let position = WindowPointF::new(self.left() as f64, self.top() as f64);
+        WindowRectF::new(position, size)
     }
 }
 
-impl ScreenPointExt for ScreenPoint {
-    fn to_window_point(&self, window_bounds: ScreenRect) -> WindowPointF {
-        let pt = self.to_f64();
-        pt.to_window_point(window_bounds)
+impl NannouPointExt for nannou::geom::Vec2 {
+    fn to_window_point(&self) -> WindowPointF {
+        WindowPointF::new(self.x as f64, self.y as f64)
     }
 }
 
-impl ScreenPointExt for ScreenPointF {
-    fn to_window_point(&self, window_bounds: ScreenRect) -> WindowPointF {
-        let monitor_pos = window_bounds.to_f64();
-        let x = self.x - monitor_pos.min_x();
-        let y = self.y - monitor_pos.min_y();
-        let tx = |x: f64| (x - monitor_pos.width() / 2.0);
-        let ty = |y: f64| (-(y - monitor_pos.height() / 2.0));
-        let x = tx(x);
-        let y = ty(y);
-        WindowPointF::new(x, y)
+// Transforms between Screen and Window coordinates
+#[derive(Debug, Clone)]
+pub struct TransformUnit {
+    window_bounds: ScreenRect,
+    window_scale: f64,
+    zoom: Option<(ScreenPointF, f64)>,
+    scissored: bool,
+    logical_units: bool,
+}
+
+impl TransformUnit {
+    pub fn new(window_bounds: ScreenRect, window_scale: f64) -> Self {
+        TransformUnit {
+            window_bounds,
+            window_scale,
+            zoom: None,
+            scissored: false,
+            logical_units: false,
+        }
+    }
+
+    pub fn with_logical_units(&self) -> Self {
+        let mut new = self.clone();
+        new.logical_units = true;
+        new
+    }
+
+    pub fn with_zoom(&self, origin: ScreenPointF, zoom: f64) -> Self {
+        let mut new = self.clone();
+        new.zoom = Some((origin, zoom));
+        new
+    }
+
+    pub fn with_scissor(&self) -> Self {
+        let mut new = self.clone();
+        new.scissored = true;
+        new
+    }
+
+    pub fn pt_to_window<U: nannou::prelude::NumCast + Copy>(&self, pt: Point2D<U, ScreenUnit>) -> WindowPointF {
+        let pt = pt.to_f64();
+        let transform = self.transform_to_window();
+        transform.transform_point(pt)
+    }
+
+    pub fn rect_to_window<U: nannou::prelude::NumCast + Copy>(&self, rect: Rect<U, ScreenUnit>) -> WindowRectF {
+        let rect = rect.to_f64();
+        let transform = self.transform_to_window();
+        transform.outer_transformed_rect(&rect)
+    }
+
+    pub fn pt_to_screen<U: nannou::prelude::NumCast + Copy>(&self, pt: Point2D<U, WindowUnit>) -> ScreenPointF {
+        let pt = pt.to_f64();
+        let transform = self.transform_to_screen();
+        transform.transform_point(pt)
+    }
+
+    pub fn rect_to_screen<U: nannou::prelude::NumCast + Copy>(&self, rect: Rect<U, WindowUnit>) -> ScreenRectF {
+        let rect = rect.to_f64();
+        let transform = self.transform_to_screen();
+        transform.outer_transformed_rect(&rect)
+    }
+
+    fn transform_to_window(&self) -> Transform2D<f64, ScreenUnit, WindowUnit> {
+        let window_center = self
+            .window_bounds
+            .to_f64()
+            .center()
+            .to_vector();
+
+        let mut transform = Transform2D::<f64, ScreenUnit, ScreenUnit>::identity()
+            // Translate units into cartesian space
+            .then_translate(-window_center)
+            .then_scale(1.0, -1.0)
+            .with_destination::<WindowUnit>();
+
+        if let Some((origin, zoom)) = self.zoom {
+            let translated_mouse_pt = transform.transform_point(origin);
+            transform = transform
+                .then_translate(-translated_mouse_pt.to_vector())
+                .then_scale(zoom.into(), zoom.into())
+                .then_translate(translated_mouse_pt.to_vector());
+        }
+
+        if self.logical_units {
+            transform = transform.then_scale(1.0 / self.window_scale, 1.0 / self.window_scale);
+        }
+
+        if self.scissored {
+            if self.logical_units {
+                transform = transform.then_scale(1.0, -1.0);
+            } else {
+                transform = transform.then_scale(1.0 / self.window_scale, -1.0 / self.window_scale);
+            }
+        }
+
+        transform
+    }
+
+    fn transform_to_screen(&self) -> Transform2D<f64, WindowUnit, ScreenUnit> {
+        self.transform_to_window().inverse().unwrap()
     }
 }
 
+// Initialise rounded ScreenRect
 const PIXEL_SELECTION_ROUNDING_THRESHOLD: f64 = 0.2;
 fn round_pixel(px: f64, prefer_down: bool) -> i32 {
     let pfloor = px.floor() as i32;
@@ -106,182 +198,168 @@ impl ScreenRectRounded for ScreenRect {
     }
 }
 
-pub trait RectExt<TRect, TPoint, T> {
-    fn top_left(&self) -> TPoint;
-    fn top_right(&self) -> TPoint;
-    fn bottom_left(&self) -> TPoint;
-    fn bottom_right(&self) -> TPoint;
+pub struct LineSegment<T, U>
+where
+    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
+    U: Copy,
+{
+    start: Point2D<T, U>,
+    end: Point2D<T, U>,
+}
+
+impl<T, U> LineSegment<T, U>
+where
+    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default + nannou::prelude::real::Real,
+    U: Copy,
+{
+    pub fn start(&self) -> Point2D<T, U> {
+        self.start
+    }
+
+    pub fn end(&self) -> Point2D<T, U> {
+        self.end
+    }
+
+    pub fn to_widened_rect(&self, radius: T) -> Rect<T, U> {
+        let start = self.start();
+        let end = self.end();
+        let x1 = start.x.min(end.x) - radius;
+        let y1 = start.y.min(end.y) - radius;
+        let x2 = start.x.max(end.x) + radius;
+        let y2 = start.y.max(end.y) + radius;
+        Rect::from_exact(x1, y1, x2, y2)
+    }
+}
+
+// Base type extensions
+#[allow(dead_code)]
+pub trait PointExt<T, U>
+where
+    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
+    U: Copy,
+{
+    fn to_widened_rect(&self, radius: T) -> Rect<T, U>;
+}
+
+impl<T, U> PointExt<T, U> for Point2D<T, U>
+where
+    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
+    U: Copy,
+{
+    fn to_widened_rect(&self, radius: T) -> Rect<T, U> {
+        let x1 = self.x - radius;
+        let y1 = self.y - radius;
+        let x2 = self.x + radius;
+        let y2 = self.y + radius;
+        Rect::from_exact(x1, y1, x2, y2)
+    }
+}
+
+#[allow(dead_code)]
+pub trait RectExt<T, U>
+where
+    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
+    U: Copy,
+{
+    fn top_left(&self) -> Point2D<T, U> {
+        Point2D::new(self.left(), self.top())
+    }
+    fn top_right(&self) -> Point2D<T, U> {
+        Point2D::new(self.right(), self.top())
+    }
+    fn bottom_left(&self) -> Point2D<T, U> {
+        Point2D::new(self.left(), self.bottom())
+    }
+    fn bottom_right(&self) -> Point2D<T, U> {
+        Point2D::new(self.right(), self.bottom())
+    }
     fn left(&self) -> T;
     fn right(&self) -> T;
     fn top(&self) -> T;
     fn bottom(&self) -> T;
-    fn from_exact(x1: T, y1: T, x2: T, y2: T) -> TRect;
-    fn from_corners(top_left: TPoint, bottom_right: TPoint) -> TRect;
+    fn left_line(&self) -> LineSegment<T, U> {
+        LineSegment {
+            start: self.top_left(),
+            end: self.bottom_left(),
+        }
+    }
+    fn right_line(&self) -> LineSegment<T, U> {
+        LineSegment {
+            start: self.top_right(),
+            end: self.bottom_right(),
+        }
+    }
+    fn top_line(&self) -> LineSegment<T, U> {
+        LineSegment {
+            start: self.top_left(),
+            end: self.top_right(),
+        }
+    }
+    fn bottom_line(&self) -> LineSegment<T, U> {
+        LineSegment {
+            start: self.bottom_left(),
+            end: self.bottom_right(),
+        }
+    }
+    fn from_exact(x1: T, y1: T, x2: T, y2: T) -> Rect<T, U> {
+        Self::from_xy_size(x1, y1, x2 - x1, y2 - y1)
+    }
+    fn from_corners(top_left: Point2D<T, U>, bottom_right: Point2D<T, U>) -> Rect<T, U> {
+        Self::from_exact(top_left.x, top_left.y, bottom_right.x, bottom_right.y)
+    }
+    fn from_xy_size(x1: T, y1: T, width: T, height: T) -> Rect<T, U> {
+        Rect::new(Point2D::new(x1, y1), Size2D::new(width, height))
+    }
 }
 
-impl RectExt<ScreenRect, ScreenPoint, i32> for ScreenRect {
-    fn top_left(&self) -> ScreenPoint {
-        ScreenPoint::new(self.left(), self.top())
-    }
-
-    fn top_right(&self) -> ScreenPoint {
-        ScreenPoint::new(self.right(), self.top())
-    }
-
-    fn bottom_left(&self) -> ScreenPoint {
-        ScreenPoint::new(self.left(), self.bottom())
-    }
-
-    fn bottom_right(&self) -> ScreenPoint {
-        ScreenPoint::new(self.right(), self.bottom())
-    }
-
-    fn left(&self) -> i32 {
+impl<T, U> RectExt<T, U> for Rect<T, U>
+where
+    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
+    U: Copy,
+{
+    fn left(&self) -> T {
         self.min_x()
     }
-
-    fn right(&self) -> i32 {
+    fn right(&self) -> T {
         self.max_x()
     }
-
-    fn top(&self) -> i32 {
+    fn top(&self) -> T {
         self.min_y()
     }
-
-    fn bottom(&self) -> i32 {
+    fn bottom(&self) -> T {
         self.max_y()
     }
-
-    fn from_exact(x1: i32, y1: i32, x2: i32, y2: i32) -> ScreenRect {
-        ScreenRect::new(
-            ScreenPoint::new(x1.min(x2), y1.min(y2)),
-            Size2D::new((x1 - x2).abs(), (y1 - y2).abs()),
-        )
-    }
-
-    fn from_corners(top_left: ScreenPoint, bottom_right: ScreenPoint) -> ScreenRect {
-        ScreenRect::from_exact(top_left.x, top_left.y, bottom_right.x, bottom_right.y)
-    }
 }
 
-impl RectExt<ScreenRectF, ScreenPointF, f64> for ScreenRectF {
-    fn top_left(&self) -> ScreenPointF {
-        ScreenPointF::new(self.left(), self.top())
-    }
+// Widen point and lines
+// pub fn point_to_widened_rect(radius: i32, pt: ScreenPoint) -> ScreenRect {
+//     let origin = pt - Size2D::new(radius, radius);
+//     let size = Size2D::new(radius * 2, radius * 2);
+//     Rect::new(origin, size)
+// }
 
-    fn top_right(&self) -> ScreenPointF {
-        ScreenPointF::new(self.right(), self.top())
-    }
+// pub fn point_to_widened_rect_f(radius: f64, pt: ScreenPointF) -> ScreenRectF {
+//     let origin = pt - Size2D::new(radius, radius);
+//     let size = Size2D::new(radius * 2.0, radius * 2.0);
+//     Rect::new(origin, size)
+// }
 
-    fn bottom_left(&self) -> ScreenPointF {
-        ScreenPointF::new(self.left(), self.bottom())
-    }
+// pub fn point_to_widened_rect_n(radius: f32, pt: nannou::glam::Vec2) -> nannou::geom::Rect {
+//     nannou::geom::Rect::from_x_y_w_h(pt.x, pt.y, radius * 2.0, radius * 2.0)
+// }
 
-    fn bottom_right(&self) -> ScreenPointF {
-        ScreenPointF::new(self.right(), self.bottom())
-    }
-    
-    fn left(&self) -> f64 {
-        self.min_x()
-    }
+// pub fn line_to_widened_rect(radius: i32, start: ScreenPoint, end: ScreenPoint) -> ScreenRect {
+//     let x1 = start.x.min(end.x) - radius;
+//     let y1 = start.y.min(end.y) - radius;
+//     let x2 = start.x.max(end.x) + radius;
+//     let y2 = start.y.max(end.y) + radius;
+//     ScreenRect::from_exact(x1, y1, x2, y2)
+// }
 
-    fn right(&self) -> f64 {
-        self.max_x()
-    }
-
-    fn top(&self) -> f64 {
-        self.min_y()
-    }
-
-    fn bottom(&self) -> f64 {
-        self.max_y()
-    }
-
-    fn from_exact(x1: f64, y1: f64, x2: f64, y2: f64) -> ScreenRectF {
-        ScreenRectF::new(
-            ScreenPointF::new(x1.min(x2), y1.min(y2)),
-            Size2D::new((x1 - x2).abs(), (y1 - y2).abs()),
-        )
-    }
-
-    fn from_corners(top_left: ScreenPointF, bottom_right: ScreenPointF) -> ScreenRectF {
-        ScreenRectF::from_exact(top_left.x, top_left.y, bottom_right.x, bottom_right.y)
-    }
-}
-
-impl RectExt<WindowRectF, WindowPointF, f64> for WindowRectF {
-    fn top_left(&self) -> WindowPointF {
-        WindowPointF::new(self.left(), self.top())
-    }
-
-    fn top_right(&self) -> WindowPointF {
-        WindowPointF::new(self.right(), self.top())
-    }
-
-    fn bottom_left(&self) -> WindowPointF {
-        WindowPointF::new(self.left(), self.bottom())
-    }
-
-    fn bottom_right(&self) -> WindowPointF {
-        WindowPointF::new(self.right(), self.bottom())
-    }
-
-    fn left(&self) -> f64 {
-        self.min_x()
-    }
-
-    fn right(&self) -> f64 {
-        self.max_x()
-    }
-
-    fn top(&self) -> f64 {
-        self.min_y()
-    }
-
-    fn bottom(&self) -> f64 {
-        self.max_y()
-    }
-
-    fn from_exact(x1: f64, y1: f64, x2: f64, y2: f64) -> WindowRectF {
-        WindowRectF::new(
-            WindowPointF::new(x1.min(x2), y1.min(y2)),
-            Size2D::new((x1 - x2).abs(), (y1 - y2).abs()),
-        )
-    }
-
-    fn from_corners(top_left: WindowPointF, bottom_right: WindowPointF) -> WindowRectF {
-        WindowRectF::from_exact(top_left.x, top_left.y, bottom_right.x, bottom_right.y)
-    }
-}
-
-pub fn point_to_widened_rect(radius: i32, pt: ScreenPoint) -> ScreenRect {
-    let origin = pt - Size2D::new(radius, radius);
-    let size = Size2D::new(radius * 2, radius * 2);
-    Rect::new(origin, size)
-}
-
-pub fn point_to_widened_rect_f(radius: f64, pt: ScreenPointF) -> ScreenRectF {
-    let origin = pt - Size2D::new(radius, radius);
-    let size = Size2D::new(radius * 2.0, radius * 2.0);
-    Rect::new(origin, size)
-}
-
-pub fn point_to_widened_rect_n(radius: f32, pt: nannou::glam::Vec2) -> nannou::geom::Rect {
-    nannou::geom::Rect::from_x_y_w_h(pt.x, pt.y, radius * 2.0, radius * 2.0)
-}
-
-pub fn line_to_widened_rect(radius: i32, start: ScreenPoint, end: ScreenPoint) -> ScreenRect {
-    let x1 = start.x.min(end.x) - radius;
-    let y1 = start.y.min(end.y) - radius;
-    let x2 = start.x.max(end.x) + radius;
-    let y2 = start.y.max(end.y) + radius;
-    ScreenRect::from_exact(x1, y1, x2, y2)
-}
-
-pub fn line_to_widened_rect_f(radius: f64, start: ScreenPointF, end: ScreenPointF) -> ScreenRectF {
-    let x1 = start.x.min(end.x) - radius;
-    let y1 = start.y.min(end.y) - radius;
-    let x2 = start.x.max(end.x) + radius;
-    let y2 = start.y.max(end.y) + radius;
-    ScreenRectF::from_exact(x1, y1, x2, y2)
-}
+// pub fn line_to_widened_rect_f(radius: f64, start: ScreenPointF, end: ScreenPointF) -> ScreenRectF {
+//     let x1 = start.x.min(end.x) - radius;
+//     let y1 = start.y.min(end.y) - radius;
+//     let x2 = start.x.max(end.x) + radius;
+//     let y2 = start.y.max(end.y) + radius;
+//     ScreenRectF::from_exact(x1, y1, x2, y2)
+// }
