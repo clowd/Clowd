@@ -2,7 +2,7 @@
 
 use crate::geometry::*;
 use anyhow::Result;
-use image::{self, DynamicImage, ImageBuffer};
+use image::{self, Bgra, DynamicImage, ImageBuffer};
 use rayon::prelude::*;
 use std::{mem, ops::Deref, ptr};
 use windows::{
@@ -251,5 +251,3 @@ pub fn capture_desktop() -> Result<(ScreenRect, image::DynamicImage, image::Dyna
         Ok((rect, capture.0, capture.1))
     }
 }
-
-
