@@ -3,6 +3,8 @@
 
 //! Simple helpers for managing wgpu state and surfaces.
 
+use std::path::PathBuf;
+
 use anyhow::Result;
 use vello::wgpu::{self, Adapter, Backends, Device, Instance, Limits, Queue, Surface, SurfaceConfiguration, SurfaceTarget, TextureFormat};
 
@@ -26,7 +28,10 @@ impl RenderContext {
     pub fn new(backends: Option<Backends>) -> Self {
         let instance = Instance::new(wgpu::InstanceDescriptor {
             backends: backends.unwrap_or(wgpu::util::backend_bits_from_env().unwrap_or(wgpu::Backends::PRIMARY)),
-            dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+            dx12_shader_compiler: wgpu::Dx12Compiler::Dxc {
+                dxil_path: Some(PathBuf::from(r"C:\Users\Caelan\Downloads\dxc_2024_07_31\bin\x64\dxil.dll")),
+                dxc_path: Some(PathBuf::from(r"C:\Users\Caelan\Downloads\dxc_2024_07_31\bin\x64\dxcompiler.dll")),
+            },
             ..Default::default()
         });
         Self {

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use euclid::{Point2D, Rect, Size2D, Transform2D};
+use num::{traits::real::Real, NumCast};
 use std::ops;
 
 // Type aliases for screen and window units
@@ -16,13 +17,13 @@ pub type WindowRectF = Rect<f64, WindowUnit>;
 pub type WindowPointF = Point2D<f64, WindowUnit>;
 
 // Conversions between WindowUnit and Nannou
-pub trait WindowRectExt {
-    fn to_nannou(&self) -> nannou::geom::Rect;
-}
+// pub trait WindowRectExt {
+//     fn to_nannou(&self) -> nannou::geom::Rect;
+// }
 
-pub trait WindowPointExt {
-    fn to_nannou(&self) -> nannou::geom::Vec2;
-}
+// pub trait WindowPointExt {
+//     fn to_nannou(&self) -> nannou::geom::Vec2;
+// }
 
 pub trait NannouRectExt {
     fn to_window_rect(&self) -> WindowRectF;
@@ -32,32 +33,32 @@ pub trait NannouPointExt {
     fn to_window_point(&self) -> WindowPointF;
 }
 
-impl WindowRectExt for WindowRectF {
-    fn to_nannou(&self) -> nannou::geom::Rect {
-        let center = self.center();
-        nannou::geom::Rect::from_x_y_w_h(center.x as f32, center.y as f32, self.size.width as f32, self.size.height as f32)
-    }
-}
+// impl WindowRectExt for WindowRectF {
+//     fn to_nannou(&self) -> nannou::geom::Rect {
+//         let center = self.center();
+//         nannou::geom::Rect::from_x_y_w_h(center.x as f32, center.y as f32, self.size.width as f32, self.size.height as f32)
+//     }
+// }
 
-impl WindowPointExt for WindowPointF {
-    fn to_nannou(&self) -> nannou::geom::Vec2 {
-        nannou::geom::Vec2::new(self.x as f32, self.y as f32)
-    }
-}
+// impl WindowPointExt for WindowPointF {
+//     fn to_nannou(&self) -> nannou::geom::Vec2 {
+//         nannou::geom::Vec2::new(self.x as f32, self.y as f32)
+//     }
+// }
 
-impl NannouRectExt for nannou::geom::Rect {
-    fn to_window_rect(&self) -> WindowRectF {
-        let size = Size2D::new(self.w() as f64, self.h() as f64);
-        let position = WindowPointF::new(self.left() as f64, self.top() as f64);
-        WindowRectF::new(position, size)
-    }
-}
+// impl NannouRectExt for nannou::geom::Rect {
+//     fn to_window_rect(&self) -> WindowRectF {
+//         let size = Size2D::new(self.w() as f64, self.h() as f64);
+//         let position = WindowPointF::new(self.left() as f64, self.top() as f64);
+//         WindowRectF::new(position, size)
+//     }
+// }
 
-impl NannouPointExt for nannou::geom::Vec2 {
-    fn to_window_point(&self) -> WindowPointF {
-        WindowPointF::new(self.x as f64, self.y as f64)
-    }
-}
+// impl NannouPointExt for nannou::geom::Vec2 {
+//     fn to_window_point(&self) -> WindowPointF {
+//         WindowPointF::new(self.x as f64, self.y as f64)
+//     }
+// }
 
 // Transforms between Screen and Window coordinates
 #[derive(Debug, Clone)]
@@ -98,25 +99,25 @@ impl TransformUnit {
         new
     }
 
-    pub fn pt_to_window<U: nannou::prelude::NumCast + Copy>(&self, pt: Point2D<U, ScreenUnit>) -> WindowPointF {
+    pub fn pt_to_window<U: NumCast + Copy>(&self, pt: Point2D<U, ScreenUnit>) -> WindowPointF {
         let pt = pt.to_f64();
         let transform = self.transform_to_window();
         transform.transform_point(pt)
     }
 
-    pub fn rect_to_window<U: nannou::prelude::NumCast + Copy>(&self, rect: Rect<U, ScreenUnit>) -> WindowRectF {
+    pub fn rect_to_window<U: NumCast + Copy>(&self, rect: Rect<U, ScreenUnit>) -> WindowRectF {
         let rect = rect.to_f64();
         let transform = self.transform_to_window();
         transform.outer_transformed_rect(&rect)
     }
 
-    pub fn pt_to_screen<U: nannou::prelude::NumCast + Copy>(&self, pt: Point2D<U, WindowUnit>) -> ScreenPointF {
+    pub fn pt_to_screen<U: NumCast + Copy>(&self, pt: Point2D<U, WindowUnit>) -> ScreenPointF {
         let pt = pt.to_f64();
         let transform = self.transform_to_screen();
         transform.transform_point(pt)
     }
 
-    pub fn rect_to_screen<U: nannou::prelude::NumCast + Copy>(&self, rect: Rect<U, WindowUnit>) -> ScreenRectF {
+    pub fn rect_to_screen<U: NumCast + Copy>(&self, rect: Rect<U, WindowUnit>) -> ScreenRectF {
         let rect = rect.to_f64();
         let transform = self.transform_to_screen();
         transform.outer_transformed_rect(&rect)
@@ -209,7 +210,7 @@ where
 
 impl<T, U> LineSegment<T, U>
 where
-    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default + nannou::prelude::real::Real,
+    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default + Real,
     U: Copy,
 {
     pub fn start(&self) -> Point2D<T, U> {
