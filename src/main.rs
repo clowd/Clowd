@@ -4,6 +4,8 @@ mod geometry;
 mod logging;
 mod screenshot;
 mod ui;
+mod app;
+mod render_context;
 
 use std::time::Duration;
 

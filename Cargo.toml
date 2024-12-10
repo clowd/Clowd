@@ -4,31 +4,27 @@ version = "0.0.0-local"
 edition = "2021"
 
 [dependencies]
-active-win-pos-rs = "0.8"
 log = "0.4"
 xcap = "0.0.14"
-nannou = "0.19"
-# nannou_egui = "0.19"
 anyhow = "1.0"
-# image = "0.25"
+image = "0.25"
 lazy_static = "1.4"
 mouse-rs = "0.4"
-# bracket-geometry = "0.8.7"
 euclid = "0.22.11"
 windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
+    "Win32_System_SystemInformation",
 ] }
-sysinfo = "0.33"
 simple-stopwatch = "0.1.4"
 simplelog = "0.12"
 time = "0.3"
 file-rotate = "0.7"
 log-panics = "2.0"
 rayon = "1.5"
-
-# [patch.crates-io]
-# image = "0.25"
+vello = "0.3.0"
+winit = "0.30.5"
+pollster = "0.4.0"
 
 [build-dependencies]
 winres = "0.1"
