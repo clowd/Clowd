@@ -11,13 +11,14 @@ use euclid::Transform2D;
 use image::{DynamicImage, ImageBuffer};
 use mouse_rs::Mouse;
 use vello::{
-    kurbo::{Affine, Circle},
+    kurbo::{Affine, Circle, Ellipse, Line, RoundedRect, Stroke},
     peniko::{Color, Fill},
     wgpu::{self, Backends, Texture},
     AaConfig, RenderParams, Renderer, RendererOptions, Scene,
 };
 use winit::{
     application::ApplicationHandler,
+    dpi::LogicalSize,
     event::{ElementState, Event, MouseButton, MouseScrollDelta, StartCause, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::KeyCode,
@@ -43,10 +44,12 @@ enum UserEvent {
 }
 
 struct App<'s> {
-    render_context: RenderContext,
+    context: RenderContext,
     event_proxy: EventLoopProxy<UserEvent>,
     present_mode: wgpu::PresentMode,
-    renderers: Vec<RendererInfo<'s>>,
+    renderer_contexts: Vec<RendererInfo<'s>>,
+    // An array of renderers, one per wgpu device
+    renderers: Vec<Option<Renderer>>,
     mouse: Mouse,
     model: Model,
     model_initialized: bool,
@@ -85,7 +88,6 @@ struct RendererInfo<'s> {
     // so the fields must be in this order
     window_id: WindowId,
     surface: RenderSurface<'s>,
-    renderer: Renderer,
     window: Arc<Window>,
     monitor_handle: MonitorHandle,
     monitor_bounds: ScreenRect,
@@ -109,6 +111,60 @@ struct DesktopWindowInfo {
     title: String,
     window_bounds: ScreenRect,
     capture: Option<DynamicImage>,
+}
+
+/// Helper function that creates a Winit window and returns it (wrapped in an Arc for sharing between threads)
+fn create_winit_window(event_loop: &ActiveEventLoop) -> Arc<Window> {
+    let attr = Window::default_attributes()
+        .with_inner_size(LogicalSize::new(1044, 800))
+        .with_resizable(true)
+        .with_fullscreen(Some(Fullscreen::Borderless(None)))
+        .with_visible(false)
+        .with_title("Vello Shapes");
+    Arc::new(event_loop.create_window(attr).unwrap())
+}
+
+/// Helper function that creates a vello `Renderer` for a given `RenderContext` and `RenderSurface`
+fn create_vello_renderer(render_cx: &RenderContext, surface: &RenderSurface<'_>) -> Renderer {
+    Renderer::new(
+        &render_cx.devices[surface.dev_id].device,
+        RendererOptions {
+            surface_format: Some(surface.format),
+            use_cpu: false,
+            antialiasing_support: vello::AaSupport {
+                area: true,
+                msaa8: false,
+                msaa16: false,
+            },
+            num_init_threads: NonZeroUsize::new(1),
+        },
+    )
+    .expect("Couldn't create renderer")
+}
+
+/// Add shapes to a vello scene. This does not actually render the shapes, but adds them
+/// to the Scene data structure which represents a set of objects to draw.
+fn add_shapes_to_scene(scene: &mut Scene) {
+    // Draw an outlined rectangle
+    let stroke = Stroke::new(6.0);
+    let rect = RoundedRect::new(10.0, 10.0, 240.0, 240.0, 20.0);
+    let rect_stroke_color = Color::rgba(0.9804, 0.702, 0.5294, 1.);
+    scene.stroke(&stroke, Affine::IDENTITY, rect_stroke_color, None, &rect);
+
+    // Draw a filled circle
+    let circle = Circle::new((420.0, 200.0), 120.0);
+    let circle_fill_color = Color::rgba(0.9529, 0.5451, 0.6588, 1.);
+    scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, circle_fill_color, None, &circle);
+
+    // Draw a filled ellipse
+    let ellipse = Ellipse::new((250.0, 420.0), (100.0, 160.0), -90.0);
+    let ellipse_fill_color = Color::rgba(0.7961, 0.651, 0.9686, 1.);
+    scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, ellipse_fill_color, None, &ellipse);
+
+    // Draw a straight line
+    let line = Line::new((260.0, 20.0), (620.0, 100.0));
+    let line_stroke_color = Color::rgba(0.5373, 0.7059, 0.9804, 1.);
+    scene.stroke(&stroke, Affine::IDENTITY, line_stroke_color, None, &line);
 }
 
 impl ApplicationHandler<UserEvent> for App<'_> {
@@ -189,72 +245,99 @@ impl ApplicationHandler<UserEvent> for App<'_> {
             ..Default::default() // button_panel: ui::ButtonPanel::new(),
         };
 
-        for (i, monitor) in monitors.enumerate() {
-            let position = monitor.position();
-            let size = monitor.size();
+        let window = create_winit_window(event_loop);
 
-            let attributes = WindowAttributes::default()
-                .with_decorations(false)
-                .with_visible(false)
-                .with_no_redirection_bitmap(true)
-                .with_title("Clowd Capture");
+        let size = window.inner_size();
+        let surface_future = self
+            .context
+            .create_surface(window.clone(), size.width, size.height, wgpu::PresentMode::AutoVsync);
+        let surface = pollster::block_on(surface_future).expect("Error creating surface");
 
-            let window = Arc::new(event_loop.create_window(attributes).unwrap());
+        // Create a vello Renderer for the surface (using its device id)
+        self.renderers
+            .resize_with(self.context.devices.len(), || None);
+        self.renderers[surface.dev_id].get_or_insert_with(|| create_vello_renderer(&self.context, &surface));
 
-            let surface_future = self
-                .render_context
-                .create_surface(window.clone(), size.width, size.height, self.present_mode);
+        let scale = primary.scale_factor();
 
-            let surface = pollster::block_on(surface_future).expect("Error creating surface");
+        self.renderer_contexts.push(RendererInfo {
+            window_id: window.id(),
+            surface,
+            window,
+            monitor_handle: primary,
+            monitor_bounds: primary_bounds,
+            transform: TransformUnit::new(primary_bounds, scale),
+            ready: false,
+            scale_factor: scale,
+            is_primary: true,
+        });
 
-            // let device_future = self
-            //     .render_context
-            //     .device(Some(&surface.surface));
-            // let device_id = pollster::block_on(device_future).expect("Error creating device");
-            let device = self
-                .render_context
-                .devices
-                .get(surface.dev_id)
-                .unwrap();
+        // for (i, monitor) in monitors.enumerate() {
+        //     let position = monitor.position();
+        //     let size = monitor.size();
 
-            const AA_CONFIGS: [AaConfig; 3] = [AaConfig::Area, AaConfig::Msaa8, AaConfig::Msaa16];
+        //     let attributes = WindowAttributes::default()
+        //         .with_decorations(false)
+        //         .with_visible(false)
+        //         .with_no_redirection_bitmap(true)
+        //         .with_title("Clowd Capture");
 
-            fn default_threads() -> usize {
-                #[cfg(target_os = "macos")]
-                return 1;
-                #[cfg(not(target_os = "macos"))]
-                return 0;
-            }
+        //     let window = Arc::new(event_loop.create_window(attributes).unwrap());
 
-            let renderer = Renderer::new(
-                &device.device,
-                RendererOptions {
-                    surface_format: Some(surface.format),
-                    use_cpu: false,
-                    antialiasing_support: AA_CONFIGS.iter().copied().collect(),
-                    num_init_threads: NonZeroUsize::new(default_threads()),
-                },
-            )
-            .unwrap();
+        //     let surface_future = self
+        //         .context
+        //         .create_surface(window.clone(), size.width, size.height, self.present_mode);
 
-            let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
-            let monitor_bounds = vd_transform.outer_transformed_rect(&monitor_bounds);
+        //     let surface = pollster::block_on(surface_future).expect("Error creating surface");
 
-            self.renderers.push(RendererInfo {
-                window_id: window.id(),
-                surface,
-                renderer,
-                window: window.clone(),
-                monitor_handle: monitor.clone(),
-                monitor_bounds,
-                transform: TransformUnit::new(monitor_bounds, monitor.scale_factor()),
-                ready: false,
-                scale_factor: monitor.scale_factor(),
-                is_primary: monitor_bounds.contains(mouse_anchor_pt),
-            });
+        //     // let device_future = self
+        //     //     .render_context
+        //     //     .device(Some(&surface.surface));
+        //     // let device_id = pollster::block_on(device_future).expect("Error creating device");
+        //     let device = self
+        //         .context
+        //         .devices
+        //         .get(surface.dev_id)
+        //         .unwrap();
 
-            info!("[TIME] Monitor Build: {:?}", Duration::from_millis(sw.ms() as u64));
-        }
+        //     const AA_CONFIGS: [AaConfig; 3] = [AaConfig::Area, AaConfig::Msaa8, AaConfig::Msaa16];
+
+        //     fn default_threads() -> usize {
+        //         #[cfg(target_os = "macos")]
+        //         return 1;
+        //         #[cfg(not(target_os = "macos"))]
+        //         return 0;
+        //     }
+
+        //     let renderer = Renderer::new(
+        //         &device.device,
+        //         RendererOptions {
+        //             surface_format: Some(surface.format),
+        //             use_cpu: false,
+        //             antialiasing_support: AA_CONFIGS.iter().copied().collect(),
+        //             num_init_threads: NonZeroUsize::new(default_threads()),
+        //         },
+        //     )
+        //     .unwrap();
+
+        //     let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
+        //     let monitor_bounds = vd_transform.outer_transformed_rect(&monitor_bounds);
+
+        //     self.renderer_contexts.push(RendererInfo {
+        //         window_id: window.id(),
+        //         surface,
+        //         renderer,
+        //         window: window.clone(),
+        //         monitor_handle: monitor.clone(),
+        //         monitor_bounds,
+        //         transform: TransformUnit::new(monitor_bounds, monitor.scale_factor()),
+        //         ready: false,
+        //         scale_factor: monitor.scale_factor(),
+        //         is_primary: monitor_bounds.contains(mouse_anchor_pt),
+        //     });
+
+        //     info!("[TIME] Monitor Build: {:?}", Duration::from_millis(sw.ms() as u64));
+        // }
 
         info!("[TIME] Done: {:?}", Duration::from_millis(sw.ms() as u64));
     }
@@ -267,7 +350,10 @@ impl ApplicationHandler<UserEvent> for App<'_> {
                 event: event.clone(),
             });
 
-        self.renderers.get_by_id(id).unwrap().ready = true;
+        self.renderer_contexts
+            .get_by_id(id)
+            .unwrap()
+            .ready = true;
 
         if !self.model.shown && self.is_all_ready() {
             self.show_all();
@@ -288,47 +374,100 @@ impl ApplicationHandler<UserEvent> for App<'_> {
 
         match event {
             WindowEvent::RedrawRequested => {
+                let render_state = self.renderer_contexts.get_by_id(id).unwrap();
                 let mut scene = Scene::new();
-                scene.fill(
-                    Fill::NonZero,
-                    Affine::IDENTITY,
-                    Color::rgba8(242, 140, 168, 255),
-                    None,
-                    &Circle::new((420.0, 200.0), 120.0),
-                );
 
-                // Render to your window/buffer/etc.
-                // let renderer = renderer.renderer;
-                let renderer = self.renderers.get_by_id(id).unwrap();
-                let device = self
-                    .render_context
-                    .devices
-                    .get(renderer.surface.dev_id)
-                    .unwrap();
+                // Re-add the objects to draw to the scene.
+                add_shapes_to_scene(&mut scene);
 
-                let surface_texture = renderer
-                    .surface
+                // Get the RenderSurface (surface + config)
+                let surface = &render_state.surface;
+                let window = &render_state.window;
+
+                // Get the window size
+                let width = surface.config.width;
+                let height = surface.config.height;
+
+                // Get a handle to the device
+                let device_handle = &self.context.devices[surface.dev_id];
+
+                // Get the surface's texture
+                let surface_texture = surface
                     .surface
                     .get_current_texture()
                     .expect("failed to get surface texture");
 
-                renderer
-                    .renderer
+                // Render to the surface's texture
+                self.renderers[surface.dev_id]
+                    .as_mut()
+                    .unwrap()
                     .render_to_surface(
-                        &device.device,
-                        &device.queue,
+                        &device_handle.device,
+                        &device_handle.queue,
                         &scene,
                         &surface_texture,
-                        &RenderParams {
+                        &vello::RenderParams {
                             base_color: Color::BLACK, // Background color
-                            width: renderer.surface.config.width,
-                            height: renderer.surface.config.height,
+                            width,
+                            height,
                             antialiasing_method: AaConfig::Msaa16,
                         },
                     )
-                    .expect("Failed to render to surface");
+                    .expect("failed to render to surface");
 
+                // Queue the texture to be presented on the surface
                 surface_texture.present();
+
+                device_handle
+                    .device
+                    .poll(wgpu::Maintain::Poll);
+                window.request_redraw();
+                println!("Redraw requested");
+
+                // scene.fill(
+                //     Fill::NonZero,
+                //     Affine::IDENTITY,
+                //     Color::rgba8(242, 140, 168, 255),
+                //     None,
+                //     &Circle::new((420.0, 200.0), 120.0),
+                // );
+
+                // // Render to your window/buffer/etc.
+                // // let renderer = renderer.renderer;
+                // let renderer = self.renderer_contexts.get_by_id(id).unwrap();
+                // let device = self
+                //     .context
+                //     .devices
+                //     .get(renderer.surface.dev_id)
+                //     .unwrap();
+
+                // let surface_texture = renderer
+                //     .surface
+                //     .surface
+                //     .get_current_texture()
+                //     .expect("failed to get surface texture");
+
+                // renderer
+                //     .renderer
+                //     .render_to_surface(
+                //         &device.device,
+                //         &device.queue,
+                //         &scene,
+                //         &surface_texture,
+                //         &RenderParams {
+                //             base_color: Color::BLACK, // Background color
+                //             width: renderer.surface.config.width,
+                //             height: renderer.surface.config.height,
+                //             antialiasing_method: AaConfig::Area,
+                //         },
+                //     )
+                //     .expect("Failed to render to surface");
+
+                // surface_texture.present();
+                // device.device.poll(wgpu::Maintain::Poll);
+
+                // renderer.window.request_redraw();
+                // info!("Window redrawn.");
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -394,30 +533,36 @@ impl ApplicationHandler<UserEvent> for App<'_> {
 
 impl App<'_> {
     fn is_all_ready(&self) -> bool {
-        self.renderers.iter().all(|r| r.ready)
+        self.renderer_contexts
+            .iter()
+            .all(|r| r.ready)
     }
 
     fn show_all(&mut self) {
-        self.renderers.iter_mut().for_each(|r| {
-            let window = &r.window;
-            window.set_fullscreen(Some(Fullscreen::Borderless(Some(r.monitor_handle.clone()))));
-            window.set_visible(true);
-            if r.is_primary {
-                window.focus_window();
-            }
-        });
+        self.renderer_contexts
+            .iter_mut()
+            .for_each(|r| {
+                let window = &r.window;
+                // window.set_fullscreen(Some(Fullscreen::Borderless(Some(r.monitor_handle.clone()))));
+                window.set_visible(true);
+                if r.is_primary {
+                    window.focus_window();
+                }
+            });
     }
 
     fn set_cursor(&mut self, cursor: Option<CursorIcon>) {
-        self.renderers.iter_mut().for_each(|r| {
-            let window = &r.window;
-            if let Some(cur) = cursor {
-                window.set_cursor_visible(true);
-                window.set_cursor(cur);
-            } else {
-                window.set_cursor_visible(false);
-            }
-        });
+        self.renderer_contexts
+            .iter_mut()
+            .for_each(|r| {
+                let window = &r.window;
+                if let Some(cur) = cursor {
+                    window.set_cursor_visible(true);
+                    window.set_cursor(cur);
+                } else {
+                    window.set_cursor_visible(false);
+                }
+            });
     }
 
     fn set_anchored(&mut self, anchored: bool) {
@@ -435,11 +580,11 @@ impl App<'_> {
     }
 
     fn get_nearest_renderer(&self, pt: ScreenPointF) -> &RendererInfo {
-        self.renderers
+        self.renderer_contexts
             .iter()
             .find(|r| r.monitor_bounds.to_f64().contains(pt))
             .or_else(|| {
-                self.renderers.iter().min_by(|a, b| {
+                self.renderer_contexts.iter().min_by(|a, b| {
                     let a_dist = a
                         .monitor_bounds
                         .center()
@@ -572,14 +717,15 @@ pub fn run_app(backends: Option<Backends>, present_mode: wgpu::PresentMode) -> R
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
 
     let mut app = App {
-        render_context: context,
+        context,
         model: Default::default(),
         event_proxy: event_loop.create_proxy(),
         present_mode,
-        renderers: Vec::new(),
+        renderer_contexts: Vec::new(),
         mouse: Mouse::new(),
         model_initialized: false,
         input: WinitInputHelper::new(),
+        renderers: Vec::new(),
     };
 
     event_loop.set_control_flow(ControlFlow::Wait);
