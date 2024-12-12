@@ -1,11 +1,11 @@
 use xcap::Monitor as XCapMonitor;
 
-use crate::{RectExt, ScreenRect};
+use crate::geometry::{RectExt, ScreenRect};
 use anyhow::Result;
-use nannou::image::{DynamicImage, GenericImage, ImageBuffer, Rgba};
+use image::{GenericImage, ImageBuffer, Rgba, RgbaImage};
 use rayon::prelude::*;
 
-pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
+pub fn capture_desktop() -> Result<(ScreenRect, RgbaImage, RgbaImage)> {
     let monitors = XCapMonitor::all()?;
 
     let mut min_x = std::i32::MAX;
@@ -84,5 +84,5 @@ pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
     let gray_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(desktop_width as u32, desktop_height as u32, gray_rgba_buffer)
         .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
-    Ok((desktop_bounds, DynamicImage::ImageRgba8(bgra_image), DynamicImage::ImageRgba8(gray_image)))
+    Ok((desktop_bounds, bgra_image, gray_image))
 }

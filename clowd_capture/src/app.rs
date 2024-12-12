@@ -11,8 +11,16 @@ use euclid::Transform2D;
 use image::{DynamicImage, ImageBuffer, RgbaImage};
 use mouse_rs::Mouse;
 use piet::{kurbo::Vec2, Color, Image, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
-use piet_common::{Device, PietImage as RealImage, WindowTarget};
+use piet_common::{Device, PietImage as RealImage};
 use simple_stopwatch::Stopwatch;
+
+#[cfg(target_os="macos")]
+use winit::platform::macos::WindowExtMacOS;
+
+#[cfg(windows)]
+use winit::platform::windows::WindowAttributesExtWindows;
+#[cfg(windows)]
+use piet_common::WindowTarget;
 
 use winit::{
     application::ApplicationHandler,
@@ -21,8 +29,7 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::KeyCode,
     monitor::MonitorHandle,
-    platform::windows::WindowAttributesExtWindows,
-    raw_window_handle::{HasRawWindowHandle, HasWindowHandle},
+    raw_window_handle::{HasRawWindowHandle, HasWindowHandle, RawWindowHandle},
     window::{CursorIcon, Fullscreen, Window, WindowAttributes, WindowId},
 };
 use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
@@ -122,11 +129,13 @@ struct DesktopWindowInfo {
     capture: Option<DynamicImage>,
 }
 
+#[cfg(windows)]
 fn get_model_snapshot(model_ref: &Arc<RwLock<SharedModel>>) -> SharedModel {
     let model = model_ref.read().unwrap();
     model.clone()
 }
 
+#[cfg(windows)]
 fn start_render_loop<'s>(mut target: WindowTarget, info: RendererDto, model_ref: Arc<RwLock<SharedModel>>) {
     std::thread::spawn(move || {
         let mut first_render = false;
@@ -194,12 +203,6 @@ impl ApplicationHandler<UserEvent> for App {
                 .with_title("Clowd Capture");
 
             let window = event_loop.create_window(attributes).unwrap();
-            #[allow(deprecated)]
-            let raw_handle = window.raw_window_handle().unwrap();
-            let target = self
-                .gpu_device
-                .window_target(raw_handle, 1.0)
-                .expect("could not create window target");
 
             let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
             let monitor_bounds = self
@@ -236,9 +239,18 @@ impl ApplicationHandler<UserEvent> for App {
 
             self.renderers.push(info);
 
-            start_render_loop(target, dto, self.model.clone());
+            #[cfg(windows)]
+            {
+                #[allow(deprecated)]
+                let raw_handle = window.raw_window_handle().unwrap();
+                let target = self
+                    .gpu_device
+                    .window_target(raw_handle, 1.0)
+                    .expect("could not create window target");
+                start_render_loop(target, dto, self.model.clone());
+            }
 
-            self.print_time(format!("Window {}/{} created.", i, monitors.len()).as_str());
+            self.print_time(format!("Window {}/{} created.", i + 1, monitors.len()).as_str());
         }
 
         self.print_time("Initialization complete, waiting for renderers to be ready...");
@@ -288,6 +300,15 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             WindowEvent::Resized(size) => {
                 // TODO?
+            }
+            WindowEvent::RedrawRequested => {
+                let renderer = self.renderers.get_by_id(id).unwrap();
+                let ns_view = match renderer.window.window_handle().unwrap().as_raw() {
+                    RawWindowHandle::AppKit(handle)=> {
+                        handle.ns_view()
+                    }
+                    _ => panic!("Unsupported window handle")
+                };
             }
             WindowEvent::CloseRequested => {
                 model.close_requested = true;
@@ -611,7 +632,13 @@ pub fn run_app() -> Result<()> {
 
     app.print_time("Begin EventLoop...");
 
-    event_loop.set_control_flow(ControlFlow::Wait);
+    let control_flow = if cfg!(windows) {
+        ControlFlow::Wait
+    } else {
+        ControlFlow::Poll
+    };
+
+    event_loop.set_control_flow(control_flow);
     event_loop.run_app(&mut app)?;
     info!("Application exited successfully.");
     Ok(())

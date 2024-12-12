@@ -4,6 +4,7 @@ fn main() {
     let ver: u64 = ver.major << 48 | ver.minor << 32 | ver.patch << 16;
 
     println!("cargo:rustc-env=NGBV_VERSION={}", version);
+    println!("cargo:rustc-env=NGBV_VERSION_U64={}", ver);
 
     #[cfg(target_os = "windows")]
     winres::WindowsResource::new()
