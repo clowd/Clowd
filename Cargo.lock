@@ -1668,6 +1668,7 @@ name = "piet-direct2d"
 version = "0.0.0-local"
 dependencies = [
  "associative-cache",
+ "bitflags 2.6.0",
  "dwrote",
  "piet",
  "piet-common",
