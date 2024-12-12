@@ -1,13 +1,13 @@
 [package]
-name = "clowd-rust"
+name = "clowd_capture"
 version = "0.0.0-local"
 edition = "2021"
 
 [dependencies]
 log = "0.4"
-xcap = "0.0.14"
+xcap = "0.1.0"
 anyhow = "1.0"
-image = "0.23"
+image = "0.25"
 lazy_static = "1.4"
 mouse-rs = "0.4"
 euclid = "0.22.11"
@@ -25,6 +25,7 @@ rayon = "1.5"
 winit = "0.30.5"
 num = "0.4.3"
 piet.workspace = true
+piet-common.workspace = true
 derivative = "2.2.0"
 
 [build-dependencies]

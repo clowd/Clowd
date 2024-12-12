@@ -1,15 +1,18 @@
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
-
-use crate::{
-    geometry::*,
-    input_helper::WinitInputHelper,
-    render_context::{RenderContext, RenderSurface},
-    screenshot::capture_desktop,
+use std::{
+    num::NonZeroUsize,
+    sync::{atomic::AtomicBool, Arc, RwLock},
+    thread::sleep_ms,
+    time::Duration,
 };
+
+use crate::{geometry::*, input::WinitInputHelper, screenshot::capture_desktop};
 use anyhow::Result;
 use euclid::Transform2D;
-use image::{DynamicImage, ImageBuffer};
+use image::{DynamicImage, ImageBuffer, RgbaImage};
 use mouse_rs::Mouse;
+use piet::{kurbo::Vec2, Color, Image, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
+use piet_common::{Device, PietImage as RealImage, WindowTarget};
+use simple_stopwatch::Stopwatch;
 
 use winit::{
     application::ApplicationHandler,
@@ -19,10 +22,10 @@ use winit::{
     keyboard::KeyCode,
     monitor::MonitorHandle,
     platform::windows::WindowAttributesExtWindows,
-    raw_window_handle::HasWindowHandle,
+    raw_window_handle::{HasRawWindowHandle, HasWindowHandle},
     window::{CursorIcon, Fullscreen, Window, WindowAttributes, WindowId},
 };
-use xcap::Window as XCapWindow;
+use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 enum MouseState {
@@ -34,70 +37,81 @@ enum MouseState {
     MovingSelection(ScreenRect, ScreenPointF),
 }
 
+#[derive(Debug, Clone)]
 enum UserEvent {
     None,
+    RendererReady(WindowId),
 }
 
-struct App<'s> {
-    context: RenderContext,
-    event_proxy: EventLoopProxy<UserEvent>,
-    present_mode: wgpu::PresentMode,
-    renderer_contexts: Vec<RendererInfo<'s>>,
-    // An array of renderers, one per wgpu device
-    renderers: Vec<Option<Renderer>>,
-    mouse: Mouse,
-    model: Model,
-    model_initialized: bool,
-    input: WinitInputHelper,
-}
-
-#[derive(derivative::Derivative)]
-#[derivative(Default)]
-struct Model {
-    desktop_bounds: ScreenRect,
-    desktop_virtual_origin: ScreenPoint,
-    // desktop_color_texture: wgpu::Texture,
-    // desktop_gray_texture: wgpu::Texture,
-    #[derivative(Default(value = "DynamicImage::new_bgra8(1, 1)"))]
-    desktop_color_image: DynamicImage,
-    #[derivative(Default(value = "DynamicImage::new_bgra8(1, 1)"))]
-    desktop_gray_image: DynamicImage,
-    windows: Vec<DesktopWindowInfo>,
-    shown: bool,
-    debug: bool,
+#[derive(Clone)]
+struct SharedModel {
     zoom: f64,
-    // accent_light: Rgb,
-    // accent_dark: Rgb,
-    selection: Option<ScreenRect>,
-    captured: bool,
     mouse_pt: ScreenPointF,
     mouse_state: MouseState,
+    selection: Option<ScreenRect>,
+    captured: bool,
+    debug: bool,
+    close_requested: bool,
+}
+
+struct App {
+    gpu_device: Device,
+    renderers: Vec<RendererInfo>,
+    initialized: bool,
+    shown: bool,
+    time: Stopwatch,
+    desktop_bounds: ScreenRect,
+    desktop_virtual_origin: ScreenPoint,
+    desktop_color_image: RgbaImage,
+    desktop_gray_image: RgbaImage,
+    windows: Vec<DesktopWindowInfo>,
+    mouse: Mouse,
     mouse_anchor_pt: ScreenPoint,
     mouse_anchored: bool,
+    input: WinitInputHelper,
+    model: Arc<RwLock<SharedModel>>,
+    event_proxy: EventLoopProxy<UserEvent>,
+    accent_light: Color,
+    accent_dark: Color,
+    vd_transform: Transform2D<i32, ScreenUnit, ScreenUnit>,
     // button_panel: ui::ButtonPanel,
 }
 
-#[allow(dead_code)]
-struct RendererInfo<'s> {
-    // SAFETY: We MUST drop the surface before the `window`,
-    // so the fields must be in this order
+struct RendererInfo {
     window_id: WindowId,
-    surface: RenderSurface<'s>,
-    window: Arc<Window>,
     monitor_handle: MonitorHandle,
     monitor_bounds: ScreenRect,
     transform: TransformUnit,
     is_primary: bool,
-    ready: bool,
     scale_factor: f64,
+    window: Window,
+    ready: bool,
 }
 
-trait RendererInfoImpl<'s> {
-    fn get_by_id(&mut self, id: WindowId) -> Option<&mut RendererInfo<'s>>;
+#[derive(Clone)]
+struct RendererDto {
+    window_id: WindowId,
+    monitor_handle: MonitorHandle,
+    monitor_bounds: ScreenRect,
+    transform: TransformUnit,
+    is_primary: bool,
+    scale_factor: f64,
+    desktop_bounds: ScreenRect,
+    desktop_virtual_origin: ScreenPoint,
+    desktop_color_image: RgbaImage,
+    desktop_gray_image: RgbaImage,
+    event_proxy: EventLoopProxy<UserEvent>,
+    accent_light: Color,
+    accent_dark: Color,
+    vd_transform: Transform2D<i32, ScreenUnit, ScreenUnit>,
 }
 
-impl<'s> RendererInfoImpl<'s> for Vec<RendererInfo<'s>> {
-    fn get_by_id(&mut self, id: WindowId) -> Option<&mut RendererInfo<'s>> {
+trait RendererInfoImpl {
+    fn get_by_id(&mut self, id: WindowId) -> Option<&mut RendererInfo>;
+}
+
+impl RendererInfoImpl for Vec<RendererInfo> {
+    fn get_by_id(&mut self, id: WindowId) -> Option<&mut RendererInfo> {
         self.iter_mut().find(|r| r.window_id == id)
     }
 }
@@ -108,364 +122,175 @@ struct DesktopWindowInfo {
     capture: Option<DynamicImage>,
 }
 
-/// Helper function that creates a Winit window and returns it (wrapped in an Arc for sharing between threads)
-fn create_winit_window(event_loop: &ActiveEventLoop) -> Arc<Window> {
-    let attr = Window::default_attributes()
-        .with_inner_size(LogicalSize::new(1044, 800))
-        .with_resizable(true)
-        .with_fullscreen(Some(Fullscreen::Borderless(None)))
-        .with_visible(false)
-        .with_title("Vello Shapes");
-    Arc::new(event_loop.create_window(attr).unwrap())
+fn get_model_snapshot(model_ref: &Arc<RwLock<SharedModel>>) -> SharedModel {
+    let model = model_ref.read().unwrap();
+    model.clone()
 }
 
-/// Helper function that creates a vello `Renderer` for a given `RenderContext` and `RenderSurface`
-fn create_vello_renderer(render_cx: &RenderContext, surface: &RenderSurface<'_>) -> Renderer {
-    Renderer::new(
-        &render_cx.devices[surface.dev_id].device,
-        RendererOptions {
-            surface_format: Some(surface.format),
-            use_cpu: false,
-            antialiasing_support: vello::AaSupport {
-                area: true,
-                msaa8: false,
-                msaa16: false,
-            },
-            num_init_threads: NonZeroUsize::new(1),
-        },
-    )
-    .expect("Couldn't create renderer")
+fn start_render_loop<'s>(mut target: WindowTarget, info: RendererDto, model_ref: Arc<RwLock<SharedModel>>) {
+    std::thread::spawn(move || {
+        let mut first_render = false;
+        loop {
+            {
+                let model = get_model_snapshot(&model_ref);
+                if model.close_requested {
+                    break;
+                }
+
+                std::thread::sleep_ms(15);
+                let mut rc = target.begin_draw();
+                let text = rc.text();
+
+                let layout = text
+                    .new_text_layout("Hello World!")
+                    .default_attribute(TextAttribute::FontSize(24.0))
+                    .build()
+                    .unwrap();
+
+                let text_pos = Vec2::new(50.0, 50.0);
+                let layout_rect = layout.size().to_rect() + text_pos;
+                let image_rect = layout.image_bounds() + text_pos;
+
+                rc.fill(layout_rect, &Color::WHITE);
+                rc.stroke(image_rect, &Color::BLACK, 0.5);
+                rc.draw_text(&layout, text_pos.to_point());
+
+                rc.finish().unwrap();
+            }
+            target.end_draw();
+
+            if !first_render {
+                first_render = true;
+                info.event_proxy
+                    .send_event(UserEvent::RendererReady(info.window_id))
+                    .unwrap();
+            }
+        }
+    });
 }
 
-/// Add shapes to a vello scene. This does not actually render the shapes, but adds them
-/// to the Scene data structure which represents a set of objects to draw.
-fn add_shapes_to_scene(scene: &mut Scene) {
-    // Draw an outlined rectangle
-    let stroke = Stroke::new(6.0);
-    let rect = RoundedRect::new(10.0, 10.0, 240.0, 240.0, 20.0);
-    let rect_stroke_color = Color::rgba(0.9804, 0.702, 0.5294, 1.);
-    scene.stroke(&stroke, Affine::IDENTITY, rect_stroke_color, None, &rect);
-
-    // Draw a filled circle
-    let circle = Circle::new((420.0, 200.0), 120.0);
-    let circle_fill_color = Color::rgba(0.9529, 0.5451, 0.6588, 1.);
-    scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, circle_fill_color, None, &circle);
-
-    // Draw a filled ellipse
-    let ellipse = Ellipse::new((250.0, 420.0), (100.0, 160.0), -90.0);
-    let ellipse_fill_color = Color::rgba(0.7961, 0.651, 0.9686, 1.);
-    scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, ellipse_fill_color, None, &ellipse);
-
-    // Draw a straight line
-    let line = Line::new((260.0, 20.0), (620.0, 100.0));
-    let line_stroke_color = Color::rgba(0.5373, 0.7059, 0.9804, 1.);
-    scene.stroke(&stroke, Affine::IDENTITY, line_stroke_color, None, &line);
-}
-
-impl ApplicationHandler<UserEvent> for App<'_> {
+impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.model_initialized {
+        if self.initialized {
             return;
+        } else {
+            self.initialized = true;
         }
 
-        let sw = simple_stopwatch::Stopwatch::start_new();
-        info!("[TIME] Start: {:?}", Duration::from_millis(sw.ms() as u64));
+        let monitors: Vec<_> = event_loop.available_monitors().collect();
+        // let monitor = monitors[0].clone();
 
-        let monitors = event_loop.available_monitors();
-        // let windows = XCapWindow::all().ok();
+        for (i, monitor) in monitors.iter().enumerate() {
+            let position = monitor.position();
+            let size = monitor.size();
+            println!("Monitor {}: {:?}, {:?},{:?}", i, monitor.name(), position, size);
 
-        let primary = event_loop.primary_monitor().unwrap();
-        let primary_position = primary.position();
-        let primary_size = primary.size();
-        let primary_bounds = ScreenRect::from_xy_size(
-            primary_position.x,
-            primary_position.y,
-            primary_size.width as i32,
-            primary_size.height as i32,
-        );
+            let attributes = WindowAttributes::default()
+                .with_decorations(false)
+                .with_blur(true)
+                .with_visible(false)
+                .with_inner_size(size)
+                .with_fullscreen(Some(Fullscreen::Borderless(Some(monitor.clone()))))
+                .with_title("Clowd Capture");
 
-        let mouse_anchor_pt = primary_bounds.center();
+            let window = event_loop.create_window(attributes).unwrap();
+            #[allow(deprecated)]
+            let raw_handle = window.raw_window_handle().unwrap();
+            let target = self
+                .gpu_device
+                .window_target(raw_handle, 1.0)
+                .expect("could not create window target");
 
-        info!("[TIME] Capturing: {:?}", Duration::from_millis(sw.ms() as u64));
+            let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
+            let monitor_bounds = self
+                .vd_transform
+                .outer_transformed_rect(&monitor_bounds);
 
-        let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop().unwrap();
+            let info = RendererInfo {
+                window_id: window.id(),
+                window,
+                monitor_handle: monitor.clone(),
+                monitor_bounds,
+                transform: TransformUnit::new(monitor_bounds, monitor.scale_factor()),
+                ready: false,
+                scale_factor: monitor.scale_factor(),
+                is_primary: monitor_bounds.contains(self.mouse_anchor_pt),
+            };
 
-        info!("[TIME] Captured: {:?}", Duration::from_millis(sw.ms() as u64));
+            let dto = RendererDto {
+                accent_dark: self.accent_dark,
+                accent_light: self.accent_light,
+                desktop_bounds: self.desktop_bounds,
+                desktop_color_image: self.desktop_color_image.clone(),
+                desktop_gray_image: self.desktop_gray_image.clone(),
+                desktop_virtual_origin: self.desktop_virtual_origin,
+                event_proxy: self.event_proxy.clone(),
+                is_primary: info.is_primary,
+                monitor_bounds: info.monitor_bounds,
+                monitor_handle: info.monitor_handle.clone(),
+                scale_factor: info.scale_factor,
+                transform: info.transform.clone(),
+                vd_transform: self.vd_transform.clone(),
+                window_id: info.window_id,
+            };
 
-        let desktop_virtual_origin = desktop_bounds.top_left();
-        let vd_transform = Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop_virtual_origin.to_vector());
+            self.renderers.push(info);
 
-        let desktop_bounds = vd_transform.outer_transformed_rect(&desktop_bounds);
+            start_render_loop(target, dto, self.model.clone());
 
-        info!("[TIME] Windows Captured: {:?}", Duration::from_millis(sw.ms() as u64));
+            self.print_time(format!("Window {}/{} created.", i, monitors.len()).as_str());
+        }
 
-        // let desktop_color_texture = Texture::from_image(event_loop, &desktop_color_image);
-        // let desktop_gray_texture = Texture::from_image(event_loop, &desktop_gray_image);
+        self.print_time("Initialization complete, waiting for renderers to be ready...");
+    }
 
-        info!("[TIME] Textures Loaded: {:?}", Duration::from_millis(sw.ms() as u64));
-        info!("[TIME] Done: {:?}", Duration::from_millis(sw.ms() as u64));
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+        match event {
+            UserEvent::RendererReady(id) => {
+                if let Some(renderer) = self.renderers.get_by_id(id) {
+                    renderer.ready = true;
+                    self.print_time(format!("Renderer {:?} ready.", id).as_str());
+                }
 
-        // for window in windows {
-        //     let window_bounds = ScreenRect::from_xy_size(window.x(), window.y(), window.width() as i32, window.height() as i32);
-        //     let window_bounds = vd_transform.outer_transformed_rect(&window_bounds);
-
-        //     desktop_windows.push(DesktopWindowInfo {
-        //         title: window.title().to_string(),
-        //         window_bounds,
-        //         // capture: window.capture_image().ok(),
-        //         capture: None,
-        //     });
-        // }
-
-        self.model = Model {
-            desktop_bounds,
-            desktop_virtual_origin,
-            // desktop_color_texture,
-            // desktop_gray_texture,
-            desktop_color_image,
-            desktop_gray_image,
-            // windows: desktop_windows,
-            shown: false,
-            debug: false,
-            zoom: 1.0,
-            // accent_light: rgb(0.0, 175.0 / 255.0, 240.0 / 255.0),
-            // accent_dark: rgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
-            // dash_black_white: bw_tex,
-            selection: None,
-            captured: false,
-            mouse_pt: ScreenPointF::zero(),
-            mouse_state: MouseState::Up,
-            mouse_anchor_pt,
-            mouse_anchored: false,
-            ..Default::default() // button_panel: ui::ButtonPanel::new(),
-        };
-
-        let window = create_winit_window(event_loop);
-        window.hwnd();
-
-        let size = window.inner_size();
-        let surface_future = self
-            .context
-            .create_surface(window.clone(), size.width, size.height, wgpu::PresentMode::AutoVsync);
-        let surface = pollster::block_on(surface_future).expect("Error creating surface");
-
-        // Create a vello Renderer for the surface (using its device id)
-        self.renderers
-            .resize_with(self.context.devices.len(), || None);
-        self.renderers[surface.dev_id].get_or_insert_with(|| create_vello_renderer(&self.context, &surface));
-
-        let scale = primary.scale_factor();
-
-        self.renderer_contexts.push(RendererInfo {
-            window_id: window.id(),
-            surface,
-            window,
-            monitor_handle: primary,
-            monitor_bounds: primary_bounds,
-            transform: TransformUnit::new(primary_bounds, scale),
-            ready: false,
-            scale_factor: scale,
-            is_primary: true,
-        });
-
-        // for (i, monitor) in monitors.enumerate() {
-        //     let position = monitor.position();
-        //     let size = monitor.size();
-
-        //     let attributes = WindowAttributes::default()
-        //         .with_decorations(false)
-        //         .with_visible(false)
-        //         .with_no_redirection_bitmap(true)
-        //         .with_title("Clowd Capture");
-
-        //     let window = Arc::new(event_loop.create_window(attributes).unwrap());
-
-        //     let surface_future = self
-        //         .context
-        //         .create_surface(window.clone(), size.width, size.height, self.present_mode);
-
-        //     let surface = pollster::block_on(surface_future).expect("Error creating surface");
-
-        //     // let device_future = self
-        //     //     .render_context
-        //     //     .device(Some(&surface.surface));
-        //     // let device_id = pollster::block_on(device_future).expect("Error creating device");
-        //     let device = self
-        //         .context
-        //         .devices
-        //         .get(surface.dev_id)
-        //         .unwrap();
-
-        //     const AA_CONFIGS: [AaConfig; 3] = [AaConfig::Area, AaConfig::Msaa8, AaConfig::Msaa16];
-
-        //     fn default_threads() -> usize {
-        //         #[cfg(target_os = "macos")]
-        //         return 1;
-        //         #[cfg(not(target_os = "macos"))]
-        //         return 0;
-        //     }
-
-        //     let renderer = Renderer::new(
-        //         &device.device,
-        //         RendererOptions {
-        //             surface_format: Some(surface.format),
-        //             use_cpu: false,
-        //             antialiasing_support: AA_CONFIGS.iter().copied().collect(),
-        //             num_init_threads: NonZeroUsize::new(default_threads()),
-        //         },
-        //     )
-        //     .unwrap();
-
-        //     let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
-        //     let monitor_bounds = vd_transform.outer_transformed_rect(&monitor_bounds);
-
-        //     self.renderer_contexts.push(RendererInfo {
-        //         window_id: window.id(),
-        //         surface,
-        //         renderer,
-        //         window: window.clone(),
-        //         monitor_handle: monitor.clone(),
-        //         monitor_bounds,
-        //         transform: TransformUnit::new(monitor_bounds, monitor.scale_factor()),
-        //         ready: false,
-        //         scale_factor: monitor.scale_factor(),
-        //         is_primary: monitor_bounds.contains(mouse_anchor_pt),
-        //     });
-
-        //     info!("[TIME] Monitor Build: {:?}", Duration::from_millis(sw.ms() as u64));
-        // }
-
-        info!("[TIME] Done: {:?}", Duration::from_millis(sw.ms() as u64));
+                if !self.shown && self.is_all_ready() {
+                    self.show_all();
+                    self.shown = true;
+                    self.print_time("All renderers ready, shown all windows...");
+                }
+            }
+            _ => (),
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        println!("Window event: {:?}", event);
+        println!("Window {:?} event: {:?}", id, event);
+
+        let model = self.model.clone();
+        let mut model = model.write().unwrap();
         self.input
             .update::<UserEvent>(&Event::WindowEvent {
                 window_id: id,
                 event: event.clone(),
             });
 
-        self.renderer_contexts
-            .get_by_id(id)
-            .unwrap()
-            .ready = true;
-
-        if !self.model.shown && self.is_all_ready() {
-            self.show_all();
-            self.model.shown = true;
-            info!("All windows ready and shown.");
-        }
-
         if self.input.key_pressed(KeyCode::KeyD) {
-            self.model.debug = !self.model.debug;
+            model.debug = !model.debug;
         } else if self.input.key_pressed(KeyCode::KeyR) {
-            self.model.zoom = 1.0;
-            self.set_anchored(false);
-            self.model.captured = false;
-            self.model.selection = None;
+            model.zoom = 1.0;
+            self.set_anchored(false, model.mouse_pt);
+            model.captured = false;
+            model.selection = None;
         } else if self.input.key_pressed(KeyCode::Escape) {
+            model.close_requested = true;
             event_loop.exit();
         }
 
         match event {
-            WindowEvent::RedrawRequested => {
-                let render_state = self.renderer_contexts.get_by_id(id).unwrap();
-                let mut scene = Scene::new();
-
-                // Re-add the objects to draw to the scene.
-                add_shapes_to_scene(&mut scene);
-
-                // Get the RenderSurface (surface + config)
-                let surface = &render_state.surface;
-                let window = &render_state.window;
-
-                // Get the window size
-                let width = surface.config.width;
-                let height = surface.config.height;
-
-                // Get a handle to the device
-                let device_handle = &self.context.devices[surface.dev_id];
-
-                // Get the surface's texture
-                let surface_texture = surface
-                    .surface
-                    .get_current_texture()
-                    .expect("failed to get surface texture");
-
-                // Render to the surface's texture
-                self.renderers[surface.dev_id]
-                    .as_mut()
-                    .unwrap()
-                    .render_to_surface(
-                        &device_handle.device,
-                        &device_handle.queue,
-                        &scene,
-                        &surface_texture,
-                        &vello::RenderParams {
-                            base_color: Color::BLACK, // Background color
-                            width,
-                            height,
-                            antialiasing_method: AaConfig::Msaa16,
-                        },
-                    )
-                    .expect("failed to render to surface");
-
-                // Queue the texture to be presented on the surface
-                surface_texture.present();
-
-                device_handle
-                    .device
-                    .poll(wgpu::Maintain::Poll);
-                window.request_redraw();
-                println!("Redraw requested");
-
-                // scene.fill(
-                //     Fill::NonZero,
-                //     Affine::IDENTITY,
-                //     Color::rgba8(242, 140, 168, 255),
-                //     None,
-                //     &Circle::new((420.0, 200.0), 120.0),
-                // );
-
-                // // Render to your window/buffer/etc.
-                // // let renderer = renderer.renderer;
-                // let renderer = self.renderer_contexts.get_by_id(id).unwrap();
-                // let device = self
-                //     .context
-                //     .devices
-                //     .get(renderer.surface.dev_id)
-                //     .unwrap();
-
-                // let surface_texture = renderer
-                //     .surface
-                //     .surface
-                //     .get_current_texture()
-                //     .expect("failed to get surface texture");
-
-                // renderer
-                //     .renderer
-                //     .render_to_surface(
-                //         &device.device,
-                //         &device.queue,
-                //         &scene,
-                //         &surface_texture,
-                //         &RenderParams {
-                //             base_color: Color::BLACK, // Background color
-                //             width: renderer.surface.config.width,
-                //             height: renderer.surface.config.height,
-                //             antialiasing_method: AaConfig::Area,
-                //         },
-                //     )
-                //     .expect("Failed to render to surface");
-
-                // surface_texture.present();
-                // device.device.poll(wgpu::Maintain::Poll);
-
-                // renderer.window.request_redraw();
-                // info!("Window redrawn.");
+            WindowEvent::Resized(size) => {
+                // TODO?
             }
             WindowEvent::CloseRequested => {
+                model.close_requested = true;
                 event_loop.exit();
             }
             WindowEvent::MouseInput {
@@ -474,11 +299,36 @@ impl ApplicationHandler<UserEvent> for App<'_> {
                 button,
             } => {
                 if state == ElementState::Pressed && button == MouseButton::Left {
-                    let pt = self.model.mouse_pt;
-                    self.handle_mouse_down(pt);
+                    if model.captured {
+                        // let hit = model.button_panel.hit_test(pt);
+                        // if hit.is_size_handle() {
+                        //     model.mouse_state = MouseState::SizingSelection(hit);
+                        // } else if hit == HitTest::Content {
+                        //     model.mouse_state = MouseState::MovingSelection(self.selection.unwrap(), pt);
+                        // }
+                    } else {
+                        model.mouse_state = MouseState::StartSelection(model.mouse_pt);
+                    }
                 } else if state == ElementState::Released && button == MouseButton::Left {
-                    let pt = self.model.mouse_pt;
-                    self.handle_mouse_up(pt);
+                    match model.mouse_state {
+                        MouseState::StartSelection(_) => {
+                            model.selection = None;
+                        }
+                        MouseState::MakingSelection(start) => {
+                            model.zoom = 1.0;
+                            model.captured = true;
+                            model.selection = Some(ScreenRect::from_rounded_threshold(
+                                start.x,
+                                start.y,
+                                model.mouse_pt.x,
+                                model.mouse_pt.y,
+                            ));
+                            self.set_anchored(false, model.mouse_pt);
+                            // self.update_buttons();
+                        }
+                        _ => (),
+                    }
+                    model.mouse_state = MouseState::Up;
                 }
             }
             WindowEvent::CursorMoved {
@@ -489,20 +339,88 @@ impl ApplicationHandler<UserEvent> for App<'_> {
                 //     let pt = transform.pt_to_screen(pt.to_window_point());
                 //     model.handle_mouse_move(app, pt);
                 let pt = ScreenPointF::new(position.x, position.y);
-                self.handle_mouse_move(pt);
+
+                if self.mouse_anchored {
+                    let relative_anchor = self.mouse_anchor_pt - self.desktop_virtual_origin.to_vector();
+                    if relative_anchor != pt.to_i32() {
+                        let anchor_f = relative_anchor.to_f64();
+                        let x_delta = (pt.x - anchor_f.x) / model.zoom;
+                        let y_delta = (pt.y - anchor_f.y) / model.zoom;
+
+                        let mut mx = model.mouse_pt.x + x_delta;
+                        let mut my = model.mouse_pt.y + y_delta;
+
+                        let bounds = self
+                            .get_nearest_renderer(ScreenPointF::new(mx, my))
+                            .monitor_bounds
+                            .to_f64();
+
+                        // clip cursor to nearest monitor
+                        let left = bounds.left();
+                        let right = bounds.right();
+                        let top = bounds.top();
+                        let bottom = bounds.bottom();
+
+                        mx = mx.max(left).min(right - 0.001);
+                        my = my.max(top).min(bottom - 0.001);
+
+                        model.mouse_pt = ScreenPointF::new(mx, my);
+                        let _ = self
+                            .mouse
+                            .move_to(self.mouse_anchor_pt.x, self.mouse_anchor_pt.y);
+                    }
+                } else {
+                    model.mouse_pt = pt;
+                }
+
+                let pt = model.mouse_pt;
+                match model.mouse_state {
+                    MouseState::Up => (),
+                    MouseState::StartSelection(start) => {
+                        let dist = start.distance_to(pt);
+                        let drag_threshold = 10.0 / model.zoom;
+                        if dist > drag_threshold {
+                            model.mouse_state = MouseState::MakingSelection(start);
+                            model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
+                        }
+                    }
+                    MouseState::MakingSelection(start) => {
+                        model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
+                    }
+                    MouseState::MovingSelection(orig_rect, orig_point) => {
+                        let dx = (pt.x - orig_point.x) as i32;
+                        let dy = (pt.y - orig_point.y) as i32;
+                        let x1 = orig_rect.min_x() + dx;
+                        let y1 = orig_rect.min_y() + dy;
+                        let x2 = orig_rect.max_x() + dx;
+                        let y2 = orig_rect.max_y() + dy;
+                        model.selection = Some(ScreenRect::from_exact(x1, y1, x2, y2));
+                        // self.update_buttons();
+                    } // MouseState::SizingSelection(hit) => {
+                      //     if let Some(selection) = model.selection {
+                      //         let rect = hit.resize_rect(pt, selection);
+                      //         model.selection = Some(rect);
+                      //     }
+                      //     self.update_buttons();
+                      // }
+                }
+
+                // if model.captured {
+                //     self.set_cursor(app, Some(self.button_panel.hit_test(pt).to_cursor()));
+                // }
             }
             WindowEvent::MouseWheel {
                 device_id: _,
                 delta,
                 phase: _,
             } => {
-                if !self.model.captured {
+                if !model.captured {
                     let delta = match delta {
                         MouseScrollDelta::LineDelta(_, y) => y,
                         MouseScrollDelta::PixelDelta(pt) => pt.y as f32,
                     };
 
-                    let mut zoom = self.model.zoom;
+                    let mut zoom = model.zoom;
 
                     if self.input.held_shift() || self.input.held_control() {
                         if delta > 0.0 {
@@ -518,8 +436,8 @@ impl ApplicationHandler<UserEvent> for App<'_> {
                         }
                     }
 
-                    self.model.zoom = zoom.max(1.0).min(256.0);
-                    self.set_anchored(zoom > 1.0);
+                    model.zoom = zoom.max(1.0).min(256.0);
+                    self.set_anchored(zoom > 1.0, model.mouse_pt);
                 }
             }
             _ => (),
@@ -527,60 +445,58 @@ impl ApplicationHandler<UserEvent> for App<'_> {
     }
 }
 
-impl App<'_> {
+impl App {
+    fn print_time(&self, msg: &str) {
+        info!("[TIME {:?}] {}", Duration::from_millis(self.time.ms() as u64), msg);
+    }
+
     fn is_all_ready(&self) -> bool {
-        self.renderer_contexts
-            .iter()
-            .all(|r| r.ready)
+        self.renderers.iter().all(|r| r.ready)
     }
 
     fn show_all(&mut self) {
-        self.renderer_contexts
-            .iter_mut()
-            .for_each(|r| {
-                let window = &r.window;
-                // window.set_fullscreen(Some(Fullscreen::Borderless(Some(r.monitor_handle.clone()))));
-                window.set_visible(true);
-                if r.is_primary {
-                    window.focus_window();
-                }
-            });
+        self.renderers.iter_mut().for_each(|r| {
+            let window = &r.window;
+            window.set_fullscreen(Some(Fullscreen::Borderless(Some(r.monitor_handle.clone()))));
+            window.set_visible(true);
+            if r.is_primary {
+                window.focus_window();
+            }
+        });
     }
 
     fn set_cursor(&mut self, cursor: Option<CursorIcon>) {
-        self.renderer_contexts
-            .iter_mut()
-            .for_each(|r| {
-                let window = &r.window;
-                if let Some(cur) = cursor {
-                    window.set_cursor_visible(true);
-                    window.set_cursor(cur);
-                } else {
-                    window.set_cursor_visible(false);
-                }
-            });
+        self.renderers.iter_mut().for_each(|r| {
+            let window = &r.window;
+            if let Some(cur) = cursor {
+                window.set_cursor_visible(true);
+                window.set_cursor(cur);
+            } else {
+                window.set_cursor_visible(false);
+            }
+        });
     }
 
-    fn set_anchored(&mut self, anchored: bool) {
-        if anchored && !self.model.mouse_anchored {
-            self.model.mouse_anchored = true;
+    fn set_anchored(&mut self, anchored: bool, pt: ScreenPointF) {
+        if anchored && !self.mouse_anchored {
+            self.mouse_anchored = true;
             let _ = self
                 .mouse
-                .move_to(self.model.mouse_anchor_pt.x, self.model.mouse_anchor_pt.y);
-        } else if !anchored && self.model.mouse_anchored {
-            self.model.mouse_anchored = false;
-            let pt = self.model.mouse_pt.to_i32();
-            let relative = pt + self.model.desktop_virtual_origin.to_vector();
+                .move_to(self.mouse_anchor_pt.x, self.mouse_anchor_pt.y);
+        } else if !anchored && self.mouse_anchored {
+            self.mouse_anchored = false;
+            let pt = pt.to_i32();
+            let relative = pt + self.desktop_virtual_origin.to_vector();
             let _ = self.mouse.move_to(relative.x, relative.y);
         }
     }
 
     fn get_nearest_renderer(&self, pt: ScreenPointF) -> &RendererInfo {
-        self.renderer_contexts
+        self.renderers
             .iter()
             .find(|r| r.monitor_bounds.to_f64().contains(pt))
             .or_else(|| {
-                self.renderer_contexts.iter().min_by(|a, b| {
+                self.renderers.iter().min_by(|a, b| {
                     let a_dist = a
                         .monitor_bounds
                         .center()
@@ -596,133 +512,104 @@ impl App<'_> {
             })
             .unwrap()
     }
-
-    fn handle_mouse_move(&mut self, pt: ScreenPointF) {
-        if self.model.mouse_anchored {
-            let relative_anchor = self.model.mouse_anchor_pt - self.model.desktop_virtual_origin.to_vector();
-            if relative_anchor != pt.to_i32() {
-                let anchor_f = relative_anchor.to_f64();
-                let x_delta = (pt.x - anchor_f.x) / self.model.zoom;
-                let y_delta = (pt.y - anchor_f.y) / self.model.zoom;
-
-                let mut mx = self.model.mouse_pt.x + x_delta;
-                let mut my = self.model.mouse_pt.y + y_delta;
-
-                let bounds = self
-                    .get_nearest_renderer(ScreenPointF::new(mx, my))
-                    .monitor_bounds
-                    .to_f64();
-
-                // clip cursor to nearest monitor
-                let left = bounds.left();
-                let right = bounds.right();
-                let top = bounds.top();
-                let bottom = bounds.bottom();
-
-                mx = mx.max(left).min(right - 0.001);
-                my = my.max(top).min(bottom - 0.001);
-
-                self.model.mouse_pt = ScreenPointF::new(mx, my);
-                let _ = self
-                    .mouse
-                    .move_to(self.model.mouse_anchor_pt.x, self.model.mouse_anchor_pt.y);
-            }
-        } else {
-            self.model.mouse_pt = pt;
-        }
-
-        let pt = self.model.mouse_pt;
-        match self.model.mouse_state {
-            MouseState::Up => (),
-            MouseState::StartSelection(start) => {
-                let dist = start.distance_to(pt);
-                let drag_threshold = 10.0 / self.model.zoom;
-                if dist > drag_threshold {
-                    self.model.mouse_state = MouseState::MakingSelection(start);
-                    self.model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
-                }
-            }
-            MouseState::MakingSelection(start) => {
-                self.model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
-            }
-            MouseState::MovingSelection(orig_rect, orig_point) => {
-                let dx = (pt.x - orig_point.x) as i32;
-                let dy = (pt.y - orig_point.y) as i32;
-                let x1 = orig_rect.min_x() + dx;
-                let y1 = orig_rect.min_y() + dy;
-                let x2 = orig_rect.max_x() + dx;
-                let y2 = orig_rect.max_y() + dy;
-                self.model.selection = Some(ScreenRect::from_exact(x1, y1, x2, y2));
-                // self.update_buttons();
-            } // MouseState::SizingSelection(hit) => {
-              //     if let Some(selection) = model.selection {
-              //         let rect = hit.resize_rect(pt, selection);
-              //         model.selection = Some(rect);
-              //     }
-              //     self.update_buttons();
-              // }
-        }
-
-        // if model.captured {
-        //     self.set_cursor(app, Some(self.button_panel.hit_test(pt).to_cursor()));
-        // }
-    }
-
-    fn handle_mouse_down(&mut self, pt: ScreenPointF) {
-        if self.model.captured {
-            // let hit = model.button_panel.hit_test(pt);
-            // if hit.is_size_handle() {
-            //     model.mouse_state = MouseState::SizingSelection(hit);
-            // } else if hit == HitTest::Content {
-            //     model.mouse_state = MouseState::MovingSelection(self.selection.unwrap(), pt);
-            // }
-        } else {
-            self.model.mouse_state = MouseState::StartSelection(pt);
-        }
-    }
-
-    fn handle_mouse_up(&mut self, pt: ScreenPointF) {
-        match self.model.mouse_state {
-            MouseState::StartSelection(_) => {
-                self.model.selection = None;
-            }
-            MouseState::MakingSelection(start) => {
-                self.model.zoom = 1.0;
-                self.model.captured = true;
-                self.model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y));
-                self.set_anchored(false);
-                // self.update_buttons();
-            }
-            _ => (),
-        }
-        self.model.mouse_state = MouseState::Up;
-    }
-
-    // fn update_buttons(&mut self) {
-    //     if let Some(selection) = self.selection {
-    //         let renderer = self.get_nearest_renderer(selection.center().to_f64());
-    //         self.button_panel
-    //             .update(renderer.monitor_bounds, renderer.scale_factor, selection);
-    //     }
-    // }
 }
 
-pub fn run_app(backends: Option<Backends>, present_mode: wgpu::PresentMode) -> Result<()> {
-    info!("Starting application event loop...");
-    let context = RenderContext::new(backends);
+pub fn run_app() -> Result<()> {
+    info!("Application Starting...");
+
+    let gpu_device = Device::new().map_err(|e| anyhow!("Error creating GPU device: {:?}", e))?;
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
+    let time = Stopwatch::start_new();
+
+    info!("[TIME] Capturing: {:?}", Duration::from_millis(time.ms() as u64));
+
+    let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop()?;
+    let desktop_virtual_origin = desktop_bounds.top_left();
+    let vd_transform = Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop_virtual_origin.to_vector());
+    let desktop_bounds = vd_transform.outer_transformed_rect(&desktop_bounds);
+
+    // gpu_device.
+
+    // let desktop_color_image = Image::new(
+    //     desktop_color_image.into_raw().into(),
+    //     vello::peniko::Format::Rgba8,
+    //     desktop_bounds.width() as u32,
+    //     desktop_bounds.height() as u32,
+    // );
+
+    // let desktop_gray_image = Image::new(
+    //     desktop_gray_image.into_raw().into(),
+    //     vello::peniko::Format::Rgba8,
+    //     desktop_bounds.width() as u32,
+    //     desktop_bounds.height() as u32,
+    // );
+
+    info!("[TIME] Captured: {:?}", Duration::from_millis(time.ms() as u64));
+
+    let windows = XCapWindow::all()?;
+    let mut desktop_windows = Vec::new();
+
+    for window in windows {
+        let window_bounds = ScreenRect::from_xy_size(window.x(), window.y(), window.width() as i32, window.height() as i32);
+        let window_bounds = vd_transform.outer_transformed_rect(&window_bounds);
+        desktop_windows.push(DesktopWindowInfo {
+            title: window.title().to_string(),
+            window_bounds,
+            // capture: window.capture_image().ok(),
+            capture: None,
+        });
+    }
+
+    info!("[TIME] Windows Captured: {:?}", Duration::from_millis(time.ms() as u64));
+
+    let mouse = Mouse::new();
+    let mouse_pt = mouse
+        .get_position()
+        .map_err(|e| anyhow!("Error getting mouse position: {:?}", e))?;
+    let mouse_pt = ScreenPointF::new(mouse_pt.x as f64, mouse_pt.y as f64);
+
+    let monitors = XCapMonitor::all()?;
+    let primary = monitors
+        .iter()
+        .find(|m| m.is_primary())
+        .unwrap();
+
+    let primary_bounds = ScreenRect::from_exact(primary.x(), primary.y(), primary.width() as i32, primary.height() as i32);
+    let mouse_anchor_pt = primary_bounds.center();
+
+    let shared = SharedModel {
+        zoom: 1.0,
+        mouse_pt,
+        selection: None,
+        captured: false,
+        debug: false,
+        mouse_state: MouseState::Up,
+        close_requested: false,
+    };
 
     let mut app = App {
-        context,
-        model: Default::default(),
+        model: Arc::new(RwLock::new(shared)),
+        gpu_device,
+        time,
         event_proxy: event_loop.create_proxy(),
-        present_mode,
-        renderer_contexts: Vec::new(),
-        mouse: Mouse::new(),
-        model_initialized: false,
-        input: WinitInputHelper::new(),
         renderers: Vec::new(),
+        mouse,
+        shown: false,
+        desktop_color_image,
+        desktop_gray_image,
+        mouse_anchor_pt,
+        mouse_anchored: false,
+        windows: desktop_windows,
+        initialized: false,
+        input: WinitInputHelper::new(),
+        desktop_bounds,
+        accent_dark: Color::rgb8(0, 125, 180),
+        accent_light: Color::rgb8(0, 175, 240),
+        desktop_virtual_origin,
+        vd_transform,
     };
+
+    app.print_time("Begin EventLoop...");
 
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop.run_app(&mut app)?;
