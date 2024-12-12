@@ -24,24 +24,19 @@ use winapi::shared::dxgiformat::DXGI_FORMAT_R8G8B8A8_UNORM;
 use winapi::shared::minwindef::TRUE;
 use winapi::shared::winerror::{HRESULT, SUCCEEDED};
 use winapi::um::d2d1::{
-    D2D1CreateFactory, ID2D1Bitmap, ID2D1BitmapRenderTarget, ID2D1Brush, ID2D1EllipseGeometry,
-    ID2D1Geometry, ID2D1GeometrySink, ID2D1GradientStopCollection, ID2D1Image, ID2D1Layer,
-    ID2D1PathGeometry, ID2D1RectangleGeometry, ID2D1RenderTarget, ID2D1RoundedRectangleGeometry,
-    ID2D1SolidColorBrush, ID2D1StrokeStyle, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_BEZIER_SEGMENT,
-    D2D1_BITMAP_INTERPOLATION_MODE, D2D1_BRUSH_PROPERTIES, D2D1_COLOR_F,
-    D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE, D2D1_DEBUG_LEVEL_NONE, D2D1_DEBUG_LEVEL_WARNING,
-    D2D1_DRAW_TEXT_OPTIONS, D2D1_EXTEND_MODE_CLAMP, D2D1_FACTORY_OPTIONS,
-    D2D1_FACTORY_TYPE_MULTI_THREADED, D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_BEGIN_HOLLOW,
-    D2D1_FIGURE_END_CLOSED, D2D1_FIGURE_END_OPEN, D2D1_FILL_MODE_ALTERNATE, D2D1_FILL_MODE_WINDING,
-    D2D1_GAMMA_2_2, D2D1_GRADIENT_STOP, D2D1_LAYER_OPTIONS_NONE, D2D1_LAYER_PARAMETERS,
-    D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES, D2D1_MATRIX_3X2_F, D2D1_POINT_2F, D2D1_POINT_2U,
-    D2D1_QUADRATIC_BEZIER_SEGMENT, D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES, D2D1_RECT_F, D2D1_RECT_U,
-    D2D1_SIZE_F, D2D1_SIZE_U, D2D1_STROKE_STYLE_PROPERTIES,
+    D2D1CreateFactory, ID2D1Bitmap, ID2D1BitmapRenderTarget, ID2D1Brush, ID2D1EllipseGeometry, ID2D1Geometry, ID2D1GeometrySink,
+    ID2D1GradientStopCollection, ID2D1Image, ID2D1Layer, ID2D1PathGeometry, ID2D1RectangleGeometry, ID2D1RenderTarget,
+    ID2D1RoundedRectangleGeometry, ID2D1SolidColorBrush, ID2D1StrokeStyle, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_BEZIER_SEGMENT,
+    D2D1_BITMAP_INTERPOLATION_MODE, D2D1_BRUSH_PROPERTIES, D2D1_COLOR_F, D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE, D2D1_DEBUG_LEVEL_NONE,
+    D2D1_DEBUG_LEVEL_WARNING, D2D1_DRAW_TEXT_OPTIONS, D2D1_EXTEND_MODE_CLAMP, D2D1_FACTORY_OPTIONS, D2D1_FACTORY_TYPE_MULTI_THREADED,
+    D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_BEGIN_HOLLOW, D2D1_FIGURE_END_CLOSED, D2D1_FIGURE_END_OPEN, D2D1_FILL_MODE_ALTERNATE,
+    D2D1_FILL_MODE_WINDING, D2D1_GAMMA_2_2, D2D1_GRADIENT_STOP, D2D1_LAYER_OPTIONS_NONE, D2D1_LAYER_PARAMETERS,
+    D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES, D2D1_MATRIX_3X2_F, D2D1_POINT_2F, D2D1_POINT_2U, D2D1_QUADRATIC_BEZIER_SEGMENT,
+    D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES, D2D1_RECT_F, D2D1_RECT_U, D2D1_SIZE_F, D2D1_SIZE_U, D2D1_STROKE_STYLE_PROPERTIES,
 };
 use winapi::um::d2d1_1::{
-    ID2D1Bitmap1, ID2D1Device, ID2D1DeviceContext, ID2D1Effect, ID2D1Factory1,
-    D2D1_BITMAP_OPTIONS_NONE, D2D1_BITMAP_OPTIONS_TARGET, D2D1_BITMAP_PROPERTIES1,
-    D2D1_COMPOSITE_MODE, D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_INTERPOLATION_MODE,
+    ID2D1Bitmap1, ID2D1Device, ID2D1DeviceContext, ID2D1Effect, ID2D1Factory1, D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1_BITMAP_OPTIONS_NONE,
+    D2D1_BITMAP_OPTIONS_TARGET, D2D1_BITMAP_PROPERTIES1, D2D1_COMPOSITE_MODE, D2D1_DEVICE_CONTEXT_OPTIONS_NONE, D2D1_INTERPOLATION_MODE,
     D2D1_PROPERTY_TYPE_FLOAT,
 };
 use winapi::um::d2d1_1::{D2D1_PRIMITIVE_BLEND_COPY, D2D1_PRIMITIVE_BLEND_SOURCE_OVER};
@@ -228,11 +223,15 @@ pub(crate) fn wrap_unit(hr: HRESULT) -> Result<(), Error> {
 }
 
 fn optional<T>(val: &Option<T>) -> *const T {
-    val.as_ref().map(|x| x as *const T).unwrap_or(null())
+    val.as_ref()
+        .map(|x| x as *const T)
+        .unwrap_or(null())
 }
 
 fn stroke_style_to_d2d(style: Option<&StrokeStyle>) -> *mut ID2D1StrokeStyle {
-    style.map(|ss| ss.0.as_raw()).unwrap_or(null_mut())
+    style
+        .map(|ss| ss.0.as_raw())
+        .unwrap_or(null_mut())
 }
 
 impl D2DFactory {
@@ -278,7 +277,11 @@ impl D2DFactory {
     pub fn create_path_geometry(&self) -> Result<PathGeometry, Error> {
         unsafe {
             let mut ptr = null_mut();
-            let hr = self.0.deref().deref().CreatePathGeometry(&mut ptr);
+            let hr = self
+                .0
+                .deref()
+                .deref()
+                .CreatePathGeometry(&mut ptr);
             wrap(hr, ptr, PathGeometry)
         }
     }
@@ -295,11 +298,7 @@ impl D2DFactory {
         }
     }
 
-    pub fn create_round_rect_geometry(
-        &self,
-        rect: Rect,
-        radius: f64,
-    ) -> Result<RoundedRectangleGeometry, Error> {
+    pub fn create_round_rect_geometry(&self, rect: Rect, radius: f64) -> Result<RoundedRectangleGeometry, Error> {
         unsafe {
             let mut ptr = null_mut();
             let hr = self
@@ -323,21 +322,16 @@ impl D2DFactory {
         }
     }
 
-    pub fn create_stroke_style(
-        &self,
-        props: &D2D1_STROKE_STYLE_PROPERTIES,
-        dashes: Option<&[f32]>,
-    ) -> Result<StrokeStyle, Error> {
+    pub fn create_stroke_style(&self, props: &D2D1_STROKE_STYLE_PROPERTIES, dashes: Option<&[f32]>) -> Result<StrokeStyle, Error> {
         unsafe {
             let mut ptr = null_mut();
             let dashes_len = dashes.map(|d| d.len()).unwrap_or(0);
             assert!(dashes_len <= 0xffff_ffff);
-            let hr = self.0.deref().deref().CreateStrokeStyle(
-                props,
-                dashes.map(|d| d.as_ptr()).unwrap_or(null()),
-                dashes_len as u32,
-                &mut ptr,
-            );
+            let hr =
+                self.0
+                    .deref()
+                    .deref()
+                    .CreateStrokeStyle(props, dashes.map(|d| d.as_ptr()).unwrap_or(null()), dashes_len as u32, &mut ptr);
             wrap(hr, ptr, StrokeStyle)
         }
     }
@@ -366,6 +360,13 @@ const DEFAULT_BRUSH_PROPERTIES: D2D1_BRUSH_PROPERTIES = D2D1_BRUSH_PROPERTIES {
     opacity: 1.0,
     transform: IDENTITY_MATRIX_3X2_F,
 };
+
+bitflags::bitflags! {
+    pub struct BitmapOptions: u32 {
+        const TARGET = D2D1_BITMAP_OPTIONS_TARGET;
+        const CANNOT_DRAW = D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    }
+}
 
 impl DeviceContext {
     /// Create a new device context from an existing COM object.
@@ -406,6 +407,7 @@ impl DeviceContext {
         &self,
         dxgi: &ComPtr<IDXGISurface>,
         dpi_scale: f32,
+        options: BitmapOptions,
     ) -> Result<Bitmap, Error> {
         let mut ptr = null_mut();
         let props = D2D1_BITMAP_PROPERTIES1 {
@@ -415,7 +417,7 @@ impl DeviceContext {
             },
             dpiX: 96.0 * dpi_scale,
             dpiY: 96.0 * dpi_scale,
-            bitmapOptions: D2D1_BITMAP_OPTIONS_TARGET,
+            bitmapOptions: options.bits(),
             colorContext: null_mut(),
         };
         let hr = self
@@ -432,9 +434,12 @@ impl DeviceContext {
     /// Set the target for the device context.
     ///
     /// Useful for rendering into bitmaps.
-    pub fn set_target(&mut self, target: &Bitmap) {
-        assert!(!target.empty_image);
-        unsafe { self.0.SetTarget(target.inner.as_raw() as *mut ID2D1Image) }
+    pub fn set_target(&mut self, target: Option<&Bitmap>) {
+        let image = match target {
+            Some(target) => target.inner.as_raw() as *mut ID2D1Image,
+            None => null_mut(),
+        };
+        unsafe { self.0.SetTarget(image) }
     }
 
     /// Set the dpi scale.
@@ -442,7 +447,8 @@ impl DeviceContext {
     /// Mostly useful when rendering into bitmaps.
     pub fn set_dpi_scale(&mut self, dpi_scale: f32) {
         unsafe {
-            self.0.SetDpi(96. * dpi_scale, 96. * dpi_scale);
+            self.0
+                .SetDpi(96. * dpi_scale, 96. * dpi_scale);
         }
     }
 
@@ -465,6 +471,7 @@ impl DeviceContext {
     pub fn begin_draw(&mut self) {
         unsafe {
             self.0.BeginDraw();
+            self.0.Clear(0 as *const _);
         }
     }
 
@@ -481,7 +488,9 @@ impl DeviceContext {
     /// End drawing and return a [`DrawRestarter`] which will restart drawing when dropped.
     pub fn end_draw_temporarily(&mut self) -> Result<DrawRestarter, Error> {
         self.end_draw()?;
-        Ok(DrawRestarter { context: self })
+        Ok(DrawRestarter {
+            context: self,
+        })
     }
 
     /// Clip axis aligned clip
@@ -533,45 +542,32 @@ impl DeviceContext {
         }
     }
 
-    pub(crate) fn fill_geometry(
-        &mut self,
-        geom: &Geometry,
-        brush: &Brush,
-        opacity_brush: Option<&Brush>,
-    ) {
+    pub(crate) fn fill_geometry(&mut self, geom: &Geometry, brush: &Brush, opacity_brush: Option<&Brush>) {
         unsafe {
             self.0.FillGeometry(
                 geom.0.as_raw(),
                 brush.as_raw(),
-                opacity_brush.map(|b| b.as_raw()).unwrap_or(null_mut()),
+                opacity_brush
+                    .map(|b| b.as_raw())
+                    .unwrap_or(null_mut()),
             );
         }
     }
 
-    pub(crate) fn draw_geometry(
-        &mut self,
-        geom: &Geometry,
-        brush: &Brush,
-        width: f32,
-        style: Option<&StrokeStyle>,
-    ) {
+    pub(crate) fn draw_geometry(&mut self, geom: &Geometry, brush: &Brush, width: f32, style: Option<&StrokeStyle>) {
         unsafe {
             self.0.DrawGeometry(
                 geom.0.as_raw(),
                 brush.as_raw(),
                 width,
-                style.map(|ss| ss.0.as_raw()).unwrap_or(null_mut()),
+                style
+                    .map(|ss| ss.0.as_raw())
+                    .unwrap_or(null_mut()),
             );
         }
     }
 
-    pub(crate) fn draw_line(
-        &self,
-        line: Line,
-        brush: &Brush,
-        width: f32,
-        style: Option<&StrokeStyle>,
-    ) {
+    pub(crate) fn draw_line(&self, line: Line, brush: &Brush, width: f32, style: Option<&StrokeStyle>) {
         unsafe {
             self.0.DrawLine(
                 to_point2f(line.p0),
@@ -583,62 +579,32 @@ impl DeviceContext {
         }
     }
 
-    pub(crate) fn draw_rect(
-        &self,
-        rect: Rect,
-        brush: &Brush,
-        width: f32,
-        style: Option<&StrokeStyle>,
-    ) {
+    pub(crate) fn draw_rect(&self, rect: Rect, brush: &Brush, width: f32, style: Option<&StrokeStyle>) {
         unsafe {
-            self.0.DrawRectangle(
-                &rect_to_rectf(rect),
-                brush.as_raw(),
-                width,
-                stroke_style_to_d2d(style),
-            );
+            self.0
+                .DrawRectangle(&rect_to_rectf(rect), brush.as_raw(), width, stroke_style_to_d2d(style));
         }
     }
 
-    pub(crate) fn draw_rounded_rect(
-        &mut self,
-        rect: Rect,
-        radius: f64,
-        brush: &Brush,
-        width: f32,
-        style: Option<&StrokeStyle>,
-    ) {
+    pub(crate) fn draw_rounded_rect(&mut self, rect: Rect, radius: f64, brush: &Brush, width: f32, style: Option<&StrokeStyle>) {
         let d2d_rounded_rect = rounded_rect_to_d2d(rect, radius);
         unsafe {
-            self.0.DrawRoundedRectangle(
-                &d2d_rounded_rect,
-                brush.as_raw(),
-                width,
-                stroke_style_to_d2d(style),
-            );
+            self.0
+                .DrawRoundedRectangle(&d2d_rounded_rect, brush.as_raw(), width, stroke_style_to_d2d(style));
         }
     }
 
-    pub(crate) fn draw_circle(
-        &self,
-        circle: Circle,
-        brush: &Brush,
-        width: f32,
-        style: Option<&StrokeStyle>,
-    ) {
+    pub(crate) fn draw_circle(&self, circle: Circle, brush: &Brush, width: f32, style: Option<&StrokeStyle>) {
         unsafe {
-            self.0.DrawEllipse(
-                &circle_to_d2d(circle),
-                brush.as_raw(),
-                width,
-                stroke_style_to_d2d(style),
-            );
+            self.0
+                .DrawEllipse(&circle_to_d2d(circle), brush.as_raw(), width, stroke_style_to_d2d(style));
         }
     }
 
     pub(crate) fn fill_rect(&self, rect: Rect, brush: &Brush) {
         unsafe {
-            self.0.FillRectangle(&rect_to_rectf(rect), brush.as_raw());
+            self.0
+                .FillRectangle(&rect_to_rectf(rect), brush.as_raw());
         }
     }
 
@@ -652,7 +618,8 @@ impl DeviceContext {
 
     pub(crate) fn fill_circle(&self, circle: Circle, brush: &Brush) {
         unsafe {
-            self.0.FillEllipse(&circle_to_d2d(circle), brush.as_raw());
+            self.0
+                .FillEllipse(&circle_to_d2d(circle), brush.as_raw());
         }
     }
 
@@ -681,7 +648,10 @@ impl DeviceContext {
                 opacityBrush: null_mut(),
                 layerOptions: D2D1_LAYER_OPTIONS_NONE,
             };
-            self.0.deref().deref().PushLayer(&params, layer.0.as_raw());
+            self.0
+                .deref()
+                .deref()
+                .PushLayer(&params, layer.0.as_raw());
         }
     }
 
@@ -703,10 +673,7 @@ impl DeviceContext {
         }
     }
 
-    pub(crate) fn create_gradient_stops(
-        &mut self,
-        stops: &[D2D1_GRADIENT_STOP],
-    ) -> Result<GradientStopCollection, Error> {
+    pub(crate) fn create_gradient_stops(&mut self, stops: &[D2D1_GRADIENT_STOP]) -> Result<GradientStopCollection, Error> {
         unsafe {
             // Should this assert or should we return an overflow error? Super
             // unlikely in either case.
@@ -714,13 +681,11 @@ impl DeviceContext {
             let mut ptr = null_mut();
             // The `deref` is because there is a method of the same name in DeviceContext
             // (with fancier color space controls). We'll take the vanilla one for now.
-            let hr = self.0.deref().deref().CreateGradientStopCollection(
-                stops.as_ptr(),
-                stops.len() as u32,
-                D2D1_GAMMA_2_2,
-                D2D1_EXTEND_MODE_CLAMP,
-                &mut ptr,
-            );
+            let hr = self
+                .0
+                .deref()
+                .deref()
+                .CreateGradientStopCollection(stops.as_ptr(), stops.len() as u32, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &mut ptr);
             wrap(hr, ptr, GradientStopCollection)
         }
     }
@@ -733,12 +698,9 @@ impl DeviceContext {
     ) -> Result<Brush, Error> {
         unsafe {
             let mut ptr = null_mut();
-            let hr = self.0.CreateLinearGradientBrush(
-                props,
-                &DEFAULT_BRUSH_PROPERTIES,
-                stops.0.as_raw(),
-                &mut ptr,
-            );
+            let hr = self
+                .0
+                .CreateLinearGradientBrush(props, &DEFAULT_BRUSH_PROPERTIES, stops.0.as_raw(), &mut ptr);
             wrap(hr, ptr, |p| Brush(p.up()))
         }
     }
@@ -750,24 +712,15 @@ impl DeviceContext {
     ) -> Result<Brush, Error> {
         unsafe {
             let mut ptr = null_mut();
-            let hr = self.0.CreateRadialGradientBrush(
-                props,
-                &DEFAULT_BRUSH_PROPERTIES,
-                stops.0.as_raw(),
-                &mut ptr,
-            );
+            let hr = self
+                .0
+                .CreateRadialGradientBrush(props, &DEFAULT_BRUSH_PROPERTIES, stops.0.as_raw(), &mut ptr);
             wrap(hr, ptr, |p| Brush(p.up()))
         }
     }
 
     // Buf is always interpreted as RGBA32 premultiplied.
-    pub(crate) fn create_bitmap(
-        &mut self,
-        width: usize,
-        height: usize,
-        buf: &[u8],
-        alpha_mode: D2D1_ALPHA_MODE,
-    ) -> Result<Bitmap, Error> {
+    pub(crate) fn create_bitmap(&mut self, width: usize, height: usize, buf: &[u8], alpha_mode: D2D1_ALPHA_MODE) -> Result<Bitmap, Error> {
         // Maybe using TryInto would be more Rust-like.
         // Note: value is set so that multiplying by 4 (for pitch) is valid.
         assert!(width != 0 && width <= 0x3fff_ffff);
@@ -790,13 +743,10 @@ impl DeviceContext {
         let pitch = (width * 4) as u32;
         unsafe {
             let mut ptr = null_mut();
-            let hr = self.0.deref().CreateBitmap(
-                size,
-                buf.as_ptr() as *const c_void,
-                pitch,
-                &props,
-                &mut ptr,
-            );
+            let hr = self
+                .0
+                .deref()
+                .CreateBitmap(size, buf.as_ptr() as *const c_void, pitch, &props, &mut ptr);
             wrap(hr, ptr, |ptr| Bitmap {
                 inner: ptr,
                 empty_image: false,
@@ -804,12 +754,7 @@ impl DeviceContext {
         }
     }
 
-    pub(crate) fn create_blank_bitmap(
-        &mut self,
-        width: usize,
-        height: usize,
-        dpi_scale: f32,
-    ) -> Result<Bitmap, Error> {
+    pub(crate) fn create_blank_bitmap(&mut self, width: usize, height: usize, dpi_scale: f32) -> Result<Bitmap, Error> {
         // Maybe using TryInto would be more Rust-like.
         // Note: value is set so that multiplying by 4 (for pitch) is valid.
         assert!(width != 0 && width <= 0x3fff_ffff);
@@ -874,13 +819,7 @@ impl DeviceContext {
         }
     }
 
-    pub(crate) fn draw_text_layout(
-        &mut self,
-        origin: D2D1_POINT_2F,
-        layout: &TextLayout,
-        brush: &Brush,
-        options: D2D1_DRAW_TEXT_OPTIONS,
-    ) {
+    pub(crate) fn draw_text_layout(&mut self, origin: D2D1_POINT_2F, layout: &TextLayout, brush: &Brush, options: D2D1_DRAW_TEXT_OPTIONS) {
         unsafe {
             self.0
                 .DrawTextLayout(origin, layout.get_raw(), brush.as_raw(), options);
@@ -904,7 +843,9 @@ impl DeviceContext {
                 dst_rect,
                 opacity,
                 interp_mode,
-                src_rect.map(|r| r as *const _).unwrap_or(null()),
+                src_rect
+                    .map(|r| r as *const _)
+                    .unwrap_or(null()),
             );
         }
     }
@@ -956,11 +897,7 @@ impl DeviceContext {
 
     // Note: the pixel size is not specified. As a potential future optimization,
     // we can be more sophisticated in choosing a pixel size.
-    pub(crate) fn create_compatible_render_target(
-        &mut self,
-        width_f: f32,
-        height_f: f32,
-    ) -> Result<BitmapRenderTarget, Error> {
+    pub(crate) fn create_compatible_render_target(&mut self, width_f: f32, height_f: f32) -> Result<BitmapRenderTarget, Error> {
         unsafe {
             let mut ptr = null_mut();
             let size_f = D2D1_SIZE_F {
@@ -975,9 +912,9 @@ impl DeviceContext {
                 alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
             };
             let options = D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE;
-            let hr =
-                self.0
-                    .CreateCompatibleRenderTarget(&size_f, null(), &format, options, &mut ptr);
+            let hr = self
+                .0
+                .CreateCompatibleRenderTarget(&size_f, null(), &format, options, &mut ptr);
             wrap(hr, ptr, BitmapRenderTarget)
         }
     }
@@ -1009,12 +946,7 @@ impl<'a> GeometrySink<'a> {
         }
     }
 
-    pub fn add_bezier(
-        &mut self,
-        point1: D2D1_POINT_2F,
-        point2: D2D1_POINT_2F,
-        point3: D2D1_POINT_2F,
-    ) {
+    pub fn add_bezier(&mut self, point1: D2D1_POINT_2F, point2: D2D1_POINT_2F, point3: D2D1_POINT_2F) {
         let seg = D2D1_BEZIER_SEGMENT {
             point1,
             point2,
@@ -1026,7 +958,10 @@ impl<'a> GeometrySink<'a> {
     }
 
     pub fn add_quadratic_bezier(&mut self, point1: D2D1_POINT_2F, point2: D2D1_POINT_2F) {
-        let seg = D2D1_QUADRATIC_BEZIER_SEGMENT { point1, point2 };
+        let seg = D2D1_QUADRATIC_BEZIER_SEGMENT {
+            point1,
+            point2,
+        };
         unsafe {
             self.ptr.AddQuadraticBezier(&seg);
         }
@@ -1051,11 +986,7 @@ impl<'a> GeometrySink<'a> {
 
     pub fn end_figure(&mut self, is_closed: bool) {
         unsafe {
-            let figure_end = if is_closed {
-                D2D1_FIGURE_END_CLOSED
-            } else {
-                D2D1_FIGURE_END_OPEN
-            };
+            let figure_end = if is_closed { D2D1_FIGURE_END_CLOSED } else { D2D1_FIGURE_END_OPEN };
             self.ptr.EndFigure(figure_end);
         }
     }
@@ -1072,15 +1003,11 @@ impl Bitmap {
         unsafe { self.inner.GetSize() }
     }
 
-    pub(crate) fn copy_from_render_target(
-        &mut self,
-        dest_point: D2D1_POINT_2U,
-        rt: &mut DeviceContext,
-        src_rect: D2D1_RECT_U,
-    ) {
+    pub(crate) fn copy_from_render_target(&mut self, dest_point: D2D1_POINT_2U, rt: &mut DeviceContext, src_rect: D2D1_RECT_U) {
         unsafe {
             let rt = rt.get_raw() as *mut _;
-            self.inner.CopyFromRenderTarget(&dest_point, rt, &src_rect);
+            self.inner
+                .CopyFromRenderTarget(&dest_point, rt, &src_rect);
         }
     }
 }

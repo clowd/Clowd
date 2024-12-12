@@ -21,6 +21,7 @@ piet = { workspace = true }
 utf16_lit = "2.0.2"
 associative-cache = "2.0.0"
 raw-window-handle = "0.6"
+bitflags = "2.6"
 
 wio = "0.2.2"
 winapi = { version = "0.3.9", features = [
@@ -34,6 +35,7 @@ winapi = { version = "0.3.9", features = [
     "dxgi1_2",
     "dxgi1_3",
     "winnls",
+    "synchapi",
 ] }
 dwrote = { version = "0.11.2", default-features = false }
 

@@ -9,6 +9,8 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
+use d2d::BitmapOptions;
+use d3d::DxgiSwapchain2;
 /// For saving to file functionality
 #[cfg(feature = "png")]
 use png::{ColorType, Encoder};
@@ -17,9 +19,7 @@ use png::{ColorType, Encoder};
 use piet::util;
 use piet::{ImageBuf, ImageFormat};
 use piet_direct2d::d2d::{Bitmap, Brush as D2DBrush};
-use piet_direct2d::d3d::{
-    D3D11Device, D3D11DeviceContext, D3D11Texture2D, TextureMode, DXGI_MAP_READ,
-};
+use piet_direct2d::d3d::{D3D11Device, D3D11DeviceContext, D3D11Texture2D, TextureMode, DXGI_MAP_READ};
 #[doc(hidden)]
 pub use piet_direct2d::*;
 use raw_window_handle::RawWindowHandle;
@@ -73,14 +73,15 @@ pub struct BitmapTarget<'a> {
     context: D2DDeviceContext,
 }
 
-pub struct DeviceTarget<'a> {
-    width: usize,
-    height: usize,
+#[allow(dead_code)]
+pub struct WindowTarget<'a> {
     d2d: &'a D2DFactory,
     dwrite: &'a DwriteFactory,
     d3d: &'a D3D11Device,
     d3d_ctx: &'a D3D11DeviceContext,
     context: D2DDeviceContext,
+    swapchain: DxgiSwapchain2,
+    pix_scale: f64,
 }
 
 impl Device {
@@ -96,7 +97,10 @@ impl Device {
         let (d3d, d3d_ctx) = D3D11Device::create().unwrap();
 
         // Create the D2D Device
-        let device = unsafe { d2d.create_device(d3d.as_dxgi().unwrap().as_raw()).unwrap() };
+        let device = unsafe {
+            d2d.create_device(d3d.as_dxgi().unwrap().as_raw())
+                .unwrap()
+        };
 
         Ok(Device {
             d2d,
@@ -107,33 +111,22 @@ impl Device {
         })
     }
 
-    pub fn surface_target<T: Into<RawWindowHandle>>(
-        &mut self,
-        hwnd: T,
-        width: usize,
-        height: usize,
-        pix_scale: f64,
-    ) -> Result<DeviceTarget, piet::Error> {
-
-       
-
-        let mut context = self.device.create_device_context().unwrap();
-        let swapchain = unsafe { self.d3d.create_swapchain_from_hwnd(hwnd).unwrap() };
-
-        swapchain.get_buffer()
-
-
-        todo!();
-
+    pub fn window_target<T: Into<RawWindowHandle>>(&mut self, hwnd: T, pix_scale: f64) -> Result<WindowTarget, piet::Error> {
+        let context = self.device.create_device_context()?;
+        let swapchain = unsafe { self.d3d.create_swapchain_from_hwnd(hwnd) }.map_err(|e| piet::Error::BackendError(Box::new(e)))?;
+        Ok(WindowTarget {
+            d2d: &self.d2d,
+            dwrite: &self.dwrite,
+            d3d: &self.d3d,
+            d3d_ctx: &self.d3d_ctx,
+            context,
+            swapchain,
+            pix_scale,
+        })
     }
 
     /// Create a new bitmap target.
-    pub fn bitmap_target(
-        &mut self,
-        width: usize,
-        height: usize,
-        pix_scale: f64,
-    ) -> Result<BitmapTarget, piet::Error> {
+    pub fn bitmap_target(&mut self, width: usize, height: usize, pix_scale: f64) -> Result<BitmapTarget, piet::Error> {
         let mut context = self.device.create_device_context().unwrap();
 
         // Create a texture to render to
@@ -145,11 +138,11 @@ impl Device {
         // Bind the backing texture to a D2D Bitmap
         let target = unsafe {
             context
-                .create_bitmap_from_dxgi(&tex.as_dxgi(), pix_scale as f32)
+                .create_bitmap_from_dxgi(&tex.as_dxgi(), pix_scale as f32, BitmapOptions::TARGET)
                 .unwrap()
         };
 
-        context.set_target(&target);
+        context.set_target(Some(&target));
         // TODO ask about this? it was in basic.rs, but not here
         context.set_dpi_scale(pix_scale as f32);
         context.begin_draw();
@@ -164,6 +157,29 @@ impl Device {
             tex,
             context,
         })
+    }
+}
+
+impl<'a> WindowTarget<'a> {
+    pub fn begin_draw(&mut self) -> D2DRenderContext {
+        let backbuffer = self.swapchain.get_buffer().unwrap();
+        let target = unsafe {
+            self.context
+                .create_bitmap_from_dxgi(&backbuffer.as_dxgi(), 1.0, BitmapOptions::TARGET | BitmapOptions::CANNOT_DRAW)
+                .unwrap()
+        };
+        self.context.set_target(Some(&target));
+        self.swapchain.wait_sync(1000);
+        self.context.begin_draw();
+
+        let text = D2DText::new_with_shared_fonts(self.dwrite.clone(), None);
+        D2DRenderContext::new(self.d2d, text, &mut self.context)
+    }
+
+    pub fn end_draw(&mut self, _dc: D2DRenderContext) {
+        self.context.end_draw().unwrap();
+        self.swapchain.present().unwrap();
+        self.context.set_target(None);
     }
 }
 
@@ -194,11 +210,7 @@ impl<'a> BitmapTarget<'a> {
     /// and doesn't write anything.
     ///
     /// Note: caller is responsible for making sure the requested `ImageFormat` is supported.
-    pub fn copy_raw_pixels(
-        &mut self,
-        fmt: ImageFormat,
-        buf: &mut [u8],
-    ) -> Result<usize, piet::Error> {
+    pub fn copy_raw_pixels(&mut self, fmt: ImageFormat, buf: &mut [u8]) -> Result<usize, piet::Error> {
         // TODO: convert other formats.
         if fmt != ImageFormat::RgbaPremul {
             return Err(piet::Error::NotSupported);
@@ -293,7 +305,9 @@ mod tests {
         piet.clip(Rect::ZERO);
         piet.finish().unwrap();
         std::mem::drop(piet);
-        target.to_image_buf(ImageFormat::RgbaPremul).unwrap();
+        target
+            .to_image_buf(ImageFormat::RgbaPremul)
+            .unwrap();
     }
 
     #[test]

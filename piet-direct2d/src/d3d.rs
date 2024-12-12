@@ -14,6 +14,7 @@ use winapi::shared::dxgi1_2::{self, IDXGIFactory2};
 use winapi::shared::dxgi1_3::IDXGISwapChain2;
 use winapi::shared::dxgiformat::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN};
 use winapi::shared::dxgitype::{DXGI_SAMPLE_DESC, DXGI_USAGE_RENDER_TARGET_OUTPUT};
+use winapi::shared::minwindef::TRUE;
 use winapi::shared::winerror::{HRESULT, SUCCEEDED};
 use winapi::um::d3d11::{
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_BIND_FLAG, D3D11_BIND_RENDER_TARGET,
@@ -21,6 +22,7 @@ use winapi::um::d3d11::{
     D3D11_TEXTURE2D_DESC, D3D11_USAGE, D3D11_USAGE_DEFAULT, D3D11_USAGE_STAGING,
 };
 use winapi::um::d3dcommon::D3D_DRIVER_TYPE_HARDWARE;
+use winapi::um::synchapi::WaitForSingleObjectEx;
 use winapi::Interface;
 
 use wio::com::ComPtr;
@@ -262,6 +264,10 @@ impl DxgiSwapchain2 {
                 Err(Error(hr))
             }
         }
+    }
+
+    pub fn wait_sync(&self, ms_timeout: u32) {
+        unsafe { WaitForSingleObjectEx(self.0.GetFrameLatencyWaitableObject(), ms_timeout, TRUE) };
     }
 }
 
