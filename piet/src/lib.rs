@@ -47,9 +47,6 @@ mod render_context;
 mod shapes;
 mod text;
 
-#[cfg(feature = "samples")]
-pub mod samples;
-
 pub use crate::color::*;
 pub use crate::conv::*;
 pub use crate::error::*;
