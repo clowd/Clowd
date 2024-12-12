@@ -4,8 +4,7 @@ mod input_helper;
 mod logging;
 mod render_context;
 mod screenshot;
-
-use vello::wgpu::{self, Backends};
+mod backend;
 
 #[macro_use]
 extern crate log;
@@ -15,7 +14,7 @@ extern crate anyhow;
 
 fn main() {
     let _ = logging::setup_logging("capture", None, true, false);
-    app::run_app(Some(Backends::DX12), wgpu::PresentMode::AutoNoVsync).unwrap();
+    app::run_app().unwrap();
 }
 
 // fn view(app: &App, model: &Model, frame: Frame) {
