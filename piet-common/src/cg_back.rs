@@ -6,12 +6,21 @@
 
 //! Support for piet CoreGraphics back-end.
 
-use std::marker::PhantomData;
 use std::path::Path;
+use std::{ffi::c_void, marker::PhantomData};
 #[cfg(feature = "png")]
 use std::{fs::File, io::BufWriter};
+use core_graphics::sys::CGContext;
+use foreign_types_shared::ForeignTypeRef;
 
+use cocoa::appkit::NSImage;
+use cocoa::base::{id, nil};
+use cocoa::foundation::NSAutoreleasePool;
+use core_graphics::context::CGContextRef;
 use core_graphics::{color_space::CGColorSpace, context::CGContext};
+use objc2::rc::Id;
+use objc2::{class, msg_send, msg_send_id};
+use objc2_app_kit::NSGraphicsContext;
 #[cfg(feature = "png")]
 use png::{ColorType, Encoder};
 
@@ -20,6 +29,7 @@ use piet::util;
 use piet::{Error, ImageBuf, ImageFormat};
 #[doc(hidden)]
 pub use piet_coregraphics::*;
+use raw_window_handle::RawWindowHandle;
 
 /// The `RenderContext` for the CoreGraphics backend, which is selected.
 pub type Piet<'a> = CoreGraphicsContext<'a>;
@@ -65,6 +75,10 @@ pub struct BitmapTarget<'a> {
     phantom: PhantomData<&'a ()>,
 }
 
+pub struct WindowTarget {
+    ns_view: *mut c_void,
+}
+
 impl Device {
     /// Create a new device.
     pub fn new() -> Result<Device, piet::Error> {
@@ -73,13 +87,36 @@ impl Device {
         })
     }
 
+    pub fn window_target<T: Into<RawWindowHandle>>(&mut self, hwnd: T, pix_scale: f64) -> Result<WindowTarget, piet::Error> {
+        unsafe {
+            let handle: RawWindowHandle = hwnd.into();
+            match handle {
+                RawWindowHandle::AppKit(handle) => {
+                    let ns_view = handle.ns_view.as_ptr() as id;
+                    let pool = NSAutoreleasePool::new(nil);
+
+                    ns_view.lockFocus();
+
+                    // TODO error handling, need to unlock focus and release pool
+                    let ns_graphics_context = NSGraphicsContext::currentContext().unwrap();
+                    let cg_ptr = ns_graphics_context.graphicsPort().as_ptr() as *mut CGContext;
+                    let cg_ref = CGContextRef::from_ptr(cg_ptr);
+
+                    
+                    // let ns_graphics_context: id = msg_send![class!(NSGraphicsContext), currentContext];
+                    // let gctx: CGContextRef = msg_send![ns_graphics_context, CGContext];
+
+                    Ok(WindowTarget {
+                        ns_view: handle.ns_view.as_ptr(),
+                    })
+                }
+                _ => panic!("unsupported handle"),
+            }
+        }
+    }
+
     /// Create a new bitmap target.
-    pub fn bitmap_target(
-        &mut self,
-        width: usize,
-        height: usize,
-        pix_scale: f64,
-    ) -> Result<BitmapTarget, piet::Error> {
+    pub fn bitmap_target(&mut self, width: usize, height: usize, pix_scale: f64) -> Result<BitmapTarget, piet::Error> {
         let ctx = CGContext::create_bitmap_context(
             None,
             width,
@@ -127,11 +164,7 @@ impl<'a> BitmapTarget<'a> {
     /// and doesn't write anything.
     ///
     /// Note: caller is responsible for making sure the requested `ImageFormat` is supported.
-    pub fn copy_raw_pixels(
-        &mut self,
-        fmt: ImageFormat,
-        buf: &mut [u8],
-    ) -> Result<usize, piet::Error> {
+    pub fn copy_raw_pixels(&mut self, fmt: ImageFormat, buf: &mut [u8]) -> Result<usize, piet::Error> {
         // TODO: convert other formats.
         if fmt != ImageFormat::RgbaPremul {
             return Err(Error::NotSupported);
