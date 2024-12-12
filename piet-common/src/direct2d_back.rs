@@ -74,15 +74,15 @@ pub struct BitmapTarget<'a> {
 }
 
 #[allow(dead_code)]
-pub struct WindowTarget<'a> {
-    d2d: &'a D2DFactory,
-    dwrite: &'a DwriteFactory,
-    d3d: &'a D3D11Device,
-    d3d_ctx: &'a D3D11DeviceContext,
+pub struct WindowTarget {
+    d2d: D2DFactory,
+    dwrite: DwriteFactory,
     context: D2DDeviceContext,
     swapchain: DxgiSwapchain2,
     pix_scale: f64,
 }
+
+unsafe impl Send for WindowTarget {}
 
 impl Device {
     /// Create a new device.
@@ -115,10 +115,8 @@ impl Device {
         let context = self.device.create_device_context()?;
         let swapchain = unsafe { self.d3d.create_swapchain_from_hwnd(hwnd) }.map_err(|e| piet::Error::BackendError(Box::new(e)))?;
         Ok(WindowTarget {
-            d2d: &self.d2d,
-            dwrite: &self.dwrite,
-            d3d: &self.d3d,
-            d3d_ctx: &self.d3d_ctx,
+            d2d: self.d2d.clone(),
+            dwrite: self.dwrite.clone(),
             context,
             swapchain,
             pix_scale,
@@ -160,7 +158,7 @@ impl Device {
     }
 }
 
-impl<'a> WindowTarget<'a> {
+impl WindowTarget {
     pub fn begin_draw(&mut self) -> D2DRenderContext {
         let backbuffer = self.swapchain.get_buffer().unwrap();
         let target = unsafe {
@@ -173,10 +171,10 @@ impl<'a> WindowTarget<'a> {
         self.context.begin_draw();
 
         let text = D2DText::new_with_shared_fonts(self.dwrite.clone(), None);
-        D2DRenderContext::new(self.d2d, text, &mut self.context)
+        D2DRenderContext::new(&self.d2d, text, &mut self.context)
     }
 
-    pub fn end_draw(&mut self, _dc: D2DRenderContext) {
+    pub fn end_draw(&mut self) {
         self.context.end_draw().unwrap();
         self.swapchain.present().unwrap();
         self.context.set_target(None);

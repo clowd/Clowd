@@ -1,10 +1,9 @@
 mod app;
 mod geometry;
-mod input_helper;
+mod input;
 mod logging;
-mod render_context;
 mod screenshot;
-mod backend;
+// mod render;
 
 #[macro_use]
 extern crate log;

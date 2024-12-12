@@ -2,7 +2,7 @@
 
 use crate::geometry::*;
 use anyhow::Result;
-use image::{self, Bgra, DynamicImage, ImageBuffer};
+use image::{self, ImageBuffer, Rgba};
 use rayon::prelude::*;
 use std::{mem, ops::Deref, ptr};
 use windows::{
@@ -147,7 +147,12 @@ impl BoxHBITMAP {
     }
 }
 
-fn to_rgba_image(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, height: i32) -> Result<(DynamicImage, DynamicImage)> {
+fn to_rgba_image(
+    box_hdc_mem: BoxHDC,
+    box_h_bitmap: BoxHBITMAP,
+    width: i32,
+    height: i32,
+) -> Result<(ImageBuffer<Rgba<u8>, Vec<u8>>, ImageBuffer<Rgba<u8>, Vec<u8>>)> {
     let buffer_size = width * height * 4;
     let mut bitmap_info = BITMAPINFO {
         bmiHeader: BITMAPINFOHEADER {
@@ -190,31 +195,59 @@ fn to_rgba_image(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, heig
     //     }
     // }
 
+    let mut color_rgba_buffer = vec![0u8; (width * height * 4) as usize];
     let mut gray_rgba_buffer = vec![0u8; (width * height * 4) as usize];
-    gray_rgba_buffer
-        .par_chunks_exact_mut(4)
+    // gray_rgba_buffer
+    //     .par_chunks_exact_mut(4)
+    //     .enumerate()
+    //     .for_each(|(i, rgba)| {
+    //         let idx = i * 4;
+    //         let b = buffer[idx] as f32;
+    //         let g = buffer[idx + 1] as f32;
+    //         let r = buffer[idx + 2] as f32;
+    //         let a = buffer[idx + 3];
+    //         let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+
+    //         rgba[0] = gray;
+    //         rgba[1] = gray;
+    //         rgba[2] = gray;
+    //         rgba[3] = a;
+    //     });
+
+    color_rgba_buffer
+        .par_chunks_mut(4)
+        .zip(gray_rgba_buffer.par_chunks_mut(4))
         .enumerate()
-        .for_each(|(i, rgba)| {
+        .for_each(|(i, (color, gray))| {
             let idx = i * 4;
             let b = buffer[idx] as f32;
             let g = buffer[idx + 1] as f32;
             let r = buffer[idx + 2] as f32;
             let a = buffer[idx + 3];
-            let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
 
-            rgba[0] = gray;
-            rgba[1] = gray;
-            rgba[2] = gray;
-            rgba[3] = a;
+            // Convert to grayscale
+            let gray_val = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+            gray[0] = gray_val;
+            gray[1] = gray_val;
+            gray[2] = gray_val;
+            gray[3] = a;
+
+            // Convert BGRA to RGBA
+            color[0] = r as u8; // R
+            color[1] = g as u8; // G
+            color[2] = b as u8; // B
+            color[3] = a; // A
         });
 
-    let bgra_image = ImageBuffer::<Bgra<u8>, Vec<u8>>::from_raw(width as u32, height as u32, buffer)
+    let bgra_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width as u32, height as u32, buffer)
         .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
-    let gray_image = ImageBuffer::<Bgra<u8>, Vec<u8>>::from_raw(width as u32, height as u32, gray_rgba_buffer)
+    let gray_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width as u32, height as u32, gray_rgba_buffer)
         .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
-    Ok((DynamicImage::ImageBgra8(bgra_image), DynamicImage::ImageBgra8(gray_image)))
+    Ok((bgra_image, gray_image))
+
+    // Ok((DynamicImage::ImageRgba8(bgra_image), DynamicImage::ImageRgba8(gray_image)))
 
     // RgbaImage::from_raw(width as u32, height as u32, buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))
 }
@@ -229,7 +262,7 @@ pub fn virtual_desktop() -> ScreenRect {
     }
 }
 
-pub fn capture_desktop() -> Result<(ScreenRect, image::DynamicImage, image::DynamicImage)> {
+pub fn capture_desktop() -> Result<(ScreenRect, ImageBuffer<Rgba<u8>, Vec<u8>>, ImageBuffer<Rgba<u8>, Vec<u8>>)> {
     unsafe {
         let rect = virtual_desktop();
         let vx = rect.min_x();

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use winit::dpi::PhysicalSize;
 use winit::event::{DeviceEvent, ElementState, Event, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{Key, KeyCode, PhysicalKey};
