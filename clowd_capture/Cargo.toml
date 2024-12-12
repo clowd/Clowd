@@ -22,10 +22,9 @@ time = "0.3"
 file-rotate = "0.7"
 log-panics = "2.0"
 rayon = "1.5"
-vello = "0.3.0"
 winit = "0.30.5"
-pollster = "0.4.0"
 num = "0.4.3"
+piet.workspace = true
 derivative = "2.2.0"
 
 [build-dependencies]

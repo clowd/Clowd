@@ -22,6 +22,7 @@ use piet_direct2d::d3d::{
 };
 #[doc(hidden)]
 pub use piet_direct2d::*;
+use raw_window_handle::RawWindowHandle;
 
 /// The `RenderContext` for the Direct2D backend, which is selected.
 pub type Piet<'a> = D2DRenderContext<'a>;
@@ -72,6 +73,16 @@ pub struct BitmapTarget<'a> {
     context: D2DDeviceContext,
 }
 
+pub struct DeviceTarget<'a> {
+    width: usize,
+    height: usize,
+    d2d: &'a D2DFactory,
+    dwrite: &'a DwriteFactory,
+    d3d: &'a D3D11Device,
+    d3d_ctx: &'a D3D11DeviceContext,
+    context: D2DDeviceContext,
+}
+
 impl Device {
     /// Create a new device.
     ///
@@ -94,6 +105,26 @@ impl Device {
             d3d_ctx,
             device,
         })
+    }
+
+    pub fn surface_target<T: Into<RawWindowHandle>>(
+        &mut self,
+        hwnd: T,
+        width: usize,
+        height: usize,
+        pix_scale: f64,
+    ) -> Result<DeviceTarget, piet::Error> {
+
+       
+
+        let mut context = self.device.create_device_context().unwrap();
+        let swapchain = unsafe { self.d3d.create_swapchain_from_hwnd(hwnd).unwrap() };
+
+        swapchain.get_buffer()
+
+
+        todo!();
+
     }
 
     /// Create a new bitmap target.

@@ -10,12 +10,7 @@ use anyhow::Result;
 use euclid::Transform2D;
 use image::{DynamicImage, ImageBuffer};
 use mouse_rs::Mouse;
-use vello::{
-    kurbo::{Affine, Circle, Ellipse, Line, RoundedRect, Stroke},
-    peniko::{Color, Fill},
-    wgpu::{self, Backends, Texture},
-    AaConfig, RenderParams, Renderer, RendererOptions, Scene,
-};
+
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -246,6 +241,7 @@ impl ApplicationHandler<UserEvent> for App<'_> {
         };
 
         let window = create_winit_window(event_loop);
+        window.hwnd();
 
         let size = window.inner_size();
         let surface_future = self

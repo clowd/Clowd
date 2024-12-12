@@ -34,13 +34,7 @@
 pub use piet::*;
 
 cfg_if::cfg_if! {
-     if #[cfg(target_arch = "wasm32")] {
-        #[path = "web_back.rs"]
-        mod backend;
-    } else if #[cfg(any(target_os = "linux", target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))] {
-        #[path = "cairo_back.rs"]
-        mod backend;
-    } else if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+    if #[cfg(any(target_os = "macos", target_os = "ios"))] {
         #[path = "cg_back.rs"]
         mod backend;
     } else if #[cfg(target_os = "windows")] {
