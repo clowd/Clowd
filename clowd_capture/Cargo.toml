@@ -1,0 +1,33 @@
+[package]
+name = "clowd-rust"
+version = "0.0.0-local"
+edition = "2021"
+
+[dependencies]
+log = "0.4"
+xcap = "0.0.14"
+anyhow = "1.0"
+image = "0.23"
+lazy_static = "1.4"
+mouse-rs = "0.4"
+euclid = "0.22.11"
+windows = { version = "0.58", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_System_SystemInformation",
+] }
+simple-stopwatch = "0.1.4"
+simplelog = "0.12"
+time = "0.3"
+file-rotate = "0.7"
+log-panics = "2.0"
+rayon = "1.5"
+vello = "0.3.0"
+winit = "0.30.5"
+pollster = "0.4.0"
+num = "0.4.3"
+derivative = "2.2.0"
+
+[build-dependencies]
+winres = "0.1"
+semver = "1.0"
