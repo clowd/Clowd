@@ -6,12 +6,12 @@
 
 //! Support for piet CoreGraphics back-end.
 
+use core_graphics::sys::CGContext as SysCGContext;
+use foreign_types_shared::{ForeignType, ForeignTypeRef};
 use std::path::Path;
 use std::{ffi::c_void, marker::PhantomData};
 #[cfg(feature = "png")]
 use std::{fs::File, io::BufWriter};
-use core_graphics::sys::CGContext;
-use foreign_types_shared::ForeignTypeRef;
 
 use cocoa::appkit::NSImage;
 use cocoa::base::{id, nil};
@@ -19,6 +19,7 @@ use cocoa::foundation::NSAutoreleasePool;
 use core_graphics::context::CGContextRef;
 use core_graphics::{color_space::CGColorSpace, context::CGContext};
 use objc2::rc::Id;
+use objc2::runtime::Object;
 use objc2::{class, msg_send, msg_send_id};
 use objc2_app_kit::NSGraphicsContext;
 #[cfg(feature = "png")]
@@ -76,7 +77,10 @@ pub struct BitmapTarget<'a> {
 }
 
 pub struct WindowTarget {
-    ns_view: *mut c_void,
+    ns_view: id,
+    pool: id,
+    ctx: CGContext,
+    height: f64,
 }
 
 impl Device {
@@ -87,7 +91,13 @@ impl Device {
         })
     }
 
-    pub fn window_target<T: Into<RawWindowHandle>>(&mut self, hwnd: T, pix_scale: f64) -> Result<WindowTarget, piet::Error> {
+    pub fn window_target<T: Into<RawWindowHandle>>(
+        &mut self,
+        hwnd: T,
+        width: usize,
+        height: usize,
+        pix_scale: f64,
+    ) -> Result<WindowTarget, piet::Error> {
         unsafe {
             let handle: RawWindowHandle = hwnd.into();
             match handle {
@@ -99,15 +109,21 @@ impl Device {
 
                     // TODO error handling, need to unlock focus and release pool
                     let ns_graphics_context = NSGraphicsContext::currentContext().unwrap();
-                    let cg_ptr = ns_graphics_context.graphicsPort().as_ptr() as *mut CGContext;
-                    let cg_ref = CGContextRef::from_ptr(cg_ptr);
+                    // let cg_ptr = ns_graphics_context.graphicsPort().as_ptr() as *mut SysCGContext;
 
-                    
+                    let ctx = CGContext::from_ptr(ns_graphics_context.graphicsPort().as_ptr() as *mut SysCGContext);
+
+                    ctx.scale(pix_scale, pix_scale);
+                    let height = height as f64 * pix_scale.recip();
+
                     // let ns_graphics_context: id = msg_send![class!(NSGraphicsContext), currentContext];
                     // let gctx: CGContextRef = msg_send![ns_graphics_context, CGContext];
 
                     Ok(WindowTarget {
-                        ns_view: handle.ns_view.as_ptr(),
+                        ns_view,
+                        pool,
+                        ctx,
+                        height,
                     })
                 }
                 _ => panic!("unsupported handle"),
@@ -133,6 +149,19 @@ impl Device {
             height,
             phantom: PhantomData,
         })
+    }
+}
+
+impl WindowTarget {
+    pub fn begin_draw(&mut self) -> CoreGraphicsContext {
+        CoreGraphicsContext::new_y_up(&mut self.ctx, self.height, None)
+    }
+
+    pub fn end_draw(&mut self) {
+        unsafe {
+            self.ns_view.unlockFocus();
+            self.pool.drain();
+        }
     }
 }
 
