@@ -191,6 +191,8 @@ pub fn draw_view<T: RenderContext>(rc: &mut T, model: &mut SharedModel, renderer
         .build()
         .unwrap();
 
+    println!("layout.size() = {:?}", layout.size());
+
     let text_pos = Vec2::new(50.0, 50.0);
     let layout_rect = layout.size().to_rect() + text_pos;
     let image_rect = layout.image_bounds() + text_pos;

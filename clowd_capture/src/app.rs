@@ -281,30 +281,34 @@ impl ApplicationHandler<UserEvent> for App {
             }
             #[cfg(target_os = "macos")]
             WindowEvent::RedrawRequested => {
+                let dto = self.create_render_dto(id);
                 let (window_handle, window_size, ready) = {
                     let renderer = self.renderers.get_by_id(id).unwrap();
                     let window = &renderer.window;
                     let size = window.inner_size();
                     (window.window_handle().unwrap(), size, renderer.ready)
                 };
+               
+                // self.gpu_device.lock_view(window_handle);
+                if let Ok(mut rc) = self.gpu_device.create_render_context(window_size.width, window_size.height) {
+                    render::draw_view(&mut rc, &mut model, &dto);
+                    rc.finish().unwrap();
+                }
+                // self.gpu_device.unlock_view(window_handle);
 
-                let mut target = self
-                    .gpu_device
-                    .window_target(window_handle, window_size.width as usize, window_size.height as usize, 1.0)
-                    .unwrap();
-                let mut rc = target.begin_draw();
-                let dto = self.create_render_dto(id);
+                
 
-                render::draw_view(&mut rc, &mut model, &dto);
 
-                rc.finish().unwrap();
-                drop(rc);
-                target.end_draw();
+                // drop(rc);
+                // target.end_draw();
+
+                // self.renderers.get_by_id(id).unwrap().window.request_redraw();
 
                 if !ready {
                     self.event_proxy
                         .send_event(UserEvent::RendererReady(id))
                         .unwrap();
+
                 }
             }
             WindowEvent::CloseRequested => {
@@ -317,6 +321,12 @@ impl ApplicationHandler<UserEvent> for App {
                 button,
             } => {
                 if state == ElementState::Pressed && button == MouseButton::Left {
+                    let window_handle = self.renderers.get_by_id(id).unwrap().window.window_handle().unwrap();
+                self.gpu_device.request_redraw(window_handle);
+                println!("Requested redraw for window {:?}", id);
+                println!("Requested redraw for window {:?}", id);
+                println!("Requested redraw for window {:?}", id);
+
                     if model.captured {
                         // let hit = model.button_panel.hit_test(pt);
                         // if hit.is_size_handle() {
