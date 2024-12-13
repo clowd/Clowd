@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{geometry::*, input::WinitInputHelper, screenshot::capture_desktop};
+use crate::{geometry::*, input::WinitInputHelper, render, screenshot::capture_desktop};
 use anyhow::Result;
 use euclid::Transform2D;
 use image::{DynamicImage, ImageBuffer, RgbaImage};
@@ -14,13 +14,13 @@ use piet::{kurbo::Vec2, Color, Image, RenderContext, Text, TextAttribute, TextLa
 use piet_common::{Device, PietImage as RealImage};
 use simple_stopwatch::Stopwatch;
 
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 use winit::platform::macos::WindowExtMacOS;
 
 #[cfg(windows)]
-use winit::platform::windows::WindowAttributesExtWindows;
-#[cfg(windows)]
 use piet_common::WindowTarget;
+#[cfg(windows)]
+use winit::platform::windows::WindowAttributesExtWindows;
 
 use winit::{
     application::ApplicationHandler,
@@ -35,7 +35,7 @@ use winit::{
 use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
-enum MouseState {
+pub enum MouseState {
     #[default]
     Up,
     StartSelection(ScreenPointF),
@@ -51,7 +51,7 @@ enum UserEvent {
 }
 
 #[derive(Clone)]
-struct SharedModel {
+pub struct SharedModel {
     zoom: f64,
     mouse_pt: ScreenPointF,
     mouse_state: MouseState,
@@ -96,7 +96,7 @@ struct RendererInfo {
 }
 
 #[derive(Clone)]
-struct RendererDto {
+pub struct RendererDto {
     window_id: WindowId,
     monitor_handle: MonitorHandle,
     monitor_bounds: ScreenRect,
@@ -137,6 +137,8 @@ fn get_model_snapshot(model_ref: &Arc<RwLock<SharedModel>>) -> SharedModel {
 
 #[cfg(windows)]
 fn start_render_loop<'s>(mut target: WindowTarget, info: RendererDto, model_ref: Arc<RwLock<SharedModel>>) {
+    use crate::render;
+
     std::thread::spawn(move || {
         let mut first_render = false;
         loop {
@@ -148,21 +150,8 @@ fn start_render_loop<'s>(mut target: WindowTarget, info: RendererDto, model_ref:
 
                 std::thread::sleep_ms(15);
                 let mut rc = target.begin_draw();
-                let text = rc.text();
-
-                let layout = text
-                    .new_text_layout("Hello World!")
-                    .default_attribute(TextAttribute::FontSize(24.0))
-                    .build()
-                    .unwrap();
-
-                let text_pos = Vec2::new(50.0, 50.0);
-                let layout_rect = layout.size().to_rect() + text_pos;
-                let image_rect = layout.image_bounds() + text_pos;
-
-                rc.fill(layout_rect, &Color::WHITE);
-                rc.stroke(image_rect, &Color::BLACK, 0.5);
-                rc.draw_text(&layout, text_pos.to_point());
+                
+                render::draw_view(&mut rc, &mut model, &info);
 
                 rc.finish().unwrap();
             }
@@ -220,22 +209,7 @@ impl ApplicationHandler<UserEvent> for App {
                 is_primary: monitor_bounds.contains(self.mouse_anchor_pt),
             };
 
-            let dto = RendererDto {
-                accent_dark: self.accent_dark,
-                accent_light: self.accent_light,
-                desktop_bounds: self.desktop_bounds,
-                desktop_color_image: self.desktop_color_image.clone(),
-                desktop_gray_image: self.desktop_gray_image.clone(),
-                desktop_virtual_origin: self.desktop_virtual_origin,
-                event_proxy: self.event_proxy.clone(),
-                is_primary: info.is_primary,
-                monitor_bounds: info.monitor_bounds,
-                monitor_handle: info.monitor_handle.clone(),
-                scale_factor: info.scale_factor,
-                transform: info.transform.clone(),
-                vd_transform: self.vd_transform.clone(),
-                window_id: info.window_id,
-            };
+            
 
             self.renderers.push(info);
 
@@ -302,13 +276,34 @@ impl ApplicationHandler<UserEvent> for App {
                 // TODO?
             }
             WindowEvent::RedrawRequested => {
-                let renderer = self.renderers.get_by_id(id).unwrap();
-                let ns_view = match renderer.window.window_handle().unwrap().as_raw() {
-                    RawWindowHandle::AppKit(handle)=> {
-                        handle.ns_view()
-                    }
-                    _ => panic!("Unsupported window handle")
+                let (window_handle, window_size, ready) = {
+                    let renderer = self.renderers.get_by_id(id).unwrap();
+                    let window = &renderer.window;
+                    let size = window.inner_size();
+                    (window.window_handle().unwrap(), size, renderer.ready)
                 };
+               
+                let mut target = self
+                    .gpu_device
+                    .window_target(window_handle, window_size.width as usize, window_size.height as usize, 1.0)
+                    .unwrap();
+                let mut rc = target.begin_draw();
+                let dto = self.create_render_dto(id);
+
+                render::draw_view(&mut rc, &mut model, &dto);
+
+                rc.finish().unwrap();
+                drop(rc);
+                target.end_draw();
+
+                if !ready {
+                    self.event_proxy
+                        .send_event(UserEvent::RendererReady(id))
+                        .unwrap();
+                }
+
+
+
             }
             WindowEvent::CloseRequested => {
                 model.close_requested = true;
@@ -469,6 +464,26 @@ impl ApplicationHandler<UserEvent> for App {
 impl App {
     fn print_time(&self, msg: &str) {
         info!("[TIME {:?}] {}", Duration::from_millis(self.time.ms() as u64), msg);
+    }
+
+    fn create_render_dto(&mut self, id: WindowId) -> RendererDto {
+        let info = self.renderers.get_by_id(id).unwrap();
+        RendererDto {
+            accent_dark: self.accent_dark,
+            accent_light: self.accent_light,
+            desktop_bounds: self.desktop_bounds,
+            desktop_color_image: self.desktop_color_image.clone(),
+            desktop_gray_image: self.desktop_gray_image.clone(),
+            desktop_virtual_origin: self.desktop_virtual_origin,
+            event_proxy: self.event_proxy.clone(),
+            is_primary: info.is_primary,
+            monitor_bounds: info.monitor_bounds,
+            monitor_handle: info.monitor_handle.clone(),
+            scale_factor: info.scale_factor,
+            transform: info.transform.clone(),
+            vd_transform: self.vd_transform.clone(),
+            window_id: info.window_id,
+        }
     }
 
     fn is_all_ready(&self) -> bool {
@@ -632,11 +647,7 @@ pub fn run_app() -> Result<()> {
 
     app.print_time("Begin EventLoop...");
 
-    let control_flow = if cfg!(windows) {
-        ControlFlow::Wait
-    } else {
-        ControlFlow::Poll
-    };
+    let control_flow = if cfg!(windows) { ControlFlow::Wait } else { ControlFlow::Poll };
 
     event_loop.set_control_flow(control_flow);
     event_loop.run_app(&mut app)?;

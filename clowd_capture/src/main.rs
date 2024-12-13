@@ -3,7 +3,7 @@ mod geometry;
 mod input;
 mod logging;
 mod screenshot;
-// mod render;
+mod render;
 
 #[macro_use]
 extern crate log;
