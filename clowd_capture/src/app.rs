@@ -137,20 +137,18 @@ fn get_model_snapshot(model_ref: &Arc<RwLock<SharedModel>>) -> SharedModel {
 
 #[cfg(windows)]
 fn start_render_loop<'s>(mut target: WindowTarget, info: RendererDto, model_ref: Arc<RwLock<SharedModel>>) {
-    use crate::render;
-
     std::thread::spawn(move || {
         let mut first_render = false;
         loop {
             {
-                let model = get_model_snapshot(&model_ref);
+                let mut model = get_model_snapshot(&model_ref);
                 if model.close_requested {
                     break;
                 }
 
                 std::thread::sleep_ms(15);
                 let mut rc = target.begin_draw();
-                
+
                 render::draw_view(&mut rc, &mut model, &info);
 
                 rc.finish().unwrap();
@@ -198,8 +196,9 @@ impl ApplicationHandler<UserEvent> for App {
                 .vd_transform
                 .outer_transformed_rect(&monitor_bounds);
 
+            let window_id = window.id();
             let info = RendererInfo {
-                window_id: window.id(),
+                window_id,
                 window,
                 monitor_handle: monitor.clone(),
                 monitor_bounds,
@@ -209,14 +208,19 @@ impl ApplicationHandler<UserEvent> for App {
                 is_primary: monitor_bounds.contains(self.mouse_anchor_pt),
             };
 
-            
-
             self.renderers.push(info);
 
             #[cfg(windows)]
             {
+                let dto = self.create_render_dto(window_id);
                 #[allow(deprecated)]
-                let raw_handle = window.raw_window_handle().unwrap();
+                let raw_handle = self
+                    .renderers
+                    .get_by_id(window_id)
+                    .unwrap()
+                    .window
+                    .raw_window_handle()
+                    .unwrap();
                 let target = self
                     .gpu_device
                     .window_target(raw_handle, 1.0)
@@ -275,6 +279,7 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::Resized(size) => {
                 // TODO?
             }
+            #[cfg(target_os = "macos")]
             WindowEvent::RedrawRequested => {
                 let (window_handle, window_size, ready) = {
                     let renderer = self.renderers.get_by_id(id).unwrap();
@@ -282,7 +287,7 @@ impl ApplicationHandler<UserEvent> for App {
                     let size = window.inner_size();
                     (window.window_handle().unwrap(), size, renderer.ready)
                 };
-               
+
                 let mut target = self
                     .gpu_device
                     .window_target(window_handle, window_size.width as usize, window_size.height as usize, 1.0)
@@ -301,9 +306,6 @@ impl ApplicationHandler<UserEvent> for App {
                         .send_event(UserEvent::RendererReady(id))
                         .unwrap();
                 }
-
-
-
             }
             WindowEvent::CloseRequested => {
                 model.close_requested = true;
