@@ -16,9 +16,9 @@ use simple_stopwatch::Stopwatch;
 
 #[cfg(target_os = "macos")]
 use winit::platform::macos::WindowExtMacOS;
+#[cfg(target_os = "macos")]
+use platform::macos::WindowAttributesExtMacOS;
 
-#[cfg(windows)]
-use piet_common::WindowTarget;
 #[cfg(windows)]
 use winit::platform::windows::WindowAttributesExtWindows;
 
@@ -29,7 +29,6 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::KeyCode,
     monitor::MonitorHandle,
-    platform::macos::WindowAttributesExtMacOS,
     raw_window_handle::{HasRawWindowHandle, HasWindowHandle, RawWindowHandle},
     window::{CursorIcon, Fullscreen, Window, WindowAttributes, WindowId},
 };
@@ -324,6 +323,7 @@ impl ApplicationHandler<UserEvent> for App {
 
         match event {
             WindowEvent::Resized(size) => {
+                #[cfg(target_os = "macos")]
                 self.draw_targets
                     .getid_mut(id)
                     .unwrap()
