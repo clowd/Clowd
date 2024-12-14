@@ -53,13 +53,13 @@ enum UserEvent {
 
 #[derive(Clone)]
 pub struct SharedModel {
-    zoom: f64,
-    mouse_pt: ScreenPointF,
-    mouse_state: MouseState,
-    selection: Option<ScreenRect>,
-    captured: bool,
-    debug: bool,
-    close_requested: bool,
+    pub zoom: f64,
+    pub mouse_pt: ScreenPointF,
+    pub mouse_state: MouseState,
+    pub selection: Option<ScreenRect>,
+    pub captured: bool,
+    pub debug: bool,
+    pub close_requested: bool,
 }
 
 struct App {
@@ -99,20 +99,20 @@ struct RendererInfo {
 
 #[derive(Clone)]
 pub struct RendererDto {
-    window_id: WindowId,
-    monitor_handle: MonitorHandle,
-    monitor_bounds: ScreenRect,
-    transform: TransformUnit,
-    is_primary: bool,
-    scale_factor: f64,
-    desktop_bounds: ScreenRect,
-    desktop_virtual_origin: ScreenPoint,
-    desktop_color_image: RgbaImage,
-    desktop_gray_image: RgbaImage,
-    event_proxy: EventLoopProxy<UserEvent>,
-    accent_light: Color,
-    accent_dark: Color,
-    vd_transform: Transform2D<i32, ScreenUnit, ScreenUnit>,
+    pub window_id: WindowId,
+    pub monitor_handle: MonitorHandle,
+    pub monitor_bounds: ScreenRect,
+    pub transform: TransformUnit,
+    pub is_primary: bool,
+    pub scale_factor: f64,
+    pub desktop_bounds: ScreenRect,
+    pub desktop_virtual_origin: ScreenPoint,
+    pub desktop_color_image: RgbaImage,
+    pub desktop_gray_image: RgbaImage,
+    pub event_proxy: EventLoopProxy<UserEvent>,
+    pub accent_light: Color,
+    pub accent_dark: Color,
+    pub vd_transform: Transform2D<i32, ScreenUnit, ScreenUnit>,
 }
 
 trait GetById<T> {
@@ -201,7 +201,7 @@ impl ApplicationHandler<UserEvent> for App {
                 .with_visible(false)
                 .with_inner_size(size)
                 .with_position(position)
-                .with_disallow_hidpi(true)
+                // .with_disallow_hidpi(true)
                 .with_title("Clowd Capture");
 
             let window = event_loop.create_window(attributes).unwrap();
@@ -334,14 +334,10 @@ impl ApplicationHandler<UserEvent> for App {
                     .unwrap()
                     .window
                     .request_redraw();
-                // window.request_redraw(); // on macos, not all windows get a redraw request?
-
-                // TODO?
             }
             #[cfg(target_os = "macos")]
             WindowEvent::RedrawRequested => {
                 let (_, target, renderer) = self.draw_targets.getid_mut(id).unwrap();
-
                 {
                     let mut rc = target.begin_draw().unwrap();
                     let model = model.clone();
@@ -349,21 +345,6 @@ impl ApplicationHandler<UserEvent> for App {
                     rc.finish().unwrap();
                 }
                 target.end_draw();
-
-                // let dto = self.create_render_dto(id);
-                // let (window_handle, window_size, ready) = {
-                //     let renderer = self.renderers.getid_mut(id).unwrap();
-                //     let window = &renderer.window;
-                //     let size = window.inner_size();
-                //     (window.window_handle().unwrap(), size, renderer.ready)
-                // };
-
-                // // self.gpu_device.lock_view(window_handle);
-                // if let Ok(mut rc) = self.gpu_device.create_render_context() {
-                //     render::draw_view(&mut rc, &mut model, &dto);
-                //     rc.finish().unwrap();
-                // }
-                // // self.gpu_device.unlock_view(window_handle);
 
                 if !self.renderers.getid(id).unwrap().ready {
                     self.event_proxy
@@ -486,6 +467,8 @@ impl ApplicationHandler<UserEvent> for App {
                       //     self.update_buttons();
                       // }
                 }
+                self.request_all_redraw();
+                
 
                 // if model.captured {
                 //     self.set_cursor(app, Some(self.button_panel.hit_test(pt).to_cursor()));
@@ -542,6 +525,10 @@ impl App {
                 window.set_cursor_visible(false);
             }
         });
+    }
+
+    fn request_all_redraw(&mut self) {
+        self.renderers.iter().for_each(|r| r.window.request_redraw());
     }
 
     fn set_anchored(&mut self, anchored: bool, pt: ScreenPointF) {
