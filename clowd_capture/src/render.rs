@@ -1,227 +1,84 @@
-// use nannou::{color::IntoLinSrgba, draw::properties::ColorScalar, glam::Vec2, prelude::Rect, wgpu::Texture, Draw};
+use crate::{
+    app::{RenderMessage, RendererDto, SharedModel, UserEvent},
+    gpu::WindowSurface,
+};
+use std::sync::mpsc::Receiver;
+use vello::{kurbo::*, peniko::*, Scene};
 
-// pub fn draw_dashed_line_polyline(draw: &Draw, start: Vec2, end: Vec2, weight: f32, dash_length: f32, texture: &Texture) {
-//     let total_distance = start.distance(end);
-//     let direction = (end - start).normalize();
+pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedModel, info: RendererDto, bus: Receiver<RenderMessage>) {
+    // This is incredibly unsafe, since if the window is closed, the surface will also be made invalid.
+    let static_surface: WindowSurface<'static> = unsafe { std::mem::transmute(surface) };
+    std::thread::spawn(move || {
+        let mut surface = static_surface;
+        let mut model = initial_model;
+        let mut first_render = false;
+        let mut renderer = surface.create_renderer();
+        let mut scene = Scene::new();
 
-//     let mut current_distance = 0.0;
-//     let mut points_colored = Vec::new();
-//     let mut toggle = true;
+        info!("{:?} Starting render loop", info.window_id);
 
-//     while current_distance < total_distance {
-//         let dash_start = start + direction * current_distance;
-//         let dash_end = start + direction * (current_distance + dash_length).min(total_distance);
+        loop {
+            let texture = surface.begin_draw();
+            scene.reset();
 
-//         let texture_coords = if toggle { [0.0, 0.0] } else { [1.0, 1.0] };
-//         points_colored.push((dash_start, texture_coords));
-//         points_colored.push((dash_end, texture_coords));
+            info!("{:?} Drawing scene", info.window_id);
+            draw_scene(&mut scene, &model, &info);
 
-//         toggle = !toggle;
-//         current_distance += dash_length;
-//     }
+            surface.end_draw(texture, &scene, &mut renderer);
 
-//     draw.polyline()
-//         .weight(weight)
-//         .points_textured(&texture, points_colored);
-// }
+            if !first_render {
+                info!("{:?} Sending ready event", info.window_id);
+                first_render = true;
+                info.event_proxy
+                    .send_event(UserEvent::RendererReady(info.window_id))
+                    .unwrap();
+            }
 
-// /// Given the edges of the rectangle and a distance `dist` along its perimeter (starting from top-left corner, going clockwise),
-// /// return the position (Vec2) on the perimeter at that distance.
-// fn position_along_perimeter(edges: &[(Vec2, Vec2)], dist: f32) -> Vec2 {
-//     let mut remaining = dist;
-//     for (start, end) in edges {
-//         let edge_len = start.distance(*end);
-//         if remaining <= edge_len {
-//             let dir = (*end - *start).normalize();
-//             return *start + dir * remaining;
-//         }
-//         remaining -= edge_len;
-//     }
-//     // If `dist` == perimeter, return the start point (closing the loop).
-//     edges[0].0
-// }
+            match bus.recv() {
+                Ok(msg) => match msg {
+                    RenderMessage::ModelUpdate(new_model) => {
+                        model = new_model;
+                    }
+                    RenderMessage::Resize((width, height)) => {
+                        surface.resize_surface(width, height);
+                    }
+                    RenderMessage::Close => {
+                        break;
+                    }
+                    _ => {}
+                },
+                Err(e) => {
+                    error!("Error receiving render message: {:?}", e);
+                    break;
+                }
+            }
+        }
 
-// pub fn draw_dashed_rectangle<C1, C2>(draw: &Draw, rect: Rect, weight: f32, dash_length: f32, color1: C1, color2: C2, time: f32)
-// where
-//     C1: IntoLinSrgba<ColorScalar> + Copy,
-//     C2: IntoLinSrgba<ColorScalar> + Copy,
-// {
-//     let dash_offset = (time * 30.0) % (dash_length * 2.0);
+        let _ = info
+            .event_proxy
+            .send_event(UserEvent::RendererExited(info.window_id));
+    });
+}
 
-//     draw.rect()
-//         .xy(rect.xy())
-//         .wh(rect.wh())
-//         .no_fill()
-//         .caps_round()
-//         .join_round()
-//         .stroke_weight(weight)
-//         .stroke_color(color1);
+pub fn draw_scene(scene: &mut Scene, _model: &SharedModel, _renderer: &RendererDto) {
+    // Draw an outlined rectangle
+    let stroke = Stroke::new(6.0);
+    let rect = RoundedRect::new(10.0, 10.0, 240.0, 240.0, 20.0);
+    let rect_stroke_color = Color::rgba(0.9804, 0.702, 0.5294, 1.);
+    scene.stroke(&stroke, Affine::IDENTITY, rect_stroke_color, None, &rect);
 
-//     // Extract corners and form edges in order: top, right, bottom, left
-//     let top_left = rect.top_left();
-//     let top_right = rect.top_right();
-//     let bottom_right = rect.bottom_right();
-//     let bottom_left = rect.bottom_left();
+    // Draw a filled circle
+    let circle = Circle::new((420.0, 200.0), 120.0);
+    let circle_fill_color = Color::rgba(0.9529, 0.5451, 0.6588, 1.);
+    scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, circle_fill_color, None, &circle);
 
-//     let edges = [
-//         (top_left, top_right),
-//         (top_right, bottom_right),
-//         (bottom_right, bottom_left),
-//         (bottom_left, top_left),
-//     ];
+    // Draw a filled ellipse
+    let ellipse = Ellipse::new((250.0, 420.0), (100.0, 160.0), -90.0);
+    let ellipse_fill_color = Color::rgba(0.7961, 0.651, 0.9686, 1.);
+    scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, ellipse_fill_color, None, &ellipse);
 
-//     // Compute the total perimeter and the cumulative distances at each corner.
-//     let mut edge_lengths = Vec::new();
-//     for (s, e) in &edges {
-//         edge_lengths.push(s.distance(*e));
-//     }
-
-//     let perimeter: f32 = edge_lengths.iter().sum();
-
-//     // Distances at corners along the perimeter:
-//     // corner_distances[0] = top_left (0.0)
-//     // corner_distances[1] = top_right
-//     // corner_distances[2] = bottom_right
-//     // corner_distances[3] = bottom_left
-//     let mut corner_distances = Vec::new();
-//     {
-//         let mut accum = 0.0;
-//         for &len in &edge_lengths {
-//             corner_distances.push(accum);
-//             accum += len;
-//         }
-//         // This final accum equals the perimeter, which loops back to top_left
-//         // We don't push perimeter again because it closes the loop.
-//     }
-
-//     // The pattern: Two colors alternate every dash_length.
-//     // cycle_length = dash_length * 2.0
-//     // first color = [0.0,0.0], second color = [1.0,1.0]
-//     let cycle_length = dash_length * 2.0;
-
-//     // Initial color toggle based on dash_offset
-//     let mut toggle = dash_offset < dash_length;
-
-//     // How much of the current color segment is left from our starting offset
-//     let initial_segment_length = if toggle {
-//         // Starting in first color segment
-//         dash_length - dash_offset.min(dash_length)
-//     } else {
-//         // Starting in second color segment
-//         cycle_length - dash_offset
-//     };
-
-//     // let mut points_colored = Vec::new();
-
-//     let mut traveled = 0.0;
-//     let mut current_segment_length = initial_segment_length;
-
-//     // let mut corner_segments = Vec::new();
-
-//     while traveled < perimeter {
-//         let end_segment = (traveled + current_segment_length).min(perimeter);
-
-//         // Draw this dash segment, possibly split by corners
-//         // Find corners that lie strictly between traveled and end_segment
-//         let mut sub_segment_starts = vec![traveled];
-//         for &c_dist in &corner_distances {
-//             if c_dist > traveled && c_dist < end_segment {
-//                 // This corner lies inside the dash
-//                 sub_segment_starts.push(c_dist);
-//             }
-//         }
-//         // Also add the end of the segment
-//         sub_segment_starts.push(end_segment);
-
-//         // Now draw sub-segments from these breakpoints
-//         for w in 0..(sub_segment_starts.len() - 1) {
-//             let seg_start = sub_segment_starts[w];
-//             let seg_end = sub_segment_starts[w + 1];
-
-//             let start_pos = position_along_perimeter(&edges, seg_start);
-//             let end_pos = position_along_perimeter(&edges, seg_end);
-
-//             // Push the points for this sub-segment
-//             // Ensure we don't duplicate points unnecessarily. But it's usually fine if we do.
-//             //     points_colored.push((start_pos, texture_coords));
-//             //     points_colored.push((end_pos, texture_coords));
-//             if toggle {
-//                 draw.line()
-//                     .weight(weight)
-//                     .start(start_pos)
-//                     .end(end_pos)
-//                     .color(color2);
-//             }
-//         }
-
-//         // Move forward
-//         traveled += current_segment_length;
-
-//         // Flip toggle (switch colors)
-//         toggle = !toggle;
-//         // From now on, full dash_length segments
-//         current_segment_length = dash_length;
-//     }
-
-//     // Draw the resulting polyline
-//     // draw.polyline()
-//     //     .weight(weight)
-//     //     .points_textured(texture, points_colored);
-
-//     // for (start, end) in corner_segments {
-//     //     draw.line()
-//     //         .weight(weight)
-//     //         .start(start)
-//     //         .end(end)
-//     //         .color(nannou::color::RED);
-//     // }
-// }
-
-use kurbo::*;
-use piet::*;
-
-use crate::app::{RendererDto, SharedModel};
-
-pub fn draw_view<T: RenderContext>(rc: &mut T, model: &SharedModel, renderer: &RendererDto) {
-    let bgrect = Rect::new(
-        50.0,
-        50.0,
-        renderer.monitor_bounds.width() as f64 - 50.0,
-        renderer.monitor_bounds.height() as f64 - 50.0,
-    );
-    rc.fill(bgrect, &Color::RED);
-
-    let text = rc.text();
-
-    let layout = text
-        .new_text_layout("Hello World!")
-        .default_attribute(TextAttribute::FontSize(24.0))
-        .build()
-        .unwrap();
-
-    println!("layout.size() = {:?}", layout.size());
-
-    let text_pos = Vec2::new(50.0, 50.0);
-    let layout_rect = layout.size().to_rect() + text_pos;
-    let image_rect = layout.image_bounds() + text_pos;
-
-    rc.fill(layout_rect, &Color::WHITE);
-    rc.stroke(image_rect, &Color::BLACK, 0.5);
-    rc.draw_text(&layout, text_pos.to_point());
-
-    let mouse_pos = model.mouse_pt;
-    let cur_horiz = Line::new(
-        Point::new(0.0, mouse_pos.y as f64),
-        Point::new(renderer.monitor_bounds.width() as f64, mouse_pos.y as f64),
-    );
-    let cur_vert = Line::new(
-        Point::new(mouse_pos.x as f64, 0.0),
-        Point::new(mouse_pos.x as f64, renderer.monitor_bounds.height() as f64),
-    );
-
-    rc.stroke(cur_horiz, &Color::BLACK, 1.0);
-    rc.stroke(cur_vert, &Color::BLACK, 1.0);
-
-    rc.stroke_styled(cur_horiz, &Color::WHITE, 1.0, &StrokeStyle::new().dash_offset(8.0));
-    rc.stroke_styled(cur_vert, &Color::WHITE, 1.0, &StrokeStyle::new().dash_offset(8.0));
+    // Draw a straight line
+    let line = Line::new((260.0, 20.0), (620.0, 100.0));
+    let line_stroke_color = Color::rgba(0.5373, 0.7059, 0.9804, 1.);
+    scene.stroke(&stroke, Affine::IDENTITY, line_stroke_color, None, &line);
 }

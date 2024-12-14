@@ -331,36 +331,3 @@ where
         self.max_y()
     }
 }
-
-// Widen point and lines
-// pub fn point_to_widened_rect(radius: i32, pt: ScreenPoint) -> ScreenRect {
-//     let origin = pt - Size2D::new(radius, radius);
-//     let size = Size2D::new(radius * 2, radius * 2);
-//     Rect::new(origin, size)
-// }
-
-// pub fn point_to_widened_rect_f(radius: f64, pt: ScreenPointF) -> ScreenRectF {
-//     let origin = pt - Size2D::new(radius, radius);
-//     let size = Size2D::new(radius * 2.0, radius * 2.0);
-//     Rect::new(origin, size)
-// }
-
-// pub fn point_to_widened_rect_n(radius: f32, pt: nannou::glam::Vec2) -> nannou::geom::Rect {
-//     nannou::geom::Rect::from_x_y_w_h(pt.x, pt.y, radius * 2.0, radius * 2.0)
-// }
-
-// pub fn line_to_widened_rect(radius: i32, start: ScreenPoint, end: ScreenPoint) -> ScreenRect {
-//     let x1 = start.x.min(end.x) - radius;
-//     let y1 = start.y.min(end.y) - radius;
-//     let x2 = start.x.max(end.x) + radius;
-//     let y2 = start.y.max(end.y) + radius;
-//     ScreenRect::from_exact(x1, y1, x2, y2)
-// }
-
-// pub fn line_to_widened_rect_f(radius: f64, start: ScreenPointF, end: ScreenPointF) -> ScreenRectF {
-//     let x1 = start.x.min(end.x) - radius;
-//     let y1 = start.y.min(end.y) - radius;
-//     let x2 = start.x.max(end.x) + radius;
-//     let y2 = start.y.max(end.y) + radius;
-//     ScreenRectF::from_exact(x1, y1, x2, y2)
-// }

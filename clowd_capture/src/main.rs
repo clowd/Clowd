@@ -1,9 +1,12 @@
+use vello::wgpu::{Backends, PresentMode};
+
 mod app;
 mod geometry;
+mod gpu;
 mod input;
 mod logging;
-mod screenshot;
 mod render;
+mod screenshot;
 
 #[macro_use]
 extern crate log;
@@ -13,7 +16,8 @@ extern crate anyhow;
 
 fn main() {
     let _ = logging::setup_logging("capture", None, true, false);
-    app::run_app().unwrap();
+    // app::run_app(Some(Backends::VULKAN | Backends::METAL), PresentMode::Mailbox).unwrap();
+    app::run_app(Some(Backends::VULKAN), PresentMode::Mailbox).unwrap();
 }
 
 // fn view(app: &App, model: &Model, frame: Frame) {

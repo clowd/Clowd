@@ -1,23 +1,26 @@
 use std::{
     num::NonZeroUsize,
-    sync::{atomic::AtomicBool, Arc, RwLock},
+    sync::{atomic::AtomicBool, mpsc, Arc, RwLock},
     thread::sleep_ms,
     time::Duration,
 };
 
-use crate::{geometry::*, input::WinitInputHelper, render, screenshot::capture_desktop};
+use crate::{geometry::*, gpu::RenderContext, input::WinitInputHelper, render, screenshot::capture_desktop};
 use anyhow::Result;
 use euclid::Transform2D;
 use image::{DynamicImage, ImageBuffer, RgbaImage};
 use mouse_rs::Mouse;
-use piet::{kurbo::Vec2, Color, Image, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
-use piet_common::{Device, PietImage as RealImage, WindowTarget};
 use simple_stopwatch::Stopwatch;
 
-#[cfg(target_os = "macos")]
-use winit::platform::macos::WindowExtMacOS;
+use vello::{
+    peniko::Color,
+    wgpu::{self, Backends},
+};
+
 #[cfg(target_os = "macos")]
 use platform::macos::WindowAttributesExtMacOS;
+#[cfg(target_os = "macos")]
+use winit::platform::macos::WindowExtMacOS;
 
 #[cfg(windows)]
 use winit::platform::windows::WindowAttributesExtWindows;
@@ -45,12 +48,21 @@ pub enum MouseState {
 }
 
 #[derive(Debug, Clone)]
-enum UserEvent {
+pub enum UserEvent {
     None,
     RendererReady(WindowId),
+    RendererExited(WindowId),
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+pub enum RenderMessage {
+    None,
+    ModelUpdate(SharedModel),
+    Resize((u32, u32)),
+    Close,
+}
+
+#[derive(Debug, Clone)]
 pub struct SharedModel {
     pub zoom: f64,
     pub mouse_pt: ScreenPointF,
@@ -62,9 +74,8 @@ pub struct SharedModel {
 }
 
 struct App {
-    gpu_device: Device,
+    gpu_device: RenderContext,
     renderers: Vec<RendererInfo>,
-    draw_targets: Vec<(WindowId, WindowTarget, RendererDto)>,
     initialized: bool,
     shown: bool,
     time: Stopwatch,
@@ -92,8 +103,9 @@ struct RendererInfo {
     transform: TransformUnit,
     is_primary: bool,
     scale_factor: f64,
-    window: Window,
+    window: Arc<Window>,
     ready: bool,
+    sender: mpsc::Sender<RenderMessage>,
 }
 
 #[derive(Clone)]
@@ -128,55 +140,10 @@ impl GetById<RendererInfo> for Vec<RendererInfo> {
     }
 }
 
-impl GetById<(WindowId, WindowTarget, RendererDto)> for Vec<(WindowId, WindowTarget, RendererDto)> {
-    fn getid_mut(&mut self, id: WindowId) -> Option<&mut (WindowId, WindowTarget, RendererDto)> {
-        self.iter_mut().find(|(i, _, _)| *i == id)
-    }
-    fn getid(&self, id: WindowId) -> Option<&(WindowId, WindowTarget, RendererDto)> {
-        self.iter().find(|(i, _, _)| *i == id)
-    }
-}
-
 struct DesktopWindowInfo {
     title: String,
     window_bounds: ScreenRect,
     capture: Option<DynamicImage>,
-}
-
-#[cfg(windows)]
-fn get_model_snapshot(model_ref: &Arc<RwLock<SharedModel>>) -> SharedModel {
-    let model = model_ref.read().unwrap();
-    model.clone()
-}
-
-#[cfg(windows)]
-fn start_render_loop<'s>(mut target: WindowTarget, info: RendererDto, model_ref: Arc<RwLock<SharedModel>>) {
-    std::thread::spawn(move || {
-        let mut first_render = false;
-        loop {
-            {
-                let mut model = get_model_snapshot(&model_ref);
-                if model.close_requested {
-                    break;
-                }
-
-                std::thread::sleep_ms(15);
-                let mut rc = target.begin_draw();
-
-                render::draw_view(&mut rc, &mut model, &info);
-
-                rc.finish().unwrap();
-            }
-            target.end_draw();
-
-            if !first_render {
-                first_render = true;
-                info.event_proxy
-                    .send_event(UserEvent::RendererReady(info.window_id))
-                    .unwrap();
-            }
-        }
-    });
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -204,23 +171,25 @@ impl ApplicationHandler<UserEvent> for App {
                 .with_title("Clowd Capture");
 
             let window = event_loop.create_window(attributes).unwrap();
-            window.request_redraw(); // on macos, not all windows get a redraw request?
 
             let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
             let monitor_bounds = self
                 .vd_transform
                 .outer_transformed_rect(&monitor_bounds);
 
+            let (sender, receiver) = mpsc::channel();
+
             let window_id = window.id();
             let info = RendererInfo {
                 window_id,
-                window,
+                window: Arc::new(window),
                 monitor_handle: monitor.clone(),
                 monitor_bounds,
                 transform: TransformUnit::new(monitor_bounds, monitor.scale_factor()),
                 ready: false,
                 scale_factor: monitor.scale_factor(),
                 is_primary: monitor_bounds.contains(self.mouse_anchor_pt),
+                sender,
             };
 
             let dto = RendererDto {
@@ -240,33 +209,16 @@ impl ApplicationHandler<UserEvent> for App {
                 window_id: info.window_id,
             };
 
-            self.renderers.push(info);
-
-            #[allow(deprecated)]
-            let raw_handle = self
-                .renderers
-                .getid_mut(window_id)
-                .unwrap()
-                .window
-                .raw_window_handle()
-                .unwrap();
-            let target = self
+            let surface = self
                 .gpu_device
-                .window_target(raw_handle, 1.0)
-                .expect("could not create window target");
+                .create_surface(info.window.clone(), size.width, size.height, wgpu::PresentMode::Mailbox)
+                .unwrap();
 
-            #[cfg(target_os = "macos")]
-            {
-                self.draw_targets
-                    .push((window_id, target, dto));
-            }
-
-            #[cfg(windows)]
-            {
-                start_render_loop(target, dto, self.model.clone());
-            }
-
+            self.renderers.push(info);
             self.print_time(format!("Window {}/{} created.", i + 1, monitors.len()).as_str());
+
+            let model = self.model.read().unwrap().clone();
+            render::begin_render_loop(surface, model, dto, receiver);
         }
 
         self.print_time("Initialization complete, waiting for renderers to be ready...");
@@ -323,17 +275,17 @@ impl ApplicationHandler<UserEvent> for App {
 
         match event {
             WindowEvent::Resized(size) => {
-                #[cfg(target_os = "macos")]
-                self.draw_targets
-                    .getid_mut(id)
-                    .unwrap()
-                    .1
-                    .resize(size.width, size.height);
-                self.renderers
-                    .getid_mut(id)
-                    .unwrap()
-                    .window
-                    .request_redraw();
+                // #[cfg(target_os = "macos")]
+                // self.draw_targets
+                //     .getid_mut(id)
+                //     .unwrap()
+                //     .1
+                //     .resize(size.width, size.height);
+                // self.renderers
+                //     .getid_mut(id)
+                //     .unwrap()
+                //     .window
+                //     .request_redraw();
             }
             #[cfg(target_os = "macos")]
             WindowEvent::RedrawRequested => {
@@ -467,8 +419,8 @@ impl ApplicationHandler<UserEvent> for App {
                       //     self.update_buttons();
                       // }
                 }
-                self.request_all_redraw();
-                
+
+                self.send_message(RenderMessage::ModelUpdate(model.clone()));
 
                 // if model.captured {
                 //     self.set_cursor(app, Some(self.button_panel.hit_test(pt).to_cursor()));
@@ -527,8 +479,10 @@ impl App {
         });
     }
 
-    fn request_all_redraw(&mut self) {
-        self.renderers.iter().for_each(|r| r.window.request_redraw());
+    fn send_message(&self, message: RenderMessage) {
+        self.renderers.iter().for_each(|r| {
+            let _ = r.sender.send(message.clone());
+        });
     }
 
     fn set_anchored(&mut self, anchored: bool, pt: ScreenPointF) {
@@ -568,10 +522,10 @@ impl App {
     }
 }
 
-pub fn run_app() -> Result<()> {
+pub fn run_app(backends: Option<Backends>, present_mode: wgpu::PresentMode) -> Result<()> {
     info!("Application Starting...");
 
-    let gpu_device = Device::new().map_err(|e| anyhow!("Error creating GPU device: {:?}", e))?;
+    let gpu_device = RenderContext::new(backends, None, None);
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
     let time = Stopwatch::start_new();
 
@@ -661,7 +615,6 @@ pub fn run_app() -> Result<()> {
         accent_light: Color::rgb8(0, 175, 240),
         desktop_virtual_origin,
         vd_transform,
-        draw_targets: Vec::new(),
     };
 
     app.print_time("Begin EventLoop...");

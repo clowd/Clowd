@@ -2,18 +2,12 @@
 resolver = "2"
 members = [
     "clowd_capture",
-    "piet",
-    "piet-common",
-    "piet-coregraphics",
-    "piet-direct2d",
 ]
 
 [workspace.package]
 version = "0.0.0-local"
 authors = ["Caelan Sayler <git@caesay.com>"]
-# homepage = "https://github.com/clowd/Clowd"
 repository = "https://github.com/clowd/Clowd"
-# documentation = "https://docs.velopack.io"
 keywords = ["update", "install", "velopack", "squirrel", "automatic-updates"]
 categories = ["development-tools"]
 license = "MIT"
@@ -21,7 +15,3 @@ edition = "2021"
 rust-version = "1.75"
 
 [workspace.dependencies]
-piet = { path = "piet" }
-piet-common = { path = "piet-common" }
-piet-coregraphics = { path = "piet-coregraphics" }
-piet-direct2d = { path = "piet-direct2d" }

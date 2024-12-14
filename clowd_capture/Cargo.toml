@@ -24,9 +24,8 @@ log-panics = "2.0"
 rayon = "1.5"
 winit = "0.30.5"
 num = "0.4.3"
-piet.workspace = true
-piet-common.workspace = true
-derivative = "2.2.0"
+vello = "0.3.0"
+pollster = "0.4.0"
 
 [build-dependencies]
 winres = "0.1"
