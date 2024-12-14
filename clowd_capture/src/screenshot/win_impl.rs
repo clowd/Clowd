@@ -1,8 +1,6 @@
-#![allow(dead_code)]
-
 use crate::geometry::*;
 use anyhow::Result;
-use image::{self, ImageBuffer, Rgba};
+use image::{self, ImageBuffer, Rgba, RgbaImage};
 use rayon::prelude::*;
 use std::{mem, ops::Deref, ptr};
 use windows::{
@@ -18,49 +16,6 @@ use windows::{
         },
     },
 };
-// use windows::Win32::System::SystemInformation::{VerSetConditionMask, VerifyVersionInfoW, OSVERSIONINFOEXW, VER_FLAGS};
-
-// const VER_GREATER_EQUAL: u8 = 3;
-// const VER_MINORVERSION: VER_FLAGS = VER_FLAGS(0x0000001);
-// const VER_MAJORVERSION: VER_FLAGS = VER_FLAGS(0x0000002);
-// const VER_BUILDNUMBER: VER_FLAGS = VER_FLAGS(0x0000004);
-// const VER_SERVICEPACKMAJOR: VER_FLAGS = VER_FLAGS(0x0000020);
-
-// fn is_os_version_or_greater_internal(major: u16, minor: u16, build: u16, service_pack: u16) -> bool {
-//     let flags = VER_MAJORVERSION | VER_MINORVERSION | VER_SERVICEPACKMAJOR;
-
-//     unsafe {
-//         let mut mask: u64 = 0;
-//         mask = VerSetConditionMask(mask, VER_MAJORVERSION, VER_GREATER_EQUAL);
-//         mask = VerSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL);
-//         mask = VerSetConditionMask(mask, VER_BUILDNUMBER, VER_GREATER_EQUAL);
-//         mask = VerSetConditionMask(mask, VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL);
-
-//         let mut osvi: OSVERSIONINFOEXW = Default::default();
-//         osvi.dwMajorVersion = major.into();
-//         osvi.dwMinorVersion = minor.into();
-//         osvi.dwBuildNumber = build.into();
-//         osvi.wServicePackMajor = service_pack.into();
-
-//         VerifyVersionInfoW(&mut osvi, flags, mask).is_ok()
-//     }
-// }
-
-// pub fn is_windows_10_or_greater() -> bool {
-//     is_os_version_or_greater_internal(10, 0, 0, 0)
-// }
-
-// pub fn is_windows_7_sp1_or_greater() -> bool {
-//     is_os_version_or_greater_internal(6, 1, 0, 1)
-// }
-
-// pub fn is_windows_8_or_greater() -> bool {
-//     is_os_version_or_greater_internal(6, 2, 0, 0)
-// }
-
-// pub fn is_windows_8_1_or_greater() -> bool {
-//     is_os_version_or_greater_internal(6, 3, 0, 0)
-// }
 
 #[derive(Debug)]
 pub(super) struct BoxHDC {
@@ -262,7 +217,7 @@ pub fn virtual_desktop() -> ScreenRect {
     }
 }
 
-pub fn capture_desktop() -> Result<(ScreenRect, ImageBuffer<Rgba<u8>, Vec<u8>>, ImageBuffer<Rgba<u8>, Vec<u8>>)> {
+pub fn capture_desktop() -> Result<(ScreenRect, RgbaImage, RgbaImage)> {
     unsafe {
         let rect = virtual_desktop();
         let vx = rect.min_x();
