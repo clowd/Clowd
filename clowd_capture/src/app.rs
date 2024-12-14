@@ -21,7 +21,7 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     monitor::MonitorHandle,
     raw_window_handle::{HasWindowHandle, RawWindowHandle},
-    window::{CursorIcon, Window, WindowAttributes, WindowId},
+    window::{CursorIcon, Fullscreen, Window, WindowAttributes, WindowId},
 };
 use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
 
@@ -245,6 +245,7 @@ impl ApplicationHandler<UserEvent> for App {
                         let window = &r.window;
                         #[cfg(target_os = "macos")]
                         window.set_simple_fullscreen(true);
+                        window.set_fullscreen(Some(Fullscreen::Borderless(Some(r.monitor_handle.clone()))));
                         window.set_visible(true);
                         if r.is_primary {
                             window.focus_window();

@@ -21,7 +21,7 @@ fn main() {
     let _ = logging::setup_logging("capture", None, true, false);
 
     #[cfg(target_os = "macos")]
-    app::run_app(Some(Backends::METAL), PresentMode::AutoNoVsync).unwrap();
+    app::run_app(Some(Backends::METAL), PresentMode::Immediate).unwrap();
 
     #[cfg(target_os = "windows")]
     app::run_app(Some(Backends::VULKAN), PresentMode::Mailbox).unwrap();
