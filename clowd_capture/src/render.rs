@@ -5,7 +5,12 @@ use crate::{
     stats::{Sample, Stats},
 };
 use crate::{geometry::*, util};
-use std::{sync::mpsc::Receiver, time::Instant};
+use anyhow::Result;
+use std::{
+    sync::mpsc::Receiver,
+    thread,
+    time::{Duration, Instant},
+};
 use vello::{kurbo::*, peniko::*, Scene};
 
 pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedModel, info: RendererDto, bus: Receiver<RenderMessage>) {
@@ -20,21 +25,37 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
         let mut stats = Stats::new();
         let mut text = SimpleText::new();
         let mut frame_start_time = Instant::now();
+        let mut should_continue = true;
 
         info!("{:?} Starting render loop", info.window_id);
 
-        loop {
-            let texture = surface.begin_draw();
-            scene.reset();
+        while should_continue {
+            loop {
+                let msg = bus
+                    .recv_timeout(Duration::from_millis(0))
+                    .unwrap_or(RenderMessage::None);
 
-            info!("{:?} Drawing scene", info.window_id);
-            draw_scene(&mut scene, &model, &info);
-
-            if model.debug {
-                draw_debug(&mut scene, &model, &info, &mut text, &stats);
+                match msg {
+                    RenderMessage::ModelUpdate(new_model) => {
+                        model = new_model;
+                    }
+                    RenderMessage::Resize((width, height)) => {
+                        surface.resize_surface(width, height);
+                    }
+                    RenderMessage::Close => {
+                        should_continue = false;
+                        break;
+                    }
+                    RenderMessage::None => {
+                        break;
+                    }
+                }
             }
 
-            surface.end_draw(texture, &scene, &mut renderer);
+            if let Err(e) = render_frame(&surface, &mut scene, &model, &info, &mut text, &stats, &mut renderer) {
+                error!("{:?} Error rendering frame: {:?}", info.window_id, e);
+                thread::sleep(Duration::from_millis(16));
+            }
 
             let new_time = Instant::now();
             stats.add_sample(Sample {
@@ -49,50 +70,34 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
                     .send_event(UserEvent::RendererReady(info.window_id))
                     .unwrap();
             }
-
-            let msg = bus.recv().unwrap();
-            match msg {
-                RenderMessage::ModelUpdate(new_model) => {
-                    model = new_model;
-                }
-                RenderMessage::Resize((width, height)) => {
-                    surface.resize_surface(width, height);
-                }
-                RenderMessage::Close => {
-                    // should_continue = false;
-                    break;
-                }
-                RenderMessage::None => {}
-            }
-
-            // loop {
-            //     let msg = bus
-            //         .recv_timeout(Duration::from_millis(32))
-            //         .unwrap_or(RenderMessage::None);
-
-            //     debug!("Received render message: {:?}", msg);
-            //     match msg {
-            //         RenderMessage::ModelUpdate(new_model) => {
-            //             model = new_model;
-            //         }
-            //         RenderMessage::Resize((width, height)) => {
-            //             surface.resize_surface(width, height);
-            //         }
-            //         RenderMessage::Close => {
-            //             should_continue = false;
-            //             break;
-            //         }
-            //         RenderMessage::None => {
-            //             break;
-            //         }
-            //     }
-            // }
         }
 
         let _ = info
             .event_proxy
             .send_event(UserEvent::RendererExited(info.window_id));
     });
+}
+
+fn render_frame(
+    surface: &WindowSurface<'_>,
+    scene: &mut Scene,
+    model: &SharedModel,
+    info: &RendererDto,
+    text: &mut SimpleText,
+    stats: &Stats,
+    renderer: &mut vello::Renderer,
+) -> Result<()> {
+    let texture = surface.begin_draw()?;
+    scene.reset();
+
+    draw_scene(scene, model, info);
+
+    if model.debug {
+        draw_debug(scene, model, info, text, stats);
+    }
+
+    surface.end_draw(texture, &*scene, renderer)?;
+    Ok(())
 }
 
 pub fn draw_scene(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {

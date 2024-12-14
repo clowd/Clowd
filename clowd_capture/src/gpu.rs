@@ -4,8 +4,8 @@ use anyhow::Result;
 use std::{num::NonZeroUsize, path::PathBuf};
 use vello::{
     wgpu::{
-        self, Adapter, Backends, Device, Instance, Limits, Queue, Surface, SurfaceConfiguration, SurfaceTarget, SurfaceTexture,
-        TextureFormat,
+        self, Adapter, Backends, Device, Instance, Limits, Queue, Surface, SurfaceConfiguration, SurfaceError, SurfaceTarget,
+        SurfaceTexture, TextureFormat,
     },
     AaConfig, Renderer, RendererOptions, Scene,
 };
@@ -35,31 +35,28 @@ fn default_threads() -> usize {
 }
 
 impl WindowSurface<'_> {
-    pub fn begin_draw(&self) -> SurfaceTexture {
-        self.surface
-            .get_current_texture()
-            .expect("failed to get surface texture")
+    pub fn begin_draw(&self) -> Result<SurfaceTexture, SurfaceError> {
+        self.surface.get_current_texture()
     }
 
-    pub fn end_draw(&self, texture: SurfaceTexture, scene: &Scene, renderer: &mut Renderer) {
-        renderer
-            .render_to_surface(
-                &self.device.device,
-                &self.device.queue,
-                scene,
-                &texture,
-                &vello::RenderParams {
-                    base_color: vello::peniko::Color::BLACK, // Background color
-                    width: self.config.width,
-                    height: self.config.height,
-                    antialiasing_method: AaConfig::Area,
-                },
-            )
-            .expect("failed to render to surface");
+    pub fn end_draw(&self, texture: SurfaceTexture, scene: &Scene, renderer: &mut Renderer) -> Result<()> {
+        renderer.render_to_surface(
+            &self.device.device,
+            &self.device.queue,
+            scene,
+            &texture,
+            &vello::RenderParams {
+                base_color: vello::peniko::Color::BLACK, // Background color
+                width: self.config.width,
+                height: self.config.height,
+                antialiasing_method: AaConfig::Area,
+            },
+        )?;
 
         texture.present();
 
         self.device.device.poll(wgpu::Maintain::Poll);
+        Ok(())
     }
 
     pub fn create_renderer(&mut self) -> Renderer {
