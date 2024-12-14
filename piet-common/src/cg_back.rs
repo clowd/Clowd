@@ -7,17 +7,25 @@
 //! Support for piet CoreGraphics back-end.
 
 use core_graphics::sys::CGContext as SysCGContext;
-use foreign_types_shared::{ForeignType, ForeignTypeRef};
-use objc::{class, msg_send, sel, sel_impl, declare::ClassDecl, rc::WeakPtr, runtime::{Class, Object, Protocol, Sel}};
+// use foreign_types_shared::{ForeignType, ForeignTypeRef};
+use sb_impl::CGImpl;
+// use objc::{
+//     class,
+//     declare::ClassDecl,
+//     msg_send,
+//     rc::WeakPtr,
+//     runtime::{Class, Object, Protocol, Sel},
+//     sel, sel_impl,
+// };
 use std::path::Path;
 use std::{ffi::c_void, marker::PhantomData};
 #[cfg(feature = "png")]
 use std::{fs::File, io::BufWriter};
 
-use cocoa::{appkit::NSImage, base::YES};
-use cocoa::base::{id, nil};
-use cocoa::foundation::NSAutoreleasePool;
-use core_graphics::context::CGContextRef;
+// use cocoa::base::{id, nil};
+// use cocoa::foundation::NSAutoreleasePool;
+// use cocoa::{appkit::NSImage, base::YES};
+use core_graphics::context::{self, CGContextRef};
 use core_graphics::{color_space::CGColorSpace, context::CGContext};
 // use objc2::rc::Id;
 // use objc2::runtime::Object;
@@ -31,7 +39,7 @@ use piet::util;
 use piet::{Error, ImageBuf, ImageFormat};
 #[doc(hidden)]
 pub use piet_coregraphics::*;
-use raw_window_handle::RawWindowHandle;
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 /// The `RenderContext` for the CoreGraphics backend, which is selected.
 pub type Piet<'a> = CoreGraphicsContext<'a>;
@@ -78,10 +86,9 @@ pub struct BitmapTarget<'a> {
 }
 
 pub struct WindowTarget {
-    ns_view: id,
-    pool: id,
-    ctx: CGContext,
-    height: f64,
+    // ns_view: id,
+    sb: CGImpl,
+    ctx: Option<CGContext>,
 }
 
 impl Device {
@@ -92,96 +99,64 @@ impl Device {
         })
     }
 
-    pub fn lock_view<T: Into<RawWindowHandle>>(&self, view: T) {
-        unsafe {
-            let handle: RawWindowHandle = view.into();
-            match handle {
-                RawWindowHandle::AppKit(handle) => {
-                    let ns_view = handle.ns_view.as_ptr() as id;
-                    ns_view.lockFocus();
-                }
-                _ => panic!("unsupported handle"),
-            }
-        }
+    pub fn window_target(&mut self, raw_handle: RawWindowHandle, pix_scale: f64) -> Result<WindowTarget, piet::Error> {
+        let sb: CGImpl = crate_layer_for_window(raw_handle).map_err(|_e| piet::Error::NotSupported)?;
+
+        // let ns_view = match raw_handle {
+        //     RawWindowHandle::AppKit(handle) => handle.ns_view.as_ptr() as id,
+        //     _ => panic!("unsupported handle"),
+        // };
+
+        Ok(WindowTarget {
+            // ns_view,
+            sb,
+            ctx: None,
+        })
     }
 
-    pub fn request_redraw<T: Into<RawWindowHandle>>(&self, view: T) {
-        unsafe {
-            let handle: RawWindowHandle = view.into();
-            match handle {
-                RawWindowHandle::AppKit(handle) => {
-                    let ns_view = handle.ns_view.as_ptr() as id;
-                    let () = msg_send![ns_view, setNeedsDisplay: YES];
-                    let () = msg_send![ns_view, displayIfNeeded];
-                }
-                _ => panic!("unsupported handle"),
-            }
-        }
-    }
-
-    pub fn unlock_view<T: Into<RawWindowHandle>>(&self, view: T) {
-        unsafe {
-            let handle: RawWindowHandle = view.into();
-            match handle {
-                RawWindowHandle::AppKit(handle) => {
-                    let ns_view = handle.ns_view.as_ptr() as id;
-                    ns_view.unlockFocus();
-                }
-                _ => panic!("unsupported handle"),
-            }
-        }
-    }
-
-    pub fn create_render_context(&mut self, width: u32, height: u32) -> Result<CoreGraphicsContext, piet::Error> {
-        let context: cocoa::base::id = unsafe { msg_send![class!(NSGraphicsContext), currentContext] };
-        let cgcontext_ptr: *mut <CGContextRef as ForeignTypeRef>::CType = unsafe { msg_send![context, CGContext] };
-
-        if cgcontext_ptr.is_null() {
-            return Err(Error::MissingFeature("NSGraphicsContext::currentContext"));
-        }
-
-        let cgcontext = unsafe { CGContextRef::from_ptr_mut(cgcontext_ptr) };
-        Ok(CoreGraphicsContext::new_y_up(cgcontext, height as f64, None))
-    }
-
-    // pub fn window_target<T: Into<RawWindowHandle>>(
-    //     &mut self,
-    //     hwnd: T,
-    //     width: usize,
-    //     height: usize,
-    //     pix_scale: f64,
-    // ) -> Result<WindowTarget, piet::Error> {
+    // pub fn lock_view<T: Into<RawWindowHandle>>(&self, view: T) {
+    //     use cocoa::appkit::NSView;
     //     unsafe {
-    //         let handle: RawWindowHandle = hwnd.into();
+    //         let handle: RawWindowHandle = view.into();
     //         match handle {
     //             RawWindowHandle::AppKit(handle) => {
     //                 let ns_view = handle.ns_view.as_ptr() as id;
-    //                 let pool = NSAutoreleasePool::new(nil);
-
     //                 ns_view.lockFocus();
-
-    //                 // TODO error handling, need to unlock focus and release pool
-    //                 let ns_graphics_context = NSGraphicsContext::currentContext().unwrap();
-    //                 // let cg_ptr = ns_graphics_context.graphicsPort().as_ptr() as *mut SysCGContext;
-
-    //                 let ctx = CGContext::from_ptr(ns_graphics_context.graphicsPort().as_ptr() as *mut SysCGContext);
-
-    //                 ctx.scale(pix_scale, pix_scale);
-    //                 let height = height as f64 * pix_scale.recip();
-
-    //                 // let ns_graphics_context: id = msg_send![class!(NSGraphicsContext), currentContext];
-    //                 // let gctx: CGContextRef = msg_send![ns_graphics_context, CGContext];
-    //                     println!("DRAWING!!");
-    //                 Ok(WindowTarget {
-    //                     ns_view,
-    //                     pool,
-    //                     ctx,
-    //                     height,
-    //                 })
     //             }
     //             _ => panic!("unsupported handle"),
     //         }
     //     }
+    // }
+
+    // pub fn unlock_view<T: Into<RawWindowHandle>>(&self, view: T) {
+    //     unsafe {
+    //         let handle: RawWindowHandle = view.into();
+    //         match handle {
+    //             RawWindowHandle::AppKit(handle) => {
+    //                 let ns_view = handle.ns_view.as_ptr() as id;
+    //                 ns_view.unlockFocus();
+    //             }
+    //             _ => panic!("unsupported handle"),
+    //         }
+    //     }
+    // }
+
+    // pub fn create_render_context(&mut self) -> Result<CoreGraphicsContext, piet::Error> {
+    //     let context: cocoa::base::id = unsafe { msg_send![class!(NSGraphicsContext), currentContext] };
+    //     let cgcontext_ptr: *mut <CGContextRef as ForeignTypeRef>::CType = unsafe { msg_send![context, CGContext] };
+
+    //     if cgcontext_ptr.is_null() {
+    //         return Err(Error::MissingFeature("NSGraphicsContext::currentContext"));
+    //     }
+
+    //     let cgcontext = unsafe { CGContextRef::from_ptr_mut(cgcontext_ptr) };
+
+    //     let rect = CGRectMake(50.0, 50.0, 100.0, 100.0);
+    //     let color = CGColor::rgb(1.0, 0.0, 0.0); // Red color
+    //     CGContextSetFillColorWithColor(cgcontext, color);
+    //     CGContextFillRect(cgcontext, rect);
+
+    //     Ok(CoreGraphicsContext::new_y_down(cgcontext, None))
     // }
 
     /// Create a new bitmap target.
@@ -206,15 +181,32 @@ impl Device {
 }
 
 impl WindowTarget {
-    pub fn begin_draw(&mut self) -> CoreGraphicsContext {
-        CoreGraphicsContext::new_y_up(&mut self.ctx, self.height, None)
+    pub fn resize(&mut self, width: u32, height: u32) {
+        let _ = self.sb.resize(width, height);
+    }
+
+    pub fn begin_draw(&mut self) -> Result<CoreGraphicsContext, piet::Error> {
+        if !self.ctx.is_none() {
+            return Err(Error::InvalidInput);
+        }
+
+        self.ctx = Some(
+            self.sb
+                .create_context()
+                .map_err(|e| Error::BackendError(Box::new(e)))?,
+        );
+
+        let ctx = self.ctx.as_mut().unwrap();
+        Ok(CoreGraphicsContext::new_y_down(ctx, None))
     }
 
     pub fn end_draw(&mut self) {
-        unsafe {
-            self.pool.drain();
-            self.ns_view.unlockFocus();
+        if self.ctx.is_none() {
+            return;
         }
+
+        let ctx = self.ctx.take().unwrap();
+        self.sb.present_context(ctx).unwrap();
     }
 }
 

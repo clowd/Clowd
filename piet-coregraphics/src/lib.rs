@@ -8,14 +8,14 @@
 
 mod ct_helpers;
 mod gradient;
+pub mod sb_error;
+pub mod sb_impl;
 mod text;
 
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use core_graphics::base::{
-    kCGImageAlphaLast, kCGImageAlphaPremultipliedLast, kCGRenderingIntentDefault, CGFloat,
-};
+use core_graphics::base::{kCGImageAlphaLast, kCGImageAlphaPremultipliedLast, kCGRenderingIntentDefault, CGFloat};
 use core_graphics::color_space::CGColorSpace;
 use core_graphics::context::{CGContextRef, CGInterpolationQuality, CGLineCap, CGLineJoin};
 use core_graphics::data_provider::CGDataProvider;
@@ -26,20 +26,24 @@ use core_graphics::image::CGImage;
 use piet::kurbo::{Affine, PathEl, Point, QuadBez, Rect, Shape, Size};
 
 use piet::{
-    Color, Error, FixedGradient, Image, ImageFormat, InterpolationMode, IntoBrush, LineCap,
-    LineJoin, RenderContext, RoundInto, StrokeStyle,
+    Color, Error, FixedGradient, Image, ImageFormat, InterpolationMode, IntoBrush, LineCap, LineJoin, RenderContext, RoundInto, StrokeStyle,
 };
+use raw_window_handle::RawWindowHandle;
+use sb_error::InitError;
+use sb_impl::CGImpl;
 
 pub use crate::text::{CoreGraphicsText, CoreGraphicsTextLayout, CoreGraphicsTextLayoutBuilder};
 
 use gradient::Gradient;
 
 // getting this to be a const takes some gymnastics
-const GRADIENT_DRAW_BEFORE_AND_AFTER: CGGradientDrawingOptions =
-    CGGradientDrawingOptions::from_bits_truncate(
-        CGGradientDrawingOptions::CGGradientDrawsAfterEndLocation.bits()
-            | CGGradientDrawingOptions::CGGradientDrawsBeforeStartLocation.bits(),
-    );
+const GRADIENT_DRAW_BEFORE_AND_AFTER: CGGradientDrawingOptions = CGGradientDrawingOptions::from_bits_truncate(
+    CGGradientDrawingOptions::CGGradientDrawsAfterEndLocation.bits() | CGGradientDrawingOptions::CGGradientDrawsBeforeStartLocation.bits(),
+);
+
+pub fn crate_layer_for_window(window: RawWindowHandle) -> Result<CGImpl, InitError> {
+    CGImpl::new(window)
+}
 
 pub struct CoreGraphicsContext<'a> {
     // Cairo has this as Clone and with &self methods, but we do this to avoid
@@ -64,11 +68,7 @@ impl<'a> CoreGraphicsContext<'a> {
     ///
     /// The optional `text` argument can be a reusable `CoreGraphicsText` struct;
     /// a new one will be constructed if `None` is passed.
-    pub fn new_y_up(
-        ctx: &mut CGContextRef,
-        height: f64,
-        text: Option<CoreGraphicsText>,
-    ) -> CoreGraphicsContext {
+    pub fn new_y_up(ctx: &mut CGContextRef, height: f64, text: Option<CoreGraphicsText>) -> CoreGraphicsContext {
         Self::new_impl(ctx, Some(height), text, false)
     }
 
@@ -78,19 +78,11 @@ impl<'a> CoreGraphicsContext<'a> {
     ///
     /// The optional `text` argument can be a reusable `CoreGraphicsText` struct;
     /// a new one will be constructed if `None` is passed.
-    pub fn new_y_down(
-        ctx: &mut CGContextRef,
-        text: Option<CoreGraphicsText>,
-    ) -> CoreGraphicsContext {
+    pub fn new_y_down(ctx: &mut CGContextRef, text: Option<CoreGraphicsText>) -> CoreGraphicsContext {
         Self::new_impl(ctx, None, text, true)
     }
 
-    fn new_impl(
-        ctx: &mut CGContextRef,
-        height: Option<f64>,
-        text: Option<CoreGraphicsText>,
-        y_down: bool,
-    ) -> CoreGraphicsContext {
+    fn new_impl(ctx: &mut CGContextRef, height: Option<f64>, text: Option<CoreGraphicsText>, y_down: bool) -> CoreGraphicsContext {
         ctx.save();
         if let Some(height) = height {
             let xform = Affine::FLIP_Y * Affine::translate((0.0, -height));
@@ -242,13 +234,7 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
         }
     }
 
-    fn stroke_styled(
-        &mut self,
-        shape: impl Shape,
-        brush: &impl IntoBrush<Self>,
-        width: f64,
-        style: &StrokeStyle,
-    ) {
+    fn stroke_styled(&mut self, shape: impl Shape, brush: &impl IntoBrush<Self>, width: f64, style: &StrokeStyle) {
         let brush = brush.make_brush(self, || shape.bounding_box());
         self.set_path(shape);
         self.set_stroke(width.round_into(), Some(style));
@@ -276,7 +262,8 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
         self.ctx.save();
         // inverted coordinate system; text is drawn from bottom left corner,
         // and (0, 0) in context is also bottom left.
-        self.ctx.translate(pos.x, layout.frame_size.height + pos.y);
+        self.ctx
+            .translate(pos.x, layout.frame_size.height + pos.y);
         self.ctx.scale(1.0, -1.0);
         layout.draw(self.ctx);
         self.ctx.restore();
@@ -284,7 +271,11 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
 
     fn save(&mut self) -> Result<(), Error> {
         self.ctx.save();
-        let state = self.transform_stack.last().copied().unwrap_or_default();
+        let state = self
+            .transform_stack
+            .last()
+            .copied()
+            .unwrap_or_default();
         self.transform_stack.push(state);
         Ok(())
     }
@@ -325,17 +316,11 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
             return Ok(CoreGraphicsImage::Empty);
         }
         assert!(!buf.is_empty() && buf.len() <= format.bytes_per_pixel() * width * height);
-        let data = Arc::new(piet::util::image_buffer_to_tightly_packed(
-            buf, width, height, stride, format,
-        )?);
+        let data = Arc::new(piet::util::image_buffer_to_tightly_packed(buf, width, height, stride, format)?);
         let data_provider = CGDataProvider::from_buffer(data);
         let (colorspace, bitmap_info, bytes) = match format {
             ImageFormat::Rgb => (CGColorSpace::create_device_rgb(), 0, 3),
-            ImageFormat::RgbaPremul => (
-                CGColorSpace::create_device_rgb(),
-                kCGImageAlphaPremultipliedLast,
-                4,
-            ),
+            ImageFormat::RgbaPremul => (CGColorSpace::create_device_rgb(), kCGImageAlphaPremultipliedLast, 4),
             ImageFormat::RgbaSeparate => (CGColorSpace::create_device_rgb(), kCGImageAlphaLast, 4),
             ImageFormat::Grayscale => (CGColorSpace::create_device_gray(), 0, 1),
             _ => unimplemented!(),
@@ -360,12 +345,7 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
         Ok(CoreGraphicsImage::from_cgimage_and_ydir(image, self.y_down))
     }
 
-    fn draw_image(
-        &mut self,
-        src_image: &Self::Image,
-        rect: impl Into<Rect>,
-        interp: InterpolationMode,
-    ) {
+    fn draw_image(&mut self, src_image: &Self::Image, rect: impl Into<Rect>, interp: InterpolationMode) {
         let image_y_down: bool;
         let image = match src_image {
             CoreGraphicsImage::YDown(img) => {
@@ -382,9 +362,7 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
         self.ctx.save();
         //https://developer.apple.com/documentation/coregraphics/cginterpolationquality?language=objc
         let quality = match interp {
-            InterpolationMode::NearestNeighbor => {
-                CGInterpolationQuality::CGInterpolationQualityNone
-            }
+            InterpolationMode::NearestNeighbor => CGInterpolationQuality::CGInterpolationQualityNone,
             InterpolationMode::Bilinear => CGInterpolationQuality::CGInterpolationQualityDefault,
         };
         self.ctx.set_interpolation_quality(quality);
@@ -396,7 +374,8 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
         } else {
             // The CGImage needs to be flipped, which we do by translating the drawing rect to be
             // centered around the origin before inverting the context.
-            self.ctx.translate(rect.min_x(), rect.max_y());
+            self.ctx
+                .translate(rect.min_x(), rect.max_y());
             self.ctx.scale(1.0, -1.0);
             self.ctx
                 .draw_image(to_cgrect(rect.with_origin(Point::ZERO)), image);
@@ -405,13 +384,7 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
         self.ctx.restore();
     }
 
-    fn draw_image_area(
-        &mut self,
-        image: &Self::Image,
-        src_rect: impl Into<Rect>,
-        dst_rect: impl Into<Rect>,
-        interp: InterpolationMode,
-    ) {
+    fn draw_image_area(&mut self, image: &Self::Image, src_rect: impl Into<Rect>, dst_rect: impl Into<Rect>, interp: InterpolationMode) {
         if let CoreGraphicsImage::YDown(image) = image {
             if let Some(cropped) = image.cropped(to_cgrect(src_rect)) {
                 self.draw_image(&CoreGraphicsImage::YDown(cropped), dst_rect, interp);
@@ -439,12 +412,7 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
         } else {
             // Otherwise the active context is y-up (macOS default in coregraphics), and we need to
             // temporarily translate and flip the context to capture the correct area.
-            let y_dir_adjusted_src_rect = Rect::new(
-                src_rect.x0,
-                self.height - src_rect.y0,
-                src_rect.x1,
-                self.height - src_rect.y1,
-            );
+            let y_dir_adjusted_src_rect = Rect::new(src_rect.x0, self.height - src_rect.y0, src_rect.x1, self.height - src_rect.y1);
             let matrix = self.ctx.get_ctm();
             to_cgrect(y_dir_adjusted_src_rect).apply_transform(&matrix)
         };
@@ -453,21 +421,17 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
             return Err(Error::InvalidInput);
         }
 
-        if src_cgrect.size.width > self.ctx.width() as f64
-            || src_cgrect.size.height > self.ctx.height() as f64
-        {
+        if src_cgrect.size.width > self.ctx.width() as f64 || src_cgrect.size.height > self.ctx.height() as f64 {
             return Err(Error::InvalidInput);
         }
 
-        let full_image = self.ctx.create_image().ok_or(Error::InvalidInput)?;
+        let full_image = self
+            .ctx
+            .create_image()
+            .ok_or(Error::InvalidInput)?;
 
-        if src_cgrect.size.width.round() as usize == self.ctx.width()
-            && src_cgrect.size.height.round() as usize == self.ctx.height()
-        {
-            return Ok(CoreGraphicsImage::from_cgimage_and_ydir(
-                full_image,
-                self.y_down,
-            ));
+        if src_cgrect.size.width.round() as usize == self.ctx.width() && src_cgrect.size.height.round() as usize == self.ctx.height() {
+            return Ok(CoreGraphicsImage::from_cgimage_and_ydir(full_image, self.y_down));
         }
 
         let cropped_image_result = full_image.cropped(src_cgrect);
@@ -493,10 +457,7 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
                 .create_image()
                 .expect("Failed to capture cropped image from resize context");
 
-            Ok(CoreGraphicsImage::from_cgimage_and_ydir(
-                cropped_image,
-                self.y_down,
-            ))
+            Ok(CoreGraphicsImage::from_cgimage_and_ydir(cropped_image, self.y_down))
         } else {
             Err(Error::InvalidInput)
         }
@@ -512,7 +473,10 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
     }
 
     fn current_transform(&self) -> Affine {
-        self.transform_stack.last().copied().unwrap_or_default()
+        self.transform_stack
+            .last()
+            .copied()
+            .unwrap_or_default()
     }
 
     fn status(&mut self) -> Result<(), Error> {
@@ -521,11 +485,7 @@ impl<'a> RenderContext for CoreGraphicsContext<'a> {
 }
 
 impl<'a> IntoBrush<CoreGraphicsContext<'a>> for Brush {
-    fn make_brush<'b>(
-        &'b self,
-        _piet: &mut CoreGraphicsContext,
-        _bbox: impl FnOnce() -> Rect,
-    ) -> std::borrow::Cow<'b, Brush> {
+    fn make_brush<'b>(&'b self, _piet: &mut CoreGraphicsContext, _bbox: impl FnOnce() -> Rect) -> std::borrow::Cow<'b, Brush> {
         Cow::Borrowed(self)
     }
 }
@@ -537,16 +497,16 @@ impl Image for CoreGraphicsImage {
         // the issue would only be accuracy of the size.
         match self {
             CoreGraphicsImage::Empty => Size::new(0., 0.),
-            CoreGraphicsImage::YDown(image) | CoreGraphicsImage::YUp(image) => {
-                Size::new(image.width() as f64, image.height() as f64)
-            }
+            CoreGraphicsImage::YDown(image) | CoreGraphicsImage::YUp(image) => Size::new(image.width() as f64, image.height() as f64),
         }
     }
 }
 
 fn convert_line_join(line_join: LineJoin) -> CGLineJoin {
     match line_join {
-        LineJoin::Miter { .. } => CGLineJoin::CGLineJoinMiter,
+        LineJoin::Miter {
+            ..
+        } => CGLineJoin::CGLineJoinMiter,
         LineJoin::Round => CGLineJoin::CGLineJoinRound,
         LineJoin::Bevel => CGLineJoin::CGLineJoinBevel,
     }
@@ -577,8 +537,10 @@ impl<'a> CoreGraphicsContext<'a> {
         let style = style.unwrap_or(&default_style);
         self.ctx.set_line_width(width);
 
-        self.ctx.set_line_join(convert_line_join(style.line_join));
-        self.ctx.set_line_cap(convert_line_cap(style.line_cap));
+        self.ctx
+            .set_line_join(convert_line_join(style.line_join));
+        self.ctx
+            .set_line_cap(convert_line_cap(style.line_cap));
 
         if let Some(limit) = style.miter_limit() {
             self.ctx.set_miter_limit(limit);
@@ -631,18 +593,7 @@ fn compute_blurred_rect(rect: Rect, radius: f64) -> (CGImage, Rect) {
 
     let data_provider = CGDataProvider::from_buffer(Arc::new(data));
     let color_space = CGColorSpace::create_device_gray();
-    let image = CGImage::new(
-        width,
-        height,
-        8,
-        8,
-        width,
-        &color_space,
-        0,
-        &data_provider,
-        false,
-        0,
-    );
+    let image = CGImage::new(width, height, 8, 8, width, &color_space, 0, &data_provider, false, 0);
     (image, rect_exp)
 }
 
@@ -760,10 +711,6 @@ mod tests {
         let unwrapped_copy = copy.as_cgimage().unwrap();
         let rewrapped_copy = CoreGraphicsImage::from_cgimage_and_ydir(unwrapped_copy.clone(), true);
 
-        piet.draw_image(
-            &rewrapped_copy,
-            Rect::new(0.0, 0.0, 400.0, 400.0),
-            InterpolationMode::Bilinear,
-        );
+        piet.draw_image(&rewrapped_copy, Rect::new(0.0, 0.0, 400.0, 400.0), InterpolationMode::Bilinear);
     }
 }

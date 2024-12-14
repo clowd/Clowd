@@ -11,7 +11,7 @@ use euclid::Transform2D;
 use image::{DynamicImage, ImageBuffer, RgbaImage};
 use mouse_rs::Mouse;
 use piet::{kurbo::Vec2, Color, Image, RenderContext, Text, TextAttribute, TextLayout, TextLayoutBuilder};
-use piet_common::{Device, PietImage as RealImage};
+use piet_common::{Device, PietImage as RealImage, WindowTarget};
 use simple_stopwatch::Stopwatch;
 
 #[cfg(target_os = "macos")]
@@ -64,6 +64,7 @@ pub struct SharedModel {
 struct App {
     gpu_device: Device,
     renderers: Vec<RendererInfo>,
+    draw_targets: Vec<(WindowId, WindowTarget, RendererDto)>,
     initialized: bool,
     shown: bool,
     time: Stopwatch,
@@ -113,13 +114,26 @@ pub struct RendererDto {
     vd_transform: Transform2D<i32, ScreenUnit, ScreenUnit>,
 }
 
-trait RendererInfoImpl {
-    fn get_by_id(&mut self, id: WindowId) -> Option<&mut RendererInfo>;
+trait GetById<T> {
+    fn getid_mut(&mut self, id: WindowId) -> Option<&mut T>;
+    fn getid(&self, id: WindowId) -> Option<&T>;
 }
 
-impl RendererInfoImpl for Vec<RendererInfo> {
-    fn get_by_id(&mut self, id: WindowId) -> Option<&mut RendererInfo> {
+impl GetById<RendererInfo> for Vec<RendererInfo> {
+    fn getid_mut(&mut self, id: WindowId) -> Option<&mut RendererInfo> {
         self.iter_mut().find(|r| r.window_id == id)
+    }
+    fn getid(&self, id: WindowId) -> Option<&RendererInfo> {
+        self.iter().find(|r| r.window_id == id)
+    }
+}
+
+impl GetById<(WindowId, WindowTarget, RendererDto)> for Vec<(WindowId, WindowTarget, RendererDto)> {
+    fn getid_mut(&mut self, id: WindowId) -> Option<&mut (WindowId, WindowTarget, RendererDto)> {
+        self.iter_mut().find(|(i, _, _)| *i == id)
+    }
+    fn getid(&self, id: WindowId) -> Option<&(WindowId, WindowTarget, RendererDto)> {
+        self.iter().find(|(i, _, _)| *i == id)
     }
 }
 
@@ -186,10 +200,11 @@ impl ApplicationHandler<UserEvent> for App {
                 .with_blur(true)
                 .with_visible(false)
                 .with_inner_size(size)
-                .with_fullscreen(Some(Fullscreen::Borderless(Some(monitor.clone()))))
+                // .with_fullscreen(Some(Fullscreen::Borderless(Some(monitor.clone()))))
                 .with_title("Clowd Capture");
 
             let window = event_loop.create_window(attributes).unwrap();
+            window.request_redraw(); // on macos, not all windows get a redraw request?
 
             let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
             let monitor_bounds = self
@@ -210,21 +225,28 @@ impl ApplicationHandler<UserEvent> for App {
 
             self.renderers.push(info);
 
+            let dto = self.create_render_dto(window_id);
+            #[allow(deprecated)]
+            let raw_handle = self
+                .renderers
+                .getid_mut(window_id)
+                .unwrap()
+                .window
+                .raw_window_handle()
+                .unwrap();
+            let target = self
+                .gpu_device
+                .window_target(raw_handle, 1.0)
+                .expect("could not create window target");
+
+            #[cfg(target_os = "macos")]
+            {
+                self.draw_targets
+                    .push((window_id, target, dto));
+            }
+
             #[cfg(windows)]
             {
-                let dto = self.create_render_dto(window_id);
-                #[allow(deprecated)]
-                let raw_handle = self
-                    .renderers
-                    .get_by_id(window_id)
-                    .unwrap()
-                    .window
-                    .raw_window_handle()
-                    .unwrap();
-                let target = self
-                    .gpu_device
-                    .window_target(raw_handle, 1.0)
-                    .expect("could not create window target");
                 start_render_loop(target, dto, self.model.clone());
             }
 
@@ -237,7 +259,7 @@ impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::RendererReady(id) => {
-                if let Some(renderer) = self.renderers.get_by_id(id) {
+                if let Some(renderer) = self.renderers.getid_mut(id) {
                     renderer.ready = true;
                     self.print_time(format!("Renderer {:?} ready.", id).as_str());
                 }
@@ -277,38 +299,51 @@ impl ApplicationHandler<UserEvent> for App {
 
         match event {
             WindowEvent::Resized(size) => {
+                self.draw_targets
+                    .getid_mut(id)
+                    .unwrap()
+                    .1
+                    .resize(size.width, size.height);
+                self.renderers
+                    .getid_mut(id)
+                    .unwrap()
+                    .window
+                    .request_redraw();
+                // window.request_redraw(); // on macos, not all windows get a redraw request?
+
                 // TODO?
             }
             #[cfg(target_os = "macos")]
             WindowEvent::RedrawRequested => {
-                let dto = self.create_render_dto(id);
-                let (window_handle, window_size, ready) = {
-                    let renderer = self.renderers.get_by_id(id).unwrap();
-                    let window = &renderer.window;
-                    let size = window.inner_size();
-                    (window.window_handle().unwrap(), size, renderer.ready)
-                };
-               
-                // self.gpu_device.lock_view(window_handle);
-                if let Ok(mut rc) = self.gpu_device.create_render_context(window_size.width, window_size.height) {
-                    render::draw_view(&mut rc, &mut model, &dto);
+                let (_, target, renderer) = self.draw_targets.getid_mut(id).unwrap();
+
+                {
+                    let mut rc = target.begin_draw().unwrap();
+                    let model = model.clone();
+                    render::draw_view(&mut rc, &model, &renderer);
                     rc.finish().unwrap();
                 }
-                // self.gpu_device.unlock_view(window_handle);
+                target.end_draw();
 
-                
+                // let dto = self.create_render_dto(id);
+                // let (window_handle, window_size, ready) = {
+                //     let renderer = self.renderers.getid_mut(id).unwrap();
+                //     let window = &renderer.window;
+                //     let size = window.inner_size();
+                //     (window.window_handle().unwrap(), size, renderer.ready)
+                // };
 
+                // // self.gpu_device.lock_view(window_handle);
+                // if let Ok(mut rc) = self.gpu_device.create_render_context() {
+                //     render::draw_view(&mut rc, &mut model, &dto);
+                //     rc.finish().unwrap();
+                // }
+                // // self.gpu_device.unlock_view(window_handle);
 
-                // drop(rc);
-                // target.end_draw();
-
-                // self.renderers.get_by_id(id).unwrap().window.request_redraw();
-
-                if !ready {
+                if !self.renderers.getid(id).unwrap().ready {
                     self.event_proxy
                         .send_event(UserEvent::RendererReady(id))
                         .unwrap();
-
                 }
             }
             WindowEvent::CloseRequested => {
@@ -321,12 +356,6 @@ impl ApplicationHandler<UserEvent> for App {
                 button,
             } => {
                 if state == ElementState::Pressed && button == MouseButton::Left {
-                    let window_handle = self.renderers.get_by_id(id).unwrap().window.window_handle().unwrap();
-                self.gpu_device.request_redraw(window_handle);
-                println!("Requested redraw for window {:?}", id);
-                println!("Requested redraw for window {:?}", id);
-                println!("Requested redraw for window {:?}", id);
-
                     if model.captured {
                         // let hit = model.button_panel.hit_test(pt);
                         // if hit.is_size_handle() {
@@ -479,7 +508,7 @@ impl App {
     }
 
     fn create_render_dto(&mut self, id: WindowId) -> RendererDto {
-        let info = self.renderers.get_by_id(id).unwrap();
+        let info = self.renderers.getid_mut(id).unwrap();
         RendererDto {
             accent_dark: self.accent_dark,
             accent_light: self.accent_light,
@@ -655,6 +684,7 @@ pub fn run_app() -> Result<()> {
         accent_light: Color::rgb8(0, 175, 240),
         desktop_virtual_origin,
         vd_transform,
+        draw_targets: Vec::new(),
     };
 
     app.print_time("Begin EventLoop...");
