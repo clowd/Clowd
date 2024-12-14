@@ -1,9 +1,11 @@
 use crate::{
     app::{RenderMessage, RendererDto, SharedModel, UserEvent},
     gpu::WindowSurface,
+    simple_text::SimpleText,
+    stats::{Sample, Snapshot, Stats},
 };
 use crate::{geometry::*, util};
-use std::sync::mpsc::Receiver;
+use std::{sync::mpsc::Receiver, time::Instant};
 use vello::{kurbo::*, peniko::*, Scene};
 
 pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedModel, info: RendererDto, bus: Receiver<RenderMessage>) {
@@ -15,7 +17,9 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
         let mut first_render = false;
         let mut renderer = surface.create_renderer();
         let mut scene = Scene::new();
-        let mut should_continue = true;
+        let mut stats = Stats::new();
+        let mut text = SimpleText::new();
+        let mut frame_start_time = Instant::now();
 
         info!("{:?} Starting render loop", info.window_id);
 
@@ -26,7 +30,17 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
             info!("{:?} Drawing scene", info.window_id);
             draw_scene(&mut scene, &model, &info);
 
+            if model.debug {
+                draw_debug(&mut scene, &model, &info, &mut text, &stats);
+            }
+
             surface.end_draw(texture, &scene, &mut renderer);
+
+            let new_time = Instant::now();
+            stats.add_sample(Sample {
+                frame_time_us: (new_time - frame_start_time).as_micros() as u64,
+            });
+            frame_start_time = new_time;
 
             if !first_render {
                 info!("{:?} Sending ready event", info.window_id);
@@ -45,7 +59,7 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
                     surface.resize_surface(width, height);
                 }
                 RenderMessage::Close => {
-                    should_continue = false;
+                    // should_continue = false;
                     break;
                 }
                 RenderMessage::None => {}
@@ -172,4 +186,13 @@ pub fn draw_crosshair(scene: &mut Scene, model: &SharedModel, renderer: &Rendere
         (intercept.x + accent_thick_length, intercept.y),
     );
     scene.stroke(&thick, Affine::IDENTITY, accent, None, &right);
+}
+
+pub fn draw_debug(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto, text: &mut SimpleText, stats: &Stats) {
+    let snapshot = stats.snapshot();
+    let bounds = renderer.monitor_bounds.to_f64();
+    let width = bounds.width();
+    let height = bounds.height();
+
+    snapshot.draw_layer(scene, text, width, height, stats.samples(), None, false, vello::AaConfig::Area);
 }
