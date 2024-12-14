@@ -1,10 +1,32 @@
+use xcap::Monitor as XCapMonitor;
+
 use crate::geometry::{RectExt, ScreenRect};
 use anyhow::Result;
 use image::{GenericImage, ImageBuffer, Rgba, RgbaImage};
 use rayon::prelude::*;
-use xcap::Monitor as XCapMonitor;
 
 pub fn capture_desktop() -> Result<(ScreenRect, RgbaImage, RgbaImage)> {
+    let monitors = XCapMonitor::all()?;
+
+    let mut min_x = std::i32::MAX;
+    let mut min_y = std::i32::MAX;
+    let mut max_x = std::i32::MIN;
+    let mut max_y = std::i32::MIN;
+
+    // Determine the bounding rectangle
+    for monitor in &monitors {
+        let scale = monitor.scale_factor();
+        min_x = min_x.min((monitor.x() as f32 * scale) as i32);
+        min_y = min_y.min((monitor.y() as f32 * scale) as i32);
+        max_x = max_x.max(((monitor.x() + monitor.width() as i32) as f32 * scale) as i32);
+        max_y = max_y.max(((monitor.y() + monitor.height() as i32) as f32 * scale) as i32);
+
+        //max_x = max_x.max(monitor.x() + monitor.width() as i32);
+        //max_y = max_y.max(monitor.y() + monitor.height() as i32);
+    }
+
+    let desktop_bounds = ScreenRect::from_exact(min_x, min_y, max_x, max_y);
+
     let desktop_width = (max_x - min_x) as u32;
     let desktop_height = (max_y - min_y) as u32;
 
