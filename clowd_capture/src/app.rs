@@ -18,7 +18,7 @@ use vello::{
 };
 
 #[cfg(target_os = "macos")]
-use platform::macos::WindowAttributesExtMacOS;
+use winit::platform::macos::WindowAttributesExtMacOS;
 #[cfg(target_os = "macos")]
 use winit::platform::macos::WindowExtMacOS;
 
@@ -75,6 +75,7 @@ pub struct SharedModel {
 
 struct App {
     gpu_device: RenderContext,
+    present_mode: wgpu::PresentMode,
     renderers: Vec<RendererInfo>,
     initialized: bool,
     shown: bool,
@@ -211,7 +212,7 @@ impl ApplicationHandler<UserEvent> for App {
 
             let surface = self
                 .gpu_device
-                .create_surface(info.window.clone(), size.width, size.height, wgpu::PresentMode::Mailbox)
+                .create_surface(info.window.clone(), size.width, size.height, self.present_mode)
                 .unwrap();
 
             self.renderers.push(info);
@@ -286,23 +287,6 @@ impl ApplicationHandler<UserEvent> for App {
                 //     .unwrap()
                 //     .window
                 //     .request_redraw();
-            }
-            #[cfg(target_os = "macos")]
-            WindowEvent::RedrawRequested => {
-                let (_, target, renderer) = self.draw_targets.getid_mut(id).unwrap();
-                {
-                    let mut rc = target.begin_draw().unwrap();
-                    let model = model.clone();
-                    render::draw_view(&mut rc, &model, &renderer);
-                    rc.finish().unwrap();
-                }
-                target.end_draw();
-
-                if !self.renderers.getid(id).unwrap().ready {
-                    self.event_proxy
-                        .send_event(UserEvent::RendererReady(id))
-                        .unwrap();
-                }
             }
             WindowEvent::CloseRequested => {
                 model.close_requested = true;
@@ -597,6 +581,7 @@ pub fn run_app(backends: Option<Backends>, present_mode: wgpu::PresentMode) -> R
 
     let mut app = App {
         model: Arc::new(RwLock::new(shared)),
+        present_mode,
         gpu_device,
         time,
         event_proxy: event_loop.create_proxy(),
