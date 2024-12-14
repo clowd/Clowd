@@ -1,8 +1,8 @@
-use crate::geometry::*;
 use crate::{
     app::{RenderMessage, RendererDto, SharedModel, UserEvent},
     gpu::WindowSurface,
 };
+use crate::{geometry::*, util};
 use std::sync::mpsc::Receiver;
 use vello::{kurbo::*, peniko::*, Scene};
 
@@ -15,6 +15,7 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
         let mut first_render = false;
         let mut renderer = surface.create_renderer();
         let mut scene = Scene::new();
+        let mut should_continue = true;
 
         info!("{:?} Starting render loop", info.window_id);
 
@@ -35,27 +36,43 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
                     .unwrap();
             }
 
-            match bus.recv() {
-                Ok(msg) => {
-                    debug!("Received render message: {:?}", msg);
-                    match msg {
-                        RenderMessage::ModelUpdate(new_model) => {
-                            model = new_model;
-                        }
-                        RenderMessage::Resize((width, height)) => {
-                            surface.resize_surface(width, height);
-                        }
-                        RenderMessage::Close => {
-                            break;
-                        }
-                        _ => {}
-                    }
+            let msg = bus.recv().unwrap();
+            match msg {
+                RenderMessage::ModelUpdate(new_model) => {
+                    model = new_model;
                 }
-                Err(e) => {
-                    error!("Error receiving render message: {:?}", e);
+                RenderMessage::Resize((width, height)) => {
+                    surface.resize_surface(width, height);
+                }
+                RenderMessage::Close => {
+                    should_continue = false;
                     break;
                 }
+                RenderMessage::None => {}
             }
+
+            // loop {
+            //     let msg = bus
+            //         .recv_timeout(Duration::from_millis(32))
+            //         .unwrap_or(RenderMessage::None);
+
+            //     debug!("Received render message: {:?}", msg);
+            //     match msg {
+            //         RenderMessage::ModelUpdate(new_model) => {
+            //             model = new_model;
+            //         }
+            //         RenderMessage::Resize((width, height)) => {
+            //             surface.resize_surface(width, height);
+            //         }
+            //         RenderMessage::Close => {
+            //             should_continue = false;
+            //             break;
+            //         }
+            //         RenderMessage::None => {
+            //             break;
+            //         }
+            //     }
+            // }
         }
 
         let _ = info
@@ -100,20 +117,59 @@ pub fn draw_crosshair(scene: &mut Scene, model: &SharedModel, renderer: &Rendere
     let mouse_pt = model.mouse_pt - ScreenPointF::new(-0.5, -0.5).to_vector();
     let bounds = renderer.monitor_bounds.to_f64();
 
-    let stroke = Stroke::new(1.0);
-    let crosshair_color = Color::WHITE;
+    let accent_length = util::round_to_even_f(100.0 * renderer.scale_factor);
+    let accent_thick_length = accent_length / 2.0;
+    let accent_width = util::round_to_odd_f(5.0 * renderer.scale_factor);
+    let dash_length = util::round_to_even_f(8.0 * renderer.scale_factor);
+
+    let thin = Stroke::new(1.0);
+    let dashed = Stroke::new(1.0).with_dashes(0.0, &[dash_length, dash_length]);
+    let thick = Stroke::new(accent_width);
+
+    let bg = Color::WHITE;
+    let fg = Color::BLACK;
+    let accent = renderer.accent_light;
 
     let horiz = Line::new((0.0, mouse_pt.y), (bounds.width(), mouse_pt.y));
     let vert = Line::new((mouse_pt.x, 0.0), (mouse_pt.x, bounds.height()));
+    scene.stroke(&thin, Affine::IDENTITY, bg, None, &horiz);
+    scene.stroke(&thin, Affine::IDENTITY, bg, None, &vert);
+    scene.stroke(&dashed, Affine::IDENTITY, fg, None, &horiz);
+    scene.stroke(&dashed, Affine::IDENTITY, fg, None, &vert);
 
-    scene.stroke(&stroke, Affine::IDENTITY, crosshair_color, None, &horiz);
-    scene.stroke(&stroke, Affine::IDENTITY, crosshair_color, None, &vert);
+    let intercept = horiz.crossing_point(vert).unwrap();
+    let horiz = Line::new(
+        (intercept.x - accent_length, intercept.y),
+        (intercept.x + accent_length, intercept.y),
+    );
+    let vert = Line::new(
+        (intercept.x, intercept.y - accent_length),
+        (intercept.x, intercept.y + accent_length),
+    );
+    scene.stroke(&thin, Affine::IDENTITY, accent, None, &horiz);
+    scene.stroke(&thin, Affine::IDENTITY, accent, None, &vert);
 
-    // Draw a horizontal line
-    // let line = Line::new((0.0, 0.0), (100.0, 0.0));
-    // scene.stroke(&stroke, Affine::IDENTITY, crosshair_color, None, &line);
+    let top = Line::new(
+        (intercept.x, intercept.y + accent_length),
+        (intercept.x, intercept.y + accent_thick_length),
+    );
+    scene.stroke(&thick, Affine::IDENTITY, accent, None, &top);
 
-    // // Draw a vertical line
-    // let line = Line::new((0.0, 0.0), (0.0, 100.0));
-    // scene.stroke(&stroke, Affine::IDENTITY, crosshair_color, None, &line);
+    let bottom = Line::new(
+        (intercept.x, intercept.y - accent_length),
+        (intercept.x, intercept.y - accent_thick_length),
+    );
+    scene.stroke(&thick, Affine::IDENTITY, accent, None, &bottom);
+
+    let left = Line::new(
+        (intercept.x - accent_length, intercept.y),
+        (intercept.x - accent_thick_length, intercept.y),
+    );
+    scene.stroke(&thick, Affine::IDENTITY, accent, None, &left);
+
+    let right = Line::new(
+        (intercept.x + accent_length, intercept.y),
+        (intercept.x + accent_thick_length, intercept.y),
+    );
+    scene.stroke(&thick, Affine::IDENTITY, accent, None, &right);
 }

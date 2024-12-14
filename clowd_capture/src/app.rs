@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::{geometry::*, gpu::RenderContext, input::WinitInputHelper, render, screenshot::capture_desktop};
 use anyhow::Result;
 use euclid::Transform2D;
@@ -18,7 +20,7 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::KeyCode,
     monitor::MonitorHandle,
-    raw_window_handle::{HasRawWindowHandle, RawWindowHandle},
+    raw_window_handle::{HasWindowHandle, RawWindowHandle},
     window::{CursorIcon, Window, WindowAttributes, WindowId},
 };
 use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
@@ -168,7 +170,7 @@ impl ApplicationHandler<UserEvent> for App {
             unsafe {
                 use windows::Win32::Graphics::Dwm::*;
                 #[allow(deprecated)]
-                if let Ok(RawWindowHandle::Win32(handle)) = window.raw_window_handle() {
+                if let RawWindowHandle::Win32(handle) = window.window_handle().unwrap().as_raw() {
                     let handle: isize = handle.hwnd.into();
                     let hwnd = windows::Win32::Foundation::HWND(handle as *mut std::ffi::c_void);
                     let dw_flag: i32 = 1;
