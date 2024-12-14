@@ -18,7 +18,7 @@ use winit::{
     application::ApplicationHandler,
     event::{ElementState, Event, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
-    keyboard::KeyCode,
+    keyboard::{KeyCode, PhysicalKey},
     monitor::MonitorHandle,
     raw_window_handle::{HasWindowHandle, RawWindowHandle},
     window::{CursorIcon, Window, WindowAttributes, WindowId},
@@ -81,7 +81,7 @@ struct App {
     mouse_anchor_pt: ScreenPoint,
     mouse_anchored: bool,
     input: WinitInputHelper,
-    model: Arc<RwLock<SharedModel>>,
+    model: SharedModel,
     event_proxy: EventLoopProxy<UserEvent>,
     accent_light: Color,
     accent_dark: Color,
@@ -226,8 +226,7 @@ impl ApplicationHandler<UserEvent> for App {
             self.renderers.push(info);
             self.print_time(format!("Window {}/{} created.", i + 1, monitors.len()).as_str());
 
-            let model = self.model.read().unwrap().clone();
-            render::begin_render_loop(surface, model, dto, receiver);
+            render::begin_render_loop(surface, self.model.clone(), dto, receiver);
         }
 
         self.print_time("Initialization complete, waiting for renderers to be ready...");
@@ -277,24 +276,11 @@ impl ApplicationHandler<UserEvent> for App {
     fn window_event(&mut self, _event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         println!("Window {:?} event: {:?}", id, event);
 
-        let model = self.model.clone();
-        let mut model = model.write().unwrap();
         self.input
             .update::<UserEvent>(&Event::WindowEvent {
                 window_id: id,
                 event: event.clone(),
             });
-
-        if self.input.key_pressed(KeyCode::KeyD) {
-            model.debug = !model.debug;
-        } else if self.input.key_pressed(KeyCode::KeyR) {
-            model.zoom = 1.0;
-            self.set_anchored(false, model.mouse_pt);
-            model.captured = false;
-            model.selection = None;
-        } else if self.input.key_pressed(KeyCode::Escape) {
-            self.send_message(RenderMessage::Close);
-        }
 
         match event {
             WindowEvent::Resized(size) => {
@@ -303,13 +289,37 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::CloseRequested => {
                 self.send_message(RenderMessage::Close);
             }
+            WindowEvent::KeyboardInput {
+                device_id: _,
+                event,
+                is_synthetic: _,
+            } => {
+                if event.state == ElementState::Pressed {
+                    match event.physical_key {
+                        PhysicalKey::Code(KeyCode::KeyD) => {
+                            self.model.debug = !self.model.debug;
+                        }
+                        PhysicalKey::Code(KeyCode::KeyR) => {
+                            self.model.zoom = 1.0;
+                            self.set_anchored(false, self.model.mouse_pt);
+                            self.model.captured = false;
+                            self.model.selection = None;
+                        }
+                        PhysicalKey::Code(KeyCode::KeyQ) | PhysicalKey::Code(KeyCode::Escape) => {
+                            self.send_message(RenderMessage::Close);
+                        }
+                        _ => (),
+                    }
+                }
+                self.send_message(RenderMessage::ModelUpdate(self.model.clone()));
+            }
             WindowEvent::MouseInput {
                 device_id: _,
                 state,
                 button,
             } => {
                 if state == ElementState::Pressed && button == MouseButton::Left {
-                    if model.captured {
+                    if self.model.captured {
                         // let hit = model.button_panel.hit_test(pt);
                         // if hit.is_size_handle() {
                         //     model.mouse_state = MouseState::SizingSelection(hit);
@@ -317,29 +327,30 @@ impl ApplicationHandler<UserEvent> for App {
                         //     model.mouse_state = MouseState::MovingSelection(self.selection.unwrap(), pt);
                         // }
                     } else {
-                        model.mouse_state = MouseState::StartSelection(model.mouse_pt);
+                        self.model.mouse_state = MouseState::StartSelection(self.model.mouse_pt);
                     }
                 } else if state == ElementState::Released && button == MouseButton::Left {
-                    match model.mouse_state {
+                    match self.model.mouse_state {
                         MouseState::StartSelection(_) => {
-                            model.selection = None;
+                            self.model.selection = None;
                         }
                         MouseState::MakingSelection(start) => {
-                            model.zoom = 1.0;
-                            model.captured = true;
-                            model.selection = Some(ScreenRect::from_rounded_threshold(
+                            self.model.zoom = 1.0;
+                            self.model.captured = true;
+                            self.model.selection = Some(ScreenRect::from_rounded_threshold(
                                 start.x,
                                 start.y,
-                                model.mouse_pt.x,
-                                model.mouse_pt.y,
+                                self.model.mouse_pt.x,
+                                self.model.mouse_pt.y,
                             ));
-                            self.set_anchored(false, model.mouse_pt);
+                            self.set_anchored(false, self.model.mouse_pt);
                             // self.update_buttons();
                         }
                         _ => (),
                     }
-                    model.mouse_state = MouseState::Up;
+                    self.model.mouse_state = MouseState::Up;
                 }
+                self.send_message(RenderMessage::ModelUpdate(self.model.clone()));
             }
             WindowEvent::CursorMoved {
                 device_id: _,
@@ -354,11 +365,11 @@ impl ApplicationHandler<UserEvent> for App {
                     let relative_anchor = self.mouse_anchor_pt - self.desktop_virtual_origin.to_vector();
                     if relative_anchor != pt.to_i32() {
                         let anchor_f = relative_anchor.to_f64();
-                        let x_delta = (pt.x - anchor_f.x) / model.zoom;
-                        let y_delta = (pt.y - anchor_f.y) / model.zoom;
+                        let x_delta = (pt.x - anchor_f.x) / self.model.zoom;
+                        let y_delta = (pt.y - anchor_f.y) / self.model.zoom;
 
-                        let mut mx = model.mouse_pt.x + x_delta;
-                        let mut my = model.mouse_pt.y + y_delta;
+                        let mut mx = self.model.mouse_pt.x + x_delta;
+                        let mut my = self.model.mouse_pt.y + y_delta;
 
                         let bounds = self
                             .get_nearest_renderer(ScreenPointF::new(mx, my))
@@ -374,28 +385,28 @@ impl ApplicationHandler<UserEvent> for App {
                         mx = mx.max(left).min(right - 0.001);
                         my = my.max(top).min(bottom - 0.001);
 
-                        model.mouse_pt = ScreenPointF::new(mx, my);
+                        self.model.mouse_pt = ScreenPointF::new(mx, my);
                         let _ = self
                             .mouse
                             .move_to(self.mouse_anchor_pt.x, self.mouse_anchor_pt.y);
                     }
                 } else {
-                    model.mouse_pt = pt;
+                    self.model.mouse_pt = pt;
                 }
 
-                let pt = model.mouse_pt;
-                match model.mouse_state {
+                let pt = self.model.mouse_pt;
+                match self.model.mouse_state {
                     MouseState::Up => (),
                     MouseState::StartSelection(start) => {
                         let dist = start.distance_to(pt);
-                        let drag_threshold = 10.0 / model.zoom;
+                        let drag_threshold = 10.0 / self.model.zoom;
                         if dist > drag_threshold {
-                            model.mouse_state = MouseState::MakingSelection(start);
-                            model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
+                            self.model.mouse_state = MouseState::MakingSelection(start);
+                            self.model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
                         }
                     }
                     MouseState::MakingSelection(start) => {
-                        model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
+                        self.model.selection = Some(ScreenRect::from_rounded_threshold(start.x, start.y, pt.x, pt.y))
                     }
                     MouseState::MovingSelection(orig_rect, orig_point) => {
                         let dx = (pt.x - orig_point.x) as i32;
@@ -404,7 +415,7 @@ impl ApplicationHandler<UserEvent> for App {
                         let y1 = orig_rect.min_y() + dy;
                         let x2 = orig_rect.max_x() + dx;
                         let y2 = orig_rect.max_y() + dy;
-                        model.selection = Some(ScreenRect::from_exact(x1, y1, x2, y2));
+                        self.model.selection = Some(ScreenRect::from_exact(x1, y1, x2, y2));
                         // self.update_buttons();
                     } // MouseState::SizingSelection(hit) => {
                       //     if let Some(selection) = model.selection {
@@ -415,7 +426,7 @@ impl ApplicationHandler<UserEvent> for App {
                       // }
                 }
 
-                self.send_message(RenderMessage::ModelUpdate(model.clone()));
+                self.send_message(RenderMessage::ModelUpdate(self.model.clone()));
 
                 // if model.captured {
                 //     self.set_cursor(app, Some(self.button_panel.hit_test(pt).to_cursor()));
@@ -426,13 +437,13 @@ impl ApplicationHandler<UserEvent> for App {
                 delta,
                 phase: _,
             } => {
-                if !model.captured {
+                if !self.model.captured {
                     let delta = match delta {
                         MouseScrollDelta::LineDelta(_, y) => y,
                         MouseScrollDelta::PixelDelta(pt) => pt.y as f32,
                     };
 
-                    let mut zoom = model.zoom;
+                    let mut zoom = self.model.zoom;
 
                     if self.input.held_shift() || self.input.held_control() {
                         if delta > 0.0 {
@@ -448,8 +459,9 @@ impl ApplicationHandler<UserEvent> for App {
                         }
                     }
 
-                    model.zoom = zoom.max(1.0).min(256.0);
-                    self.set_anchored(zoom > 1.0, model.mouse_pt);
+                    self.model.zoom = zoom.max(1.0).min(256.0);
+                    self.set_anchored(zoom > 1.0, self.model.mouse_pt);
+                    self.send_message(RenderMessage::ModelUpdate(self.model.clone()));
                 }
             }
             _ => (),
@@ -588,7 +600,7 @@ pub fn run_app(backends: Option<Backends>, present_mode: wgpu::PresentMode) -> R
     };
 
     let mut app = App {
-        model: Arc::new(RwLock::new(shared)),
+        model: shared,
         present_mode,
         gpu_device,
         time,

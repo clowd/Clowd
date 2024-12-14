@@ -2,7 +2,7 @@ use crate::{
     app::{RenderMessage, RendererDto, SharedModel, UserEvent},
     gpu::WindowSurface,
     simple_text::SimpleText,
-    stats::{Sample, Snapshot, Stats},
+    stats::{Sample, Stats},
 };
 use crate::{geometry::*, util};
 use std::{sync::mpsc::Receiver, time::Instant};
