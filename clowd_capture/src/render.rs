@@ -1,3 +1,4 @@
+use crate::geometry::*;
 use crate::{
     app::{RenderMessage, RendererDto, SharedModel, UserEvent},
     gpu::WindowSurface,
@@ -35,18 +36,21 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
             }
 
             match bus.recv() {
-                Ok(msg) => match msg {
-                    RenderMessage::ModelUpdate(new_model) => {
-                        model = new_model;
+                Ok(msg) => {
+                    debug!("Received render message: {:?}", msg);
+                    match msg {
+                        RenderMessage::ModelUpdate(new_model) => {
+                            model = new_model;
+                        }
+                        RenderMessage::Resize((width, height)) => {
+                            surface.resize_surface(width, height);
+                        }
+                        RenderMessage::Close => {
+                            break;
+                        }
+                        _ => {}
                     }
-                    RenderMessage::Resize((width, height)) => {
-                        surface.resize_surface(width, height);
-                    }
-                    RenderMessage::Close => {
-                        break;
-                    }
-                    _ => {}
-                },
+                }
                 Err(e) => {
                     error!("Error receiving render message: {:?}", e);
                     break;
@@ -60,7 +64,9 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
     });
 }
 
-pub fn draw_scene(scene: &mut Scene, _model: &SharedModel, _renderer: &RendererDto) {
+pub fn draw_scene(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {
+    draw_background(scene, model, renderer);
+
     // Draw an outlined rectangle
     let stroke = Stroke::new(6.0);
     let rect = RoundedRect::new(10.0, 10.0, 240.0, 240.0, 20.0);
@@ -81,4 +87,33 @@ pub fn draw_scene(scene: &mut Scene, _model: &SharedModel, _renderer: &RendererD
     let line = Line::new((260.0, 20.0), (620.0, 100.0));
     let line_stroke_color = Color::rgba(0.5373, 0.7059, 0.9804, 1.);
     scene.stroke(&stroke, Affine::IDENTITY, line_stroke_color, None, &line);
+
+    draw_crosshair(scene, model, renderer);
+}
+
+pub fn draw_background(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {
+    let bounds = renderer.monitor_bounds.to_f64();
+    scene.draw_image(&renderer.desktop_gray_image, Affine::IDENTITY);
+}
+
+pub fn draw_crosshair(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {
+    let mouse_pt = model.mouse_pt - ScreenPointF::new(-0.5, -0.5).to_vector();
+    let bounds = renderer.monitor_bounds.to_f64();
+
+    let stroke = Stroke::new(1.0);
+    let crosshair_color = Color::WHITE;
+
+    let horiz = Line::new((0.0, mouse_pt.y), (bounds.width(), mouse_pt.y));
+    let vert = Line::new((mouse_pt.x, 0.0), (mouse_pt.x, bounds.height()));
+
+    scene.stroke(&stroke, Affine::IDENTITY, crosshair_color, None, &horiz);
+    scene.stroke(&stroke, Affine::IDENTITY, crosshair_color, None, &vert);
+
+    // Draw a horizontal line
+    // let line = Line::new((0.0, 0.0), (100.0, 0.0));
+    // scene.stroke(&stroke, Affine::IDENTITY, crosshair_color, None, &line);
+
+    // // Draw a vertical line
+    // let line = Line::new((0.0, 0.0), (0.0, 100.0));
+    // scene.stroke(&stroke, Affine::IDENTITY, crosshair_color, None, &line);
 }
