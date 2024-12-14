@@ -1,41 +1,32 @@
-use std::{
-    num::NonZeroUsize,
-    sync::{atomic::AtomicBool, mpsc, Arc, RwLock},
-    thread::sleep_ms,
-    time::Duration,
-};
-
 use crate::{geometry::*, gpu::RenderContext, input::WinitInputHelper, render, screenshot::capture_desktop};
 use anyhow::Result;
 use euclid::Transform2D;
-use image::{DynamicImage, ImageBuffer, RgbaImage};
+use image::RgbaImage;
 use mouse_rs::Mouse;
 use simple_stopwatch::Stopwatch;
-
+use std::{
+    sync::{mpsc, Arc, RwLock},
+    time::Duration,
+};
 use vello::{
-    peniko::Color,
+    peniko::{Color, Image},
     wgpu::{self, Backends},
 };
+use winit::{
+    application::ApplicationHandler,
+    event::{ElementState, Event, MouseButton, MouseScrollDelta, WindowEvent},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
+    keyboard::KeyCode,
+    monitor::MonitorHandle,
+    raw_window_handle::{HasRawWindowHandle, RawWindowHandle},
+    window::{CursorIcon, Window, WindowAttributes, WindowId},
+};
+use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
 
 #[cfg(target_os = "macos")]
 use winit::platform::macos::WindowAttributesExtMacOS;
 #[cfg(target_os = "macos")]
 use winit::platform::macos::WindowExtMacOS;
-
-#[cfg(windows)]
-use winit::platform::windows::WindowAttributesExtWindows;
-
-use winit::{
-    application::ApplicationHandler,
-    dpi::LogicalSize,
-    event::{ElementState, Event, MouseButton, MouseScrollDelta, StartCause, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
-    keyboard::KeyCode,
-    monitor::MonitorHandle,
-    raw_window_handle::{HasRawWindowHandle, HasWindowHandle, RawWindowHandle},
-    window::{CursorIcon, Fullscreen, Window, WindowAttributes, WindowId},
-};
-use xcap::{Monitor as XCapMonitor, Window as XCapWindow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum MouseState {
@@ -70,7 +61,6 @@ pub struct SharedModel {
     pub selection: Option<ScreenRect>,
     pub captured: bool,
     pub debug: bool,
-    pub close_requested: bool,
 }
 
 struct App {
@@ -82,8 +72,8 @@ struct App {
     time: Stopwatch,
     desktop_bounds: ScreenRect,
     desktop_virtual_origin: ScreenPoint,
-    desktop_color_image: RgbaImage,
-    desktop_gray_image: RgbaImage,
+    desktop_color_image: Image,
+    desktop_gray_image: Image,
     windows: Vec<DesktopWindowInfo>,
     mouse: Mouse,
     mouse_anchor_pt: ScreenPoint,
@@ -106,6 +96,7 @@ struct RendererInfo {
     scale_factor: f64,
     window: Arc<Window>,
     ready: bool,
+    closed: bool,
     sender: mpsc::Sender<RenderMessage>,
 }
 
@@ -119,8 +110,8 @@ pub struct RendererDto {
     pub scale_factor: f64,
     pub desktop_bounds: ScreenRect,
     pub desktop_virtual_origin: ScreenPoint,
-    pub desktop_color_image: RgbaImage,
-    pub desktop_gray_image: RgbaImage,
+    pub desktop_color_image: Image,
+    pub desktop_gray_image: Image,
     pub event_proxy: EventLoopProxy<UserEvent>,
     pub accent_light: Color,
     pub accent_dark: Color,
@@ -144,7 +135,7 @@ impl GetById<RendererInfo> for Vec<RendererInfo> {
 struct DesktopWindowInfo {
     title: String,
     window_bounds: ScreenRect,
-    capture: Option<DynamicImage>,
+    capture: Option<RgbaImage>,
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -173,6 +164,20 @@ impl ApplicationHandler<UserEvent> for App {
 
             let window = event_loop.create_window(attributes).unwrap();
 
+            #[cfg(windows)]
+            unsafe {
+                use windows::Win32::Graphics::Dwm::*;
+                #[allow(deprecated)]
+                if let Ok(RawWindowHandle::Win32(handle)) = window.raw_window_handle() {
+                    let handle: isize = handle.hwnd.into();
+                    let hwnd = windows::Win32::Foundation::HWND(handle as *mut std::ffi::c_void);
+                    let dw_flag: i32 = 1;
+                    let dw_flag_ptr = &dw_flag as *const i32 as *const std::ffi::c_void;
+                    let _ = DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, dw_flag_ptr, 4);
+                    let _ = DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, dw_flag_ptr, 4);
+                }
+            }
+
             let monitor_bounds = ScreenRect::from_xy_size(position.x, position.y, size.width as i32, size.height as i32);
             let monitor_bounds = self
                 .vd_transform
@@ -191,6 +196,7 @@ impl ApplicationHandler<UserEvent> for App {
                 scale_factor: monitor.scale_factor(),
                 is_primary: monitor_bounds.contains(self.mouse_anchor_pt),
                 sender,
+                closed: false,
             };
 
             let dto = RendererDto {
@@ -225,7 +231,7 @@ impl ApplicationHandler<UserEvent> for App {
         self.print_time("Initialization complete, waiting for renderers to be ready...");
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::RendererReady(id) => {
                 if let Some(renderer) = self.renderers.getid_mut(id) {
@@ -247,11 +253,26 @@ impl ApplicationHandler<UserEvent> for App {
                     self.print_time("All renderers ready, shown all windows...");
                 }
             }
+            UserEvent::RendererExited(id) => {
+                if let Some(renderer) = self.renderers.getid_mut(id) {
+                    renderer.closed = true;
+                    self.print_time(format!("Renderer {:?} exited.", id).as_str());
+                }
+
+                // if one of the renderers closes, close all renderers
+                self.send_message(RenderMessage::Close);
+
+                if self.renderers.iter().all(|r| r.closed) {
+                    self.print_time("All renderers exited, closing event loop...");
+                    self.renderers.clear();
+                    event_loop.exit();
+                }
+            }
             _ => (),
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, _event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         println!("Window {:?} event: {:?}", id, event);
 
         let model = self.model.clone();
@@ -270,27 +291,15 @@ impl ApplicationHandler<UserEvent> for App {
             model.captured = false;
             model.selection = None;
         } else if self.input.key_pressed(KeyCode::Escape) {
-            model.close_requested = true;
-            event_loop.exit();
+            self.send_message(RenderMessage::Close);
         }
 
         match event {
             WindowEvent::Resized(size) => {
-                // #[cfg(target_os = "macos")]
-                // self.draw_targets
-                //     .getid_mut(id)
-                //     .unwrap()
-                //     .1
-                //     .resize(size.width, size.height);
-                // self.renderers
-                //     .getid_mut(id)
-                //     .unwrap()
-                //     .window
-                //     .request_redraw();
+                self.send_message(RenderMessage::Resize((size.width, size.height)));
             }
             WindowEvent::CloseRequested => {
-                model.close_requested = true;
-                event_loop.exit();
+                self.send_message(RenderMessage::Close);
             }
             WindowEvent::MouseInput {
                 device_id: _,
@@ -520,21 +529,19 @@ pub fn run_app(backends: Option<Backends>, present_mode: wgpu::PresentMode) -> R
     let vd_transform = Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop_virtual_origin.to_vector());
     let desktop_bounds = vd_transform.outer_transformed_rect(&desktop_bounds);
 
-    // gpu_device.
+    let desktop_color_image = Image::new(
+        desktop_color_image.into_raw().into(),
+        vello::peniko::Format::Rgba8,
+        desktop_bounds.width() as u32,
+        desktop_bounds.height() as u32,
+    );
 
-    // let desktop_color_image = Image::new(
-    //     desktop_color_image.into_raw().into(),
-    //     vello::peniko::Format::Rgba8,
-    //     desktop_bounds.width() as u32,
-    //     desktop_bounds.height() as u32,
-    // );
-
-    // let desktop_gray_image = Image::new(
-    //     desktop_gray_image.into_raw().into(),
-    //     vello::peniko::Format::Rgba8,
-    //     desktop_bounds.width() as u32,
-    //     desktop_bounds.height() as u32,
-    // );
+    let desktop_gray_image = Image::new(
+        desktop_gray_image.into_raw().into(),
+        vello::peniko::Format::Rgba8,
+        desktop_bounds.width() as u32,
+        desktop_bounds.height() as u32,
+    );
 
     info!("[TIME] Captured: {:?}", Duration::from_millis(time.ms() as u64));
 
@@ -576,7 +583,6 @@ pub fn run_app(backends: Option<Backends>, present_mode: wgpu::PresentMode) -> R
         captured: false,
         debug: false,
         mouse_state: MouseState::Up,
-        close_requested: false,
     };
 
     let mut app = App {
