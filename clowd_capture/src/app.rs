@@ -29,6 +29,7 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     keyboard::KeyCode,
     monitor::MonitorHandle,
+    platform::macos::WindowAttributesExtMacOS,
     raw_window_handle::{HasRawWindowHandle, HasWindowHandle, RawWindowHandle},
     window::{CursorIcon, Fullscreen, Window, WindowAttributes, WindowId},
 };
@@ -188,7 +189,6 @@ impl ApplicationHandler<UserEvent> for App {
         }
 
         let monitors: Vec<_> = event_loop.available_monitors().collect();
-        // let monitor = monitors[0].clone();
 
         for (i, monitor) in monitors.iter().enumerate() {
             let position = monitor.position();
@@ -200,7 +200,8 @@ impl ApplicationHandler<UserEvent> for App {
                 .with_blur(true)
                 .with_visible(false)
                 .with_inner_size(size)
-                // .with_fullscreen(Some(Fullscreen::Borderless(Some(monitor.clone()))))
+                .with_position(position)
+                .with_disallow_hidpi(true)
                 .with_title("Clowd Capture");
 
             let window = event_loop.create_window(attributes).unwrap();
@@ -223,9 +224,25 @@ impl ApplicationHandler<UserEvent> for App {
                 is_primary: monitor_bounds.contains(self.mouse_anchor_pt),
             };
 
+            let dto = RendererDto {
+                accent_dark: self.accent_dark,
+                accent_light: self.accent_light,
+                desktop_bounds: self.desktop_bounds,
+                desktop_color_image: self.desktop_color_image.clone(),
+                desktop_gray_image: self.desktop_gray_image.clone(),
+                desktop_virtual_origin: self.desktop_virtual_origin,
+                event_proxy: self.event_proxy.clone(),
+                is_primary: info.is_primary,
+                monitor_bounds: info.monitor_bounds,
+                monitor_handle: info.monitor_handle.clone(),
+                scale_factor: info.scale_factor,
+                transform: info.transform.clone(),
+                vd_transform: self.vd_transform.clone(),
+                window_id: info.window_id,
+            };
+
             self.renderers.push(info);
 
-            let dto = self.create_render_dto(window_id);
             #[allow(deprecated)]
             let raw_handle = self
                 .renderers
@@ -264,8 +281,16 @@ impl ApplicationHandler<UserEvent> for App {
                     self.print_time(format!("Renderer {:?} ready.", id).as_str());
                 }
 
-                if !self.shown && self.is_all_ready() {
-                    self.show_all();
+                if !self.shown && self.renderers.iter().all(|r| r.ready) {
+                    self.renderers.iter_mut().for_each(|r| {
+                        let window = &r.window;
+                        #[cfg(target_os = "macos")]
+                        window.set_simple_fullscreen(true);
+                        window.set_visible(true);
+                        if r.is_primary {
+                            window.focus_window();
+                        }
+                    });
                     self.shown = true;
                     self.print_time("All renderers ready, shown all windows...");
                 }
@@ -505,41 +530,6 @@ impl ApplicationHandler<UserEvent> for App {
 impl App {
     fn print_time(&self, msg: &str) {
         info!("[TIME {:?}] {}", Duration::from_millis(self.time.ms() as u64), msg);
-    }
-
-    fn create_render_dto(&mut self, id: WindowId) -> RendererDto {
-        let info = self.renderers.getid_mut(id).unwrap();
-        RendererDto {
-            accent_dark: self.accent_dark,
-            accent_light: self.accent_light,
-            desktop_bounds: self.desktop_bounds,
-            desktop_color_image: self.desktop_color_image.clone(),
-            desktop_gray_image: self.desktop_gray_image.clone(),
-            desktop_virtual_origin: self.desktop_virtual_origin,
-            event_proxy: self.event_proxy.clone(),
-            is_primary: info.is_primary,
-            monitor_bounds: info.monitor_bounds,
-            monitor_handle: info.monitor_handle.clone(),
-            scale_factor: info.scale_factor,
-            transform: info.transform.clone(),
-            vd_transform: self.vd_transform.clone(),
-            window_id: info.window_id,
-        }
-    }
-
-    fn is_all_ready(&self) -> bool {
-        self.renderers.iter().all(|r| r.ready)
-    }
-
-    fn show_all(&mut self) {
-        self.renderers.iter_mut().for_each(|r| {
-            let window = &r.window;
-            window.set_fullscreen(Some(Fullscreen::Borderless(Some(r.monitor_handle.clone()))));
-            window.set_visible(true);
-            if r.is_primary {
-                window.focus_window();
-            }
-        });
     }
 
     fn set_cursor(&mut self, cursor: Option<CursorIcon>) {
