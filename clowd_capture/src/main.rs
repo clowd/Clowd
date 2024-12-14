@@ -7,6 +7,7 @@ mod input;
 mod logging;
 mod render;
 mod screenshot;
+mod util;
 
 #[macro_use]
 extern crate log;
