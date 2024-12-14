@@ -8,6 +8,8 @@ mod logging;
 mod render;
 mod screenshot;
 mod util;
+mod stats;
+mod simple_text;
 
 #[macro_use]
 extern crate log;
