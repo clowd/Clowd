@@ -183,6 +183,14 @@ use piet::*;
 use crate::app::{RendererDto, SharedModel};
 
 pub fn draw_view<T: RenderContext>(rc: &mut T, model: &SharedModel, renderer: &RendererDto) {
+    let bgrect = Rect::new(
+        50.0,
+        50.0,
+        renderer.monitor_bounds.width() as f64 - 50.0,
+        renderer.monitor_bounds.height() as f64 - 50.0,
+    );
+    rc.fill(bgrect, &Color::RED);
+
     let text = rc.text();
 
     let layout = text
@@ -193,11 +201,27 @@ pub fn draw_view<T: RenderContext>(rc: &mut T, model: &SharedModel, renderer: &R
 
     println!("layout.size() = {:?}", layout.size());
 
-    let text_pos = Vec2::new(50.0, 1050.0);
+    let text_pos = Vec2::new(50.0, 50.0);
     let layout_rect = layout.size().to_rect() + text_pos;
     let image_rect = layout.image_bounds() + text_pos;
 
     rc.fill(layout_rect, &Color::WHITE);
     rc.stroke(image_rect, &Color::BLACK, 0.5);
     rc.draw_text(&layout, text_pos.to_point());
+
+    let mouse_pos = model.mouse_pt;
+    let cur_horiz = Line::new(
+        Point::new(0.0, mouse_pos.y as f64),
+        Point::new(renderer.monitor_bounds.width() as f64, mouse_pos.y as f64),
+    );
+    let cur_vert = Line::new(
+        Point::new(mouse_pos.x as f64, 0.0),
+        Point::new(mouse_pos.x as f64, renderer.monitor_bounds.height() as f64),
+    );
+
+    rc.stroke(cur_horiz, &Color::BLACK, 1.0);
+    rc.stroke(cur_vert, &Color::BLACK, 1.0);
+
+    rc.stroke_styled(cur_horiz, &Color::WHITE, 1.0, &StrokeStyle::new().dash_offset(8.0));
+    rc.stroke_styled(cur_vert, &Color::WHITE, 1.0, &StrokeStyle::new().dash_offset(8.0));
 }

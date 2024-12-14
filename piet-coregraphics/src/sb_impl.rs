@@ -250,9 +250,19 @@ impl CGImpl {
         // Grab initial width and height from the layer (whose properties have just been initialized
         // by the observer using `NSKeyValueObservingOptionInitial`).
         let size = layer.bounds().size;
-        let scale_factor = layer.contentsScale();
-        let width = (size.width * scale_factor) as usize;
-        let height = (size.height * scale_factor) as usize;
+
+        // let scale_factor = layer.contentsScale();
+        // let width = (size.width * scale_factor) as usize;
+        // let height = (size.height * scale_factor) as usize;
+
+        let width = size.width as usize;
+        let height = size.height as usize;
+
+        // println!("size: {:?}", height);
+        // println!("size: {:?}", height);
+        // println!("size: {:?}", height);
+        // println!("size: {:?}", size);
+        // println!("size: {:?}", size);
 
         Ok(Self {
             layer: SendCALayer(layer),
@@ -298,9 +308,10 @@ impl CGImpl {
     // pub fn end_transaction(&self) {
     //     CATransaction::commit();
     // }
-    pub fn get_layer_size(&self) -> (usize, usize) {
+    pub fn get_layer_size(&self) -> (u32, u32) {
         let size = self.layer.bounds().size;
-        (size.width as usize, size.height as usize)
+        let scale_factor = self.layer.contentsScale();
+        ((size.width * scale_factor) as u32, (size.height * scale_factor) as u32)
     }
 
     pub fn create_context(&mut self) -> Result<CGContext, SoftBufferError> {

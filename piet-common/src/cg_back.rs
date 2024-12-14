@@ -197,7 +197,9 @@ impl WindowTarget {
         );
 
         let ctx = self.ctx.as_mut().unwrap();
-        Ok(CoreGraphicsContext::new_y_down(ctx, None))
+        Ok(CoreGraphicsContext::new_y_up(ctx, self.sb.get_layer_size().1 as f64, None))
+
+        // Ok(CoreGraphicsContext::new_y_up(ctx, self.sb.get_layer_size().1 as f64, None))
     }
 
     pub fn end_draw(&mut self) {
