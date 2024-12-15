@@ -21,11 +21,14 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
         let mut model = initial_model;
         let mut first_render = false;
         let mut renderer = surface.create_renderer();
+        let mut bg_scene = Scene::new();
         let mut scene = Scene::new();
         let mut stats = Stats::new();
         let mut text = SimpleText::new();
         let mut frame_start_time = Instant::now();
         let mut should_continue = true;
+
+        bg_scene.draw_image(&info.desktop_gray_image, Affine::IDENTITY);
 
         info!("{:?} Starting render loop", info.window_id);
 
@@ -51,6 +54,9 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
                     }
                 }
             }
+
+            scene.reset();
+            // scene.append(&bg_scene, None);
 
             if let Err(e) = render_frame(&surface, &mut scene, &model, &info, &mut text, &stats, &mut renderer) {
                 error!("{:?} Error rendering frame: {:?}", info.window_id, e);
@@ -88,48 +94,68 @@ fn render_frame(
     renderer: &mut vello::Renderer,
 ) -> Result<()> {
     let texture = surface.begin_draw()?;
-    scene.reset();
 
-    draw_scene(scene, model, info);
+    // draw_background(scene, model, info);
+
+    // let bounds = info.monitor_bounds.to_f64();
+    // scene.fill(
+    //     Fill::NonZero,
+    //     Affine::IDENTITY,
+    //     &info.desktop_gray_image,
+    //     Some(Affine::translate((-bounds.min_x(), -bounds.min_y()))),
+    //     &Rect::new(0.0, 0.0, bounds.width() as f64, bounds.height() as f64),
+    // );
+
+    draw_crosshair(scene, model, info);
+
+    // draw_scene(scene, bg_scene, model, info);
 
     if model.debug {
         draw_debug(scene, model, info, text, stats);
     }
 
-    surface.end_draw(texture, &*scene, renderer)?;
+    surface.end_draw(texture, scene, renderer)?;
     Ok(())
 }
 
-pub fn draw_scene(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {
-    draw_background(scene, model, renderer);
+// pub fn draw_scene(scene: &mut Scene, bg_scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {
 
-    // Draw an outlined rectangle
-    let stroke = Stroke::new(6.0);
-    let rect = RoundedRect::new(10.0, 10.0, 240.0, 240.0, 20.0);
-    let rect_stroke_color = Color::rgba(0.9804, 0.702, 0.5294, 1.);
-    scene.stroke(&stroke, Affine::IDENTITY, rect_stroke_color, None, &rect);
+//     // Draw an outlined rectangle
+//     let stroke = Stroke::new(6.0);
+//     let rect = RoundedRect::new(10.0, 10.0, 240.0, 240.0, 20.0);
+//     let rect_stroke_color = Color::rgba(0.9804, 0.702, 0.5294, 1.);
+//     scene.stroke(&stroke, Affine::IDENTITY, rect_stroke_color, None, &rect);
 
-    // Draw a filled circle
-    let circle = Circle::new((420.0, 200.0), 120.0);
-    let circle_fill_color = Color::rgba(0.9529, 0.5451, 0.6588, 1.);
-    scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, circle_fill_color, None, &circle);
+//     // Draw a filled circle
+//     let circle = Circle::new((420.0, 200.0), 120.0);
+//     let circle_fill_color = Color::rgba(0.9529, 0.5451, 0.6588, 1.);
+//     scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, circle_fill_color, None, &circle);
 
-    // Draw a filled ellipse
-    let ellipse = Ellipse::new((250.0, 420.0), (100.0, 160.0), -90.0);
-    let ellipse_fill_color = Color::rgba(0.7961, 0.651, 0.9686, 1.);
-    scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, ellipse_fill_color, None, &ellipse);
+//     // Draw a filled ellipse
+//     let ellipse = Ellipse::new((250.0, 420.0), (100.0, 160.0), -90.0);
+//     let ellipse_fill_color = Color::rgba(0.7961, 0.651, 0.9686, 1.);
+//     scene.fill(vello::peniko::Fill::NonZero, Affine::IDENTITY, ellipse_fill_color, None, &ellipse);
 
-    // Draw a straight line
-    let line = Line::new((260.0, 20.0), (620.0, 100.0));
-    let line_stroke_color = Color::rgba(0.5373, 0.7059, 0.9804, 1.);
-    scene.stroke(&stroke, Affine::IDENTITY, line_stroke_color, None, &line);
+//     // Draw a straight line
+//     let line = Line::new((260.0, 20.0), (620.0, 100.0));
+//     let line_stroke_color = Color::rgba(0.5373, 0.7059, 0.9804, 1.);
+//     scene.stroke(&stroke, Affine::IDENTITY, line_stroke_color, None, &line);
 
-    draw_crosshair(scene, model, renderer);
-}
+//     draw_crosshair(scene, model, renderer);
+// }
 
 pub fn draw_background(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {
     let bounds = renderer.monitor_bounds.to_f64();
-    scene.draw_image(&renderer.desktop_gray_image, Affine::IDENTITY);
+
+    scene.fill(
+        Fill::NonZero,
+        Affine::IDENTITY,
+        &renderer.desktop_gray_image,
+        Some(Affine::translate((-bounds.min_x(), -bounds.min_y()))),
+        &Rect::new(0.0, 0.0, bounds.width() as f64, bounds.height() as f64),
+    );
+
+    // scene.draw_image(&bg, Affine::IDENTITY);
 }
 
 pub fn draw_crosshair(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {

@@ -161,7 +161,6 @@ impl ApplicationHandler<UserEvent> for App {
                 .with_visible(false)
                 .with_inner_size(size)
                 .with_position(position)
-                // .with_disallow_hidpi(true)
                 .with_title("Clowd Capture");
 
             let window = event_loop.create_window(attributes).unwrap();
