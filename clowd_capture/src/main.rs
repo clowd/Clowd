@@ -1,354 +1,327 @@
-use vello::wgpu::{Backends, PresentMode};
+//! This example demonstrates Bevy's immediate mode drawing API intended for visual debugging.
 
-mod app;
 mod geometry;
-mod gpu;
-mod input;
-mod logging;
-mod render;
+mod plugins;
 mod screenshot;
-mod util;
-mod stats;
-mod simple_text;
-
-#[macro_use]
-extern crate log;
 
 #[macro_use]
 extern crate anyhow;
 
+use bevy::{
+    color::palettes,
+    core::FrameCount,
+    log::*,
+    render::camera::RenderTarget,
+    window::{RawHandleWrapper, WindowCreated, WindowRef, WindowResolution},
+};
+
+use raw_window_handle::RawWindowHandle;
+use screenshot::capture_desktop;
+use xcap::Monitor as XCapMonitor;
+
+use std::{
+    f32::consts::{FRAC_PI_2, PI, TAU},
+    num::NonZero,
+};
+
+use bevy::{color::palettes::css::*, math::Isometry2d, prelude::*, render::settings::RenderCreation, window::PresentMode};
+
 fn main() {
-    let _ = logging::setup_logging("capture", None, true, false);
-
-    #[cfg(target_os = "macos")]
-    app::run_app(Some(Backends::METAL), PresentMode::AutoVsync).unwrap();
-
-    #[cfg(target_os = "windows")]
-    app::run_app(Some(Backends::DX12), PresentMode::Mailbox).unwrap();
+    App::new()
+        .add_plugins((
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: None,
+                    close_when_requested: true,
+                    exit_condition: bevy::window::ExitCondition::DontExit,
+                })
+                .set(bevy::render::RenderPlugin {
+                    render_creation: RenderCreation::Automatic(bevy::render::settings::WgpuSettings {
+                        backends: Some(bevy::render::settings::Backends::DX12 | bevy::render::settings::Backends::METAL),
+                        dx12_shader_compiler: bevy::render::settings::Dx12Compiler::Dxc {
+                            dxil_path: None,
+                            dxc_path: None,
+                        },
+                        power_preference: bevy::render::settings::PowerPreference::HighPerformance,
+                        ..default()
+                    }),
+                    ..default()
+                }),
+            bevy::diagnostic::LogDiagnosticsPlugin::default(),
+            plugins::framepace::FramepacePlugin,
+        ))
+        // .init_gizmo_group::<MyRoundGizmos>()
+        .add_systems(Startup, setup)
+        .add_systems(Update, (update_cursor, handle_keypress, handle_window_created, make_visible))
+        .run();
 }
 
-// fn view(app: &App, model: &Model, frame: Frame) {
-//     let desc = SamplerBuilder::new()
-//         .mag_filter(wgpu::FilterMode::Nearest)
-//         .min_filter(wgpu::FilterMode::Nearest)
-//         .mipmap_filter(wgpu::FilterMode::Nearest)
-//         .into_descriptor();
+fn handle_window_created(mut events: EventReader<WindowCreated>, windows: Query<(&RawHandleWrapper, &Window)>) {
+    for w in events.read() {
+        let w = windows.get(w.window).unwrap();
+        if let RawWindowHandle::Win32(handle) = w.0.window_handle {
+            use windows::Win32::Graphics::Dwm::*;
+            let handle: isize = handle.hwnd.into();
+            let hwnd = windows::Win32::Foundation::HWND(handle as *mut std::ffi::c_void);
+            let dw_flag: i32 = 1;
+            let dw_flag_ptr = &dw_flag as *const i32 as *const std::ffi::c_void;
+            unsafe {
+                let _ = DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, dw_flag_ptr, 4);
+                let _ = DwmSetWindowAttribute(hwnd, DWMWA_EXCLUDED_FROM_PEEK, dw_flag_ptr, 4);
+            }
+        }
+    }
+}
 
-//     let window = app.window(frame.window_id()).unwrap();
-//     let draw = app
-//         .draw()
-//         .scale(1.0 / window.scale_factor())
-//         .sampler(desc);
+fn make_visible(mut window: Query<&mut Window>, frames: Res<FrameCount>) {
+    if frames.0 == 2 {
+        for mut window in window.iter_mut() {
+            window.visible = true;
+        }
+    }
+}
 
-//     let renderer = model
-//         .renderers
-//         .iter()
-//         .find(|r| r.window == frame.window_id())
-//         .unwrap();
+#[derive(Resource)]
+struct MouseRes(mouse_rs::Mouse);
 
-//     draw_texture(model, &draw, renderer, app.time);
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let monitors = XCapMonitor::all().expect("Failed to get all monitors");
+    commands.insert_resource(MouseRes(mouse_rs::Mouse::new()));
 
-//     if !model.captured {
-//         draw_crosshair(model, &draw, renderer);
-//     }
+    let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop().expect("Unable to capture desktop");
 
-//     if model.debug {
-//         draw_debug(model, &draw, renderer);
-//     }
 
-//     if let Some(selection) = model.selection {
-//         if model.captured
-//             && renderer
-//                 .monitor_bounds
-//                 .contains(selection.center())
-//         {
-//             model.button_panel.draw(&draw, renderer);
-//         }
-//     }
 
-//     draw.to_frame(app, &frame).unwrap();
+    let node = Node {
+        position_type: PositionType::Absolute,
+        top: Val::Px(12.0),
+        left: Val::Px(12.0),
+        ..default()
+    };
+
+    for (i, monitor) in monitors.iter().enumerate() {
+        let scale = monitor.scale_factor();
+        let x = monitor.x();
+        let y = monitor.y();
+        let width = monitor.width();
+        let height = monitor.height();
+        info!(
+            "Monitor {}: x={}, y={}, width={}, height={}, scale={}",
+            i + 1,
+            x,
+            y,
+            width,
+            height,
+            scale
+        );
+
+        let window = commands
+            .spawn(Window {
+                title: "Clowd Capture".to_owned(),
+                resolution: WindowResolution::new(width as f32, height as f32).with_scale_factor_override(1.0),
+                present_mode: PresentMode::Mailbox,
+                desired_maximum_frame_latency: NonZero::new(1),
+                focused: i == 0,
+                position: WindowPosition::At(IVec2::new(x, y)),
+                decorations: false,
+                visible: false,
+                ..default()
+            })
+            .id();
+
+        let camera = commands
+            .spawn((
+                Camera2d::default(),
+                Transform::from_xyz(0.0, 0.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
+                Camera {
+                    target: RenderTarget::Window(WindowRef::Entity(window)),
+                    ..default()
+                },
+            ))
+            .id();
+
+        commands.spawn((
+            Text::new(format!("Window: {}", i + 1)),
+            node.clone(),
+            // Since we are using multiple cameras, we need to specify which camera UI should be rendered to
+            TargetCamera(camera),
+        ));
+    }
+
+    // commands.spawn(Camera2d);
+    // // text
+    // commands.spawn((
+    //     Text::new(
+    //         "Hold 'Left' or 'Right' to change the line width of straight gizmos\n\
+    //     Hold 'Up' or 'Down' to change the line width of round gizmos\n\
+    //     Press '1' / '2' to toggle the visibility of straight / round gizmos\n\
+    //     Press 'U' / 'I' to cycle through line styles\n\
+    //     Press 'J' / 'K' to cycle through line joins",
+    //     ),
+    //     Node {
+    //         position_type: PositionType::Absolute,
+    //         top: Val::Px(12.),
+    //         left: Val::Px(12.),
+    //         ..default()
+    //     },
+    // ));
+}
+
+fn update_cursor(mouse: Res<MouseRes>, mut gizmos: Gizmos) {
+    if let Ok(pos) = mouse.0.get_position() {
+        let pos = IVec2::new(pos.x, pos.y).as_vec2();
+        // let pos = Vec2::new(pos.x - windows.single().width() / 2.0, windows.single().height() / 2.0 - pos.y);
+        gizmos.circle_2d(pos, 10.0, palettes::basic::GREEN);
+        // gizmos.linestrip_2d(positions, color);
+    }
+}
+
+fn handle_keypress(mut exit: EventWriter<AppExit>, keyboard: Res<ButtonInput<KeyCode>>, time: Res<Time>) {
+    if keyboard.just_pressed(KeyCode::Escape) {
+        exit.send(AppExit::Success);
+    }
+}
+
+// // We can create our own gizmo config group!
+// #[derive(Default, Reflect, GizmoConfigGroup)]
+// struct MyRoundGizmos {}
+
+// fn setup(mut commands: Commands) {
+//     commands.spawn(Camera2d);
+//     // text
+//     commands.spawn((
+//         Text::new(
+//             "Hold 'Left' or 'Right' to change the line width of straight gizmos\n\
+//         Hold 'Up' or 'Down' to change the line width of round gizmos\n\
+//         Press '1' / '2' to toggle the visibility of straight / round gizmos\n\
+//         Press 'U' / 'I' to cycle through line styles\n\
+//         Press 'J' / 'K' to cycle through line joins",
+//         ),
+//         Node {
+//             position_type: PositionType::Absolute,
+//             top: Val::Px(12.),
+//             left: Val::Px(12.),
+//             ..default()
+//         },
+//     ));
 // }
 
-// fn draw_texture(model: &Model, draw: &Draw, renderer: &RendererInfo, time: f32) {
-//     let cursor_pos = renderer
-//         .transform
-//         .pt_to_window(model.mouse_pt)
-//         .to_nannou();
+// fn draw_example_collection(mut gizmos: Gizmos, mut my_gizmos: Gizmos<MyRoundGizmos>, time: Res<Time>) {
+//     let sin_t_scaled = ops::sin(time.elapsed_secs()) * 50.;
+//     gizmos.line_2d(Vec2::Y * -sin_t_scaled, Vec2::splat(-80.), RED);
+//     gizmos.ray_2d(Vec2::Y * sin_t_scaled, Vec2::splat(80.), LIME);
 
-//     let zoom_f32 = model.zoom as f32;
+//     gizmos
+//         .grid_2d(
+//             Isometry2d::IDENTITY,
+//             UVec2::new(16, 9),
+//             Vec2::new(80., 80.),
+//             // Dark gray
+//             LinearRgba::gray(0.05),
+//         )
+//         .outer_edges();
 
-//     let monitor_center = renderer.monitor_bounds.center().to_f32();
-//     let desktop_center = model.desktop_bounds.center().to_f32();
-//     let x_diff = desktop_center.x - monitor_center.x;
-//     let y_diff = -(desktop_center.y - monitor_center.y);
+//     // Triangle
+//     gizmos.linestrip_gradient_2d([
+//         (Vec2::Y * 300., BLUE),
+//         (Vec2::new(-255., -155.), RED),
+//         (Vec2::new(255., -155.), LIME),
+//         (Vec2::Y * 300., BLUE),
+//     ]);
 
-//     let texture_draw = draw
-//         .x_y(x_diff * zoom_f32, y_diff * zoom_f32)
-//         .x_y(-cursor_pos.x * (zoom_f32 - 1.0), -cursor_pos.y * (zoom_f32 - 1.0))
-//         .scale(zoom_f32);
+//     gizmos.rect_2d(Isometry2d::IDENTITY, Vec2::splat(650.), BLACK);
 
-//     texture_draw.texture(&model.desktop_gray_texture);
+//     gizmos.cross_2d(Vec2::new(-160., 120.), 12., FUCHSIA);
 
-//     draw.rect()
-//         .wh(renderer.size_vec2)
-//         .rgba(0.0, 0.0, 0.0, 0.5);
+//     let domain = Interval::EVERYWHERE;
+//     let curve = FunctionCurve::new(domain, |t| Vec2::new(t, ops::sin(t / 25.0) * 100.0));
+//     let resolution = ((ops::sin(time.elapsed_secs()) + 1.0) * 50.0) as usize;
+//     let times_and_colors = (0..=resolution)
+//         .map(|n| n as f32 / resolution as f32)
+//         .map(|t| (t - 0.5) * 600.0)
+//         .map(|t| (t, TEAL.mix(&HOT_PINK, (t + 300.0) / 600.0)));
+//     gizmos.curve_gradient_2d(curve, times_and_colors);
 
-//     if let Some(screen_selection) = model.selection {
-//         let zoom_transform = renderer
-//             .transform
-//             .with_zoom(model.mouse_pt, model.zoom);
+//     my_gizmos
+//         .rounded_rect_2d(Isometry2d::IDENTITY, Vec2::splat(630.), BLACK)
+//         .corner_radius(ops::cos(time.elapsed_secs() / 3.) * 100.);
 
-//         let scissor_transform = zoom_transform.with_scissor();
+//     // Circles have 32 line-segments by default.
+//     // You may want to increase this for larger circles.
+//     my_gizmos
+//         .circle_2d(Isometry2d::IDENTITY, 300., NAVY)
+//         .resolution(64);
 
-//         let scissor_rect = scissor_transform
-//             .rect_to_window(screen_selection.to_f64())
-//             .to_nannou();
+//     my_gizmos.ellipse_2d(Rot2::radians(time.elapsed_secs() % TAU), Vec2::new(100., 200.), YELLOW_GREEN);
 
-//         let cropped_draw = texture_draw.scissor(scissor_rect);
+//     // Arcs default resolution is linearly interpolated between
+//     // 1 and 32, using the arc length as scalar.
+//     my_gizmos.arc_2d(Rot2::radians(sin_t_scaled / 10.), FRAC_PI_2, 310., ORANGE_RED);
+//     my_gizmos.arc_2d(Isometry2d::IDENTITY, FRAC_PI_2, 80.0, ORANGE_RED);
+//     my_gizmos.long_arc_2d_between(Vec2::ZERO, Vec2::X * 20.0, Vec2::Y * 20.0, ORANGE_RED);
+//     my_gizmos.short_arc_2d_between(Vec2::ZERO, Vec2::X * 40.0, Vec2::Y * 40.0, ORANGE_RED);
 
-//         cropped_draw.texture(&model.desktop_color_texture);
+//     gizmos.arrow_2d(Vec2::ZERO, Vec2::from_angle(sin_t_scaled / -10. + PI / 2.) * 50., YELLOW);
 
-//         let pixel_size = renderer.scale_factor.floor() as f32;
-//         let outline_weight = pixel_size * 2.0;
-//         let outline_offset = if model.zoom < 1.5 {
-//             SideOffsets2D::new(1, 1, 1, 1)
-//         } else {
-//             SideOffsets2D::new(0, 0, 0, 0)
+//     // You can create more complex arrows using the arrow builder.
+//     gizmos
+//         .arrow_2d(Vec2::ZERO, Vec2::from_angle(sin_t_scaled / -10.) * 50., GREEN)
+//         .with_double_end()
+//         .with_tip_length(10.);
+// }
+
+// fn update_config(mut config_store: ResMut<GizmoConfigStore>, keyboard: Res<ButtonInput<KeyCode>>, time: Res<Time>) {
+//     let (config, _) = config_store.config_mut::<DefaultGizmoConfigGroup>();
+//     if keyboard.pressed(KeyCode::ArrowRight) {
+//         config.line_width += 5. * time.delta_secs();
+//         config.line_width = config.line_width.clamp(0., 50.);
+//     }
+//     if keyboard.pressed(KeyCode::ArrowLeft) {
+//         config.line_width -= 5. * time.delta_secs();
+//         config.line_width = config.line_width.clamp(0., 50.);
+//     }
+//     if keyboard.just_pressed(KeyCode::Digit1) {
+//         config.enabled ^= true;
+//     }
+//     if keyboard.just_pressed(KeyCode::KeyU) {
+//         config.line_style = match config.line_style {
+//             GizmoLineStyle::Solid => GizmoLineStyle::Dotted,
+//             _ => GizmoLineStyle::Solid,
 //         };
-
-//         let outline_rect = zoom_transform.rect_to_window(
-//             screen_selection
-//                 .outer_rect(outline_offset)
-//                 .to_f64(),
-//         );
-
-//         draw_ex::draw_dashed_rectangle(
-//             &draw,
-//             outline_rect.to_nannou(),
-//             outline_weight,
-//             pixel_size * 20.0,
-//             WHITE,
-//             model.accent_dark,
-//             time,
-//         );
-
-//         let min_size_for_handles = (6.0 * pixel_size * 5.0) as i32;
-//         if model.captured && screen_selection.width() > min_size_for_handles && screen_selection.height() > min_size_for_handles {
-//             for handle in HitTest::resize_handles() {
-//                 let pos = handle
-//                     .handle_position(screen_selection.outer_rect(outline_offset))
-//                     .to_f64();
-
-//                 let pos = zoom_transform.pt_to_window(pos);
-
-//                 let rect = pos
-//                     .to_widened_rect(6.0 * pixel_size as f64)
-//                     .to_nannou();
-//                 draw.ellipse()
-//                     .xy(rect.xy())
-//                     .wh(rect.wh())
-//                     .color(model.accent_light);
-
-//                 let rect = pos
-//                     .to_widened_rect(5.0 * pixel_size as f64)
-//                     .to_nannou();
-//                 draw.ellipse()
-//                     .xy(rect.xy())
-//                     .wh(rect.wh())
-//                     .color(WHITE);
-
-//                 let rect = pos
-//                     .to_widened_rect(4.0 * pixel_size as f64)
-//                     .to_nannou();
-//                 draw.ellipse()
-//                     .xy(rect.xy())
-//                     .wh(rect.wh())
-//                     .color(model.accent_light);
-//             }
-//         }
 //     }
-// }
-
-// fn draw_crosshair(model: &Model, draw: &Draw, renderer: &RendererInfo) {
-//     let rc_win = renderer
-//         .transform
-//         .rect_to_window(renderer.monitor_bounds)
-//         .to_nannou();
-//     let mouse_pos = renderer
-//         .transform
-//         .pt_to_window(model.mouse_pt)
-//         .to_nannou();
-//     let mouse = mouse_pos - pt2(-0.5, 0.5);
-//     let mouse_dashed_horiz = (pt2(rc_win.left(), mouse.y), pt2(rc_win.right(), mouse.y));
-//     let mouse_dashed_vert = (pt2(mouse.x, rc_win.bottom()), pt2(mouse.x, rc_win.top()));
-
-//     draw_ex::draw_dashed_line_polyline(&draw, mouse_dashed_horiz.0, mouse_dashed_horiz.1, 1.0, 8.0, &model.dash_black_white);
-
-//     draw_ex::draw_dashed_line_polyline(&draw, mouse_dashed_vert.0, mouse_dashed_vert.1, 1.0, 8.0, &model.dash_black_white);
-
-//     let accent_size = 100.0;
-//     let accent_color = model.accent_light;
-//     let mouse_accent_horiz = (pt2(mouse.x - accent_size, mouse.y), pt2(mouse.x + accent_size, mouse.y));
-//     let mouse_accent_vert = (pt2(mouse.x, mouse.y - accent_size), pt2(mouse.x, mouse.y + accent_size));
-
-//     draw.line()
-//         .start(mouse_accent_horiz.0)
-//         .end(mouse_accent_horiz.1)
-//         .stroke_weight(1.0)
-//         .color(accent_color);
-
-//     draw.line()
-//         .start(mouse_accent_vert.0)
-//         .end(mouse_accent_vert.1)
-//         .stroke_weight(1.0)
-//         .color(accent_color);
-
-//     let handle_size = accent_size / 2.0;
-//     let handle_weight = 5.0;
-
-//     let mouse_handle_left = (pt2(mouse.x - handle_size - 0.5, mouse.y), pt2(mouse.x - accent_size - 0.5, mouse.y));
-//     let mouse_handle_right = (pt2(mouse.x + handle_size + 0.5, mouse.y), pt2(mouse.x + accent_size + 0.5, mouse.y));
-//     let mouse_handle_top = (pt2(mouse.x, mouse.y - handle_size - 0.5), pt2(mouse.x, mouse.y - accent_size - 0.5));
-//     let mouse_handle_bottom = (pt2(mouse.x, mouse.y + handle_size + 0.5), pt2(mouse.x, mouse.y + accent_size + 0.5));
-
-//     draw.line()
-//         .start(mouse_handle_left.0)
-//         .end(mouse_handle_left.1)
-//         .stroke_weight(handle_weight)
-//         .color(accent_color);
-
-//     draw.line()
-//         .start(mouse_handle_right.0)
-//         .end(mouse_handle_right.1)
-//         .stroke_weight(handle_weight)
-//         .color(accent_color);
-
-//     draw.line()
-//         .start(mouse_handle_top.0)
-//         .end(mouse_handle_top.1)
-//         .stroke_weight(handle_weight)
-//         .color(accent_color);
-
-//     draw.line()
-//         .start(mouse_handle_bottom.0)
-//         .end(mouse_handle_bottom.1)
-//         .stroke_weight(handle_weight)
-//         .color(accent_color);
-// }
-
-// fn draw_debug(model: &Model, draw: &Draw, renderer: &RendererInfo) {
-//     let win = renderer
-//         .transform
-//         .rect_to_window(renderer.monitor_bounds)
-//         .to_nannou();
-
-//     // Crosshair at window center
-//     let crosshair_color = rgba(1.0, 1.0, 1.0, 1.0);
-//     let ends = [win.mid_top(), win.mid_right(), win.mid_bottom(), win.mid_left()];
-//     for &end in &ends {
-//         draw.arrow()
-//             .weight(0.5)
-//             .start_cap_round()
-//             .head_length(16.0)
-//             .head_width(8.0)
-//             .color(crosshair_color)
-//             .end(end - vec2(-0.5, -0.5))
-//             .start(vec2(0.5, 0.5));
+//     if keyboard.just_pressed(KeyCode::KeyJ) {
+//         config.line_joints = match config.line_joints {
+//             GizmoLineJoint::Bevel => GizmoLineJoint::Miter,
+//             GizmoLineJoint::Miter => GizmoLineJoint::Round(4),
+//             GizmoLineJoint::Round(_) => GizmoLineJoint::None,
+//             GizmoLineJoint::None => GizmoLineJoint::Bevel,
+//         };
 //     }
 
-//     let top = format!("{:.1}", win.top());
-//     let bottom = format!("{:.1}", win.bottom());
-//     let left = format!("{:.1}", win.left());
-//     let right = format!("{:.1}", win.right());
-//     let x_off = 30.0;
-//     let y_off = 20.0;
-//     draw.text("0.0")
-//         .x_y(15.0, 15.0)
-//         .color(crosshair_color)
-//         .font_size(14);
-//     draw.text(&top)
-//         .h(win.h())
-//         .font_size(14)
-//         .align_text_top()
-//         .color(crosshair_color)
-//         .x(x_off);
-//     draw.text(&bottom)
-//         .h(win.h())
-//         .font_size(14)
-//         .align_text_bottom()
-//         .color(crosshair_color)
-//         .x(x_off);
-//     draw.text(&left)
-//         .w(win.w())
-//         .font_size(14)
-//         .left_justify()
-//         .color(crosshair_color)
-//         .y(y_off);
-//     draw.text(&right)
-//         .w(win.w())
-//         .font_size(14)
-//         .right_justify()
-//         .color(crosshair_color)
-//         .y(y_off);
-
-//     let mouse_pos = renderer
-//         .transform
-//         .pt_to_window(model.mouse_pt)
-//         .to_nannou();
-
-//     // Debug window and monitor details.
-//     let m_scale_factor = renderer.scale_factor;
-//     let mon_phys_size = renderer.monitor_handle.size();
-//     let mon_log_size = mon_phys_size.to_logical::<f32>(m_scale_factor as f64);
-//     let mon_phys_pos = renderer.monitor_handle.position();
-//     let mon_log_pos = mon_phys_pos.to_logical::<f32>(m_scale_factor as f64);
-//     let text = format!(
-//         "
-//         Monitor logical: [{:.0}, {:.0}, {:.0}, {:.0}]
-//         Monitor phsical: [{:.0}, {:.0}, {:.0}, {:.0}]
-//         Monitor ratio: {:.2}
-//         Monitor scale factor: {:.2}
-//         Monitor primary: {:?}
-//         World zoom: {:.2}
-//         World mouse: {:?}
-//         Mouse relative to window: {:.2}
-//         Artificial mouse: {:?}
-//         ",
-//         mon_log_pos.x,
-//         mon_log_pos.y,
-//         mon_log_size.width,
-//         mon_log_size.height,
-//         mon_phys_pos.x,
-//         mon_phys_pos.y,
-//         mon_phys_size.width,
-//         mon_phys_size.height,
-//         mon_log_size.width / mon_log_size.height,
-//         m_scale_factor,
-//         renderer.is_primary,
-//         model.zoom,
-//         model.mouse_pt,
-//         mouse_pos,
-//         model.mouse_anchored,
-//     );
-//     let pad = 6.0;
-//     draw.text(&text)
-//         .h(win.pad(pad).h())
-//         .w(win.pad(pad).w())
-//         .line_spacing(pad)
-//         .font_size(14)
-//         .align_text_bottom()
-//         .color(crosshair_color)
-//         .left_justify();
-
-//     // Ellipse at mouse.
-//     draw.ellipse()
-//         .wh([5.0; 2].into())
-//         .xy(mouse_pos);
-
-//     // Mouse position text.
-//     let pos = format!("[{:.1}, {:.1}]", mouse_pos.x, mouse_pos.y);
-//     draw.text(&pos)
-//         .xy(mouse_pos + vec2(0.0, 20.0))
-//         .font_size(14)
-//         .color(WHITE);
+//     let (my_config, _) = config_store.config_mut::<MyRoundGizmos>();
+//     if keyboard.pressed(KeyCode::ArrowUp) {
+//         my_config.line_width += 5. * time.delta_secs();
+//         my_config.line_width = my_config.line_width.clamp(0., 50.);
+//     }
+//     if keyboard.pressed(KeyCode::ArrowDown) {
+//         my_config.line_width -= 5. * time.delta_secs();
+//         my_config.line_width = my_config.line_width.clamp(0., 50.);
+//     }
+//     if keyboard.just_pressed(KeyCode::Digit2) {
+//         my_config.enabled ^= true;
+//     }
+//     if keyboard.just_pressed(KeyCode::KeyI) {
+//         my_config.line_style = match my_config.line_style {
+//             GizmoLineStyle::Solid => GizmoLineStyle::Dotted,
+//             _ => GizmoLineStyle::Solid,
+//         };
+//     }
+//     if keyboard.just_pressed(KeyCode::KeyK) {
+//         my_config.line_joints = match my_config.line_joints {
+//             GizmoLineJoint::Bevel => GizmoLineJoint::Miter,
+//             GizmoLineJoint::Miter => GizmoLineJoint::Round(4),
+//             GizmoLineJoint::Round(_) => GizmoLineJoint::None,
+//             GizmoLineJoint::None => GizmoLineJoint::Bevel,
+//         };
+//     }
 // }

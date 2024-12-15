@@ -1,3 +1,4 @@
+use bevy::log::*;
 use crate::geometry::*;
 use anyhow::Result;
 use image::{self, ImageBuffer, Rgba, RgbaImage};
@@ -90,7 +91,7 @@ impl Drop for BoxHBITMAP {
         // https://learn.microsoft.com/zh-cn/windows/win32/api/wingdi/nf-wingdi-createcompatiblebitmap
         unsafe {
             if !DeleteObject(self.0).as_bool() {
-                log::error!("DeleteObject {:?} failed", self)
+                error!("DeleteObject {:?} failed", self)
             }
         };
     }
