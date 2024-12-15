@@ -66,6 +66,8 @@ fn main() {
 fn handle_window_created(mut events: EventReader<WindowCreated>, windows: Query<(&RawHandleWrapper, &Window)>) {
     for w in events.read() {
         let w = windows.get(w.window).unwrap();
+        
+        #[cfg(windows)]
         if let RawWindowHandle::Win32(handle) = w.0.window_handle {
             use windows::Win32::Graphics::Dwm::*;
             let handle: isize = handle.hwnd.into();
@@ -133,8 +135,8 @@ fn setup(
         let scale = monitor.scale_factor();
         let x = monitor.x();
         let y = monitor.y();
-        let width = monitor.width() as f32 / scale;
-        let height = monitor.height() as f32 / scale;
+        let width = monitor.width() as f32 * scale;
+        let height = monitor.height() as f32 * scale;
         info!(
             "Monitor {}: x={}, y={}, width={}, height={}, scale={}",
             i + 1,
@@ -149,7 +151,10 @@ fn setup(
             .spawn(Window {
                 title: "Clowd Capture".to_owned(),
                 resolution: WindowResolution::new(width, height).with_scale_factor_override(1.0),
+                #[cfg(target_os = "windows")]
                 present_mode: PresentMode::Mailbox,
+                #[cfg(target_os = "macos")]
+                present_mode: PresentMode::Immediate,
                 desired_maximum_frame_latency: NonZero::new(1),
                 focused: i == 0,
                 position: WindowPosition::At(IVec2::new(x, y)),

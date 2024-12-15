@@ -86,3 +86,7 @@ pub fn capture_desktop() -> Result<(ScreenRect, RgbaImage, RgbaImage)> {
 
     Ok((desktop_bounds, bgra_image, gray_image))
 }
+
+pub fn all_monitors() -> Result<Vec<XCapMonitor>> {
+    Ok(XCapMonitor::all()?)
+}
