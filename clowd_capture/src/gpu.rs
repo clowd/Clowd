@@ -5,7 +5,7 @@ use std::{num::NonZeroUsize, path::PathBuf};
 use vello::{
     wgpu::{
         self, Adapter, Backends, Device, Instance, Limits, Queue, Surface, SurfaceConfiguration, SurfaceError, SurfaceTarget,
-        SurfaceTexture, TextureFormat,
+        SurfaceTexture, Texture, TextureFormat, TextureView,
     },
     AaConfig, Renderer, RendererOptions, Scene,
 };
@@ -14,10 +14,10 @@ pub struct RenderContext {
     instance: Instance,
 }
 
-struct DeviceHandle {
-    adapter: Adapter,
-    device: Device,
-    queue: Queue,
+pub struct DeviceHandle {
+    pub adapter: Adapter,
+    pub device: Device,
+    pub queue: Queue,
 }
 
 pub struct WindowSurface<'w> {
@@ -39,19 +39,89 @@ impl WindowSurface<'_> {
         self.surface.get_current_texture()
     }
 
-    pub fn end_draw(&self, texture: SurfaceTexture, scene: &Scene, renderer: &mut Renderer) -> Result<()> {
-        renderer.render_to_surface(
+    pub fn upload_image(&self, image: &image::RgbaImage) -> Texture {
+        let image_width = image.width();
+        let image_height = image.height();
+        let texture = self
+            .device
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("Image Texture"),
+                size: wgpu::Extent3d {
+                    width: image_width,
+                    height: image_height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb, // match your image data format if possible
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST, // required to upload data
+                view_formats: &[],
+            });
+
+        let data = image.as_raw(); // This is &[u8] containing RGBA data
+        let texture_size = wgpu::Extent3d {
+            width: image_width,
+            height: image_height,
+            depth_or_array_layers: 1,
+        };
+
+        self.device.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * image_width), // 4 bytes per pixel * width
+                rows_per_image: None,
+            },
+            texture_size,
+        );
+        texture
+    }
+
+    pub fn submit(&self) {
+        self.device.queue.submit(Vec::new());
+    }
+
+    pub fn draw_scene(&self, scene: &Scene, texture: &TextureView, renderer: &mut Renderer) -> Result<()> {
+        renderer.render_to_texture(
             &self.device.device,
             &self.device.queue,
-            scene,
+            &scene,
             &texture,
             &vello::RenderParams {
-                base_color: vello::peniko::Color::BLACK, // Background color
+                base_color: vello::peniko::Color::TRANSPARENT, // Background color
                 width: self.config.width,
                 height: self.config.height,
                 antialiasing_method: AaConfig::Area,
             },
         )?;
+        Ok(())
+    }
+
+    pub fn get_device(&self) -> &DeviceHandle {
+        &self.device
+    }
+
+    pub fn end_draw(&self, texture: SurfaceTexture) -> Result<()> {
+        // renderer.render_to_surface(
+        //     &self.device.device,
+        //     &self.device.queue,
+        //     scene,
+        //     &texture,
+        // &vello::RenderParams {
+        //     base_color: vello::peniko::Color::BLACK, // Background color
+        //     width: self.config.width,
+        //     height: self.config.height,
+        //     antialiasing_method: AaConfig::Area,
+        // },
+        // )?;
 
         texture.present();
 

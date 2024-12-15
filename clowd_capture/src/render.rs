@@ -11,7 +11,12 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use vello::{kurbo::*, peniko::*, Scene};
+use vello::{
+    kurbo::*,
+    peniko::*,
+    wgpu::{self, ImageCopyTextureTagged, Texture, TextureViewDescriptor},
+    Scene,
+};
 
 pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedModel, info: RendererDto, bus: Receiver<RenderMessage>) {
     // This is incredibly unsafe, since if the window is closed, the surface will also be made invalid.
@@ -21,14 +26,15 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
         let mut model = initial_model;
         let mut first_render = false;
         let mut renderer = surface.create_renderer();
-        let mut bg_scene = Scene::new();
         let mut scene = Scene::new();
         let mut stats = Stats::new();
         let mut text = SimpleText::new();
         let mut frame_start_time = Instant::now();
         let mut should_continue = true;
 
-        bg_scene.draw_image(&info.desktop_gray_image, Affine::IDENTITY);
+        let gray_texture = surface.upload_image(&info.desktop_gray_image);
+        let color_texture = surface.upload_image(&info.desktop_color_image);
+        surface.submit(); // upload the images
 
         info!("{:?} Starting render loop", info.window_id);
 
@@ -56,9 +62,18 @@ pub fn begin_render_loop<'s>(surface: WindowSurface<'s>, initial_model: SharedMo
             }
 
             scene.reset();
-            // scene.append(&bg_scene, None);
 
-            if let Err(e) = render_frame(&surface, &mut scene, &model, &info, &mut text, &stats, &mut renderer) {
+            if let Err(e) = render_frame(
+                &surface,
+                &mut scene,
+                &model,
+                &info,
+                &mut text,
+                &stats,
+                &mut renderer,
+                &gray_texture,
+                &color_texture,
+            ) {
                 error!("{:?} Error rendering frame: {:?}", info.window_id, e);
                 thread::sleep(Duration::from_millis(16));
             }
@@ -92,29 +107,65 @@ fn render_frame(
     text: &mut SimpleText,
     stats: &Stats,
     renderer: &mut vello::Renderer,
+    gray_texture: &Texture,
+    color_texture: &Texture,
 ) -> Result<()> {
-    let texture = surface.begin_draw()?;
+    let device = surface.get_device();
+    let surface_texture = surface.begin_draw()?;
+    let surface_view = surface_texture
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
 
-    // draw_background(scene, model, info);
+    let gray_view = gray_texture.create_view(&TextureViewDescriptor::default());
 
-    // let bounds = info.monitor_bounds.to_f64();
-    // scene.fill(
-    //     Fill::NonZero,
-    //     Affine::IDENTITY,
-    //     &info.desktop_gray_image,
-    //     Some(Affine::translate((-bounds.min_x(), -bounds.min_y()))),
-    //     &Rect::new(0.0, 0.0, bounds.width() as f64, bounds.height() as f64),
-    // );
+    let diffuse_sampler = device
+        .device
+        .create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+    let mut encoder = device
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Blit Encoder"),
+        });
+    {
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Blit Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &surface_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            ..Default::default()
+        });
+
+        rpass.set_pipeline(&your_blit_pipeline);
+        rpass.set_bind_group(0, &your_texture_bind_group, &[]);
+        // Draw a single triangle that covers the entire screen, or a simple quad
+        rpass.draw(0..3, 0..1);
+    }
+
+    device.queue.submit(Some(encoder.finish()));
 
     draw_crosshair(scene, model, info);
-
-    // draw_scene(scene, bg_scene, model, info);
 
     if model.debug {
         draw_debug(scene, model, info, text, stats);
     }
 
-    surface.end_draw(texture, scene, renderer)?;
+    surface.draw_scene(scene, &surface_view, renderer);
+    surface.end_draw(surface_texture)?;
     Ok(())
 }
 
@@ -147,13 +198,13 @@ fn render_frame(
 pub fn draw_background(scene: &mut Scene, model: &SharedModel, renderer: &RendererDto) {
     let bounds = renderer.monitor_bounds.to_f64();
 
-    scene.fill(
-        Fill::NonZero,
-        Affine::IDENTITY,
-        &renderer.desktop_gray_image,
-        Some(Affine::translate((-bounds.min_x(), -bounds.min_y()))),
-        &Rect::new(0.0, 0.0, bounds.width() as f64, bounds.height() as f64),
-    );
+    // scene.fill(
+    //     Fill::NonZero,
+    //     Affine::IDENTITY,
+    //     &renderer.desktop_gray_image,
+    //     Some(Affine::translate((-bounds.min_x(), -bounds.min_y()))),
+    //     &Rect::new(0.0, 0.0, bounds.width() as f64, bounds.height() as f64),
+    // );
 
     // scene.draw_image(&bg, Affine::IDENTITY);
 }
