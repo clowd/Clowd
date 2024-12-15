@@ -2,22 +2,28 @@
 
 mod geometry;
 mod plugins;
-mod screenshot;
+mod screen;
 
 #[macro_use]
 extern crate anyhow;
 
+use crate::geometry::*;
+
 use bevy::{
+    asset::RenderAssetUsages,
     color::palettes,
     core::FrameCount,
+    image::CompressedImageFormats,
     log::*,
-    render::camera::RenderTarget,
+    render::{camera::RenderTarget, view},
     window::{RawHandleWrapper, WindowCreated, WindowRef, WindowResolution},
 };
 
+use euclid::Transform2D;
+use image::DynamicImage;
+use iyes_perf_ui::prelude::PerfUiDefaultEntries;
 use raw_window_handle::RawWindowHandle;
-use screenshot::capture_desktop;
-use xcap::Monitor as XCapMonitor;
+use screen::{all_monitors, capture_desktop};
 
 use std::{
     f32::consts::{FRAC_PI_2, PI, TAU},
@@ -48,7 +54,8 @@ fn main() {
                     ..default()
                 }),
             bevy::diagnostic::LogDiagnosticsPlugin::default(),
-            plugins::framepace::FramepacePlugin,
+            bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
+            // plugins::framepace::FramepacePlugin,
         ))
         // .init_gizmo_group::<MyRoundGizmos>()
         .add_systems(Startup, setup)
@@ -84,13 +91,36 @@ fn make_visible(mut window: Query<&mut Window>, frames: Res<FrameCount>) {
 #[derive(Resource)]
 struct MouseRes(mouse_rs::Mouse);
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let monitors = XCapMonitor::all().expect("Failed to get all monitors");
+fn setup(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    // mut meshes: ResMut<Assets<Mesh>>,
+    // mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let monitors = all_monitors().expect("Failed to get all monitors");
     commands.insert_resource(MouseRes(mouse_rs::Mouse::new()));
 
     let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop().expect("Unable to capture desktop");
+    // let desktop_virtual_origin = desktop_bounds.top_left();
+    // let vd_transform = Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop_virtual_origin.to_vector());
 
+    println!("Desktop bounds: {:?}", desktop_bounds);
 
+    let dynamic_color = DynamicImage::ImageRgba8(desktop_color_image);
+    let dynamic_gray = DynamicImage::ImageRgba8(desktop_gray_image);
+    let image_color = Image::from_dynamic(dynamic_color, true, RenderAssetUsages::all());
+    let image_gray = Image::from_dynamic(dynamic_gray, true, RenderAssetUsages::all());
+    let color_handle = images.add(image_color);
+    let gray_handle = images.add(image_gray);
+
+    commands.spawn((
+        Sprite::from_image(gray_handle.clone()),
+        Transform::from_translation(Vec3::new(
+            (desktop_bounds.width() as f32 / 2.0) + desktop_bounds.left() as f32,
+            (-desktop_bounds.height() as f32 / 2.0) - desktop_bounds.top() as f32,
+            0.,
+        )),
+    ));
 
     let node = Node {
         position_type: PositionType::Absolute,
@@ -103,8 +133,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         let scale = monitor.scale_factor();
         let x = monitor.x();
         let y = monitor.y();
-        let width = monitor.width();
-        let height = monitor.height();
+        let width = monitor.width() as f32 / scale;
+        let height = monitor.height() as f32 / scale;
         info!(
             "Monitor {}: x={}, y={}, width={}, height={}, scale={}",
             i + 1,
@@ -118,7 +148,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         let window = commands
             .spawn(Window {
                 title: "Clowd Capture".to_owned(),
-                resolution: WindowResolution::new(width as f32, height as f32).with_scale_factor_override(1.0),
+                resolution: WindowResolution::new(width, height).with_scale_factor_override(1.0),
                 present_mode: PresentMode::Mailbox,
                 desired_maximum_frame_latency: NonZero::new(1),
                 focused: i == 0,
@@ -129,10 +159,23 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             })
             .id();
 
+        let half_width = width / 2.0;
+        let half_height = height / 2.0;
+
+        // let viewport_bounds = ScreenRect::from_xy_size(x, y, monitor.width() as i32, monitor.height() as i32);
+        // let viewport_bounds = vd_transform.outer_transformed_rect(&viewport_bounds);
+
+        // info!("Viewport bounds: {:?}", viewport_bounds);
+
         let camera = commands
             .spawn((
                 Camera2d::default(),
-                Transform::from_xyz(0.0, 0.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
+                // Transform::IDENTITY.with_translation(Vec3::new(
+                //     half_width + viewport_bounds.min_x() as f32,
+                //     -half_height - viewport_bounds.min_y() as f32,
+                //     0.0,
+                // )),
+                Transform::IDENTITY.with_translation(Vec3::new(x as f32 + half_width, -y as f32 - half_height as f32, 0.0)),
                 Camera {
                     target: RenderTarget::Window(WindowRef::Entity(window)),
                     ..default()
@@ -148,28 +191,12 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         ));
     }
 
-    // commands.spawn(Camera2d);
-    // // text
-    // commands.spawn((
-    //     Text::new(
-    //         "Hold 'Left' or 'Right' to change the line width of straight gizmos\n\
-    //     Hold 'Up' or 'Down' to change the line width of round gizmos\n\
-    //     Press '1' / '2' to toggle the visibility of straight / round gizmos\n\
-    //     Press 'U' / 'I' to cycle through line styles\n\
-    //     Press 'J' / 'K' to cycle through line joins",
-    //     ),
-    //     Node {
-    //         position_type: PositionType::Absolute,
-    //         top: Val::Px(12.),
-    //         left: Val::Px(12.),
-    //         ..default()
-    //     },
-    // ));
+    commands.spawn(PerfUiDefaultEntries::default());
 }
 
 fn update_cursor(mouse: Res<MouseRes>, mut gizmos: Gizmos) {
     if let Ok(pos) = mouse.0.get_position() {
-        let pos = IVec2::new(pos.x, pos.y).as_vec2();
+        let pos = IVec2::new(pos.x, -pos.y).as_vec2();
         // let pos = Vec2::new(pos.x - windows.single().width() / 2.0, windows.single().height() / 2.0 - pos.y);
         gizmos.circle_2d(pos, 10.0, palettes::basic::GREEN);
         // gizmos.linestrip_2d(positions, color);
