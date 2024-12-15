@@ -27,7 +27,7 @@ rayon = "1.5"
 num = "0.4.3"
 # vello = "0.3.0"
 # pollster = "0.4.0"
-bevy = "0.15.0-rc.3"
+bevy = { version = "0.15.0-rc.3", features = ["bevy_gizmos"] }
 iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git" }
 spin_sleep = "1.0"
 raw-window-handle = "0.6"
