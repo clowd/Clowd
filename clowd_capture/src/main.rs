@@ -13,16 +13,16 @@ use crate::resources::*;
 
 use bevy::{
     asset::RenderAssetUsages,
-    color::palettes,
+    color::palettes::css::*,
     core::FrameCount,
     log::*,
     prelude::*,
     render::camera::RenderTarget,
     render::settings::RenderCreation,
-    window::PresentMode,
-    window::{RawHandleWrapper, WindowCreated, WindowRef, WindowResolution},
+    window::{PresentMode, RawHandleWrapper, WindowCreated, WindowRef, WindowResolution},
 };
 
+use bevy_prototype_lyon::prelude::*;
 use iyes_perf_ui::prelude::*;
 use raw_window_handle::RawWindowHandle;
 use screen::{all_monitors, capture_desktop};
@@ -34,7 +34,7 @@ fn main() {
                 .set(WindowPlugin {
                     primary_window: None,
                     close_when_requested: true,
-                    exit_condition: bevy::window::ExitCondition::DontExit,
+                    exit_condition: bevy::window::ExitCondition::OnAllClosed,
                 })
                 .set(bevy::render::RenderPlugin {
                     render_creation: RenderCreation::Automatic(bevy::render::settings::WgpuSettings {
@@ -53,6 +53,7 @@ fn main() {
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin)
         .add_plugins(PerfUiPlugin)
+        .add_plugins(ShapePlugin)
         .init_gizmo_group::<MyOverlayGizmos>()
         .init_resource::<MousePosition>()
         .init_resource::<CaptureState>()
@@ -95,9 +96,23 @@ struct MyOverlayGizmos {}
 fn setup(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    // mut meshes: ResMut<Assets<Mesh>>,
-    // mut materials: ResMut<Assets<ColorMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    let shape = shapes::RegularPolygon {
+        sides: 6,
+        feature: shapes::RegularPolygonFeature::Radius(200.0),
+        ..shapes::RegularPolygon::default()
+    };
+    commands.spawn((Camera2d, Msaa::Sample4));
+    commands.spawn((
+        ShapeBuilder::with(&shape)
+            .fill(DARK_CYAN)
+            .stroke((BLACK, 10.0))
+            .build(),
+        Transform::from_xyz(0.0, 0.0, 1.0),
+    ));
+
     let monitors = all_monitors().expect("Failed to get all monitors");
     let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop().expect("Unable to capture desktop");
 
@@ -161,6 +176,7 @@ fn setup(
         let camera = commands
             .spawn((
                 Camera2d::default(),
+                Msaa::Sample4,
                 Transform::IDENTITY.with_translation(Vec3::new(x as f32 + half_width, -y as f32 - half_height as f32, 0.0)),
                 Camera {
                     target: RenderTarget::Window(WindowRef::Entity(window)),
@@ -176,6 +192,11 @@ fn setup(
             commands.spawn((PerfUiDefaultEntries::default(), TargetCamera(camera)));
         }
     }
+
+    // let shapes = [
+    //     meshes.add(Rectangle::new(width, height)),
+    //     meshes.add(Line2d)
+    // ]
 }
 
 fn toggle_debug(
@@ -196,7 +217,7 @@ fn toggle_debug(
 fn update_cursor(mouse: Res<MousePosition>, mut gizmos: Gizmos<MyOverlayGizmos>) {
     let pos = mouse.get();
     let pos = IVec2::new(pos.x, -pos.y).as_vec2();
-    gizmos.circle_2d(pos, 10.0, palettes::basic::GREEN);
+    gizmos.circle_2d(pos, 10.0, GREEN);
 }
 
 fn handle_keypress(

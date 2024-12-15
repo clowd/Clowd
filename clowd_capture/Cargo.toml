@@ -4,10 +4,8 @@ version = "0.0.0-local"
 edition = "2021"
 
 [dependencies]
-# log = "0.4"
 anyhow = "1.0"
 image = "0.25"
-# lazy_static = "1.4"
 mouse-rs = "0.4"
 euclid = "0.22.11"
 windows = { version = "0.58", features = [
@@ -17,21 +15,14 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Dwm",
     "Win32_System_SystemInformation",
 ] }
-# simple-stopwatch = "0.1.4"
-# simplelog = "0.12"
-# time = "0.3"
-# file-rotate = "0.7"
-# log-panics = "2.0"
+
 rayon = "1.5"
-# winit = "0.30.5"
 num = "0.4.3"
-# vello = "0.3.0"
-# pollster = "0.4.0"
-bevy = { version = "0.15.0-rc.3", features = ["bevy_gizmos"] }
-iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git" }
+bevy = { version = "0.15.0", features = ["bevy_gizmos"] }
+bevy_prototype_lyon = { git = "https://github.com/Nilirad/bevy_prototype_lyon.git", rev = "0dacb384dcace5ce82f890b3b5cbdce2941ee461" }
+iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git", rev = "d8f3cbb2ec486b85a86b21e1aa32dcebd26ac884" }
 spin_sleep = "1.0"
 raw-window-handle = "0.6"
-# bevy_framepace = "0.17"
 
 [target.'cfg(target_os="macos")'.dependencies]
 xcap = "0.1.0"
