@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 use crate::geometry::*;
-use bevy::prelude::Resource;
+use bevy::{
+    prelude::{Entity, Resource},
+    ui::TargetCamera,
+};
 
 #[derive(Resource)]
 pub struct MousePosition(mouse_rs::Mouse);
@@ -34,6 +37,15 @@ pub enum MouseState {
     #[default]
     Up,
     StartSel(ScreenPointF),
+}
+
+#[derive(Resource)]
+pub struct PrimaryCamera(pub Entity);
+
+impl PrimaryCamera {
+    pub fn get(&self) -> TargetCamera {
+        TargetCamera(self.0)
+    }
 }
 
 // #[derive(Resource, Default)]
