@@ -43,7 +43,7 @@ fn main() {
                 })
                 .set(bevy::render::RenderPlugin {
                     render_creation: RenderCreation::Automatic(bevy::render::settings::WgpuSettings {
-                        backends: Some(bevy::render::settings::Backends::DX12 | bevy::render::settings::Backends::METAL),
+                        backends: Some(bevy::render::settings::Backends::VULKAN | bevy::render::settings::Backends::METAL),
                         dx12_shader_compiler: bevy::render::settings::Dx12Compiler::Dxc {
                             dxil_path: None,
                             dxc_path: None,
