@@ -74,8 +74,8 @@ struct App {
     time: Stopwatch,
     desktop_bounds: ScreenRect,
     desktop_virtual_origin: ScreenPoint,
-    desktop_color_image: Image,
-    desktop_gray_image: Image,
+    desktop_color_image: RgbaImage,
+    desktop_gray_image: RgbaImage,
     windows: Vec<DesktopWindowInfo>,
     mouse: Mouse,
     mouse_anchor_pt: ScreenPoint,
@@ -112,8 +112,8 @@ pub struct RendererDto {
     pub scale_factor: f64,
     pub desktop_bounds: ScreenRect,
     pub desktop_virtual_origin: ScreenPoint,
-    pub desktop_color_image: Image,
-    pub desktop_gray_image: Image,
+    pub desktop_color_image: RgbaImage,
+    pub desktop_gray_image: RgbaImage,
     pub event_proxy: EventLoopProxy<UserEvent>,
     pub accent_light: Color,
     pub accent_dark: Color,
@@ -543,19 +543,19 @@ pub fn run_app(backends: Option<Backends>, present_mode: wgpu::PresentMode) -> R
     let vd_transform = Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop_virtual_origin.to_vector());
     let desktop_bounds = vd_transform.outer_transformed_rect(&desktop_bounds);
 
-    let desktop_color_image = Image::new(
-        desktop_color_image.into_raw().into(),
-        vello::peniko::Format::Rgba8,
-        desktop_bounds.width() as u32,
-        desktop_bounds.height() as u32,
-    );
+    // let desktop_color_image = Image::new(
+    //     desktop_color_image.into_raw().into(),
+    //     vello::peniko::Format::Rgba8,
+    //     desktop_bounds.width() as u32,
+    //     desktop_bounds.height() as u32,
+    // );
 
-    let desktop_gray_image = Image::new(
-        desktop_gray_image.into_raw().into(),
-        vello::peniko::Format::Rgba8,
-        desktop_bounds.width() as u32,
-        desktop_bounds.height() as u32,
-    );
+    // let desktop_gray_image = Image::new(
+    //     desktop_gray_image.into_raw().into(),
+    //     vello::peniko::Format::Rgba8,
+    //     desktop_bounds.width() as u32,
+    //     desktop_bounds.height() as u32,
+    // );
 
     info!("[TIME] Captured: {:?}", Duration::from_millis(time.ms() as u64));
 
