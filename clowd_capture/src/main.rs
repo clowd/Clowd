@@ -2,39 +2,33 @@
 
 mod geometry;
 mod plugins;
+mod resources;
 mod screen;
 
 #[macro_use]
 extern crate anyhow;
 
 use crate::geometry::*;
+use crate::resources::*;
 
 use bevy::{
     asset::RenderAssetUsages,
     color::palettes,
     core::FrameCount,
-    image::CompressedImageFormats,
     log::*,
-    render::{camera::RenderTarget, view},
+    prelude::*,
+    render::camera::RenderTarget,
+    render::settings::RenderCreation,
+    window::PresentMode,
     window::{RawHandleWrapper, WindowCreated, WindowRef, WindowResolution},
 };
 
-use euclid::Transform2D;
-use image::DynamicImage;
-use iyes_perf_ui::prelude::PerfUiDefaultEntries;
 use raw_window_handle::RawWindowHandle;
 use screen::{all_monitors, capture_desktop};
 
-use std::{
-    f32::consts::{FRAC_PI_2, PI, TAU},
-    num::NonZero,
-};
-
-use bevy::{color::palettes::css::*, math::Isometry2d, prelude::*, render::settings::RenderCreation, window::PresentMode};
-
 fn main() {
     App::new()
-        .add_plugins((
+        .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: None,
@@ -53,20 +47,24 @@ fn main() {
                     }),
                     ..default()
                 }),
-            bevy::diagnostic::LogDiagnosticsPlugin::default(),
-            bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
-            // plugins::framepace::FramepacePlugin,
-        ))
-        // .init_gizmo_group::<MyRoundGizmos>()
+        )
+        .add_plugins(bevy::diagnostic::LogDiagnosticsPlugin::default())
+        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
+        .add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin)
+        .add_plugins(iyes_perf_ui::PerfUiPlugin)
+        .init_gizmo_group::<MyOverlayGizmos>()
+        .init_resource::<MousePosition>()
+        .init_resource::<CaptureState>()
         .add_systems(Startup, setup)
         .add_systems(Update, (update_cursor, handle_keypress, handle_window_created, make_visible))
+        .add_systems(Update, toggle_debug.before(iyes_perf_ui::PerfUiSet::Setup))
         .run();
 }
 
 fn handle_window_created(mut events: EventReader<WindowCreated>, windows: Query<(&RawHandleWrapper, &Window)>) {
     for w in events.read() {
         let w = windows.get(w.window).unwrap();
-        
+
         #[cfg(windows)]
         if let RawWindowHandle::Win32(handle) = w.0.window_handle {
             use windows::Win32::Graphics::Dwm::*;
@@ -90,8 +88,8 @@ fn make_visible(mut window: Query<&mut Window>, frames: Res<FrameCount>) {
     }
 }
 
-#[derive(Resource)]
-struct MouseRes(mouse_rs::Mouse);
+#[derive(Default, Reflect, GizmoConfigGroup)]
+struct MyOverlayGizmos {}
 
 fn setup(
     mut commands: Commands,
@@ -100,18 +98,11 @@ fn setup(
     // mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let monitors = all_monitors().expect("Failed to get all monitors");
-    commands.insert_resource(MouseRes(mouse_rs::Mouse::new()));
-
     let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop().expect("Unable to capture desktop");
-    // let desktop_virtual_origin = desktop_bounds.top_left();
-    // let vd_transform = Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop_virtual_origin.to_vector());
 
     println!("Desktop bounds: {:?}", desktop_bounds);
-
-    let dynamic_color = DynamicImage::ImageRgba8(desktop_color_image);
-    let dynamic_gray = DynamicImage::ImageRgba8(desktop_gray_image);
-    let image_color = Image::from_dynamic(dynamic_color, true, RenderAssetUsages::all());
-    let image_gray = Image::from_dynamic(dynamic_gray, true, RenderAssetUsages::all());
+    let image_color = Image::from_dynamic(desktop_color_image, true, RenderAssetUsages::all());
+    let image_gray = Image::from_dynamic(desktop_gray_image, true, RenderAssetUsages::all());
     let color_handle = images.add(image_color);
     let gray_handle = images.add(image_gray);
 
@@ -155,7 +146,7 @@ fn setup(
                 present_mode: PresentMode::Mailbox,
                 #[cfg(target_os = "macos")]
                 present_mode: PresentMode::Immediate,
-                desired_maximum_frame_latency: NonZero::new(1),
+                desired_maximum_frame_latency: std::num::NonZero::new(1),
                 focused: i == 0,
                 position: WindowPosition::At(IVec2::new(x, y)),
                 decorations: false,
@@ -194,23 +185,48 @@ fn setup(
             // Since we are using multiple cameras, we need to specify which camera UI should be rendered to
             TargetCamera(camera),
         ));
+
+        if monitor.is_primary() {
+            commands.spawn((iyes_perf_ui::prelude::PerfUiDefaultEntries::default(), TargetCamera(camera)));
+        }
     }
 
-    commands.spawn(PerfUiDefaultEntries::default());
+    // commands.spawn(PerfUiDefaultEntries::default());
+    // commands.spawn(iyes_perf_ui::prelude::PerfUiAllEntries::default());
 }
 
-fn update_cursor(mouse: Res<MouseRes>, mut gizmos: Gizmos) {
-    if let Ok(pos) = mouse.0.get_position() {
-        let pos = IVec2::new(pos.x, -pos.y).as_vec2();
-        // let pos = Vec2::new(pos.x - windows.single().width() / 2.0, windows.single().height() / 2.0 - pos.y);
-        gizmos.circle_2d(pos, 10.0, palettes::basic::GREEN);
-        // gizmos.linestrip_2d(positions, color);
+fn toggle_debug(mut commands: Commands, q_root: Query<Entity, With<iyes_perf_ui::prelude::PerfUiRoot>>, kbd: Res<ButtonInput<KeyCode>>) {
+    if kbd.just_pressed(KeyCode::F12) {
+        if let Ok(e) = q_root.get_single() {
+            // despawn the existing Perf UI
+            commands.entity(e).despawn_recursive();
+        } else {
+            // create a simple Perf UI with default settings
+            // and all entries provided by the crate:
+            commands.spawn(iyes_perf_ui::prelude::PerfUiDefaultEntries::default());
+        }
     }
 }
 
-fn handle_keypress(mut exit: EventWriter<AppExit>, keyboard: Res<ButtonInput<KeyCode>>, time: Res<Time>) {
+fn update_cursor(mouse: Res<MousePosition>, mut gizmos: Gizmos<MyOverlayGizmos>) {
+    let pos = mouse.get();
+    let pos = IVec2::new(pos.x, -pos.y).as_vec2();
+    gizmos.circle_2d(pos, 10.0, palettes::basic::GREEN);
+}
+
+fn handle_keypress(
+    mut exit: EventWriter<AppExit>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    mut config_store: ResMut<GizmoConfigStore>,
+) {
+    let (my_config, _) = config_store.config_mut::<MyOverlayGizmos>();
+
     if keyboard.just_pressed(KeyCode::Escape) {
         exit.send(AppExit::Success);
+    } else if keyboard.just_pressed(KeyCode::KeyQ) {
+        my_config.enabled ^= true;
+        println!("Overlay gizmos enabled: {}", my_config.enabled);
     }
 }
 

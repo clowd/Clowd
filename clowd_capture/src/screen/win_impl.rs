@@ -1,7 +1,7 @@
-use bevy::log::*;
 use crate::geometry::*;
 use anyhow::Result;
-use image::{self, ImageBuffer, Rgba, RgbaImage};
+use bevy::log::*;
+use image::{self, DynamicImage, ImageBuffer, Rgba};
 use rayon::prelude::*;
 use std::{mem, ops::Deref, ptr};
 use windows::{
@@ -153,22 +153,6 @@ fn to_rgba_image(
 
     let mut color_rgba_buffer = vec![0u8; (width * height * 4) as usize];
     let mut gray_rgba_buffer = vec![0u8; (width * height * 4) as usize];
-    // gray_rgba_buffer
-    //     .par_chunks_exact_mut(4)
-    //     .enumerate()
-    //     .for_each(|(i, rgba)| {
-    //         let idx = i * 4;
-    //         let b = buffer[idx] as f32;
-    //         let g = buffer[idx + 1] as f32;
-    //         let r = buffer[idx + 2] as f32;
-    //         let a = buffer[idx + 3];
-    //         let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
-
-    //         rgba[0] = gray;
-    //         rgba[1] = gray;
-    //         rgba[2] = gray;
-    //         rgba[3] = a;
-    //     });
 
     color_rgba_buffer
         .par_chunks_mut(4)
@@ -202,10 +186,6 @@ fn to_rgba_image(
         .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
     Ok((bgra_image, gray_image))
-
-    // Ok((DynamicImage::ImageRgba8(bgra_image), DynamicImage::ImageRgba8(gray_image)))
-
-    // RgbaImage::from_raw(width as u32, height as u32, buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))
 }
 
 pub fn virtual_desktop() -> ScreenRect {
@@ -218,7 +198,7 @@ pub fn virtual_desktop() -> ScreenRect {
     }
 }
 
-pub fn capture_desktop() -> Result<(ScreenRect, RgbaImage, RgbaImage)> {
+pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
     unsafe {
         let rect = virtual_desktop();
         let vx = rect.min_x();
@@ -237,6 +217,6 @@ pub fn capture_desktop() -> Result<(ScreenRect, RgbaImage, RgbaImage)> {
         BitBlt(*box_hdc_mem, 0, 0, vw, vh, *box_hdc_desktop_window, vx, vy, SRCCOPY | CAPTUREBLT)?;
 
         let capture = to_rgba_image(box_hdc_mem, box_h_bitmap, vw, vh)?;
-        Ok((rect, capture.0, capture.1))
+        Ok((rect, DynamicImage::ImageRgba8(capture.0), DynamicImage::ImageRgba8(capture.1)))
     }
 }
