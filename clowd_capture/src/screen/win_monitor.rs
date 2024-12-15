@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use bevy::log::*;
 use std::mem;
@@ -6,9 +8,8 @@ use windows::{
     Win32::{
         Foundation::{BOOL, LPARAM, POINT, RECT, TRUE},
         Graphics::Gdi::{
-            EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint, DEVMODEW,
-            DMDO_180, DMDO_270, DMDO_90, DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
-            MONITOR_DEFAULTTONULL,
+            EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint, DEVMODEW, DMDO_180, DMDO_270, DMDO_90,
+            DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONULL,
         },
         UI::{HiDpi::GetDpiForMonitor, WindowsAndMessaging::MONITORINFOF_PRIMARY},
     },
@@ -162,11 +163,11 @@ impl ImplMonitor {
 
 #[derive(Debug, Clone)]
 pub struct Monitor {
-    pub(crate) impl_monitor: win_monitor::ImplMonitor,
+    pub(crate) impl_monitor: ImplMonitor,
 }
 
 impl Monitor {
-    pub(crate) fn new(impl_monitor: win_monitor::ImplMonitor) -> Monitor {
+    pub(crate) fn new(impl_monitor: ImplMonitor) -> Monitor {
         Monitor {
             impl_monitor,
         }
@@ -175,7 +176,7 @@ impl Monitor {
 
 impl Monitor {
     pub fn all() -> Result<Vec<Monitor>> {
-        let monitors = win_monitor::ImplMonitor::all()?
+        let monitors = ImplMonitor::all()?
             .iter()
             .map(|impl_monitor| Monitor::new(impl_monitor.clone()))
             .collect();
