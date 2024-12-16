@@ -45,6 +45,13 @@ impl Default for VirtualDesktop {
 #[derive(Resource)]
 pub struct FirstRenderTime(pub f64);
 
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
+pub enum MouseState {
+    #[default]
+    Up,
+    StartSel(ScreenPointF),
+}
+
 #[derive(Resource)]
 pub struct MousePosition {
     zoom: f32,
@@ -126,6 +133,14 @@ impl MousePosition {
         self.zoom = zoom;
     }
 
+    pub fn set_button_state(&mut self, state: MouseState) {
+        self.mouse_state = state;
+    }
+
+    pub fn get_button_state(&self) -> MouseState {
+        self.mouse_state
+    }
+
     pub fn set_anchored(&mut self, anchored: bool) {
         if !self.anchored && anchored {
             self.mouse_pos = SystemInterop::get_mouse_position().to_f32();
@@ -169,21 +184,6 @@ impl Default for MousePosition {
 #[derive(Resource, Default)]
 pub struct CaptureState {
     pub selection: Option<ScreenRect>,
-}
-
-// impl Default for CaptureState {
-//     fn default() -> Self {
-//         Self {
-//             selection: Some(ScreenRect::from_xy_size(200, 200, 500, 500)),
-//         }
-//     }
-// }
-
-#[derive(Resource, Default)]
-pub enum MouseState {
-    #[default]
-    Up,
-    StartSel(ScreenPointF),
 }
 
 #[derive(Resource)]
