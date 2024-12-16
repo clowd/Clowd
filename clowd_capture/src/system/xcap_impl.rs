@@ -5,27 +5,29 @@ use anyhow::Result;
 use image::{GenericImage, ImageBuffer, Rgba, RgbaImage};
 use rayon::prelude::*;
 
-pub fn capture_desktop() -> Result<(ScreenRect, RgbaImage, RgbaImage)> {
-    let monitors = XCapMonitor::all()?;
-
+pub fn virtual_desktop_and_monitors() -> (ScreenRect, Vec<XCapMonitor>) {
+    let monitors = XCapMonitor::all().expect("Unable to enumerate monitors");
     let mut min_x = std::i32::MAX;
     let mut min_y = std::i32::MAX;
     let mut max_x = std::i32::MIN;
     let mut max_y = std::i32::MIN;
 
     // Determine the bounding rectangle
+    let monitors = Vec::new();
     for monitor in &monitors {
         let scale = monitor.scale_factor();
         min_x = min_x.min((monitor.x() as f32 * scale) as i32);
         min_y = min_y.min((monitor.y() as f32 * scale) as i32);
         max_x = max_x.max(((monitor.x() + monitor.width() as i32) as f32 * scale) as i32);
         max_y = max_y.max(((monitor.y() + monitor.height() as i32) as f32 * scale) as i32);
-
-        //max_x = max_x.max(monitor.x() + monitor.width() as i32);
-        //max_y = max_y.max(monitor.y() + monitor.height() as i32);
+        monitors.push(monitor);
     }
 
-    let desktop_bounds = ScreenRect::from_exact(min_x, min_y, max_x, max_y);
+    (ScreenRect::from_exact(min_x, min_y, max_x, max_y), monitors)
+}
+
+pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
+    let (desktop_bounds, monitors) = virtual_desktop_and_monitors();
 
     let desktop_width = (max_x - min_x) as u32;
     let desktop_height = (max_y - min_y) as u32;
@@ -84,9 +86,5 @@ pub fn capture_desktop() -> Result<(ScreenRect, RgbaImage, RgbaImage)> {
     let gray_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(desktop_width as u32, desktop_height as u32, gray_rgba_buffer)
         .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
-    Ok((desktop_bounds, bgra_image, gray_image))
-}
-
-pub fn all_monitors() -> Result<Vec<XCapMonitor>> {
-    Ok(XCapMonitor::all()?)
+    Ok((DynamicImage::ImageRgba8(bgra_image), DynamicImage::ImageRgba8(gray_image)))
 }

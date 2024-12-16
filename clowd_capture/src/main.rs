@@ -1,9 +1,8 @@
 mod geometry;
-mod mouse;
 mod myshapes;
 mod plugins;
 mod resources;
-mod screen;
+mod system;
 
 #[macro_use]
 extern crate anyhow;
@@ -30,8 +29,7 @@ use euclid::Transform2D;
 use euclid::Vector2D;
 use iyes_perf_ui::prelude::*;
 use raw_window_handle::RawWindowHandle;
-use screen::capture_desktop;
-use screen::Monitor;
+use system::SystemInterop;
 
 fn main() {
     App::new()
@@ -70,9 +68,9 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res<AccentColors>) {
-    let monitors = Monitor::all().expect("Failed to get all monitors");
-    let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop().expect("Unable to capture desktop");
-    let desktop_bounds = desktop_bounds.to_f32();
+    let monitors = SystemInterop::all_monitor_bounds();
+    let desktop_bounds = SystemInterop::virtual_desktop_bounds().to_f32();
+    let (desktop_color_image, desktop_gray_image) = SystemInterop::capture_desktop();
 
     println!("Desktop bounds: {:?}", desktop_bounds);
     let image_color = Image::from_dynamic(desktop_color_image, true, RenderAssetUsages::all());
@@ -112,9 +110,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
         ..default()
     };
 
-    for (i, monitor) in monitors.iter().enumerate() {
-        let scale = monitor.scale_factor();
-        let bounds = monitor.bounds();
+    for (i, (bounds, scale, primary)) in monitors.iter().enumerate() {
         let x = bounds.left();
         let y = bounds.top();
         let width = bounds.width() as f32 / scale;
@@ -142,7 +138,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
         let half_width = width / 2.0;
         let half_height = height / 2.0;
         let cam_transform = Transform::IDENTITY
-            .with_scale(Vec3::splat(scale as f32))
+            .with_scale(Vec3::splat(*scale))
             .with_translation(Vec3::new(
                 x as f32 + half_width * scale,
                 -y as f32 - half_height as f32 * scale,
@@ -163,11 +159,11 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
 
         commands.spawn((Text::new(format!("Window: {}", i + 1)), node.clone(), TargetCamera(camera)));
 
-        if monitor.is_primary() {
+        if *primary {
             commands.insert_resource(PrimaryCamera(camera));
         }
 
-        camera_entities.push((camera, bounds, cam_transform.clone(), scale));
+        camera_entities.push((camera, bounds.clone(), cam_transform.clone(), *scale));
     }
 
     commands.insert_resource(CameraEntities(camera_entities));
