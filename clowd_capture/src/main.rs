@@ -50,7 +50,8 @@ fn main() {
                         ..default()
                     }),
                     ..default()
-                }),
+                })
+                .set(ImagePlugin::default_nearest()),
         )
         .add_plugins(bevy::diagnostic::LogDiagnosticsPlugin::default())
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
@@ -78,6 +79,8 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
     let image_gray = Image::from_dynamic(desktop_gray_image, true, RenderAssetUsages::all());
     let color_handle = images.add(image_color);
     let gray_handle = images.add(image_gray);
+
+    let mut camera_entities = Vec::new();
 
     commands.spawn((
         Sprite::from_image(gray_handle),
@@ -111,8 +114,8 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
         let bounds = monitor.bounds();
         let x = bounds.left();
         let y = bounds.top();
-        let width = bounds.width() as f32 * scale;
-        let height = bounds.height() as f32 * scale;
+        let width = bounds.width() as f32 / scale;
+        let height = bounds.height() as f32 / scale;
         info!("Monitor {}: bounds={:?}, scale={}", i + 1, bounds, scale);
 
         let window = commands
@@ -135,15 +138,23 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
 
         let half_width = width / 2.0;
         let half_height = height / 2.0;
+        let cam_transform = Transform::IDENTITY
+            .with_scale(Vec3::splat(scale as f32))
+            .with_translation(Vec3::new(
+                x as f32 + half_width * scale,
+                -y as f32 - half_height as f32 * scale,
+                0.0,
+            ));
         let camera = commands
             .spawn((
                 Camera2d::default(),
                 Msaa::Sample4,
-                Transform::IDENTITY.with_translation(Vec3::new(x as f32 + half_width, -y as f32 - half_height as f32, 0.0)),
+                cam_transform,
                 Camera {
                     target: RenderTarget::Window(WindowRef::Entity(window)),
                     ..default()
                 },
+                WindowCameraTag,
             ))
             .id();
 
@@ -152,7 +163,11 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
         if monitor.is_primary() {
             commands.insert_resource(PrimaryCamera(camera));
         }
+
+        camera_entities.push((camera, bounds, cam_transform.clone(), scale));
     }
+
+    commands.insert_resource(CameraEntities(camera_entities));
 
     // create crosshair
     let ch_parent_accent = commands
@@ -275,12 +290,14 @@ fn startup_animation(
     }
 
     if let Some(first_render) = first_render {
-        let elapsed_seconds = time.elapsed_secs_f64() - first_render.0;
         let mut overlay = query.single_mut();
-        let fade_duration = 0.2; // 200ms
-        let t = (elapsed_seconds / fade_duration).clamp(0.0, 1.0);
-        let fade_value = 0.5 * (1.0 + (PI * t).cos());
-        overlay.color.set_alpha(fade_value as f32);
+        if overlay.color.alpha() > 0.0 {
+            let elapsed_seconds = time.elapsed_secs_f64() - first_render.0;
+            let fade_duration = 0.2; // 200ms
+            let t = (elapsed_seconds / fade_duration).clamp(0.0, 1.0);
+            let fade_value = 0.5 * (1.0 + (PI * t).cos());
+            overlay.color.set_alpha(fade_value as f32);
+        }
     }
 }
 
@@ -310,7 +327,9 @@ fn handle_mouse_move(
         Query<&mut Transform, With<CrosshairVertTag>>,
         Query<&mut Transform, With<CrosshairHorizTag>>,
         Query<&mut Transform, With<CrosshairAccentTag>>,
+        Query<&mut Transform, With<WindowCameraTag>>,
     )>,
+    cameras: Res<CameraEntities>,
 ) {
     mouse.update_position();
     let pos = mouse.get_position().to_nannou();
@@ -323,6 +342,28 @@ fn handle_mouse_move(
     if let Ok(mut e) = transforms.p2().get_single_mut() {
         e.translation = Transform::from_xyz(pos.x, pos.y, Z_CURSOR_ACCENT).translation;
     }
+
+    // Update camera positions
+    let zoom = mouse.get_zoom();
+    for camera in &cameras.0 {
+        if let Ok(mut e) = transforms.p3().get_mut(camera.0) {
+            if zoom > 1.0 {
+                e.scale = Vec3::splat(camera.3 * 1.0 / zoom as f32);
+            } else {
+                // reset to defaults
+                e.translation = camera.2.translation;
+                e.scale = Vec3::splat(camera.3);
+            }
+        }
+    }
+
+    // for (_, bounds, mut transform) in cameras.0.iter_mut() {
+    //     let half_width = bounds.width() as f32 / 2.0;
+    //     let half_height = bounds.height() as f32 / 2.0;
+    //     let x = bounds.left() as f32 + half_width;
+    //     let y = bounds.top() as f32 + half_height;
+    //     transform.translation = Vec3::new(x, -y, 0.0);
+    // }
 }
 
 fn handle_mouse_scroll(mut mouse: ResMut<MousePosition>, mut scroll: EventReader<MouseWheel>, keyboard: Res<ButtonInput<KeyCode>>) {
