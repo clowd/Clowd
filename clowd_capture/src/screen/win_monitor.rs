@@ -10,10 +10,13 @@ use windows::{
         Graphics::Gdi::{
             EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint, DEVMODEW, DMDO_180, DMDO_270, DMDO_90,
             DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONULL,
+            MONITOR_DEFAULTTOPRIMARY,
         },
         UI::{HiDpi::GetDpiForMonitor, WindowsAndMessaging::MONITORINFOF_PRIMARY},
     },
 };
+
+use crate::{RectExt, ScreenRect};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ImplMonitor {
@@ -159,15 +162,25 @@ impl ImplMonitor {
 
         ImplMonitor::new(hmonitor)
     }
+
+    pub fn primary() -> Result<ImplMonitor> {
+        let hmonitor = unsafe { MonitorFromPoint(POINT::default(), MONITOR_DEFAULTTOPRIMARY) };
+
+        if hmonitor.is_invalid() {
+            bail!("Not found primary monitor");
+        }
+
+        ImplMonitor::new(hmonitor)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Monitor {
-    pub(crate) impl_monitor: ImplMonitor,
+    impl_monitor: ImplMonitor,
 }
 
 impl Monitor {
-    pub(crate) fn new(impl_monitor: ImplMonitor) -> Monitor {
+    fn new(impl_monitor: ImplMonitor) -> Monitor {
         Monitor {
             impl_monitor,
         }
@@ -182,51 +195,38 @@ impl Monitor {
             .collect();
         Ok(monitors)
     }
+
+    pub fn primary() -> Result<Monitor> {
+        let impl_monitor = ImplMonitor::primary()?;
+        Ok(Monitor::new(impl_monitor))
+    }
 }
 
 impl Monitor {
-    /// Unique identifier associated with the screen.
     pub fn id(&self) -> u32 {
         self.impl_monitor.id
     }
-    /// Unique identifier associated with the screen.
     pub fn name(&self) -> &str {
         &self.impl_monitor.name
     }
-    /// The screen x coordinate.
-    pub fn x(&self) -> i32 {
-        self.impl_monitor.x
+    pub fn bounds(&self) -> ScreenRect {
+        ScreenRect::from_xy_size(
+            self.impl_monitor.x,
+            self.impl_monitor.y,
+            self.impl_monitor.width as i32,
+            self.impl_monitor.height as i32,
+        )
     }
-    /// The screen x coordinate.
-    pub fn y(&self) -> i32 {
-        self.impl_monitor.y
-    }
-    /// The screen pixel width.
-    pub fn width(&self) -> u32 {
-        self.impl_monitor.width
-    }
-    /// The screen pixel height.
-    pub fn height(&self) -> u32 {
-        self.impl_monitor.height
-    }
-    /// Can be 0, 90, 180, 270, represents screen rotation in clock-wise degrees.
     pub fn rotation(&self) -> f32 {
         self.impl_monitor.rotation
     }
-    /// Output device's pixel scale factor.
     pub fn scale_factor(&self) -> f32 {
         self.impl_monitor.scale_factor
     }
-    /// The screen refresh rate.
     pub fn frequency(&self) -> f32 {
         self.impl_monitor.frequency
     }
-    /// Whether the screen is the main screen
     pub fn is_primary(&self) -> bool {
         self.impl_monitor.is_primary
     }
-}
-
-pub fn all_monitors() -> Result<Vec<Monitor>> {
-    Monitor::all()
 }

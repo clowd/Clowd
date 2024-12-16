@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::geometry::*;
+use crate::{geometry::*, screen::Monitor};
 use bevy::{
     color::Color,
     prelude::{Component, Entity, Resource},
@@ -34,30 +34,109 @@ pub const Z_DEBUG: f32 = 5.0;
 pub struct FirstRenderTime(pub f64);
 
 #[derive(Resource)]
-pub struct MousePosition(mouse_rs::Mouse);
+pub struct MousePosition {
+    mouse: mouse_rs::Mouse,
+    zoom: f64,
+    mouse_state: MouseState,
+    mouse_pos: ScreenPointF,
+    mouse_anchor_pos: ScreenPoint,
+    anchored: bool,
+}
 
 impl MousePosition {
-    pub fn get(&self) -> ScreenPoint {
-        let pos = self.0.get_position().unwrap();
-        ScreenPoint::new(pos.x as i32, pos.y as i32)
+    // pub fn get(&self) -> ScreenPoint {
+    //     let pos = self.mouse.get_position().unwrap();
+    //     ScreenPoint::new(pos.x as i32, pos.y as i32)
+    // }
+    // pub fn set(&self, pos: ScreenPoint) {
+    //     let _ = self.mouse.move_to(pos.x, pos.y);
+    // }
+
+    pub fn update_position(&mut self) {
+        let pt = self.mouse.get_position().unwrap();
+        let pt = ScreenPoint::new(pt.x, pt.y);
+        let anchor = self.mouse_anchor_pos;
+        if self.anchored {
+            if pt != self.mouse_anchor_pos {
+                let x_delta = (pt.x - anchor.x) as f64 / self.zoom;
+                let y_delta = (pt.y - anchor.y) as f64 / self.zoom;
+                let mx = self.mouse_pos.x + x_delta;
+                let my = self.mouse_pos.y + y_delta;
+
+                // let bounds = self
+                //     .get_nearest_renderer(ScreenPointF::new(mx, my))
+                //     .monitor_bounds
+                //     .to_f64();
+
+                // // clip cursor to nearest monitor
+                // let left = bounds.left();
+                // let right = bounds.right();
+                // let top = bounds.top();
+                // let bottom = bounds.bottom();
+
+                // mx = mx.max(left).min(right - 0.001);
+                // my = my.max(top).min(bottom - 0.001);
+
+                println!("Prev Mouse Pos: {:?}", self.mouse_pos);
+                self.mouse_pos = ScreenPointF::new(mx, my);
+
+                println!("Delta: {:?}", (x_delta, y_delta));
+                println!("Mouse Pos: {:?}", self.mouse_pos);
+
+                let _ = self
+                    .mouse
+                    .move_to(self.mouse_anchor_pos.x, self.mouse_anchor_pos.y);
+            }
+        } else {
+            self.mouse_pos = pt.to_f64();
+        }
     }
-    pub fn set(&self, pos: ScreenPoint) {
-        let _ = self.0.move_to(pos.x, pos.y);
+
+    pub fn get_position(&self) -> ScreenPointF {
+        ScreenPointF::new(self.mouse_pos.x, -self.mouse_pos.y)
+    }
+
+    pub fn get_zoom(&self) -> f64 {
+        self.zoom
+    }
+
+    pub fn set_zoom(&mut self, zoom: f64) {
+        self.zoom = zoom;
+    }
+
+    pub fn set_anchored(&mut self, anchored: bool) {
+        if !self.anchored && anchored {
+            let pos = self.mouse.get_position().unwrap();
+            self.mouse_pos = ScreenPointF::new(pos.x as f64, pos.y as f64);
+            let _ = self
+                .mouse
+                .move_to(self.mouse_anchor_pos.x, self.mouse_anchor_pos.y);
+            self.anchored = true;
+        } else if self.anchored && !anchored {
+            let _ = self
+                .mouse
+                .move_to(self.mouse_pos.x as i32, self.mouse_pos.y as i32);
+            self.anchored = false;
+        }
     }
 }
 
 impl Default for MousePosition {
     fn default() -> Self {
-        MousePosition(mouse_rs::Mouse::new())
+        Self {
+            mouse: mouse_rs::Mouse::new(),
+            zoom: 1.0,
+            mouse_state: MouseState::Up,
+            mouse_pos: ScreenPointF::new(0.0, 0.0),
+            mouse_anchor_pos: Monitor::primary().unwrap().bounds().center(),
+            anchored: false,
+        }
     }
 }
 
 #[derive(Resource, Default)]
 pub struct CaptureState {
     pub selection: Option<ScreenRect>,
-    pub zoom: f32,
-    pub mouse_state: MouseState,
-    pub mouse_pos: ScreenPointF,
 }
 
 #[derive(Resource, Default)]
