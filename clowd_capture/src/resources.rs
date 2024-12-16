@@ -1,9 +1,5 @@
 #![allow(dead_code)]
-use crate::{
-    geometry::*,
-    mouse,
-    screen::{virtual_desktop, Monitor},
-};
+use crate::{geometry::*, system::SystemInterop};
 use bevy::{
     color::Color,
     prelude::{Component, Entity, Resource, Transform},
@@ -45,7 +41,7 @@ pub struct VirtualDesktop(pub ScreenRect);
 
 impl Default for VirtualDesktop {
     fn default() -> Self {
-        Self(virtual_desktop())
+        Self(SystemInterop::virtual_desktop_bounds())
     }
 }
 
@@ -59,44 +55,49 @@ pub struct MousePosition {
     mouse_pos: ScreenPointF,
     mouse_anchor_pos: ScreenPoint,
     anchored: bool,
+    monitor_bounds: Vec<(ScreenRect, f32, bool)>,
 }
 
 impl MousePosition {
-    // pub fn get(&self) -> ScreenPoint {
-    //     let pos = self.mouse.get_position().unwrap();
-    //     ScreenPoint::new(pos.x as i32, pos.y as i32)
-    // }
-    // pub fn set(&self, pos: ScreenPoint) {
-    //     let _ = self.mouse.move_to(pos.x, pos.y);
-    // }
-
     pub fn update_position(&mut self) {
-        let pt = mouse::get_position();
+        let pt = SystemInterop::get_mouse_position();
         let pt = ScreenPoint::new(pt.x, pt.y);
         let anchor = self.mouse_anchor_pos;
         if self.anchored {
             if pt != self.mouse_anchor_pos {
                 let x_delta = (pt.x - anchor.x) as f32 / self.zoom;
                 let y_delta = (pt.y - anchor.y) as f32 / self.zoom;
-                let mx = self.mouse_pos.x + x_delta;
-                let my = self.mouse_pos.y + y_delta;
+                let mut mx = self.mouse_pos.x + x_delta;
+                let mut my = self.mouse_pos.y + y_delta;
 
-                // let bounds = self
-                //     .get_nearest_renderer(ScreenPointF::new(mx, my))
-                //     .monitor_bounds
-                //     .to_f64();
+                // get nearest monitor bounds
+                let pt = ScreenPointF::new(mx, my);
+                let bounds = self
+                    .monitor_bounds
+                    .iter()
+                    .find(|r| r.0.to_f32().contains(pt))
+                    .or_else(|| {
+                        self.monitor_bounds.iter().min_by(|a, b| {
+                            let a_dist = a.0.center().to_f32().distance_to(pt);
+                            let b_dist = b.0.center().to_f32().distance_to(pt);
+                            a_dist.partial_cmp(&b_dist).unwrap()
+                        })
+                    })
+                    .unwrap()
+                    .0
+                    .to_f32();
 
-                // // clip cursor to nearest monitor
-                // let left = bounds.left();
-                // let right = bounds.right();
-                // let top = bounds.top();
-                // let bottom = bounds.bottom();
+                // clip cursor to nearest monitor
+                let left = bounds.left();
+                let right = bounds.right();
+                let top = bounds.top();
+                let bottom = bounds.bottom();
 
-                // mx = mx.max(left).min(right - 0.001);
-                // my = my.max(top).min(bottom - 0.001);
+                mx = mx.max(left).min(right - 0.001);
+                my = my.max(top).min(bottom - 0.001);
 
                 self.mouse_pos = ScreenPointF::new(mx, my);
-                mouse::set_position(self.mouse_anchor_pos);
+                SystemInterop::set_mouse_position(self.mouse_anchor_pos);
             }
         } else {
             println!("Mouse position: {:?}", pt);
@@ -119,11 +120,11 @@ impl MousePosition {
 
     pub fn set_anchored(&mut self, anchored: bool) {
         if !self.anchored && anchored {
-            self.mouse_pos = mouse::get_position().to_f32();
-            mouse::set_position(self.mouse_anchor_pos);
+            self.mouse_pos = SystemInterop::get_mouse_position().to_f32();
+            SystemInterop::set_mouse_position(self.mouse_anchor_pos);
             self.anchored = true;
         } else if self.anchored && !anchored {
-            mouse::set_position(self.mouse_pos.to_i32());
+            SystemInterop::set_mouse_position(self.mouse_pos.to_i32());
             self.anchored = false;
         }
     }
@@ -131,12 +132,19 @@ impl MousePosition {
 
 impl Default for MousePosition {
     fn default() -> Self {
+        let monitor_bounds = SystemInterop::all_monitor_bounds();
+        let primary_bounds = monitor_bounds
+            .iter()
+            .find(|(_, _, primary)| *primary)
+            .map(|(bounds, _, _)| bounds.clone())
+            .expect("Unable to find primary monitor bounds");
         Self {
             zoom: 1.0,
             mouse_state: MouseState::Up,
             mouse_pos: ScreenPointF::new(0.0, 0.0),
-            mouse_anchor_pos: Monitor::primary().unwrap().bounds().center(),
+            mouse_anchor_pos: primary_bounds.center(),
             anchored: false,
+            monitor_bounds,
         }
     }
 }

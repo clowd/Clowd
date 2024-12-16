@@ -198,7 +198,7 @@ pub fn virtual_desktop() -> ScreenRect {
     }
 }
 
-pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
+pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
     unsafe {
         let rect = virtual_desktop();
         let vx = rect.min_x();
@@ -217,6 +217,6 @@ pub fn capture_desktop() -> Result<(ScreenRect, DynamicImage, DynamicImage)> {
         BitBlt(*box_hdc_mem, 0, 0, vw, vh, *box_hdc_desktop_window, vx, vy, SRCCOPY | CAPTUREBLT)?;
 
         let capture = to_rgba_image(box_hdc_mem, box_h_bitmap, vw, vh)?;
-        Ok((rect, DynamicImage::ImageRgba8(capture.0), DynamicImage::ImageRgba8(capture.1)))
+        Ok((DynamicImage::ImageRgba8(capture.0), DynamicImage::ImageRgba8(capture.1)))
     }
 }
