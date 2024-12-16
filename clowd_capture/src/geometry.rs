@@ -10,19 +10,19 @@ pub struct ScreenUnit;
 // #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 // pub struct WindowUnit;
 pub type ScreenRect = Rect<i32, ScreenUnit>;
-pub type ScreenRectF = Rect<f64, ScreenUnit>;
+pub type ScreenRectF = Rect<f32, ScreenUnit>;
 pub type ScreenPoint = Point2D<i32, ScreenUnit>;
-pub type ScreenPointF = Point2D<f64, ScreenUnit>;
-// pub type WindowRectF = Rect<f64, WindowUnit>;
-// pub type WindowPointF = Point2D<f64, WindowUnit>;
+pub type ScreenPointF = Point2D<f32, ScreenUnit>;
+// pub type WindowRectF = Rect<f32, WindowUnit>;
+// pub type WindowPointF = Point2D<f32, WindowUnit>;
 
 // Conversions between WindowUnit and Bevy
 pub trait EuclidRectExt {
-    fn to_nannou(&self) -> bevy::math::Rect;
+    fn to_bevy(&self) -> bevy::math::Rect;
 }
 
 pub trait EuclidPointExt {
-    fn to_nannou(&self) -> bevy::math::Vec2;
+    fn to_bevy(&self) -> bevy::math::Vec2;
 }
 
 pub trait BevyRectExt {
@@ -34,7 +34,7 @@ pub trait BevyPointExt {
 }
 
 impl EuclidRectExt for ScreenRectF {
-    fn to_nannou(&self) -> bevy::math::Rect {
+    fn to_bevy(&self) -> bevy::math::Rect {
         let top_left = self.top_left();
         let bottom_right = self.bottom_right();
         bevy::math::Rect::new(top_left.x as f32, top_left.y as f32, bottom_right.x as f32, bottom_right.y as f32)
@@ -42,7 +42,7 @@ impl EuclidRectExt for ScreenRectF {
 }
 
 impl EuclidPointExt for ScreenPointF {
-    fn to_nannou(&self) -> bevy::math::Vec2 {
+    fn to_bevy(&self) -> bevy::math::Vec2 {
         bevy::math::Vec2::new(self.x as f32, self.y as f32)
     }
 }
@@ -57,7 +57,7 @@ impl BevyRectExt for bevy::math::Rect {
 
 impl BevyPointExt for bevy::math::Vec2 {
     fn to_euclid(&self) -> ScreenPointF {
-        ScreenPointF::new(self.x as f64, self.y as f64)
+        ScreenPointF::new(self.x as f32, self.y as f32)
     }
 }
 
@@ -65,14 +65,14 @@ impl BevyPointExt for bevy::math::Vec2 {
 // #[derive(Debug, Clone)]
 // pub struct TransformUnit {
 //     window_bounds: ScreenRect,
-//     window_scale: f64,
-//     zoom: Option<(ScreenPointF, f64)>,
+//     window_scale: f32,
+//     zoom: Option<(ScreenPointF, f32)>,
 //     scissored: bool,
 //     logical_units: bool,
 // }
 
 // impl TransformUnit {
-//     pub fn new(window_bounds: ScreenRect, window_scale: f64) -> Self {
+//     pub fn new(window_bounds: ScreenRect, window_scale: f32) -> Self {
 //         TransformUnit {
 //             window_bounds,
 //             window_scale,
@@ -88,7 +88,7 @@ impl BevyPointExt for bevy::math::Vec2 {
 //         new
 //     }
 
-//     pub fn with_zoom(&self, origin: ScreenPointF, zoom: f64) -> Self {
+//     pub fn with_zoom(&self, origin: ScreenPointF, zoom: f32) -> Self {
 //         let mut new = self.clone();
 //         new.zoom = Some((origin, zoom));
 //         new
@@ -101,37 +101,37 @@ impl BevyPointExt for bevy::math::Vec2 {
 //     }
 
 //     pub fn pt_to_window<U: NumCast + Copy>(&self, pt: Point2D<U, ScreenUnit>) -> WindowPointF {
-//         let pt = pt.to_f64();
+//         let pt = pt.to_f32();
 //         let transform = self.transform_to_window();
 //         transform.transform_point(pt)
 //     }
 
 //     pub fn rect_to_window<U: NumCast + Copy>(&self, rect: Rect<U, ScreenUnit>) -> WindowRectF {
-//         let rect = rect.to_f64();
+//         let rect = rect.to_f32();
 //         let transform = self.transform_to_window();
 //         transform.outer_transformed_rect(&rect)
 //     }
 
 //     pub fn pt_to_screen<U: NumCast + Copy>(&self, pt: Point2D<U, WindowUnit>) -> ScreenPointF {
-//         let pt = pt.to_f64();
+//         let pt = pt.to_f32();
 //         let transform = self.transform_to_screen();
 //         transform.transform_point(pt)
 //     }
 
 //     pub fn rect_to_screen<U: NumCast + Copy>(&self, rect: Rect<U, WindowUnit>) -> ScreenRectF {
-//         let rect = rect.to_f64();
+//         let rect = rect.to_f32();
 //         let transform = self.transform_to_screen();
 //         transform.outer_transformed_rect(&rect)
 //     }
 
-//     fn transform_to_window(&self) -> Transform2D<f64, ScreenUnit, WindowUnit> {
+//     fn transform_to_window(&self) -> Transform2D<f32, ScreenUnit, WindowUnit> {
 //         let window_center = self
 //             .window_bounds
-//             .to_f64()
+//             .to_f32()
 //             .center()
 //             .to_vector();
 
-//         let mut transform = Transform2D::<f64, ScreenUnit, ScreenUnit>::identity()
+//         let mut transform = Transform2D::<f32, ScreenUnit, ScreenUnit>::identity()
 //             // Translate units into cartesian space
 //             .then_translate(-window_center)
 //             .then_scale(1.0, -1.0)
@@ -160,16 +160,16 @@ impl BevyPointExt for bevy::math::Vec2 {
 //         transform
 //     }
 
-//     fn transform_to_screen(&self) -> Transform2D<f64, WindowUnit, ScreenUnit> {
+//     fn transform_to_screen(&self) -> Transform2D<f32, WindowUnit, ScreenUnit> {
 //         self.transform_to_window().inverse().unwrap()
 //     }
 // }
 
 // Initialise rounded ScreenRect
-const PIXEL_SELECTION_ROUNDING_THRESHOLD: f64 = 0.2;
-fn round_pixel(px: f64, prefer_down: bool) -> i32 {
+const PIXEL_SELECTION_ROUNDING_THRESHOLD: f32 = 0.2;
+fn round_pixel(px: f32, prefer_down: bool) -> i32 {
     let pfloor = px.floor() as i32;
-    let position = px - pfloor as f64;
+    let position = px - pfloor as f32;
     let cut_ratio = if prefer_down {
         1.0 - PIXEL_SELECTION_ROUNDING_THRESHOLD
     } else {
@@ -182,18 +182,18 @@ fn round_pixel(px: f64, prefer_down: bool) -> i32 {
     }
 }
 
-fn round_pixel_pair(v1: f64, v2: f64) -> (i32, i32) {
+fn round_pixel_pair(v1: f32, v2: f32) -> (i32, i32) {
     let vmin = v1.min(v2);
     let vmax = v1.max(v2);
     (round_pixel(vmin, true), round_pixel(vmax, false))
 }
 
 pub trait ScreenRectRounded {
-    fn from_rounded_threshold(x1: f64, y1: f64, x2: f64, y2: f64) -> ScreenRect;
+    fn from_rounded_threshold(x1: f32, y1: f32, x2: f32, y2: f32) -> ScreenRect;
 }
 
 impl ScreenRectRounded for ScreenRect {
-    fn from_rounded_threshold(x1: f64, y1: f64, x2: f64, y2: f64) -> ScreenRect {
+    fn from_rounded_threshold(x1: f32, y1: f32, x2: f32, y2: f32) -> ScreenRect {
         let (x1, x2) = round_pixel_pair(x1, x2);
         let (y1, y2) = round_pixel_pair(y1, y2);
         ScreenRect::from_exact(x1, y1, x2, y2)
