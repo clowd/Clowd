@@ -1,7 +1,7 @@
 use crate::geometry::*;
 use anyhow::Result;
 use bevy::log::*;
-use image::{self, DynamicImage, ImageBuffer, Rgba};
+use image::{self, DynamicImage, ImageBuffer, Rgba, RgbaImage};
 use rayon::prelude::*;
 use std::{mem, ops::Deref, ptr};
 use windows::{
@@ -179,11 +179,11 @@ fn to_rgba_image(
             color[3] = a; // A
         });
 
-    let bgra_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width as u32, height as u32, buffer)
-        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
+    let bgra_image =
+        RgbaImage::from_raw(width as u32, height as u32, color_rgba_buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
-    let gray_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width as u32, height as u32, gray_rgba_buffer)
-        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
+    let gray_image =
+        RgbaImage::from_raw(width as u32, height as u32, gray_rgba_buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
     Ok((bgra_image, gray_image))
 }
