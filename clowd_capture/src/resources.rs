@@ -107,7 +107,7 @@ impl MousePosition {
     }
 
     pub fn get_position(&self) -> ScreenPointF {
-        ScreenPointF::new(self.mouse_pos.x, -self.mouse_pos.y)
+        ScreenPointF::new(self.mouse_pos.x, self.mouse_pos.y)
     }
 
     pub fn get_zoom(&self) -> f32 {
