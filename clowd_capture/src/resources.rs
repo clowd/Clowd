@@ -2,6 +2,7 @@
 use crate::{geometry::*, system::SystemInterop};
 use bevy::{
     color::Color,
+    log::*,
     prelude::{Component, Entity, Resource, Transform},
     ui::TargetCamera,
 };
@@ -11,6 +12,9 @@ pub struct ImageGrayTag;
 
 #[derive(Component)]
 pub struct ImageColorTag;
+
+#[derive(Component)]
+pub struct ImageIntroOverlayTag;
 
 #[derive(Component)]
 pub struct CrosshairAccentTag;
@@ -26,6 +30,7 @@ pub struct WindowCameraTag;
 
 pub const Z_BGGRAY: f32 = 0.0;
 pub const Z_BGCOLOR: f32 = 1.0;
+pub const Z_BGCOLOR_OVERLAY: f32 = 1.1;
 pub const Z_SELECTIONBORDER: f32 = 2.0;
 pub const Z_CURSOR_BACK: f32 = 3.0;
 pub const Z_CURSOR_DASH: f32 = 3.1;
@@ -126,6 +131,15 @@ impl MousePosition {
         } else if self.anchored && !anchored {
             SystemInterop::set_mouse_position(self.mouse_pos.to_i32());
             self.anchored = false;
+        }
+    }
+}
+
+impl Drop for MousePosition {
+    fn drop(&mut self) {
+        if self.anchored {
+            self.set_anchored(false);
+            warn!("MousePosition was dropped while still anchored");
         }
     }
 }
