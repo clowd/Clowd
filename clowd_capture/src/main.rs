@@ -294,9 +294,10 @@ fn background_update(
 fn mouse_update(
     mut mouse: ResMut<MousePosition>,
     mut scroll: EventReader<MouseWheel>,
+    mut capture: ResMut<CaptureState>,
     // mut window: Query<&mut Window>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    capture: Res<CaptureState>,
+    buttons: Res<ButtonInput<MouseButton>>,
     _first_render: Res<FirstRenderTime>,
 ) {
     if capture.selection.is_none() {
@@ -329,6 +330,18 @@ fn mouse_update(
     }
     mouse.update_position();
     mouse.set_anchored(capture.selection.is_none());
+
+    if capture.selection.is_none() {
+        let pos = mouse.get_position();
+        if buttons.just_released(MouseButton::Left) {
+            if let Some(selection) = mouse.get_selection_in_progress() {
+                capture.selection = Some(selection);
+            }
+            mouse.set_button_state(MouseState::Up);
+        } else if buttons.just_pressed(MouseButton::Left) {
+            mouse.set_button_state(MouseState::StartSel(pos));
+        }
+    }
 }
 
 fn handle_keypress(
