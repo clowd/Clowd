@@ -1,5 +1,8 @@
 #![allow(dead_code)]
-use crate::{geometry::*, screen::Monitor};
+use crate::{
+    geometry::*,
+    screen::{virtual_desktop, Monitor},
+};
 use bevy::{
     color::Color,
     prelude::{Component, Entity, Resource, Transform},
@@ -37,12 +40,21 @@ pub const Z_DEBUG: f32 = 5.0;
 pub struct CameraEntities(pub Vec<(Entity, ScreenRect, Transform, f32)>);
 
 #[derive(Resource)]
+pub struct VirtualDesktop(pub ScreenRect);
+
+impl Default for VirtualDesktop {
+    fn default() -> Self {
+        Self(virtual_desktop())
+    }
+}
+
+#[derive(Resource)]
 pub struct FirstRenderTime(pub f64);
 
 #[derive(Resource)]
 pub struct MousePosition {
     mouse: mouse_rs::Mouse,
-    zoom: f64,
+    zoom: f32,
     mouse_state: MouseState,
     mouse_pos: ScreenPointF,
     mouse_anchor_pos: ScreenPoint,
@@ -64,8 +76,8 @@ impl MousePosition {
         let anchor = self.mouse_anchor_pos;
         if self.anchored {
             if pt != self.mouse_anchor_pos {
-                let x_delta = (pt.x - anchor.x) as f64 / self.zoom;
-                let y_delta = (pt.y - anchor.y) as f64 / self.zoom;
+                let x_delta = (pt.x - anchor.x) as f32 / self.zoom;
+                let y_delta = (pt.y - anchor.y) as f32 / self.zoom;
                 let mx = self.mouse_pos.x + x_delta;
                 let my = self.mouse_pos.y + y_delta;
 
@@ -83,18 +95,14 @@ impl MousePosition {
                 // mx = mx.max(left).min(right - 0.001);
                 // my = my.max(top).min(bottom - 0.001);
 
-                println!("Prev Mouse Pos: {:?}", self.mouse_pos);
                 self.mouse_pos = ScreenPointF::new(mx, my);
-
-                println!("Delta: {:?}", (x_delta, y_delta));
-                println!("Mouse Pos: {:?}", self.mouse_pos);
 
                 let _ = self
                     .mouse
                     .move_to(self.mouse_anchor_pos.x, self.mouse_anchor_pos.y);
             }
         } else {
-            self.mouse_pos = pt.to_f64();
+            self.mouse_pos = pt.to_f32();
         }
     }
 
@@ -102,18 +110,18 @@ impl MousePosition {
         ScreenPointF::new(self.mouse_pos.x, -self.mouse_pos.y)
     }
 
-    pub fn get_zoom(&self) -> f64 {
+    pub fn get_zoom(&self) -> f32 {
         self.zoom
     }
 
-    pub fn set_zoom(&mut self, zoom: f64) {
+    pub fn set_zoom(&mut self, zoom: f32) {
         self.zoom = zoom;
     }
 
     pub fn set_anchored(&mut self, anchored: bool) {
         if !self.anchored && anchored {
             let pos = self.mouse.get_position().unwrap();
-            self.mouse_pos = ScreenPointF::new(pos.x as f64, pos.y as f64);
+            self.mouse_pos = ScreenPointF::new(pos.x as f32, pos.y as f32);
             let _ = self
                 .mouse
                 .move_to(self.mouse_anchor_pos.x, self.mouse_anchor_pos.y);
@@ -140,9 +148,15 @@ impl Default for MousePosition {
     }
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct CaptureState {
     pub selection: Option<ScreenRect>,
+}
+
+impl Default for CaptureState {
+    fn default() -> Self {
+        Self { selection: Some(ScreenRect::from_xy_size(200, 200, 500, 500)) }
+    }
 }
 
 #[derive(Resource, Default)]

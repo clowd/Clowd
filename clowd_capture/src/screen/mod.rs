@@ -5,7 +5,7 @@ mod win_impl;
 mod win_monitor;
 
 #[cfg(windows)]
-pub use win_impl::capture_desktop;
+pub use win_impl::{capture_desktop, virtual_desktop};
 
 #[cfg(windows)]
 pub use win_monitor::Monitor;

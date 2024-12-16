@@ -25,6 +25,7 @@ use bevy::{
 };
 
 use bevy_prototype_lyon::prelude::*;
+use euclid::Transform2D;
 use iyes_perf_ui::prelude::*;
 use raw_window_handle::RawWindowHandle;
 use screen::capture_desktop;
@@ -61,6 +62,7 @@ fn main() {
         .init_resource::<MousePosition>()
         .init_resource::<CaptureState>()
         .init_resource::<AccentColors>()
+        .init_resource::<VirtualDesktop>()
         .add_systems(Startup, setup)
         .add_systems(Update, startup_animation)
         .add_systems(PreUpdate, handle_mouse_scroll)
@@ -92,8 +94,11 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
         ImageGrayTag,
     ));
 
+    let mut color_sprite = Sprite::from_image(color_handle);
+    color_sprite.rect = Some(ScreenRectF::from_xy_size(0.0, 0.0, 500.0, 500.0).to_bevy());
+
     commands.spawn((
-        Sprite::from_image(color_handle),
+        color_sprite,
         Transform::from_translation(Vec3::new(
             (desktop_bounds.width() / 2.0) + desktop_bounds.left(),
             (-desktop_bounds.height() / 2.0) - desktop_bounds.top(),
@@ -139,7 +144,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
         let half_width = width / 2.0;
         let half_height = height / 2.0;
         let cam_transform = Transform::IDENTITY
-            .with_scale(Vec3::splat(scale as f32))
+            .with_scale(Vec3::splat(scale * 3.0 as f32))
             .with_translation(Vec3::new(
                 x as f32 + half_width * scale,
                 -y as f32 - half_height as f32 * scale,
@@ -276,10 +281,12 @@ fn startup_animation(
     mut commands: Commands,
     mut window: Query<&mut Window>,
     mut mouse: ResMut<MousePosition>,
+    mut query: Query<(&mut Sprite, &mut Transform), With<ImageColorTag>>,
+    desktop: Res<VirtualDesktop>,
     frames: Res<FrameCount>,
     first_render: Option<Res<FirstRenderTime>>,
+    capture: Res<CaptureState>,
     time: Res<Time>,
-    mut query: Query<&mut Sprite, With<ImageColorTag>>,
 ) {
     if frames.0 == 3 {
         for mut window in window.iter_mut() {
@@ -289,14 +296,30 @@ fn startup_animation(
         mouse.set_anchored(true);
     }
 
-    if let Some(first_render) = first_render {
-        let mut overlay = query.single_mut();
-        if overlay.color.alpha() > 0.0 {
+    let mut overlay = query.single_mut();
+    if let Some(capture) = capture.selection {
+        // arrange the color image to the selected region
+        let desktop_bounds = desktop.0.to_f32();
+        let capture_transform =
+            Transform2D::<f32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop.0.to_f32().top_left().to_vector());
+        let capture_rect = capture_transform.outer_transformed_rect(&capture.to_f32());
+
+        overlay.1.translation = Vec3::new(
+            (capture_rect.width() / 2.0) + desktop_bounds.left() + capture_rect.left(),
+            (-capture_rect.height() / 2.0) - desktop_bounds.top() - capture_rect.top(),
+            Z_BGCOLOR,
+        );
+
+        overlay.0.color.set_alpha(1.0);
+        overlay.0.rect = Some(capture_rect.to_bevy());
+    } else if let Some(first_render) = first_render {
+        // fade out the color image upon startup
+        if overlay.0.color.alpha() > 0.0 {
             let elapsed_seconds = time.elapsed_secs_f64() - first_render.0;
             let fade_duration = 0.2; // 200ms
             let t = (elapsed_seconds / fade_duration).clamp(0.0, 1.0);
             let fade_value = 0.5 * (1.0 + (PI * t).cos());
-            overlay.color.set_alpha(fade_value as f32);
+            overlay.0.color.set_alpha(fade_value as f32);
         }
     }
 }
@@ -332,7 +355,7 @@ fn handle_mouse_move(
     cameras: Res<CameraEntities>,
 ) {
     mouse.update_position();
-    let pos = mouse.get_position().to_nannou();
+    let pos = mouse.get_position().to_bevy();
     if let Ok(mut e) = transforms.p0().get_single_mut() {
         e.translation = Transform::from_xyz(pos.x, 0.0, Z_CURSOR_BACK).translation;
     }
@@ -344,18 +367,18 @@ fn handle_mouse_move(
     }
 
     // Update camera positions
-    let zoom = mouse.get_zoom();
-    for camera in &cameras.0 {
-        if let Ok(mut e) = transforms.p3().get_mut(camera.0) {
-            if zoom > 1.0 {
-                e.scale = Vec3::splat(camera.3 * 1.0 / zoom as f32);
-            } else {
-                // reset to defaults
-                e.translation = camera.2.translation;
-                e.scale = Vec3::splat(camera.3);
-            }
-        }
-    }
+    // let zoom = mouse.get_zoom();
+    // for camera in &cameras.0 {
+    //     if let Ok(mut e) = transforms.p3().get_mut(camera.0) {
+    //         if zoom > 1.0 {
+    //             e.scale = Vec3::splat(camera.3 * 1.0 / zoom as f32);
+    //         } else {
+    //             // reset to defaults
+    //             e.translation = camera.2.translation;
+    //             e.scale = Vec3::splat(camera.3);
+    //         }
+    //     }
+    // }
 
     // for (_, bounds, mut transform) in cameras.0.iter_mut() {
     //     let half_width = bounds.width() as f32 / 2.0;
