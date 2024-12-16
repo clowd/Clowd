@@ -80,27 +80,23 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
 
     let mut camera_entities = Vec::new();
 
+    // spawn background images
+    let img_tx = (desktop_bounds.width() / 2.0) + desktop_bounds.left();
+    let img_ty = (-desktop_bounds.height() / 2.0) - desktop_bounds.top();
     commands.spawn((
         Sprite::from_image(gray_handle),
-        Transform::from_translation(Vec3::new(
-            (desktop_bounds.width() / 2.0) + desktop_bounds.left(),
-            (-desktop_bounds.height() / 2.0) - desktop_bounds.top(),
-            Z_BGGRAY,
-        )),
+        Transform::from_translation(Vec3::new(img_tx, img_ty, Z_BGGRAY)),
         ImageGrayTag,
     ));
-
-    let mut color_sprite = Sprite::from_image(color_handle);
-    color_sprite.rect = Some(ScreenRectF::from_xy_size(0.0, 0.0, 500.0, 500.0).to_bevy());
-
     commands.spawn((
-        color_sprite,
-        Transform::from_translation(Vec3::new(
-            (desktop_bounds.width() / 2.0) + desktop_bounds.left(),
-            (-desktop_bounds.height() / 2.0) - desktop_bounds.top(),
-            Z_BGCOLOR,
-        )),
+        Sprite::from_image(color_handle.clone()),
+        Transform::from_translation(Vec3::new(img_tx, img_ty, Z_BGCOLOR)),
         ImageColorTag,
+    ));
+    commands.spawn((
+        Sprite::from_image(color_handle),
+        Transform::from_translation(Vec3::new(img_tx, img_ty, Z_BGCOLOR_OVERLAY)),
+        ImageIntroOverlayTag,
     ));
 
     let node = Node {
@@ -170,15 +166,30 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
 
     // create crosshair
     let ch_parent_accent = commands
-        .spawn((Transform::default(), GlobalTransform::default(), CrosshairAccentTag))
+        .spawn((
+            Transform::default(),
+            GlobalTransform::default(),
+            Visibility::default(),
+            CrosshairAccentTag,
+        ))
         .id();
 
     let ch_parent_horiz = commands
-        .spawn((Transform::default(), GlobalTransform::default(), CrosshairHorizTag))
+        .spawn((
+            Transform::default(),
+            GlobalTransform::default(),
+            Visibility::default(),
+            CrosshairHorizTag,
+        ))
         .id();
 
     let ch_parent_vert = commands
-        .spawn((Transform::default(), GlobalTransform::default(), CrosshairVertTag))
+        .spawn((
+            Transform::default(),
+            GlobalTransform::default(),
+            Visibility::default(),
+            CrosshairVertTag,
+        ))
         .id();
 
     let ch_stroke = 1.0;
@@ -275,10 +286,9 @@ fn startup_animation(
     mut commands: Commands,
     mut window: Query<&mut Window>,
     mut mouse: ResMut<MousePosition>,
-    mut query: Query<(&mut Sprite, &mut Transform), With<ImageColorTag>>,
+    mut query: Query<(Entity, &mut Sprite), With<ImageIntroOverlayTag>>,
     frames: Res<FrameCount>,
     first_render: Option<Res<FirstRenderTime>>,
-    capture: Res<CaptureState>,
     time: Res<Time>,
 ) {
     if frames.0 == 3 {
@@ -291,13 +301,17 @@ fn startup_animation(
 
     if let Some(first_render) = first_render {
         // fade out the color image upon startup
-        let mut overlay = query.single_mut();
-        if capture.selection.is_none() && overlay.0.color.alpha() > 0.0 {
-            let elapsed_seconds = time.elapsed_secs_f64() - first_render.0;
-            let fade_duration = 0.2; // 200ms
-            let t = (elapsed_seconds / fade_duration).clamp(0.0, 1.0);
-            let fade_value = 0.5 * (1.0 + (PI * t).cos());
-            overlay.0.color.set_alpha(fade_value as f32);
+        if let Ok((entity, mut overlay)) = query.get_single_mut() {
+            if overlay.color.alpha() > 0.0 {
+                let elapsed_seconds = time.elapsed_secs_f64() - first_render.0;
+                let fade_duration = 0.2;
+                let t = (elapsed_seconds / fade_duration).clamp(0.0, 1.0);
+                let fade_value = 0.5 * (1.0 + (PI * t).cos());
+                overlay.color.set_alpha(fade_value as f32);
+            } else {
+                commands.entity(entity).despawn_recursive();
+                commands.remove_resource::<FirstRenderTime>();
+            }
         }
     }
 }
@@ -329,6 +343,7 @@ fn handle_mouse_move(
         Query<&mut Transform, With<CrosshairHorizTag>>,
         Query<&mut Transform, With<CrosshairAccentTag>>,
         Query<(&mut Sprite, &mut Transform), With<ImageGrayTag>>,
+        Query<(&mut Sprite, &mut Transform), With<ImageIntroOverlayTag>>,
         Query<(&mut Sprite, &mut Transform), With<ImageColorTag>>,
         // Query<&mut Transform, With<WindowCameraTag>>,
     )>,
@@ -373,6 +388,14 @@ fn handle_mouse_move(
     }
 
     if let Ok(mut e) = queries.p4().get_single_mut() {
+        let new_origin = image_transform.transform_point(ScreenPointF::new(0.0, 0.0));
+        let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGGRAY).with_scale(Vec3::new(zoom, zoom, 1.0));
+        e.1.translation = transform.translation;
+        e.1.scale = transform.scale;
+        e.1.rotation = transform.rotation;
+    }
+
+    if let Ok(mut e) = queries.p5().get_single_mut() {
         let capture_transform = if let Some(capture_rect) = capture.selection {
             let capture_transform =
                 Transform2D::<f32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop.0.to_f32().top_left().to_vector());
@@ -469,7 +492,6 @@ fn handle_mouse_scroll(mut mouse: ResMut<MousePosition>, mut scroll: EventReader
 }
 
 fn handle_keypress(
-    mut mouse: ResMut<MousePosition>,
     mut commands: Commands,
     mut exit: EventWriter<AppExit>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -477,7 +499,6 @@ fn handle_keypress(
     camera: Res<PrimaryCamera>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
-        mouse.set_anchored(false);
         exit.send(AppExit::Success);
     } else if keyboard.just_pressed(KeyCode::KeyQ) {
         // my_config.enabled ^= true;
