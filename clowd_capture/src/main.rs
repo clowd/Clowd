@@ -16,6 +16,7 @@ use bevy::{
     asset::RenderAssetUsages,
     color::palettes::css::*,
     core::FrameCount,
+    input::mouse::MouseWheel,
     log::*,
     prelude::*,
     render::camera::RenderTarget,
@@ -26,7 +27,8 @@ use bevy::{
 use bevy_prototype_lyon::prelude::*;
 use iyes_perf_ui::prelude::*;
 use raw_window_handle::RawWindowHandle;
-use screen::{all_monitors, capture_desktop};
+use screen::capture_desktop;
+use screen::Monitor;
 
 fn main() {
     App::new()
@@ -60,13 +62,14 @@ fn main() {
         .init_resource::<AccentColors>()
         .add_systems(Startup, setup)
         .add_systems(Update, startup_animation)
+        .add_systems(PreUpdate, handle_mouse_scroll)
         .add_systems(Update, (handle_window_created, handle_mouse_move))
         .add_systems(Update, handle_keypress.before(iyes_perf_ui::PerfUiSet::Setup))
         .run();
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res<AccentColors>) {
-    let monitors = all_monitors().expect("Failed to get all monitors");
+    let monitors = Monitor::all().expect("Failed to get all monitors");
     let (desktop_bounds, desktop_color_image, desktop_gray_image) = capture_desktop().expect("Unable to capture desktop");
     let desktop_bounds = desktop_bounds.to_f32();
 
@@ -105,24 +108,17 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
 
     for (i, monitor) in monitors.iter().enumerate() {
         let scale = monitor.scale_factor();
-        let x = monitor.x();
-        let y = monitor.y();
-        let width = monitor.width() as f32 * scale;
-        let height = monitor.height() as f32 * scale;
-        info!(
-            "Monitor {}: x={}, y={}, width={}, height={}, scale={}",
-            i + 1,
-            x,
-            y,
-            width,
-            height,
-            scale
-        );
+        let bounds = monitor.bounds();
+        let x = bounds.left();
+        let y = bounds.top();
+        let width = bounds.width() as f32 * scale;
+        let height = bounds.height() as f32 * scale;
+        info!("Monitor {}: bounds={:?}, scale={}", i + 1, bounds, scale);
 
         let window = commands
             .spawn(Window {
                 title: "Clowd Capture".to_owned(),
-                resolution: WindowResolution::new(width, height).with_scale_factor_override(1.0),
+                resolution: WindowResolution::new(width, height),
                 #[cfg(target_os = "windows")]
                 present_mode: PresentMode::Mailbox,
                 #[cfg(target_os = "macos")]
@@ -131,6 +127,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
                 focused: i == 0,
                 position: WindowPosition::At(IVec2::new(x, y)),
                 decorations: false,
+                window_level: bevy::window::WindowLevel::AlwaysOnTop,
                 visible: false,
                 ..default()
             })
@@ -263,6 +260,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
 fn startup_animation(
     mut commands: Commands,
     mut window: Query<&mut Window>,
+    mut mouse: ResMut<MousePosition>,
     frames: Res<FrameCount>,
     first_render: Option<Res<FirstRenderTime>>,
     time: Res<Time>,
@@ -273,6 +271,7 @@ fn startup_animation(
             window.visible = true;
         }
         commands.insert_resource(FirstRenderTime(time.elapsed_secs_f64()));
+        mouse.set_anchored(true);
     }
 
     if let Some(first_render) = first_render {
@@ -306,15 +305,15 @@ fn handle_window_created(mut events: EventReader<WindowCreated>, windows: Query<
 }
 
 fn handle_mouse_move(
-    mouse: Res<MousePosition>,
+    mut mouse: ResMut<MousePosition>,
     mut transforms: ParamSet<(
         Query<&mut Transform, With<CrosshairVertTag>>,
         Query<&mut Transform, With<CrosshairHorizTag>>,
         Query<&mut Transform, With<CrosshairAccentTag>>,
     )>,
 ) {
-    let pos = mouse.get();
-    let pos = IVec2::new(pos.x, -pos.y).as_vec2();
+    mouse.update_position();
+    let pos = mouse.get_position().to_nannou();
     if let Ok(mut e) = transforms.p0().get_single_mut() {
         e.translation = Transform::from_xyz(pos.x, 0.0, Z_CURSOR_BACK).translation;
     }
@@ -326,7 +325,35 @@ fn handle_mouse_move(
     }
 }
 
+fn handle_mouse_scroll(mut mouse: ResMut<MousePosition>, mut scroll: EventReader<MouseWheel>, keyboard: Res<ButtonInput<KeyCode>>) {
+    for ev in scroll.read() {
+        let delta = ev.y;
+        let mut zoom = mouse.get_zoom();
+
+        if keyboard.pressed(KeyCode::ShiftLeft)
+            || keyboard.pressed(KeyCode::ShiftRight)
+            || keyboard.pressed(KeyCode::ControlLeft)
+            || keyboard.pressed(KeyCode::ControlRight)
+        {
+            if delta > 0.0 {
+                zoom *= 1.05;
+            } else {
+                zoom /= 1.05;
+            }
+        } else {
+            if delta > 0.0 {
+                zoom *= 2.0;
+            } else {
+                zoom /= 2.0;
+            }
+        }
+
+        mouse.set_zoom(zoom.max(1.0).min(256.0));
+    }
+}
+
 fn handle_keypress(
+    mut mouse: ResMut<MousePosition>,
     mut commands: Commands,
     mut exit: EventWriter<AppExit>,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -334,6 +361,7 @@ fn handle_keypress(
     camera: Res<PrimaryCamera>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
+        mouse.set_anchored(false);
         exit.send(AppExit::Success);
     } else if keyboard.just_pressed(KeyCode::KeyQ) {
         // my_config.enabled ^= true;

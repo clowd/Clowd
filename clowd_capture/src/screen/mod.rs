@@ -8,7 +8,7 @@ mod win_monitor;
 pub use win_impl::capture_desktop;
 
 #[cfg(windows)]
-pub use win_monitor::all_monitors;
+pub use win_monitor::Monitor;
 
 #[cfg(not(windows))]
 mod xcap_impl;
