@@ -59,6 +59,11 @@ fn main() {
         .init_resource::<CaptureState>()
         .init_resource::<AccentColors>()
         .init_resource::<VirtualDesktop>()
+        // saves a lot of system resources!
+        // .insert_resource(WinitSettings {
+        //     focused_mode: UpdateMode::reactive(Duration::from_millis(6)),
+        //     unfocused_mode: UpdateMode::reactive(Duration::from_millis(6)),
+        // })
         .add_systems(Startup, setup)
         .add_systems(Update, startup_animation)
         .add_systems(PreUpdate, mouse_update)
