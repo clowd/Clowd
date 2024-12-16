@@ -143,7 +143,7 @@ pub fn crosshair_update(
     accents: Res<AccentColors>,
 ) {
     if capture.selection.is_none() {
-        let pos = mouse.get_position();
+        let pos = mouse.get_position().to_i32().to_f32();
         if queries.p0().get_single().is_err() {
             crosshair_spawn(commands, pos, desktop, accents);
         } else {
