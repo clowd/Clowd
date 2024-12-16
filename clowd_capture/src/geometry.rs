@@ -1,168 +1,169 @@
 #![allow(dead_code)]
 
-use euclid::{Point2D, Rect, Size2D, Transform2D};
-use num::{traits::real::Real, NumCast};
+use euclid::{Point2D, Rect, Size2D};
+use num::traits::real::Real;
 use std::ops;
 
 // Type aliases for screen and window units
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ScreenUnit;
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct WindowUnit;
+// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+// pub struct WindowUnit;
 pub type ScreenRect = Rect<i32, ScreenUnit>;
 pub type ScreenRectF = Rect<f64, ScreenUnit>;
 pub type ScreenPoint = Point2D<i32, ScreenUnit>;
 pub type ScreenPointF = Point2D<f64, ScreenUnit>;
-pub type WindowRectF = Rect<f64, WindowUnit>;
-pub type WindowPointF = Point2D<f64, WindowUnit>;
+// pub type WindowRectF = Rect<f64, WindowUnit>;
+// pub type WindowPointF = Point2D<f64, WindowUnit>;
 
-// Conversions between WindowUnit and Nannou
-// pub trait WindowRectExt {
-//     fn to_nannou(&self) -> nannou::geom::Rect;
-// }
-
-// pub trait WindowPointExt {
-//     fn to_nannou(&self) -> nannou::geom::Vec2;
-// }
-
-pub trait NannouRectExt {
-    fn to_window_rect(&self) -> WindowRectF;
+// Conversions between WindowUnit and Bevy
+pub trait EuclidRectExt {
+    fn to_nannou(&self) -> bevy::math::Rect;
 }
 
-pub trait NannouPointExt {
-    fn to_window_point(&self) -> WindowPointF;
+pub trait EuclidPointExt {
+    fn to_nannou(&self) -> bevy::math::Vec2;
 }
 
-// impl WindowRectExt for WindowRectF {
-//     fn to_nannou(&self) -> nannou::geom::Rect {
-//         let center = self.center();
-//         nannou::geom::Rect::from_x_y_w_h(center.x as f32, center.y as f32, self.size.width as f32, self.size.height as f32)
-//     }
-// }
+pub trait BevyRectExt {
+    fn to_euclid(&self) -> ScreenRectF;
+}
 
-// impl WindowPointExt for WindowPointF {
-//     fn to_nannou(&self) -> nannou::geom::Vec2 {
-//         nannou::geom::Vec2::new(self.x as f32, self.y as f32)
-//     }
-// }
+pub trait BevyPointExt {
+    fn to_euclid(&self) -> ScreenPointF;
+}
 
-// impl NannouRectExt for nannou::geom::Rect {
-//     fn to_window_rect(&self) -> WindowRectF {
-//         let size = Size2D::new(self.w() as f64, self.h() as f64);
-//         let position = WindowPointF::new(self.left() as f64, self.top() as f64);
-//         WindowRectF::new(position, size)
-//     }
-// }
+impl EuclidRectExt for ScreenRectF {
+    fn to_nannou(&self) -> bevy::math::Rect {
+        let top_left = self.top_left();
+        let bottom_right = self.bottom_right();
+        bevy::math::Rect::new(top_left.x as f32, top_left.y as f32, bottom_right.x as f32, bottom_right.y as f32)
+    }
+}
 
-// impl NannouPointExt for nannou::geom::Vec2 {
-//     fn to_window_point(&self) -> WindowPointF {
-//         WindowPointF::new(self.x as f64, self.y as f64)
-//     }
-// }
+impl EuclidPointExt for ScreenPointF {
+    fn to_nannou(&self) -> bevy::math::Vec2 {
+        bevy::math::Vec2::new(self.x as f32, self.y as f32)
+    }
+}
+
+impl BevyRectExt for bevy::math::Rect {
+    fn to_euclid(&self) -> ScreenRectF {
+        let top_left = self.min.to_euclid();
+        let bottom_right = self.max.to_euclid();
+        ScreenRectF::from_corners(top_left, bottom_right)
+    }
+}
+
+impl BevyPointExt for bevy::math::Vec2 {
+    fn to_euclid(&self) -> ScreenPointF {
+        ScreenPointF::new(self.x as f64, self.y as f64)
+    }
+}
 
 // Transforms between Screen and Window coordinates
-#[derive(Debug, Clone)]
-pub struct TransformUnit {
-    window_bounds: ScreenRect,
-    window_scale: f64,
-    zoom: Option<(ScreenPointF, f64)>,
-    scissored: bool,
-    logical_units: bool,
-}
+// #[derive(Debug, Clone)]
+// pub struct TransformUnit {
+//     window_bounds: ScreenRect,
+//     window_scale: f64,
+//     zoom: Option<(ScreenPointF, f64)>,
+//     scissored: bool,
+//     logical_units: bool,
+// }
 
-impl TransformUnit {
-    pub fn new(window_bounds: ScreenRect, window_scale: f64) -> Self {
-        TransformUnit {
-            window_bounds,
-            window_scale,
-            zoom: None,
-            scissored: false,
-            logical_units: false,
-        }
-    }
+// impl TransformUnit {
+//     pub fn new(window_bounds: ScreenRect, window_scale: f64) -> Self {
+//         TransformUnit {
+//             window_bounds,
+//             window_scale,
+//             zoom: None,
+//             scissored: false,
+//             logical_units: false,
+//         }
+//     }
 
-    pub fn with_logical_units(&self) -> Self {
-        let mut new = self.clone();
-        new.logical_units = true;
-        new
-    }
+//     pub fn with_logical_units(&self) -> Self {
+//         let mut new = self.clone();
+//         new.logical_units = true;
+//         new
+//     }
 
-    pub fn with_zoom(&self, origin: ScreenPointF, zoom: f64) -> Self {
-        let mut new = self.clone();
-        new.zoom = Some((origin, zoom));
-        new
-    }
+//     pub fn with_zoom(&self, origin: ScreenPointF, zoom: f64) -> Self {
+//         let mut new = self.clone();
+//         new.zoom = Some((origin, zoom));
+//         new
+//     }
 
-    pub fn with_scissor(&self) -> Self {
-        let mut new = self.clone();
-        new.scissored = true;
-        new
-    }
+//     pub fn with_scissor(&self) -> Self {
+//         let mut new = self.clone();
+//         new.scissored = true;
+//         new
+//     }
 
-    pub fn pt_to_window<U: NumCast + Copy>(&self, pt: Point2D<U, ScreenUnit>) -> WindowPointF {
-        let pt = pt.to_f64();
-        let transform = self.transform_to_window();
-        transform.transform_point(pt)
-    }
+//     pub fn pt_to_window<U: NumCast + Copy>(&self, pt: Point2D<U, ScreenUnit>) -> WindowPointF {
+//         let pt = pt.to_f64();
+//         let transform = self.transform_to_window();
+//         transform.transform_point(pt)
+//     }
 
-    pub fn rect_to_window<U: NumCast + Copy>(&self, rect: Rect<U, ScreenUnit>) -> WindowRectF {
-        let rect = rect.to_f64();
-        let transform = self.transform_to_window();
-        transform.outer_transformed_rect(&rect)
-    }
+//     pub fn rect_to_window<U: NumCast + Copy>(&self, rect: Rect<U, ScreenUnit>) -> WindowRectF {
+//         let rect = rect.to_f64();
+//         let transform = self.transform_to_window();
+//         transform.outer_transformed_rect(&rect)
+//     }
 
-    pub fn pt_to_screen<U: NumCast + Copy>(&self, pt: Point2D<U, WindowUnit>) -> ScreenPointF {
-        let pt = pt.to_f64();
-        let transform = self.transform_to_screen();
-        transform.transform_point(pt)
-    }
+//     pub fn pt_to_screen<U: NumCast + Copy>(&self, pt: Point2D<U, WindowUnit>) -> ScreenPointF {
+//         let pt = pt.to_f64();
+//         let transform = self.transform_to_screen();
+//         transform.transform_point(pt)
+//     }
 
-    pub fn rect_to_screen<U: NumCast + Copy>(&self, rect: Rect<U, WindowUnit>) -> ScreenRectF {
-        let rect = rect.to_f64();
-        let transform = self.transform_to_screen();
-        transform.outer_transformed_rect(&rect)
-    }
+//     pub fn rect_to_screen<U: NumCast + Copy>(&self, rect: Rect<U, WindowUnit>) -> ScreenRectF {
+//         let rect = rect.to_f64();
+//         let transform = self.transform_to_screen();
+//         transform.outer_transformed_rect(&rect)
+//     }
 
-    fn transform_to_window(&self) -> Transform2D<f64, ScreenUnit, WindowUnit> {
-        let window_center = self
-            .window_bounds
-            .to_f64()
-            .center()
-            .to_vector();
+//     fn transform_to_window(&self) -> Transform2D<f64, ScreenUnit, WindowUnit> {
+//         let window_center = self
+//             .window_bounds
+//             .to_f64()
+//             .center()
+//             .to_vector();
 
-        let mut transform = Transform2D::<f64, ScreenUnit, ScreenUnit>::identity()
-            // Translate units into cartesian space
-            .then_translate(-window_center)
-            .then_scale(1.0, -1.0)
-            .with_destination::<WindowUnit>();
+//         let mut transform = Transform2D::<f64, ScreenUnit, ScreenUnit>::identity()
+//             // Translate units into cartesian space
+//             .then_translate(-window_center)
+//             .then_scale(1.0, -1.0)
+//             .with_destination::<WindowUnit>();
 
-        if let Some((origin, zoom)) = self.zoom {
-            let translated_mouse_pt = transform.transform_point(origin);
-            transform = transform
-                .then_translate(-translated_mouse_pt.to_vector())
-                .then_scale(zoom.into(), zoom.into())
-                .then_translate(translated_mouse_pt.to_vector());
-        }
+//         if let Some((origin, zoom)) = self.zoom {
+//             let translated_mouse_pt = transform.transform_point(origin);
+//             transform = transform
+//                 .then_translate(-translated_mouse_pt.to_vector())
+//                 .then_scale(zoom.into(), zoom.into())
+//                 .then_translate(translated_mouse_pt.to_vector());
+//         }
 
-        if self.logical_units {
-            transform = transform.then_scale(1.0 / self.window_scale, 1.0 / self.window_scale);
-        }
+//         if self.logical_units {
+//             transform = transform.then_scale(1.0 / self.window_scale, 1.0 / self.window_scale);
+//         }
 
-        if self.scissored {
-            if self.logical_units {
-                transform = transform.then_scale(1.0, -1.0);
-            } else {
-                transform = transform.then_scale(1.0 / self.window_scale, -1.0 / self.window_scale);
-            }
-        }
+//         if self.scissored {
+//             if self.logical_units {
+//                 transform = transform.then_scale(1.0, -1.0);
+//             } else {
+//                 transform = transform.then_scale(1.0 / self.window_scale, -1.0 / self.window_scale);
+//             }
+//         }
 
-        transform
-    }
+//         transform
+//     }
 
-    fn transform_to_screen(&self) -> Transform2D<f64, WindowUnit, ScreenUnit> {
-        self.transform_to_window().inverse().unwrap()
-    }
-}
+//     fn transform_to_screen(&self) -> Transform2D<f64, WindowUnit, ScreenUnit> {
+//         self.transform_to_window().inverse().unwrap()
+//     }
+// }
 
 // Initialise rounded ScreenRect
 const PIXEL_SELECTION_ROUNDING_THRESHOLD: f64 = 0.2;
@@ -329,5 +330,40 @@ where
     }
     fn bottom(&self) -> T {
         self.max_y()
+    }
+}
+
+#[allow(dead_code)]
+pub trait BevyConvRectExt {
+    fn top_left(&self) -> bevy::math::Vec2 {
+        bevy::math::Vec2::new(self.left(), self.top())
+    }
+    fn top_right(&self) -> bevy::math::Vec2 {
+        bevy::math::Vec2::new(self.right(), self.top())
+    }
+    fn bottom_left(&self) -> bevy::math::Vec2 {
+        bevy::math::Vec2::new(self.left(), self.bottom())
+    }
+    fn bottom_right(&self) -> bevy::math::Vec2 {
+        bevy::math::Vec2::new(self.right(), self.bottom())
+    }
+    fn left(&self) -> f32;
+    fn right(&self) -> f32;
+    fn top(&self) -> f32;
+    fn bottom(&self) -> f32;
+}
+
+impl BevyConvRectExt for bevy::math::Rect {
+    fn left(&self) -> f32 {
+        self.min.x
+    }
+    fn right(&self) -> f32 {
+        self.max.x
+    }
+    fn top(&self) -> f32 {
+        self.min.y
+    }
+    fn bottom(&self) -> f32 {
+        self.max.y
     }
 }

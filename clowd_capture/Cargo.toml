@@ -18,7 +18,23 @@ windows = { version = "0.58", features = [
 
 rayon = "1.5"
 num = "0.4.3"
-bevy = { version = "0.15.0", features = ["bevy_gizmos"] }
+bevy = { version = "0.15.0", default-features = false, features = [
+    "bevy_core_pipeline",
+    "bevy_color",
+    "bevy_render",
+    "bevy_winit",
+    "bevy_window",
+    "bevy_text",
+    "bevy_asset",
+    "bevy_sprite",
+    "bevy_ui",
+    "multi_threaded",
+    "png",
+    "shader_format_spirv",
+    "spirv_shader_passthrough",
+    "default_font",
+    "custom_cursor",
+] }
 bevy_prototype_lyon = { git = "https://github.com/Nilirad/bevy_prototype_lyon.git", rev = "0dacb384dcace5ce82f890b3b5cbdce2941ee461" }
 iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git", rev = "d8f3cbb2ec486b85a86b21e1aa32dcebd26ac884" }
 spin_sleep = "1.0"
