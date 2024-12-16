@@ -17,21 +17,13 @@ pub struct ImageColorTag;
 pub struct ImageIntroOverlayTag;
 
 #[derive(Component)]
-pub struct CrosshairAccentTag;
-
-#[derive(Component)]
-pub struct CrosshairHorizTag;
-
-#[derive(Component)]
-pub struct CrosshairVertTag;
-
-#[derive(Component)]
 pub struct WindowCameraTag;
 
 pub const Z_BGGRAY: f32 = 0.0;
 pub const Z_BGCOLOR: f32 = 1.0;
 pub const Z_BGCOLOR_OVERLAY: f32 = 1.1;
 pub const Z_SELECTIONBORDER: f32 = 2.0;
+pub const Z_SELECTIONBORDER_DASH: f32 = 2.1;
 pub const Z_CURSOR_BACK: f32 = 3.0;
 pub const Z_CURSOR_DASH: f32 = 3.1;
 pub const Z_CURSOR_ACCENT: f32 = 3.2;
@@ -64,7 +56,7 @@ pub struct MousePosition {
 }
 
 impl MousePosition {
-    pub fn update_position(&mut self) {
+    pub fn update_position(&mut self) -> ScreenPointF {
         let pt = SystemInterop::get_mouse_position();
         let pt = ScreenPoint::new(pt.x, pt.y);
         let anchor = self.mouse_anchor_pos;
@@ -105,9 +97,20 @@ impl MousePosition {
                 SystemInterop::set_mouse_position(self.mouse_anchor_pos);
             }
         } else {
-            println!("Mouse position: {:?}", pt);
-
             self.mouse_pos = pt.to_f32();
+        }
+        self.mouse_pos
+    }
+
+    pub fn get_selection_in_progress(&self) -> Option<ScreenRect> {
+        match self.mouse_state {
+            MouseState::StartSel(start) => Some(ScreenRect::from_rounded_threshold(
+                start.x,
+                start.y,
+                self.mouse_pos.x,
+                self.mouse_pos.y,
+            )),
+            _ => None,
         }
     }
 
@@ -163,18 +166,18 @@ impl Default for MousePosition {
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct CaptureState {
     pub selection: Option<ScreenRect>,
 }
 
-impl Default for CaptureState {
-    fn default() -> Self {
-        Self {
-            selection: Some(ScreenRect::from_xy_size(200, 200, 500, 500)),
-        }
-    }
-}
+// impl Default for CaptureState {
+//     fn default() -> Self {
+//         Self {
+//             selection: Some(ScreenRect::from_xy_size(200, 200, 500, 500)),
+//         }
+//     }
+// }
 
 #[derive(Resource, Default)]
 pub enum MouseState {

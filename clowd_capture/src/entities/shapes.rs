@@ -42,7 +42,22 @@ fn position_along_perimeter(edges: &[(Vec2, Vec2)], dist: f32) -> Vec2 {
     edges[0].0
 }
 
-pub fn draw_dashed_rectangle<C1, C2>(rect: Rect, dash_length: f32, time: f32) -> ShapePath {
+pub fn shape_rectangle(rect: Rect) -> ShapePath {
+    let top_left = rect.top_left();
+    let top_right = rect.top_right();
+    let bottom_right = rect.bottom_right();
+    let bottom_left = rect.bottom_left();
+
+    let mut shape = ShapePath::new();
+    shape = shape.move_to(top_left);
+    shape = shape.line_to(top_right);
+    shape = shape.line_to(bottom_right);
+    shape = shape.line_to(bottom_left);
+    shape = shape.close();
+    shape
+}
+
+pub fn shape_dashed_rectangle(rect: Rect, dash_length: f32, time: f32) -> ShapePath {
     let dash_offset = (time * 30.0) % (dash_length * 2.0);
 
     // Extract corners and form edges in order: top, right, bottom, left

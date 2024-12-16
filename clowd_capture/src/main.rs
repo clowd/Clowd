@@ -1,5 +1,5 @@
+mod entities;
 mod geometry;
-mod myshapes;
 mod plugins;
 mod resources;
 mod system;
@@ -9,12 +9,12 @@ extern crate anyhow;
 
 use std::f64::consts::PI;
 
+use crate::entities::*;
 use crate::geometry::*;
 use crate::resources::*;
 
 use bevy::{
     asset::RenderAssetUsages,
-    color::palettes::css::*,
     core::FrameCount,
     input::mouse::MouseWheel,
     log::*,
@@ -61,18 +61,19 @@ fn main() {
         .init_resource::<VirtualDesktop>()
         .add_systems(Startup, setup)
         .add_systems(Update, startup_animation)
-        .add_systems(PreUpdate, handle_mouse_scroll)
-        .add_systems(Update, (handle_window_created, handle_mouse_move))
+        .add_systems(PreUpdate, mouse_update)
+        .add_systems(Update, (window_created, background_update))
+        .add_systems(Update, (selection::selection_update, crosshair::crosshair_update))
         .add_systems(Update, handle_keypress.before(iyes_perf_ui::PerfUiSet::Setup))
         .run();
 }
 
-fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res<AccentColors>) {
+fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let monitors = SystemInterop::all_monitor_bounds();
     let desktop_bounds = SystemInterop::virtual_desktop_bounds().to_f32();
     let (desktop_color_image, desktop_gray_image) = SystemInterop::capture_desktop();
 
-    println!("Desktop bounds: {:?}", desktop_bounds);
+    info!("Desktop bounds: {:?}", desktop_bounds);
     let image_color = Image::from_dynamic(desktop_color_image, true, RenderAssetUsages::all());
     let image_gray = Image::from_dynamic(desktop_gray_image, true, RenderAssetUsages::all());
     let color_handle = images.add(image_color);
@@ -163,123 +164,6 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, accents: Res
     }
 
     commands.insert_resource(CameraEntities(camera_entities));
-
-    // create crosshair
-    let ch_parent_accent = commands
-        .spawn((
-            Transform::default(),
-            GlobalTransform::default(),
-            Visibility::default(),
-            CrosshairAccentTag,
-        ))
-        .id();
-
-    let ch_parent_horiz = commands
-        .spawn((
-            Transform::default(),
-            GlobalTransform::default(),
-            Visibility::default(),
-            CrosshairHorizTag,
-        ))
-        .id();
-
-    let ch_parent_vert = commands
-        .spawn((
-            Transform::default(),
-            GlobalTransform::default(),
-            Visibility::default(),
-            CrosshairVertTag,
-        ))
-        .id();
-
-    let ch_stroke = 1.0;
-    let ch_dashlength = 8.0;
-    let ch_offset_x = -0.5;
-    let ch_offset_y = 0.5;
-    let accent_size = 100.0;
-    let accent_width = 5.0;
-    let ch_horiz_start = Vec2::new(desktop_bounds.min_x(), ch_offset_x);
-    let ch_horiz_end = Vec2::new(desktop_bounds.max_x(), ch_offset_x);
-    let ch_vert_start = Vec2::new(ch_offset_y, -desktop_bounds.min_y());
-    let ch_vert_end = Vec2::new(ch_offset_y, -desktop_bounds.max_y());
-
-    println!("Desktop bounds: {:?}", desktop_bounds);
-
-    commands
-        .spawn((
-            ShapeBuilder::with(&shapes::Line(ch_horiz_start, ch_horiz_end))
-                .stroke((BLACK, ch_stroke))
-                .build(),
-            Transform::from_xyz(0.0, 0.0, Z_CURSOR_BACK),
-        ))
-        .set_parent(ch_parent_horiz);
-
-    commands
-        .spawn((
-            ShapeBuilder::with(&shapes::Line(ch_vert_start, ch_vert_end))
-                .stroke((BLACK, ch_stroke))
-                .build(),
-            Transform::from_xyz(0.0, 0.0, Z_CURSOR_BACK),
-        ))
-        .set_parent(ch_parent_vert);
-
-    commands
-        .spawn((
-            ShapeBuilder::with(&myshapes::shape_dashed_line(ch_horiz_start, ch_horiz_end, ch_dashlength))
-                .stroke((WHITE, ch_stroke))
-                .build(),
-            Transform::from_xyz(0.0, 0.0, Z_CURSOR_DASH),
-        ))
-        .set_parent(ch_parent_horiz);
-
-    commands
-        .spawn((
-            ShapeBuilder::with(&myshapes::shape_dashed_line(ch_vert_start, ch_vert_end, ch_dashlength))
-                .stroke((WHITE, ch_stroke))
-                .build(),
-            Transform::from_xyz(0.0, 0.0, Z_CURSOR_DASH),
-        ))
-        .set_parent(ch_parent_vert);
-
-    let ch_horiz_start = Vec2::new(-accent_size, ch_offset_x);
-    let ch_horiz_end = Vec2::new(accent_size, ch_offset_x);
-    let ch_vert_start = Vec2::new(ch_offset_y, -accent_size);
-    let ch_vert_end = Vec2::new(ch_offset_y, accent_size);
-    commands
-        .spawn((
-            ShapeBuilder::with(&shapes::Line(ch_horiz_start, ch_horiz_end))
-                .stroke((accents.accent_light, ch_stroke))
-                .build(),
-            Transform::from_xyz(0.0, 0.0, Z_CURSOR_ACCENT),
-        ))
-        .set_parent(ch_parent_accent);
-
-    commands
-        .spawn((
-            ShapeBuilder::with(&shapes::Line(ch_vert_start, ch_vert_end))
-                .stroke((accents.accent_light, ch_stroke))
-                .build(),
-            Transform::from_xyz(0.0, 0.0, Z_CURSOR_ACCENT),
-        ))
-        .set_parent(ch_parent_accent);
-
-    let ch_accent_rects = [
-        (Vec2::new(-accent_size, ch_offset_x), Vec2::new(-accent_size / 2.0, ch_offset_x)), // left
-        (Vec2::new(accent_size / 2.0, ch_offset_x), Vec2::new(accent_size, ch_offset_x)),   // right
-        (Vec2::new(ch_offset_y, -accent_size), Vec2::new(ch_offset_y, -accent_size / 2.0)), // bottom
-        (Vec2::new(ch_offset_y, accent_size / 2.0), Vec2::new(ch_offset_y, accent_size)),   // top
-    ];
-
-    for (start, end) in ch_accent_rects.iter() {
-        commands
-            .spawn((
-                ShapeBuilder::with(&shapes::Line(*start, *end))
-                    .stroke((accents.accent_light, accent_width))
-                    .build(),
-                Transform::from_xyz(0.0, 0.0, Z_CURSOR_ACCENT),
-            ))
-            .set_parent(ch_parent_accent);
-    }
 }
 
 fn startup_animation(
@@ -295,8 +179,8 @@ fn startup_animation(
         for mut window in window.iter_mut() {
             window.visible = true;
         }
-        commands.insert_resource(FirstRenderTime(time.elapsed_secs_f64()));
         mouse.set_anchored(true);
+        commands.insert_resource(FirstRenderTime(time.elapsed_secs_f64()));
     }
 
     if let Some(first_render) = first_render {
@@ -310,13 +194,12 @@ fn startup_animation(
                 overlay.color.set_alpha(fade_value as f32);
             } else {
                 commands.entity(entity).despawn_recursive();
-                commands.remove_resource::<FirstRenderTime>();
             }
         }
     }
 }
 
-fn handle_window_created(mut events: EventReader<WindowCreated>, windows: Query<(&RawHandleWrapper, &Window)>) {
+fn window_created(mut events: EventReader<WindowCreated>, windows: Query<(&RawHandleWrapper, &Window)>) {
     for w in events.read() {
         let w = windows.get(w.window).unwrap();
         // WinitWindows::get_window
@@ -336,35 +219,18 @@ fn handle_window_created(mut events: EventReader<WindowCreated>, windows: Query<
     }
 }
 
-fn handle_mouse_move(
-    mut mouse: ResMut<MousePosition>,
+fn background_update(
     mut queries: ParamSet<(
-        Query<&mut Transform, With<CrosshairVertTag>>,
-        Query<&mut Transform, With<CrosshairHorizTag>>,
-        Query<&mut Transform, With<CrosshairAccentTag>>,
         Query<(&mut Sprite, &mut Transform), With<ImageGrayTag>>,
         Query<(&mut Sprite, &mut Transform), With<ImageIntroOverlayTag>>,
         Query<(&mut Sprite, &mut Transform), With<ImageColorTag>>,
-        // Query<&mut Transform, With<WindowCameraTag>>,
     )>,
+    mouse: Res<MousePosition>,
     desktop: Res<VirtualDesktop>,
     capture: Res<CaptureState>,
-    // cameras: Res<CameraEntities>,
 ) {
-    // update crosshair
-    mouse.update_position();
-    let pos = mouse.get_position();
-    if let Ok(mut e) = queries.p0().get_single_mut() {
-        e.translation = Vec3::new(pos.x, 0.0, Z_CURSOR_BACK);
-    }
-    if let Ok(mut e) = queries.p1().get_single_mut() {
-        e.translation = Vec3::new(0.0, -pos.y, Z_CURSOR_BACK);
-    }
-    if let Ok(mut e) = queries.p2().get_single_mut() {
-        e.translation = Vec3::new(pos.x, -pos.y, Z_CURSOR_ACCENT);
-    }
-
     // update background images
+    let pos = mouse.get_position();
     let zoom = mouse.get_zoom();
     let desktop_bounds = desktop.0.to_f32();
     let image_transform = Transform2D::<f32, ScreenUnit, ScreenUnit>::identity()
@@ -379,7 +245,7 @@ fn handle_mouse_move(
         // flip Y into bevy space
         .then_scale(1.0, -1.0);
 
-    if let Ok(mut e) = queries.p3().get_single_mut() {
+    if let Ok(mut e) = queries.p0().get_single_mut() {
         let new_origin = image_transform.transform_point(ScreenPointF::new(0.0, 0.0));
         let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGGRAY).with_scale(Vec3::new(zoom, zoom, 1.0));
         e.1.translation = transform.translation;
@@ -387,7 +253,7 @@ fn handle_mouse_move(
         e.1.rotation = transform.rotation;
     }
 
-    if let Ok(mut e) = queries.p4().get_single_mut() {
+    if let Ok(mut e) = queries.p1().get_single_mut() {
         let new_origin = image_transform.transform_point(ScreenPointF::new(0.0, 0.0));
         let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGGRAY).with_scale(Vec3::new(zoom, zoom, 1.0));
         e.1.translation = transform.translation;
@@ -395,7 +261,7 @@ fn handle_mouse_move(
         e.1.rotation = transform.rotation;
     }
 
-    if let Ok(mut e) = queries.p5().get_single_mut() {
+    if let Ok(mut e) = queries.p2().get_single_mut() {
         let capture_transform = if let Some(capture_rect) = capture.selection {
             let capture_transform =
                 Transform2D::<f32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop.0.to_f32().top_left().to_vector());
@@ -423,77 +289,52 @@ fn handle_mouse_move(
         e.1.scale = transform.scale;
         e.1.rotation = transform.rotation;
     }
-
-    // if let Some(capture) = capture.selection {
-    //     // arrange the color image to the selected region
-    //     let desktop_bounds = desktop.0.to_f32();
-    //     let capture_transform =
-    //         Transform2D::<f32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop.0.to_f32().top_left().to_vector());
-    //     let capture_rect = capture_transform.outer_transformed_rect(&capture.to_f32());
-
-    //     overlay.1.translation = Vec3::new(
-    //         (capture_rect.width() / 2.0) + desktop_bounds.left() + capture_rect.left(),
-    //         (-capture_rect.height() / 2.0) - desktop_bounds.top() - capture_rect.top(),
-    //         Z_BGCOLOR,
-    //     );
-
-    //     overlay.0.color.set_alpha(1.0);
-    //     overlay.0.rect = Some(capture_rect.to_bevy());
-    // }
-
-    // Update camera positions
-    // let zoom = mouse.get_zoom();
-    // for camera in &cameras.0 {
-    //     if let Ok(mut e) = transforms.p3().get_mut(camera.0) {
-    //         if zoom > 1.0 {
-    //             e.scale = Vec3::splat(camera.3 * 1.0 / zoom as f32);
-    //         } else {
-    //             // reset to defaults
-    //             e.translation = camera.2.translation;
-    //             e.scale = Vec3::splat(camera.3);
-    //         }
-    //     }
-    // }
-
-    // for (_, bounds, mut transform) in cameras.0.iter_mut() {
-    //     let half_width = bounds.width() as f32 / 2.0;
-    //     let half_height = bounds.height() as f32 / 2.0;
-    //     let x = bounds.left() as f32 + half_width;
-    //     let y = bounds.top() as f32 + half_height;
-    //     transform.translation = Vec3::new(x, -y, 0.0);
-    // }
 }
 
-fn handle_mouse_scroll(mut mouse: ResMut<MousePosition>, mut scroll: EventReader<MouseWheel>, keyboard: Res<ButtonInput<KeyCode>>) {
-    for ev in scroll.read() {
-        let delta = ev.y;
-        let mut zoom = mouse.get_zoom();
+fn mouse_update(
+    mut mouse: ResMut<MousePosition>,
+    mut scroll: EventReader<MouseWheel>,
+    // mut window: Query<&mut Window>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    capture: Res<CaptureState>,
+    _first_render: Res<FirstRenderTime>,
+) {
+    if capture.selection.is_none() {
+        for ev in scroll.read() {
+            let delta = ev.y;
+            let mut zoom = mouse.get_zoom();
 
-        if keyboard.pressed(KeyCode::ShiftLeft)
-            || keyboard.pressed(KeyCode::ShiftRight)
-            || keyboard.pressed(KeyCode::ControlLeft)
-            || keyboard.pressed(KeyCode::ControlRight)
-        {
-            if delta > 0.0 {
-                zoom *= 1.05;
+            if keyboard.pressed(KeyCode::ShiftLeft)
+                || keyboard.pressed(KeyCode::ShiftRight)
+                || keyboard.pressed(KeyCode::ControlLeft)
+                || keyboard.pressed(KeyCode::ControlRight)
+            {
+                if delta > 0.0 {
+                    zoom *= 1.05;
+                } else {
+                    zoom /= 1.05;
+                }
             } else {
-                zoom /= 1.05;
+                if delta > 0.0 {
+                    zoom *= 2.0;
+                } else {
+                    zoom /= 2.0;
+                }
             }
-        } else {
-            if delta > 0.0 {
-                zoom *= 2.0;
-            } else {
-                zoom /= 2.0;
-            }
+
+            mouse.set_zoom(zoom.max(1.0).min(256.0));
         }
-
-        mouse.set_zoom(zoom.max(1.0).min(256.0));
+    } else {
+        mouse.set_zoom(1.0);
     }
+    mouse.update_position();
+    mouse.set_anchored(capture.selection.is_none());
 }
 
 fn handle_keypress(
     mut commands: Commands,
     mut exit: EventWriter<AppExit>,
+    mut capture: ResMut<CaptureState>,
     keyboard: Res<ButtonInput<KeyCode>>,
     q_root: Query<Entity, With<PerfUiRoot>>,
     camera: Res<PrimaryCamera>,
@@ -501,8 +342,11 @@ fn handle_keypress(
     if keyboard.just_pressed(KeyCode::Escape) {
         exit.send(AppExit::Success);
     } else if keyboard.just_pressed(KeyCode::KeyQ) {
-        // my_config.enabled ^= true;
-        // println!("Overlay gizmos enabled: {}", my_config.enabled);
+        if capture.selection.is_some() {
+            capture.selection = None;
+        } else {
+            capture.selection = Some(ScreenRect::from_xy_size(200, 200, 500, 500));
+        }
     } else if keyboard.just_pressed(KeyCode::KeyD) {
         if let Ok(e) = q_root.get_single() {
             commands.entity(e).despawn_recursive();
