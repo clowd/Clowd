@@ -2,7 +2,7 @@
 use crate::{geometry::*, screen::Monitor};
 use bevy::{
     color::Color,
-    prelude::{Component, Entity, Resource},
+    prelude::{Component, Entity, Resource, Transform},
     ui::TargetCamera,
 };
 
@@ -21,6 +21,9 @@ pub struct CrosshairHorizTag;
 #[derive(Component)]
 pub struct CrosshairVertTag;
 
+#[derive(Component)]
+pub struct WindowCameraTag;
+
 pub const Z_BGGRAY: f32 = 0.0;
 pub const Z_BGCOLOR: f32 = 1.0;
 pub const Z_SELECTIONBORDER: f32 = 2.0;
@@ -29,6 +32,9 @@ pub const Z_CURSOR_DASH: f32 = 3.1;
 pub const Z_CURSOR_ACCENT: f32 = 3.2;
 pub const Z_UI: f32 = 4.0;
 pub const Z_DEBUG: f32 = 5.0;
+
+#[derive(Resource)]
+pub struct CameraEntities(pub Vec<(Entity, ScreenRect, Transform, f32)>);
 
 #[derive(Resource)]
 pub struct FirstRenderTime(pub f64);
