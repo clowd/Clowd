@@ -1,4 +1,5 @@
 mod geometry;
+mod mouse;
 mod myshapes;
 mod plugins;
 mod resources;
@@ -27,7 +28,6 @@ use bevy::{
 use bevy_prototype_lyon::prelude::*;
 use euclid::Transform2D;
 use euclid::Vector2D;
-use euclid::Vector3D;
 use iyes_perf_ui::prelude::*;
 use raw_window_handle::RawWindowHandle;
 use screen::capture_desktop;
@@ -45,10 +45,6 @@ fn main() {
                 .set(bevy::render::RenderPlugin {
                     render_creation: RenderCreation::Automatic(bevy::render::settings::WgpuSettings {
                         backends: Some(bevy::render::settings::Backends::VULKAN | bevy::render::settings::Backends::METAL),
-                        dx12_shader_compiler: bevy::render::settings::Dx12Compiler::Dxc {
-                            dxil_path: None,
-                            dxc_path: None,
-                        },
                         power_preference: bevy::render::settings::PowerPreference::HighPerformance,
                         ..default()
                     }),

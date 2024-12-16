@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 image = "0.25"
-mouse-rs = "0.4"
 euclid = "0.22.11"
 windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
@@ -42,6 +41,7 @@ raw-window-handle = "0.6"
 
 [target.'cfg(target_os="macos")'.dependencies]
 xcap = "0.1.0"
+mouse-rs = "0.4"
 
 [build-dependencies]
 winres = "0.1"

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use crate::{
     geometry::*,
+    mouse,
     screen::{virtual_desktop, Monitor},
 };
 use bevy::{
@@ -53,7 +54,6 @@ pub struct FirstRenderTime(pub f64);
 
 #[derive(Resource)]
 pub struct MousePosition {
-    mouse: mouse_rs::Mouse,
     zoom: f32,
     mouse_state: MouseState,
     mouse_pos: ScreenPointF,
@@ -71,7 +71,7 @@ impl MousePosition {
     // }
 
     pub fn update_position(&mut self) {
-        let pt = self.mouse.get_position().unwrap();
+        let pt = mouse::get_position();
         let pt = ScreenPoint::new(pt.x, pt.y);
         let anchor = self.mouse_anchor_pos;
         if self.anchored {
@@ -96,12 +96,11 @@ impl MousePosition {
                 // my = my.max(top).min(bottom - 0.001);
 
                 self.mouse_pos = ScreenPointF::new(mx, my);
-
-                let _ = self
-                    .mouse
-                    .move_to(self.mouse_anchor_pos.x, self.mouse_anchor_pos.y);
+                mouse::set_position(self.mouse_anchor_pos);
             }
         } else {
+            println!("Mouse position: {:?}", pt);
+
             self.mouse_pos = pt.to_f32();
         }
     }
@@ -120,16 +119,11 @@ impl MousePosition {
 
     pub fn set_anchored(&mut self, anchored: bool) {
         if !self.anchored && anchored {
-            let pos = self.mouse.get_position().unwrap();
-            self.mouse_pos = ScreenPointF::new(pos.x as f32, pos.y as f32);
-            let _ = self
-                .mouse
-                .move_to(self.mouse_anchor_pos.x, self.mouse_anchor_pos.y);
+            self.mouse_pos = mouse::get_position().to_f32();
+            mouse::set_position(self.mouse_anchor_pos);
             self.anchored = true;
         } else if self.anchored && !anchored {
-            let _ = self
-                .mouse
-                .move_to(self.mouse_pos.x as i32, self.mouse_pos.y as i32);
+            mouse::set_position(self.mouse_pos.to_i32());
             self.anchored = false;
         }
     }
@@ -138,7 +132,6 @@ impl MousePosition {
 impl Default for MousePosition {
     fn default() -> Self {
         Self {
-            mouse: mouse_rs::Mouse::new(),
             zoom: 1.0,
             mouse_state: MouseState::Up,
             mouse_pos: ScreenPointF::new(0.0, 0.0),
@@ -155,7 +148,9 @@ pub struct CaptureState {
 
 impl Default for CaptureState {
     fn default() -> Self {
-        Self { selection: Some(ScreenRect::from_xy_size(200, 200, 500, 500)) }
+        Self {
+            selection: Some(ScreenRect::from_xy_size(200, 200, 500, 500)),
+        }
     }
 }
 
