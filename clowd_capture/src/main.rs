@@ -58,7 +58,7 @@ fn main() {
         .init_resource::<CaptureState>()
         .init_resource::<AccentColors>()
         .init_resource::<VirtualDesktop>()
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, buttonpanel::buttonpanel_init))
         .add_systems(Update, startup_animation)
         .add_systems(PreUpdate, mouse_update)
         .add_systems(Update, (window_created, background_update))
@@ -67,7 +67,7 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>, asset_server: Res<AssetServer>, accents: Res<AccentColors>) {
     let monitors = SystemInterop::all_monitor_bounds();
     let desktop_bounds = SystemInterop::virtual_desktop_bounds().to_f32();
     let (desktop_color_image, desktop_gray_image) = SystemInterop::capture_desktop();
@@ -150,10 +150,86 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             commands.insert_resource(PrimaryCamera(camera));
         }
 
-        camera_entities.push((camera, bounds.clone(), cam_transform.clone(), *scale));
+        camera_entities.push((camera, bounds.clone(), cam_transform.clone(), *scale, *primary));
     }
 
+    // start UI
+    let font = asset_server.load(r"C:\Source\clowd-rust\clowd_capture\assets\fonts\Roboto-Regular.ttf");
+
+    let primary_camera = camera_entities
+        .iter()
+        .find(|(_, _, _, _, primary)| *primary)
+        .unwrap()
+        .0;
+
     commands.insert_resource(CameraEntities(camera_entities));
+
+    fn spawn_nested_text_bundle(builder: &mut ChildBuilder, font: Handle<Font>, text: &str) {
+        builder.spawn((
+            Node {
+                align_self: AlignSelf::Center,
+                ..default()
+            },
+            Text::new(text.to_uppercase()),
+            TextFont {
+                font,
+                font_size: 12.0,
+                ..default()
+            },
+            TextColor::WHITE,
+        ));
+    }
+
+    const BUTTON_SIZE: f32 = 50.0;
+    const BUTTON_SVG_SIZE: f32 = 26.0;
+    const BUTTON_COUNT: f32 = 6.0;
+    const BUTTON_PADDING: f32 = 4.0;
+
+    fn spawn_button(builder: &mut ChildBuilder, text: &str, bg: Color, font: &Handle<Font>) {
+        builder
+            .spawn((
+                Node {
+                    width: Val::Px(BUTTON_SIZE),
+                    height: Val::Px(BUTTON_SIZE),
+                    flex_direction: FlexDirection::ColumnReverse,
+                    padding: UiRect {
+                        left: Val::Px(BUTTON_PADDING),
+                        right: Val::Px(BUTTON_PADDING),
+                        top: Val::Px(BUTTON_PADDING),
+                        bottom: Val::Px(BUTTON_PADDING),
+                    },
+                    ..default()
+                },
+                BackgroundColor(bg),
+            ))
+            .with_children(|builder| {
+                spawn_nested_text_bundle(builder, font.clone(), text);
+            });
+    }
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                align_content: AlignContent::Center,
+                top: Val::Px(100.0),
+                left: Val::Px(100.0),
+                // width: Val::Px(5.0 * BUTTON_SIZE),
+                // height: Val::Px(BUTTON_SIZE),
+                ..default()
+            },
+            TargetCamera(primary_camera),
+        ))
+        .with_children(|builder| {
+            spawn_button(builder, "Edit", accents.accent_light, &font);
+            spawn_button(builder, "Video", accents.accent_light, &font);
+            spawn_button(builder, "Copy", accents.accent_light, &font);
+            spawn_button(builder, "Save", accents.accent_light, &font);
+            spawn_button(builder, "Reset", accents.panel_gray, &font);
+            spawn_button(builder, "Exit", accents.panel_gray, &font);
+        });
 }
 
 fn startup_animation(mut commands: Commands, mut window: Query<&mut Window>, frames: Res<FrameCount>, time: Res<Time>) {
