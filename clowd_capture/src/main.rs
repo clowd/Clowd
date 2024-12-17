@@ -7,8 +7,6 @@ mod system;
 #[macro_use]
 extern crate anyhow;
 
-use std::f64::consts::PI;
-
 use crate::entities::*;
 use crate::geometry::*;
 use crate::resources::*;
@@ -60,11 +58,6 @@ fn main() {
         .init_resource::<CaptureState>()
         .init_resource::<AccentColors>()
         .init_resource::<VirtualDesktop>()
-        // saves a lot of system resources!
-        // .insert_resource(WinitSettings {
-        //     focused_mode: UpdateMode::reactive(Duration::from_millis(6)),
-        //     unfocused_mode: UpdateMode::reactive(Duration::from_millis(6)),
-        // })
         .add_systems(Startup, setup)
         .add_systems(Update, startup_animation)
         .add_systems(PreUpdate, mouse_update)
@@ -100,11 +93,6 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Transform::from_translation(Vec3::new(img_tx, img_ty, Z_BGCOLOR)),
         ImageColorTag,
     ));
-    commands.spawn((
-        Sprite::from_image(color_handle),
-        Transform::from_translation(Vec3::new(img_tx, img_ty, Z_BGCOLOR_OVERLAY)),
-        ImageIntroOverlayTag,
-    ));
 
     let node = Node {
         position_type: PositionType::Absolute,
@@ -132,7 +120,6 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                 focused: i == 0,
                 position: WindowPosition::At(IVec2::new(x, y)),
                 decorations: false,
-                window_level: bevy::window::WindowLevel::AlwaysOnTop,
                 visible: false,
                 ..default()
             })
@@ -172,39 +159,13 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.insert_resource(CameraEntities(camera_entities));
 }
 
-fn startup_animation(
-    mut commands: Commands,
-    mut window: Query<&mut Window>,
-    mut mouse: ResMut<MousePosition>,
-    mut query: Query<(Entity, &mut Sprite), With<ImageIntroOverlayTag>>,
-    frames: Res<FrameCount>,
-    first_render: Option<Res<FirstRenderTime>>,
-    time: Res<Time>,
-) {
-    if frames.0 == 3 {
+fn startup_animation(mut commands: Commands, mut window: Query<&mut Window>, frames: Res<FrameCount>, time: Res<Time>) {
+    if frames.0 == 10 {
         for mut window in window.iter_mut() {
             window.visible = true;
+            window.window_level = bevy::window::WindowLevel::AlwaysOnTop;
         }
-        mouse.set_anchored(true);
-    }
-
-    if frames.0 == 30 {
         commands.insert_resource(FirstRenderTime(time.elapsed_secs_f64()));
-    }
-
-    if let Some(first_render) = first_render {
-        // fade out the color image upon startup
-        if let Ok((entity, mut overlay)) = query.get_single_mut() {
-            if overlay.color.alpha() > 0.0 {
-                let elapsed_seconds = time.elapsed_secs_f64() - first_render.0;
-                let fade_duration = 0.2;
-                let t = (elapsed_seconds / fade_duration).clamp(0.0, 1.0);
-                let fade_value = 0.5 * (1.0 + (PI * t).cos());
-                overlay.color.set_alpha(fade_value as f32);
-            } else {
-                commands.entity(entity).despawn_recursive();
-            }
-        }
     }
 }
 
@@ -231,7 +192,6 @@ fn window_created(mut events: EventReader<WindowCreated>, windows: Query<(&RawHa
 fn background_update(
     mut queries: ParamSet<(
         Query<&mut Transform, With<ImageGrayTag>>,
-        Query<&mut Transform, With<ImageIntroOverlayTag>>,
         Query<(&mut Sprite, &mut Transform), With<ImageColorTag>>,
     )>,
     mouse: Res<MousePosition>,
@@ -263,14 +223,6 @@ fn background_update(
     }
 
     if let Ok(mut e) = queries.p1().get_single_mut() {
-        let new_origin = image_transform.transform_point(ScreenPointF::new(0.0, 0.0));
-        let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGGRAY).with_scale(Vec3::new(zoom, zoom, 1.0));
-        e.translation = transform.translation;
-        e.scale = transform.scale;
-        e.rotation = transform.rotation;
-    }
-
-    if let Ok(mut e) = queries.p2().get_single_mut() {
         let selection_rect = mouse
             .get_selection_in_progress()
             .map_or_else(|| capture.selection, |v| Some(v));
