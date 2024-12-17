@@ -185,6 +185,9 @@ fn startup_animation(
             window.visible = true;
         }
         mouse.set_anchored(true);
+    }
+
+    if frames.0 == 30 {
         commands.insert_resource(FirstRenderTime(time.elapsed_secs_f64()));
     }
 
@@ -226,8 +229,8 @@ fn window_created(mut events: EventReader<WindowCreated>, windows: Query<(&RawHa
 
 fn background_update(
     mut queries: ParamSet<(
-        Query<(&mut Sprite, &mut Transform), With<ImageGrayTag>>,
-        Query<(&mut Sprite, &mut Transform), With<ImageIntroOverlayTag>>,
+        Query<&mut Transform, With<ImageGrayTag>>,
+        Query<&mut Transform, With<ImageIntroOverlayTag>>,
         Query<(&mut Sprite, &mut Transform), With<ImageColorTag>>,
     )>,
     mouse: Res<MousePosition>,
@@ -253,17 +256,17 @@ fn background_update(
     if let Ok(mut e) = queries.p0().get_single_mut() {
         let new_origin = image_transform.transform_point(ScreenPointF::new(0.0, 0.0));
         let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGGRAY).with_scale(Vec3::new(zoom, zoom, 1.0));
-        e.1.translation = transform.translation;
-        e.1.scale = transform.scale;
-        e.1.rotation = transform.rotation;
+        e.translation = transform.translation;
+        e.scale = transform.scale;
+        e.rotation = transform.rotation;
     }
 
     if let Ok(mut e) = queries.p1().get_single_mut() {
         let new_origin = image_transform.transform_point(ScreenPointF::new(0.0, 0.0));
         let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGGRAY).with_scale(Vec3::new(zoom, zoom, 1.0));
-        e.1.translation = transform.translation;
-        e.1.scale = transform.scale;
-        e.1.rotation = transform.rotation;
+        e.translation = transform.translation;
+        e.scale = transform.scale;
+        e.rotation = transform.rotation;
     }
 
     if let Ok(mut e) = queries.p2().get_single_mut() {
