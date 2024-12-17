@@ -22,6 +22,7 @@ use bevy::{
     render::camera::RenderTarget,
     render::settings::RenderCreation,
     window::{PresentMode, RawHandleWrapper, WindowCreated, WindowRef, WindowResolution},
+    winit::cursor::CursorIcon,
 };
 
 use bevy_prototype_lyon::prelude::*;
@@ -270,9 +271,9 @@ fn background_update(
     }
 
     if let Ok(mut e) = queries.p2().get_single_mut() {
-        let selection_rect = capture
-            .selection
-            .map_or_else(|| mouse.get_selection_in_progress(), |v| Some(v));
+        let selection_rect = mouse
+            .get_selection_in_progress()
+            .map_or_else(|| capture.selection, |v| Some(v));
 
         let mut transform = None;
         if let Some(capture_rect) = selection_rect {
@@ -309,14 +310,25 @@ fn background_update(
 }
 
 fn mouse_update(
+    mut commands: Commands,
     mut mouse: ResMut<MousePosition>,
     mut scroll: EventReader<MouseWheel>,
     mut capture: ResMut<CaptureState>,
-    // mut window: Query<&mut Window>,
+    mut window: Query<(Entity, &mut Window)>,
+    desktop: Res<VirtualDesktop>,
     keyboard: Res<ButtonInput<KeyCode>>,
     buttons: Res<ButtonInput<MouseButton>>,
     first_render: Option<Res<FirstRenderTime>>,
 ) {
+    let mut set_cursor = |cursor: CursorIcon, visible: bool| {
+        for mut window in window.iter_mut() {
+            window.1.cursor_options.visible = visible;
+            commands
+                .entity(window.0)
+                .insert(cursor.clone());
+        }
+    };
+
     if capture.selection.is_none() {
         for ev in scroll.read() {
             let delta = ev.y;
@@ -345,21 +357,35 @@ fn mouse_update(
     } else {
         mouse.set_zoom(1.0);
     }
-    mouse.update_position();
+
+    let pos = mouse.update_position();
 
     if first_render.is_some() {
         mouse.set_anchored(capture.selection.is_none());
     }
 
     if capture.selection.is_none() {
-        if buttons.just_released(MouseButton::Left) {
-            if let Some(selection) = mouse.get_selection_in_progress() {
-                capture.selection = Some(selection);
-            }
-            mouse.button_up();
-        } else if buttons.just_pressed(MouseButton::Left) {
+        set_cursor(CursorIcon::System(bevy::window::SystemCursorIcon::Default), false);
+        if buttons.just_pressed(MouseButton::Left) {
             mouse.start_selection();
         }
+    } else {
+        if let MouseState::SizingSel(hit, _) = mouse.get_button_state() {
+            set_cursor(hit.to_cursor(), true);
+        } else {
+            let hit = HitTest::hit_test_rect(pos, capture.selection);
+            set_cursor(hit.to_cursor(), true);
+            if buttons.just_pressed(MouseButton::Left) {
+                mouse.start_sizing(hit, capture.selection.unwrap());
+            }
+        }
+    }
+
+    if buttons.just_released(MouseButton::Left) {
+        if let Some(selection) = mouse.get_selection_in_progress() {
+            capture.selection = selection.intersection(&desktop.0);
+        }
+        mouse.button_up();
     }
 }
 
