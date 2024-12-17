@@ -49,6 +49,7 @@ pub struct FirstRenderTime(pub f64);
 pub enum MouseState {
     #[default]
     Up,
+    PendingSel(ScreenPointF),
     StartSel(ScreenPointF),
 }
 
@@ -106,19 +107,32 @@ impl MousePosition {
         } else {
             self.mouse_pos = pt.to_f32();
         }
+
+        // if selection is pending, let's decide if we should start it
+        if let MouseState::PendingSel(start) = self.mouse_state {
+            let distance = start.distance_to(self.mouse_pos);
+            let drag_threshold = 10.0 / self.zoom;
+            if distance > drag_threshold {
+                self.mouse_state = MouseState::StartSel(start);
+            }
+        }
+
         self.mouse_pos
     }
 
     pub fn get_selection_in_progress(&self) -> Option<ScreenRect> {
         match self.mouse_state {
-            MouseState::StartSel(start) => Some(ScreenRect::from_rounded_threshold(
-                start.x,
-                start.y,
-                self.mouse_pos.x,
-                self.mouse_pos.y,
-            )),
+            MouseState::StartSel(start) => ScreenRect::from_rounded_threshold(start.x, start.y, self.mouse_pos.x, self.mouse_pos.y),
             _ => None,
         }
+    }
+
+    pub fn start_selection(&mut self) {
+        self.mouse_state = MouseState::PendingSel(self.mouse_pos);
+    }
+
+    pub fn button_up(&mut self) {
+        self.mouse_state = MouseState::Up;
     }
 
     pub fn get_position(&self) -> ScreenPointF {
@@ -131,10 +145,6 @@ impl MousePosition {
 
     pub fn set_zoom(&mut self, zoom: f32) {
         self.zoom = zoom;
-    }
-
-    pub fn set_button_state(&mut self, state: MouseState) {
-        self.mouse_state = state;
     }
 
     pub fn get_button_state(&self) -> MouseState {

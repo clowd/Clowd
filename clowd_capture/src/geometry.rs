@@ -189,14 +189,20 @@ fn round_pixel_pair(v1: f32, v2: f32) -> (i32, i32) {
 }
 
 pub trait ScreenRectRounded {
-    fn from_rounded_threshold(x1: f32, y1: f32, x2: f32, y2: f32) -> ScreenRect;
+    fn from_rounded_threshold(x1: f32, y1: f32, x2: f32, y2: f32) -> Option<ScreenRect>;
 }
 
 impl ScreenRectRounded for ScreenRect {
-    fn from_rounded_threshold(x1: f32, y1: f32, x2: f32, y2: f32) -> ScreenRect {
+    fn from_rounded_threshold(x1: f32, y1: f32, x2: f32, y2: f32) -> Option<ScreenRect> {
         let (x1, x2) = round_pixel_pair(x1, x2);
         let (y1, y2) = round_pixel_pair(y1, y2);
-        ScreenRect::from_exact(x1, y1, x2, y2)
+        let rect = ScreenRect::from_exact(x1, y1, x2, y2);
+
+        if rect.width() > 0 && rect.height() > 0 {
+            Some(rect)
+        } else {
+            None
+        }
     }
 }
 
