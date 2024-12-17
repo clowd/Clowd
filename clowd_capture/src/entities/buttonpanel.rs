@@ -77,6 +77,16 @@ impl ButtonSvgData {
     }
 }
 
+#[derive(Component)]
+pub struct ButtonPanelButtonTag;
+
+#[derive(Component)]
+pub struct ButtonPanelRootTag;
+
+const BUTTON_SIZE: f32 = 50.0;
+const BUTTON_COUNT: i32 = 6;
+const BUTTON_PADDING: f32 = 2.0;
+
 pub fn buttonpanel_init(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let copy_bytes = include_bytes!("../../assets/svg/copy_to_clipboard.svg");
     let save_bytes = include_bytes!("../../assets/svg/save.svg");
@@ -132,20 +142,15 @@ pub fn buttonpanel_init(mut commands: Commands, mut images: ResMut<Assets<Image>
 
 fn buttonpanel_spawn(
     mut commands: Commands,
-    camera_entities: Res<CameraEntities>,
+    camera_entity: Entity,
     accents: Res<AccentColors>,
     svg_data: Res<ButtonSvgData>,
     asset_server: Res<AssetServer>,
+    initial_point: ScreenPointF,
+    orientation: FlexDirection,
 ) {
     // start UI
     let font = asset_server.load(r"C:\Source\clowd-rust\clowd_capture\assets\fonts\Roboto-Regular.ttf");
-
-    let primary_camera = camera_entities
-        .0
-        .iter()
-        .find(|(_, _, _, _, primary)| *primary)
-        .unwrap()
-        .0;
 
     fn spawn_nested_text_bundle(builder: &mut ChildBuilder, font: Handle<Font>, text: &str) {
         builder.spawn((
@@ -162,11 +167,6 @@ fn buttonpanel_spawn(
             TextColor::WHITE,
         ));
     }
-
-    const BUTTON_SIZE: f32 = 50.0;
-    const BUTTON_SVG_SIZE: f32 = 26.0;
-    const BUTTON_COUNT: f32 = 6.0;
-    const BUTTON_PADDING: f32 = 2.0;
 
     fn spawn_button(builder: &mut ChildBuilder, text: &str, bg: Color, font: &Handle<Font>, icon: SvgIcon, svg_data: &Res<ButtonSvgData>) {
         builder
@@ -185,6 +185,7 @@ fn buttonpanel_spawn(
                     ..default()
                 },
                 BackgroundColor(bg),
+                ButtonPanelButtonTag,
             ))
             .with_children(|builder| {
                 let (image, size) = svg_data.get(icon, 1.0);
@@ -217,16 +218,15 @@ fn buttonpanel_spawn(
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                flex_direction: FlexDirection::Row,
+                flex_direction: orientation,
                 align_items: AlignItems::Center,
                 align_content: AlignContent::Center,
-                top: Val::Px(100.0),
-                left: Val::Px(100.0),
-                // width: Val::Px(5.0 * BUTTON_SIZE),
-                // height: Val::Px(BUTTON_SIZE),
+                top: Val::Px(initial_point.y),
+                left: Val::Px(initial_point.x),
                 ..default()
             },
-            TargetCamera(primary_camera),
+            TargetCamera(camera_entity),
+            ButtonPanelRootTag,
         ))
         .with_children(|builder| {
             spawn_button(builder, "Edit", accents.accent_light, &font, SvgIcon::Edit, &svg_data);
@@ -236,4 +236,123 @@ fn buttonpanel_spawn(
             spawn_button(builder, "Reset", accents.panel_gray, &font, SvgIcon::Reset, &svg_data);
             spawn_button(builder, "Exit", accents.panel_gray, &font, SvgIcon::Exit, &svg_data);
         });
+}
+
+fn get_ideal_position(cameras: &Res<CameraEntities>, selection: ScreenRect) -> (Entity, ScreenPointF, FlexDirection, f32) {
+    // Convert everything to integers as in the original code
+
+    // find the screen that contains the center of the selection
+    let selection_center = selection.center();
+    let (camera_entity, screen_bounds, _, dpi_zoom, _) = cameras
+        .0
+        .iter()
+        .find(|(_, bounds, _, _, _)| bounds.contains(selection_center))
+        .unwrap();
+
+    let min_distance = (2.0 * dpi_zoom).ceil() as i32;
+    let max_distance = (15.0 * dpi_zoom).ceil() as i32;
+    // let button_spacing = (3.0 * dpi_zoom).ceil() as i32;
+    let svg_button_size = (BUTTON_SIZE * dpi_zoom).floor() as i32;
+
+    let long_edge_px = svg_button_size * (BUTTON_COUNT as i32); // + (button_spacing * 2);
+    let short_edge_px = svg_button_size;
+
+    // Clip selection to monitor
+    let selection_clipped = selection
+        .intersection(&screen_bounds)
+        .unwrap_or(selection);
+
+    // Compute spaces around the selection
+    let bottom_space = (screen_bounds.bottom() - selection_clipped.bottom()).max(0) - min_distance;
+    let right_space = (screen_bounds.right() - selection_clipped.right()).max(0) - min_distance;
+    let left_space = (selection_clipped.left() - screen_bounds.left()).max(0) - min_distance;
+
+    let vert: bool;
+    let mut ind_left: i32;
+    let ind_top: i32;
+
+    if bottom_space >= short_edge_px {
+        // Vertically oriented panel below the selection
+        vert = true;
+        ind_left = selection_clipped.left() + selection_clipped.width() / 2 - long_edge_px / 2;
+        ind_top = (screen_bounds
+            .bottom()
+            .min(selection_clipped.bottom() + max_distance + short_edge_px))
+            - short_edge_px;
+    } else if right_space >= short_edge_px {
+        // Horizontally oriented panel to the right of selection
+        vert = false;
+        ind_left = (screen_bounds
+            .right()
+            .min(selection_clipped.right() + max_distance + short_edge_px))
+            - short_edge_px;
+        ind_top = selection_clipped.bottom() - long_edge_px;
+    } else if left_space >= short_edge_px {
+        // Horizontally oriented panel to the left of selection
+        vert = false;
+        ind_left = (selection_clipped.left() - max_distance - short_edge_px).max(0);
+        ind_top = selection_clipped.bottom() - long_edge_px;
+    } else {
+        // Inside capture rect
+        vert = true;
+        ind_left = selection_clipped.left() + selection_clipped.width() / 2 - long_edge_px / 2;
+        ind_top = selection_clipped.bottom() - short_edge_px - (max_distance * 2);
+    }
+
+    let horizontal_size = if vert { long_edge_px } else { short_edge_px };
+    let vertical_size = if vert { short_edge_px } else { long_edge_px };
+
+    // Clamp to screen bounds
+    if ind_left < screen_bounds.left() {
+        ind_left = screen_bounds.left();
+    } else if ind_left + horizontal_size > screen_bounds.right() {
+        ind_left = screen_bounds.right() - horizontal_size;
+    }
+
+    // Construct the desired bounding rect for the panel
+    let desired_rect = ScreenRect::from_exact(ind_left, ind_top, ind_left + horizontal_size, ind_top + vertical_size);
+
+    // Update orientation based on what we calculated
+    let orientation = if vert { FlexDirection::Row } else { FlexDirection::Column };
+
+    // Return the entity, position, and orientation
+    (*camera_entity, desired_rect.top_left().to_f32(), orientation, *dpi_zoom)
+}
+
+pub fn buttonpanel_update(
+    mut commands: Commands,
+    mut queries: ParamSet<(
+        Query<(Entity, &mut Node, &mut TargetCamera), With<ButtonPanelRootTag>>,
+        Query<(Entity, &mut Node), With<ButtonPanelButtonTag>>,
+    )>,
+    camera_entities: Res<CameraEntities>,
+    accents: Res<AccentColors>,
+    svg_data: Res<ButtonSvgData>,
+    capture: Res<CaptureState>,
+    asset_server: Res<AssetServer>,
+    mouse: Res<MousePosition>,
+) {
+    let ideal_position = if let Some(selection_rect) = capture.selection {
+        let selection_rect = mouse
+            .get_selection_in_progress()
+            .unwrap_or(selection_rect);
+        Some(get_ideal_position(&camera_entities, selection_rect))
+    } else {
+        None
+    };
+
+    if let Ok(mut e) = queries.p0().get_single_mut() {
+        if capture.selection.is_none() {
+            commands.entity(e.0).despawn_recursive();
+        } else if let Some((entity, position, orientation, dpi_zoom)) = ideal_position {
+            e.1.flex_direction = orientation;
+            e.1.left = Val::Px(position.x);
+            e.1.top = Val::Px(position.y);
+            e.2 .0 = entity;
+        }
+    } else {
+        if let Some((entity, position, orientation, dpi_zoom)) = ideal_position {
+            buttonpanel_spawn(commands, entity, accents, svg_data, asset_server, position, orientation);
+        }
+    }
 }

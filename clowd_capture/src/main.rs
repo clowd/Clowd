@@ -62,7 +62,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Update, startup_animation)
         .add_systems(PreUpdate, mouse_update)
-        .add_systems(Update, (window_created, background_update))
+        .add_systems(Update, (window_created, background_update, buttonpanel::buttonpanel_update))
         .add_systems(Update, (selection::selection_update, crosshair::crosshair_update))
         .add_systems(Update, handle_keypress.before(iyes_perf_ui::PerfUiSet::Setup))
         .run();
@@ -106,7 +106,7 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             .spawn(Window {
                 title: "Clowd Capture".to_owned(),
                 resolution: WindowResolution::new(width, height),
-                present_mode: PresentMode::Immediate,
+                present_mode: PresentMode::AutoNoVsync,
                 desired_maximum_frame_latency: std::num::NonZero::new(1),
                 focused: i == 0,
                 position: WindowPosition::At(IVec2::new(x, y)),
