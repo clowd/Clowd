@@ -267,32 +267,41 @@ fn background_update(
     }
 
     if let Ok(mut e) = queries.p2().get_single_mut() {
-        let capture_transform = if let Some(capture_rect) = capture.selection {
-            let capture_transform =
-                Transform2D::<f32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop.0.to_f32().top_left().to_vector());
-            let capture_rect = capture_transform.outer_transformed_rect(&capture_rect.to_f32());
-            e.0.color.set_alpha(1.0);
-            e.0.rect = Some(capture_rect.to_bevy());
+        let selection_rect = capture
+            .selection
+            .map_or_else(|| mouse.get_selection_in_progress(), |v| Some(v));
 
-            Transform2D::<f32, ScreenUnit, ScreenUnit>::identity()
-                .then_translate(Vector2D::new(capture_rect.width() / 2.0, capture_rect.height() / 2.0))
-                .then_translate(Vector2D::new(desktop_bounds.left(), desktop_bounds.top()))
-                .then_translate(capture_rect.top_left().to_vector())
-                .then_translate(-pos.to_vector())
-                .then_scale(zoom, zoom)
-                .then_translate(pos.to_vector())
-                .then_scale(1.0, -1.0)
+        let mut transform = None;
+        if let Some(capture_rect) = selection_rect {
+            if capture_rect.width() > 0 && capture_rect.height() > 0 {
+                let capture_transform =
+                    Transform2D::<f32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop.0.to_f32().top_left().to_vector());
+                let capture_rect = capture_transform.outer_transformed_rect(&capture_rect.to_f32());
+                e.0.color.set_alpha(1.0);
+                e.0.rect = Some(capture_rect.to_bevy());
+                transform = Some(
+                    Transform2D::<f32, ScreenUnit, ScreenUnit>::identity()
+                        .then_translate(Vector2D::new(capture_rect.width() / 2.0, capture_rect.height() / 2.0))
+                        .then_translate(Vector2D::new(desktop_bounds.left(), desktop_bounds.top()))
+                        .then_translate(capture_rect.top_left().to_vector())
+                        .then_translate(-pos.to_vector())
+                        .then_scale(zoom, zoom)
+                        .then_translate(pos.to_vector())
+                        .then_scale(1.0, -1.0),
+                );
+            }
+        }
+
+        if let Some(transform) = transform {
+            let new_origin = transform.transform_point(ScreenPointF::new(0.0, 0.0));
+            let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGCOLOR).with_scale(Vec3::new(zoom, zoom, 1.0));
+            e.1.translation = transform.translation;
+            e.1.scale = transform.scale;
+            e.1.rotation = transform.rotation;
         } else {
             e.0.color.set_alpha(0.0);
             e.0.rect = None;
-            image_transform
-        };
-
-        let new_origin = capture_transform.transform_point(ScreenPointF::new(0.0, 0.0));
-        let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGCOLOR).with_scale(Vec3::new(zoom, zoom, 1.0));
-        e.1.translation = transform.translation;
-        e.1.scale = transform.scale;
-        e.1.rotation = transform.rotation;
+        }
     }
 }
 
@@ -303,7 +312,7 @@ fn mouse_update(
     // mut window: Query<&mut Window>,
     keyboard: Res<ButtonInput<KeyCode>>,
     buttons: Res<ButtonInput<MouseButton>>,
-    _first_render: Res<FirstRenderTime>,
+    first_render: Option<Res<FirstRenderTime>>,
 ) {
     if capture.selection.is_none() {
         for ev in scroll.read() {
@@ -334,17 +343,19 @@ fn mouse_update(
         mouse.set_zoom(1.0);
     }
     mouse.update_position();
-    mouse.set_anchored(capture.selection.is_none());
+
+    if first_render.is_some() {
+        mouse.set_anchored(capture.selection.is_none());
+    }
 
     if capture.selection.is_none() {
-        let pos = mouse.get_position();
         if buttons.just_released(MouseButton::Left) {
             if let Some(selection) = mouse.get_selection_in_progress() {
                 capture.selection = Some(selection);
             }
-            mouse.set_button_state(MouseState::Up);
+            mouse.button_up();
         } else if buttons.just_pressed(MouseButton::Left) {
-            mouse.set_button_state(MouseState::StartSel(pos));
+            mouse.start_selection();
         }
     }
 }
