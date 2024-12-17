@@ -72,11 +72,12 @@ pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
             let g = buffer[idx + 1] as f32;
             let r = buffer[idx + 2] as f32;
             let a = buffer[idx + 3];
-            let gray = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+            let gray_val = (0.299 * r + 0.587 * g + 0.114 * b);
+            let gray_val = (gray_val * 0.65) as u8; // darken by 35%
 
-            rgba[0] = gray;
-            rgba[1] = gray;
-            rgba[2] = gray;
+            rgba[0] = gray_val;
+            rgba[1] = gray_val;
+            rgba[2] = gray_val;
             rgba[3] = a;
         });
 

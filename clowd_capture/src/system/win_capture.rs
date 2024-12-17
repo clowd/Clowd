@@ -166,7 +166,8 @@ fn to_rgba_image(
             let a = buffer[idx + 3];
 
             // Convert to grayscale
-            let gray_val = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+            let gray_val = 0.299 * r + 0.587 * g + 0.114 * b;
+            let gray_val = (gray_val * 0.65) as u8; // darken by 35%
             gray[0] = gray_val;
             gray[1] = gray_val;
             gray[2] = gray_val;
