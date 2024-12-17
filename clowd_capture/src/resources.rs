@@ -16,9 +16,6 @@ pub struct ImageGrayTag;
 pub struct ImageColorTag;
 
 #[derive(Component)]
-pub struct ImageIntroOverlayTag;
-
-#[derive(Component)]
 pub struct WindowCameraTag;
 
 pub const Z_BGGRAY: f32 = 0.0;
