@@ -58,9 +58,9 @@ pub fn selection_update(
     accents: Res<AccentColors>,
     time: Res<Time>,
 ) {
-    let selection_rect = capture
-        .selection
-        .map_or_else(|| mouse.get_selection_in_progress(), |v| Some(v));
+    let selection_rect = mouse
+        .get_selection_in_progress()
+        .map_or_else(|| capture.selection, |v| Some(v));
 
     if let Some(selection_rect) = selection_rect {
         let pos = mouse.get_position();
