@@ -30,7 +30,7 @@ pub const Z_UI: f32 = 4.0;
 pub const Z_DEBUG: f32 = 5.0;
 
 #[derive(Resource)]
-pub struct CameraEntities(pub Vec<(Entity, ScreenRect, Transform, f32)>);
+pub struct CameraEntities(pub Vec<(Entity, ScreenRect, Transform, f32, bool)>);
 
 #[derive(Resource)]
 pub struct VirtualDesktop(pub ScreenRect);
@@ -230,6 +230,7 @@ impl PrimaryCamera {
 pub struct AccentColors {
     pub accent_light: Color,
     pub accent_dark: Color,
+    pub panel_gray: Color,
 }
 
 impl Default for AccentColors {
@@ -237,6 +238,7 @@ impl Default for AccentColors {
         Self {
             accent_light: Color::srgb(0.0, 175.0 / 255.0, 240.0 / 255.0),
             accent_dark: Color::srgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
+            panel_gray: Color::srgb(0.216, 0.216, 0.216),
         }
     }
 }

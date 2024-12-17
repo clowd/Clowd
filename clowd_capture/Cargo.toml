@@ -38,6 +38,7 @@ bevy_prototype_lyon = { git = "https://github.com/Nilirad/bevy_prototype_lyon.gi
 iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git", rev = "d8f3cbb2ec486b85a86b21e1aa32dcebd26ac884" }
 spin_sleep = "1.0"
 raw-window-handle = "0.6"
+resvg = "0.44.0"
 
 [target.'cfg(target_os="macos")'.dependencies]
 xcap = "0.1.0"
