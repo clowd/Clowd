@@ -112,9 +112,6 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             .spawn(Window {
                 title: "Clowd Capture".to_owned(),
                 resolution: WindowResolution::new(width, height),
-                #[cfg(target_os = "windows")]
-                present_mode: PresentMode::Mailbox,
-                #[cfg(target_os = "macos")]
                 present_mode: PresentMode::Immediate,
                 desired_maximum_frame_latency: std::num::NonZero::new(1),
                 focused: i == 0,
