@@ -10,26 +10,22 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "clowd_ui",
-        "width": 800,
-        "height": 600
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
   },
   "bundle": {
-    "active": true,
+    "active": false,
     "targets": "all",
     "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "../../assets/regular/regular-64x64.png",
+      "../../assets/regular/regular-48x48.png",
+      "../../assets/regular/regular-32x32.png",
+      "../../assets/regular/regular-24x24.png",
+      "../../assets/regular/regular-20x20.png",
+      "../../assets/regular/regular-16x16.png",
+      "../../assets/regular/regular.ico"
     ]
   }
 }
