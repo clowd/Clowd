@@ -14,7 +14,7 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Dwm",
     "Win32_System_SystemInformation",
 ] }
-
+clap = { version = "4.5", features = ["derive"] }
 rayon = "1.5"
 num = "0.4.3"
 bevy = { version = "0.15.0", default-features = false, features = [
@@ -40,6 +40,8 @@ resvg = "0.44.0"
 rfd = "0.15.1"
 arboard = "3.4.1"
 dirs = "5.0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
 
 [target.'cfg(target_os="macos")'.dependencies]
 xcap = "0.1.0"

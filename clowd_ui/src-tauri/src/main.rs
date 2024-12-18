@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod capture;
 mod commands;
 mod settings;
 
@@ -31,35 +32,12 @@ lazy_static! {
 fn action_exit_app(app: AppHandle) {
     let settings = app.state::<ClowdSettingsMutex>();
     let settings = settings.read().unwrap();
-    if let Err(e) = settings.save() {
-        error!("Error saving settings: {}", e);
-    }
-
+    settings.save();
     EXIT_REQUESTED.store(true, std::sync::atomic::Ordering::Relaxed);
     app.exit(0);
 }
 
 fn action_start_capture(app: AppHandle) {
-    fn start_capture(app: AppHandle, session_dir: PathBuf, name_template: String) -> Result<()> {
-        let mut capture_exe = std::env::current_exe()?;
-        capture_exe.pop();
-        capture_exe.push("clowd_capture.exe");
-
-        let now = Local::now();
-        let name = now.format(&name_template).to_string();
-
-        let mut cmd = std::process::Command::new(capture_exe)
-            .arg("--sessionDir")
-            .arg(session_dir)
-            .arg("--sessionName")
-            .arg(name)
-            .spawn()?;
-
-        cmd.wait()?;
-
-        Ok(())
-    }
-
     let (session_dir, name_template) = {
         let settings = app.state::<ClowdSettingsMutex>();
         let settings = settings.read().unwrap();
@@ -67,13 +45,27 @@ fn action_start_capture(app: AppHandle) {
     };
 
     std::thread::spawn(move || {
-        if let Err(e) = start_capture(app, session_dir, name_template) {
-            MessageDialog::new()
-                .set_title("Capture Error")
-                .set_description(&format!("Error starting capture: {}", e))
-                .set_buttons(rfd::MessageButtons::Ok)
-                .set_level(rfd::MessageLevel::Error)
-                .show();
+        let app = app.clone();
+
+        match capture::start_capture_blocking(session_dir, name_template) {
+            Ok(res) => match res {
+                capture::CaptureResult::SaveFile(last_dir) => {
+                    let settings = app.state::<ClowdSettingsMutex>();
+                    let mut settings = settings.write().unwrap();
+                    settings.last_capture_save_dir = PathBuf::from(last_dir);
+                    settings.save()
+                }
+                capture::CaptureResult::Edit(image_path) => {}
+                _ => {}
+            },
+            Err(e) => {
+                MessageDialog::new()
+                    .set_title("Capture Error")
+                    .set_description(&format!("Error starting capture: {}", e))
+                    .set_buttons(rfd::MessageButtons::Ok)
+                    .set_level(rfd::MessageLevel::Error)
+                    .show();
+            }
         }
     });
 }

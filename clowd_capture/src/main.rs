@@ -1,3 +1,4 @@
+mod cli;
 mod entities;
 mod exit;
 mod geometry;
@@ -24,6 +25,7 @@ use bevy::{
 };
 
 use bevy_prototype_lyon::prelude::*;
+use clap::Parser;
 use euclid::Transform2D;
 use euclid::Vector2D;
 use iyes_perf_ui::prelude::*;
@@ -31,6 +33,22 @@ use raw_window_handle::RawWindowHandle;
 use system::SystemInterop;
 
 fn main() {
+    let args = cli::ProgramArgs::parse();
+    let mut accents = AccentColors::default();
+
+    if let Some(accent) = &args.accentColor {
+        match cli::cli_parse_color(accent) {
+            Ok((color, dark, light)) => {
+                accents.accent = color;
+                accents.accent_dark = dark;
+                accents.accent_light = light;
+            }
+            Err(e) => {
+                error!("Error parsing accent color: {}", e);
+            }
+        }
+    }
+
     App::new()
         .add_plugins(
             DefaultPlugins
@@ -54,9 +72,10 @@ fn main() {
         .add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin)
         .add_plugins(PerfUiPlugin)
         .add_plugins(ShapePlugin)
+        .insert_resource(args)
+        .insert_resource(accents)
         .init_resource::<MousePosition>()
         .init_resource::<CaptureState>()
-        .init_resource::<AccentColors>()
         .init_resource::<VirtualDesktop>()
         .add_systems(PreStartup, buttonpanel::buttonpanel_init)
         .add_systems(Startup, setup)
@@ -352,6 +371,7 @@ fn handle_actions(
     camera: Res<PrimaryCamera>,
     screenshot: Res<RawScreenshotData>,
     desktop: Res<VirtualDesktop>,
+    args: Res<cli::ProgramArgs>,
 ) {
     let mut exit_app = || {
         for mut window in window.iter_mut() {
@@ -394,7 +414,11 @@ fn handle_actions(
                     let selection = capture_transform.outer_transformed_rect(&capture);
                     commands.insert_resource(exit::AfterExitAction {
                         screenshot: screenshot.0.clone(),
-                        selection,
+                        screenshot_selection: selection,
+                        raw_selection: capture,
+                        capture_path: args.capturePath.clone(),
+                        result_path: args.resultPath.clone(),
+                        last_save_dir: args.lastSaveDir.clone(),
                         action: action.clone(),
                     });
                     exit_app();
