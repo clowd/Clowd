@@ -1,6 +1,5 @@
 mod entities;
 mod geometry;
-mod plugins;
 mod resources;
 mod system;
 
