@@ -63,12 +63,18 @@ impl Default for ClowdSettings {
 }
 
 impl ClowdSettings {
-    pub fn save(&self) -> Result<()> {
+    pub fn try_save(&self) -> Result<()> {
         let parent_dir = self.session_dir.parent().unwrap();
         let settings_path = parent_dir.join("clowd_settings.json");
         let s = serde_json::to_string_pretty(self)?;
         std::fs::write(settings_path, s)?;
         Ok(())
+    }
+
+    pub fn save(&self) {
+        if let Err(e) = self.try_save() {
+            error!("Error saving settings: {}", e);
+        }
     }
 }
 
