@@ -21,7 +21,7 @@
     <ProjectName>Clowd.NativeDX</ProjectName>
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -53,9 +53,9 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions);CLOWD_VERSION</PreprocessorDefinitions>
       <!--<AdditionalIncludeDirectories>$(ProjectDir)third-party\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>-->
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>4244;4267;4838;4305;4996</DisableSpecificWarnings>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -71,7 +71,7 @@
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <!--<AdditionalIncludeDirectories>$(ProjectDir)third-party\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>-->
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <DisableSpecificWarnings>4244;4267;4838;4305;4996</DisableSpecificWarnings>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -81,6 +81,7 @@
     </Link>-->
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="argh.h" />
     <ClInclude Include="BorderWindow.h" />
     <ClInclude Include="CursorInfoEx.h" />
     <ClInclude Include="DxOutputDevice.h" />
@@ -121,6 +122,7 @@
     <ClCompile Include="DxOutputDevice.cpp" />
     <ClCompile Include="DxScreenCapture.cpp" />
     <ClCompile Include="exports.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="NativeBitmap.cpp" />
     <ClCompile Include="outline-text\BmpOutlineText.cpp">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)</AdditionalIncludeDirectories>

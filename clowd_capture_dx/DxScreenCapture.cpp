@@ -199,7 +199,7 @@ DxScreenCapture::DxScreenCapture(captureArgs* options)
 {
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
     memcpy(&_options, options, sizeof(captureArgs));
-    mainThread = (HANDLE)_beginthreadex(NULL, 0, MessagePumpProc, static_cast<LPVOID>(this), 0, &mainThreadId);
+    //mainThread = (HANDLE)_beginthreadex(NULL, 0, MessagePumpProc, static_cast<LPVOID>(this), 0, &mainThreadId);
 }
 
 DxScreenCapture::~DxScreenCapture()
@@ -208,12 +208,12 @@ DxScreenCapture::~DxScreenCapture()
         Close(true);
 }
 
-unsigned int __stdcall DxScreenCapture::MessagePumpProc(void* lpParam)
-{
-    DxScreenCapture* pThis = static_cast<DxScreenCapture*>(lpParam);
-    pThis->RunMessagePump();
-    return 0;
-}
+//unsigned int __stdcall DxScreenCapture::MessagePumpProc(void* lpParam)
+//{
+//    DxScreenCapture* pThis = static_cast<DxScreenCapture*>(lpParam);
+//    pThis->RunMessagePump();
+//    return 0;
+//}
 
 void DxScreenCapture::RunMessagePump()
 {
@@ -579,7 +579,7 @@ void DxScreenCapture::RunRenderLoop(const render_info& wi, const DxDisplay& mon,
                         dc->SetTransform(defaultMatrix);
 
                         dc->DrawImage(widx);
-                        for each (auto & intersect in swnd->obstructionRects)
+                        for (RECT intersect : swnd->obstructionRects)
                         {
                             auto pt = D2D1::Point2F(intersect.left - swnd->rcWorkspace.left + cropX, intersect.top - swnd->rcWorkspace.top + cropY);
                             dc->DrawImage(bitmapBlurred, pt, Rect2D2D1(&intersect), D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR, D2D1_COMPOSITE_MODE_BOUNDED_SOURCE_COPY);
@@ -1871,8 +1871,8 @@ void DxScreenCapture::Close(bool waitForExit)
     if (native != nullptr && native->disposed == 0 && primaryWindow)
         PostMessage(primaryWindow, WMEX_DESTROY, 0, 0);
 
-    if (waitForExit)
-        WaitForSingleObject(mainThread, 5000);
+    //if (waitForExit)
+    //    WaitForSingleObject(mainThread, 5000);
 }
 
 //void DxScreenCapture::WriteToPointer(void* scan0, int dataSize)

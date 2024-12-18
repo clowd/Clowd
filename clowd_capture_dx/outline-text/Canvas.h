@@ -388,7 +388,7 @@ private:
 	@param source color in ARGB
 	@return destination color
 	*/
-	static inline UINT Canvas::PreMultipliedAlphablend(UINT dest, UINT source);
+	static inline UINT PreMultipliedAlphablend(UINT dest, UINT source);
 
 };
 
