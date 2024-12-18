@@ -1,2 +1,5 @@
 /target
-.idea
+.idea/
+.vs/
+x64/
+bin/
