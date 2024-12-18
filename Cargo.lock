@@ -1668,8 +1668,10 @@ checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-targets 0.52.6",
 ]
 
@@ -1722,6 +1724,14 @@ dependencies = [
 name = "clowd_ui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "arboard",
+ "chrono",
+ "dirs",
+ "global-hotkey",
+ "lazy_static",
+ "log",
+ "rfd",
  "serde",
  "serde_json",
  "tauri",
@@ -3069,6 +3079,23 @@ name = "glob"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
+
+[[package]]
+name = "global-hotkey"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b00d88f1be7bf4cd2e61623ce08e84be2dfa4eab458e5d632d3dab95f16c1f64"
+dependencies = [
+ "crossbeam-channel",
+ "keyboard-types",
+ "objc2",
+ "objc2-app-kit",
+ "once_cell",
+ "serde",
+ "thiserror 1.0.69",
+ "windows-sys 0.59.0",
+ "x11-dl",
+]
 
 [[package]]
 name = "glow"

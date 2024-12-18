@@ -11,6 +11,7 @@ fn main() {
         .set_manifest_file("app.manifest")
         .set_version_info(winres::VersionInfo::PRODUCTVERSION, ver)
         .set_version_info(winres::VersionInfo::FILEVERSION, ver)
+        .set_icon("../assets/regular/regular.ico")
         .set("CompanyName", "Clowd")
         .set("ProductName", "Clowd")
         .set("ProductVersion", &version)
