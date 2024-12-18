@@ -41,7 +41,7 @@ fn spawn_selection(mut commands: Commands, rect: ScreenRectF, accents: Res<Accen
     ));
 
     commands.spawn((
-        get_dash_shape(rect, accents.accent_dark, time.elapsed_secs()),
+        get_dash_shape(rect, accents.accent, time.elapsed_secs()),
         SelectionBorderDash,
         Transform::from_xyz(0.0, 0.0, Z_SELECTIONBORDER_DASH),
     ));
@@ -80,7 +80,7 @@ pub fn selection_update(
                 *e.1 = get_bg_shape(selection_rect);
             }
             if let Ok(mut e) = queries.p1().get_single_mut() {
-                *e.1 = get_dash_shape(selection_rect, accents.accent_dark, time.elapsed_secs());
+                *e.1 = get_dash_shape(selection_rect, accents.accent, time.elapsed_secs());
             }
         }
     } else {
