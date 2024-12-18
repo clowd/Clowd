@@ -372,6 +372,7 @@ fn handle_actions(
     screenshot: Res<RawScreenshotData>,
     desktop: Res<VirtualDesktop>,
     args: Res<cli::ProgramArgs>,
+    mouse: Res<MousePosition>,
 ) {
     let mut exit_app = || {
         for mut window in window.iter_mut() {
@@ -385,6 +386,7 @@ fn handle_actions(
         (&[KeyCode::KeyC, KeyCode::Insert], UserAction::Copy),
         (&[KeyCode::KeyX, KeyCode::Escape, KeyCode::F4], UserAction::Exit),
         (&[KeyCode::KeyD], UserAction::ToggleDebug),
+        (&[KeyCode::KeyB, KeyCode::KeyH], UserAction::SelectColor),
         (&[KeyCode::KeyR, KeyCode::Delete], UserAction::Reset),
         (&[KeyCode::KeyV], UserAction::Video),
         (&[KeyCode::KeyE, KeyCode::Enter, KeyCode::KeyP], UserAction::Edit),
@@ -407,18 +409,19 @@ fn handle_actions(
 
     if let Some((_, action)) = current_action {
         match action {
-            UserAction::Save | UserAction::Copy | UserAction::Video | UserAction::Edit => {
+            UserAction::Save | UserAction::Copy | UserAction::Video | UserAction::Edit | UserAction::SelectColor => {
                 if let Some(capture) = capture.selection {
                     let capture_transform =
                         Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop.0.top_left().to_vector());
+                    let mouse = capture_transform.transform_point(mouse.get_position().to_i32());
                     let selection = capture_transform.outer_transformed_rect(&capture);
                     commands.insert_resource(exit::AfterExitAction {
                         screenshot: screenshot.0.clone(),
                         screenshot_selection: selection,
+                        screenshot_mouse_pt: mouse,
                         raw_selection: capture,
                         capture_path: args.capture_path.clone(),
                         result_path: args.result_path.clone(),
-                        last_save_dir: args.last_save_dir.clone(),
                         action: action.clone(),
                     });
                     exit_app();

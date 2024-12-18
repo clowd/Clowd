@@ -1,13 +1,11 @@
-use std::path::PathBuf;
-
 use arboard::{Clipboard, ImageData};
 use bevy::prelude::Resource;
-use image::DynamicImage;
-use rfd::{FileDialog, MessageDialog};
+use image::{DynamicImage, GenericImageView};
+use rfd::MessageDialog;
 
 use crate::{
     cli::{self, ProgramResultRect},
-    ScreenRect, UserAction,
+    ScreenPoint, ScreenRect, UserAction,
 };
 
 #[derive(Resource)]
@@ -15,10 +13,10 @@ pub struct AfterExitAction {
     pub screenshot: DynamicImage,
     pub screenshot_selection: ScreenRect,
     pub raw_selection: ScreenRect,
+    pub screenshot_mouse_pt: ScreenPoint,
     pub action: UserAction,
     pub capture_path: String,
     pub result_path: String,
-    pub last_save_dir: Option<String>,
 }
 
 impl Drop for AfterExitAction {
@@ -59,40 +57,64 @@ impl Drop for AfterExitAction {
                     let _ = cli::write_result_file(cli::ProgramResult::CopyToClipboard, &self.result_path);
                 }
             },
-            UserAction::Save => {
-                let initial_dir = self
-                    .last_save_dir
-                    .clone()
-                    .map(|f| PathBuf::from(f))
-                    .unwrap_or_else(|| dirs::picture_dir().unwrap_or_else(|| dirs::home_dir().unwrap()));
+            // UserAction::Save => {
+            //     let initial_dir = self
+            //         .last_save_dir
+            //         .clone()
+            //         .map(|f| PathBuf::from(f))
+            //         .unwrap_or_else(|| dirs::picture_dir().unwrap_or_else(|| dirs::home_dir().unwrap()));
 
-                let file_opt = FileDialog::new()
-                    .set_title("Save Image")
-                    .add_filter("PNG", &["png"])
-                    .add_filter("JPEG", &["jpg", "jpeg", "jfif"])
-                    .add_filter("BMP", &["bmp"])
-                    .add_filter("TIFF", &["tiff", "tif"])
-                    .add_filter("GIF", &["gif"])
-                    .add_filter("WEBP", &["webp"])
-                    .add_filter("AVIF", &["avif"])
-                    .set_directory(initial_dir)
-                    .save_file();
+            //     let file_opt = FileDialog::new()
+            //         .set_title("Save Image")
+            //         .add_filter("PNG", &["png"])
+            //         .add_filter("JPEG", &["jpg", "jpeg", "jfif"])
+            //         .add_filter("BMP", &["bmp"])
+            //         .add_filter("TIFF", &["tiff", "tif"])
+            //         .add_filter("GIF", &["gif"])
+            //         .add_filter("WEBP", &["webp"])
+            //         .add_filter("AVIF", &["avif"])
+            //         .set_directory(initial_dir)
+            //         .save_file();
 
-                if let Some(file) = file_opt {
-                    if let Err(e) = cropped.save(&file) {
-                        MessageDialog::new()
-                            .set_title("Error: Save Image")
-                            .set_description(&format!("Failed to save image: {}", e))
-                            .set_buttons(rfd::MessageButtons::Ok)
-                            .set_level(rfd::MessageLevel::Error)
-                            .show();
-                    }
-                    let _ = cli::write_result_file(cli::ProgramResult::SaveFile(file.to_string_lossy().to_string()), &self.result_path);
-                } else {
-                    let _ = cli::write_result_file(cli::ProgramResult::Cancelled, &self.result_path);
+            //     if let Some(file) = file_opt {
+            //         if let Err(e) = cropped.save(&file) {
+            //             MessageDialog::new()
+            //                 .set_title("Error: Save Image")
+            //                 .set_description(&format!("Failed to save image: {}", e))
+            //                 .set_buttons(rfd::MessageButtons::Ok)
+            //                 .set_level(rfd::MessageLevel::Error)
+            //                 .show();
+            //         }
+            //         let _ = cli::write_result_file(cli::ProgramResult::SaveFile(file.to_string_lossy().to_string()), &self.result_path);
+            //     } else {
+            //         let _ = cli::write_result_file(cli::ProgramResult::Cancelled, &self.result_path);
+            //     }
+            // }
+            UserAction::SelectColor => {
+                let pt = self.screenshot_mouse_pt.to_u32();
+                let color = cropped.get_pixel(pt.x, pt.y);
+                let color = cli::ProgramResultColor {
+                    r: color[0],
+                    g: color[1],
+                    b: color[2],
+                };
+
+                if let Err(e) = cli::write_result_file(cli::ProgramResult::SelectColor(color), &self.result_path) {
+                    MessageDialog::new()
+                        .set_title("Error: Pick Color")
+                        .set_description(&format!("Failed to write result: {}", e))
+                        .set_buttons(rfd::MessageButtons::Ok)
+                        .set_level(rfd::MessageLevel::Error)
+                        .show();
                 }
             }
-            UserAction::Edit => {
+            UserAction::Edit | UserAction::Save => {
+                let action = if self.action == UserAction::Edit {
+                    cli::ProgramResult::Edit
+                } else {
+                    cli::ProgramResult::SaveFile
+                };
+
                 if let Err(e) = cropped.save(&self.capture_path) {
                     MessageDialog::new()
                         .set_title("Error: Save Image")
@@ -101,7 +123,7 @@ impl Drop for AfterExitAction {
                         .set_level(rfd::MessageLevel::Error)
                         .show();
                 } else {
-                    if let Err(e) = cli::write_result_file(cli::ProgramResult::Edit, &self.result_path) {
+                    if let Err(e) = cli::write_result_file(action, &self.result_path) {
                         MessageDialog::new()
                             .set_title("Error: Save Image")
                             .set_description(&format!("Failed to save image: {}", e))

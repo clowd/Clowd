@@ -51,7 +51,7 @@ CliColor util_parse_color(const string& input)
 void run(vector<string> arguments)
 {
     argh::parser cmdl;
-    cmdl.add_params({ "low-perf-mode", "last-save-dir", "accent-color ", "capture-path", "result-path" });
+    cmdl.add_params({ "accent-color ", "capture-path", "result-path" });
     cmdl.parse(arguments);
 
     cerr << std::endl;
@@ -62,7 +62,6 @@ void run(vector<string> arguments)
     if (help) {
         cerr << "Arguments: " << std::endl;
         cerr << "  -h, --help                 Show this help text" << std::endl;
-        cerr << "  --last-save-dir {filePath}   The last used save directory" << std::endl;
         cerr << "  --low-perf-mode              Disable animations & optimise for old devices" << std::endl;
         cerr << "  --accent-color              Accent color for crosshair, borders, UI etc." << std::endl;
         cerr << "  --capture-path {filePath}   Path to save the captured image" << std::endl;
@@ -72,8 +71,7 @@ void run(vector<string> arguments)
 
     bool lowPerfMode = cmdl["low-perf-mode"];
 
-    string lastSaveDir, accentColor, capturePath, resultPath;
-    lastSaveDir = cmdl("last-save-dir").str();
+    string accentColor, capturePath, resultPath;
     accentColor = cmdl("accent-color").str();
     capturePath = cmdl("capture-path").str();
     resultPath = cmdl("result-path").str();
