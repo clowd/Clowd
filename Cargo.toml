@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "clowd_capture",
+    "clowd_ui/src-tauri"
 ]
 
 [workspace.package]
