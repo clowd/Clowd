@@ -362,7 +362,7 @@ fn handle_actions(
 
     let actions: Vec<(&[KeyCode], UserAction)> = vec![
         (&[KeyCode::KeyS], UserAction::Save),
-        (&[KeyCode::KeyC], UserAction::Copy),
+        (&[KeyCode::KeyC, KeyCode::Insert], UserAction::Copy),
         (&[KeyCode::KeyX, KeyCode::Escape, KeyCode::F4], UserAction::Exit),
         (&[KeyCode::KeyD], UserAction::ToggleDebug),
         (&[KeyCode::KeyR, KeyCode::Delete], UserAction::Reset),
