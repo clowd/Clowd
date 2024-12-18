@@ -37,6 +37,9 @@ iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git", rev = "d
 spin_sleep = "1.0"
 raw-window-handle = "0.6"
 resvg = "0.44.0"
+rfd = "0.15.1"
+arboard = "3.4.1"
+dirs = "5.0.1"
 
 [target.'cfg(target_os="macos")'.dependencies]
 xcap = "0.1.0"
