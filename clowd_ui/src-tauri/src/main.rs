@@ -1,6 +1,168 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
+mod settings;
+
+use std::{path::PathBuf, sync::atomic::AtomicBool};
+
+use anyhow::Result;
+use chrono::Local;
+use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
+use lazy_static::lazy_static;
+use rfd::MessageDialog;
+use settings::{ClowdSettingsMutex, HotkeyManager};
+use tauri::{
+    image::Image,
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    AppHandle, Manager,
+};
+
+#[macro_use]
+extern crate anyhow;
+
+#[macro_use]
+extern crate log;
+
+lazy_static! {
+    static ref EXIT_REQUESTED: AtomicBool = AtomicBool::new(false);
+}
+
+fn action_exit_app(app: AppHandle) {
+    let settings = app.state::<ClowdSettingsMutex>();
+    let settings = settings.read().unwrap();
+    if let Err(e) = settings.save() {
+        error!("Error saving settings: {}", e);
+    }
+
+    EXIT_REQUESTED.store(true, std::sync::atomic::Ordering::Relaxed);
+    app.exit(0);
+}
+
+fn action_start_capture(app: AppHandle) {
+    fn start_capture(app: AppHandle, session_dir: PathBuf, name_template: String) -> Result<()> {
+        let mut capture_exe = std::env::current_exe()?;
+        capture_exe.pop();
+        capture_exe.push("clowd_capture.exe");
+
+        let now = Local::now();
+        let name = now.format(&name_template).to_string();
+
+        let mut cmd = std::process::Command::new(capture_exe)
+            .arg("--sessionDir")
+            .arg(session_dir)
+            .arg("--sessionName")
+            .arg(name)
+            .spawn()?;
+
+        cmd.wait()?;
+
+        Ok(())
+    }
+
+    let (session_dir, name_template) = {
+        let settings = app.state::<ClowdSettingsMutex>();
+        let settings = settings.read().unwrap();
+        (settings.session_dir.clone(), settings.filename_pattern.clone())
+    };
+
+    std::thread::spawn(move || {
+        if let Err(e) = start_capture(app, session_dir, name_template) {
+            MessageDialog::new()
+                .set_title("Capture Error")
+                .set_description(&format!("Error starting capture: {}", e))
+                .set_buttons(rfd::MessageButtons::Ok)
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+        }
+    });
+}
+
+fn action_reset_hotkeys(app: AppHandle) {
+    let hotkey_manger = app.state::<HotkeyManager>();
+    let (capture, colorpick) = {
+        let settings = app.state::<ClowdSettingsMutex>();
+        let settings = settings.read().unwrap();
+        (settings.hotkey_capture.clone(), settings.hotkey_colorpick.clone())
+    };
+
+    let capture_id = capture
+        .map(|h| h.id)
+        .unwrap_or(u32::max_value());
+    let colorpick_id = colorpick
+        .map(|h| h.id)
+        .unwrap_or(u32::max_value());
+
+    let to_register = vec![capture, colorpick]
+        .iter()
+        .filter(|h| h.is_some())
+        .map(|h| h.unwrap())
+        .collect::<Vec<_>>();
+
+    hotkey_manger.unregister_all();
+    hotkey_manger.register_all(to_register.as_slice());
+
+    let closure = move |e: GlobalHotKeyEvent| {
+        let app = app.clone();
+        if e.state == HotKeyState::Pressed {
+            match e.id {
+                id if id == capture_id => action_start_capture(app),
+                id if id == colorpick_id => {
+                    // todo
+                }
+                _ => {}
+            }
+        }
+    };
+
+    GlobalHotKeyEvent::set_event_handler(Some(closure));
+}
+
 fn main() {
-    clowd_ui_lib::run()
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .manage(HotkeyManager::default())
+        .manage(settings::load_settings_or_default())
+        .invoke_handler(tauri::generate_handler![commands::greet])
+        .setup(|app| {
+            let menu_capture = MenuItem::new(app, "Capture Screen", true, Some("PrtScr"))?;
+            let menu_quit = MenuItem::new(app, "Quit", true, Some("q"))?;
+            let menu = Menu::new(app)?;
+            menu.append(&menu_capture)?;
+            menu.append(&menu_quit)?;
+            TrayIconBuilder::new()
+                .icon(Image::from_bytes(include_bytes!("../../../assets/white/borderless-white.ico"))?)
+                .tooltip(env!("CARGO_PKG_DESCRIPTION"))
+                .menu(&menu)
+                // .on_tray_icon_event(handle_tray_event) TODO: double click should open settings
+                .on_menu_event(move |app, event| {
+                    let quit_id = menu_quit.id();
+                    let capture_id = menu_capture.id();
+                    match event.id {
+                        id if id == quit_id => action_exit_app(app.clone()),
+                        id if id == capture_id => action_start_capture(app.clone()),
+                        _ => {}
+                    }
+                })
+                .build(app)?;
+
+            action_reset_hotkeys(app.app_handle().clone());
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            // todo
+            match event {
+                tauri::RunEvent::ExitRequested {
+                    api,
+                    ..
+                } => {
+                    if !EXIT_REQUESTED.load(std::sync::atomic::Ordering::Relaxed) {
+                        api.prevent_exit();
+                    }
+                }
+                _ => {}
+            }
+        });
 }
