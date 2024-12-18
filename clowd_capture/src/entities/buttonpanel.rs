@@ -78,7 +78,7 @@ impl ButtonSvgData {
 }
 
 #[derive(Component)]
-pub struct ButtonPanelButtonTag;
+pub struct ButtonPanelButtonTag(pub bool);
 
 #[derive(Component)]
 pub struct ButtonPanelRootTag;
@@ -140,10 +140,21 @@ pub fn buttonpanel_init(mut commands: Commands, mut images: ResMut<Assets<Image>
     commands.insert_resource(buttons);
 }
 
+pub fn get_button_color(state: Interaction, accent: bool, accents: &Res<AccentColors>) -> Color {
+    match (state, accent) {
+        (Interaction::Pressed, true) => accents.accent_dark,
+        (Interaction::Pressed, false) => accents.panel_dark,
+        (Interaction::Hovered, true) => accents.accent_light,
+        (Interaction::Hovered, false) => accents.panel_light,
+        (Interaction::None, true) => accents.accent,
+        (Interaction::None, false) => accents.panel,
+    }
+}
+
 fn buttonpanel_spawn(
     mut commands: Commands,
     camera_entity: Entity,
-    accents: Res<AccentColors>,
+    accents: &Res<AccentColors>,
     svg_data: Res<ButtonSvgData>,
     asset_server: Res<AssetServer>,
     initial_point: ScreenPointF,
@@ -168,7 +179,15 @@ fn buttonpanel_spawn(
         ));
     }
 
-    fn spawn_button(builder: &mut ChildBuilder, text: &str, bg: Color, font: &Handle<Font>, icon: SvgIcon, svg_data: &Res<ButtonSvgData>) {
+    fn spawn_button(
+        builder: &mut ChildBuilder,
+        text: &str,
+        accent: bool,
+        font: &Handle<Font>,
+        icon: SvgIcon,
+        svg_data: &Res<ButtonSvgData>,
+        accents: &Res<AccentColors>,
+    ) {
         builder
             .spawn((
                 Node {
@@ -182,10 +201,13 @@ fn buttonpanel_spawn(
                         bottom: Val::Px(BUTTON_PADDING),
                     },
                     row_gap: Val::Px(4.0),
+
+                    // BackgroundColor(Color::BLACK),
                     ..default()
                 },
-                BackgroundColor(bg),
-                ButtonPanelButtonTag,
+                Button,
+                BackgroundColor(get_button_color(Interaction::None, accent, accents)),
+                ButtonPanelButtonTag(accent),
             ))
             .with_children(|builder| {
                 let (image, size) = svg_data.get(icon, 1.0);
@@ -229,12 +251,12 @@ fn buttonpanel_spawn(
             ButtonPanelRootTag,
         ))
         .with_children(|builder| {
-            spawn_button(builder, "Edit", accents.accent_light, &font, SvgIcon::Edit, &svg_data);
-            spawn_button(builder, "Video", accents.accent_light, &font, SvgIcon::Video, &svg_data);
-            spawn_button(builder, "Copy", accents.accent_light, &font, SvgIcon::Copy, &svg_data);
-            spawn_button(builder, "Save", accents.accent_light, &font, SvgIcon::Save, &svg_data);
-            spawn_button(builder, "Reset", accents.panel_gray, &font, SvgIcon::Reset, &svg_data);
-            spawn_button(builder, "Exit", accents.panel_gray, &font, SvgIcon::Exit, &svg_data);
+            spawn_button(builder, "Edit", true, &font, SvgIcon::Edit, &svg_data, &accents);
+            spawn_button(builder, "Video", true, &font, SvgIcon::Video, &svg_data, &accents);
+            spawn_button(builder, "Copy", true, &font, SvgIcon::Copy, &svg_data, &accents);
+            spawn_button(builder, "Save", true, &font, SvgIcon::Save, &svg_data, &accents);
+            spawn_button(builder, "Reset", false, &font, SvgIcon::Reset, &svg_data, &accents);
+            spawn_button(builder, "Exit", false, &font, SvgIcon::Exit, &svg_data, &accents);
         });
 }
 
@@ -323,7 +345,7 @@ pub fn buttonpanel_update(
     mut commands: Commands,
     mut queries: ParamSet<(
         Query<(Entity, &mut Node, &mut TargetCamera), With<ButtonPanelRootTag>>,
-        Query<(Entity, &mut Node), With<ButtonPanelButtonTag>>,
+        Query<(&Interaction, &mut BackgroundColor, &ButtonPanelButtonTag), (Changed<Interaction>, With<ButtonPanelButtonTag>)>,
     )>,
     camera_entities: Res<CameraEntities>,
     accents: Res<AccentColors>,
@@ -352,7 +374,11 @@ pub fn buttonpanel_update(
         }
     } else {
         if let Some((entity, position, orientation, dpi_zoom)) = ideal_position {
-            buttonpanel_spawn(commands, entity, accents, svg_data, asset_server, position, orientation);
+            buttonpanel_spawn(commands, entity, &accents, svg_data, asset_server, position, orientation);
         }
+    }
+
+    for (interaction, mut color, tag) in &mut queries.p1().iter_mut() {
+        *color = BackgroundColor(get_button_color(*interaction, tag.0, &accents));
     }
 }

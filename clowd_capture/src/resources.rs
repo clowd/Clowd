@@ -229,16 +229,22 @@ impl PrimaryCamera {
 #[derive(Resource)]
 pub struct AccentColors {
     pub accent_light: Color,
+    pub accent: Color,
     pub accent_dark: Color,
-    pub panel_gray: Color,
+    pub panel_dark: Color,
+    pub panel: Color,
+    pub panel_light: Color,
 }
 
 impl Default for AccentColors {
     fn default() -> Self {
         Self {
             accent_light: Color::srgb(0.0, 175.0 / 255.0, 240.0 / 255.0),
-            accent_dark: Color::srgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
-            panel_gray: Color::srgb(0.216, 0.216, 0.216),
+            accent: Color::srgb(0.0, 125.0 / 255.0, 180.0 / 255.0),
+            accent_dark: Color::srgb(0.0, 75.0 / 255.0, 120.0 / 255.0),
+            panel_dark: Color::srgb_u8(31, 31, 31),
+            panel: Color::srgb_u8(55, 55, 55),
+            panel_light: Color::srgb_u8(115, 115, 115),
         }
     }
 }
