@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::Local;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -35,20 +35,21 @@ pub fn start_capture_blocking(session_dir: PathBuf, name_template: String) -> Re
     let now = Local::now();
     let name = now.format(&name_template).to_string();
 
+    fs::create_dir_all(&session_dir)?;
     let capture_path = session_dir.join(name.clone() + ".png");
     let result_path = session_dir.join(name + ".result");
 
     let mut cmd = std::process::Command::new(capture_exe)
-        .arg("--capturePath")
+        .arg("--capture-path")
         .arg(&capture_path)
-        .arg("--resultPath")
+        .arg("--result-path")
         .arg(&result_path)
         .spawn()?;
 
     cmd.wait()?;
 
     if !result_path.exists() {
-        return Err(anyhow!("Capture failed, no result found. Check logs for a more detailed error."));
+        bail!("Capture failed, no result found. Check logs for a more detailed error.");
     }
 
     let result = std::fs::read_to_string(&result_path)?;
@@ -63,9 +64,7 @@ pub fn start_capture_blocking(session_dir: PathBuf, name_template: String) -> Re
         }
         ProgramResult::Edit => {
             if !capture_path.exists() {
-                return Err(anyhow!(
-                    "Capture failed, no output image found. Check logs for a more detailed error."
-                ));
+                bail!("Capture failed, no output image found. Check logs for a more detailed error.");
             }
             Ok(CaptureResult::Edit(capture_path.to_string_lossy().to_string()))
         }
