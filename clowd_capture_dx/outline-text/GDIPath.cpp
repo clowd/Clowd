@@ -165,6 +165,14 @@ bool GDIPath::GetStringPath(
 
 }
 
+Gdiplus::Point lp_to_point(LPPOINT point) {
+	return Gdiplus::Point(point->x, point->y);
+}
+
+Gdiplus::Point lp_to_point(tagPOINT point) {
+	return Gdiplus::Point(point.x, point.y);
+}
+
 void GDIPath::PolyDraw(
 	Gdiplus::GraphicsPath* pPath, 
 	CONST LPPOINT lppt, 
@@ -188,7 +196,7 @@ void GDIPath::PolyDraw(
 			break;
 
 		case PT_LINETO | PT_CLOSEFIGURE:
-			pPath->AddLine( pptPrev->x, pptPrev->y, lppt[nIndex].x, lppt[nIndex].y);
+			pPath->AddLine(lp_to_point(pptPrev), lp_to_point(lppt[nIndex]));
 			pptPrev = &lppt[nIndex];
 			if (pptLastMoveTo != NULL)
 			{
@@ -199,17 +207,17 @@ void GDIPath::PolyDraw(
 			break;
 
 		case PT_LINETO:
-			pPath->AddLine( pptPrev->x, pptPrev->y, lppt[nIndex].x, lppt[nIndex].y);
+			pPath->AddLine(lp_to_point(pptPrev), lp_to_point(lppt[nIndex]));
 			pptPrev = &lppt[nIndex];
 			break;
 
 		case PT_BEZIERTO | PT_CLOSEFIGURE:
 			//ASSERT(nIndex + 2 <= cCount);
 			pPath->AddBezier( 
-				pptPrev->x, pptPrev->y,
-				lppt[nIndex].x, lppt[nIndex].y,
-				lppt[nIndex+1].x, lppt[nIndex+1].y,
-				lppt[nIndex+2].x, lppt[nIndex+2].y );
+				lp_to_point(pptPrev),
+				lp_to_point(lppt[nIndex]),
+				lp_to_point(lppt[nIndex + 1]),
+				lp_to_point(lppt[nIndex + 2]));
 			nIndex += 2;
 			pptPrev = &lppt[nIndex];
 			if (pptLastMoveTo != NULL)
@@ -222,11 +230,11 @@ void GDIPath::PolyDraw(
 
 		case PT_BEZIERTO:
 			//ASSERT(nIndex + 2 <= cCount);
-			pPath->AddBezier( 
-				pptPrev->x, pptPrev->y,
-				lppt[nIndex].x, lppt[nIndex].y,
-				lppt[nIndex+1].x, lppt[nIndex+1].y,
-				lppt[nIndex+2].x, lppt[nIndex+2].y );
+			pPath->AddBezier(
+				lp_to_point(pptPrev),
+				lp_to_point(lppt[nIndex]),
+				lp_to_point(lppt[nIndex + 1]),
+				lp_to_point(lppt[nIndex + 2]));
 			nIndex += 2;
 			pptPrev = &lppt[nIndex];
 			break;
@@ -237,7 +245,7 @@ void GDIPath::PolyDraw(
 	// close it now.
 	if (pptLastMoveTo != NULL && nIndex > 1)
 	{
-		pPath->AddLine( pptPrev->x, pptPrev->y, pptLastMoveTo->x, pptLastMoveTo->y);
+		pPath->AddLine(lp_to_point(pptPrev), lp_to_point(pptLastMoveTo));
 		//pPath->CloseFigure();
 	}
 }

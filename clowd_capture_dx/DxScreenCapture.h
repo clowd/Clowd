@@ -65,15 +65,14 @@ private:
     int _vy;
     captureArgs _options;
     std::mutex sync;
-    HANDLE mainThread;
-    unsigned int mainThreadId;
+    //HANDLE mainThread;
+    //unsigned int mainThreadId;
     std::vector<render_info> windows;
     std::vector<std::exception> errors;
     HWND primaryWindow;
     mc_window_native* native;
 
-    static unsigned int __stdcall MessagePumpProc(void* lpParam);
-    void RunMessagePump();
+    //static unsigned int __stdcall MessagePumpProc(void* lpParam);
     static unsigned int __stdcall RenderThreadProc(void* lpParam);
     void RunRenderLoop(const render_info& wi, const DxDisplay& mon, const ScreenInfo& myscreen);
     static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -93,6 +92,7 @@ private:
 public:
     DxScreenCapture(captureArgs* options);
     ~DxScreenCapture();
+    void RunMessagePump();
     void Reset();
     void Close(bool waitForExit = false);
     System::String SaveSession(System::String sessionDirectory, System::String createdUtc);

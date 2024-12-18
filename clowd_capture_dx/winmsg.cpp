@@ -47,7 +47,7 @@ using namespace std;
 
 typedef struct {
 	unsigned long code;
-	wchar_t* text;
+	const wchar_t* text;
 } XMSGITEM;
 
 // These from https://wiki.winehq.org/List_Of_Windows_Messages
