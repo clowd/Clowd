@@ -8,6 +8,7 @@ use bevy::{
     window::SystemCursorIcon,
     winit::cursor::CursorIcon,
 };
+use image::DynamicImage;
 
 #[derive(Component)]
 pub struct ImageGrayTag;
@@ -31,6 +32,9 @@ pub const Z_DEBUG: f32 = 5.0;
 
 #[derive(Resource)]
 pub struct CameraEntities(pub Vec<(Entity, ScreenRect, Transform, f32, bool)>);
+
+#[derive(Resource)]
+pub struct RawScreenshotData(pub DynamicImage);
 
 #[derive(Resource)]
 pub struct VirtualDesktop(pub ScreenRect);
@@ -247,6 +251,17 @@ impl Default for AccentColors {
             panel_light: Color::srgb_u8(115, 115, 115),
         }
     }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum UserAction {
+    Copy,
+    Save,
+    Exit,
+    Edit,
+    Reset,
+    Video,
+    ToggleDebug,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -1,4 +1,5 @@
 mod entities;
+mod exit;
 mod geometry;
 mod resources;
 mod system;
@@ -71,6 +72,8 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let monitors = SystemInterop::all_monitor_bounds();
     let desktop_bounds = SystemInterop::virtual_desktop_bounds().to_f32();
     let (desktop_color_image, desktop_gray_image) = SystemInterop::capture_desktop();
+
+    commands.insert_resource(RawScreenshotData(desktop_color_image.clone()));
 
     info!("Desktop bounds: {:?}", desktop_bounds);
     let image_color = Image::from_dynamic(desktop_color_image, true, RenderAssetUsages::all());
@@ -347,76 +350,69 @@ fn handle_actions(
     debug_query: Query<Entity, With<PerfUiRoot>>,
     button_query: Query<(&Interaction, &buttonpanel::ButtonPanelButtonTag)>,
     camera: Res<PrimaryCamera>,
+    screenshot: Res<RawScreenshotData>,
+    desktop: Res<VirtualDesktop>,
 ) {
-    let mut actions: Vec<(&[KeyCode], buttonpanel::ButtonAction, Box<dyn FnOnce() -> ()>)> = Vec::new();
-    actions.push((
-        &[KeyCode::KeyS],
-        buttonpanel::ButtonAction::Save,
-        Box::new(|| {
-            // todo
-        }),
-    ));
-    actions.push((
-        &[KeyCode::KeyC],
-        buttonpanel::ButtonAction::Copy,
-        Box::new(|| {
-            // todo
-        }),
-    ));
-    actions.push((
-        &[KeyCode::KeyX, KeyCode::Escape, KeyCode::F4],
-        buttonpanel::ButtonAction::Exit,
-        Box::new(|| {
-            for mut window in window.iter_mut() {
-                window.visible = false;
-            }
-            exit.send(AppExit::Success);
-        }),
-    ));
-    actions.push((
-        &[KeyCode::KeyD],
-        buttonpanel::ButtonAction::None,
-        Box::new(|| {
-            if let Ok(e) = debug_query.get_single() {
-                commands.entity(e).despawn_recursive();
-            } else {
-                commands.spawn((PerfUiDefaultEntries::default(), camera.get()));
-            }
-        }),
-    ));
-    actions.push((
-        &[KeyCode::KeyR, KeyCode::Delete],
-        buttonpanel::ButtonAction::Reset,
-        Box::new(|| {
-            capture.selection = None;
-        }),
-    ));
-    actions.push((
-        &[KeyCode::KeyV],
-        buttonpanel::ButtonAction::Video,
-        Box::new(|| {
-            //todo
-        }),
-    ));
-    actions.push((
-        &[KeyCode::KeyE, KeyCode::Enter, KeyCode::KeyP],
-        buttonpanel::ButtonAction::Edit,
-        Box::new(|| {
-            //todo
-        }),
-    ));
+    let mut exit_app = || {
+        for mut window in window.iter_mut() {
+            window.visible = false;
+        }
+        exit.send(AppExit::Success);
+    };
 
-    let pressed_buttons: Vec<buttonpanel::ButtonAction> = button_query
-        .iter()
-        .filter(|(interaction, _)| **interaction == Interaction::Pressed)
-        .map(|(_, tag)| tag.action)
-        .collect();
+    let actions: Vec<(&[KeyCode], UserAction)> = vec![
+        (&[KeyCode::KeyS], UserAction::Save),
+        (&[KeyCode::KeyC], UserAction::Copy),
+        (&[KeyCode::KeyX, KeyCode::Escape, KeyCode::F4], UserAction::Exit),
+        (&[KeyCode::KeyD], UserAction::ToggleDebug),
+        (&[KeyCode::KeyR, KeyCode::Delete], UserAction::Reset),
+        (&[KeyCode::KeyV], UserAction::Video),
+        (&[KeyCode::KeyE, KeyCode::Enter, KeyCode::KeyP], UserAction::Edit),
+    ];
 
-    for (keys, action, func) in actions {
-        if keys.iter().any(|k| keyboard.pressed(*k)) {
-            func();
-        } else if buttons.just_pressed(MouseButton::Left) && pressed_buttons.contains(&action) {
-            func();
+    let pressed_buttons: Vec<UserAction> = if buttons.just_pressed(MouseButton::Left) {
+        button_query
+            .iter()
+            .filter(|(interaction, _)| **interaction == Interaction::Pressed)
+            .map(|(_, tag)| tag.action)
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let current_action = actions.iter().find(|(keys, action)| {
+        keys.iter()
+            .any(|k| keyboard.just_pressed(*k) || pressed_buttons.iter().any(|b| *b == *action))
+    });
+
+    if let Some((_, action)) = current_action {
+        match action {
+            UserAction::Save | UserAction::Copy | UserAction::Video | UserAction::Edit => {
+                if let Some(capture) = capture.selection {
+                    let capture_transform =
+                        Transform2D::<i32, ScreenUnit, ScreenUnit>::identity().then_translate(-desktop.0.top_left().to_vector());
+                    let selection = capture_transform.outer_transformed_rect(&capture);
+                    commands.insert_resource(exit::AfterExitAction {
+                        screenshot: screenshot.0.clone(),
+                        selection,
+                        action: action.clone(),
+                    });
+                    exit_app();
+                }
+            }
+            UserAction::Exit => {
+                exit_app();
+            }
+            UserAction::ToggleDebug => {
+                if let Ok(e) = debug_query.get_single() {
+                    commands.entity(e).despawn_recursive();
+                } else {
+                    commands.spawn((PerfUiDefaultEntries::default(), camera.get()));
+                }
+            }
+            UserAction::Reset => {
+                capture.selection = None;
+            }
         }
     }
 }

@@ -5,7 +5,7 @@ use image::RgbaImage;
 use resvg::{tiny_skia, usvg};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum ButtonAction {
+pub enum SvgIcon {
     None,
     #[allow(dead_code)]
     Clowd,
@@ -15,6 +15,20 @@ pub enum ButtonAction {
     Edit,
     Reset,
     Video,
+}
+
+impl SvgIcon {
+    pub fn from_action(action: UserAction) -> Self {
+        match action {
+            UserAction::Copy => SvgIcon::Copy,
+            UserAction::Save => SvgIcon::Save,
+            UserAction::Exit => SvgIcon::Exit,
+            UserAction::Edit => SvgIcon::Edit,
+            UserAction::Reset => SvgIcon::Reset,
+            UserAction::Video => SvgIcon::Video,
+            _ => SvgIcon::None,
+        }
+    }
 }
 
 #[derive(Resource)]
@@ -39,16 +53,16 @@ struct ButtonGroup {
 }
 
 impl ButtonSvgData {
-    pub fn get(&self, icon: ButtonAction, scale: f32) -> (Handle<Image>, f32) {
+    pub fn get(&self, icon: SvgIcon, scale: f32) -> (Handle<Image>, f32) {
         let group = match icon {
-            ButtonAction::None => &self.clowd,
-            ButtonAction::Clowd => &self.clowd,
-            ButtonAction::Copy => &self.copy,
-            ButtonAction::Save => &self.save,
-            ButtonAction::Exit => &self.exit,
-            ButtonAction::Edit => &self.edit,
-            ButtonAction::Reset => &self.reset,
-            ButtonAction::Video => &self.video,
+            SvgIcon::None => &self.clowd,
+            SvgIcon::Clowd => &self.clowd,
+            SvgIcon::Copy => &self.copy,
+            SvgIcon::Save => &self.save,
+            SvgIcon::Exit => &self.exit,
+            SvgIcon::Edit => &self.edit,
+            SvgIcon::Reset => &self.reset,
+            SvgIcon::Video => &self.video,
         };
 
         if scale < 1.01 {
@@ -72,7 +86,7 @@ impl ButtonSvgData {
 #[derive(Component)]
 pub struct ButtonPanelButtonTag {
     pub accent: bool,
-    pub action: ButtonAction,
+    pub action: UserAction,
 }
 
 #[derive(Component)]
@@ -179,7 +193,7 @@ fn buttonpanel_spawn(
         text: &str,
         accent: bool,
         font: &Handle<Font>,
-        icon: ButtonAction,
+        icon: UserAction,
         svg_data: &Res<ButtonSvgData>,
         accents: &Res<AccentColors>,
     ) {
@@ -208,7 +222,7 @@ fn buttonpanel_spawn(
                 },
             ))
             .with_children(|builder| {
-                let (image, size) = svg_data.get(icon, 1.0);
+                let (image, size) = svg_data.get(SvgIcon::from_action(icon), 1.0);
                 builder.spawn((
                     ImageNode {
                         image,
@@ -249,12 +263,12 @@ fn buttonpanel_spawn(
             ButtonPanelRootTag,
         ))
         .with_children(|builder| {
-            spawn_button(builder, "Edit", true, &font, ButtonAction::Edit, &svg_data, &accents);
-            spawn_button(builder, "Video", true, &font, ButtonAction::Video, &svg_data, &accents);
-            spawn_button(builder, "Copy", true, &font, ButtonAction::Copy, &svg_data, &accents);
-            spawn_button(builder, "Save", true, &font, ButtonAction::Save, &svg_data, &accents);
-            spawn_button(builder, "Reset", false, &font, ButtonAction::Reset, &svg_data, &accents);
-            spawn_button(builder, "Exit", false, &font, ButtonAction::Exit, &svg_data, &accents);
+            spawn_button(builder, "Edit", true, &font, UserAction::Edit, &svg_data, &accents);
+            spawn_button(builder, "Video", true, &font, UserAction::Video, &svg_data, &accents);
+            spawn_button(builder, "Copy", true, &font, UserAction::Copy, &svg_data, &accents);
+            spawn_button(builder, "Save", true, &font, UserAction::Save, &svg_data, &accents);
+            spawn_button(builder, "Reset", false, &font, UserAction::Reset, &svg_data, &accents);
+            spawn_button(builder, "Exit", false, &font, UserAction::Exit, &svg_data, &accents);
         });
 }
 
