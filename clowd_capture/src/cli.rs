@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use bevy::{color::Color, prelude::Resource};
 use clap::*;
 use serde::{Deserialize, Serialize};
@@ -8,15 +6,15 @@ use serde::{Deserialize, Serialize};
 #[command(version, about, long_about = None)]
 pub struct ProgramArgs {
     #[arg(long)]
-    pub capturePath: String,
+    pub capture_path: String,
     #[arg(long)]
-    pub resultPath: String,
+    pub result_path: String,
     #[arg(long)]
-    pub lastSaveDir: Option<String>,
+    pub last_save_dir: Option<String>,
     #[arg(long)]
-    pub accentColor: Option<String>,
+    pub accent_color: Option<String>,
     #[arg(long)]
-    pub lowPerfMode: Option<bool>,
+    pub low_perf_mode: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

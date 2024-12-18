@@ -36,7 +36,7 @@ fn main() {
     let args = cli::ProgramArgs::parse();
     let mut accents = AccentColors::default();
 
-    if let Some(accent) = &args.accentColor {
+    if let Some(accent) = &args.accent_color {
         match cli::cli_parse_color(accent) {
             Ok((color, dark, light)) => {
                 accents.accent = color;
@@ -416,9 +416,9 @@ fn handle_actions(
                         screenshot: screenshot.0.clone(),
                         screenshot_selection: selection,
                         raw_selection: capture,
-                        capture_path: args.capturePath.clone(),
-                        result_path: args.resultPath.clone(),
-                        last_save_dir: args.lastSaveDir.clone(),
+                        capture_path: args.capture_path.clone(),
+                        result_path: args.result_path.clone(),
+                        last_save_dir: args.last_save_dir.clone(),
                         action: action.clone(),
                     });
                     exit_app();

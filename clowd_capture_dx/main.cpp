@@ -51,7 +51,7 @@ CliColor util_parse_color(const string& input)
 void run(vector<string> arguments)
 {
     argh::parser cmdl;
-    cmdl.add_params({ "lowPerfMode", "lastSaveDir", "accentColor", "capturePath", "resultPath" });
+    cmdl.add_params({ "low-perf-mode", "last-save-dir", "accent-color ", "capture-path", "result-path" });
     cmdl.parse(arguments);
 
     cerr << std::endl;
@@ -62,21 +62,21 @@ void run(vector<string> arguments)
     if (help) {
         cerr << "Arguments: " << std::endl;
         cerr << "  -h, --help                 Show this help text" << std::endl;
-        cerr << "  --lastSaveDir {filePath}   The last used save directory" << std::endl;
-        cerr << "  --lowPerfMode              Disable animations & optimise for old devices" << std::endl;
-        cerr << "  --accentColor              Accent color for crosshair, borders, UI etc." << std::endl;
-        cerr << "  --capturePath {filePath}   Path to save the captured image" << std::endl;
-        cerr << "  --resultPath {filePath}    Path to save the result json" << std::endl;
+        cerr << "  --last-save-dir {filePath}   The last used save directory" << std::endl;
+        cerr << "  --low-perf-mode              Disable animations & optimise for old devices" << std::endl;
+        cerr << "  --accent-color              Accent color for crosshair, borders, UI etc." << std::endl;
+        cerr << "  --capture-path {filePath}   Path to save the captured image" << std::endl;
+        cerr << "  --result-path {filePath}    Path to save the result json" << std::endl;
         return;
     }
 
-    bool lowPerfMode = cmdl["lowPerfMode"];
+    bool lowPerfMode = cmdl["low-perf-mode"];
 
     string lastSaveDir, accentColor, capturePath, resultPath;
-    lastSaveDir = cmdl("lastSaveDir").str();
-    accentColor = cmdl("accentColor").str();
-    capturePath = cmdl("capturePath").str();
-    resultPath = cmdl("resultPath").str();
+    lastSaveDir = cmdl("last-save-dir").str();
+    accentColor = cmdl("accent-color").str();
+    capturePath = cmdl("capture-path").str();
+    resultPath = cmdl("result-path").str();
 
     if (accentColor.empty()) {
         accentColor = "0,125,180";
