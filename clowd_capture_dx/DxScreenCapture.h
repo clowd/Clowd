@@ -57,6 +57,20 @@ struct render_info
     HANDLE eventSignal;
 };
 
+typedef struct
+{
+    BYTE colorR;
+    BYTE colorG;
+    BYTE colorB;
+    BOOL animationDisabled;
+    BOOL obstructedWindowDisabled;
+    BOOL tipsDisabled;
+    wchar_t sessionDirectory[512];
+    wchar_t createdUtc[128];
+    RECT initialRect;
+    BOOL copyCursor;
+} captureArgs;
+
 class DxScreenCapture
 {
 

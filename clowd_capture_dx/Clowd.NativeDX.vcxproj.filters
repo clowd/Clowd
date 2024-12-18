@@ -54,9 +54,6 @@
     <ClInclude Include="json.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="exports.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="outline-text\TextOutlineStrategy.h">
       <Filter>Header Files\OutlineText</Filter>
     </ClInclude>
@@ -147,9 +144,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="BorderWindow.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="exports.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="outline-text\TextOutlineStrategy.cpp">

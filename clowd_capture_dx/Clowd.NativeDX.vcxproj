@@ -86,7 +86,6 @@
     <ClInclude Include="CursorInfoEx.h" />
     <ClInclude Include="DxOutputDevice.h" />
     <ClInclude Include="DxScreenCapture.h" />
-    <ClInclude Include="exports.h" />
     <ClInclude Include="json.hpp" />
     <ClInclude Include="NativeBitmap.h" />
     <ClInclude Include="outline-text\BmpOutlineText.h" />
@@ -121,7 +120,6 @@
     <ClCompile Include="CursorInfoEx.cpp" />
     <ClCompile Include="DxOutputDevice.cpp" />
     <ClCompile Include="DxScreenCapture.cpp" />
-    <ClCompile Include="exports.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="NativeBitmap.cpp" />
     <ClCompile Include="outline-text\BmpOutlineText.cpp">
