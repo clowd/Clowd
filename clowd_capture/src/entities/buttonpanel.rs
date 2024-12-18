@@ -1,21 +1,12 @@
 use crate::geometry::*;
 use crate::resources::*;
-use bevy::{
-    asset::RenderAssetUsages,
-    core::FrameCount,
-    input::mouse::MouseWheel,
-    log::*,
-    prelude::*,
-    render::camera::RenderTarget,
-    render::settings::RenderCreation,
-    ui::widget::NodeImageMode,
-    window::{PresentMode, RawHandleWrapper, WindowCreated, WindowRef, WindowResolution},
-    winit::cursor::CursorIcon,
-};
+use bevy::{asset::RenderAssetUsages, prelude::*, ui::widget::NodeImageMode};
 use image::RgbaImage;
 use resvg::{tiny_skia, usvg};
 
-pub enum SvgIcon {
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ButtonAction {
+    None,
     #[allow(dead_code)]
     Clowd,
     Copy,
@@ -48,15 +39,16 @@ struct ButtonGroup {
 }
 
 impl ButtonSvgData {
-    pub fn get(&self, icon: SvgIcon, scale: f32) -> (Handle<Image>, f32) {
+    pub fn get(&self, icon: ButtonAction, scale: f32) -> (Handle<Image>, f32) {
         let group = match icon {
-            SvgIcon::Clowd => &self.clowd,
-            SvgIcon::Copy => &self.copy,
-            SvgIcon::Save => &self.save,
-            SvgIcon::Exit => &self.exit,
-            SvgIcon::Edit => &self.edit,
-            SvgIcon::Reset => &self.reset,
-            SvgIcon::Video => &self.video,
+            ButtonAction::None => &self.clowd,
+            ButtonAction::Clowd => &self.clowd,
+            ButtonAction::Copy => &self.copy,
+            ButtonAction::Save => &self.save,
+            ButtonAction::Exit => &self.exit,
+            ButtonAction::Edit => &self.edit,
+            ButtonAction::Reset => &self.reset,
+            ButtonAction::Video => &self.video,
         };
 
         if scale < 1.01 {
@@ -78,7 +70,10 @@ impl ButtonSvgData {
 }
 
 #[derive(Component)]
-pub struct ButtonPanelButtonTag(pub bool);
+pub struct ButtonPanelButtonTag {
+    pub accent: bool,
+    pub action: ButtonAction,
+}
 
 #[derive(Component)]
 pub struct ButtonPanelRootTag;
@@ -184,7 +179,7 @@ fn buttonpanel_spawn(
         text: &str,
         accent: bool,
         font: &Handle<Font>,
-        icon: SvgIcon,
+        icon: ButtonAction,
         svg_data: &Res<ButtonSvgData>,
         accents: &Res<AccentColors>,
     ) {
@@ -207,7 +202,10 @@ fn buttonpanel_spawn(
                 },
                 Button,
                 BackgroundColor(get_button_color(Interaction::None, accent, accents)),
-                ButtonPanelButtonTag(accent),
+                ButtonPanelButtonTag {
+                    accent,
+                    action: icon,
+                },
             ))
             .with_children(|builder| {
                 let (image, size) = svg_data.get(icon, 1.0);
@@ -251,12 +249,12 @@ fn buttonpanel_spawn(
             ButtonPanelRootTag,
         ))
         .with_children(|builder| {
-            spawn_button(builder, "Edit", true, &font, SvgIcon::Edit, &svg_data, &accents);
-            spawn_button(builder, "Video", true, &font, SvgIcon::Video, &svg_data, &accents);
-            spawn_button(builder, "Copy", true, &font, SvgIcon::Copy, &svg_data, &accents);
-            spawn_button(builder, "Save", true, &font, SvgIcon::Save, &svg_data, &accents);
-            spawn_button(builder, "Reset", false, &font, SvgIcon::Reset, &svg_data, &accents);
-            spawn_button(builder, "Exit", false, &font, SvgIcon::Exit, &svg_data, &accents);
+            spawn_button(builder, "Edit", true, &font, ButtonAction::Edit, &svg_data, &accents);
+            spawn_button(builder, "Video", true, &font, ButtonAction::Video, &svg_data, &accents);
+            spawn_button(builder, "Copy", true, &font, ButtonAction::Copy, &svg_data, &accents);
+            spawn_button(builder, "Save", true, &font, ButtonAction::Save, &svg_data, &accents);
+            spawn_button(builder, "Reset", false, &font, ButtonAction::Reset, &svg_data, &accents);
+            spawn_button(builder, "Exit", false, &font, ButtonAction::Exit, &svg_data, &accents);
         });
 }
 
@@ -379,6 +377,6 @@ pub fn buttonpanel_update(
     }
 
     for (interaction, mut color, tag) in &mut queries.p1().iter_mut() {
-        *color = BackgroundColor(get_button_color(*interaction, tag.0, &accents));
+        *color = BackgroundColor(get_button_color(*interaction, tag.accent, &accents));
     }
 }

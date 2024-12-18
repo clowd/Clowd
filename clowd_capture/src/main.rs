@@ -64,7 +64,7 @@ fn main() {
         .add_systems(PreUpdate, mouse_update)
         .add_systems(Update, (window_created, background_update, buttonpanel::buttonpanel_update))
         .add_systems(Update, (selection::selection_update, crosshair::crosshair_update))
-        .add_systems(Update, handle_keypress.before(iyes_perf_ui::PerfUiSet::Setup))
+        .add_systems(Update, handle_actions.before(iyes_perf_ui::PerfUiSet::Setup))
         .run();
 }
 
@@ -338,31 +338,86 @@ fn mouse_update(
     }
 }
 
-fn handle_keypress(
+fn handle_actions(
     mut commands: Commands,
     mut exit: EventWriter<AppExit>,
     mut capture: ResMut<CaptureState>,
     mut window: Query<&mut Window>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    q_root: Query<Entity, With<PerfUiRoot>>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    debug_query: Query<Entity, With<PerfUiRoot>>,
+    button_query: Query<(&Interaction, &buttonpanel::ButtonPanelButtonTag)>,
     camera: Res<PrimaryCamera>,
 ) {
-    if keyboard.just_pressed(KeyCode::Escape) {
-        for mut window in window.iter_mut() {
-            window.visible = false;
-        }
-        exit.send(AppExit::Success);
-    } else if keyboard.just_pressed(KeyCode::KeyQ) {
-        if capture.selection.is_some() {
+    let mut actions: Vec<(&[KeyCode], buttonpanel::ButtonAction, Box<dyn FnOnce() -> ()>)> = Vec::new();
+    actions.push((
+        &[KeyCode::KeyS],
+        buttonpanel::ButtonAction::Save,
+        Box::new(|| {
+            // todo
+        }),
+    ));
+    actions.push((
+        &[KeyCode::KeyC],
+        buttonpanel::ButtonAction::Copy,
+        Box::new(|| {
+            // todo
+        }),
+    ));
+    actions.push((
+        &[KeyCode::KeyX, KeyCode::Escape, KeyCode::F4],
+        buttonpanel::ButtonAction::Exit,
+        Box::new(|| {
+            for mut window in window.iter_mut() {
+                window.visible = false;
+            }
+            exit.send(AppExit::Success);
+        }),
+    ));
+    actions.push((
+        &[KeyCode::KeyD],
+        buttonpanel::ButtonAction::None,
+        Box::new(|| {
+            if let Ok(e) = debug_query.get_single() {
+                commands.entity(e).despawn_recursive();
+            } else {
+                commands.spawn((PerfUiDefaultEntries::default(), camera.get()));
+            }
+        }),
+    ));
+    actions.push((
+        &[KeyCode::KeyR, KeyCode::Delete],
+        buttonpanel::ButtonAction::Reset,
+        Box::new(|| {
             capture.selection = None;
-        } else {
-            capture.selection = Some(ScreenRect::from_xy_size(200, 200, 500, 500));
-        }
-    } else if keyboard.just_pressed(KeyCode::KeyD) {
-        if let Ok(e) = q_root.get_single() {
-            commands.entity(e).despawn_recursive();
-        } else {
-            commands.spawn((PerfUiDefaultEntries::default(), camera.get()));
+        }),
+    ));
+    actions.push((
+        &[KeyCode::KeyV],
+        buttonpanel::ButtonAction::Video,
+        Box::new(|| {
+            //todo
+        }),
+    ));
+    actions.push((
+        &[KeyCode::KeyE, KeyCode::Enter, KeyCode::KeyP],
+        buttonpanel::ButtonAction::Edit,
+        Box::new(|| {
+            //todo
+        }),
+    ));
+
+    let pressed_buttons: Vec<buttonpanel::ButtonAction> = button_query
+        .iter()
+        .filter(|(interaction, _)| **interaction == Interaction::Pressed)
+        .map(|(_, tag)| tag.action)
+        .collect();
+
+    for (keys, action, func) in actions {
+        if keys.iter().any(|k| keyboard.pressed(*k)) {
+            func();
+        } else if buttons.just_pressed(MouseButton::Left) && pressed_buttons.contains(&action) {
+            func();
         }
     }
 }
