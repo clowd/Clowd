@@ -13,11 +13,19 @@ pub struct ProgramResultRect {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-enum ProgramResult {
+pub struct ProgramResultColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ProgramResult {
     Cancelled,
     CopyToClipboard,
-    SaveFile(String),
+    SaveFile,
     Edit,
+    SelectColor(ProgramResultColor),
     Video(ProgramResultRect),
 }
 

@@ -10,8 +10,6 @@ pub struct ProgramArgs {
     #[arg(long)]
     pub result_path: String,
     #[arg(long)]
-    pub last_save_dir: Option<String>,
-    #[arg(long)]
     pub accent_color: Option<String>,
     #[arg(long)]
     pub low_perf_mode: Option<bool>,
@@ -26,11 +24,19 @@ pub struct ProgramResultRect {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProgramResultColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ProgramResult {
     Cancelled,
     CopyToClipboard,
-    SaveFile(String),
+    SaveFile,
     Edit,
+    SelectColor(ProgramResultColor),
     Video(ProgramResultRect),
 }
 

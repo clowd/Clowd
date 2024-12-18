@@ -262,6 +262,7 @@ pub enum UserAction {
     Reset,
     Video,
     ToggleDebug,
+    SelectColor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
