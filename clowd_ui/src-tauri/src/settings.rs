@@ -15,7 +15,7 @@ fn default_pattern() -> String {
 }
 
 fn default_save_dir() -> PathBuf {
-    dirs::picture_dir().unwrap()
+    dirs::picture_dir().unwrap_or_else(|| dirs::home_dir().unwrap())
 }
 
 fn default_session_dir() -> PathBuf {
