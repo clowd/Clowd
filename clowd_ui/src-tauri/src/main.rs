@@ -38,24 +38,28 @@ fn action_exit_app(app: AppHandle) {
 }
 
 fn action_start_capture(app: AppHandle) {
-    let (session_dir, name_template) = {
+    let (session_dir, name_template, last_save_dir) = {
         let settings = app.state::<ClowdSettingsMutex>();
         let settings = settings.read().unwrap();
-        (settings.session_dir.clone(), settings.filename_pattern.clone())
+        (
+            settings.session_dir.clone(),
+            settings.filename_pattern.clone(),
+            settings.last_capture_save_dir.clone(),
+        )
     };
 
     std::thread::spawn(move || {
         let app = app.clone();
 
-        match capture::start_capture_blocking(session_dir, name_template) {
+        match capture::start_capture_blocking(session_dir, name_template, last_save_dir) {
             Ok(res) => match res {
-                capture::CaptureResult::SaveFile(last_dir) => {
+                capture::CaptureResult::UpdateLastSaveDir(last_dir) => {
                     let settings = app.state::<ClowdSettingsMutex>();
                     let mut settings = settings.write().unwrap();
                     settings.last_capture_save_dir = PathBuf::from(last_dir);
                     settings.save()
                 }
-                capture::CaptureResult::Edit(image_path) => {}
+                capture::CaptureResult::EditImage(image_path) => {}
                 _ => {}
             },
             Err(e) => {
