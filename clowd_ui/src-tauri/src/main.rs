@@ -148,7 +148,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::greet,
             commands::show_dialog_error,
-            commands::get_image_uri
+            commands::get_image_uri,
+            commands::show_current_window,
         ])
         .setup(|app| {
             let menu_capture = MenuItem::new(app, "Capture Screen", true, Some("PrtScr"))?;

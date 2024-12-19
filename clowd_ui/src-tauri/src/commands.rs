@@ -24,3 +24,10 @@ pub async fn show_dialog_error(title: String, body: String, window: tauri::Windo
         .show();
     Ok(())
 }
+
+#[tauri::command]
+pub fn show_current_window(window: tauri::Window) {
+    if let Err(e) = window.show() {
+        error!("Error showing window: {}", e);
+    }
+}
