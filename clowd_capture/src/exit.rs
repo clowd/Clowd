@@ -24,7 +24,7 @@ impl Drop for AfterExitAction {
         let selection = self.screenshot_selection.to_u32();
         let cropped = self
             .screenshot
-            .crop_imm(selection.min_x(), selection.min_y(), selection.max_x(), selection.max_y());
+            .crop_imm(selection.min_x(), selection.min_y(), selection.width(), selection.height());
 
         match self.action {
             UserAction::Copy => match Clipboard::new() {
