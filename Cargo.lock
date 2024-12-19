@@ -1820,6 +1820,7 @@ dependencies = [
  "chrono",
  "dirs",
  "global-hotkey",
+ "image",
  "lazy_static",
  "log",
  "rfd",
@@ -1828,6 +1829,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "urlencoding",
 ]
 
 [[package]]

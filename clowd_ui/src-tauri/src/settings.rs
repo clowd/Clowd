@@ -25,6 +25,13 @@ fn default_session_dir() -> PathBuf {
     parent_dir.join("sessions")
 }
 
+fn default_view_data_dir() -> PathBuf {
+    let mut parent_dir = std::env::current_exe().unwrap();
+    parent_dir.pop();
+    parent_dir.pop();
+    parent_dir.join("view_data")
+}
+
 // NOTE: anything that is not an Option<T> must have a default attribute
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClowdSettings {
@@ -34,6 +41,8 @@ pub struct ClowdSettings {
     pub filename_pattern: String,
     #[serde(default = "default_session_dir")]
     pub session_dir: PathBuf,
+    #[serde(default = "default_view_data_dir")]
+    pub webview_data_dir: PathBuf,
     #[serde(default = "default_save_dir")]
     pub last_capture_save_dir: PathBuf,
     #[serde(default)]
@@ -45,7 +54,6 @@ pub struct ClowdSettings {
 }
 
 pub type ClowdSettingsMutex = RwLock<ClowdSettings>;
-pub type ClowdSettingsMutexState<'a> = State<'a, ClowdSettingsMutex>;
 
 impl Default for ClowdSettings {
     fn default() -> Self {
@@ -54,6 +62,7 @@ impl Default for ClowdSettings {
             hotkey_colorpick: Some(HotKey::new(Some(Modifiers::SHIFT), Code::PrintScreen)),
             filename_pattern: default_pattern(),
             session_dir: default_session_dir(),
+            webview_data_dir: default_view_data_dir(),
             last_capture_save_dir: default_save_dir(),
             no_check_updates: false,
             no_start_on_login: false,

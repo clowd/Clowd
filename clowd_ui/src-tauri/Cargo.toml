@@ -23,6 +23,8 @@ rfd = "0.15.1"
 arboard = "3.4.1"
 dirs = "5.0.1"
 global-hotkey = { version = "0.6.3", features = ["serde"] }
+image = "0.25"
+urlencoding = "2.1.3"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

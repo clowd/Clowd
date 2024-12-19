@@ -3,11 +3,11 @@
 mod capture;
 mod commands;
 mod settings;
+mod util;
 
-use std::{path::PathBuf, sync::atomic::AtomicBool};
+use std::{collections::HashMap, path::PathBuf, sync::atomic::AtomicBool};
 
 use anyhow::Result;
-use chrono::Local;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use lazy_static::lazy_static;
 use rfd::MessageDialog;
@@ -16,6 +16,8 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
+    utils::config::WindowConfig,
+    window::Color,
     AppHandle, Manager,
 };
 
@@ -59,7 +61,9 @@ fn action_start_capture(app: AppHandle) {
                     settings.last_capture_save_dir = PathBuf::from(last_dir);
                     settings.save()
                 }
-                capture::CaptureResult::EditImage(image_path) => {}
+                capture::CaptureResult::EditImage(image_path) => {
+                    action_open_canvas(app, Some(image_path));
+                }
                 _ => {}
             },
             Err(e) => {
@@ -72,6 +76,35 @@ fn action_start_capture(app: AppHandle) {
             }
         }
     });
+}
+
+fn action_open_colorpick(app: AppHandle, initial_color: Option<Color>) {
+    // todo
+}
+
+fn action_open_canvas(app: AppHandle, initial_image: Option<PathBuf>) {
+    let mut query = HashMap::new();
+    let mut width = 800.0;
+    let mut height = 600.0;
+
+    if let Some(image) = initial_image {
+        query.insert("image", image.to_string_lossy().to_string());
+        if let Ok((w, h)) = util::get_image_size(image) {
+            width = w as f64 + 100.0;
+            height = h as f64 + 100.0;
+            query.insert("width", width.to_string());
+            query.insert("height", height.to_string());
+        }
+    }
+
+    if let Err(e) = util::show_window(app, "canvas", "Clowd Canvas", width, height, query) {
+        MessageDialog::new()
+            .set_title("Canvas Error")
+            .set_description(&format!("Error opening canvas: {}", e))
+            .set_buttons(rfd::MessageButtons::Ok)
+            .set_level(rfd::MessageLevel::Error)
+            .show();
+    }
 }
 
 fn action_reset_hotkeys(app: AppHandle) {
@@ -103,9 +136,7 @@ fn action_reset_hotkeys(app: AppHandle) {
         if e.state == HotKeyState::Pressed {
             match e.id {
                 id if id == capture_id => action_start_capture(app),
-                id if id == colorpick_id => {
-                    // todo
-                }
+                id if id == colorpick_id => action_open_colorpick(app, None),
                 _ => {}
             }
         }
@@ -122,9 +153,13 @@ fn main() {
         .invoke_handler(tauri::generate_handler![commands::greet])
         .setup(|app| {
             let menu_capture = MenuItem::new(app, "Capture Screen", true, Some("PrtScr"))?;
+            let menu_canvas = MenuItem::new(app, "Canvas", true, Some("c"))?;
+            let menu_colorpick = MenuItem::new(app, "Color Picker", true, Some("p"))?;
             let menu_quit = MenuItem::new(app, "Quit", true, Some("q"))?;
             let menu = Menu::new(app)?;
             menu.append(&menu_capture)?;
+            menu.append(&menu_canvas)?;
+            menu.append(&menu_colorpick)?;
             menu.append(&menu_quit)?;
             TrayIconBuilder::new()
                 .icon(Image::from_bytes(include_bytes!("../../../assets/white/borderless-white.ico"))?)
@@ -137,6 +172,8 @@ fn main() {
                     match event.id {
                         id if id == quit_id => action_exit_app(app.clone()),
                         id if id == capture_id => action_start_capture(app.clone()),
+                        id if id == menu_canvas.id() => action_open_canvas(app.clone(), None),
+                        id if id == menu_colorpick.id() => action_open_colorpick(app.clone(), None),
                         _ => {}
                     }
                 })
@@ -147,18 +184,15 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| {
-            // todo
-            match event {
-                tauri::RunEvent::ExitRequested {
-                    api,
-                    ..
-                } => {
-                    if !EXIT_REQUESTED.load(std::sync::atomic::Ordering::Relaxed) {
-                        api.prevent_exit();
-                    }
+        .run(|_app_handle, event| match event {
+            tauri::RunEvent::ExitRequested {
+                api,
+                ..
+            } => {
+                if !EXIT_REQUESTED.load(std::sync::atomic::Ordering::Relaxed) {
+                    api.prevent_exit();
                 }
-                _ => {}
             }
+            _ => {}
         });
 }
