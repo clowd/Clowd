@@ -59,7 +59,7 @@ impl Drop for AfterExitAction {
             },
             UserAction::SelectColor => {
                 let pt = self.screenshot_mouse_pt.to_u32();
-                let color = cropped.get_pixel(pt.x, pt.y);
+                let color = self.screenshot.get_pixel(pt.x, pt.y);
                 let color = cli::ProgramResultColor {
                     r: color[0],
                     g: color[1],
