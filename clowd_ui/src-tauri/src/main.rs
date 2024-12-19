@@ -1,22 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod capture;
-mod commands;
+mod ipc;
+mod page;
 mod settings;
 mod util;
 
-use std::{collections::HashMap, path::PathBuf, sync::atomic::AtomicBool};
-
-use anyhow::Result;
 use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 use lazy_static::lazy_static;
+use page::ShowPage;
 use rfd::MessageDialog;
 use settings::{ClowdSettingsMutex, HotkeyManager};
+use std::{path::PathBuf, sync::atomic::AtomicBool};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    utils::config::WindowConfig,
     window::Color,
     AppHandle, Manager,
 };
@@ -86,7 +85,7 @@ fn action_open_canvas(app: AppHandle, initial_image: Option<PathBuf>) {
     if let Some(image) = initial_image {
         match util::get_image_size(&image) {
             Ok((w, h)) => {
-                util::show_window(app, "Clowd Canvas", util::ShowPage::CanvasImage(image, w, h));
+                page::show_window(app, "Clowd Canvas", ShowPage::CanvasImage(image, w, h));
             }
             Err(e) => {
                 MessageDialog::new()
@@ -98,7 +97,7 @@ fn action_open_canvas(app: AppHandle, initial_image: Option<PathBuf>) {
             }
         }
     } else {
-        util::show_window(app, "Clowd Canvas", util::ShowPage::CanvasEmpty);
+        page::show_window(app, "Clowd Canvas", ShowPage::CanvasEmpty);
     }
 }
 
@@ -146,10 +145,10 @@ fn main() {
         .manage(HotkeyManager::default())
         .manage(settings::load_settings_or_default())
         .invoke_handler(tauri::generate_handler![
-            commands::greet,
-            commands::show_dialog_error,
-            commands::get_image_uri,
-            commands::show_current_window,
+            ipc::greet,
+            ipc::show_dialog_error,
+            ipc::get_image_uri,
+            ipc::show_current_window,
         ])
         .setup(|app| {
             let menu_capture = MenuItem::new(app, "Capture Screen", true, Some("PrtScr"))?;
