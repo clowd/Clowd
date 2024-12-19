@@ -114,7 +114,7 @@ fn show_window_impl(app: AppHandle, page: &str, title: &str, width: f64, height:
         focus: true,
         transparent: false,
         maximized: false,
-        visible: true,
+        visible: false,
         decorations: true,
         hidden_title: true,
         accept_first_mouse: false,

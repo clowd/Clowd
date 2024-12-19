@@ -3,6 +3,13 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import Canvas from "./Canvas";
 import queryString from 'query-string';
+import { showCurrentWindow } from "./ipc";
+
+import "./main.css";
+
+setTimeout(() => {
+  showCurrentWindow();
+}, 100);
 
 // import { Window } from "@tauri-apps/api/window";
 // Window.getCurrent().close();
@@ -22,6 +29,8 @@ const args = queryString.parse(location.search);
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <RootComponent {...args} />
+    <div style={{ position: 'fixed', inset: 0 }}>
+      <RootComponent {...args} />
+    </div>
   </React.StrictMode>,
 );
