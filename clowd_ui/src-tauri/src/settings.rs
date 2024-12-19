@@ -8,7 +8,6 @@ use std::{
     path::PathBuf,
     sync::{Mutex, RwLock},
 };
-use tauri::State;
 
 fn default_pattern() -> String {
     "clowd_%Y-%m-%d_%H-%M-%S".to_string()

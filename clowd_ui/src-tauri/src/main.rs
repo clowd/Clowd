@@ -83,27 +83,22 @@ fn action_open_colorpick(app: AppHandle, initial_color: Option<Color>) {
 }
 
 fn action_open_canvas(app: AppHandle, initial_image: Option<PathBuf>) {
-    let mut query = HashMap::new();
-    let mut width = 800.0;
-    let mut height = 600.0;
-
     if let Some(image) = initial_image {
-        query.insert("image", image.to_string_lossy().to_string());
-        if let Ok((w, h)) = util::get_image_size(image) {
-            width = w as f64 + 100.0;
-            height = h as f64 + 100.0;
-            query.insert("width", width.to_string());
-            query.insert("height", height.to_string());
+        match util::get_image_size(&image) {
+            Ok((w, h)) => {
+                util::show_window(app, "Clowd Canvas", util::ShowPage::CanvasImage(image, w, h));
+            }
+            Err(e) => {
+                MessageDialog::new()
+                    .set_title("Canvas Error")
+                    .set_description(&format!("Error loading image: {}", e))
+                    .set_buttons(rfd::MessageButtons::Ok)
+                    .set_level(rfd::MessageLevel::Error)
+                    .show();
+            }
         }
-    }
-
-    if let Err(e) = util::show_window(app, "canvas", "Clowd Canvas", width, height, query) {
-        MessageDialog::new()
-            .set_title("Canvas Error")
-            .set_description(&format!("Error opening canvas: {}", e))
-            .set_buttons(rfd::MessageButtons::Ok)
-            .set_level(rfd::MessageLevel::Error)
-            .show();
+    } else {
+        util::show_window(app, "Clowd Canvas", util::ShowPage::CanvasEmpty);
     }
 }
 
@@ -150,7 +145,11 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(HotkeyManager::default())
         .manage(settings::load_settings_or_default())
-        .invoke_handler(tauri::generate_handler![commands::greet])
+        .invoke_handler(tauri::generate_handler![
+            commands::greet,
+            commands::show_dialog_error,
+            commands::get_image_uri
+        ])
         .setup(|app| {
             let menu_capture = MenuItem::new(app, "Capture Screen", true, Some("PrtScr"))?;
             let menu_canvas = MenuItem::new(app, "Canvas", true, Some("c"))?;
