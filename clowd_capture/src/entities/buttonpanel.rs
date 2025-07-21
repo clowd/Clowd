@@ -1,6 +1,6 @@
 use crate::geometry::*;
 use crate::resources::*;
-use bevy::{asset::RenderAssetUsages, prelude::*, ui::{widget::NodeImageMode, UiTargetCamera}};
+use bevy::{asset::RenderAssetUsages, prelude::*, text::{JustifyText, LineBreak, TextLayout, LineHeight}, ui::{widget::NodeImageMode, UiTargetCamera}};
 use image::RgbaImage;
 use resvg::{tiny_skia, usvg};
 
@@ -92,8 +92,11 @@ pub struct ButtonPanelButtonTag {
 #[derive(Component)]
 pub struct ButtonPanelRootTag;
 
+#[derive(Component)]
+pub struct SelectionIndicatorTag;
+
 const BUTTON_SIZE: f32 = 50.0;
-const BUTTON_COUNT: i32 = 6;
+const BUTTON_COUNT: i32 = 7; // 6 buttons + 1 indicator
 const BUTTON_PADDING: f32 = 2.0;
 
 pub fn buttonpanel_init(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
@@ -166,11 +169,13 @@ fn buttonpanel_spawn(
     accents: &Res<AccentColors>,
     svg_data: Res<ButtonSvgData>,
     asset_server: Res<AssetServer>,
+    capture: &Res<CaptureState>,
     initial_point: ScreenPointF,
     orientation: FlexDirection,
 ) {
     // start UI
     let font = asset_server.load("fonts/Roboto-Regular.ttf");
+    let consolas_font = asset_server.load("fonts/Consolas.ttf");
 
     fn spawn_nested_text_bundle(builder: &mut ChildSpawnerCommands, font: Handle<Font>, text: &str) {
         builder.spawn((
@@ -186,6 +191,166 @@ fn buttonpanel_spawn(
             },
             TextColor::WHITE,
         ));
+    }
+
+    fn spawn_selection_indicator(
+        builder: &mut ChildSpawnerCommands,
+        font: &Handle<Font>,
+        accents: &Res<AccentColors>,
+        selection: Option<ScreenRect>,
+    ) {
+        let text = if let Some(rect) = selection {
+            format!("{}\n\u{00D7}\n{}", rect.width(), rect.height())
+        } else {
+            "0\n\u{00D7}\n0".to_string()
+        };
+
+        builder
+            .spawn((
+                Node {
+                    width: Val::Px(BUTTON_SIZE),
+                    height: Val::Px(BUTTON_SIZE),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    padding: UiRect {
+                        left: Val::Px(BUTTON_PADDING),
+                        right: Val::Px(BUTTON_PADDING),
+                        top: Val::Px(BUTTON_PADDING),
+                        bottom: Val::Px(BUTTON_PADDING),
+                    },
+                    margin: UiRect {
+                        right: Val::Px(10.0), // Add 10px gap to the right
+                        ..default()
+                    },
+                    position_type: PositionType::Relative,
+                    ..default()
+                },
+                BackgroundColor(accents.panel),
+                SelectionIndicatorTag,
+            ))
+            .with_children(|builder| {
+                // Corner borders
+                let corner_length = 15.0;
+                let border_width = 2.0;
+                
+                // Top-left corner
+                builder.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(corner_length),
+                        height: Val::Px(border_width),
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                builder.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(border_width),
+                        height: Val::Px(corner_length),
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                
+                // Top-right corner
+                builder.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(corner_length),
+                        height: Val::Px(border_width),
+                        right: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                builder.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(border_width),
+                        height: Val::Px(corner_length),
+                        right: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                
+                // Bottom-left corner
+                builder.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(corner_length),
+                        height: Val::Px(border_width),
+                        left: Val::Px(0.0),
+                        bottom: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                builder.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(border_width),
+                        height: Val::Px(corner_length),
+                        left: Val::Px(0.0),
+                        bottom: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                
+                // Bottom-right corner
+                builder.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(corner_length),
+                        height: Val::Px(border_width),
+                        right: Val::Px(0.0),
+                        bottom: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                builder.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(border_width),
+                        height: Val::Px(corner_length),
+                        right: Val::Px(0.0),
+                        bottom: Val::Px(0.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::WHITE),
+                ));
+                
+                // Text content
+                builder.spawn((
+                    Node {
+                        align_self: AlignSelf::Center,
+                        ..default()
+                    },
+                    Text::new(text),
+                    TextFont {
+                        font: font.clone(),
+                        font_size: 12.0,
+                        line_height: LineHeight::Px(10.0),
+                        ..default()
+                    },
+                    TextColor::WHITE,
+                    TextLayout {
+                        justify: JustifyText::Center,
+                        linebreak: LineBreak::WordBoundary,
+                        ..default()
+                    },
+                ));
+            });
     }
 
     fn spawn_button(
@@ -263,6 +428,7 @@ fn buttonpanel_spawn(
             ButtonPanelRootTag,
         ))
         .with_children(|builder| {
+            spawn_selection_indicator(builder, &consolas_font, &accents, capture.selection);
             spawn_button(builder, "Edit", true, &font, UserAction::Edit, &svg_data, &accents);
             spawn_button(builder, "Video", true, &font, UserAction::Video, &svg_data, &accents);
             spawn_button(builder, "Copy", true, &font, UserAction::Copy, &svg_data, &accents);
@@ -383,6 +549,8 @@ pub fn buttonpanel_update(
         Query<(Entity, &mut Node, &mut UiTargetCamera), With<ButtonPanelRootTag>>,
         Query<(&Interaction, &mut BackgroundColor, &ButtonPanelButtonTag), (Changed<Interaction>, With<ButtonPanelButtonTag>)>,
     )>,
+    indicator_query: Query<&Children, With<SelectionIndicatorTag>>,
+    mut text_query: Query<&mut Text>,
     camera_entities: Res<CameraEntities>,
     accents: Res<AccentColors>,
     svg_data: Res<ButtonSvgData>,
@@ -402,19 +570,35 @@ pub fn buttonpanel_update(
     if let Ok(mut e) = queries.p0().single_mut() {
         if capture.selection.is_none() {
             commands.entity(e.0).despawn();
-        } else if let Some((entity, position, orientation, dpi_zoom)) = ideal_position {
+        } else if let Some((entity, position, orientation, _dpi_zoom)) = ideal_position {
             e.1.flex_direction = orientation;
             e.1.left = Val::Px(position.x);
             e.1.top = Val::Px(position.y);
             e.2 .0 = entity;
         }
     } else {
-        if let Some((entity, position, orientation, dpi_zoom)) = ideal_position {
-            buttonpanel_spawn(commands, entity, &accents, svg_data, asset_server, position, orientation);
+        if let Some((entity, position, orientation, _dpi_zoom)) = ideal_position {
+            buttonpanel_spawn(commands, entity, &accents, svg_data, asset_server, &capture, position, orientation);
         }
     }
 
     for (interaction, mut color, tag) in &mut queries.p1().iter_mut() {
         *color = BackgroundColor(get_button_color(*interaction, tag.accent, &accents));
+    }
+
+    // Update selection indicator text
+    if let Some(selection_rect) = capture.selection {
+        let selection_rect = mouse
+            .get_selection_in_progress()
+            .unwrap_or(selection_rect);
+        
+        for children in indicator_query.iter() {
+            // The indicator has one text child
+            if let Some(&text_entity) = children.first() {
+                if let Ok(mut text) = text_query.get_mut(text_entity) {
+                    **text = format!("{}\n\u{00D7}\n{}", selection_rect.width(), selection_rect.height());
+                }
+            }
+        }
     }
 }
