@@ -26,6 +26,7 @@ bevy = { workspace = true, default-features = false, features = [
     "bevy_text",
     "bevy_asset",
     "bevy_sprite",
+    "bevy_log",
     "bevy_ui",
     "multi_threaded",
     "png",

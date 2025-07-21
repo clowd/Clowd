@@ -25,7 +25,8 @@ clap = { version = "4.5", features = ["derive"] }
 euclid = "0.22"
 num = "0.4"
 bevy = { version = "0.16.1", default-features = false }
-bevy_prototype_lyon = { git = "https://github.com/Nilirad/bevy_prototype_lyon.git", rev = "0602a0937b7dc6bfbdce53ae364b38e1a155d5de" }
+# bevy_prototype_lyon = { git = "https://github.com/Nilirad/bevy_prototype_lyon.git", rev = "0602a0937b7dc6bfbdce53ae364b38e1a155d5de" }
+bevy_prototype_lyon = { git = "https://github.com/rparrett/bevy_prototype_lyon", branch = "fix-dynamic-examples" }
 iyes_perf_ui = "0.5"
 resvg = "0.45"
 windows = "0.61"

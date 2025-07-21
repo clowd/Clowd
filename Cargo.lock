@@ -1043,7 +1043,7 @@ dependencies = [
 [[package]]
 name = "bevy_prototype_lyon"
 version = "0.14.0"
-source = "git+https://github.com/Nilirad/bevy_prototype_lyon.git?rev=0602a0937b7dc6bfbdce53ae364b38e1a155d5de#0602a0937b7dc6bfbdce53ae364b38e1a155d5de"
+source = "git+https://github.com/rparrett/bevy_prototype_lyon?branch=fix-dynamic-examples#f91fc3d4142acc7ac720c1b7a07eed1cd9241f96"
 dependencies = [
  "bevy",
  "lyon_algorithms",
@@ -4296,7 +4296,7 @@ checksum = "4488594b9328dee448adb906d8b126d9b7deb7cf5c22161ee591610bb1be83c0"
 dependencies = [
  "bitflags 2.9.1",
  "libc",
- "redox_syscall 0.5.14",
+ "redox_syscall 0.5.15",
 ]
 
 [[package]]
@@ -5487,7 +5487,7 @@ checksum = "bc838d2a56b5b1a6c25f55575dfc605fabb63bb2365f6c2353ef9159aa69e4a5"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall 0.5.14",
+ "redox_syscall 0.5.15",
  "smallvec",
  "windows-targets 0.52.6",
 ]
@@ -6237,9 +6237,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.5.14"
+version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de3a5d9f0aba1dbcec1cc47f0ff94a4b778fe55bca98a6dfa92e4e094e57b1c4"
+checksum = "7e8af0dde094006011e6a740d4879319439489813bd0bcdc7d821beaeeff48ec"
 dependencies = [
  "bitflags 2.9.1",
 ]
@@ -6968,7 +6968,7 @@ dependencies = [
  "objc2-foundation 0.2.2",
  "objc2-quartz-core 0.2.2",
  "raw-window-handle",
- "redox_syscall 0.5.14",
+ "redox_syscall 0.5.15",
  "wasm-bindgen",
  "web-sys",
  "windows-sys 0.59.0",
