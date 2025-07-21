@@ -2,7 +2,7 @@ use bevy::{color::Color, prelude::Resource};
 use clap::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Parser, Debug, Resource)]
+#[derive(Parser, Debug, Clone, Resource)]
 #[command(version, about, long_about = None)]
 pub struct ProgramArgs {
     #[arg(long)]
