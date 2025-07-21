@@ -281,7 +281,31 @@ fn get_ideal_position(cameras: &Res<CameraEntities>, selection: ScreenRect) -> (
         .0
         .iter()
         .find(|(_, bounds, _, _, _)| bounds.contains(selection_center))
-        .unwrap();
+        .or_else(|| {
+            // Fallback to closest camera if selection center is not in any bounds
+            cameras.0.iter().min_by_key(|(_, bounds, _, _, _)| {
+                // Calculate distance from selection center to closest edge of the bounds
+                let dx = if selection_center.x < bounds.left() {
+                    bounds.left() - selection_center.x
+                } else if selection_center.x > bounds.right() {
+                    selection_center.x - bounds.right()
+                } else {
+                    0
+                };
+                
+                let dy = if selection_center.y < bounds.top() {
+                    bounds.top() - selection_center.y
+                } else if selection_center.y > bounds.bottom() {
+                    selection_center.y - bounds.bottom()
+                } else {
+                    0
+                };
+                
+                // Return squared distance to avoid sqrt calculation
+                dx * dx + dy * dy
+            })
+        })
+        .expect("No cameras available");
 
     let min_distance = (2.0 * dpi_zoom).ceil() as i32;
     let max_distance = (15.0 * dpi_zoom).ceil() as i32;
