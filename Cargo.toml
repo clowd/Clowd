@@ -16,6 +16,62 @@ edition = "2021"
 rust-version = "1.75"
 
 [workspace.dependencies]
+# Core dependencies
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+image = "0.25"
+
+# Async and concurrency
+rayon = "1.5"
+
+# CLI and parsing
+clap = { version = "4.5", features = ["derive"] }
+
+# Math and geometry
+euclid = "0.22.11"
+num = "0.4.3"
+
+# Graphics and UI
+bevy = { version = "0.15.0", default-features = false }
+bevy_prototype_lyon = { git = "https://github.com/Nilirad/bevy_prototype_lyon.git", rev = "0dacb384dcace5ce82f890b3b5cbdce2941ee461" }
+iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git", rev = "d8f3cbb2ec486b85a86b21e1aa32dcebd26ac884" }
+resvg = "0.44.0"
+
+# System integration
+windows = "0.58"
+raw-window-handle = "0.6"
+spin_sleep = "1.0"
+
+# File operations and dialogs
+rfd = "0.15.1"
+arboard = "3.4.1"
+dirs = "5.0.1"
+
+# Time and date
+chrono = "0.4.39"
+
+# Networking and encoding
+urlencoding = "2.1.3"
+base64 = "0.22"
+
+# Tauri dependencies
+tauri = "2"
+tauri-plugin-opener = "2"
+tauri-build = "2"
+
+# Utilities
+log = "0.4"
+lazy_static = "1"
+global-hotkey = "0.6.3"
+
+# macOS-specific dependencies
+xcap = "0.1.0"
+mouse-rs = "0.4"
+
+# Build dependencies
+winres = "0.1"
+semver = "1.0"
 
 
 # default to small, optimized workspace release binaries
