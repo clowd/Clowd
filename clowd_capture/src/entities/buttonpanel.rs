@@ -170,7 +170,7 @@ fn buttonpanel_spawn(
     orientation: FlexDirection,
 ) {
     // start UI
-    let font = asset_server.load(r"C:\Source\clowd-rust\clowd_capture\assets\fonts\Roboto-Regular.ttf");
+    let font = asset_server.load("fonts/Roboto-Regular.ttf");
 
     fn spawn_nested_text_bundle(builder: &mut ChildSpawnerCommands, font: Handle<Font>, text: &str) {
         builder.spawn((
