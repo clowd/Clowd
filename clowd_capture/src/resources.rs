@@ -4,7 +4,7 @@ use bevy::{
     color::Color,
     log::*,
     prelude::{Component, Entity, Resource, Transform},
-    ui::TargetCamera,
+    ui::UiTargetCamera,
     window::SystemCursorIcon,
     winit::cursor::CursorIcon,
 };
@@ -225,8 +225,8 @@ pub struct CaptureState {
 pub struct PrimaryCamera(pub Entity);
 
 impl PrimaryCamera {
-    pub fn get(&self) -> TargetCamera {
-        TargetCamera(self.0)
+    pub fn get(&self) -> UiTargetCamera {
+        UiTargetCamera(self.0)
     }
 }
 

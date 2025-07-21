@@ -6,7 +6,7 @@ use std::mem;
 use windows::{
     core::PCWSTR,
     Win32::{
-        Foundation::{BOOL, LPARAM, POINT, RECT, TRUE},
+        Foundation::{LPARAM, POINT, RECT, TRUE},
         Graphics::Gdi::{
             EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint, DEVMODEW, DMDO_180, DMDO_270, DMDO_90,
             DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONULL,
@@ -36,7 +36,7 @@ pub(crate) struct ImplMonitor {
     pub is_primary: bool,
 }
 
-extern "system" fn monitor_enum_proc(hmonitor: HMONITOR, _: HDC, _: *mut RECT, state: LPARAM) -> BOOL {
+extern "system" fn monitor_enum_proc(hmonitor: HMONITOR, _: HDC, _: *mut RECT, state: LPARAM) -> windows::core::BOOL {
     unsafe {
         let state = Box::leak(Box::from_raw(state.0 as *mut Vec<HMONITOR>));
         state.push(hmonitor);
@@ -132,7 +132,7 @@ impl ImplMonitor {
         let hmonitors_mut_ptr: *mut Vec<HMONITOR> = Box::into_raw(Box::default());
 
         let hmonitors = unsafe {
-            EnumDisplayMonitors(HDC::default(), None, Some(monitor_enum_proc), LPARAM(hmonitors_mut_ptr as isize)).ok()?;
+            EnumDisplayMonitors(Some(HDC::default()), None, Some(monitor_enum_proc), LPARAM(hmonitors_mut_ptr as isize)).ok()?;
             Box::from_raw(hmonitors_mut_ptr)
         };
 

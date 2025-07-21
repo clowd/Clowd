@@ -73,22 +73,22 @@ pub fn selection_update(
 
         let selection_rect = selection_transform.outer_transformed_rect(&selection_rect.to_f32());
 
-        if queries.p0().get_single().is_err() {
+        if queries.p0().single().is_err() {
             spawn_selection(commands, selection_rect, accents, time);
         } else {
-            if let Ok(mut e) = queries.p0().get_single_mut() {
+            if let Ok(mut e) = queries.p0().single_mut() {
                 *e.1 = get_bg_shape(selection_rect);
             }
-            if let Ok(mut e) = queries.p1().get_single_mut() {
+            if let Ok(mut e) = queries.p1().single_mut() {
                 *e.1 = get_dash_shape(selection_rect, accents.accent, time.elapsed_secs());
             }
         }
     } else {
-        if let Ok(e) = queries.p0().get_single_mut() {
-            commands.entity(e.0).despawn_recursive();
+        if let Ok(e) = queries.p0().single_mut() {
+            commands.entity(e.0).despawn();
         }
-        if let Ok(e) = queries.p1().get_single_mut() {
-            commands.entity(e.0).despawn_recursive();
+        if let Ok(e) = queries.p1().single_mut() {
+            commands.entity(e.0).despawn();
         }
     }
 }

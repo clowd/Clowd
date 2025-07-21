@@ -14,7 +14,7 @@ use crate::resources::*;
 
 use bevy::{
     asset::RenderAssetUsages,
-    core::FrameCount,
+    diagnostic::FrameCount,
     input::mouse::MouseWheel,
     log::*,
     prelude::*,
@@ -68,7 +68,10 @@ fn main() {
                 .set(ImagePlugin::default_nearest()),
         )
         .add_plugins(bevy::diagnostic::LogDiagnosticsPlugin::default())
-        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
+        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin {
+            max_history_length: 20,
+            smoothing_factor: 0.8,
+        })
         .add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin)
         .add_plugins(PerfUiPlugin)
         .add_plugins(ShapePlugin)
@@ -193,7 +196,7 @@ fn window_created(mut events: EventReader<WindowCreated>, windows: Query<(&RawHa
         // WinitWindows::get_window
 
         #[cfg(windows)]
-        if let RawWindowHandle::Win32(handle) = w.0.window_handle {
+        if let RawWindowHandle::Win32(handle) = w.0.get_window_handle() {
             use windows::Win32::Graphics::Dwm::*;
             let handle: isize = handle.hwnd.into();
             let hwnd = windows::Win32::Foundation::HWND(handle as *mut std::ffi::c_void);
@@ -232,7 +235,7 @@ fn background_update(
         // flip Y into bevy space
         .then_scale(1.0, -1.0);
 
-    if let Ok(mut e) = queries.p0().get_single_mut() {
+    if let Ok(mut e) = queries.p0().single_mut() {
         let new_origin = image_transform.transform_point(ScreenPointF::new(0.0, 0.0));
         let transform = Transform::from_xyz(new_origin.x, new_origin.y, Z_BGGRAY).with_scale(Vec3::new(zoom, zoom, 1.0));
         e.translation = transform.translation;
@@ -240,7 +243,7 @@ fn background_update(
         e.rotation = transform.rotation;
     }
 
-    if let Ok(mut e) = queries.p1().get_single_mut() {
+    if let Ok(mut e) = queries.p1().single_mut() {
         let selection_rect = mouse
             .get_selection_in_progress()
             .map_or_else(|| capture.selection, |v| Some(v));
@@ -378,7 +381,7 @@ fn handle_actions(
         for mut window in window.iter_mut() {
             window.visible = false;
         }
-        exit.send(AppExit::Success);
+        exit.write(AppExit::Success);
     };
 
     let actions: Vec<(&[KeyCode], UserAction)> = vec![
@@ -431,8 +434,8 @@ fn handle_actions(
                 exit_app();
             }
             UserAction::ToggleDebug => {
-                if let Ok(e) = debug_query.get_single() {
-                    commands.entity(e).despawn_recursive();
+                if let Ok(e) = debug_query.single() {
+                    commands.entity(e).despawn();
                 } else {
                     commands.spawn((PerfUiDefaultEntries::default(), camera.get()));
                 }
