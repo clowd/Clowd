@@ -60,7 +60,7 @@ fn crosshair_spawn(mut commands: Commands, pos: ScreenPointF, desktop: Res<Virtu
                 .build(),
             Transform::from_xyz(0.0, 0.0, Z_CURSOR_BACK),
         ))
-        .set_parent(ch_parent_horiz);
+        .insert(ChildOf(ch_parent_horiz));
 
     commands
         .spawn((
@@ -69,7 +69,7 @@ fn crosshair_spawn(mut commands: Commands, pos: ScreenPointF, desktop: Res<Virtu
                 .build(),
             Transform::from_xyz(0.0, 0.0, Z_CURSOR_BACK),
         ))
-        .set_parent(ch_parent_vert);
+        .insert(ChildOf(ch_parent_vert));
 
     commands
         .spawn((
@@ -78,7 +78,7 @@ fn crosshair_spawn(mut commands: Commands, pos: ScreenPointF, desktop: Res<Virtu
                 .build(),
             Transform::from_xyz(0.0, 0.0, Z_CURSOR_DASH),
         ))
-        .set_parent(ch_parent_horiz);
+        .insert(ChildOf(ch_parent_horiz));
 
     commands
         .spawn((
@@ -87,7 +87,7 @@ fn crosshair_spawn(mut commands: Commands, pos: ScreenPointF, desktop: Res<Virtu
                 .build(),
             Transform::from_xyz(0.0, 0.0, Z_CURSOR_DASH),
         ))
-        .set_parent(ch_parent_vert);
+        .insert(ChildOf(ch_parent_vert));
 
     let ch_horiz_start = Vec2::new(-accent_size, ch_offset_x);
     let ch_horiz_end = Vec2::new(accent_size, ch_offset_x);
@@ -100,7 +100,7 @@ fn crosshair_spawn(mut commands: Commands, pos: ScreenPointF, desktop: Res<Virtu
                 .build(),
             Transform::from_xyz(0.0, 0.0, Z_CURSOR_ACCENT),
         ))
-        .set_parent(ch_parent_accent);
+        .insert(ChildOf(ch_parent_accent));
 
     commands
         .spawn((
@@ -109,7 +109,7 @@ fn crosshair_spawn(mut commands: Commands, pos: ScreenPointF, desktop: Res<Virtu
                 .build(),
             Transform::from_xyz(0.0, 0.0, Z_CURSOR_ACCENT),
         ))
-        .set_parent(ch_parent_accent);
+        .insert(ChildOf(ch_parent_accent));
 
     let ch_accent_rects = [
         (Vec2::new(-accent_size, ch_offset_x), Vec2::new(-accent_size / 2.0, ch_offset_x)), // left
@@ -126,7 +126,7 @@ fn crosshair_spawn(mut commands: Commands, pos: ScreenPointF, desktop: Res<Virtu
                     .build(),
                 Transform::from_xyz(0.0, 0.0, Z_CURSOR_ACCENT),
             ))
-            .set_parent(ch_parent_accent);
+            .insert(ChildOf(ch_parent_accent));
     }
 }
 
