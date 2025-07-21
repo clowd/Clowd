@@ -1,6 +1,6 @@
 use crate::geometry::*;
 use crate::resources::*;
-use bevy::{asset::RenderAssetUsages, prelude::*, ui::widget::NodeImageMode};
+use bevy::{asset::RenderAssetUsages, prelude::*, ui::{widget::NodeImageMode, UiTargetCamera}};
 use image::RgbaImage;
 use resvg::{tiny_skia, usvg};
 
@@ -172,7 +172,7 @@ fn buttonpanel_spawn(
     // start UI
     let font = asset_server.load(r"C:\Source\clowd-rust\clowd_capture\assets\fonts\Roboto-Regular.ttf");
 
-    fn spawn_nested_text_bundle(builder: &mut ChildBuilder, font: Handle<Font>, text: &str) {
+    fn spawn_nested_text_bundle(builder: &mut ChildSpawnerCommands, font: Handle<Font>, text: &str) {
         builder.spawn((
             Node {
                 align_self: AlignSelf::Center,
@@ -189,7 +189,7 @@ fn buttonpanel_spawn(
     }
 
     fn spawn_button(
-        builder: &mut ChildBuilder,
+        builder: &mut ChildSpawnerCommands,
         text: &str,
         accent: bool,
         font: &Handle<Font>,
@@ -259,7 +259,7 @@ fn buttonpanel_spawn(
                 left: Val::Px(initial_point.x),
                 ..default()
             },
-            TargetCamera(camera_entity),
+            UiTargetCamera(camera_entity),
             ButtonPanelRootTag,
         ))
         .with_children(|builder| {
@@ -356,7 +356,7 @@ fn get_ideal_position(cameras: &Res<CameraEntities>, selection: ScreenRect) -> (
 pub fn buttonpanel_update(
     mut commands: Commands,
     mut queries: ParamSet<(
-        Query<(Entity, &mut Node, &mut TargetCamera), With<ButtonPanelRootTag>>,
+        Query<(Entity, &mut Node, &mut UiTargetCamera), With<ButtonPanelRootTag>>,
         Query<(&Interaction, &mut BackgroundColor, &ButtonPanelButtonTag), (Changed<Interaction>, With<ButtonPanelButtonTag>)>,
     )>,
     camera_entities: Res<CameraEntities>,
@@ -375,9 +375,9 @@ pub fn buttonpanel_update(
         None
     };
 
-    if let Ok(mut e) = queries.p0().get_single_mut() {
+    if let Ok(mut e) = queries.p0().single_mut() {
         if capture.selection.is_none() {
-            commands.entity(e.0).despawn_recursive();
+            commands.entity(e.0).despawn();
         } else if let Some((entity, position, orientation, dpi_zoom)) = ideal_position {
             e.1.flex_direction = orientation;
             e.1.left = Val::Px(position.x);

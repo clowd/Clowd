@@ -37,7 +37,7 @@ impl Drop for BoxHDC {
         // https://learn.microsoft.com/zh-cn/windows/win32/api/winuser/nf-winuser-releasedc
         unsafe {
             if let Some(hwnd) = self.hwnd {
-                if ReleaseDC(hwnd, self.hdc) != 1 {
+                if ReleaseDC(Some(hwnd), self.hdc) != 1 {
                     error!("ReleaseDC {:?} failed", self)
                 }
             } else if !DeleteDC(self.hdc).as_bool() {
@@ -70,7 +70,7 @@ impl From<HWND> for BoxHDC {
     fn from(hwnd: HWND) -> Self {
         // GetWindowDC vs GetDC, GetDC 不会绘制窗口边框
         // https://learn.microsoft.com/zh-cn/windows/win32/api/winuser/nf-winuser-getwindowdc
-        let hdc = unsafe { GetWindowDC(hwnd) };
+        let hdc = unsafe { GetWindowDC(Some(hwnd)) };
 
         BoxHDC::new(hdc, Some(hwnd))
     }
@@ -90,7 +90,7 @@ impl Drop for BoxHBITMAP {
     fn drop(&mut self) {
         // https://learn.microsoft.com/zh-cn/windows/win32/api/wingdi/nf-wingdi-createcompatiblebitmap
         unsafe {
-            if !DeleteObject(self.0).as_bool() {
+            if !DeleteObject(self.0.into()).as_bool() {
                 error!("DeleteObject {:?} failed", self)
             }
         };
@@ -210,12 +210,12 @@ pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
         let hwnd = GetDesktopWindow();
         let box_hdc_desktop_window = BoxHDC::from(hwnd);
 
-        let box_hdc_mem = BoxHDC::new(CreateCompatibleDC(*box_hdc_desktop_window), None);
+        let box_hdc_mem = BoxHDC::new(CreateCompatibleDC(Some(*box_hdc_desktop_window)), None);
         let box_h_bitmap = BoxHBITMAP::new(CreateCompatibleBitmap(*box_hdc_desktop_window, vw, vh));
 
-        SelectObject(*box_hdc_mem, *box_h_bitmap);
+        SelectObject(*box_hdc_mem, (*box_h_bitmap).into());
 
-        BitBlt(*box_hdc_mem, 0, 0, vw, vh, *box_hdc_desktop_window, vx, vy, SRCCOPY | CAPTUREBLT)?;
+        BitBlt(*box_hdc_mem, 0, 0, vw, vh, Some(*box_hdc_desktop_window), vx, vy, SRCCOPY | CAPTUREBLT)?;
 
         let capture = to_rgba_image(box_hdc_mem, box_h_bitmap, vw, vh)?;
         Ok((DynamicImage::ImageRgba8(capture.0), DynamicImage::ImageRgba8(capture.1)))

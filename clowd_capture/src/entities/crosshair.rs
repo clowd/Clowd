@@ -144,28 +144,28 @@ pub fn crosshair_update(
 ) {
     if capture.selection.is_none() {
         let pos = mouse.get_position().to_i32().to_f32();
-        if queries.p0().get_single().is_err() {
+        if queries.p0().single().is_err() {
             crosshair_spawn(commands, pos, desktop, accents);
         } else {
-            if let Ok(mut e) = queries.p0().get_single_mut() {
+            if let Ok(mut e) = queries.p0().single_mut() {
                 e.1.translation = Vec3::new(pos.x, 0.0, Z_CURSOR_BACK);
             }
-            if let Ok(mut e) = queries.p1().get_single_mut() {
+            if let Ok(mut e) = queries.p1().single_mut() {
                 e.1.translation = Vec3::new(0.0, -pos.y, Z_CURSOR_BACK);
             }
-            if let Ok(mut e) = queries.p2().get_single_mut() {
+            if let Ok(mut e) = queries.p2().single_mut() {
                 e.1.translation = Vec3::new(pos.x, -pos.y, Z_CURSOR_ACCENT);
             }
         }
     } else {
-        if let Ok(e) = queries.p0().get_single_mut() {
-            commands.entity(e.0).despawn_recursive();
+        if let Ok(e) = queries.p0().single_mut() {
+            commands.entity(e.0).despawn();
         }
-        if let Ok(e) = queries.p1().get_single_mut() {
-            commands.entity(e.0).despawn_recursive();
+        if let Ok(e) = queries.p1().single_mut() {
+            commands.entity(e.0).despawn();
         }
-        if let Ok(e) = queries.p2().get_single_mut() {
-            commands.entity(e.0).despawn_recursive();
+        if let Ok(e) = queries.p2().single_mut() {
+            commands.entity(e.0).despawn();
         }
     }
 }
