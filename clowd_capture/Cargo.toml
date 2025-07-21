@@ -4,20 +4,20 @@ version = "0.0.0-local"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
-image = "0.25"
-euclid = "0.22.11"
-windows = { version = "0.58", features = [
+anyhow = { workspace = true }
+image = { workspace = true }
+euclid = { workspace = true }
+windows = { workspace = true, features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",
     "Win32_System_SystemInformation",
 ] }
-clap = { version = "4.5", features = ["derive"] }
-rayon = "1.5"
-num = "0.4.3"
-bevy = { version = "0.15.0", default-features = false, features = [
+clap = { workspace = true, features = ["derive"] }
+rayon = { workspace = true }
+num = { workspace = true }
+bevy = { workspace = true, default-features = false, features = [
     "bevy_core_pipeline",
     "bevy_color",
     "bevy_render",
@@ -32,20 +32,20 @@ bevy = { version = "0.15.0", default-features = false, features = [
     "shader_format_spirv",
     "spirv_shader_passthrough",
 ] }
-bevy_prototype_lyon = { git = "https://github.com/Nilirad/bevy_prototype_lyon.git", rev = "0dacb384dcace5ce82f890b3b5cbdce2941ee461" }
-iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui.git", rev = "d8f3cbb2ec486b85a86b21e1aa32dcebd26ac884" }
-spin_sleep = "1.0"
-raw-window-handle = "0.6"
-resvg = "0.44.0"
-rfd = "0.15.1"
-arboard = "3.4.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
+bevy_prototype_lyon = { workspace = true }
+iyes_perf_ui = { workspace = true }
+spin_sleep = { workspace = true }
+raw-window-handle = { workspace = true }
+resvg = { workspace = true }
+rfd = { workspace = true }
+arboard = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 [target.'cfg(target_os="macos")'.dependencies]
-xcap = "0.1.0"
-mouse-rs = "0.4"
+xcap = { workspace = true }
+mouse-rs = { workspace = true }
 
 [build-dependencies]
-winres = "0.1"
-semver = "1.0"
+winres = { workspace = true }
+semver = { workspace = true }

@@ -6,26 +6,26 @@ authors = ["you"]
 edition = "2021"
 
 [dependencies]
-anyhow = "1"
-log = "0.4"
-tauri = { version = "2", features = [
+anyhow = { workspace = true }
+log = { workspace = true }
+tauri = { workspace = true, features = [
     "common-controls-v6",
     "image-ico",
     "image-png",
     "tray-icon",
 ] }
-tauri-plugin-opener = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-lazy_static = "1"
-chrono = "0.4.39"
-rfd = "0.15.1"
-arboard = "3.4.1"
-dirs = "5.0.1"
-global-hotkey = { version = "0.6.3", features = ["serde"] }
-image = "0.25"
-urlencoding = "2.1.3"
-base64 = "0.22"
+tauri-plugin-opener = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+lazy_static = { workspace = true }
+chrono = { workspace = true }
+rfd = { workspace = true }
+arboard = { workspace = true }
+dirs = { workspace = true }
+global-hotkey = { workspace = true, features = ["serde"] }
+image = { workspace = true }
+urlencoding = { workspace = true }
+base64 = { workspace = true }
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { workspace = true, features = [] }
