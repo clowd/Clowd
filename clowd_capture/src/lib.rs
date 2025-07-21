@@ -55,6 +55,7 @@ pub fn start(args: cli::ProgramArgs) {
                     close_when_requested: true,
                     exit_condition: bevy::window::ExitCondition::OnAllClosed,
                 })
+                .set(ImagePlugin::default_nearest())
                 .set(bevy::render::RenderPlugin {
                     render_creation: RenderCreation::Automatic(bevy::render::settings::WgpuSettings {
                         backends: Some(bevy::render::settings::Backends::VULKAN),
