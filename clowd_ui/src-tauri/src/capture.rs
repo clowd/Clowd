@@ -62,7 +62,8 @@ pub fn start_capture_blocking(session_dir: PathBuf, name_template: String, initi
     cmd.wait()?;
 
     if !result_path.exists() {
-        bail!("Capture failed, no result found. Check logs for a more detailed error.");
+        warn!("Capture failed, no result found. Check logs for a more detailed error.");
+        return Ok(CaptureResult::NotHandled);
     }
 
     let result = std::fs::read_to_string(&result_path)?;

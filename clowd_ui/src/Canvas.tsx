@@ -1,90 +1,135 @@
-import { DefaultMainMenu, DefaultMainMenuContent, DefaultNavigationPanel, DefaultQuickActions, DefaultQuickActionsContent, DefaultZoomMenu, DefaultZoomMenuContent, TLComponents, Tldraw, TldrawUiMenuActionItem, TldrawUiMenuContextProvider, TldrawUiMenuGroup, TldrawUiMenuItem, TLUiOverrides, useCanRedo, useCanUndo, useTldrawUiComponents } from "tldraw";
+import {
+  createShapeId,
+  DefaultMainMenu,
+  DefaultMainMenuContent,
+  DefaultQuickActions,
+  DefaultQuickActionsContent,
+  TLComponents,
+  Tldraw,
+  TldrawOptions,
+  TldrawUiButton,
+  TldrawUiMenuActionItem,
+  TldrawUiMenuContextProvider,
+  TldrawUiMenuGroup,
+  TldrawUiMenuItem,
+  useCanRedo,
+  useCanUndo,
+  useDefaultColorTheme,
+} from "tldraw";
 import { getImageUri } from "./ipc";
-import 'tldraw/tldraw.css';
+import "tldraw/tldraw.css";
 import { CustomZoomMenu } from "./components/CustomZoom";
+import saveThin from "./assets/save-thin.svg";
 
-// https://github.com/tldraw/tldraw/blob/0d88f3e0a5efee2e23b10c56cdadc3fcd976b984/apps/examples/src/examples/custom-menus/CustomMenusExample.tsx#L181
+// https://github.com/tldraw/tldraw/blob/main/apps/examples/src/examples/custom-menus/CustomMenusExample.tsx
 
-function CustomMainMenu() {
-    return (
-        <>
-            <DefaultMainMenu>
-                <div style={{ backgroundColor: 'thistle' }}>
-                    <TldrawUiMenuGroup id="example">
-                        <TldrawUiMenuItem
-                            id="like"
-                            label="Like my posts"
-                            icon="external-link"
-                            readonlyOk
-                            onSelect={() => {
-                                window.open('https://x.com/tldraw', '_blank')
-                            }}
-                        />
-                    </TldrawUiMenuGroup>
-                </div>
-                <DefaultMainMenuContent />
-            </DefaultMainMenu>
-            <DefaultQuickActions>
-                <DefaultQuickActionsContent />
-                {/* <div style={{ backgroundColor: 'thistle' }}>
-                    <TldrawUiMenuItem id="code" icon="code" onSelect={() => window.alert('code')} />
-                </div> */}
-            </DefaultQuickActions>
-            <CustomZoomMenu />
-            {/* <DefaultZoomMenu>
-                <DefaultZoomMenuContent />
-            </DefaultZoomMenu> */}
-            {/* <ZoomMenu /> */}
-        </>
-    )
-}
+// function CustomMainMenu() {
+//   let theme = useDefaultColorTheme();
+//   let isDark = theme.id === "dark";
+//   let svgStyle = isDark ? { filter: "invert(1)" } : {};
+//   return (
+//     <>
+//       <DefaultMainMenu>
+//         <div style={{ backgroundColor: "thistle" }}>
+//           <TldrawUiMenuGroup id="example">
+//             <TldrawUiMenuItem
+//               id="like"
+//               label="Like my posts"
+//               icon="external-link"
+//               readonlyOk
+//               onSelect={() => {
+//                 window.open("https://x.com/tldraw", "_blank");
+//               }}
+//             />
+//           </TldrawUiMenuGroup>
+//         </div>
+//         <DefaultMainMenuContent />
+//       </DefaultMainMenu>
+//       <DefaultQuickActions>
+//         <DefaultQuickActionsContent />
+//       </DefaultQuickActions>
+//       <TldrawUiMenuContextProvider type="small-icons" sourceId="quick-actions">
+//         <TldrawUiMenuItem
+//           id="like"
+//           label="Like my posts"
+//           icon="clipboard-copy"
+//           readonlyOk
+//           onSelect={() => {
+//             window.open("https://x.com/tldraw", "_blank");
+//           }}
+//         />
+//         <TldrawUiButton type="icon" title={"Save"}>
+//           <img
+//             src={saveThin}
+//             className="logo react"
+//             alt="React logo"
+//             width={18}
+//             style={svgStyle}
+//           />
+//         </TldrawUiButton>
+//       </TldrawUiMenuContextProvider>
+
+//       <CustomZoomMenu />
+//     </>
+//   );
+// }
 
 function CustomQuickActions() {
-    const canUndo = useCanUndo()
-    const canRedo = useCanRedo()
-    // return (
-    //     <DefaultQuickActions>
-    //         <DefaultQuickActionsContent />
-    //         <div style={{ backgroundColor: 'thistle' }}>
-    //             <TldrawUiMenuItem id="code" icon="code" onSelect={() => window.alert('code')} />
-    //         </div>
-    //     </DefaultQuickActions>
-    // )
-    return <>
+  let theme = useDefaultColorTheme();
+  let isDark = theme.id === "dark";
+  let svgStyle = isDark ? { filter: "invert(1)" } : {};
 
-        <TldrawUiMenuContextProvider type="small-icons" sourceId="quick-actions">
-            <TldrawUiMenuActionItem actionId="undo" disabled={!canUndo} />
-            <TldrawUiMenuActionItem actionId="redo" disabled={!canRedo} />
-        </TldrawUiMenuContextProvider>
-
-    </>
+  return (
+    <DefaultQuickActions>
+      <DefaultQuickActionsContent />
+      <TldrawUiMenuItem
+        id="clipboard-copy"
+        label="Copy to clipboard"
+        icon="clipboard-copy"
+        readonlyOk
+        onSelect={() => {
+          window.open("https://x.com/tldraw", "_blank");
+        }}
+      />
+      <TldrawUiButton type="icon" title={"Save"}>
+        <img
+          src={saveThin}
+          className="logo react"
+          alt="React logo"
+          width={18}
+          style={svgStyle}
+        />
+      </TldrawUiButton>
+      <CustomZoomMenu />
+    </DefaultQuickActions>
+  );
 }
 
 const components: TLComponents = {
-    // ActionsMenu: CustomActionsMenu,
-    // ContextMenu: CustomContextMenu,
-    // DebugMenu: CustomDebugMenu,
-    // HelpMenu: CustomHelpMenu,
-    // KeyboardShortcutsDialog: CustomKeyboardShortcutsDialog,
-    // MainMenu: CustomMainMenu,
-    // NavigationPanel: CustomNavigationPanel,
-    // PageMenu: CustomPageMenu,
-    MainMenu: CustomMainMenu,
-    PageMenu: null,
-    QuickActions: null,
-    ActionsMenu: null,
-    NavigationPanel: null,
-    // ZoomMenu: null,
-    // Minimap: null,
-    // StylePanel: CustomStylePanel,
-    // Toolbar: CustomToolbar,
-    // ZoomMenu: CustomZoomMenu,
-}
+  // ActionsMenu: CustomActionsMenu,
+  // ContextMenu: CustomContextMenu,
+  // DebugMenu: CustomDebugMenu,
+  // HelpMenu: CustomHelpMenu,
+  // KeyboardShortcutsDialog: CustomKeyboardShortcutsDialog,
+  // MainMenu: CustomMainMenu,
+  // NavigationPanel: CustomNavigationPanel,
+  // PageMenu: CustomPageMenu,
+  // MainMenu: CustomMainMenu,
+  PageMenu: null,
+  QuickActions: CustomQuickActions,
+  ActionsMenu: null,
+  NavigationPanel: null,
+  // ZoomMenu: null,
+  // Minimap: null,
+  // StylePanel: CustomStylePanel,
+  // Toolbar: CustomToolbar,
+  // ZoomMenu: CustomZoomMenu,
+};
 
 interface CanvasProps {
-    width?: number;
-    height?: number;
-    imagePath?: string;
+  width?: number;
+  height?: number;
+  imagePath?: string;
 }
 
 // const myOverrides: TLUiOverrides = {
@@ -108,42 +153,49 @@ interface CanvasProps {
 //     },
 // }
 
+const options: Partial<TldrawOptions> = {
+  maxPages: 1, // disable pages
+  actionShortcutsLocation: "menu", // move action shortcuts to the menu
+};
+
 export const Canvas: React.FC<CanvasProps> = ({ width, height, imagePath }) => {
-    return (
-        <div style={{ position: 'fixed', inset: 0 }}>
-            <Tldraw
-                inferDarkMode={true}
-                autoFocus={true}
-                components={components}
-                cameraOptions={{ wheelBehavior: 'zoom' }}
-                onMount={(editor) => {
-                    if (!!imagePath) {
-                        getImageUri(imagePath).then((imageUrl) => {
-                            editor.run(
-                                () => {
-                                    let imageShape = {
-                                        id: "initial-image" as any,
-                                        type: 'image',
-                                        props: {
-                                            x: 0,
-                                            y: 0,
-                                            width: width,
-                                            height: height,
-                                            url: imageUrl,
-                                        },
-                                    };
-                                    editor.createShape(imageShape);
-                                    editor.zoomToFit()
-                                    editor.selectNone()
-                                },
-                                { history: 'ignore' }
-                            );
-                        });
-                    }
-                }}
-            />
-        </div>
-    )
-}
+  return (
+    <div style={{ position: "fixed", inset: 0 }}>
+      <Tldraw
+        forceMobile={true}
+        inferDarkMode={true}
+        autoFocus={true}
+        options={options}
+        components={components}
+        cameraOptions={{ wheelBehavior: "zoom" }}
+        onMount={(editor) => {
+          if (!!imagePath) {
+            getImageUri(imagePath).then((imageUrl) => {
+              editor.run(
+                () => {
+                  let imageShape = {
+                    id: createShapeId(),
+                    type: "image",
+                    props: {
+                      x: 0,
+                      y: 0,
+                      width: width,
+                      height: height,
+                      url: imageUrl,
+                    },
+                  };
+                  editor.createShape(imageShape);
+                  editor.zoomToFit();
+                  editor.selectNone();
+                },
+                { history: "ignore" }
+              );
+            });
+          }
+        }}
+      />
+    </div>
+  );
+};
 
 export default Canvas;
