@@ -5,7 +5,7 @@ use std::time::Instant;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::geometry::{ScreenPoint, ScreenRect};
+use crate::geometry::{ScreenPointF, ScreenRect};
 use crate::gpu::{SharedGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
 
@@ -17,10 +17,14 @@ const FADE_DURATION_SECS: f32 = 0.3;
 /// Messages the main thread can send to a render thread.
 pub enum RenderMsg {
     Resize(PhysicalSize<u32>),
-    /// New cursor position in virtual-desktop screen pixels. The render
-    /// thread caches the latest value into a local and uses it on the next
-    /// frame; the channel is the only synchronisation we need.
-    MousePos(ScreenPoint),
+    /// New cursor + zoom state. `pos` is the *virtual* cursor in
+    /// virtual-desktop pixels (f32 so sub-pixel motion at high zoom stays
+    /// smooth); `zoom` is the current magnifier scale (1.0 .. 256.0). The
+    /// render thread caches the latest values and uses them on the next
+    /// frame — the channel is the only synchronisation we need. Cursor
+    /// moves and zoom changes share a single message so the render thread
+    /// never sees a partially-updated state across two drains.
+    MouseState { pos: ScreenPointF, zoom: f32 },
     Shutdown,
 }
 
@@ -44,8 +48,8 @@ impl WindowHandle {
         let _ = self.tx.send(RenderMsg::Resize(size));
     }
 
-    pub fn update_mouse(&self, pos: ScreenPoint) {
-        let _ = self.tx.send(RenderMsg::MousePos(pos));
+    pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32) {
+        let _ = self.tx.send(RenderMsg::MouseState { pos, zoom });
     }
 }
 
@@ -78,9 +82,9 @@ impl Drop for WindowHandle {
 /// per-window uniform.
 ///
 /// `initial_mouse` is the cursor position (virtual-desktop screen
-/// pixels) sampled by the main thread *before* any window was created,
-/// so the very first frame can render the crosshair at the correct spot
-/// without ever querying the OS from the render thread.
+/// pixels, as f32) sampled by the main thread *before* any window was
+/// created, so the very first frame can render the crosshair at the
+/// correct spot without ever querying the OS from the render thread.
 pub fn spawn_render_thread(
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -89,7 +93,7 @@ pub fn spawn_render_thread(
     monitor_bounds: ScreenRect,
     scale_factor: f32,
     refresh_hz: f32,
-    initial_mouse: ScreenPoint,
+    initial_mouse: ScreenPointF,
     first_frame_barrier: Arc<Barrier>,
 ) -> WindowHandle {
     let (tx, rx) = mpsc::channel();
@@ -129,7 +133,7 @@ fn render_thread_main(
     monitor_bounds: ScreenRect,
     scale_factor: f32,
     refresh_hz: f32,
-    initial_mouse: ScreenPoint,
+    initial_mouse: ScreenPointF,
     first_frame_barrier: Arc<Barrier>,
 ) {
     // `refresh_hz` is accepted (and logged) for future use — DXGI's waitable
@@ -159,7 +163,11 @@ fn render_thread_main(
         // UV math: where this monitor begins inside the virtual-desktop
         // texture, and how much of that texture it covers. Done in f32 so
         // negative monitor origins (secondary monitors left of/above the
-        // primary) work without underflow.
+        // primary) work without underflow. This is the **baseline** — the
+        // zoom-around-cursor transform is folded into it per frame below,
+        // and the uniform's `uv_offset_scale` field carries the post-zoom
+        // result to the shader. At zoom=1 the folded value is identical to
+        // the baseline.
         let m_x = monitor_bounds.min_x() as f32;
         let m_y = monitor_bounds.min_y() as f32;
         let m_w = monitor_bounds.width() as f32;
@@ -168,7 +176,7 @@ fn render_thread_main(
         let vd_y = snap.vdesktop_origin[1];
         let vd_w = snap.vdesktop_size[0];
         let vd_h = snap.vdesktop_size[1];
-        let uv_offset_scale = [
+        let base_uv_offset_scale = [
             (m_x - vd_x) / vd_w,
             (m_y - vd_y) / vd_h,
             m_w / vd_w,
@@ -179,9 +187,9 @@ fn render_thread_main(
         // the crosshair appears at the correct spot the instant the window
         // becomes visible rather than briefly snapping from the top-left.
         // The value was sampled by the main thread *before* any window
-        // existed; from here on the position arrives via RenderMsg::MousePos.
-        let init_local_x = (initial_mouse.x - monitor_bounds.min_x()) as f32;
-        let init_local_y = (initial_mouse.y - monitor_bounds.min_y()) as f32;
+        // existed; from here on the position arrives via RenderMsg::MouseState.
+        let init_local_x = initial_mouse.x - monitor_bounds.min_x() as f32;
+        let init_local_y = initial_mouse.y - monitor_bounds.min_y() as f32;
 
         // params[3] = DPI scale factor. This value is constant for the
         // lifetime of the window (winit delivers ScaleFactorChanged on
@@ -190,8 +198,10 @@ fn render_thread_main(
         // params[0..3] for fade + cursor. `crosshair_color` is also
         // immutable from the GPU's POV — copied from settings once at
         // startup, never updated again.
+        // Frame-0 uniforms: zoom=1 (which means the folded uv_offset_scale
+        // equals the baseline), fade=0, cursor at the pre-window position.
         let uniforms = WindowUniforms {
-            uv_offset_scale,
+            uv_offset_scale: base_uv_offset_scale,
             params: [0.0, init_local_x, init_local_y, scale_factor],
             crosshair_color: settings.crosshair_color,
         };
@@ -227,6 +237,7 @@ fn render_thread_main(
             ubo,
             bind_group,
             uniforms,
+            base_uv_offset_scale,
         }
     });
 
@@ -241,16 +252,18 @@ fn render_thread_main(
     // hop), and we don't want any of that to eat into the 500ms budget.
     let start = Instant::now();
 
-    // Latest cursor position the main thread has told us about, in
-    // virtual-desktop screen pixels. Seeded from the pre-window snapshot;
-    // every subsequent value arrives via RenderMsg::MousePos.
-    let mut mouse_pos: ScreenPoint = initial_mouse;
+    // Latest cursor position (virtual-desktop pixels, f32) and zoom level
+    // the main thread has told us about. Seeded from the pre-window
+    // snapshot at zoom=1; every subsequent value arrives via
+    // RenderMsg::MouseState.
+    let mut mouse_pos: ScreenPointF = initial_mouse;
+    let mut zoom: f32 = 1.0;
 
     loop {
         // Drain *all* pending commands non-blockingly before the blocking
-        // present. A burst of MousePos events from a fast mouse must collapse
-        // to the latest in a single frame, not lag N frames behind. Shutdown
-        // propagates within at most one frame.
+        // present. A burst of MouseState events from a fast mouse must
+        // collapse to the latest in a single frame, not lag N frames
+        // behind. Shutdown propagates within at most one frame.
         loop {
             match rx.try_recv() {
                 Ok(RenderMsg::Resize(new_size)) => {
@@ -258,8 +271,9 @@ fn render_thread_main(
                     config.height = new_size.height.max(1);
                     surface.configure(&gpu.device, &config);
                 }
-                Ok(RenderMsg::MousePos(p)) => {
-                    mouse_pos = p;
+                Ok(RenderMsg::MouseState { pos, zoom: z }) => {
+                    mouse_pos = pos;
+                    zoom = z;
                 }
                 Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
                 Err(mpsc::TryRecvError::Empty) => break,
@@ -284,18 +298,53 @@ fn render_thread_main(
             let fade = 1.0 - inv * inv * inv * inv;
             state.uniforms.params[0] = fade;
 
-            // Cursor in window-local physical pixels. Out-of-range values
-            // (cursor on another monitor) are passed through as-is — the
-            // shader's integer-equality test cannot match any framebuffer
-            // pixel index, so the line silently vanishes on this window.
-            // The position came from the main thread via RenderMsg::MousePos
-            // and was cached into `mouse_pos` during the drain above; we
-            // already write the uniform every frame for the fade, so adding
-            // these two i32 subtractions is free.
-            let local_x = mouse_pos.x - monitor_bounds.min_x();
-            let local_y = mouse_pos.y - monitor_bounds.min_y();
-            state.uniforms.params[1] = local_x as f32;
-            state.uniforms.params[2] = local_y as f32;
+            // Cursor in window-local physical pixels (f32 so sub-pixel
+            // motion at high zoom is preserved for the UV math below).
+            // Out-of-range values (cursor on another monitor) are passed
+            // through as-is — the crosshair shader floors to int and then
+            // integer-compares, so no line appears on windows that the
+            // cursor isn't over. The position came from the main thread
+            // via RenderMsg::MouseState and was cached into `mouse_pos`
+            // during the drain above.
+            let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;
+            let local_y = mouse_pos.y - monitor_bounds.min_y() as f32;
+            state.uniforms.params[1] = local_x;
+            state.uniforms.params[2] = local_y;
+
+            // Fold the zoom-around-cursor transform into uv_offset_scale.
+            //
+            //   window_uv' = (window_uv - cursor_win_uv) / zoom + cursor_win_uv
+            //   vd_uv      = base_offset + window_uv' * base_scale
+            //
+            //   new_offset = base_offset + base_scale * cursor_win_uv * (1 - 1/zoom)
+            //   new_scale  = base_scale / zoom
+            //
+            // At zoom=1 the formulas degenerate to the baseline, so the
+            // zoom=1 path is byte-identical to the pre-zoom build. The
+            // shader still computes `vd_uv = offset + window_uv * scale`;
+            // all the zoom math lives here on the CPU side.
+            //
+            // Per the "all monitors zoom uniformly" design: even monitors
+            // that don't contain the cursor apply the same transform, so
+            // cursor_win_uv can land outside [0, 1] on those. The sampler's
+            // ClampToEdge address mode means any off-region sample just
+            // hugs the texture edge on those monitors.
+            if zoom <= 1.0 {
+                state.uniforms.uv_offset_scale = state.base_uv_offset_scale;
+            } else {
+                let w = config.width as f32;
+                let h = config.height as f32;
+                let cu = local_x / w;
+                let cv = local_y / h;
+                let k = 1.0 - 1.0 / zoom;
+                let base = state.base_uv_offset_scale;
+                state.uniforms.uv_offset_scale = [
+                    base[0] + base[2] * cu * k,
+                    base[1] + base[3] * cv * k,
+                    base[2] / zoom,
+                    base[3] / zoom,
+                ];
+            }
 
             gpu.queue
                 .write_buffer(&state.ubo, 0, bytemuck::bytes_of(&state.uniforms));
@@ -314,6 +363,11 @@ struct SnapshotState {
     ubo: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     uniforms: WindowUniforms,
+    /// This monitor's un-zoomed UV region of the shared desktop texture:
+    /// [u_offset, v_offset, u_scale, v_scale]. The per-frame loop folds
+    /// the current zoom-around-cursor transform into this to produce
+    /// `uniforms.uv_offset_scale`. At zoom=1 they're identical.
+    base_uv_offset_scale: [f32; 4],
 }
 
 fn draw_once(

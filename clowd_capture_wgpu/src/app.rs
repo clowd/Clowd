@@ -3,23 +3,65 @@ use std::sync::{Arc, Barrier};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, KeyEvent, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId, WindowLevel};
 
-use crate::geometry::ScreenPoint;
+use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
 use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
 use crate::platform;
 use crate::settings::CapturerSettings;
 use crate::system::SystemInterop;
 use crate::window_state::{spawn_render_thread, WindowHandle};
 
+/// Minimum zoom. The magnifier only ever enlarges the source.
+const ZOOM_MIN: f32 = 1.0;
+/// Maximum zoom. Matches the original C++ capturer (Screens.cpp /
+/// DxScreenCapture.cpp — `min(max(zoom, 1), 256)`).
+const ZOOM_MAX: f32 = 256.0;
+/// Multiplicative step per wheel tick. Coarse by design — no modifier-key
+/// fine-grained step in v1.
+const ZOOM_STEP: f32 = 2.0;
+
+/// Virtual-cursor + magnifier state owned by the event-loop thread.
+///
+/// When `anchored` is false (the zoom=1 case) the OS cursor is authoritative
+/// and `virtual_cursor` mirrors it exactly. When `anchored` is true (zoom>1)
+/// the real OS cursor is pinned to `anchor` via SetCursorPos; each
+/// CursorMoved event instead produces a `(os - anchor) / zoom` delta that
+/// advances the virtual cursor in fractional world pixels. See the
+/// reference C++ in clowd_capture_dx/Screens.cpp:MouseAnchorStart /
+/// MouseAnchorUpdate / MouseAnchorStop for the original design.
+struct InputState {
+    /// The logical cursor in virtual-desktop pixels. Always-live: even at
+    /// zoom=1 we keep it updated so the zoom-in transition doesn't need
+    /// a special "sample the OS cursor" step.
+    virtual_cursor: ScreenPointF,
+    /// Magnifier scale in [ZOOM_MIN, ZOOM_MAX]. 1.0 = unzoomed (no anchor).
+    zoom: f32,
+    /// Whether the OS cursor is currently pinned to `anchor`. Implied by
+    /// `zoom > 1`, but tracked explicitly so the start/stop transitions
+    /// (which need a single SetCursorPos warp) are driven by the wheel
+    /// handler and not by every CursorMoved event.
+    anchored: bool,
+    /// Fixed point in virtual-desktop pixels (== real screen coords, since
+    /// the origin of the virtual desktop *is* where primary monitor origin
+    /// plus screen = real coords match). Computed once at startup as the
+    /// centre of the primary monitor, per Screens.cpp:111-114.
+    anchor: ScreenPoint,
+}
+
 pub struct App {
     settings: Arc<CapturerSettings>,
     gpu: Option<Arc<SharedGpu>>,
     instance: Option<wgpu::Instance>,
     windows: HashMap<WindowId, WindowHandle>,
+    /// Populated once in `resumed()`. Used by `clamp_to_nearest_monitor`
+    /// so the virtual cursor can't escape all physical screens while the
+    /// OS cursor is pinned to the anchor.
+    monitor_bounds: Vec<ScreenRect>,
+    input: InputState,
 }
 
 impl App {
@@ -29,8 +71,77 @@ impl App {
             gpu: None,
             instance: None,
             windows: HashMap::new(),
+            monitor_bounds: Vec::new(),
+            // Real values are written in `resumed()` once we know where
+            // the primary monitor is and where the cursor currently sits.
+            // Zero here is a placeholder that never gets broadcast.
+            input: InputState {
+                virtual_cursor: ScreenPointF::new(0.0, 0.0),
+                zoom: 1.0,
+                anchored: false,
+                anchor: ScreenPoint::new(0, 0),
+            },
         }
     }
+
+    /// Push the current `(virtual_cursor, zoom)` to every render thread.
+    /// Monitors that don't contain the cursor still need the message so
+    /// they can apply the zoom transform uniformly (their crosshair
+    /// vanishes via the shader's integer-equality miss).
+    fn broadcast_mouse_state(&self) {
+        for h in self.windows.values() {
+            h.update_mouse_state(self.input.virtual_cursor, self.input.zoom);
+        }
+    }
+}
+
+/// Clamp the point to whichever monitor currently contains it, or to the
+/// nearest monitor if it's in the multi-monitor dead zone. A tiny epsilon
+/// is subtracted from the max edge so the point never lands on the
+/// exclusive right/bottom of a rect (matches Screens.cpp:147-153 which
+/// subtracts 0.001 from the right/bottom bounds).
+fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[ScreenRect]) {
+    if monitors.is_empty() {
+        return;
+    }
+    // First try: already inside a monitor? Leave it alone.
+    for m in monitors {
+        let mx = m.min_x() as f32;
+        let my = m.min_y() as f32;
+        let mw = m.width() as f32;
+        let mh = m.height() as f32;
+        if p.x >= mx && p.x < mx + mw && p.y >= my && p.y < my + mh {
+            return;
+        }
+    }
+    // Not inside any monitor — pick the one whose centre is closest and
+    // clamp into its bounds. Distance-to-centre is good enough as a
+    // "nearest monitor" heuristic for a cursor that's just crossed a
+    // boundary.
+    let (best_ix, _) = monitors
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let cx = m.min_x() as f32 + m.width() as f32 * 0.5;
+            let cy = m.min_y() as f32 + m.height() as f32 * 0.5;
+            let dx = p.x - cx;
+            let dy = p.y - cy;
+            (i, dx * dx + dy * dy)
+        })
+        .fold((0usize, f32::INFINITY), |(bi, bd), (i, d)| {
+            if d < bd {
+                (i, d)
+            } else {
+                (bi, bd)
+            }
+        });
+    let m = &monitors[best_ix];
+    let min_x = m.min_x() as f32;
+    let min_y = m.min_y() as f32;
+    let max_x = (m.min_x() + m.width()) as f32 - 0.001;
+    let max_y = (m.min_y() + m.height()) as f32 - 0.001;
+    p.x = p.x.clamp(min_x, max_x);
+    p.y = p.y.clamp(min_y, max_y);
 }
 
 impl ApplicationHandler for App {
@@ -60,8 +171,33 @@ impl ApplicationHandler for App {
         // each render thread can seed its frame-0 crosshair uniform without
         // ever having to query the OS itself. After the windows are up the
         // main thread keeps every render thread in sync by translating
-        // WindowEvent::CursorMoved into RenderMsg::MousePos.
+        // WindowEvent::CursorMoved into RenderMsg::MouseState.
         let initial_mouse = SystemInterop::get_mouse_position();
+        let initial_mouse_f =
+            ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
+
+        // Populate the InputState we drive the zoom + virtual cursor from.
+        // The anchor is the real-screen centre of the primary monitor (per
+        // Screens.cpp:111-114) — the fixed point we warp the OS cursor to
+        // while anchored. Falls back to the first monitor if no primary
+        // is flagged, which should never happen but is cheap to guard.
+        let primary = captured
+            .monitors
+            .iter()
+            .find(|m| m.is_primary)
+            .or_else(|| captured.monitors.first())
+            .expect("at least one monitor present");
+        let anchor = ScreenPoint::new(
+            primary.bounds.min_x() + (primary.bounds.width() / 2),
+            primary.bounds.min_y() + (primary.bounds.height() / 2),
+        );
+        self.input = InputState {
+            virtual_cursor: initial_mouse_f,
+            zoom: 1.0,
+            anchored: false,
+            anchor,
+        };
+        self.monitor_bounds = captured.monitors.iter().map(|m| m.bounds).collect();
 
         // 2. Create one hidden, borderless window per monitor.
         let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(captured.monitors.len());
@@ -151,7 +287,7 @@ impl ApplicationHandler for App {
                 m.bounds,
                 m.scale_factor,
                 hz,
-                initial_mouse,
+                initial_mouse_f,
                 barrier.clone(),
             );
             handles.insert(id, handle);
@@ -204,19 +340,94 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(new_size) => handle.resize(new_size),
             WindowEvent::CursorMoved { position, .. } => {
                 // winit hands us a position in this window's local physical
-                // pixels. Convert to virtual-desktop coords using the source
-                // window's monitor bounds, then broadcast to *every* render
-                // thread — windows on other monitors still need updates so
-                // their crosshair correctly disappears (the shader's range
-                // check handles the off-monitor case for free).
+                // pixels. Reconstruct the OS cursor in virtual-desktop
+                // coords so we can compare against the anchor (itself in
+                // virtual-desktop coords).
                 let bounds = handle.monitor_bounds;
-                let vd = ScreenPoint::new(
-                    bounds.min_x() + position.x as i32,
-                    bounds.min_y() + position.y as i32,
+                let os_vd = ScreenPoint::new(
+                    bounds.min_x() + position.x.round() as i32,
+                    bounds.min_y() + position.y.round() as i32,
                 );
-                for h in self.windows.values() {
-                    h.update_mouse(vd);
+
+                if self.input.anchored {
+                    // Feedback-loop guard: our own SetCursorPos(anchor)
+                    // below will trigger a CursorMoved event back at the
+                    // anchor. Skip it so we don't re-apply a zero delta
+                    // and (worse) re-warp mid-frame. Matches
+                    // Screens.cpp:IsAnchorPt + DxScreenCapture.cpp:1389.
+                    if os_vd == self.input.anchor {
+                        return;
+                    }
+                    let zoom = self.input.zoom;
+                    let dx = (os_vd.x - self.input.anchor.x) as f32 / zoom;
+                    let dy = (os_vd.y - self.input.anchor.y) as f32 / zoom;
+                    self.input.virtual_cursor.x += dx;
+                    self.input.virtual_cursor.y += dy;
+                    clamp_to_nearest_monitor(
+                        &mut self.input.virtual_cursor,
+                        &self.monitor_bounds,
+                    );
+                    SystemInterop::set_mouse_position(self.input.anchor);
+                } else {
+                    // Unanchored (zoom == 1): the OS cursor is truth. We
+                    // still keep `virtual_cursor` updated so a subsequent
+                    // zoom-in transition doesn't need a GetCursorPos.
+                    self.input.virtual_cursor =
+                        ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
                 }
+
+                self.broadcast_mouse_state();
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Normalise the two winit delta variants into a single
+                // scalar "step" whose sign is all we care about for a
+                // coarse ×2/÷2 zoom. LineDelta is the desktop-mouse case;
+                // PixelDelta comes from touchpads in physical pixels and
+                // needs taming so one scroll gesture isn't twenty zoom
+                // steps.
+                let step = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(p) => (p.y / 50.0) as f32,
+                };
+                if step == 0.0 {
+                    return;
+                }
+
+                let new_zoom = if step > 0.0 {
+                    self.input.zoom * ZOOM_STEP
+                } else {
+                    self.input.zoom / ZOOM_STEP
+                };
+                let new_zoom = new_zoom.clamp(ZOOM_MIN, ZOOM_MAX);
+                if (new_zoom - self.input.zoom).abs() < f32::EPSILON {
+                    return;
+                }
+
+                let was_anchored = self.input.anchored;
+                let will_anchor = new_zoom > 1.0;
+
+                if !was_anchored && will_anchor {
+                    // MouseAnchorStart (Screens.cpp:130-137): pin the OS
+                    // cursor to the anchor. `virtual_cursor` already tracks
+                    // the current cursor position, so the zoom appears
+                    // centered on wherever the user was pointing.
+                    self.input.anchored = true;
+                    SystemInterop::set_mouse_position(self.input.anchor);
+                } else if was_anchored && !will_anchor {
+                    // MouseAnchorStop (Screens.cpp:161-167): un-pin by
+                    // moving the real OS cursor to where the virtual
+                    // cursor currently sits — no visual jump because the
+                    // virtual cursor was what the user saw.
+                    self.input.anchored = false;
+                    let restore = ScreenPoint::new(
+                        self.input.virtual_cursor.x.floor() as i32,
+                        self.input.virtual_cursor.y.floor() as i32,
+                    );
+                    SystemInterop::set_mouse_position(restore);
+                }
+
+                self.input.zoom = new_zoom;
+                self.broadcast_mouse_state();
             }
             _ => {}
         }
