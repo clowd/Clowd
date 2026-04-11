@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Clowd.Drawing/Clowd.Drawing.csproj" />
+  <Project Path="Clowd.Ui/Clowd.Ui.csproj" />
+</Solution>
