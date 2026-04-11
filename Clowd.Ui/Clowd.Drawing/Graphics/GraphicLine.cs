@@ -95,10 +95,34 @@ namespace Clowd.Drawing.Graphics
             else LineEnd = point;
         }
 
+        // Shared cursors (same pattern as GraphicRectangle).
+        private static readonly Cursor _cursorHorizontal = new Cursor(StandardCursorType.RightSide);       // ↔
+        private static readonly Cursor _cursorVertical   = new Cursor(StandardCursorType.TopSide);         // ↕
+        private static readonly Cursor _cursorDiagNwSe   = new Cursor(StandardCursorType.BottomRightCorner); // ↘↖
+        private static readonly Cursor _cursorDiagNeSw   = new Cursor(StandardCursorType.BottomLeftCorner);  // ↙↗
+
         internal override Cursor GetHandleCursor(int handleNumber)
         {
-            // TODO Phase 12: replace with CursorResources.SizeAll
-            return new Cursor(StandardCursorType.SizeAll);
+            // Pick a cursor that points along the line so the user sees which
+            // direction the handle will drag. The line's screen-space angle
+            // (from start to end) determines the visual octant.
+            double dx = LineEnd.X - LineStart.X;
+            double dy = LineEnd.Y - LineStart.Y;
+            if (dx == 0 && dy == 0)
+                return _cursorHorizontal;
+
+            double deg = Math.Atan2(dy, dx) * 180.0 / Math.PI; // 0° = east, clockwise positive
+            if (deg < 0) deg += 360;
+            int octant = ((int)Math.Round(deg / 45.0)) % 8;
+
+            return octant switch
+            {
+                0 or 4 => _cursorHorizontal,
+                2 or 6 => _cursorVertical,
+                1 or 5 => _cursorDiagNwSe,
+                3 or 7 => _cursorDiagNeSw,
+                _      => _cursorHorizontal,
+            };
         }
 
         internal override void DrawObject(DrawingContext ctx)

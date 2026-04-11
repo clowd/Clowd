@@ -246,28 +246,52 @@ namespace Clowd.Drawing.Graphics
             OnPropertyChanged(nameof(Left));
         }
 
+        // Shared cursors (cheap to reuse, and StandardCursorType doesn't change).
+        private static readonly Cursor _cursorHand       = new Cursor(StandardCursorType.Hand);
+        private static readonly Cursor _cursorHorizontal = new Cursor(StandardCursorType.RightSide);       // ↔
+        private static readonly Cursor _cursorVertical   = new Cursor(StandardCursorType.TopSide);         // ↕
+        private static readonly Cursor _cursorDiagNwSe   = new Cursor(StandardCursorType.BottomRightCorner); // ↘↖
+        private static readonly Cursor _cursorDiagNeSw   = new Cursor(StandardCursorType.BottomLeftCorner);  // ↙↗
+
         internal override Cursor GetHandleCursor(int handleNumber)
         {
             if (handleNumber == 0 || handleNumber > 9)
                 return HelperFunctions.DefaultCursor;
 
             if (handleNumber == 9)
-                return new Cursor(StandardCursorType.Hand); // rotation
+                return _cursorHand; // rotation
 
-            // Per-corner / per-edge resize cursors. We don't account for the
-            // rectangle's own rotation here — Phase 12 keeps it simple by
-            // mapping handle index → standard cursor type.
-            return handleNumber switch
+            // Base direction of each handle in degrees, where 0° = east (screen
+            // right) and positive angles rotate clockwise (screen Y is down).
+            double baseAngle = handleNumber switch
             {
-                1 => new Cursor(StandardCursorType.TopLeftCorner),
-                2 => new Cursor(StandardCursorType.TopSide),
-                3 => new Cursor(StandardCursorType.TopRightCorner),
-                4 => new Cursor(StandardCursorType.RightSide),
-                5 => new Cursor(StandardCursorType.BottomRightCorner),
-                6 => new Cursor(StandardCursorType.BottomSide),
-                7 => new Cursor(StandardCursorType.BottomLeftCorner),
-                8 => new Cursor(StandardCursorType.LeftSide),
-                _ => HelperFunctions.DefaultCursor,
+                1 => -135, // top-left   (NW)
+                2 =>  -90, // top        (N)
+                3 =>  -45, // top-right  (NE)
+                4 =>    0, // right      (E)
+                5 =>   45, // bot-right  (SE)
+                6 =>   90, // bottom     (S)
+                7 =>  135, // bot-left   (SW)
+                8 =>  180, // left       (W)
+                _ =>    0,
+            };
+
+            // Add the rectangle's own rotation to get the handle's on-screen
+            // direction, then snap to the nearest 45° octant.
+            double effective = (baseAngle + Angle) % 360;
+            if (effective < 0) effective += 360;
+            int octant = ((int)Math.Round(effective / 45.0)) % 8;
+
+            // Avalonia renders horizontal/vertical/diagonal resize cursors the
+            // same for the two opposing directions, so 8 octants reduce to 4
+            // visual cursors.
+            return octant switch
+            {
+                0 or 4 => _cursorHorizontal, // ↔
+                2 or 6 => _cursorVertical,   // ↕
+                1 or 5 => _cursorDiagNwSe,   // ↘↖
+                3 or 7 => _cursorDiagNeSw,   // ↙↗
+                _      => HelperFunctions.DefaultCursor,
             };
         }
 
