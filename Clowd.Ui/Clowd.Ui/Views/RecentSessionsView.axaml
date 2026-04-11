@@ -1,11 +1,29 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="Clowd.Ui.Views.RecentSessionsView">
-    <Grid>
-        <StackPanel HorizontalAlignment="Center"
+             xmlns:vm="clr-namespace:Clowd.Ui.ViewModels.Pages"
+             x:Class="Clowd.Ui.Views.RecentSessionsView"
+             x:DataType="vm:RecentSessionsViewModel">
+    <Grid RowDefinitions="Auto,*" Margin="24">
+        <!-- Header bar -->
+        <Grid Grid.Row="0" Margin="0,0,0,16" ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0"
+                       Text="Recent sessions"
+                       FontSize="20"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    Content="New session"
+                    Padding="14,6"
+                    Click="OnNewSessionClick" />
+        </Grid>
+
+        <!-- Empty state -->
+        <StackPanel Grid.Row="1"
+                    HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     MaxWidth="380"
-                    Spacing="14">
+                    Spacing="14"
+                    IsVisible="{Binding !HasSessions}">
             <Viewbox Width="64" Height="64" HorizontalAlignment="Center">
                 <Path Data="{StaticResource IconRecent}"
                       Fill="{DynamicResource SystemBaseHighColor}"
@@ -15,10 +33,30 @@
                        FontSize="18"
                        FontWeight="SemiBold"
                        HorizontalAlignment="Center" />
-            <TextBlock Text="Captures and uploads will appear here once the capture process is integrated."
+            <TextBlock Text="Click 'New session' above to start drawing, or drop images into a new editor window."
                        TextAlignment="Center"
                        TextWrapping="Wrap"
                        Opacity="0.65" />
         </StackPanel>
+
+        <!-- Sessions list -->
+        <ListBox Grid.Row="1"
+                 IsVisible="{Binding HasSessions}"
+                 ItemsSource="{Binding Sessions}"
+                 DoubleTapped="OnSessionDoubleTapped">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="*,Auto" Margin="4">
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{Binding Name}"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding ModifiedUtc, StringFormat='Last modified {0:yyyy-MM-dd HH:mm} UTC'}"
+                                       Opacity="0.6"
+                                       FontSize="11" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
     </Grid>
 </UserControl>

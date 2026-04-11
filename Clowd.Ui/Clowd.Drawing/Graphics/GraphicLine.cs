@@ -23,7 +23,7 @@ namespace Clowd.Drawing.Graphics
         private Point _lineStart;
         private Point _lineEnd;
 
-        protected GraphicLine()
+        public GraphicLine()
         { }
 
         public GraphicLine(Color objectColor, double lineWidth, Point start, Point end)
@@ -103,7 +103,8 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawObject(DrawingContext ctx)
         {
-            // Phase 2: stub. Phase 3 will draw via ctx.DrawLine(pen, start, end).
+            var pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
+            ctx.DrawLine(pen, LineStart, LineEnd);
         }
     }
 }

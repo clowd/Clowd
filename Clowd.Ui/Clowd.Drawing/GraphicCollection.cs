@@ -185,6 +185,44 @@ namespace Clowd.Drawing
             return result;
         }
 
+        // ---- Z-order operations ----
+
+        public void MoveToFront(GraphicBase g)
+        {
+            var idx = _graphics.IndexOf(g);
+            if (idx < 0 || idx == _graphics.Count - 1) return;
+            _graphics.RemoveAt(idx);
+            _graphics.Add(g);
+            RaiseChanged();
+        }
+
+        public void MoveToBack(GraphicBase g)
+        {
+            var idx = _graphics.IndexOf(g);
+            if (idx <= 0) return;
+            _graphics.RemoveAt(idx);
+            _graphics.Insert(0, g);
+            RaiseChanged();
+        }
+
+        public void MoveForward(GraphicBase g)
+        {
+            var idx = _graphics.IndexOf(g);
+            if (idx < 0 || idx == _graphics.Count - 1) return;
+            _graphics.RemoveAt(idx);
+            _graphics.Insert(idx + 1, g);
+            RaiseChanged();
+        }
+
+        public void MoveBackward(GraphicBase g)
+        {
+            var idx = _graphics.IndexOf(g);
+            if (idx <= 0) return;
+            _graphics.RemoveAt(idx);
+            _graphics.Insert(idx - 1, g);
+            RaiseChanged();
+        }
+
         public GraphicBase[] GetGraphicList(bool selectedOnly)
         {
             if (selectedOnly)
