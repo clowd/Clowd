@@ -30,6 +30,8 @@ pub struct ImplMonitor {
     pub width: u32,
     pub height: u32,
     pub rotation: f32,
+    /// DPI scale derived from `GetDpiForMonitor` (effective DPI / 96).
+    /// 1.0 = 100%, 1.5 = 150%, 2.0 = 200%, etc.
     pub scale_factor: f32,
     pub frequency: f32,
     pub is_primary: bool,
