@@ -2,6 +2,7 @@ mod app;
 mod geometry;
 mod gpu;
 mod platform;
+mod settings;
 mod system;
 mod window_state;
 
@@ -10,6 +11,8 @@ extern crate log;
 
 #[macro_use]
 extern crate anyhow;
+
+use std::sync::Arc;
 
 fn main() -> anyhow::Result<()> {
     let _ = simplelog::TermLogger::init(
@@ -22,7 +25,12 @@ fn main() -> anyhow::Result<()> {
     let event_loop = winit::event_loop::EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
 
-    let mut app = app::App::default();
+    // Built once and shared (Arc) with the App and every render thread.
+    // The struct will grow over time; constructing it here keeps the
+    // call site honest about which knobs the capturer is launched with.
+    let settings = Arc::new(settings::CapturerSettings::default());
+
+    let mut app = app::App::new(settings);
     event_loop.run_app(&mut app)?;
     Ok(())
 }
