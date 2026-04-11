@@ -34,16 +34,48 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
     return out;
 }
 
+// Standard sRGB transfer functions. The texture and surface are both
+// non-sRGB (`Bgra8Unorm`), so wgpu does *no* colour-space conversion on
+// sample or store — values go in and out as raw byte / 255. We do the
+// sRGB ↔ linear conversion manually here, only when the grayscale math
+// actually needs linear light.
+fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
+    let cutoff = vec3<f32>(0.04045);
+    let lo = c / 12.92;
+    let hi = pow((c + 0.055) / 1.055, vec3<f32>(2.4));
+    return select(hi, lo, c <= cutoff);
+}
+
+fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let cutoff = vec3<f32>(0.0031308);
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(hi, lo, c <= cutoff);
+}
+
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let color = textureSample(desktop_tex, desktop_samp, in.uv);
-    // The texture is Rgba8UnormSrgb, so the sample is already in linear
-    // light. Use Rec.709 linear-light luma coefficients (NOT BT.601, which
-    // are defined for gamma-encoded values). The 0.42 multiplier reproduces
-    // the old "35% darken" effect: applying 0.65 in sRGB space corresponds
-    // to roughly 0.65^2 ≈ 0.42 in linear space.
-    let luma = dot(color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.42;
-    let gray = vec3<f32>(luma);
     let fade = clamp(u.fade_pad.x, 0.0, 1.0);
-    return vec4<f32>(mix(color.rgb, gray, fade), 1.0);
+
+    // fade = 0 is the common case during the hold phase. Pass through
+    // bit-exactly — no sRGB math, no lerp rounding — so the rendered
+    // window is pixel-identical to the original BitBlt bytes, which
+    // themselves are pixel-identical to what DWM was displaying. This
+    // is what eliminates the "subtle colour shift" at window appearance.
+    if (fade == 0.0) {
+        return vec4<f32>(color.rgb, 1.0);
+    }
+
+    // fade > 0: decode to linear light, apply the grayscale + darken,
+    // re-encode to sRGB. Rec.709 linear-light luma coefficients (NOT
+    // BT.601, which are defined for gamma-encoded values). The 0.42
+    // multiplier reproduces the old "35% darken" effect: 0.65 in sRGB
+    // space is roughly 0.65^2 ≈ 0.42 in linear space.
+    let linear = srgb_to_linear(color.rgb);
+    let luma = dot(linear, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.42;
+    let gray_linear = vec3<f32>(luma);
+    let out_linear = mix(linear, gray_linear, fade);
+    let out_srgb = linear_to_srgb(out_linear);
+    return vec4<f32>(out_srgb, 1.0);
 }
