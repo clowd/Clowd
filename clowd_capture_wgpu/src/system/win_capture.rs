@@ -1,5 +1,5 @@
 use anyhow::Result;
-use image::{self, DynamicImage, ImageBuffer, Rgba, RgbaImage};
+use image::{DynamicImage, RgbaImage};
 use rayon::prelude::*;
 use std::{mem, ops::Deref, ptr};
 use windows::{
@@ -107,8 +107,17 @@ fn to_rgba_image(
     box_h_bitmap: BoxHBITMAP,
     width: i32,
     height: i32,
-) -> Result<(ImageBuffer<Rgba<u8>, Vec<u8>>, ImageBuffer<Rgba<u8>, Vec<u8>>)> {
-    let buffer_size = width * height * 4;
+) -> Result<(RgbaImage, RgbaImage)> {
+    // Single allocation path: GetDIBits writes BGRA directly into `color`,
+    // then the rayon pass converts `color` to RGBA in-place and computes
+    // `gray` in a second buffer. Previously this allocated a third full
+    // frame buffer and ran rayon with a 4-byte task granularity — fine for
+    // correctness but catastrophic for throughput on a 4K capture.
+    let byte_count = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or_else(|| anyhow!("capture dimensions overflow"))?;
+
     let mut bitmap_info = BITMAPINFO {
         bmiHeader: BITMAPINFOHEADER {
             biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -116,76 +125,71 @@ fn to_rgba_image(
             biHeight: -height,
             biPlanes: 1,
             biBitCount: 32,
-            biSizeImage: buffer_size as u32,
+            biSizeImage: byte_count as u32,
             biCompression: 0,
             ..Default::default()
         },
         ..Default::default()
     };
 
-    let mut buffer = vec![0u8; buffer_size as usize];
+    let mut color = vec![0u8; byte_count];
+    let mut gray = vec![0u8; byte_count];
 
     unsafe {
-        let is_success = GetDIBits(
+        let scan_lines = GetDIBits(
             *box_hdc_mem,
             *box_h_bitmap,
             0,
             height as u32,
-            Some(buffer.as_mut_ptr().cast()),
+            Some(color.as_mut_ptr().cast()),
             &mut bitmap_info,
             DIB_RGB_COLORS,
-        ) == 0;
-
-        if is_success {
-            bail!("Get RGBA data failed");
+        );
+        if scan_lines == 0 {
+            bail!("GetDIBits failed");
         }
-    };
+    }
 
-    // let is_old_version = get_os_major_version() < 8;
-    // for src in buffer.chunks_exact_mut(4) {
-    //     src.swap(0, 2);
-    //     // fix https://github.com/nashaofu/xcap/issues/92#issuecomment-1910014951
-    //     if src[3] == 0 && is_old_version {
-    //         src[3] = 255;
-    //     }
-    // }
+    // Chunk at row granularity so rayon tasks are large enough to amortize
+    // scheduling. ~64 rows per task ≈ 1 MB at 4K width — big enough that
+    // scheduler overhead is noise, small enough to keep all cores fed.
+    let row_bytes = (width as usize) * 4;
+    let chunk_bytes = row_bytes.saturating_mul(64).max(row_bytes);
 
-    let mut color_rgba_buffer = vec![0u8; (width * height * 4) as usize];
-    let mut gray_rgba_buffer = vec![0u8; (width * height * 4) as usize];
+    // Pre-combined BT.601 luma + 35% darken in 8-bit fixed point.
+    // 0.299*0.65 ≈ 50/256, 0.587*0.65 ≈ 98/256, 0.114*0.65 ≈ 19/256.
+    // Sum 167/256 ≈ 0.6523 — visually indistinguishable from the old 0.65.
+    color
+        .par_chunks_mut(chunk_bytes)
+        .zip(gray.par_chunks_mut(chunk_bytes))
+        .for_each(|(color_chunk, gray_chunk)| {
+            for (cp, gp) in color_chunk
+                .chunks_exact_mut(4)
+                .zip(gray_chunk.chunks_exact_mut(4))
+            {
+                let b = cp[0] as u32;
+                let g = cp[1] as u32;
+                let r = cp[2] as u32;
+                let a = cp[3];
 
-    color_rgba_buffer
-        .par_chunks_mut(4)
-        .zip(gray_rgba_buffer.par_chunks_mut(4))
-        .enumerate()
-        .for_each(|(i, (color, gray))| {
-            let idx = i * 4;
-            let b = buffer[idx] as f32;
-            let g = buffer[idx + 1] as f32;
-            let r = buffer[idx + 2] as f32;
-            let a = buffer[idx + 3];
+                let gray_val = ((50 * r + 98 * g + 19 * b) >> 8) as u8;
+                gp[0] = gray_val;
+                gp[1] = gray_val;
+                gp[2] = gray_val;
+                gp[3] = a;
 
-            // Convert to grayscale
-            let gray_val = 0.299 * r + 0.587 * g + 0.114 * b;
-            let gray_val = (gray_val * 0.65) as u8; // darken by 35%
-            gray[0] = gray_val;
-            gray[1] = gray_val;
-            gray[2] = gray_val;
-            gray[3] = a;
-
-            // Convert BGRA to RGBA
-            color[0] = r as u8; // R
-            color[1] = g as u8; // G
-            color[2] = b as u8; // B
-            color[3] = a; // A
+                // In-place BGRA → RGBA. G and A stay put.
+                cp[0] = r as u8;
+                cp[2] = b as u8;
+            }
         });
 
-    let bgra_image =
-        RgbaImage::from_raw(width as u32, height as u32, color_rgba_buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
+    let rgba_image = RgbaImage::from_raw(width as u32, height as u32, color)
+        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
+    let gray_image = RgbaImage::from_raw(width as u32, height as u32, gray)
+        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
-    let gray_image =
-        RgbaImage::from_raw(width as u32, height as u32, gray_rgba_buffer).ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
-
-    Ok((bgra_image, gray_image))
+    Ok((rgba_image, gray_image))
 }
 
 pub fn virtual_desktop() -> ScreenRect {
@@ -216,7 +220,7 @@ pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
 
         BitBlt(*box_hdc_mem, 0, 0, vw, vh, Some(*box_hdc_desktop_window), vx, vy, SRCCOPY | CAPTUREBLT)?;
 
-        let capture = to_rgba_image(box_hdc_mem, box_h_bitmap, vw, vh)?;
-        Ok((DynamicImage::ImageRgba8(capture.0), DynamicImage::ImageRgba8(capture.1)))
+        let (rgba, gray) = to_rgba_image(box_hdc_mem, box_h_bitmap, vw, vh)?;
+        Ok((DynamicImage::ImageRgba8(rgba), DynamicImage::ImageRgba8(gray)))
     }
 }

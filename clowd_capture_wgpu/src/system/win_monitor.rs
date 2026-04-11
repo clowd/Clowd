@@ -18,7 +18,7 @@ use windows::{
 use crate::geometry::{RectExt, ScreenRect};
 
 #[derive(Debug, Clone)]
-pub(crate) struct ImplMonitor {
+pub struct ImplMonitor {
     #[allow(unused)]
     pub hmonitor: HMONITOR,
     #[allow(unused)]
@@ -36,12 +36,14 @@ pub(crate) struct ImplMonitor {
 }
 
 extern "system" fn monitor_enum_proc(hmonitor: HMONITOR, _: HDC, _: *mut RECT, state: LPARAM) -> windows::core::BOOL {
+    // EnumDisplayMonitors is synchronous, so the `state` pointer is live for
+    // the entire call — we can just re-borrow it without round-tripping
+    // through Box::from_raw/Box::leak.
     unsafe {
-        let state = Box::leak(Box::from_raw(state.0 as *mut Vec<HMONITOR>));
+        let state = &mut *(state.0 as *mut Vec<HMONITOR>);
         state.push(hmonitor);
-
-        TRUE
     }
+    TRUE
 }
 
 fn get_dev_mode_w(monitor_info_exw: &MONITORINFOEXW) -> Result<DEVMODEW> {
@@ -128,20 +130,26 @@ impl ImplMonitor {
     }
 
     pub fn all() -> Result<Vec<ImplMonitor>> {
-        let hmonitors_mut_ptr: *mut Vec<HMONITOR> = Box::into_raw(Box::default());
-
-        let hmonitors = unsafe {
-            EnumDisplayMonitors(Some(HDC::default()), None, Some(monitor_enum_proc), LPARAM(hmonitors_mut_ptr as isize)).ok()?;
-            Box::from_raw(hmonitors_mut_ptr)
-        };
+        // Stack-owned collector: if EnumDisplayMonitors returns an error,
+        // the Vec drops cleanly at the end of scope. The previous
+        // Box::into_raw/from_raw pattern leaked the allocation on any `?`
+        // that fired before the Box was reconstructed.
+        let mut hmonitors: Vec<HMONITOR> = Vec::new();
+        unsafe {
+            EnumDisplayMonitors(
+                Some(HDC::default()),
+                None,
+                Some(monitor_enum_proc),
+                LPARAM(&mut hmonitors as *mut _ as isize),
+            )
+            .ok()?;
+        }
 
         let mut impl_monitors = Vec::with_capacity(hmonitors.len());
-
-        for &hmonitor in hmonitors.iter() {
-            if let Ok(impl_monitor) = ImplMonitor::new(hmonitor) {
-                impl_monitors.push(impl_monitor);
-            } else {
-                error!("ImplMonitor::new({:?}) failed", hmonitor);
+        for hmonitor in hmonitors {
+            match ImplMonitor::new(hmonitor) {
+                Ok(m) => impl_monitors.push(m),
+                Err(_) => error!("ImplMonitor::new({:?}) failed", hmonitor),
             }
         }
 
@@ -173,59 +181,15 @@ impl ImplMonitor {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Monitor {
-    impl_monitor: ImplMonitor,
-}
-
-impl Monitor {
-    fn new(impl_monitor: ImplMonitor) -> Monitor {
-        Monitor {
-            impl_monitor,
-        }
-    }
-}
-
-impl Monitor {
-    pub fn all() -> Result<Vec<Monitor>> {
-        let monitors = ImplMonitor::all()?
-            .iter()
-            .map(|impl_monitor| Monitor::new(impl_monitor.clone()))
-            .collect();
-        Ok(monitors)
-    }
-
-    pub fn primary() -> Result<Monitor> {
-        let impl_monitor = ImplMonitor::primary()?;
-        Ok(Monitor::new(impl_monitor))
-    }
-}
-
-impl Monitor {
-    pub fn id(&self) -> u32 {
-        self.impl_monitor.id
-    }
-    pub fn name(&self) -> &str {
-        &self.impl_monitor.name
-    }
+impl ImplMonitor {
     pub fn bounds(&self) -> ScreenRect {
-        ScreenRect::from_xy_size(
-            self.impl_monitor.x,
-            self.impl_monitor.y,
-            self.impl_monitor.width as i32,
-            self.impl_monitor.height as i32,
-        )
+        ScreenRect::from_xy_size(self.x, self.y, self.width as i32, self.height as i32)
     }
-    pub fn rotation(&self) -> f32 {
-        self.impl_monitor.rotation
-    }
-    pub fn scale_factor(&self) -> f32 {
-        self.impl_monitor.scale_factor
-    }
-    pub fn frequency(&self) -> f32 {
-        self.impl_monitor.frequency
-    }
-    pub fn is_primary(&self) -> bool {
-        self.impl_monitor.is_primary
-    }
+}
+
+/// Enumerate every connected monitor. Returns the raw `ImplMonitor` records
+/// so the caller can reshape them into whatever summary it needs; the former
+/// `Monitor` wrapper just cloned every `ImplMonitor` to serve the same data.
+pub fn all() -> Result<Vec<ImplMonitor>> {
+    ImplMonitor::all()
 }
