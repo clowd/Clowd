@@ -1,12 +1,21 @@
 [package]
 name = "clowd_capture_wgpu"
-version.workspace = true
-authors.workspace = true
-repository.workspace = true
-keywords.workspace = true
-categories.workspace = true
-license.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+version = "1.0.0"
+edition = "2021"
 
 [dependencies]
+anyhow = "1.0"
+image = "0.25"
+euclid = "0.22"
+windows = { version = "0.62", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Dwm",
+    "Win32_System_SystemInformation",
+] }
+winit = "0.30"
+wgpu = "29.0"
+rayon = "1.11"
+log = "0.4"
+num = "0.4"
