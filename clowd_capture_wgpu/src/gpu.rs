@@ -303,13 +303,19 @@ pub fn create_desktop_snapshot(
     queue.submit(std::iter::empty());
 
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    // Nearest filtering on both axes. Zoom is clamped to >= 1.0, so we only
+    // ever magnify; nearest keeps individual source pixels crisp under
+    // magnification instead of blending them into each other. At zoom == 1
+    // the fragment UV lands exactly on a texel centre, so Nearest is
+    // bit-identical to Linear for the unzoomed path — no change in the
+    // byte-exact window-uncloaking behaviour.
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
         label: Some("desktop snapshot sampler"),
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
+        mag_filter: wgpu::FilterMode::Nearest,
+        min_filter: wgpu::FilterMode::Nearest,
         mipmap_filter: wgpu::MipmapFilterMode::Nearest,
         ..Default::default()
     });
