@@ -7,6 +7,7 @@ use winit::window::Window;
 
 use crate::geometry::ScreenRect;
 use crate::gpu::{SharedGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::system::SystemInterop;
 
 /// Duration of the colour → grayscale fade after the window first becomes
 /// visible. Tuned to feel "snappy but not snap" — under 300ms reads as a
@@ -140,9 +141,16 @@ fn render_thread_main(
             m_h / vd_h,
         ];
 
+        // Seed the cursor position for the very first (frame-0) draw, so
+        // the crosshair appears at the correct spot the instant the window
+        // becomes visible rather than briefly snapping from the top-left.
+        let cursor = SystemInterop::get_mouse_position();
+        let init_local_x = (cursor.x - monitor_bounds.min_x()) as f32;
+        let init_local_y = (cursor.y - monitor_bounds.min_y()) as f32;
+
         let uniforms = WindowUniforms {
             uv_offset_scale,
-            fade_pad: [0.0; 4],
+            params: [0.0, init_local_x, init_local_y, 0.0],
         };
 
         let ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {
@@ -219,7 +227,21 @@ fn render_thread_main(
             let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
             let inv = 1.0 - t;
             let fade = 1.0 - inv * inv * inv * inv;
-            state.uniforms.fade_pad[0] = fade;
+            state.uniforms.params[0] = fade;
+
+            // Cursor in window-local physical pixels. Out-of-range values
+            // (cursor on another monitor) are passed through as-is — the
+            // shader's integer-equality test cannot match any framebuffer
+            // pixel index, so the line silently vanishes on this window.
+            // GetCursorPos is a cheap syscall and we already write the
+            // uniform every frame for the fade, so this adds no extra
+            // staging traffic.
+            let cursor = SystemInterop::get_mouse_position();
+            let local_x = cursor.x - monitor_bounds.min_x();
+            let local_y = cursor.y - monitor_bounds.min_y();
+            state.uniforms.params[1] = local_x as f32;
+            state.uniforms.params[2] = local_y as f32;
+
             gpu.queue
                 .write_buffer(&state.ubo, 0, bytemuck::bytes_of(&state.uniforms));
         }
