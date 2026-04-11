@@ -10,14 +10,26 @@ use winit::window::{Window, WindowId, WindowLevel};
 
 use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
 use crate::platform;
+use crate::settings::CapturerSettings;
 use crate::system::SystemInterop;
 use crate::window_state::{spawn_render_thread, WindowHandle};
 
-#[derive(Default)]
 pub struct App {
+    settings: Arc<CapturerSettings>,
     gpu: Option<Arc<SharedGpu>>,
     instance: Option<wgpu::Instance>,
     windows: HashMap<WindowId, WindowHandle>,
+}
+
+impl App {
+    pub fn new(settings: Arc<CapturerSettings>) -> Self {
+        Self {
+            settings,
+            gpu: None,
+            instance: None,
+            windows: HashMap::new(),
+        }
+    }
 }
 
 impl ApplicationHandler for App {
@@ -127,6 +139,7 @@ impl ApplicationHandler for App {
                 w,
                 surface,
                 bootstrap.shared.clone(),
+                self.settings.clone(),
                 m.bounds,
                 m.scale_factor,
                 hz,

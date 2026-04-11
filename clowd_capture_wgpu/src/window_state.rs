@@ -7,6 +7,7 @@ use winit::window::Window;
 
 use crate::geometry::ScreenRect;
 use crate::gpu::{SharedGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::settings::CapturerSettings;
 use crate::system::SystemInterop;
 
 /// Duration of the colour → grayscale fade after the window first becomes
@@ -59,11 +60,15 @@ impl Drop for WindowHandle {
 /// virtual-desktop bounds) to compute its slice of the shared texture.
 /// `scale_factor` is this monitor's DPI scale (1.0 = 100 %) and is
 /// written once into the uniform so the shader can size the coloured
-/// crosshair arms in physical pixels.
+/// crosshair arms in physical pixels. `settings` is the shared
+/// `CapturerSettings`; the render thread reads it once at startup
+/// (currently only `crosshair_color`) and stashes the values into the
+/// per-window uniform.
 pub fn spawn_render_thread(
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     gpu: Arc<SharedGpu>,
+    settings: Arc<CapturerSettings>,
     monitor_bounds: ScreenRect,
     scale_factor: f32,
     refresh_hz: f32,
@@ -78,6 +83,7 @@ pub fn spawn_render_thread(
             render_thread_main(
                 surface,
                 gpu,
+                settings,
                 rx,
                 initial_size,
                 monitor_bounds,
@@ -97,6 +103,7 @@ pub fn spawn_render_thread(
 fn render_thread_main(
     surface: wgpu::Surface<'static>,
     gpu: Arc<SharedGpu>,
+    settings: Arc<CapturerSettings>,
     rx: mpsc::Receiver<RenderMsg>,
     size: PhysicalSize<u32>,
     monitor_bounds: ScreenRect,
@@ -158,10 +165,13 @@ fn render_thread_main(
         // lifetime of the window (winit delivers ScaleFactorChanged on
         // actual DPI changes, which we don't currently handle), so we
         // only write it here and leave the per-frame path touching
-        // params[0..3] for fade + cursor.
+        // params[0..3] for fade + cursor. `crosshair_color` is also
+        // immutable from the GPU's POV — copied from settings once at
+        // startup, never updated again.
         let uniforms = WindowUniforms {
             uv_offset_scale,
             params: [0.0, init_local_x, init_local_y, scale_factor],
+            crosshair_color: settings.crosshair_color,
         };
 
         let ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {

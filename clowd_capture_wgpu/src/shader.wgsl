@@ -12,9 +12,13 @@
 //                        1.5 = 150 %, …). Used to size the coloured
 //                        crosshair arms so they stay the same physical
 //                        size on every display.
+//   crosshair_color    = RGBA colour used for both the inner thin cross
+//                        and the outer thick segments. Seeded once from
+//                        `CapturerSettings`; never updated per frame.
 struct Uniforms {
     uv_offset_scale: vec4<f32>,
     params:          vec4<f32>,
+    crosshair_color: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -120,9 +124,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let on_thick_v_colour = adx <= wide_half && ady > chunk && ady <= chunk2;
     let on_thick_h_colour = ady <= wide_half && adx > chunk && adx <= chunk2;
     if (on_thin_colour || on_thick_v_colour || on_thick_h_colour) {
-        // Hard-coded red for now; lift to a uniform when we want to
-        // theme the crosshair.
-        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+        return u.crosshair_color;
     }
 
     if (on_v_line || on_h_line) {

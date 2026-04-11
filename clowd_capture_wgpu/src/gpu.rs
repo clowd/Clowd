@@ -5,10 +5,10 @@ use winit::window::Window;
 
 use crate::system::CapturedDesktop;
 
-/// 32-byte uniform block written by the main thread (UV region) and updated
-/// every frame by each render thread (fade factor + cursor position). Two
-/// `vec4`s satisfy the WGSL uniform-address-space rule that the struct size
-/// be a multiple of 16.
+/// 48-byte uniform block written once per render-thread startup (UV region,
+/// DPI scale, crosshair colour) and updated every frame by each render
+/// thread (fade factor + cursor position). Three `vec4`s satisfy the WGSL
+/// uniform-address-space rule that the struct size be a multiple of 16.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct WindowUniforms {
@@ -24,6 +24,11 @@ pub struct WindowUniforms {
     ///     used by the shader to size the coloured crosshair arms so
     ///     they stay the same physical size on every display
     pub params: [f32; 4],
+    /// RGBA colour (each channel in [0, 1]) used for the coloured
+    /// sections of the crosshair — both the inner thin arms and the
+    /// outer thick segments. Seeded from `CapturerSettings` at render-
+    /// thread startup and currently never updated after that.
+    pub crosshair_color: [f32; 4],
 }
 
 pub const WINDOW_UNIFORMS_SIZE: u64 = std::mem::size_of::<WindowUniforms>() as u64;
