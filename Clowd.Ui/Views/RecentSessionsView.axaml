@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Clowd.Ui.Views.RecentSessionsView">
+    <Grid>
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MaxWidth="380"
+                    Spacing="14">
+            <Viewbox Width="64" Height="64" HorizontalAlignment="Center">
+                <Path Data="{StaticResource IconRecent}"
+                      Fill="{DynamicResource SystemBaseHighColor}"
+                      Opacity="0.3" />
+            </Viewbox>
+            <TextBlock Text="No recent sessions"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="Captures and uploads will appear here once the capture process is integrated."
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Opacity="0.65" />
+        </StackPanel>
+    </Grid>
+</UserControl>

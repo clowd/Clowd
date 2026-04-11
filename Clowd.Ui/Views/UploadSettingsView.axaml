@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Clowd.Ui.Models.Settings"
+             xmlns:upload="using:Clowd.Ui.Models.Upload"
+             x:Class="Clowd.Ui.Views.UploadSettingsView"
+             x:DataType="settings:SettingsUpload">
+    <ScrollViewer>
+        <StackPanel Spacing="20" MaxWidth="720" HorizontalAlignment="Left">
+            <TextBlock Text="Upload providers" FontSize="24" FontWeight="SemiBold" />
+            <TextBlock Text="Enable the providers you want to use. Catbox works out of the box; others are placeholders for now."
+                       Opacity="0.65"
+                       TextWrapping="Wrap" />
+
+            <ItemsControl ItemsSource="{Binding Providers}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="upload:UploadProviderInfo">
+                        <Border Margin="0,0,0,8"
+                                Padding="14,12"
+                                BorderBrush="{DynamicResource SystemBaseLowColor}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                                <CheckBox Grid.Column="0"
+                                          IsChecked="{Binding IsEnabled}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,14,0" />
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Provider.Name}"
+                                               FontWeight="SemiBold"
+                                               FontSize="14" />
+                                    <TextBlock Text="{Binding Provider.Description}"
+                                               Opacity="0.7"
+                                               FontSize="12"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="2"
+                                        Content="Configure..."
+                                        IsEnabled="False"
+                                        ToolTip.Tip="Provider-specific settings will be available in a future update." />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

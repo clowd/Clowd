@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Clowd.Ui.ViewModels.Pages"
+             xmlns:settings="using:Clowd.Ui.Models.Settings"
+             x:Class="Clowd.Ui.Views.EditorSettingsView"
+             x:DataType="vm:EditorSettingsViewModel">
+    <ScrollViewer>
+        <StackPanel Spacing="20" MaxWidth="640" HorizontalAlignment="Left">
+            <TextBlock Text="Editor" FontSize="24" FontWeight="SemiBold" />
+
+            <Border BorderBrush="{DynamicResource SystemBaseLowColor}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="16,12">
+                <StackPanel Spacing="14">
+
+                    <CheckBox IsChecked="{Binding Settings.RestoreSessionsOnClowdStart}"
+                              Content="Restore sessions when Clowd starts" />
+
+                    <Grid ColumnDefinitions="160,*" VerticalAlignment="Center">
+                        <TextBlock Grid.Column="0" Text="Canvas background" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                            <Border Width="32" Height="24"
+                                    BorderBrush="Black" BorderThickness="1"
+                                    CornerRadius="3"
+                                    Background="{Binding CanvasBackgroundBrush}" />
+                            <Button Content="Pick color..." Click="OnPickColor" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="160,*" VerticalAlignment="Center">
+                        <TextBlock Grid.Column="0" Text="Delete sessions after" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+                            <NumericUpDown Value="{Binding DeleteSessionsNumberDecimal, Mode=TwoWay}"
+                                           Minimum="1" Maximum="9999"
+                                           Width="120"
+                                           FormatString="0" />
+                            <ComboBox x:Name="UnitCombo"
+                                      SelectedItem="{Binding Settings.DeleteSessionsAfter.Unit, Mode=TwoWay}"
+                                      Width="120" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="160,*" VerticalAlignment="Center">
+                        <TextBlock Grid.Column="0" Text="Startup padding (px)" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Column="1"
+                                       Value="{Binding StartupPaddingDecimal, Mode=TwoWay}"
+                                       Minimum="0" Maximum="500"
+                                       Width="120"
+                                       HorizontalAlignment="Left"
+                                       FormatString="0" />
+                    </Grid>
+
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
