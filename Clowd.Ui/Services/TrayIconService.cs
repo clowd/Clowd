@@ -1,6 +1,7 @@
 using System;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform;
 
 namespace Clowd.Ui.Services;
 
@@ -23,6 +24,7 @@ public sealed class TrayIconService : IDisposable
         {
             ToolTipText = "Clowd",
             IsVisible = true,
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Clowd.Ui/Assets/clowd.ico"))),
             Menu = new NativeMenu(),
         };
 

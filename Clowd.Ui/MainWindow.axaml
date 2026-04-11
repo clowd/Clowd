@@ -7,6 +7,7 @@
         x:Class="Clowd.Ui.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Clowd"
+        Icon="/Assets/clowd.ico"
         Width="900" Height="600"
         MinWidth="700" MinHeight="450"
         Background="{DynamicResource SystemRegionBrush}">
