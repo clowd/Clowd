@@ -58,6 +58,16 @@ public partial class App : Application
             _tray = new TrayIconService(desktop);
             _tray.UploadFileRequested += async (_, _) => await HandleUploadFileFromTrayAsync();
             _tray.NewEditorRequested += (_, _) => EditorWindows.OpenNew();
+            _tray.ColorPickerRequested += (_, _) =>
+            {
+                // Tray invocation has no owner window, so use Show() (non-modal)
+                // and open in viewer mode (no OK, copy buttons enabled).
+                var dlg = new ColorPickerDialog(previous: null, asDialog: false)
+                {
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                };
+                dlg.Show();
+            };
 
             _hotkeyBinder = new HotkeyBinder(Platform);
             BindHotkeys();

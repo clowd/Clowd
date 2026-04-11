@@ -16,6 +16,7 @@ public sealed class TrayIconService : IDisposable
 
     public event EventHandler? UploadFileRequested;
     public event EventHandler? NewEditorRequested;
+    public event EventHandler? ColorPickerRequested;
 
     public TrayIconService(IClassicDesktopStyleApplicationLifetime lifetime)
     {
@@ -38,12 +39,16 @@ public sealed class TrayIconService : IDisposable
         var uploadItem = new NativeMenuItem("Upload file...");
         uploadItem.Click += (_, _) => UploadFileRequested?.Invoke(this, EventArgs.Empty);
 
+        var colorPickerItem = new NativeMenuItem("Color picker...");
+        colorPickerItem.Click += (_, _) => ColorPickerRequested?.Invoke(this, EventArgs.Empty);
+
         var exitItem = new NativeMenuItem("Exit");
         exitItem.Click += (_, _) => _lifetime.Shutdown();
 
         _trayIcon.Menu.Items.Add(openItem);
         _trayIcon.Menu.Items.Add(newEditorItem);
         _trayIcon.Menu.Items.Add(uploadItem);
+        _trayIcon.Menu.Items.Add(colorPickerItem);
         _trayIcon.Menu.Items.Add(new NativeMenuItemSeparator());
         _trayIcon.Menu.Items.Add(exitItem);
 
