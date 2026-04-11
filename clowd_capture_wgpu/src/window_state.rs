@@ -5,10 +5,9 @@ use std::time::Instant;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::geometry::ScreenRect;
+use crate::geometry::{ScreenPoint, ScreenRect};
 use crate::gpu::{SharedGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
-use crate::system::SystemInterop;
 
 /// Duration of the colour → grayscale fade after the window first becomes
 /// visible. Tuned to feel "snappy but not snap" — under 300ms reads as a
@@ -18,6 +17,10 @@ const FADE_DURATION_SECS: f32 = 0.3;
 /// Messages the main thread can send to a render thread.
 pub enum RenderMsg {
     Resize(PhysicalSize<u32>),
+    /// New cursor position in virtual-desktop screen pixels. The render
+    /// thread caches the latest value into a local and uses it on the next
+    /// frame; the channel is the only synchronisation we need.
+    MousePos(ScreenPoint),
     Shutdown,
 }
 
@@ -27,6 +30,11 @@ pub enum RenderMsg {
 /// cleanly.
 pub struct WindowHandle {
     pub window: Arc<Window>,
+    /// This window's monitor in virtual-desktop screen pixels. Cached on
+    /// the main thread so `CursorMoved` (which delivers window-local
+    /// coords) can be converted to virtual-desktop coords without having
+    /// to re-enumerate monitors on every mouse-move.
+    pub monitor_bounds: ScreenRect,
     tx: mpsc::Sender<RenderMsg>,
     thread: Option<JoinHandle<()>>,
 }
@@ -34,6 +42,10 @@ pub struct WindowHandle {
 impl WindowHandle {
     pub fn resize(&self, size: PhysicalSize<u32>) {
         let _ = self.tx.send(RenderMsg::Resize(size));
+    }
+
+    pub fn update_mouse(&self, pos: ScreenPoint) {
+        let _ = self.tx.send(RenderMsg::MousePos(pos));
     }
 }
 
@@ -64,6 +76,11 @@ impl Drop for WindowHandle {
 /// `CapturerSettings`; the render thread reads it once at startup
 /// (currently only `crosshair_color`) and stashes the values into the
 /// per-window uniform.
+///
+/// `initial_mouse` is the cursor position (virtual-desktop screen
+/// pixels) sampled by the main thread *before* any window was created,
+/// so the very first frame can render the crosshair at the correct spot
+/// without ever querying the OS from the render thread.
 pub fn spawn_render_thread(
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -72,6 +89,7 @@ pub fn spawn_render_thread(
     monitor_bounds: ScreenRect,
     scale_factor: f32,
     refresh_hz: f32,
+    initial_mouse: ScreenPoint,
     first_frame_barrier: Arc<Barrier>,
 ) -> WindowHandle {
     let (tx, rx) = mpsc::channel();
@@ -89,12 +107,14 @@ pub fn spawn_render_thread(
                 monitor_bounds,
                 scale_factor,
                 refresh_hz,
+                initial_mouse,
                 first_frame_barrier,
             );
         })
         .expect("spawn render thread");
     WindowHandle {
         window,
+        monitor_bounds,
         tx,
         thread: Some(thread),
     }
@@ -109,6 +129,7 @@ fn render_thread_main(
     monitor_bounds: ScreenRect,
     scale_factor: f32,
     refresh_hz: f32,
+    initial_mouse: ScreenPoint,
     first_frame_barrier: Arc<Barrier>,
 ) {
     // `refresh_hz` is accepted (and logged) for future use — DXGI's waitable
@@ -157,9 +178,10 @@ fn render_thread_main(
         // Seed the cursor position for the very first (frame-0) draw, so
         // the crosshair appears at the correct spot the instant the window
         // becomes visible rather than briefly snapping from the top-left.
-        let cursor = SystemInterop::get_mouse_position();
-        let init_local_x = (cursor.x - monitor_bounds.min_x()) as f32;
-        let init_local_y = (cursor.y - monitor_bounds.min_y()) as f32;
+        // The value was sampled by the main thread *before* any window
+        // existed; from here on the position arrives via RenderMsg::MousePos.
+        let init_local_x = (initial_mouse.x - monitor_bounds.min_x()) as f32;
+        let init_local_y = (initial_mouse.y - monitor_bounds.min_y()) as f32;
 
         // params[3] = DPI scale factor. This value is constant for the
         // lifetime of the window (winit delivers ScaleFactorChanged on
@@ -219,17 +241,29 @@ fn render_thread_main(
     // hop), and we don't want any of that to eat into the 500ms budget.
     let start = Instant::now();
 
+    // Latest cursor position the main thread has told us about, in
+    // virtual-desktop screen pixels. Seeded from the pre-window snapshot;
+    // every subsequent value arrives via RenderMsg::MousePos.
+    let mut mouse_pos: ScreenPoint = initial_mouse;
+
     loop {
-        // Drain any pending commands non-blockingly before the blocking
-        // present. A Shutdown propagates within at most one frame.
-        match rx.try_recv() {
-            Ok(RenderMsg::Resize(new_size)) => {
-                config.width = new_size.width.max(1);
-                config.height = new_size.height.max(1);
-                surface.configure(&gpu.device, &config);
+        // Drain *all* pending commands non-blockingly before the blocking
+        // present. A burst of MousePos events from a fast mouse must collapse
+        // to the latest in a single frame, not lag N frames behind. Shutdown
+        // propagates within at most one frame.
+        loop {
+            match rx.try_recv() {
+                Ok(RenderMsg::Resize(new_size)) => {
+                    config.width = new_size.width.max(1);
+                    config.height = new_size.height.max(1);
+                    surface.configure(&gpu.device, &config);
+                }
+                Ok(RenderMsg::MousePos(p)) => {
+                    mouse_pos = p;
+                }
+                Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
+                Err(mpsc::TryRecvError::Empty) => break,
             }
-            Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
-            Err(mpsc::TryRecvError::Empty) => {}
         }
 
         // Update the fade factor and push it to the GPU. Cheap; the
@@ -254,12 +288,12 @@ fn render_thread_main(
             // (cursor on another monitor) are passed through as-is — the
             // shader's integer-equality test cannot match any framebuffer
             // pixel index, so the line silently vanishes on this window.
-            // GetCursorPos is a cheap syscall and we already write the
-            // uniform every frame for the fade, so this adds no extra
-            // staging traffic.
-            let cursor = SystemInterop::get_mouse_position();
-            let local_x = cursor.x - monitor_bounds.min_x();
-            let local_y = cursor.y - monitor_bounds.min_y();
+            // The position came from the main thread via RenderMsg::MousePos
+            // and was cached into `mouse_pos` during the drain above; we
+            // already write the uniform every frame for the fade, so adding
+            // these two i32 subtractions is free.
+            let local_x = mouse_pos.x - monitor_bounds.min_x();
+            let local_y = mouse_pos.y - monitor_bounds.min_y();
             state.uniforms.params[1] = local_x as f32;
             state.uniforms.params[2] = local_y as f32;
 

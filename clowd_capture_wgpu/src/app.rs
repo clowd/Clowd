@@ -8,6 +8,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId, WindowLevel};
 
+use crate::geometry::ScreenPoint;
 use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
 use crate::platform;
 use crate::settings::CapturerSettings;
@@ -54,6 +55,13 @@ impl ApplicationHandler for App {
             event_loop.exit();
             return;
         }
+
+        // Snapshot the cursor position before any of our windows exist, so
+        // each render thread can seed its frame-0 crosshair uniform without
+        // ever having to query the OS itself. After the windows are up the
+        // main thread keeps every render thread in sync by translating
+        // WindowEvent::CursorMoved into RenderMsg::MousePos.
+        let initial_mouse = SystemInterop::get_mouse_position();
 
         // 2. Create one hidden, borderless window per monitor.
         let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(captured.monitors.len());
@@ -143,6 +151,7 @@ impl ApplicationHandler for App {
                 m.bounds,
                 m.scale_factor,
                 hz,
+                initial_mouse,
                 barrier.clone(),
             );
             handles.insert(id, handle);
@@ -193,6 +202,22 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::Resized(new_size) => handle.resize(new_size),
+            WindowEvent::CursorMoved { position, .. } => {
+                // winit hands us a position in this window's local physical
+                // pixels. Convert to virtual-desktop coords using the source
+                // window's monitor bounds, then broadcast to *every* render
+                // thread — windows on other monitors still need updates so
+                // their crosshair correctly disappears (the shader's range
+                // check handles the off-monitor case for free).
+                let bounds = handle.monitor_bounds;
+                let vd = ScreenPoint::new(
+                    bounds.min_x() + position.x as i32,
+                    bounds.min_y() + position.y as i32,
+                );
+                for h in self.windows.values() {
+                    h.update_mouse(vd);
+                }
+            }
             _ => {}
         }
     }
