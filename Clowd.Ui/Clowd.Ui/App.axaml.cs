@@ -21,6 +21,9 @@ public partial class App : Application
     public SettingsRoot Settings { get; private set; } = null!;
     public IPlatformService Platform { get; private set; } = new DefaultPlatformService();
 
+    public SessionStore Sessions { get; } = new();
+    public IEditorWindowService EditorWindows { get; private set; } = null!;
+
     private TrayIconService? _tray;
     private HotkeyBinder? _hotkeyBinder;
 
@@ -39,8 +42,10 @@ public partial class App : Application
             // The app exits only when the tray "Exit" item calls Shutdown().
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+            EditorWindows = new EditorWindowService(Sessions);
+
             var navigation = new NavigationService();
-            navigation.Register(PageKey.Recent,  () => new RecentSessionsView());
+            navigation.Register(PageKey.Recent,  () => new RecentSessionsView(new RecentSessionsViewModel(Sessions, EditorWindows)));
             navigation.Register(PageKey.General, () => new GeneralSettingsView(Settings.General));
             navigation.Register(PageKey.Hotkeys, () => new HotkeysSettingsView(new HotkeysViewModel(Settings.Hotkeys)));
             navigation.Register(PageKey.Editor,  () => new EditorSettingsView(new EditorSettingsViewModel(Settings.Editor)));
@@ -52,6 +57,7 @@ public partial class App : Application
 
             _tray = new TrayIconService(desktop);
             _tray.UploadFileRequested += async (_, _) => await HandleUploadFileFromTrayAsync();
+            _tray.NewEditorRequested += (_, _) => EditorWindows.OpenNew();
 
             _hotkeyBinder = new HotkeyBinder(Platform);
             BindHotkeys();

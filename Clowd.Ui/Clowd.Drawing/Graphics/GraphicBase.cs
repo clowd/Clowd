@@ -7,12 +7,22 @@ using Avalonia.Media;
 
 namespace Clowd.Drawing.Graphics
 {
-    public abstract class GraphicBase : SimpleNotifyObject
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+    [JsonDerivedType(typeof(GraphicRectangle), "rect")]
+    [JsonDerivedType(typeof(GraphicFilledRectangle), "filledRect")]
+    [JsonDerivedType(typeof(GraphicEllipse), "ellipse")]
+    [JsonDerivedType(typeof(GraphicLine), "line")]
+    [JsonDerivedType(typeof(GraphicArrow), "arrow")]
+    [JsonDerivedType(typeof(GraphicPolyLine), "polyline")]
+    [JsonDerivedType(typeof(GraphicText), "text")]
+    [JsonDerivedType(typeof(GraphicCount), "count")]
+    [JsonDerivedType(typeof(GraphicImage), "image")]
+    public abstract class GraphicBase : SimpleNotifyObject, IJsonOnDeserialized
     {
         public string Id
         {
             get => _id;
-            internal set => Set(ref _id, value);
+            set => Set(ref _id, value);
         }
 
         public virtual Color ObjectColor
@@ -54,7 +64,8 @@ namespace Clowd.Drawing.Graphics
         private bool _dropShadowEffect;
         private bool _isSelected;
 
-        protected GraphicBase()
+        // Public so System.Text.Json can construct subclasses during undo deserialize.
+        public GraphicBase()
         { }
 
         protected GraphicBase(Color objectColor, double lineWidth) : this(objectColor, lineWidth, true)
@@ -85,6 +96,20 @@ namespace Clowd.Drawing.Graphics
         internal virtual void Activate(object canvas) { }
 
         internal virtual void Normalize() { }
+
+        /// <summary>
+        /// Called by System.Text.Json after deserialization. Recomputes
+        /// derived state (centre of rotation, etc.) via <see cref="Normalize"/>.
+        /// Subclasses can override <see cref="OnDeserializedCore"/> to run
+        /// extra initialisation.
+        /// </summary>
+        void IJsonOnDeserialized.OnDeserialized()
+        {
+            Normalize();
+            OnDeserializedCore();
+        }
+
+        protected virtual void OnDeserializedCore() { }
 
         internal virtual int MakeHitTest(Point point, DpiScale uiscale)
         {

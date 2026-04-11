@@ -15,6 +15,7 @@ public sealed class TrayIconService : IDisposable
     private readonly IClassicDesktopStyleApplicationLifetime _lifetime;
 
     public event EventHandler? UploadFileRequested;
+    public event EventHandler? NewEditorRequested;
 
     public TrayIconService(IClassicDesktopStyleApplicationLifetime lifetime)
     {
@@ -31,6 +32,9 @@ public sealed class TrayIconService : IDisposable
         var openItem = new NativeMenuItem("Open Clowd");
         openItem.Click += (_, _) => ShowMainWindow();
 
+        var newEditorItem = new NativeMenuItem("New editor");
+        newEditorItem.Click += (_, _) => NewEditorRequested?.Invoke(this, EventArgs.Empty);
+
         var uploadItem = new NativeMenuItem("Upload file...");
         uploadItem.Click += (_, _) => UploadFileRequested?.Invoke(this, EventArgs.Empty);
 
@@ -38,6 +42,7 @@ public sealed class TrayIconService : IDisposable
         exitItem.Click += (_, _) => _lifetime.Shutdown();
 
         _trayIcon.Menu.Items.Add(openItem);
+        _trayIcon.Menu.Items.Add(newEditorItem);
         _trayIcon.Menu.Items.Add(uploadItem);
         _trayIcon.Menu.Items.Add(new NativeMenuItemSeparator());
         _trayIcon.Menu.Items.Add(exitItem);

@@ -39,6 +39,8 @@ namespace Clowd.Drawing.Graphics
             set => Set(ref _angle, value);
         }
 
+        // Recomputed by Normalize() on every deserialize, so excluded from JSON snapshots.
+        [System.Text.Json.Serialization.JsonIgnore]
         public Point CenterOfRotation
         {
             get => _centerOfRotation;
@@ -53,7 +55,7 @@ namespace Clowd.Drawing.Graphics
         private double _bottom;
         private double _angle;
 
-        protected GraphicRectangle()
+        public GraphicRectangle()
         { }
 
         public GraphicRectangle(Color objectColor, double lineWidth, Rect rect)
@@ -246,14 +248,27 @@ namespace Clowd.Drawing.Graphics
 
         internal override Cursor GetHandleCursor(int handleNumber)
         {
-            // TODO Phase 12: replace with CursorResources rotation/resize cursors.
             if (handleNumber == 0 || handleNumber > 9)
                 return HelperFunctions.DefaultCursor;
 
             if (handleNumber == 9)
-                return new Cursor(StandardCursorType.Hand);
+                return new Cursor(StandardCursorType.Hand); // rotation
 
-            return new Cursor(StandardCursorType.SizeAll);
+            // Per-corner / per-edge resize cursors. We don't account for the
+            // rectangle's own rotation here — Phase 12 keeps it simple by
+            // mapping handle index → standard cursor type.
+            return handleNumber switch
+            {
+                1 => new Cursor(StandardCursorType.TopLeftCorner),
+                2 => new Cursor(StandardCursorType.TopSide),
+                3 => new Cursor(StandardCursorType.TopRightCorner),
+                4 => new Cursor(StandardCursorType.RightSide),
+                5 => new Cursor(StandardCursorType.BottomRightCorner),
+                6 => new Cursor(StandardCursorType.BottomSide),
+                7 => new Cursor(StandardCursorType.BottomLeftCorner),
+                8 => new Cursor(StandardCursorType.LeftSide),
+                _ => HelperFunctions.DefaultCursor,
+            };
         }
 
         internal override void Normalize()
@@ -294,8 +309,29 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawObject(DrawingContext drawingContext)
         {
-            // Phase 2: stub. Phase 3 implements real rectangle rendering with
-            // PushTransform(rotate around center) + DrawRectangle.
+            // Rotate around CenterOfRotation. Avalonia's DrawingContext uses a
+            // disposable PushedState (the WPF PushTransform/Pop pair).
+            var rotateMatrix =
+                Matrix.CreateTranslation(-CenterOfRotation.X, -CenterOfRotation.Y) *
+                Matrix.CreateRotation(Angle * Math.PI / 180.0) *
+                Matrix.CreateTranslation(CenterOfRotation.X, CenterOfRotation.Y);
+
+            using (drawingContext.PushTransform(rotateMatrix))
+            {
+                DrawRectangle(drawingContext);
+            }
+        }
+
+        internal virtual void DrawRectangle(DrawingContext drawingContext)
+        {
+            var pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
+            var inset = LineWidth / 2;
+            var rect = new Rect(
+                UnrotatedBounds.Left + inset,
+                UnrotatedBounds.Top + inset,
+                Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left - LineWidth),
+                Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top - LineWidth));
+            drawingContext.DrawRectangle(null, pen, rect, LineWidth, LineWidth);
         }
 
         protected override void DrawSingleTracker(DrawingContext drawingContext, int handleNum, DpiScale uiscale)
