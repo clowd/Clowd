@@ -2,11 +2,16 @@
 //   uv_offset_scale.xy = where this monitor begins in the shared desktop
 //                        texture, in normalised UV space.
 //   uv_offset_scale.zw = the size of this monitor in the same UV space.
-//   fade_pad.x         = grayscale fade factor in [0, 1].
+//   params.x           = grayscale fade factor in [0, 1].
 //                        0 = original colour, 1 = darkened grayscale.
+//   params.yz          = cursor position in window-local physical pixels.
+//                        Out-of-range values mean the cursor is on another
+//                        monitor; the integer-equality test below silently
+//                        misses and no line is drawn for that axis.
+//   params.w           = unused.
 struct Uniforms {
     uv_offset_scale: vec4<f32>,
-    fade_pad:        vec4<f32>,
+    params:          vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -55,8 +60,38 @@ fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
+    // Crosshair: a white line with a black dashed pattern overlaid on
+    // top, so the cursor stays visible on both light and dark
+    // backgrounds (white survives the dark stretches, black survives
+    // the light ones). Drawn over everything else, including the fade.
+    // Comparing integer pixel indices guarantees exactly 1 physical
+    // pixel thickness on every display, regardless of DPI scale,
+    // because the swapchain is sized in physical pixels and
+    // `@builtin(position)` is the framebuffer pixel coordinate
+    // (centred on .5).
+    let px = vec2<i32>(floor(in.pos.xy));
+    let mouse_x = i32(u.params.y);
+    let mouse_y = i32(u.params.z);
+    let on_v_line = px.x == mouse_x;
+    let on_h_line = px.y == mouse_y;
+    if (on_v_line || on_h_line) {
+        // Dash runs ALONG the line: along Y for the vertical line,
+        // along X for the horizontal one. 4 black + 4 white pixels
+        // per period, anchored to absolute window coordinates so the
+        // dashes feel screen-fixed rather than swimming with the
+        // cursor. At the intersection both axes are on the line; we
+        // arbitrarily pick the vertical line's phase — the pixel only
+        // gets one colour anyway.
+        let dash_coord = select(px.x, px.y, on_v_line);
+        let phase = dash_coord % 8;
+        if (phase < 4) {
+            return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        }
+        return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    }
+
     let color = textureSample(desktop_tex, desktop_samp, in.uv);
-    let fade = clamp(u.fade_pad.x, 0.0, 1.0);
+    let fade = clamp(u.params.x, 0.0, 1.0);
 
     // fade = 0 is the common case during the hold phase. Pass through
     // bit-exactly — no sRGB math, no lerp rounding — so the rendered

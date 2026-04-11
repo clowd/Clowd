@@ -6,16 +6,22 @@ use winit::window::Window;
 use crate::system::CapturedDesktop;
 
 /// 32-byte uniform block written by the main thread (UV region) and updated
-/// every frame by each render thread (fade factor). Two `vec4`s satisfy the
-/// WGSL uniform-address-space rule that the struct size be a multiple of 16.
+/// every frame by each render thread (fade factor + cursor position). Two
+/// `vec4`s satisfy the WGSL uniform-address-space rule that the struct size
+/// be a multiple of 16.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct WindowUniforms {
     /// xy = UV offset of this monitor in the desktop texture
     /// zw = UV scale of this monitor in the desktop texture
     pub uv_offset_scale: [f32; 4],
-    /// x = fade factor in [0, 1], yzw unused
-    pub fade_pad: [f32; 4],
+    /// x = fade factor in [0, 1]
+    /// y = cursor X in window-local physical pixels (out-of-range = cursor
+    ///     is on another monitor; the shader's integer-equality test then
+    ///     never matches and the vertical crosshair line vanishes here)
+    /// z = cursor Y in window-local physical pixels (same convention)
+    /// w = unused
+    pub params: [f32; 4],
 }
 
 pub const WINDOW_UNIFORMS_SIZE: u64 = std::mem::size_of::<WindowUniforms>() as u64;
