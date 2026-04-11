@@ -99,6 +99,10 @@ public class ColorWheel : Control
         var rowBytes = w * 4;
         var pixels = new byte[w * h * 4];
 
+        // Hide the radiusSq compiler warning about being unused — we no longer
+        // hard-cut on the squared radius because the edge is now anti-aliased.
+        _ = radiusSq;
+
         for (int y = 0; y < h; y++)
         {
             double dy = y - cy + 0.5;
@@ -106,20 +110,23 @@ public class ColorWheel : Control
             for (int x = 0; x < w; x++)
             {
                 double dx = x - cx + 0.5;
-                double distSq = dx * dx + dy * dy;
+                double distance = Math.Sqrt(dx * dx + dy * dy);
                 int o = rowOffset + x * 4;
 
-                if (distSq > radiusSq)
+                // Coverage ramps from 1 (fully inside) to 0 (fully outside)
+                // across a 1-pixel band centred on the wheel's edge — gives
+                // a single-pixel anti-aliased boundary instead of a hard step.
+                double coverage = radius + 0.5 - distance;
+                if (coverage <= 0)
                 {
-                    // Outside the wheel — fully transparent.
                     pixels[o + 0] = 0;
                     pixels[o + 1] = 0;
                     pixels[o + 2] = 0;
                     pixels[o + 3] = 0;
                     continue;
                 }
+                if (coverage > 1) coverage = 1;
 
-                double distance = Math.Sqrt(distSq);
                 double saturation = distance / radius;
                 if (saturation > 1) saturation = 1;
                 double angleR = Math.Atan2(-dy, dx);
@@ -131,7 +138,7 @@ public class ColorWheel : Control
                 pixels[o + 0] = b;
                 pixels[o + 1] = g;
                 pixels[o + 2] = r;
-                pixels[o + 3] = 255;
+                pixels[o + 3] = (byte)Math.Round(coverage * 255);
             }
         }
 
@@ -190,20 +197,33 @@ public class ColorWheel : Control
         if (CurrentColor == null)
             return;
 
-        // Diamond cursor (rotated square) anchored at the current colour.
+        // Diamond cursor at the current colour. Two nested borders
+        // (black inner + white outer) so the cursor stays visible against
+        // any background — matches the palette item hover treatment.
         var p = _cursorPos;
+        var fill = new SolidColorBrush(CurrentColor.ToColor());
+
+        var inner = MakeDiamond(p, HalfCursor);
+        var outer = MakeDiamond(p, HalfCursor + 1);
+
+        // Outer ring: white pen, no fill.
+        ctx.DrawGeometry(null, new Pen(Brushes.White, 1), outer);
+        // Inner shape: filled with the current colour, black 1px outline.
+        ctx.DrawGeometry(fill, new Pen(Brushes.Black, 1), inner);
+    }
+
+    private static StreamGeometry MakeDiamond(Point centre, double half)
+    {
         var geo = new StreamGeometry();
         using (var g = geo.Open())
         {
-            g.BeginFigure(new Point(p.X, p.Y - HalfCursor), true);
-            g.LineTo(new Point(p.X + HalfCursor, p.Y));
-            g.LineTo(new Point(p.X, p.Y + HalfCursor));
-            g.LineTo(new Point(p.X - HalfCursor, p.Y));
+            g.BeginFigure(new Point(centre.X, centre.Y - half), true);
+            g.LineTo(new Point(centre.X + half, centre.Y));
+            g.LineTo(new Point(centre.X, centre.Y + half));
+            g.LineTo(new Point(centre.X - half, centre.Y));
             g.EndFigure(true);
         }
-
-        var fill = new SolidColorBrush(CurrentColor.ToColor());
-        ctx.DrawGeometry(fill, new Pen(Brushes.Black, 1), geo);
+        return geo;
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
