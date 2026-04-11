@@ -1890,6 +1890,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "clowd_capture_wgpu"
+version = "0.0.0-local"
+
+[[package]]
 name = "clowd_ui"
 version = "0.1.0"
 dependencies = [
