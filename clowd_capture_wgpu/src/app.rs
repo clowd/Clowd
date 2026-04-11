@@ -3,12 +3,12 @@ use std::sync::{Arc, Barrier};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, KeyEvent, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId, WindowLevel};
 
-use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
+use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
 use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
 use crate::platform;
 use crate::settings::CapturerSettings;
@@ -24,7 +24,8 @@ const ZOOM_MAX: f32 = 256.0;
 /// fine-grained step in v1.
 const ZOOM_STEP: f32 = 2.0;
 
-/// Virtual-cursor + magnifier state owned by the event-loop thread.
+/// Virtual-cursor + magnifier + selection state owned by the event-loop
+/// thread.
 ///
 /// When `anchored` is false (the zoom=1 case) the OS cursor is authoritative
 /// and `virtual_cursor` mirrors it exactly. When `anchored` is true (zoom>1)
@@ -33,6 +34,14 @@ const ZOOM_STEP: f32 = 2.0;
 /// advances the virtual cursor in fractional world pixels. See the
 /// reference C++ in clowd_capture_dx/Screens.cpp:MouseAnchorStart /
 /// MouseAnchorUpdate / MouseAnchorStop for the original design.
+///
+/// The selection state machine mirrors the C++ `mc_frame_data` flags from
+/// DxScreenCapture.cpp directly (mouse_down / dragging / captured) rather
+/// than collapsing them into an enum. Visible states:
+///   Idle:           !mouse_down && !dragging && !captured
+///   Pending-drag:    mouse_down && !dragging && !captured
+///   Dragging:        mouse_down &&  dragging && !captured
+///   Captured:       !mouse_down && !dragging &&  captured
 struct InputState {
     /// The logical cursor in virtual-desktop pixels. Always-live: even at
     /// zoom=1 we keep it updated so the zoom-in transition doesn't need
@@ -50,6 +59,36 @@ struct InputState {
     /// plus screen = real coords match). Computed once at startup as the
     /// centre of the primary monitor, per Screens.cpp:111-114.
     anchor: ScreenPoint,
+    /// Left mouse button currently held down. Set on Pressed, cleared on
+    /// Released. Cleared regardless of whether a drag was actually
+    /// promoted, so a click that never crossed the drag threshold is a
+    /// no-op overall.
+    mouse_down: bool,
+    /// `Some(virtual_cursor)` captured at the moment of mouse-down, in
+    /// virtual-desktop pixels. The drag rectangle is computed against
+    /// this point on every subsequent CursorMoved.
+    mouse_down_pt: Option<ScreenPointF>,
+    /// DPI scale of the monitor that contained `mouse_down_pt` at the
+    /// moment of mouse-down, captured **once** so the drag-distance
+    /// threshold doesn't flicker as the cursor crosses display
+    /// boundaries during a drag. Falls back to 1.0 if no monitor
+    /// contained the press point.
+    mouse_down_dpi: f32,
+    /// Promoted from `false` to `true` once the rounded selection
+    /// width OR height exceeds `6 / (mouse_down_dpi * zoom)` virtual-
+    /// desktop pixels — the same threshold as
+    /// DxScreenCapture.cpp:1497.
+    dragging: bool,
+    /// Current selection rectangle in virtual-desktop pixel coordinates,
+    /// or `None` if there is no selection (idle, pre-threshold, or
+    /// dragged back to a degenerate rect). Updated continuously while
+    /// `dragging`; preserved verbatim once `captured`.
+    selection: Option<ScreenRect>,
+    /// Becomes `true` once the user releases the mouse with a non-empty
+    /// selection. While captured the wheel handler is a no-op (matches
+    /// DxScreenCapture.cpp:1527) and a fresh mouse-down is ignored —
+    /// resize/move of an existing selection is out of scope for v1.
+    captured: bool,
 }
 
 pub struct App {
@@ -59,8 +98,15 @@ pub struct App {
     windows: HashMap<WindowId, WindowHandle>,
     /// Populated once in `resumed()`. Used by `clamp_to_nearest_monitor`
     /// so the virtual cursor can't escape all physical screens while the
-    /// OS cursor is pinned to the anchor.
+    /// OS cursor is pinned to the anchor, and by the mouse-down handler
+    /// to find the monitor under the press point for the drag-threshold
+    /// DPI lookup.
     monitor_bounds: Vec<ScreenRect>,
+    /// Per-monitor DPI scale, parallel-indexed with `monitor_bounds`.
+    /// Read at mouse-down to seed `InputState::mouse_down_dpi` so the
+    /// drag-distance threshold matches the C++ `dpizoom` factor at
+    /// DxScreenCapture.cpp:1497.
+    monitor_dpi: Vec<f32>,
     input: InputState,
 }
 
@@ -72,6 +118,7 @@ impl App {
             instance: None,
             windows: HashMap::new(),
             monitor_bounds: Vec::new(),
+            monitor_dpi: Vec::new(),
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
             // Zero here is a placeholder that never gets broadcast.
@@ -80,19 +127,51 @@ impl App {
                 zoom: 1.0,
                 anchored: false,
                 anchor: ScreenPoint::new(0, 0),
+                mouse_down: false,
+                mouse_down_pt: None,
+                mouse_down_dpi: 1.0,
+                dragging: false,
+                selection: None,
+                captured: false,
             },
         }
     }
 
-    /// Push the current `(virtual_cursor, zoom)` to every render thread.
-    /// Monitors that don't contain the cursor still need the message so
-    /// they can apply the zoom transform uniformly (their crosshair
-    /// vanishes via the shader's integer-equality miss).
+    /// Push the current `(virtual_cursor, zoom, selection, captured)` to
+    /// every render thread. Monitors that don't contain the cursor still
+    /// need the message so they can apply the zoom transform uniformly
+    /// (their crosshair vanishes via the shader's integer-equality miss),
+    /// and so each render thread can run its own VD→window-local pixel
+    /// transform on the selection rect.
     fn broadcast_mouse_state(&self) {
         for h in self.windows.values() {
-            h.update_mouse_state(self.input.virtual_cursor, self.input.zoom);
+            h.update_mouse_state(
+                self.input.virtual_cursor,
+                self.input.zoom,
+                self.input.selection,
+                self.input.captured,
+            );
         }
     }
+}
+
+/// Look up the DPI scale of whichever monitor currently contains `p`,
+/// returning `1.0` if the point falls in the multi-monitor dead zone.
+/// Used at mouse-down to seed the drag-distance threshold so that
+/// dragging across a monitor boundary doesn't change the threshold mid-
+/// gesture (matches the C++ behaviour at DxScreenCapture.cpp:1497, which
+/// reads `dpizoom` once from the monitor under `mouseDownPt`).
+fn dpi_at_point(p: ScreenPointF, monitors: &[ScreenRect], dpis: &[f32]) -> f32 {
+    for (i, m) in monitors.iter().enumerate() {
+        let mx = m.min_x() as f32;
+        let my = m.min_y() as f32;
+        let mw = m.width() as f32;
+        let mh = m.height() as f32;
+        if p.x >= mx && p.x < mx + mw && p.y >= my && p.y < my + mh {
+            return dpis.get(i).copied().unwrap_or(1.0);
+        }
+    }
+    1.0
 }
 
 /// Clamp the point to whichever monitor currently contains it, or to the
@@ -196,8 +275,15 @@ impl ApplicationHandler for App {
             zoom: 1.0,
             anchored: false,
             anchor,
+            mouse_down: false,
+            mouse_down_pt: None,
+            mouse_down_dpi: 1.0,
+            dragging: false,
+            selection: None,
+            captured: false,
         };
         self.monitor_bounds = captured.monitors.iter().map(|m| m.bounds).collect();
+        self.monitor_dpi = captured.monitors.iter().map(|m| m.scale_factor).collect();
 
         // 2. Create one hidden, borderless window per monitor.
         let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(captured.monitors.len());
@@ -376,9 +462,114 @@ impl ApplicationHandler for App {
                         ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
                 }
 
+                // Drag tracking: if the user is mid-press and hasn't yet
+                // finalised a selection, recompute the rounded selection
+                // rect against the start point. The drag is "promoted"
+                // from pending to active once the rounded width or height
+                // exceeds 6 / (dpi * zoom) virtual-desktop pixels — same
+                // threshold as DxScreenCapture.cpp:1493-1499. Once active,
+                // every cursor move overwrites `selection`. Note that
+                // `from_rounded_threshold` returns `None` if the user
+                // drags back onto the start pixel — propagating that
+                // `None` briefly hides the rect, matching the C++ feel.
+                if self.input.mouse_down && !self.input.captured {
+                    if let Some(start) = self.input.mouse_down_pt {
+                        let psel = ScreenRect::from_rounded_threshold(
+                            start.x,
+                            start.y,
+                            self.input.virtual_cursor.x,
+                            self.input.virtual_cursor.y,
+                        );
+                        if !self.input.dragging {
+                            let threshold = 6.0
+                                / (self.input.mouse_down_dpi * self.input.zoom);
+                            let crossed = psel.map_or(false, |r| {
+                                (r.width() as f32) > threshold
+                                    || (r.height() as f32) > threshold
+                            });
+                            if crossed {
+                                self.input.dragging = true;
+                            }
+                        }
+                        if self.input.dragging {
+                            self.input.selection = psel;
+                        }
+                    }
+                }
+
                 self.broadcast_mouse_state();
             }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => {
+                match state {
+                    ElementState::Pressed => {
+                        // Resize/move of an already-finalised selection is
+                        // out of scope for v1 — ignore further mouse-downs
+                        // once captured (matches the no-op intent of the
+                        // wheel handler at DxScreenCapture.cpp:1527).
+                        if self.input.captured {
+                            return;
+                        }
+                        self.input.mouse_down = true;
+                        self.input.mouse_down_pt = Some(self.input.virtual_cursor);
+                        self.input.mouse_down_dpi = dpi_at_point(
+                            self.input.virtual_cursor,
+                            &self.monitor_bounds,
+                            &self.monitor_dpi,
+                        );
+                        self.input.dragging = false;
+                        // Selection itself is left alone here so a single
+                        // tap (no drag) doesn't blow away anything that
+                        // was pre-painted by the seed path. In practice
+                        // it should already be None at this point.
+                    }
+                    ElementState::Released => {
+                        let finalising =
+                            self.input.dragging && self.input.selection.is_some();
+                        self.input.mouse_down = false;
+                        self.input.mouse_down_pt = None;
+                        self.input.dragging = false;
+                        if finalising {
+                            self.input.captured = true;
+                            // Snap zoom back to 1 and tear down the
+                            // anchor when a selection is finalised
+                            // (matches FrameMakeSelection at
+                            // DxScreenCapture.cpp:1816). The unanchor
+                            // sequence is the mirror of the wheel
+                            // handler's MouseAnchorStop branch below:
+                            // warp the OS cursor to the virtual cursor
+                            // so there's no visual jump.
+                            if self.input.anchored {
+                                self.input.anchored = false;
+                                let restore = ScreenPoint::new(
+                                    self.input.virtual_cursor.x.floor() as i32,
+                                    self.input.virtual_cursor.y.floor() as i32,
+                                );
+                                SystemInterop::set_mouse_position(restore);
+                            }
+                            self.input.zoom = 1.0;
+                        }
+                        self.broadcast_mouse_state();
+                    }
+                }
+            }
             WindowEvent::MouseWheel { delta, .. } => {
+                // After a selection has been finalised the wheel is a
+                // no-op — matches DxScreenCapture.cpp:1527's `if
+                // (data.captured) return 0;`. While a drag is *in
+                // progress* the wheel is allowed: rough-drag, zoom in
+                // for precision, refine is a deliberate workflow.
+                // The selection lives in virtual-desktop coords, so
+                // zooming during a drag re-renders it under the new
+                // transform without moving the underlying selected
+                // pixels — and the next CursorMoved naturally
+                // refreshes the rounded rect against the new zoom.
+                if self.input.captured {
+                    return;
+                }
                 // Normalise the two winit delta variants into a single
                 // scalar "step" whose sign is all we care about for a
                 // coarse ×2/÷2 zoom. LineDelta is the desktop-mouse case;

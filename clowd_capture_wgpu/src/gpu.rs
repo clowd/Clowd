@@ -5,10 +5,10 @@ use winit::window::Window;
 
 use crate::system::CapturedDesktop;
 
-/// 48-byte uniform block written once per render-thread startup (UV region,
+/// 80-byte uniform block written once per render-thread startup (UV region,
 /// DPI scale, crosshair colour) and updated every frame by each render
-/// thread (fade factor + cursor position). Three `vec4`s satisfy the WGSL
-/// uniform-address-space rule that the struct size be a multiple of 16.
+/// thread (fade factor, cursor position, selection rect, animation time).
+/// Five `vec4`s — still 16-byte-aligned and a single cache line on x86_64.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct WindowUniforms {
@@ -26,9 +26,26 @@ pub struct WindowUniforms {
     pub params: [f32; 4],
     /// RGBA colour (each channel in [0, 1]) used for the coloured
     /// sections of the crosshair — both the inner thin arms and the
-    /// outer thick segments. Seeded from `CapturerSettings` at render-
+    /// outer thick segments, AND the marching-ants dashes on the
+    /// selection border. Seeded from `CapturerSettings` at render-
     /// thread startup and currently never updated after that.
     pub crosshair_color: [f32; 4],
+    /// Mouse-drag selection rectangle in **window-local physical pixels**
+    /// (already transformed from virtual-desktop coords through the same
+    /// zoom math the UV pipeline uses, so the rect stays glued to the
+    /// selected desktop content under zoom).
+    ///   x = left, y = top, z = right, w = bottom
+    /// Sentinel for "no selection": `z <= x || w <= y` (the shader treats
+    /// any such rect as empty and falls through to the normal grayscale
+    /// path). The render thread writes `[0.0, 0.0, -1.0, -1.0]` when
+    /// there's no active selection.
+    pub selection_rect: [f32; 4],
+    /// x = elapsed seconds since the render thread's animation clock
+    ///     started (after the first-frame barrier). Drives the
+    ///     marching-ants phase on the selection border at 16 px/sec
+    ///     (one full 8px-on/8px-off dash cycle per second).
+    /// yzw = reserved.
+    pub selection_params: [f32; 4],
 }
 
 pub const WINDOW_UNIFORMS_SIZE: u64 = std::mem::size_of::<WindowUniforms>() as u64;
