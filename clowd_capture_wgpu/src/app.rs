@@ -6,9 +6,9 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
-use winit::window::{Window, WindowId, WindowLevel};
+use winit::window::{CursorIcon, Window, WindowId, WindowLevel};
 
-use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
+use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
 use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
 use crate::platform;
 use crate::settings::CapturerSettings;
@@ -23,6 +23,72 @@ const ZOOM_MAX: f32 = 256.0;
 /// Multiplicative step per wheel tick. Coarse by design — no modifier-key
 /// fine-grained step in v1.
 const ZOOM_STEP: f32 = 2.0;
+
+/// Pre-DPI radius (in virtual-desktop pixels) of the resize-handle hit
+/// boxes used once a selection is captured. Matches
+/// `UNSCALED_DRAG_HANDLE_SIZE` at DxScreenCapture.cpp:23. The C++ scales
+/// it by `dpizoom = monitor.dpi / BASE_DPI`; we do the same per-monitor
+/// using `monitor_dpi`.
+const UNSCALED_DRAG_HANDLE_SIZE: f32 = 10.0;
+
+/// Result of hit-testing the cursor against a captured selection rect.
+/// Drives both the cursor-icon swap (one-to-one with `IDC_*` cursors in
+/// `FrameSetCursor` at DxScreenCapture.cpp:1732-1798) and the resize/move
+/// drag mode that mouse-down promotes it to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Hittest {
+    /// Cursor is outside the selection (and not on any handle). Default
+    /// arrow cursor; mouse-down does nothing in this state.
+    Outside,
+    /// Cursor is inside the selection's interior. Move cursor;
+    /// mouse-down enters MoveDrag.
+    Inside,
+    Top,
+    Right,
+    Bottom,
+    Left,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl Hittest {
+    /// Map this hittest to the cursor icon that should be displayed
+    /// while hovering. Mirrors `FrameSetCursor`'s switch at
+    /// DxScreenCapture.cpp:1736.
+    fn cursor(self) -> CursorIcon {
+        match self {
+            Hittest::Outside => CursorIcon::Default,
+            Hittest::Inside => CursorIcon::Move,
+            Hittest::Top | Hittest::Bottom => CursorIcon::NsResize,
+            Hittest::Left | Hittest::Right => CursorIcon::EwResize,
+            Hittest::TopLeft | Hittest::BottomRight => CursorIcon::NwseResize,
+            Hittest::TopRight | Hittest::BottomLeft => CursorIcon::NeswResize,
+        }
+    }
+}
+
+/// What kind of drag is currently in progress. Set on mouse-down,
+/// consumed by every CursorMoved until mouse-up. The pre-capture
+/// "drawing a new selection" path doesn't use this enum (it's still
+/// driven by `mouse_down` + `dragging`); these variants only fire
+/// once `captured` is true.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DragMode {
+    /// Translating the whole rect. Each frame the rect is shifted by
+    /// `(virtual_cursor - mouse_down_pt)` from the snapshotted anchor
+    /// selection, then soft-clamped to keep it on-screen *without*
+    /// changing its size.
+    Move,
+    /// Resizing via one of the eight handles. The handle's edges are
+    /// dragged to the cursor each frame; the un-touched edges keep
+    /// their value from the snapshotted anchor selection. Hard-clamp
+    /// each moved edge to vd bounds, then normalise via min/max so
+    /// the rect stays well-formed even when the user drags past the
+    /// opposite edge (matches the C++ `Xy12Rect` normalisation).
+    Resize(Hittest),
+}
 
 /// Virtual-cursor + magnifier + selection state owned by the event-loop
 /// thread.
@@ -86,9 +152,27 @@ struct InputState {
     selection: Option<ScreenRect>,
     /// Becomes `true` once the user releases the mouse with a non-empty
     /// selection. While captured the wheel handler is a no-op (matches
-    /// DxScreenCapture.cpp:1527) and a fresh mouse-down is ignored —
-    /// resize/move of an existing selection is out of scope for v1.
+    /// DxScreenCapture.cpp:1527), the rendered crosshair is suppressed,
+    /// and the cursor switches between resize/move icons based on the
+    /// per-frame `hittest`.
     captured: bool,
+    /// Latest hit test result against the captured selection rect.
+    /// Refreshed on every CursorMoved while `captured`. Determines the
+    /// cursor icon (via `Hittest::cursor`) and is the seed for the
+    /// drag mode entered on the next mouse-down. Always `Outside`
+    /// before capture and reset on un-capture.
+    hittest: Hittest,
+    /// What kind of drag is currently in progress (only meaningful
+    /// while `captured && mouse_down`). `None` between drags.
+    drag_mode: Option<DragMode>,
+    /// The selection rect at the moment the current drag started, in
+    /// virtual-desktop pixel coords. Both `Move` and `Resize` use this
+    /// as the anchor against which `(cursor - mouse_down_pt)` deltas
+    /// are applied — using a frozen anchor instead of incrementally
+    /// updating the rect avoids drift and gives the soft-clamp
+    /// "snap back when cursor returns into bounds" behaviour the user
+    /// asked for.
+    drag_anchor_selection: Option<ScreenRect>,
 }
 
 pub struct App {
@@ -107,6 +191,12 @@ pub struct App {
     /// drag-distance threshold matches the C++ `dpizoom` factor at
     /// DxScreenCapture.cpp:1497.
     monitor_dpi: Vec<f32>,
+    /// Union rect of the virtual desktop in physical pixels — same value
+    /// as `captured.bounds` from the startup snapshot. Used to soft-
+    /// clamp the selection during move/resize so it can't be pushed off
+    /// screen (matches `WorkspaceBounds()` + `ClipRectBy` at
+    /// DxScreenCapture.cpp:1844-1845).
+    vd_bounds: ScreenRect,
     input: InputState,
 }
 
@@ -119,6 +209,7 @@ impl App {
             windows: HashMap::new(),
             monitor_bounds: Vec::new(),
             monitor_dpi: Vec::new(),
+            vd_bounds: ScreenRect::zero(),
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
             // Zero here is a placeholder that never gets broadcast.
@@ -133,6 +224,9 @@ impl App {
                 dragging: false,
                 selection: None,
                 captured: false,
+                hittest: Hittest::Outside,
+                drag_mode: None,
+                drag_anchor_selection: None,
             },
         }
     }
@@ -153,6 +247,183 @@ impl App {
             );
         }
     }
+}
+
+/// Hit-test the cursor (in virtual-desktop pixels) against a captured
+/// selection rect. The handle radius is `UNSCALED_DRAG_HANDLE_SIZE *
+/// dpi_scale` rounded down, mirroring DxScreenCapture.cpp:1676. Corners
+/// are tested before edges so they win at the corner squares (same
+/// loop order as DxScreenCapture.cpp:1695-1721).
+fn hit_test(cursor: ScreenPointF, sel: ScreenRect, dpi_scale: f32) -> Hittest {
+    let r = (UNSCALED_DRAG_HANDLE_SIZE * dpi_scale).floor() as i32;
+    let cx = cursor.x.floor() as i32;
+    let cy = cursor.y.floor() as i32;
+
+    // Corner: a `(2r+1) × (2r+1)` square centred on the corner pixel,
+    // matching `PtToWidenedRect` at rectex.h:119-127.
+    let in_corner = |x: i32, y: i32| -> bool {
+        cx >= x - r && cx <= x + r && cy >= y - r && cy <= y + r
+    };
+    // Edge: a rect widened by `r` on every side around the line
+    // segment. Same shape as the corners on the perpendicular axis,
+    // but stretched along the edge — matching `LineToWidenedRect` at
+    // rectex.h:129-137.
+    let in_edge = |x1: i32, y1: i32, x2: i32, y2: i32| -> bool {
+        let lx = x1.min(x2) - r;
+        let rx = x1.max(x2) + r;
+        let ty = y1.min(y2) - r;
+        let by = y1.max(y2) + r;
+        cx >= lx && cx <= rx && cy >= ty && cy <= by
+    };
+
+    let l = sel.left();
+    let t = sel.top();
+    let r_edge = sel.right();
+    let b = sel.bottom();
+
+    // Order matches the C++ handles[] array at DxScreenCapture.cpp:1695:
+    // four corners first, then four edges, with first-hit-wins.
+    if in_corner(l, t) {
+        return Hittest::TopLeft;
+    }
+    if in_corner(r_edge, t) {
+        return Hittest::TopRight;
+    }
+    if in_corner(r_edge, b) {
+        return Hittest::BottomRight;
+    }
+    if in_corner(l, b) {
+        return Hittest::BottomLeft;
+    }
+    if in_edge(l, t, r_edge, t) {
+        return Hittest::Top;
+    }
+    if in_edge(r_edge, t, r_edge, b) {
+        return Hittest::Right;
+    }
+    if in_edge(r_edge, b, l, b) {
+        return Hittest::Bottom;
+    }
+    if in_edge(l, t, l, b) {
+        return Hittest::Left;
+    }
+
+    // Fall through: inside the rect (move) or fully outside.
+    if cx >= l && cx < r_edge && cy >= t && cy < b {
+        Hittest::Inside
+    } else {
+        Hittest::Outside
+    }
+}
+
+/// Translate the anchor rect by `(delta_x, delta_y)` and return its
+/// intersection with the virtual desktop bounds, or `None` if the
+/// translated rect is fully outside the vd. This is the "move" path's
+/// core: the underlying logical position is free-form (whatever the
+/// cursor points at), and what gets drawn + eventually saved is the
+/// *cropped* rect so the selection can't "run off" a display — it
+/// visually shrinks against the boundary and reappears when the
+/// cursor comes back, all without mutating the anchor.
+fn move_and_crop(
+    anchor: ScreenRect,
+    delta_x: i32,
+    delta_y: i32,
+    vd: ScreenRect,
+) -> Option<ScreenRect> {
+    let moved = ScreenRect::from_xy_size(
+        anchor.left() + delta_x,
+        anchor.top() + delta_y,
+        anchor.width(),
+        anchor.height(),
+    );
+    intersect_rects(moved, vd)
+}
+
+/// Intersection of two rects, or `None` if they don't overlap. Used by
+/// the move-and-crop path to clip the translated rect to vd bounds
+/// each frame.
+fn intersect_rects(a: ScreenRect, b: ScreenRect) -> Option<ScreenRect> {
+    let l = a.left().max(b.left());
+    let t = a.top().max(b.top());
+    let r = a.right().min(b.right());
+    let bot = a.bottom().min(b.bottom());
+    if r > l && bot > t {
+        Some(ScreenRect::from_exact(l, t, r, bot))
+    } else {
+        None
+    }
+}
+
+/// Apply a `Resize` drag to an anchor selection rect via the cursor's
+/// current virtual-desktop position. Each handle pulls a different
+/// subset of the four edges:
+///   * corners drag two edges (the corner-opposite stays fixed)
+///   * edges drag one edge (the other three stay fixed)
+///   * inside / outside don't enter resize mode
+/// Each moved edge is hard-clamped to the vd bounds before the rect is
+/// re-normalised, so dragging the right edge past the left flips the
+/// rect (matches the C++ `Xy12Rect` normalisation at rectex.h:111-117
+/// and DxScreenCapture.cpp:1419-1458).
+fn resize_with_clamp(
+    anchor: ScreenRect,
+    handle: Hittest,
+    cursor_x: i32,
+    cursor_y: i32,
+    vd: ScreenRect,
+) -> ScreenRect {
+    let mut left = anchor.left();
+    let mut top = anchor.top();
+    let mut right = anchor.right();
+    let mut bottom = anchor.bottom();
+    // Each handle pins the opposite corner and drags the named one(s).
+    match handle {
+        Hittest::Top => {
+            top = cursor_y;
+        }
+        Hittest::Bottom => {
+            bottom = cursor_y;
+        }
+        Hittest::Left => {
+            left = cursor_x;
+        }
+        Hittest::Right => {
+            right = cursor_x;
+        }
+        Hittest::TopLeft => {
+            left = cursor_x;
+            top = cursor_y;
+        }
+        Hittest::TopRight => {
+            right = cursor_x;
+            top = cursor_y;
+        }
+        Hittest::BottomLeft => {
+            left = cursor_x;
+            bottom = cursor_y;
+        }
+        Hittest::BottomRight => {
+            right = cursor_x;
+            bottom = cursor_y;
+        }
+        // The Inside/Outside hittests aren't valid resize handles —
+        // mouse-down dispatch routes them to Move / no-op respectively,
+        // so we should never see them here. Defensive no-op.
+        Hittest::Inside | Hittest::Outside => {}
+    }
+    // Clamp every edge — even ones we didn't move — so an anchor that
+    // was already partly off-screen can't escape further. The C++
+    // `ClipRectBy` only runs at finalisation, but here we want the
+    // soft-clamp behaviour live on every frame.
+    left = left.clamp(vd.left(), vd.right());
+    right = right.clamp(vd.left(), vd.right());
+    top = top.clamp(vd.top(), vd.bottom());
+    bottom = bottom.clamp(vd.top(), vd.bottom());
+    // Normalise into a min/max rect (mirrors `Xy12Rect`).
+    let nl = left.min(right);
+    let nr = left.max(right);
+    let nt = top.min(bottom);
+    let nb = top.max(bottom);
+    ScreenRect::from_exact(nl, nt, nr, nb)
 }
 
 /// Look up the DPI scale of whichever monitor currently contains `p`,
@@ -281,9 +552,13 @@ impl ApplicationHandler for App {
             dragging: false,
             selection: None,
             captured: false,
+            hittest: Hittest::Outside,
+            drag_mode: None,
+            drag_anchor_selection: None,
         };
         self.monitor_bounds = captured.monitors.iter().map(|m| m.bounds).collect();
         self.monitor_dpi = captured.monitors.iter().map(|m| m.scale_factor).collect();
+        self.vd_bounds = captured.bounds;
 
         // 2. Create one hidden, borderless window per monitor.
         let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(captured.monitors.len());
@@ -497,6 +772,76 @@ impl ApplicationHandler for App {
                     }
                 }
 
+                // Captured-state input. Two distinct sub-modes:
+                //   * No active drag → hit-test the cursor against
+                //     the selection and swap the OS cursor icon.
+                //   * Active drag → apply the move/resize math
+                //     against the snapshotted anchor selection,
+                //     soft-clamping to virtual desktop bounds.
+                // Mirrors `FrameUpdateHitTest`/`FrameSetCursor` and
+                // the WM_MOUSEMOVE handlers at
+                // DxScreenCapture.cpp:1402-1490/1670/1732.
+                if self.input.captured {
+                    if let (Some(mode), Some(anchor), Some(start)) = (
+                        self.input.drag_mode,
+                        self.input.drag_anchor_selection,
+                        self.input.mouse_down_pt,
+                    ) {
+                        let cur_x = self.input.virtual_cursor.x.floor() as i32;
+                        let cur_y = self.input.virtual_cursor.y.floor() as i32;
+                        let new_sel = match mode {
+                            DragMode::Move => {
+                                // No soft-clamp: the logical rect
+                                // follows the cursor freely via
+                                // `anchor + delta`, and the *displayed*
+                                // rect is the intersection with vd
+                                // bounds. Dragging the selection
+                                // fully off-screen produces `None`
+                                // and makes the selection disappear;
+                                // dragging back brings it back.
+                                let dx = (self.input.virtual_cursor.x
+                                    - start.x)
+                                    .round()
+                                    as i32;
+                                let dy = (self.input.virtual_cursor.y
+                                    - start.y)
+                                    .round()
+                                    as i32;
+                                move_and_crop(
+                                    anchor,
+                                    dx,
+                                    dy,
+                                    self.vd_bounds,
+                                )
+                            }
+                            DragMode::Resize(handle) => Some(resize_with_clamp(
+                                anchor,
+                                handle,
+                                cur_x,
+                                cur_y,
+                                self.vd_bounds,
+                            )),
+                        };
+                        self.input.selection = new_sel;
+                    } else if let Some(sel) = self.input.selection {
+                        // Hover hit-test only when no drag is active.
+                        // The cursor is determined by the hover state;
+                        // during a drag the OS cursor stays whatever
+                        // it was at mouse-down (matches Windows native
+                        // resize-drag feel).
+                        let dpi = dpi_at_point(
+                            self.input.virtual_cursor,
+                            &self.monitor_bounds,
+                            &self.monitor_dpi,
+                        );
+                        let ht = hit_test(self.input.virtual_cursor, sel, dpi);
+                        if ht != self.input.hittest {
+                            self.input.hittest = ht;
+                            handle.window.set_cursor(ht.cursor());
+                        }
+                    }
+                }
+
                 self.broadcast_mouse_state();
             }
             WindowEvent::MouseInput {
@@ -506,13 +851,31 @@ impl ApplicationHandler for App {
             } => {
                 match state {
                     ElementState::Pressed => {
-                        // Resize/move of an already-finalised selection is
-                        // out of scope for v1 — ignore further mouse-downs
-                        // once captured (matches the no-op intent of the
-                        // wheel handler at DxScreenCapture.cpp:1527).
                         if self.input.captured {
+                            // Captured: this mouse-down enters either
+                            // Move (clicked inside the rect) or
+                            // Resize (clicked on a handle). Anywhere
+                            // else is a no-op — clicking outside the
+                            // selection doesn't deselect in v1.
+                            let drag_mode = match self.input.hittest {
+                                Hittest::Inside => Some(DragMode::Move),
+                                Hittest::Outside => None,
+                                handle => Some(DragMode::Resize(handle)),
+                            };
+                            if drag_mode.is_some() {
+                                self.input.mouse_down = true;
+                                self.input.mouse_down_pt =
+                                    Some(self.input.virtual_cursor);
+                                self.input.drag_mode = drag_mode;
+                                self.input.drag_anchor_selection =
+                                    self.input.selection;
+                            }
                             return;
                         }
+                        // Pre-capture: starting a fresh draw-selection
+                        // gesture. The pending-drag state is promoted
+                        // to active dragging by the threshold check in
+                        // CursorMoved.
                         self.input.mouse_down = true;
                         self.input.mouse_down_pt = Some(self.input.virtual_cursor);
                         self.input.mouse_down_dpi = dpi_at_point(
@@ -529,9 +892,31 @@ impl ApplicationHandler for App {
                     ElementState::Released => {
                         let finalising =
                             self.input.dragging && self.input.selection.is_some();
+                        let was_move_drag = matches!(
+                            self.input.drag_mode,
+                            Some(DragMode::Move),
+                        );
                         self.input.mouse_down = false;
                         self.input.mouse_down_pt = None;
                         self.input.dragging = false;
+                        self.input.drag_mode = None;
+                        self.input.drag_anchor_selection = None;
+                        // A Move drag that ended with the selection
+                        // fully off-screen means the user effectively
+                        // cancelled the selection by shoving it into
+                        // the void — un-capture so the wheel handler
+                        // re-enables zoom and the next mouse-down
+                        // starts a fresh draw instead of an impossible
+                        // move/resize. Mirrors the C++ `rEmpty`
+                        // branch at DxScreenCapture.cpp:1820-1830.
+                        if was_move_drag
+                            && self.input.captured
+                            && self.input.selection.is_none()
+                        {
+                            self.input.captured = false;
+                            self.input.hittest = Hittest::Outside;
+                            handle.window.set_cursor(CursorIcon::Default);
+                        }
                         if finalising {
                             self.input.captured = true;
                             // Snap zoom back to 1 and tear down the
@@ -551,6 +936,24 @@ impl ApplicationHandler for App {
                                 SystemInterop::set_mouse_position(restore);
                             }
                             self.input.zoom = 1.0;
+                            // Immediately hit-test against the just-
+                            // finalised selection so the cursor flips
+                            // to the right resize/move icon without
+                            // having to wiggle the mouse.
+                            if let Some(sel) = self.input.selection {
+                                let dpi = dpi_at_point(
+                                    self.input.virtual_cursor,
+                                    &self.monitor_bounds,
+                                    &self.monitor_dpi,
+                                );
+                                let ht = hit_test(
+                                    self.input.virtual_cursor,
+                                    sel,
+                                    dpi,
+                                );
+                                self.input.hittest = ht;
+                                handle.window.set_cursor(ht.cursor());
+                            }
                         }
                         self.broadcast_mouse_state();
                     }
