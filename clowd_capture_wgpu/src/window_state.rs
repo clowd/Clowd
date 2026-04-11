@@ -11,7 +11,7 @@ use crate::gpu::{SharedGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 /// Duration of the colour → grayscale fade after the window first becomes
 /// visible. Tuned to feel "snappy but not snap" — under 300ms reads as a
 /// pop, over 700ms feels sluggish.
-const FADE_DURATION_SECS: f32 = 0.5;
+const FADE_DURATION_SECS: f32 = 0.3;
 
 /// Messages the main thread can send to a render thread.
 pub enum RenderMsg {

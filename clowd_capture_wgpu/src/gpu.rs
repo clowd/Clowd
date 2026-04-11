@@ -127,12 +127,21 @@ impl GpuCore {
             })
             .await?;
 
+        // Prefer a NON-sRGB swapchain format. The snapshot texture is
+        // uploaded as raw bytes with no sRGB decoding, and the shader
+        // passes those bytes straight through when fade = 0. Going through
+        // an sRGB surface would re-encode them on write, and the
+        // sRGB-decode-on-sample + sRGB-encode-on-write round trip is not
+        // strictly bit-exact at 8-bit precision — that produced a visible
+        // colour shift at the moment of the window uncloaking, because the
+        // user's eye has a direct "live desktop vs. our render" reference
+        // in that instant. Non-sRGB in and non-sRGB out is byte-identical.
         let caps = first_surface.get_capabilities(&adapter);
         let surface_format = caps
             .formats
             .iter()
             .copied()
-            .find(|f| f.is_srgb())
+            .find(|f| !f.is_srgb())
             .unwrap_or(caps.formats[0]);
 
         Ok(Self {
@@ -249,12 +258,14 @@ pub fn create_desktop_snapshot(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         // GetDIBits hands us raw BGRA bytes that are exactly what the
-        // display was scanning out — i.e. sRGB-encoded. Sampling through
-        // Bgra8UnormSrgb decodes to linear *and* swizzles BGRA→RGBA in the
-        // texture unit, so the shader sees plain `(R, G, B, A)` linear.
-        // Writing to our sRGB swapchain re-encodes on the way out, giving
-        // a pixel-identical round-trip when fade = 0.
-        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+        // display is scanning out (sRGB-encoded). We deliberately store
+        // them as **non-sRGB** `Bgra8Unorm` so that sampling returns the
+        // raw byte values (as floats in [0, 1]) with *no* colour-space
+        // conversion. Combined with a non-sRGB surface format, this gives
+        // a byte-identical pass-through at fade = 0 (no sRGB decode/encode
+        // round-trip). The shader decodes sRGB → linear manually when it
+        // actually needs linear light (for the grayscale luma math).
+        format: wgpu::TextureFormat::Bgra8Unorm,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
