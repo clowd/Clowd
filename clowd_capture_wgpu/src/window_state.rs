@@ -57,11 +57,15 @@ impl Drop for WindowHandle {
 /// `monitor_bounds` is this window's monitor in virtual-desktop screen
 /// coordinates. The thread uses it (combined with the snapshot's
 /// virtual-desktop bounds) to compute its slice of the shared texture.
+/// `scale_factor` is this monitor's DPI scale (1.0 = 100 %) and is
+/// written once into the uniform so the shader can size the coloured
+/// crosshair arms in physical pixels.
 pub fn spawn_render_thread(
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     gpu: Arc<SharedGpu>,
     monitor_bounds: ScreenRect,
+    scale_factor: f32,
     refresh_hz: f32,
     first_frame_barrier: Arc<Barrier>,
 ) -> WindowHandle {
@@ -77,6 +81,7 @@ pub fn spawn_render_thread(
                 rx,
                 initial_size,
                 monitor_bounds,
+                scale_factor,
                 refresh_hz,
                 first_frame_barrier,
             );
@@ -95,6 +100,7 @@ fn render_thread_main(
     rx: mpsc::Receiver<RenderMsg>,
     size: PhysicalSize<u32>,
     monitor_bounds: ScreenRect,
+    scale_factor: f32,
     refresh_hz: f32,
     first_frame_barrier: Arc<Barrier>,
 ) {
@@ -148,9 +154,14 @@ fn render_thread_main(
         let init_local_x = (cursor.x - monitor_bounds.min_x()) as f32;
         let init_local_y = (cursor.y - monitor_bounds.min_y()) as f32;
 
+        // params[3] = DPI scale factor. This value is constant for the
+        // lifetime of the window (winit delivers ScaleFactorChanged on
+        // actual DPI changes, which we don't currently handle), so we
+        // only write it here and leave the per-frame path touching
+        // params[0..3] for fade + cursor.
         let uniforms = WindowUniforms {
             uv_offset_scale,
-            params: [0.0, init_local_x, init_local_y, 0.0],
+            params: [0.0, init_local_x, init_local_y, scale_factor],
         };
 
         let ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {

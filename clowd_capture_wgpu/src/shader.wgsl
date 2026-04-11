@@ -8,7 +8,10 @@
 //                        Out-of-range values mean the cursor is on another
 //                        monitor; the integer-equality test below silently
 //                        misses and no line is drawn for that axis.
-//   params.w           = unused.
+//   params.w           = this monitor's DPI scale factor (1.0 = 100 %,
+//                        1.5 = 150 %, …). Used to size the coloured
+//                        crosshair arms so they stay the same physical
+//                        size on every display.
 struct Uniforms {
     uv_offset_scale: vec4<f32>,
     params:          vec4<f32>,
@@ -72,8 +75,56 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(floor(in.pos.xy));
     let mouse_x = i32(u.params.y);
     let mouse_y = i32(u.params.z);
-    let on_v_line = px.x == mouse_x;
-    let on_h_line = px.y == mouse_y;
+    let scale = max(u.params.w, 1.0);
+    let dx = px.x - mouse_x;
+    let dy = px.y - mouse_y;
+    let adx = abs(dx);
+    let ady = abs(dy);
+    let on_v_line = dx == 0;
+    let on_h_line = dy == 0;
+
+    // Coloured section geometry.
+    //
+    //     ┊     ▌         ┊
+    //     ┊     ▌         ┊  <- outer thick segment (red, ~5 px at 100 %)
+    //     ┊     │         ┊
+    //     ┊     │         ┊  <- inner thin arm (red, 1 px)
+    //   ──┴─────┼─────────┴──  <- main long crosshair (b/w dashed)
+    //     ┊     │         ┊
+    //     ┊     │         ┊
+    //     ┊     ▌         ┊
+    //     ┊     ▌         ┊
+    //
+    //            └─ chunk ─┘
+    //     └───── chunk2 ───┘
+    //
+    // `chunk` is the length of one arm of the inner cross; the outer
+    // thick segments extend from `chunk` to `2*chunk` out from the
+    // cursor along each axis. Everything scales with the monitor's
+    // DPI so the feature is the same physical size on every display.
+    // `UNSCALED_CURSOR_PART_LENGTH` in the original C++ source = 50.
+    let chunk = i32(round(50.0 * scale));
+    let chunk2 = chunk * 2;
+    // Thick-segment half-width; total pixel count = 2*wide_half + 1,
+    // always odd so the segment sits pixel-sharp on the cursor
+    // column/row. ~5 physical pixels wide at 100 %, capped at 9.
+    let wide_half = clamp(i32(round(2.5 * scale)), 1, 4);
+
+    // Inner thin coloured cross (1 pixel wide, radius `chunk`).
+    let on_thin_colour = (on_v_line && ady <= chunk) || (on_h_line && adx <= chunk);
+    // Outer thick coloured segments: a wide slab on each arm, lying
+    // between the inner thin cross and the long dashed line. The
+    // `adx <= wide_half` / `ady <= wide_half` tests naturally clip
+    // the slab if the cursor is well off this monitor, since both
+    // axes have to be close to the cursor for red to appear.
+    let on_thick_v_colour = adx <= wide_half && ady > chunk && ady <= chunk2;
+    let on_thick_h_colour = ady <= wide_half && adx > chunk && adx <= chunk2;
+    if (on_thin_colour || on_thick_v_colour || on_thick_h_colour) {
+        // Hard-coded red for now; lift to a uniform when we want to
+        // theme the crosshair.
+        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    }
+
     if (on_v_line || on_h_line) {
         // Dash runs ALONG the line: along Y for the vertical line,
         // along X for the horizontal one. 4 black + 4 white pixels
