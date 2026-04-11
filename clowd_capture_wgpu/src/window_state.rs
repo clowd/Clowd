@@ -205,9 +205,20 @@ fn render_thread_main(
 
         // Update the fade factor and push it to the GPU. Cheap; the
         // staging ring buffer absorbs this without blocking.
+        //
+        // Ease-out quart (1 - (1 - t)^4): the sweet spot between a
+        // mechanical-feeling cubic and the near-instant expo — enough
+        // snap at the front that the darken feels like a deliberate
+        // gesture, with room in the tail to actually settle into the
+        // grayscale rather than slamming into it. If you want to retune:
+        //   ease-out cubic:  1 - inv*inv*inv           (gentler snap)
+        //   ease-out quint:  1 - inv*inv*inv*inv*inv   (more snap)
+        //   ease-out expo:   1 - (-10 * t).exp2()      (near-instant)
         if let Some(state) = snapshot_state.as_mut() {
             let elapsed = start.elapsed().as_secs_f32();
-            let fade = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
+            let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
+            let inv = 1.0 - t;
+            let fade = 1.0 - inv * inv * inv * inv;
             state.uniforms.fade_pad[0] = fade;
             gpu.queue
                 .write_buffer(&state.ubo, 0, bytemuck::bytes_of(&state.uniforms));
