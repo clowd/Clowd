@@ -43,23 +43,15 @@ impl SystemInterop {
         win_capture::capture_desktop().expect("Unable to capture desktop")
     }
 
-    pub fn all_monitor_bounds() -> Vec<(ScreenRect, f32, bool)> {
-        win_monitor::Monitor::all()
-            .expect("Unable to enumerate monitors")
-            .iter()
-            .map(|m| (m.bounds(), m.scale_factor(), m.is_primary()))
-            .collect()
-    }
-
     pub fn all_monitors() -> Vec<MonitorInfo> {
-        win_monitor::Monitor::all()
+        win_monitor::all()
             .expect("Unable to enumerate monitors")
-            .iter()
+            .into_iter()
             .map(|m| MonitorInfo {
                 bounds: m.bounds(),
-                scale_factor: m.scale_factor(),
-                is_primary: m.is_primary(),
-                refresh_hz: m.frequency(),
+                scale_factor: m.scale_factor,
+                is_primary: m.is_primary,
+                refresh_hz: m.frequency,
             })
             .collect()
     }
@@ -77,13 +69,5 @@ impl SystemInterop {
 
     pub fn capture_desktop() -> (DynamicImage, DynamicImage) {
         xcap_impl::capture_desktop().expect("Unable to capture desktop")
-    }
-
-    pub fn all_monitor_bounds() -> Vec<(ScreenRect, f32, bool)> {
-        xcap::Monitor::all()
-            .expect("Unable to enumerate monitors")
-            .iter()
-            .map(|m| (m.bounds(), m.scale_factor()))
-            .collect()
     }
 }

@@ -92,13 +92,9 @@ impl ApplicationHandler for App {
         //    until every swapchain has a valid first frame before any window
         //    is flipped visible.
         let barrier = Arc::new(Barrier::new(per_window.len() + 1));
-        let mut handles: HashMap<WindowId, WindowHandle> = HashMap::new();
-        let mut first_id: Option<WindowId> = None;
+        let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(per_window.len());
         for (w, surface, hz) in per_window {
             let id = w.id();
-            if first_id.is_none() {
-                first_id = Some(id);
-            }
             let handle = spawn_render_thread(w, surface, bootstrap.shared.clone(), hz, barrier.clone());
             handles.insert(id, handle);
         }
@@ -110,14 +106,12 @@ impl ApplicationHandler for App {
         barrier.wait();
 
         // 6. Flip every window visible in one pass, then focus the first.
+        //    `first_window` is still in scope from step 1, so we can focus
+        //    it directly without round-tripping through the handles map.
         for handle in handles.values() {
             handle.window.set_visible(true);
         }
-        if let Some(id) = first_id {
-            if let Some(handle) = handles.get(&id) {
-                handle.window.focus_window();
-            }
-        }
+        first_window.focus_window();
 
         self.gpu = Some(bootstrap.shared);
         self.instance = Some(bootstrap.instance);
