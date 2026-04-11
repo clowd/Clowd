@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -8,15 +8,16 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuBootstrap, SharedGpu};
 use crate::platform;
 use crate::system::SystemInterop;
-use crate::window_state::{RenderOutcome, WindowState};
+use crate::window_state::{spawn_render_thread, WindowHandle};
 
 #[derive(Default)]
 pub struct App {
-    gpu: Option<GpuContext>,
-    windows: HashMap<WindowId, WindowState>,
+    gpu: Option<Arc<SharedGpu>>,
+    instance: Option<wgpu::Instance>,
+    windows: HashMap<WindowId, WindowHandle>,
 }
 
 impl ApplicationHandler for App {
@@ -26,7 +27,7 @@ impl ApplicationHandler for App {
             return;
         }
 
-        let monitors = SystemInterop::all_monitor_bounds();
+        let monitors = SystemInterop::all_monitors();
         if monitors.is_empty() {
             error!("no monitors detected; nothing to render to");
             event_loop.exit();
@@ -34,10 +35,10 @@ impl ApplicationHandler for App {
         }
 
         // 1. Create one hidden, borderless window per monitor.
-        let mut raw_windows: Vec<Arc<Window>> = Vec::with_capacity(monitors.len());
-        for (i, (bounds, _scale, _primary)) in monitors.iter().enumerate() {
-            let width = bounds.size.width.max(1) as u32;
-            let height = bounds.size.height.max(1) as u32;
+        let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(monitors.len());
+        for (i, m) in monitors.iter().enumerate() {
+            let width = m.bounds.size.width.max(1) as u32;
+            let height = m.bounds.size.height.max(1) as u32;
             let attrs = Window::default_attributes()
                 .with_title("clowd capture")
                 .with_decorations(false)
@@ -45,29 +46,28 @@ impl ApplicationHandler for App {
                 .with_visible(false)
                 .with_transparent(false)
                 .with_active(i == 0)
-                .with_position(PhysicalPosition::new(bounds.origin.x, bounds.origin.y))
+                .with_position(PhysicalPosition::new(m.bounds.origin.x, m.bounds.origin.y))
                 .with_inner_size(PhysicalSize::new(width, height));
-            let window = match event_loop.create_window(attrs) {
-                Ok(w) => Arc::new(w),
-                Err(e) => {
-                    error!("failed to create window for monitor {i}: {e:?}");
-                    continue;
+            match event_loop.create_window(attrs) {
+                Ok(w) => {
+                    let w = Arc::new(w);
+                    platform::apply_capture_window_tweaks(&w);
+                    created.push((w, m.refresh_hz));
                 }
-            };
-            platform::apply_capture_window_tweaks(&window);
-            raw_windows.push(window);
+                Err(e) => error!("failed to create window for monitor {i}: {e:?}"),
+            }
         }
 
-        if raw_windows.is_empty() {
+        if created.is_empty() {
             error!("no windows created; exiting");
             event_loop.exit();
             return;
         }
 
-        // 2. Bootstrap wgpu using the first window's surface as the compatible target.
-        let first = raw_windows[0].clone();
-        let (gpu, first_surface) = match pollster::block_on(GpuContext::new(first.clone())) {
-            Ok(pair) => pair,
+        // 2. Bootstrap wgpu on the main thread against the first window.
+        let first_window = created[0].0.clone();
+        let bootstrap = match pollster::block_on(GpuBootstrap::new(first_window.clone())) {
+            Ok(b) => b,
             Err(e) => {
                 error!("failed to initialize wgpu: {e:?}");
                 event_loop.exit();
@@ -75,48 +75,53 @@ impl ApplicationHandler for App {
             }
         };
 
-        // 3. Build per-window state. First window reuses the surface we already created.
-        let mut windows: HashMap<WindowId, WindowState> = HashMap::new();
-        let first_id = first.id();
-        windows.insert(first_id, WindowState::new(first, first_surface, &gpu));
-
-        for w in raw_windows.iter().skip(1) {
-            let surface = match gpu.instance.create_surface(w.clone()) {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("failed to create surface for extra window: {e:?}");
-                    continue;
-                }
-            };
-            windows.insert(w.id(), WindowState::new(w.clone(), surface, &gpu));
-        }
-
-        // 4. Render one frame into every window BEFORE any of them become visible.
-        //    render() submits + presents synchronously, so by the time the loop ends
-        //    every swapchain has a valid first frame.
-        for state in windows.values_mut() {
-            match state.render(&gpu) {
-                RenderOutcome::Presented => {}
-                RenderOutcome::NeedsReconfigure => {
-                    state.reconfigure(&gpu);
-                    let _ = state.render(&gpu);
-                }
-                RenderOutcome::Skipped => {
-                    warn!("initial frame skipped by compositor");
-                }
+        // 3. Build surfaces for windows 1..N on the main thread.
+        //    wgpu's raw-window-handle retrieval happens here, still on the
+        //    thread that owns the Window.
+        let mut per_window: Vec<(Arc<Window>, wgpu::Surface<'static>, f32)> =
+            Vec::with_capacity(created.len());
+        per_window.push((first_window.clone(), bootstrap.first_surface, created[0].1));
+        for (w, hz) in created.iter().skip(1) {
+            match bootstrap.instance.create_surface(w.clone()) {
+                Ok(s) => per_window.push((w.clone(), s, *hz)),
+                Err(e) => error!("failed to create surface for extra window: {e:?}"),
             }
         }
 
-        // 5. Flip every window visible in one pass, then focus the first.
-        for state in windows.values() {
-            state.window.set_visible(true);
-        }
-        if let Some(first_state) = windows.get(&first_id) {
-            first_state.window.focus_window();
+        // 4. Spawn render threads behind a Barrier so the main thread waits
+        //    until every swapchain has a valid first frame before any window
+        //    is flipped visible.
+        let barrier = Arc::new(Barrier::new(per_window.len() + 1));
+        let mut handles: HashMap<WindowId, WindowHandle> = HashMap::new();
+        let mut first_id: Option<WindowId> = None;
+        for (w, surface, hz) in per_window {
+            let id = w.id();
+            if first_id.is_none() {
+                first_id = Some(id);
+            }
+            let handle = spawn_render_thread(w, surface, bootstrap.shared.clone(), hz, barrier.clone());
+            handles.insert(id, handle);
         }
 
-        self.gpu = Some(gpu);
-        self.windows = windows;
+        // 5. Wait until every render thread reports "frame 0 done". If any
+        //    thread panics before hitting the barrier this would block
+        //    forever — but draw_once handles all wgpu errors without
+        //    panicking, so that's not a real concern in normal operation.
+        barrier.wait();
+
+        // 6. Flip every window visible in one pass, then focus the first.
+        for handle in handles.values() {
+            handle.window.set_visible(true);
+        }
+        if let Some(id) = first_id {
+            if let Some(handle) = handles.get(&id) {
+                handle.window.focus_window();
+            }
+        }
+
+        self.gpu = Some(bootstrap.shared);
+        self.instance = Some(bootstrap.instance);
+        self.windows = handles;
     }
 
     fn window_event(
@@ -125,10 +130,7 @@ impl ApplicationHandler for App {
         id: WindowId,
         event: WindowEvent,
     ) {
-        let Some(gpu) = self.gpu.as_ref() else {
-            return;
-        };
-        let Some(state) = self.windows.get_mut(&id) else {
+        let Some(handle) = self.windows.get(&id) else {
             return;
         };
 
@@ -147,14 +149,7 @@ impl ApplicationHandler for App {
             } => {
                 event_loop.exit();
             }
-            WindowEvent::Resized(new_size) => state.resize(gpu, new_size),
-            WindowEvent::RedrawRequested => match state.render(gpu) {
-                RenderOutcome::Presented | RenderOutcome::Skipped => {}
-                RenderOutcome::NeedsReconfigure => {
-                    state.reconfigure(gpu);
-                    state.window.request_redraw();
-                }
-            },
+            WindowEvent::Resized(new_size) => handle.resize(new_size),
             _ => {}
         }
     }
