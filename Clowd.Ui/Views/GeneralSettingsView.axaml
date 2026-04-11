@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:Clowd.Ui.Models.Settings"
+             x:Class="Clowd.Ui.Views.GeneralSettingsView"
+             x:DataType="settings:SettingsGeneral">
+    <ScrollViewer>
+        <StackPanel Spacing="24" MaxWidth="640" HorizontalAlignment="Left">
+            <TextBlock Text="General" FontSize="24" FontWeight="SemiBold" />
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Updates" FontSize="14" FontWeight="SemiBold" Opacity="0.85" />
+                <Border BorderBrush="{DynamicResource SystemBaseLowColor}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="16,12">
+                    <CheckBox IsChecked="{Binding ExperimentalUpdateChannel}"
+                              Content="Download experimental updates (things may break)" />
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Shell integration" FontSize="14" FontWeight="SemiBold" Opacity="0.85" />
+                <Border BorderBrush="{DynamicResource SystemBaseLowColor}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="16,12">
+                    <StackPanel Spacing="10">
+                        <CheckBox x:Name="ChkAutoStart"
+                                  IsChecked="{Binding RegisterAutoStart}"
+                                  Content="Start Clowd when I sign in" />
+                        <CheckBox x:Name="ChkContextMenu"
+                                  IsChecked="{Binding RegisterExplorerContextMenu}"
+                                  Content="Add &quot;Upload with Clowd&quot; to file explorer" />
+                        <TextBlock Text="Note: shell integration is platform-specific and not yet implemented in this build."
+                                   FontSize="11"
+                                   Opacity="0.6"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
