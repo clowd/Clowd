@@ -5,7 +5,7 @@ use std::time::Instant;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::geometry::{ScreenPointF, ScreenRect};
+use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::{SharedGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
 
@@ -17,14 +17,24 @@ const FADE_DURATION_SECS: f32 = 0.3;
 /// Messages the main thread can send to a render thread.
 pub enum RenderMsg {
     Resize(PhysicalSize<u32>),
-    /// New cursor + zoom state. `pos` is the *virtual* cursor in
-    /// virtual-desktop pixels (f32 so sub-pixel motion at high zoom stays
-    /// smooth); `zoom` is the current magnifier scale (1.0 .. 256.0). The
-    /// render thread caches the latest values and uses them on the next
-    /// frame — the channel is the only synchronisation we need. Cursor
-    /// moves and zoom changes share a single message so the render thread
-    /// never sees a partially-updated state across two drains.
-    MouseState { pos: ScreenPointF, zoom: f32 },
+    /// New cursor + zoom + selection state. `pos` is the *virtual* cursor
+    /// in virtual-desktop pixels (f32 so sub-pixel motion at high zoom
+    /// stays smooth); `zoom` is the current magnifier scale (1.0 .. 256.0);
+    /// `selection` is the current mouse-drag rect in virtual-desktop pixel
+    /// coords (each render thread maps it through its own VD→window-local
+    /// transform every frame); `captured` is true after the user has
+    /// finalised a selection. The render thread caches the latest values
+    /// and uses them on the next frame — the channel is the only
+    /// synchronisation we need. Everything ships in a single message so
+    /// state-transition frames (e.g. finalise-selection-and-snap-zoom)
+    /// land atomically and the render thread never sees a partially-
+    /// updated state across two drains.
+    MouseState {
+        pos: ScreenPointF,
+        zoom: f32,
+        selection: Option<ScreenRect>,
+        captured: bool,
+    },
     Shutdown,
 }
 
@@ -48,8 +58,19 @@ impl WindowHandle {
         let _ = self.tx.send(RenderMsg::Resize(size));
     }
 
-    pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32) {
-        let _ = self.tx.send(RenderMsg::MouseState { pos, zoom });
+    pub fn update_mouse_state(
+        &self,
+        pos: ScreenPointF,
+        zoom: f32,
+        selection: Option<ScreenRect>,
+        captured: bool,
+    ) {
+        let _ = self.tx.send(RenderMsg::MouseState {
+            pos,
+            zoom,
+            selection,
+            captured,
+        });
     }
 }
 
@@ -199,11 +220,14 @@ fn render_thread_main(
         // immutable from the GPU's POV — copied from settings once at
         // startup, never updated again.
         // Frame-0 uniforms: zoom=1 (which means the folded uv_offset_scale
-        // equals the baseline), fade=0, cursor at the pre-window position.
+        // equals the baseline), fade=0, cursor at the pre-window position,
+        // empty selection rect (right<=left sentinel), animation clock at 0.
         let uniforms = WindowUniforms {
             uv_offset_scale: base_uv_offset_scale,
             params: [0.0, init_local_x, init_local_y, scale_factor],
             crosshair_color: settings.crosshair_color,
+            selection_rect: [0.0, 0.0, -1.0, -1.0],
+            selection_params: [0.0, 0.0, 0.0, 0.0],
         };
 
         let ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {
@@ -252,12 +276,20 @@ fn render_thread_main(
     // hop), and we don't want any of that to eat into the 500ms budget.
     let start = Instant::now();
 
-    // Latest cursor position (virtual-desktop pixels, f32) and zoom level
-    // the main thread has told us about. Seeded from the pre-window
-    // snapshot at zoom=1; every subsequent value arrives via
-    // RenderMsg::MouseState.
+    // Latest cursor position (virtual-desktop pixels, f32), zoom level,
+    // and selection rect the main thread has told us about. Seeded from
+    // the pre-window snapshot at zoom=1, no selection; every subsequent
+    // value arrives via RenderMsg::MouseState.
     let mut mouse_pos: ScreenPointF = initial_mouse;
     let mut zoom: f32 = 1.0;
+    let mut selection: Option<ScreenRect> = None;
+    // `captured` is currently received but not separately read by the
+    // render thread — the visible state is fully determined by whether
+    // `selection` is `Some`. Kept around in the message so the main
+    // thread can broadcast the finalisation atomically with the
+    // zoom-snap-back, and so future render-thread effects (e.g. button
+    // panel) can light up on capture without a second message.
+    let mut _captured: bool = false;
 
     loop {
         // Drain *all* pending commands non-blockingly before the blocking
@@ -271,9 +303,16 @@ fn render_thread_main(
                     config.height = new_size.height.max(1);
                     surface.configure(&gpu.device, &config);
                 }
-                Ok(RenderMsg::MouseState { pos, zoom: z }) => {
+                Ok(RenderMsg::MouseState {
+                    pos,
+                    zoom: z,
+                    selection: sel,
+                    captured: cap,
+                }) => {
                     mouse_pos = pos;
                     zoom = z;
+                    selection = sel;
+                    _captured = cap;
                 }
                 Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
                 Err(mpsc::TryRecvError::Empty) => break,
@@ -345,6 +384,44 @@ fn render_thread_main(
                     base[3] / zoom,
                 ];
             }
+
+            // Selection rect (if any) → window-local physical pixels.
+            //
+            //   local_cx = cx - mx                    (cursor in window-local px)
+            //   window_x = (vd_x - cx) * zoom + local_cx
+            //
+            // At zoom=1 this collapses to `vd_x - mx` (the trivial subtract-
+            // monitor-origin case). At zoom>1 the rect expands around the
+            // cursor by the same factor as the desktop content under it,
+            // so the border stays glued to whatever desktop pixels were
+            // selected. The captured-and-zoomed combination never renders
+            // (zoom snaps back to 1 on capture in app.rs), so the only
+            // time this branch matters is during an active drag.
+            if let Some(sel) = selection {
+                let cx = mouse_pos.x;
+                let cy = mouse_pos.y;
+                let local_cx = cx - monitor_bounds.min_x() as f32;
+                let local_cy = cy - monitor_bounds.min_y() as f32;
+                let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
+                    (
+                        (vd_x - cx) * zoom + local_cx,
+                        (vd_y - cy) * zoom + local_cy,
+                    )
+                };
+                let (l, t) = to_local(sel.left() as f32, sel.top() as f32);
+                let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
+                state.uniforms.selection_rect = [l, t, r, b];
+            } else {
+                // Sentinel: any rect with right<=left or bottom<=top is
+                // treated as "no selection" by the shader.
+                state.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
+            }
+
+            // Animation clock for the marching-ants dash phase. Always
+            // written so the dashes don't freeze when a selection
+            // appears mid-second; cheap, and a no-op when there's no
+            // selection (the shader's emptiness sentinel short-circuits).
+            state.uniforms.selection_params[0] = elapsed;
 
             gpu.queue
                 .write_buffer(&state.ubo, 0, bytemuck::bytes_of(&state.uniforms));

@@ -12,13 +12,24 @@
 //                        1.5 = 150 %, …). Used to size the coloured
 //                        crosshair arms so they stay the same physical
 //                        size on every display.
-//   crosshair_color    = RGBA colour used for both the inner thin cross
-//                        and the outer thick segments. Seeded once from
+//   crosshair_color    = RGBA colour used for both the inner thin cross,
+//                        the outer thick segments, AND the marching-ants
+//                        dashes on the selection border. Seeded once from
 //                        `CapturerSettings`; never updated per frame.
+//   selection_rect     = mouse-drag selection in window-local physical
+//                        pixels: x=left y=top z=right w=bottom. Empty if
+//                        z<=x || w<=y; the shader treats any such rect
+//                        as "no selection" and falls through to the
+//                        normal grayscale path.
+//   selection_params.x = elapsed seconds since the per-thread animation
+//                        clock started; drives the marching-ants phase
+//                        on the selection border.
 struct Uniforms {
-    uv_offset_scale: vec4<f32>,
-    params:          vec4<f32>,
-    crosshair_color: vec4<f32>,
+    uv_offset_scale:  vec4<f32>,
+    params:           vec4<f32>,
+    crosshair_color:  vec4<f32>,
+    selection_rect:   vec4<f32>,
+    selection_params: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -141,6 +152,91 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         }
         return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    }
+
+    // Mouse-drag selection. The rect lives in window-local physical
+    // pixels (already through the same zoom transform as the UV path,
+    // done CPU-side in the render thread), so the comparison is just
+    // against the framebuffer pixel index. The order of the
+    // selection branches matters: both crosshair returns above must
+    // win over the selection fill so the cursor stays visible inside
+    // the rect; the desktop fade below catches every non-selection
+    // pixel as before.
+    let sr = u.selection_rect;
+    let sr_empty = sr.z <= sr.x || sr.w <= sr.y;
+    if (!sr_empty) {
+        let fpx = vec2<f32>(f32(px.x), f32(px.y));
+        let inside = fpx.x >= sr.x && fpx.x < sr.z &&
+                     fpx.y >= sr.y && fpx.y < sr.w;
+        if (inside) {
+            // Skip the grayscale fade entirely. Same bit-exact
+            // pass-through path as the existing fade==0.0 branch
+            // below — sample, drop alpha, return.
+            let c = textureSample(desktop_tex, desktop_samp, in.uv);
+            return vec4<f32>(c.rgb, 1.0);
+        }
+        // 2-pixel ring strictly outside the rect. Drawn fully
+        // outside (no half-overlap on the edge) so nothing inside
+        // the selection is ever obscured — a deliberate divergence
+        // from the C++ reference, which strokes centred on the edge.
+        let in_border = fpx.x >= sr.x - 2.0 && fpx.x < sr.z + 2.0 &&
+                        fpx.y >= sr.y - 2.0 && fpx.y < sr.w + 2.0;
+        if (in_border) {
+            // Classify the pixel into exactly one of four slabs.
+            // Top/bottom span the full outer width (including the
+            // 2×2 corner squares); left/right are only the inner
+            // strip strictly between them. This makes the
+            // membership disjoint, so the clockwise perimeter walk
+            // below is unambiguous at the corners.
+            let on_top    = fpx.y <  sr.y;
+            let on_bottom = fpx.y >= sr.w;
+            let on_right  = !on_top && !on_bottom && fpx.x >= sr.z;
+            // on_left is the implicit else.
+
+            // Walk the border clockwise from the outside-top-left
+            // corner: top → right → bottom → left → back to start.
+            // `arc` is the cumulative pixel count along that walk
+            // (constant across the 2-px slab thickness — both rows
+            // of the top slab at a given x get the same arc, so the
+            // dash pattern reads as a single solid stripe). With
+            // `phase = arc - t_offset`, increasing `t_offset`
+            // shifts dashes toward higher arc, which is clockwise.
+            let sx = i32(sr.x);
+            let sy = i32(sr.y);
+            let sz = i32(sr.z);
+            let sw = i32(sr.w);
+            let width_outer  = (sz - sx) + 4; // x-span of top/bottom slabs
+            let height_inner = sw - sy;       // y-span of left/right slabs
+
+            var arc: i32;
+            if (on_top) {
+                arc = px.x - (sx - 2);
+            } else if (on_right) {
+                arc = width_outer + (px.y - sy);
+            } else if (on_bottom) {
+                arc = width_outer + height_inner + ((sz + 1) - px.x);
+            } else { // on_left
+                arc = 2 * width_outer + height_inner + ((sw - 1) - px.y);
+            }
+
+            // Pattern: 16 px dash, 16 px gap, full 32 px cycle —
+            // matches the C++ D2D stroke style at
+            // DxScreenCapture.cpp:638-639, where the dash array
+            // value of 8 is in stroke-width units (stroke width
+            // = 2 px) and the per-second offset is `8 * 2 = 16`
+            // dash-array units = 32 physical px. The dashes scroll
+            // 32 px/sec around the perimeter — one full cycle per
+            // second. WGSL signed `%` can be negative, so
+            // normalise into [0, 32). If the perimeter isn't a
+            // multiple of 32 there's a slight phase seam at the
+            // top-left wrap-around; visually unobjectionable.
+            let t_offset = i32(floor(u.selection_params.x * 32.0));
+            let phase = ((arc - t_offset) % 32 + 32) % 32;
+            if (phase < 16) {
+                return u.crosshair_color;
+            }
+            return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+        }
     }
 
     let color = textureSample(desktop_tex, desktop_samp, in.uv);
