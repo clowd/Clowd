@@ -26,7 +26,7 @@
 //! resvg / fontdue are all pure-Rust SIMD.
 
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use tiny_skia::{FillRule, Paint, Pixmap, PixmapMut, Rect as SkRect, Transform};
 
@@ -548,13 +548,40 @@ impl BakePanelBackend {
         let mut underline_x_start = 0.0_f32;
         let mut underline_x_end = 0.0_f32;
         for (i, c) in text.chars().enumerate() {
-            let (metrics, coverage) = self.font.rasterize(c, px);
+            // ClearType-style subpixel rasterization: fontdue returns a
+            // `metrics.width * 3` byte buffer, RGB per pixel column, with
+            // each byte being the coverage of one LCD subpixel stripe.
+            // We low-pass it with the FreeType default LCD filter to
+            // suppress red/blue color fringes, then composite each
+            // channel against the destination in linear light.
+            //
+            // `fix_fontdue_subpixel_offset` corrects a fontdue 0.9 bug
+            // where the glyph is positioned `2 * fract(bounds.xmin)`
+            // subpixels too far left in its canvas — see that function's
+            // doc comment for the gory details. The corrected buffer is
+            // one logical pixel wider so we don't clip the right edge.
+            let (metrics, raw_coverage) = self.font.rasterize_subpixel(c, px);
+            let (shifted, fixed_w) = fix_fontdue_subpixel_offset(
+                &raw_coverage,
+                metrics.width,
+                metrics.height,
+                metrics.bounds.xmin,
+            );
+            let filtered = apply_lcd_filter(&shifted, fixed_w, metrics.height);
             let top = y + (ascent - metrics.ymin as f32 - metrics.height as f32);
             let left = x + metrics.xmin as f32;
             // Truncate-to-int for the blit so the underline can use the
             // exact same integer x as the glyph bitmap below.
             let glyph_left_px = left as i32;
-            blit_glyph(pixmap, &coverage, metrics.width, metrics.height, glyph_left_px, top as i32, rgba);
+            blit_glyph_subpixel(
+                pixmap,
+                &filtered,
+                fixed_w,
+                metrics.height,
+                glyph_left_px,
+                top as i32,
+                rgba,
+            );
             if underline == Some(i) {
                 // Match the glyph's actual integer pixel rect — re-rounding
                 // `x + xmin` independently can shift it by a pixel relative
@@ -823,47 +850,226 @@ fn blit_pixmap(dst: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
     }
 }
 
-/// Blit a fontdue glyph coverage buffer onto the pixmap as `rgba`
-/// modulated by per-pixel coverage (0..255). Produces crisp anti-
-/// aliased text.
-fn blit_glyph(
+// ---------------------------------------------------------------------------
+// ClearType-style subpixel text compositing.
+//
+// Three pieces stacked together:
+//
+//   1. `rasterize_subpixel` (fontdue) renders each glyph at 3x horizontal
+//      resolution with one coverage byte per LCD subpixel stripe.
+//
+//   2. `apply_lcd_filter` runs FreeType's default 5-tap FIR
+//      `[8, 77, 86, 77, 8] / 256` over the 3x-wide buffer to suppress
+//      the red/blue color fringes that naive subpixel rendering
+//      produces. Without this filter the result looks like RGB confetti
+//      around glyph stems; with it, you get clean text.
+//
+//   3. `blit_glyph_subpixel` composites the per-channel coverage onto
+//      the pixmap *in linear light* using sRGB <-> linear LUTs. This is
+//      what makes small text look solid and on-weight instead of thin
+//      and washed out — Microsoft's ClearType depends on this just as
+//      much as it depends on subpixel rendering.
+//
+// Precondition: the destination pixmap is opaque underneath the text
+// (alpha = 0xFF). The panel always satisfies this — `GRAY_RGBA` and
+// the accent colour are both opaque, the hover overlay leaves dst alpha
+// at 0xFF, and the textured-quad pipeline blends the *whole* baked
+// pixmap onto the screen with premultiplied alpha. We rely on this so
+// we can read the destination RGB as plain sRGB rather than dividing
+// out a fractional alpha.
+
+/// FreeType's `FT_LCD_FILTER_DEFAULT` coefficients (sum to 256).
+const LCD_FILTER: [u32; 5] = [8, 77, 86, 77, 8];
+
+fn srgb_to_linear_lut() -> &'static [f32; 256] {
+    static LUT: OnceLock<[f32; 256]> = OnceLock::new();
+    LUT.get_or_init(|| {
+        let mut lut = [0.0f32; 256];
+        for (i, slot) in lut.iter_mut().enumerate() {
+            let c = i as f32 / 255.0;
+            *slot = if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            };
+        }
+        lut
+    })
+}
+
+fn linear_to_srgb_lut() -> &'static [u8; 4096] {
+    static LUT: OnceLock<[u8; 4096]> = OnceLock::new();
+    LUT.get_or_init(|| {
+        let mut lut = [0u8; 4096];
+        for (i, slot) in lut.iter_mut().enumerate() {
+            let lin = i as f32 / 4095.0;
+            let srgb = if lin <= 0.003_130_8 {
+                lin * 12.92
+            } else {
+                1.055 * lin.powf(1.0 / 2.4) - 0.055
+            };
+            *slot = (srgb.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+        }
+        lut
+    })
+}
+
+/// Compensate for a fontdue 0.9 bug in `rasterize_indexed_subpixel`.
+///
+/// Fontdue computes `offset_x = fract(bounds.xmin)` at the **logical**
+/// scale (one unit = one logical pixel), then passes it verbatim to
+/// `Raster::draw` *with* a horizontal scale of `3 * scale`. The raster
+/// adds the offset to the already-3x-scaled glyph coordinates as if it
+/// were in subpixel units. Net effect: every glyph is rendered
+/// `2 * fract(bounds.xmin)` subpixels too far left in its canvas. For
+/// glyphs whose `fract(bounds.xmin)` is large (V, E, I, X all qualify
+/// in Roboto), the shift is 1-2 subpixels = up to 0.66 logical pixels,
+/// which is enough to make 1px gaps between adjacent letters disappear
+/// entirely.
+///
+/// We compensate by shifting the raw subpixel buffer right by
+/// `round(2 * fract(bounds.xmin))` subpixel columns into a buffer that
+/// is one logical pixel wider. The extra column on the right is filled
+/// with zeros and is enough to hold the shifted content without
+/// clipping.
+fn fix_fontdue_subpixel_offset(
+    raw: &[u8],
+    w_logical: usize,
+    h: usize,
+    bounds_xmin: f32,
+) -> (Vec<u8>, usize) {
+    let new_w_logical = w_logical + 1;
+    let new_stride = new_w_logical * 3;
+    let mut out = vec![0u8; new_stride * h];
+    if w_logical == 0 || h == 0 {
+        return (out, new_w_logical);
+    }
+    let old_stride = w_logical * 3;
+    let frac = bounds_xmin - bounds_xmin.floor(); // in [0, 1)
+    // Shift in subpixel columns. `2 * frac` is in [0, 2), so the
+    // rounded shift is 0, 1, or 2.
+    let shift = (2.0 * frac).round() as usize;
+    let shift = shift.min(new_stride.saturating_sub(old_stride));
+    for row in 0..h {
+        let src_off = row * old_stride;
+        let dst_off = row * new_stride + shift;
+        let copy_len = old_stride.min(new_stride - shift);
+        out[dst_off..dst_off + copy_len]
+            .copy_from_slice(&raw[src_off..src_off + copy_len]);
+    }
+    (out, new_w_logical)
+}
+
+/// Apply a 5-tap FreeType LCD filter to a fontdue subpixel coverage
+/// buffer. Input is `metrics.width * 3` bytes per row (R, G, B per
+/// pixel column). Output is the same shape — out-of-bounds samples at
+/// row edges are treated as zero.
+fn apply_lcd_filter(buf: &[u8], w_logical: usize, h: usize) -> Vec<u8> {
+    let stride = w_logical * 3;
+    if stride == 0 || h == 0 {
+        return Vec::new();
+    }
+    let mut out = vec![0u8; buf.len()];
+    for row in 0..h {
+        let row_off = row * stride;
+        for x in 0..stride {
+            let s0 = if x >= 2 { buf[row_off + x - 2] as u32 } else { 0 };
+            let s1 = if x >= 1 { buf[row_off + x - 1] as u32 } else { 0 };
+            let s2 = buf[row_off + x] as u32;
+            let s3 = if x + 1 < stride {
+                buf[row_off + x + 1] as u32
+            } else {
+                0
+            };
+            let s4 = if x + 2 < stride {
+                buf[row_off + x + 2] as u32
+            } else {
+                0
+            };
+            let v = LCD_FILTER[0] * s0
+                + LCD_FILTER[1] * s1
+                + LCD_FILTER[2] * s2
+                + LCD_FILTER[3] * s3
+                + LCD_FILTER[4] * s4;
+            // Filter sums to 256, so v <= 256 * 255 = 65280.
+            out[row_off + x] = ((v + 128) / 256).min(255) as u8;
+        }
+    }
+    out
+}
+
+/// Composite a per-subpixel coverage buffer onto the pixmap, treating
+/// the three coverage values for each pixel as the alpha for the R, G,
+/// B channels respectively. Blends in linear light. Assumes the
+/// destination pixel is opaque (alpha = 0xFF) — see the module-level
+/// comment for why that holds for the panel.
+fn blit_glyph_subpixel(
     dst: &mut Pixmap,
-    coverage: &[u8],
+    coverage_rgb: &[u8],
     w: usize,
     h: usize,
     x: i32,
     y: i32,
-    rgba: [u8; 4],
+    text_rgba: [u8; 4],
 ) {
+    if w == 0 || h == 0 {
+        return;
+    }
     let dst_w = dst.width() as i32;
     let dst_h = dst.height() as i32;
     let data = dst.data_mut();
+    let s2l = srgb_to_linear_lut();
+    let l2s = linear_to_srgb_lut();
+
+    let text_alpha = text_rgba[3] as f32 / 255.0;
+    let text_lin = [
+        s2l[text_rgba[0] as usize],
+        s2l[text_rgba[1] as usize],
+        s2l[text_rgba[2] as usize],
+    ];
+
+    let stride_3 = w * 3;
     for gy in 0..(h as i32) {
         let dy = y + gy;
         if dy < 0 || dy >= dst_h {
             continue;
         }
+        let row_off = (gy as usize) * stride_3;
         for gx in 0..(w as i32) {
             let dx = x + gx;
             if dx < 0 || dx >= dst_w {
                 continue;
             }
-            let c = coverage[(gy as usize) * w + (gx as usize)] as u32;
-            if c == 0 {
+            let pix_off = row_off + (gx as usize) * 3;
+            let cov_r = coverage_rgb[pix_off] as f32 * (1.0 / 255.0) * text_alpha;
+            let cov_g = coverage_rgb[pix_off + 1] as f32 * (1.0 / 255.0) * text_alpha;
+            let cov_b = coverage_rgb[pix_off + 2] as f32 * (1.0 / 255.0) * text_alpha;
+            if cov_r == 0.0 && cov_g == 0.0 && cov_b == 0.0 {
                 continue;
             }
-            // Final alpha = rgba.a * coverage / 255, then premultiply
-            // colour with final alpha for source-over.
-            let final_a = (rgba[3] as u32 * c + 127) / 255;
-            let sr = (rgba[0] as u32 * final_a + 127) / 255;
-            let sg = (rgba[1] as u32 * final_a + 127) / 255;
-            let sb = (rgba[2] as u32 * final_a + 127) / 255;
-            let inv_a = 255 - final_a;
             let di = ((dy * dst_w + dx) * 4) as usize;
-            data[di] = (sr + (data[di] as u32 * inv_a + 127) / 255) as u8;
-            data[di + 1] = (sg + (data[di + 1] as u32 * inv_a + 127) / 255) as u8;
-            data[di + 2] = (sb + (data[di + 2] as u32 * inv_a + 127) / 255) as u8;
-            data[di + 3] = (final_a + (data[di + 3] as u32 * inv_a + 127) / 255) as u8;
+            // Dst is premultiplied sRGB. Because dst alpha is 0xFF here
+            // (panel precondition), the premultiplied bytes equal the
+            // straight-sRGB bytes, so we can index the LUT directly.
+            let dst_lin = [
+                s2l[data[di] as usize],
+                s2l[data[di + 1] as usize],
+                s2l[data[di + 2] as usize],
+            ];
+            let out_lin = [
+                text_lin[0] * cov_r + dst_lin[0] * (1.0 - cov_r),
+                text_lin[1] * cov_g + dst_lin[1] * (1.0 - cov_g),
+                text_lin[2] * cov_b + dst_lin[2] * (1.0 - cov_b),
+            ];
+            // Quantize linear -> 12-bit LUT index, then look up the
+            // sRGB-encoded byte. clamp() handles tiny float overshoot
+            // from rounding in the lerp.
+            data[di] = l2s[(out_lin[0].clamp(0.0, 1.0) * 4095.0) as usize];
+            data[di + 1] = l2s[(out_lin[1].clamp(0.0, 1.0) * 4095.0) as usize];
+            data[di + 2] = l2s[(out_lin[2].clamp(0.0, 1.0) * 4095.0) as usize];
+            // Leave alpha alone — dst stays opaque so the textured quad
+            // fully replaces what's underneath when it's blended onto
+            // the swapchain.
         }
     }
 }

@@ -692,7 +692,7 @@ impl ApplicationHandler for App {
                 .with_visible(false)
                 .with_transparent(false)
                 .with_active(i == 0)
-                .with_window_level(WindowLevel::AlwaysOnTop)
+                // .with_window_level(WindowLevel::AlwaysOnTop)
                 .with_position(PhysicalPosition::new(m.bounds.origin.x, m.bounds.origin.y))
                 .with_inner_size(PhysicalSize::new(width, height));
             match event_loop.create_window(attrs) {
