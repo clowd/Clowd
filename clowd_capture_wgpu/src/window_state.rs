@@ -283,13 +283,10 @@ fn render_thread_main(
     let mut mouse_pos: ScreenPointF = initial_mouse;
     let mut zoom: f32 = 1.0;
     let mut selection: Option<ScreenRect> = None;
-    // `captured` is currently received but not separately read by the
-    // render thread — the visible state is fully determined by whether
-    // `selection` is `Some`. Kept around in the message so the main
-    // thread can broadcast the finalisation atomically with the
-    // zoom-snap-back, and so future render-thread effects (e.g. button
-    // panel) can light up on capture without a second message.
-    let mut _captured: bool = false;
+    // Once captured the shader stops drawing the crosshair entirely
+    // — the OS cursor takes over the visual role. Plumbed via
+    // `selection_params.y` (0/1 float).
+    let mut captured: bool = false;
 
     loop {
         // Drain *all* pending commands non-blockingly before the blocking
@@ -312,7 +309,7 @@ fn render_thread_main(
                     mouse_pos = pos;
                     zoom = z;
                     selection = sel;
-                    _captured = cap;
+                    captured = cap;
                 }
                 Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
                 Err(mpsc::TryRecvError::Empty) => break,
@@ -417,11 +414,19 @@ fn render_thread_main(
                 state.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
             }
 
-            // Animation clock for the marching-ants dash phase. Always
-            // written so the dashes don't freeze when a selection
-            // appears mid-second; cheap, and a no-op when there's no
-            // selection (the shader's emptiness sentinel short-circuits).
+            // selection_params:
+            //   [0] = animation clock for the marching-ants phase
+            //         (always written so the dashes don't freeze when
+            //         a selection appears mid-second; cheap, and a
+            //         no-op when there's no selection — the shader's
+            //         emptiness sentinel short-circuits).
+            //   [1] = `captured` flag as a float; the shader compares
+            //         > 0.5 to suppress the crosshair entirely.
+            //   [2] = current zoom; the shader scales border thickness
+            //         and dash period by `1 / zoom`.
             state.uniforms.selection_params[0] = elapsed;
+            state.uniforms.selection_params[1] = if captured { 1.0 } else { 0.0 };
+            state.uniforms.selection_params[2] = zoom;
 
             gpu.queue
                 .write_buffer(&state.ubo, 0, bytemuck::bytes_of(&state.uniforms));

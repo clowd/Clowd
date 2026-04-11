@@ -42,9 +42,17 @@ pub struct WindowUniforms {
     pub selection_rect: [f32; 4],
     /// x = elapsed seconds since the render thread's animation clock
     ///     started (after the first-frame barrier). Drives the
-    ///     marching-ants phase on the selection border at 16 px/sec
-    ///     (one full 8px-on/8px-off dash cycle per second).
-    /// yzw = reserved.
+    ///     marching-ants phase on the selection border.
+    /// y = `captured` flag as a float (0.0 = not captured, 1.0 =
+    ///     selection finalised). When set, the shader stops drawing
+    ///     the crosshair and dashed cursor lines entirely so the OS
+    ///     cursor takes over.
+    /// z = current magnifier zoom level (1.0 .. 256.0). Used by the
+    ///     shader to scale the border thickness and dash period by
+    ///     `1 / zoom`, mirroring the C++ source's
+    ///     `2 / data.zoom` stroke width at
+    ///     DxScreenCapture.cpp:644-645.
+    /// w = reserved.
     pub selection_params: [f32; 4],
 }
 
