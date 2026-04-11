@@ -43,6 +43,8 @@
         <Style Selector="Button.footer">
             <Setter Property="Padding" Value="18,6" />
             <Setter Property="MinWidth" Value="84" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
     </Window.Styles>
 
