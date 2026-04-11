@@ -25,10 +25,12 @@ simplelog = "0.12"
 
 # --- panel rendering -------------------------------------------------------
 # resvg reuses usvg + tiny-skia under the hood, so their versions are pinned
-# together. fontdue is a pure-Rust glyph rasterizer we use for the button
-# labels + area-indicator digits; `cosmic-text` / `ab_glyph` would also work,
-# fontdue is the leanest option that still handles underlines and Latin text.
+# together. swash handles all the font work — outline rasterization with
+# true LCD subpixel rendering (Format::Subpixel) and fractional positioning.
+# Used by cosmic-text under the hood; same code path Google's font stack
+# trusts. We previously used fontdue but it has a positioning bug in its
+# subpixel rasterizer.
 resvg      = { version = "0.47", default-features = false }
 usvg       = { version = "0.47", default-features = false }
 tiny-skia  = "0.12"
-fontdue    = "0.9"
+swash      = "0.2"
