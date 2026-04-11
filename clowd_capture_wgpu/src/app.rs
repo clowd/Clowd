@@ -128,6 +128,7 @@ impl ApplicationHandler for App {
                 surface,
                 bootstrap.shared.clone(),
                 m.bounds,
+                m.scale_factor,
                 hz,
                 barrier.clone(),
             );

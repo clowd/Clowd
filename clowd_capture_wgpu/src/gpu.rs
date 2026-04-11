@@ -20,7 +20,9 @@ pub struct WindowUniforms {
     ///     is on another monitor; the shader's integer-equality test then
     ///     never matches and the vertical crosshair line vanishes here)
     /// z = cursor Y in window-local physical pixels (same convention)
-    /// w = unused
+    /// w = this monitor's DPI scale factor (1.0 = 100%, 1.5 = 150%, …);
+    ///     used by the shader to size the coloured crosshair arms so
+    ///     they stay the same physical size on every display
     pub params: [f32; 4],
 }
 
