@@ -13,6 +13,16 @@ mod xcap_impl;
 use crate::geometry::{ScreenPoint, ScreenRect};
 use image::DynamicImage;
 
+/// Information about a single monitor, bundled together so callers don't
+/// have to juggle parallel vectors of fields.
+#[derive(Debug, Clone)]
+pub struct MonitorInfo {
+    pub bounds: ScreenRect,
+    pub scale_factor: f32,
+    pub is_primary: bool,
+    pub refresh_hz: f32,
+}
+
 pub struct SystemInterop;
 
 #[cfg(windows)]
@@ -38,6 +48,19 @@ impl SystemInterop {
             .expect("Unable to enumerate monitors")
             .iter()
             .map(|m| (m.bounds(), m.scale_factor(), m.is_primary()))
+            .collect()
+    }
+
+    pub fn all_monitors() -> Vec<MonitorInfo> {
+        win_monitor::Monitor::all()
+            .expect("Unable to enumerate monitors")
+            .iter()
+            .map(|m| MonitorInfo {
+                bounds: m.bounds(),
+                scale_factor: m.scale_factor(),
+                is_primary: m.is_primary(),
+                refresh_hz: m.frequency(),
+            })
             .collect()
     }
 }
