@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:drawing="clr-namespace:Clowd.Drawing;assembly=Clowd.Drawing"
         xmlns:converters="clr-namespace:Clowd.Ui.Converters"
+        xmlns:controls="clr-namespace:Clowd.Ui.Controls"
         x:Class="Clowd.Ui.Views.EditorWindow"
         x:CompileBindings="False"
         Title="Edit - Clowd"
@@ -58,40 +59,134 @@
     </Window.Resources>
 
     <Window.Styles>
-        <!-- Tool button style for the left rail. -->
+        <!-- ==========================================================
+             Tool / command button styles — borderless 30×30 squares,
+             no margin so they sit edge-to-edge in the toolbars. Hover
+             and active states use semi-transparent white overlays
+             (#33FFFFFF / #55FFFFFF) to match the legacy WPF ToolButton.
+             ========================================================== -->
+
+        <!-- Left-rail tool buttons -->
         <Style Selector="Button.tool">
-            <Setter Property="Width" Value="44" />
-            <Setter Property="Height" Value="40" />
-            <Setter Property="Margin" Value="4,2,4,2" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="#3a3a3a" />
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="7" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="#dcdcdc" />
-            <Setter Property="BorderBrush" Value="#555555" />
-            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="FontSize" Value="11" />
+        </Style>
+        <Style Selector="Button.tool /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
         </Style>
         <Style Selector="Button.tool:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#505050" />
+            <Setter Property="Background" Value="#33FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
         </Style>
-        <Style Selector="Button.tool.active">
-            <Setter Property="Background" Value="#0078D7" />
-            <Setter Property="BorderBrush" Value="#1591ff" />
-            <Setter Property="Foreground" Value="White" />
+        <Style Selector="Button.tool:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#55FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
         </Style>
         <Style Selector="Button.tool.active /template/ ContentPresenter">
-            <Setter Property="Background" Value="#0078D7" />
+            <Setter Property="Background" Value="#55FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
         </Style>
 
-        <!-- Icon sizing for PathIcons inside tool buttons and command buttons. -->
-        <Style Selector="Button.tool PathIcon">
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="Foreground" Value="#e7e7e7" />
+        <!-- Top-bar command buttons (Save / Copy / Upload / Undo / Redo / Pin) -->
+        <Style Selector="Button.cmd">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="7" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#dcdcdc" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
-        <Style Selector="Button.tool.active PathIcon">
-            <Setter Property="Foreground" Value="White" />
+        <Style Selector="Button.cmd /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="Button.cmd:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#33FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.cmd:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#55FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <!-- Wide command buttons that show a label (e.g. font picker showing
+             "Segoe UI"). Auto-width, fixed 30 px tall, otherwise borderless
+             to match the rest. -->
+        <Style Selector="Button.cmd-wide">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="80" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#dcdcdc" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.cmd-wide /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="Button.cmd-wide:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#33FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.cmd-wide:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#55FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <!-- ToggleButton.cmd (Pin / always-on-top) -->
+        <Style Selector="ToggleButton.cmd">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="7" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#dcdcdc" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="ToggleButton.cmd /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+        <Style Selector="ToggleButton.cmd:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#33FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="ToggleButton.cmd:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#55FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="ToggleButton.cmd:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="#55FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <!-- Icon sizing inside the buttons. The 30×30 button with 7 px
+             padding leaves 16×16 for the icon, matching the legacy WPF
+             ToolButton dimensions. -->
+        <Style Selector="Button.tool PathIcon">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Foreground" Value="#e7e7e7" />
         </Style>
         <Style Selector="Button.cmd PathIcon">
             <Setter Property="Width" Value="16" />
@@ -112,20 +207,11 @@
             <Setter Property="Orientation" Value="Horizontal" />
             <Setter Property="Margin" Value="6,0,6,0" />
             <Setter Property="Spacing" Value="4" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style Selector="StackPanel.section TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="#dcdcdc" />
-        </Style>
-        <Style Selector="Button.cmd">
-            <Setter Property="MinWidth" Value="32" />
-            <Setter Property="Height" Value="26" />
-            <Setter Property="Margin" Value="2,0,2,0" />
-            <Setter Property="Padding" Value="6,0" />
-            <Setter Property="Background" Value="#454545" />
-            <Setter Property="Foreground" Value="#dcdcdc" />
-            <Setter Property="BorderBrush" Value="#666666" />
-            <Setter Property="BorderThickness" Value="1" />
         </Style>
         <Style Selector="Border.colorSwatch">
             <Setter Property="Width" Value="22" />
@@ -137,217 +223,236 @@
 
     <Grid Background="#535353" RowDefinitions="Auto,*">
 
-        <!-- ====================== Top toolbar ====================== -->
+        <!-- ====================== Top toolbar ======================
+             Single horizontal DockAndWrapPanel: contextual property
+             sections flow from the left, dock-to-end commands stick
+             to the right. When the window narrows enough that the
+             content can't fit on one row, the panel wraps every
+             child left-to-right (mirroring the WPF original). -->
         <Border Grid.Row="0"
                 Background="#3a3a3a"
                 BorderBrush="#1d1d1d"
-                BorderThickness="0,0,0,1"
-                Padding="4">
-            <DockPanel LastChildFill="False">
+                BorderThickness="0,0,0,1">
+            <controls:DockAndWrapPanel ItemHeight="30" Orientation="Horizontal">
 
-                <!-- Dock-to-end commands (Save / Copy / Upload / Pin) -->
-                <ToggleButton DockPanel.Dock="Right"
-                              Classes="cmd"
-                              ToolTip.Tip="Always on top"
-                              IsChecked="{Binding $parent[Window].Topmost}">
-                    <PathIcon Data="{StaticResource IconPinned}" />
-                </ToggleButton>
-                <Button DockPanel.Dock="Right" Classes="cmd"
-                        Click="OnUploadClick"
-                        ToolTip.Tip="Upload (Ctrl+U)">
-                    <PathIcon Data="{StaticResource IconUpload}" />
-                </Button>
-                <Button DockPanel.Dock="Right" Classes="cmd"
-                        Click="OnCopyClick"
-                        ToolTip.Tip="Copy (Ctrl+C)">
-                    <PathIcon Data="{StaticResource IconCopy}" />
-                </Button>
-                <Button DockPanel.Dock="Right" Classes="cmd"
-                        Click="OnSaveClick"
-                        ToolTip.Tip="Save (Ctrl+S)">
-                    <PathIcon Data="{StaticResource IconSave}" />
-                </Button>
-                <Button DockPanel.Dock="Right" Classes="cmd"
-                        Click="OnRedoClick"
-                        ToolTip.Tip="Redo (Ctrl+Y)">
-                    <PathIcon Data="{StaticResource IconRedo}" />
-                </Button>
-                <Button DockPanel.Dock="Right" Classes="cmd"
+                <!-- Subject name (current selection or active tool) -->
+                <StackPanel Classes="section">
+                    <TextBlock Text="{Binding ElementName=Canvas, Path=SubjectName}"
+                               FontWeight="SemiBold" />
+                </StackPanel>
+
+                <!-- Zoom -->
+                <StackPanel Classes="section">
+                    <TextBlock Text="Zoom:" />
+                    <NumericUpDown Width="86"
+                                   Minimum="0.05"
+                                   Maximum="50"
+                                   Increment="0.1"
+                                   FormatString="0.00"
+                                   Value="{Binding ElementName=Canvas, Path=ContentScale, Mode=OneWay}" />
+                    <Button Classes="cmd" Click="OnResetZoomClick"
+                            ToolTip.Tip="Reset zoom and pan">
+                        <PathIcon Data="{StaticResource IconReset}" />
+                    </Button>
+                </StackPanel>
+
+                <!-- Canvas Background -->
+                <StackPanel Classes="section"
+                            IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=CanvasBackground}">
+                    <TextBlock Text="Canvas:" />
+                    <Border Classes="colorSwatch" Cursor="Hand" PointerPressed="OnCanvasBackgroundClick">
+                        <Rectangle>
+                            <Rectangle.Fill>
+                                <SolidColorBrush Color="{Binding ElementName=Canvas, Path=ArtworkBackground}" />
+                            </Rectangle.Fill>
+                        </Rectangle>
+                    </Border>
+                </StackPanel>
+
+                <!-- Stroke width -->
+                <StackPanel Classes="section"
+                            IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=Stroke}">
+                    <TextBlock Text="Stroke:" />
+                    <NumericUpDown Width="74"
+                                   Minimum="1"
+                                   Maximum="64"
+                                   Increment="1"
+                                   FormatString="0"
+                                   Value="{Binding ElementName=Canvas, Path=LineWidth, Mode=TwoWay}" />
+                </StackPanel>
+
+                <!-- Object color -->
+                <StackPanel Classes="section"
+                            IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=Color}">
+                    <TextBlock Text="Color:" />
+                    <Border Classes="colorSwatch" Cursor="Hand" PointerPressed="OnObjectColorClick">
+                        <Rectangle>
+                            <Rectangle.Fill>
+                                <SolidColorBrush Color="{Binding ElementName=Canvas, Path=ObjectColor}" />
+                            </Rectangle.Fill>
+                        </Rectangle>
+                    </Border>
+                </StackPanel>
+
+                <!-- Font picker -->
+                <StackPanel Classes="section"
+                            IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=Font}">
+                    <TextBlock Text="Font:" />
+                    <Button Classes="cmd-wide"
+                            Content="{Binding ElementName=Canvas, Path=TextFontFamilyName}"
+                            Click="OnFontClick"
+                            ToolTip.Tip="Choose font" />
+                    <NumericUpDown Width="68"
+                                   Minimum="6"
+                                   Maximum="200"
+                                   Increment="1"
+                                   FormatString="0"
+                                   Value="{Binding ElementName=Canvas, Path=TextFontSize, Mode=TwoWay}" />
+                </StackPanel>
+
+                <!-- Angle -->
+                <StackPanel Classes="section"
+                            IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=Angle}">
+                    <TextBlock Text="Angle:" />
+                    <NumericUpDown Width="74"
+                                   Minimum="-180"
+                                   Maximum="180"
+                                   Increment="5"
+                                   FormatString="0"
+                                   Value="{Binding ElementName=Canvas, Path=ObjectAngle, Mode=TwoWay}" />
+                </StackPanel>
+
+                <!-- Blur radius (pixelate tool) -->
+                <StackPanel Classes="section"
+                            IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=BlurRadius}">
+                    <TextBlock Text="Blur:" />
+                    <NumericUpDown Width="74"
+                                   Minimum="1"
+                                   Maximum="50"
+                                   Increment="1"
+                                   FormatString="0"
+                                   Value="{Binding ElementName=Canvas, Path=BlurRadius, Mode=TwoWay}" />
+                </StackPanel>
+
+                <!-- Dock-to-end commands. ArrangeDockedLine fills from the
+                     trailing edge backwards, so the LAST docked child in
+                     document order is the rightmost on screen. Listing them
+                     Undo→Pin therefore matches the visual order
+                     Undo Redo Save Copy Upload Pin (left → right). -->
+                <Button Classes="cmd"
+                        controls:DockAndWrapPanel.DockToEnd="True"
                         Click="OnUndoClick"
                         ToolTip.Tip="Undo (Ctrl+Z)">
                     <PathIcon Data="{StaticResource IconUndo}" />
                 </Button>
-
-                <!-- Contextual property sections -->
-                <WrapPanel Orientation="Horizontal">
-
-                    <!-- Subject name (current selection or active tool) -->
-                    <StackPanel Classes="section">
-                        <TextBlock Text="{Binding ElementName=Canvas, Path=SubjectName}"
-                                   FontWeight="SemiBold" />
-                    </StackPanel>
-
-                    <!-- Zoom -->
-                    <StackPanel Classes="section">
-                        <TextBlock Text="Zoom:" />
-                        <NumericUpDown Width="86"
-                                       Minimum="0.05"
-                                       Maximum="50"
-                                       Increment="0.1"
-                                       FormatString="0.00"
-                                       Value="{Binding ElementName=Canvas, Path=ContentScale, Mode=OneWay}" />
-                        <Button Classes="cmd" Click="OnResetZoomClick"
-                                ToolTip.Tip="Reset zoom and pan">
-                            <PathIcon Data="{StaticResource IconReset}" />
-                        </Button>
-                    </StackPanel>
-
-                    <!-- Canvas Background -->
-                    <StackPanel Classes="section"
-                                IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=CanvasBackground}">
-                        <TextBlock Text="Canvas:" />
-                        <Border Classes="colorSwatch" Cursor="Hand" PointerPressed="OnCanvasBackgroundClick">
-                            <Rectangle>
-                                <Rectangle.Fill>
-                                    <SolidColorBrush Color="{Binding ElementName=Canvas, Path=ArtworkBackground}" />
-                                </Rectangle.Fill>
-                            </Rectangle>
-                        </Border>
-                    </StackPanel>
-
-                    <!-- Stroke width -->
-                    <StackPanel Classes="section"
-                                IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=Stroke}">
-                        <TextBlock Text="Stroke:" />
-                        <NumericUpDown Width="74"
-                                       Minimum="1"
-                                       Maximum="64"
-                                       Increment="1"
-                                       FormatString="0"
-                                       Value="{Binding ElementName=Canvas, Path=LineWidth, Mode=TwoWay}" />
-                    </StackPanel>
-
-                    <!-- Object color -->
-                    <StackPanel Classes="section"
-                                IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=Color}">
-                        <TextBlock Text="Color:" />
-                        <Border Classes="colorSwatch" Cursor="Hand" PointerPressed="OnObjectColorClick">
-                            <Rectangle>
-                                <Rectangle.Fill>
-                                    <SolidColorBrush Color="{Binding ElementName=Canvas, Path=ObjectColor}" />
-                                </Rectangle.Fill>
-                            </Rectangle>
-                        </Border>
-                    </StackPanel>
-
-                    <!-- Font picker -->
-                    <StackPanel Classes="section"
-                                IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=Font}">
-                        <TextBlock Text="Font:" />
-                        <Button Classes="cmd"
-                                Content="{Binding ElementName=Canvas, Path=TextFontFamilyName}"
-                                Click="OnFontClick"
-                                ToolTip.Tip="Choose font" />
-                        <NumericUpDown Width="68"
-                                       Minimum="6"
-                                       Maximum="200"
-                                       Increment="1"
-                                       FormatString="0"
-                                       Value="{Binding ElementName=Canvas, Path=TextFontSize, Mode=TwoWay}" />
-                    </StackPanel>
-
-                    <!-- Angle -->
-                    <StackPanel Classes="section"
-                                IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=Angle}">
-                        <TextBlock Text="Angle:" />
-                        <NumericUpDown Width="74"
-                                       Minimum="-180"
-                                       Maximum="180"
-                                       Increment="5"
-                                       FormatString="0"
-                                       Value="{Binding ElementName=Canvas, Path=ObjectAngle, Mode=TwoWay}" />
-                    </StackPanel>
-
-                    <!-- Blur radius (pixelate tool) -->
-                    <StackPanel Classes="section"
-                                IsVisible="{Binding ElementName=Canvas, Path=SubjectSkill, Converter={StaticResource SkillFlag}, ConverterParameter=BlurRadius}">
-                        <TextBlock Text="Blur:" />
-                        <NumericUpDown Width="74"
-                                       Minimum="1"
-                                       Maximum="50"
-                                       Increment="1"
-                                       FormatString="0"
-                                       Value="{Binding ElementName=Canvas, Path=BlurRadius, Mode=TwoWay}" />
-                    </StackPanel>
-                </WrapPanel>
-            </DockPanel>
+                <Button Classes="cmd"
+                        controls:DockAndWrapPanel.DockToEnd="True"
+                        Click="OnRedoClick"
+                        ToolTip.Tip="Redo (Ctrl+Y)">
+                    <PathIcon Data="{StaticResource IconRedo}" />
+                </Button>
+                <Button Classes="cmd"
+                        controls:DockAndWrapPanel.DockToEnd="True"
+                        Click="OnSaveClick"
+                        ToolTip.Tip="Save (Ctrl+S)">
+                    <PathIcon Data="{StaticResource IconSave}" />
+                </Button>
+                <Button Classes="cmd"
+                        controls:DockAndWrapPanel.DockToEnd="True"
+                        Click="OnCopyClick"
+                        ToolTip.Tip="Copy (Ctrl+C)">
+                    <PathIcon Data="{StaticResource IconCopy}" />
+                </Button>
+                <Button Classes="cmd"
+                        controls:DockAndWrapPanel.DockToEnd="True"
+                        Click="OnUploadClick"
+                        ToolTip.Tip="Upload (Ctrl+U)">
+                    <PathIcon Data="{StaticResource IconUpload}" />
+                </Button>
+                <ToggleButton Classes="cmd"
+                              controls:DockAndWrapPanel.DockToEnd="True"
+                              ToolTip.Tip="Always on top"
+                              IsChecked="{Binding $parent[Window].Topmost}">
+                    <PathIcon Data="{StaticResource IconPinned}" />
+                </ToggleButton>
+            </controls:DockAndWrapPanel>
         </Border>
 
         <!-- ====================== Body: left rail + canvas ====================== -->
         <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
 
-            <!-- Left tool rail -->
+            <!-- Left tool rail.
+                 WrapPanel with vertical orientation (mirroring the legacy
+                 WPF ToolBar) so when the window is too short for all 11
+                 buttons the rail grows into a second column instead of
+                 scrolling buttons off-screen. -->
             <Border Grid.Column="0"
                     Background="#2d2d2d"
                     BorderBrush="#1d1d1d"
                     BorderThickness="0,0,1,0">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Orientation="Vertical" Margin="0,4,0,0">
-                        <Button Classes="tool" Tag="Pointer"         Click="OnToolButtonClick" ToolTip.Tip="Selection (S)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Pointer}">
-                            <PathIcon Data="{StaticResource IconToolPointer}" />
-                        </Button>
-                        <Button Classes="tool" Tag="None"            Click="OnToolButtonClick" ToolTip.Tip="Pan (D)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=None}">
-                            <PathIcon Data="{StaticResource IconToolPan}" />
-                        </Button>
-                        <Button Classes="tool" Tag="Rectangle"       Click="OnToolButtonClick" ToolTip.Tip="Rectangle (R)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Rectangle}">
-                            <PathIcon Data="{StaticResource IconToolRectangle}" />
-                        </Button>
-                        <Button Classes="tool" Tag="FilledRectangle" Click="OnToolButtonClick" ToolTip.Tip="Filled Rectangle (F)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=FilledRectangle}">
-                            <PathIcon Data="{StaticResource IconToolFilledRectangle}" />
-                        </Button>
-                        <Button Classes="tool" Tag="Ellipse"         Click="OnToolButtonClick" ToolTip.Tip="Ellipse (E)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Ellipse}">
-                            <PathIcon Data="{StaticResource IconToolEllipse}" />
-                        </Button>
-                        <Button Classes="tool" Tag="Line"            Click="OnToolButtonClick" ToolTip.Tip="Line (L)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Line}">
-                            <PathIcon Data="{StaticResource IconToolLine}" />
-                        </Button>
-                        <Button Classes="tool" Tag="Arrow"           Click="OnToolButtonClick" ToolTip.Tip="Arrow (A)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Arrow}">
-                            <PathIcon Data="{StaticResource IconToolArrow}" />
-                        </Button>
-                        <Button Classes="tool" Tag="PolyLine"        Click="OnToolButtonClick" ToolTip.Tip="Pencil (P)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=PolyLine}">
-                            <PathIcon Data="{StaticResource IconToolPolyLine}" />
-                        </Button>
-                        <Button Classes="tool" Tag="Text"            Click="OnToolButtonClick" ToolTip.Tip="Text (T)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Text}">
-                            <PathIcon Data="{StaticResource IconToolText}" />
-                        </Button>
-                        <Button Classes="tool" Tag="Count"           Click="OnToolButtonClick" ToolTip.Tip="Numbered Step (N)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Count}">
-                            <PathIcon Data="{StaticResource IconToolCount}" />
-                        </Button>
-                        <Button Classes="tool" Tag="Pixelate"        Click="OnToolButtonClick" ToolTip.Tip="Obscure / Pixelate (O)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Pixelate}">
-                            <PathIcon Data="{StaticResource IconToolPixelate}" />
-                        </Button>
-                    </StackPanel>
-                </ScrollViewer>
+                <WrapPanel Orientation="Vertical" UseLayoutRounding="True">
+                    <Button Classes="tool" Tag="Pointer"         Click="OnToolButtonClick" ToolTip.Tip="Selection (S)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Pointer}">
+                        <PathIcon Data="{StaticResource IconToolPointer}" />
+                    </Button>
+                    <Button Classes="tool" Tag="None"            Click="OnToolButtonClick" ToolTip.Tip="Pan (D)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=None}">
+                        <PathIcon Data="{StaticResource IconToolPan}" />
+                    </Button>
+                    <Button Classes="tool" Tag="Rectangle"       Click="OnToolButtonClick" ToolTip.Tip="Rectangle (R)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Rectangle}">
+                        <PathIcon Data="{StaticResource IconToolRectangle}" />
+                    </Button>
+                    <Button Classes="tool" Tag="FilledRectangle" Click="OnToolButtonClick" ToolTip.Tip="Filled Rectangle (F)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=FilledRectangle}">
+                        <PathIcon Data="{StaticResource IconToolFilledRectangle}" />
+                    </Button>
+                    <Button Classes="tool" Tag="Ellipse"         Click="OnToolButtonClick" ToolTip.Tip="Ellipse (E)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Ellipse}">
+                        <PathIcon Data="{StaticResource IconToolEllipse}" />
+                    </Button>
+                    <Button Classes="tool" Tag="Line"            Click="OnToolButtonClick" ToolTip.Tip="Line (L)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Line}">
+                        <PathIcon Data="{StaticResource IconToolLine}" />
+                    </Button>
+                    <Button Classes="tool" Tag="Arrow"           Click="OnToolButtonClick" ToolTip.Tip="Arrow (A)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Arrow}">
+                        <PathIcon Data="{StaticResource IconToolArrow}" />
+                    </Button>
+                    <Button Classes="tool" Tag="PolyLine"        Click="OnToolButtonClick" ToolTip.Tip="Pencil (P)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=PolyLine}">
+                        <PathIcon Data="{StaticResource IconToolPolyLine}" />
+                    </Button>
+                    <Button Classes="tool" Tag="Text"            Click="OnToolButtonClick" ToolTip.Tip="Text (T)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Text}">
+                        <PathIcon Data="{StaticResource IconToolText}" />
+                    </Button>
+                    <Button Classes="tool" Tag="Count"           Click="OnToolButtonClick" ToolTip.Tip="Numbered Step (N)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Count}">
+                        <PathIcon Data="{StaticResource IconToolCount}" />
+                    </Button>
+                    <Button Classes="tool" Tag="Pixelate"        Click="OnToolButtonClick" ToolTip.Tip="Obscure / Pixelate (O)"
+                            Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Pixelate}">
+                        <PathIcon Data="{StaticResource IconToolPixelate}" />
+                    </Button>
+                </WrapPanel>
             </Border>
 
-            <!-- Drawing canvas -->
+            <!-- Drawing canvas with overlay layer for in-place editors -->
             <Border Grid.Column="1"
                     Background="#1e1e1e"
                     ClipToBounds="True">
-                <drawing:DrawingCanvas x:Name="Canvas"
-                                       HorizontalAlignment="Stretch"
-                                       VerticalAlignment="Stretch" />
+                <Panel>
+                    <drawing:DrawingCanvas x:Name="Canvas"
+                                           HorizontalAlignment="Stretch"
+                                           VerticalAlignment="Stretch" />
+                    <!-- Overlay layer for in-place edit controls (text TextBox).
+                         Null background makes empty areas pass pointer events
+                         through to the DrawingCanvas below; the child TextBox
+                         still receives input where it's positioned. -->
+                    <Canvas x:Name="OverlayLayer"
+                            Background="{x:Null}" />
+                </Panel>
             </Border>
         </Grid>
     </Grid>

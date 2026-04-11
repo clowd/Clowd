@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Clowd.Drawing.Graphics;
 using Clowd.Drawing.Tools;
@@ -20,6 +21,12 @@ namespace Clowd.Drawing
     /// a <c>VisualCollection</c> of per-graphic <c>DrawingVisual</c>s; the
     /// Avalonia version draws everything in a single render override and
     /// invalidates whenever the collection raises <see cref="GraphicCollection.Changed"/>.
+    ///
+    /// We inherit from <see cref="Control"/> (not <see cref="Panel"/>) because
+    /// <c>Panel.Render</c> is sealed in Avalonia and we need a custom draw
+    /// pipeline. Overlay UI like the in-place text-edit <see cref="TextBox"/>
+    /// is hosted by the outer shell via the <see cref="TextEditRequested"/>
+    /// event.
     /// </summary>
     public class DrawingCanvas : Control
     {
@@ -82,7 +89,11 @@ namespace Clowd.Drawing
         {
             // A fresh collection by default so consumers don't have to assign one.
             GraphicsList = new GraphicCollection();
-            Background = Brushes.Transparent;
+            Background = BuildCheckeredBackgroundBrush();
+            // Keep the tiled checkerboard pattern crisp; without this Avalonia
+            // bilinearly samples the 50×50 source bitmap on hi-DPI displays
+            // and the dot edges turn into a uniform grey wash.
+            RenderOptions.SetBitmapInterpolationMode(this, BitmapInterpolationMode.None);
             _undoManager = new UndoManager(this);
 
             // Register the built-in tools with name + skill metadata.
@@ -689,7 +700,15 @@ namespace Clowd.Drawing
             _viewportTx += dx;
             _viewportTy += dy;
             InvalidateVisual();
+            ViewportChanged?.Invoke(this, EventArgs.Empty);
         }
+
+        /// <summary>
+        /// Fires after any viewport mutation (pan, zoom, reset). The shell
+        /// uses it to reposition screen-space overlays like the in-place
+        /// text editor.
+        /// </summary>
+        public event EventHandler? ViewportChanged;
 
         /// <summary>
         /// Multiply the viewport scale by <paramref name="factor"/>, anchored at
@@ -712,6 +731,7 @@ namespace Clowd.Drawing
                 GraphicsList.Dpi = CanvasUiElementScale;
 
             InvalidateVisual();
+            ViewportChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public void ResetViewport()
@@ -722,6 +742,103 @@ namespace Clowd.Drawing
             if (GraphicsList != null)
                 GraphicsList.Dpi = CanvasUiElementScale;
             InvalidateVisual();
+            ViewportChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        // ---- In-place text editing ----
+
+        /// <summary>
+        /// Raised when the user double-clicks a <see cref="GraphicText"/> and
+        /// the shell (e.g. <c>EditorWindow</c>) should display an in-place
+        /// TextBox overlay. The shell is responsible for positioning,
+        /// focusing, and committing — the canvas only knows that editing is
+        /// requested. See <c>EditorWindow.OnTextEditRequested</c> for the
+        /// Avalonia host implementation.
+        /// </summary>
+        public event EventHandler<TextEditRequestedEventArgs>? TextEditRequested;
+
+        /// <summary>
+        /// Called by <see cref="GraphicText.Activate"/>. Raises
+        /// <see cref="TextEditRequested"/> so the outer shell can host a
+        /// positioned editor. No-op if nothing is subscribed.
+        /// </summary>
+        public void RequestTextEdit(GraphicText target)
+        {
+            TextEditRequested?.Invoke(this, new TextEditRequestedEventArgs(target));
+        }
+
+        // ---- Artwork export ----
+
+        /// <summary>
+        /// Computes the union of every non-scaffolding graphic's bounding box.
+        /// Returns <see cref="Rect.Empty"/> if the canvas holds nothing paintable.
+        /// </summary>
+        public Rect GetArtworkBounds()
+        {
+            var list = GraphicsList;
+            if (list == null || list.Count == 0) return default;
+
+            bool any = false;
+            double minX = double.MaxValue, minY = double.MaxValue;
+            double maxX = double.MinValue, maxY = double.MinValue;
+            foreach (var g in list)
+            {
+                if (g.IsScaffolding) continue;
+                var b = g.Bounds;
+                if (b.Width <= 0 || b.Height <= 0) continue;
+                if (b.Left   < minX) minX = b.Left;
+                if (b.Top    < minY) minY = b.Top;
+                if (b.Right  > maxX) maxX = b.Right;
+                if (b.Bottom > maxY) maxY = b.Bottom;
+                any = true;
+            }
+            if (!any) return default;
+            return new Rect(minX, minY, maxX - minX, maxY - minY);
+        }
+
+        /// <summary>
+        /// Flattens the current artwork (all non-scaffolding graphics, plus the
+        /// artwork background colour if opaque) into a <see cref="RenderTargetBitmap"/>.
+        /// No viewport transform is applied — the bitmap is always at 100% zoom,
+        /// its pixel size equal to the artwork bounds plus an optional
+        /// <paramref name="padding"/>. Returns <c>null</c> if there is nothing
+        /// to render.
+        /// </summary>
+        public RenderTargetBitmap? RenderArtworkToBitmap(int padding = 8)
+        {
+            var list = GraphicsList;
+            if (list == null) return null;
+
+            var bounds = GetArtworkBounds();
+            if (bounds.Width <= 0 || bounds.Height <= 0) return null;
+
+            var w = (int)Math.Ceiling(bounds.Width) + padding * 2;
+            var h = (int)Math.Ceiling(bounds.Height) + padding * 2;
+            if (w <= 0 || h <= 0) return null;
+
+            var rtb = new RenderTargetBitmap(new Avalonia.PixelSize(w, h), new Avalonia.Vector(96, 96));
+            using (var ctx = rtb.CreateDrawingContext())
+            {
+                var bg = ArtworkBackground;
+                if (bg.A != 0)
+                    ctx.DrawRectangle(new SolidColorBrush(bg), null, new Rect(0, 0, w, h));
+
+                // Translate so the artwork's top-left lands at (padding, padding).
+                var translate = Matrix.CreateTranslation(-bounds.X + padding, -bounds.Y + padding);
+                using (ctx.PushTransform(translate))
+                {
+                    var dpi = new DpiScale(1.0);
+                    list.Dpi = dpi;
+                    foreach (var g in list)
+                    {
+                        if (g.IsScaffolding) continue;
+                        // Use DrawObject directly so selection handles / dashed
+                        // borders aren't baked into the exported bitmap.
+                        g.DrawObject(ctx);
+                    }
+                }
+            }
+            return rtb;
         }
 
         // ---- Pointer event dispatch ----
@@ -741,6 +858,28 @@ namespace Clowd.Drawing
                 _capturedPointer = e.Pointer;
                 Cursor = new Cursor(StandardCursorType.SizeAll);
                 return;
+            }
+
+            // Double-click routes to Graphic.Activate — used by GraphicImage to
+            // toggle crop mode and GraphicText to enter inline edit mode. Only
+            // left-button double-clicks trigger this; middle/right pass through.
+            if (e.ClickCount == 2 && props.IsLeftButtonPressed)
+            {
+                var pt = ToContentPoint(e.GetPosition(this));
+                var dpi = CanvasUiElementScale;
+                GraphicBase? hit = null;
+                for (int i = GraphicsList.Count - 1; i >= 0; i--)
+                {
+                    var g = GraphicsList[i];
+                    if (g.IsScaffolding) continue;
+                    if (g.MakeHitTest(pt, dpi) >= 0) { hit = g; break; }
+                }
+                if (hit != null)
+                {
+                    hit.Activate(this);
+                    e.Handled = true;
+                    return;
+                }
             }
 
             CurrentTool?.OnPointerPressed(this, e);
@@ -880,23 +1019,35 @@ namespace Clowd.Drawing
 
         // ---- Render ----
 
+        /// <summary>
+        /// Builds the screen-space tiled checkerboard brush ported from the WPF
+        /// editor's <c>CheckeredLargeLightWhiteBackgroundBrush</c>. The original
+        /// used a vector geometry "M0,0 H1 V1 H2 V2 H1 V1 H0Z" (an L-shape made
+        /// of two unit squares) inside a 0,0,2,2 viewbox stretched to a 50×50
+        /// viewport — a 25× scale, so the visible squares are 25×25 px each.
+        /// We bake that to a 50×50 bitmap and tile it. The pattern is fixed in
+        /// screen space so panning the artwork visibly slides over it.
+        /// </summary>
+        private static IBrush BuildCheckeredBackgroundBrush()
+        {
+            var bmp = new RenderTargetBitmap(new PixelSize(50, 50), new Vector(96, 96));
+            using (var ctx = bmp.CreateDrawingContext())
+            {
+                var fill = new SolidColorBrush(Color.FromArgb(0x11, 0xff, 0xff, 0xff));
+                ctx.FillRectangle(fill, new Rect(0, 0, 25, 25));
+                ctx.FillRectangle(fill, new Rect(25, 25, 25, 25));
+            }
+            return new ImageBrush(bmp)
+            {
+                TileMode = TileMode.Tile,
+                Stretch = Stretch.None,
+                DestinationRect = new RelativeRect(0, 0, 50, 50, RelativeUnit.Absolute),
+            };
+        }
+
         public override void Render(DrawingContext context)
         {
             base.Render(context);
-
-            // Hit-test backstop: an invisible fill spanning the control bounds.
-            // Stays in screen space (not viewport-transformed).
-            if (_background != null)
-                context.DrawRectangle(_background, null, new Rect(Bounds.Size));
-
-            // Artwork background — only paints if the user picked a non-transparent colour.
-            // For now we fill the whole viewport with this colour. Phase 8 may switch to a
-            // bounded artwork rectangle if the design calls for it.
-            var bgColor = ArtworkBackground;
-            if (bgColor.A != 0)
-            {
-                context.DrawRectangle(new SolidColorBrush(bgColor), null, new Rect(Bounds.Size));
-            }
 
             var list = GraphicsList;
             if (list == null) return;
@@ -908,6 +1059,32 @@ namespace Clowd.Drawing
 
             using (context.PushTransform(viewport))
             {
+                // Checkered pattern, anchored to *content* space rather than screen
+                // space, so panning and zooming visibly slide the pattern under the
+                // cursor — that's the affordance the user wanted ("it needs to move
+                // when you are panning"). Cover the visible content region by
+                // inverse-transforming the on-screen Bounds back into content units.
+                if (_background != null && viewport.TryInvert(out var inverse))
+                {
+                    var visibleContent = new Rect(Bounds.Size).TransformToAABB(inverse);
+                    context.DrawRectangle(_background, null, visibleContent);
+                }
+
+                // Artwork background — only paints if the user picked a non-transparent
+                // colour. Bounded to the artwork content rect, so it sits *on top* of
+                // the checkered pattern but only inside the artwork region.
+                // Mirrors the WPF editor's InvalidateBackground which drew at
+                // GraphicsList.ContentBounds.
+                var bgColor = ArtworkBackground;
+                if (bgColor.A != 0)
+                {
+                    var bounds = list.ContentBounds;
+                    if (bounds.Width > 0 && bounds.Height > 0)
+                    {
+                        context.DrawRectangle(new SolidColorBrush(bgColor), null, bounds);
+                    }
+                }
+
                 var dpi = CanvasUiElementScale;
                 list.Dpi = dpi;
                 foreach (var g in list)

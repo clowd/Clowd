@@ -358,6 +358,30 @@ namespace Clowd.Drawing.Graphics
             drawingContext.DrawRectangle(null, pen, rect, LineWidth, LineWidth);
         }
 
+        protected override void DrawTrackers(DrawingContext drawingContext, DpiScale uiscale)
+        {
+            // Handle positions are computed in unrotated (axis-aligned) space
+            // by GetHandle, which is what MakeHitTest expects (it inverse-
+            // transforms incoming pointer coords). But the visual trackers
+            // must sit on top of the rotated shape, so wrap the whole thing
+            // in the same rotation transform DrawObject uses.
+            if (Angle == 0)
+            {
+                base.DrawTrackers(drawingContext, uiscale);
+                return;
+            }
+
+            var rotateMatrix =
+                Matrix.CreateTranslation(-CenterOfRotation.X, -CenterOfRotation.Y) *
+                Matrix.CreateRotation(Angle * Math.PI / 180.0) *
+                Matrix.CreateTranslation(CenterOfRotation.X, CenterOfRotation.Y);
+
+            using (drawingContext.PushTransform(rotateMatrix))
+            {
+                base.DrawTrackers(drawingContext, uiscale);
+            }
+        }
+
         protected override void DrawSingleTracker(DrawingContext drawingContext, int handleNum, DpiScale uiscale)
         {
             if (handleNum == 9) // draw rotation handle differently

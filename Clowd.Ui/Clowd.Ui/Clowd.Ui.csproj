@@ -16,6 +16,11 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.0" />
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.0.0" />
+    <!-- Transitive pin: Avalonia.X11 pulls in Tmds.DBus.Protocol 0.90.3 which has
+         CVE-2026-39959 (GHSA-xrw6-gwf8-vvr9). 0.92.0 is the first patched
+         version on the 0.22+ track. Only actually loaded on Linux, but the
+         NU1903 warning flags it regardless of target RID. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
     <PackageReference Include="SharpHook" Version="7.1.1" />
     <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.0">
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
