@@ -26,7 +26,7 @@ pub fn virtual_desktop_and_monitors() -> (ScreenRect, Vec<XCapMonitor>) {
     (ScreenRect::from_exact(min_x, min_y, max_x, max_y), monitors)
 }
 
-pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
+pub fn capture_desktop() -> Result<DynamicImage> {
     let (desktop_bounds, monitors) = virtual_desktop_and_monitors();
 
     let desktop_width = (max_x - min_x) as u32;
@@ -87,5 +87,6 @@ pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
     let gray_image = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(desktop_width as u32, desktop_height as u32, gray_rgba_buffer)
         .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
 
-    Ok((DynamicImage::ImageRgba8(bgra_image), DynamicImage::ImageRgba8(gray_image)))
+    let _ = gray_image;
+    Ok(DynamicImage::ImageRgba8(bgra_image))
 }

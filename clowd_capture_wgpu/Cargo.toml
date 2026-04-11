@@ -20,5 +20,5 @@ rayon = "1.11"
 log = "0.4"
 num = "0.4"
 pollster = "0.4"
-bytemuck = "1"
+bytemuck = { version = "1", features = ["derive"] }
 simplelog = "0.12"

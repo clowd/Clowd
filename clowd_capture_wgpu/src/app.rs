@@ -8,7 +8,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use crate::gpu::{GpuBootstrap, SharedGpu};
+use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
 use crate::platform;
 use crate::system::SystemInterop;
 use crate::window_state::{spawn_render_thread, WindowHandle};
@@ -27,16 +27,25 @@ impl ApplicationHandler for App {
             return;
         }
 
-        let monitors = SystemInterop::all_monitors();
-        if monitors.is_empty() {
+        // 1. Capture the virtual desktop FIRST, before any winit window
+        //    exists. Hidden windows are not normally composited by DWM, but
+        //    capturing before any window creation eliminates the possibility
+        //    entirely. The capture is a synchronous Win32 BitBlt; it must
+        //    happen on the event loop thread. The returned bytes are raw
+        //    BGRA — no CPU swizzle — so this call is essentially BitBlt +
+        //    GetDIBits + a single Vec allocation. The bundled `monitors`
+        //    field is the topology snapshot taken at the same instant.
+        let captured = SystemInterop::capture_desktop();
+
+        if captured.monitors.is_empty() {
             error!("no monitors detected; nothing to render to");
             event_loop.exit();
             return;
         }
 
-        // 1. Create one hidden, borderless window per monitor.
-        let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(monitors.len());
-        for (i, m) in monitors.iter().enumerate() {
+        // 2. Create one hidden, borderless window per monitor.
+        let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(captured.monitors.len());
+        for (i, m) in captured.monitors.iter().enumerate() {
             let width = m.bounds.size.width.max(1) as u32;
             let height = m.bounds.size.height.max(1) as u32;
             let attrs = Window::default_attributes()
@@ -64,10 +73,13 @@ impl ApplicationHandler for App {
             return;
         }
 
-        // 2. Bootstrap wgpu on the main thread against the first window.
+        // 3. Bootstrap wgpu core against the first window. We need the
+        //    device + queue before we can upload the snapshot, but we can't
+        //    build the pipeline yet because its layout depends on whether
+        //    the snapshot exists.
         let first_window = created[0].0.clone();
-        let bootstrap = match pollster::block_on(GpuBootstrap::new(first_window.clone())) {
-            Ok(b) => b,
+        let core = match pollster::block_on(GpuCore::new(first_window.clone())) {
+            Ok(c) => c,
             Err(e) => {
                 error!("failed to initialize wgpu: {e:?}");
                 event_loop.exit();
@@ -75,7 +87,17 @@ impl ApplicationHandler for App {
             }
         };
 
-        // 3. Build surfaces for windows 1..N on the main thread.
+        // 4. Upload the captured desktop into a shared GPU texture. Returns
+        //    `None` if the bitmap is larger than the adapter's max 2D
+        //    texture dimension — in that case the render threads fall back
+        //    to a plain dark clear.
+        let snapshot = create_desktop_snapshot(&core.device, &core.queue, &captured);
+
+        // 5. Finalise: build the pipeline using the snapshot's bind group
+        //    layout (or no bind groups in the fallback path).
+        let bootstrap = core.finalize(snapshot);
+
+        // 6. Build surfaces for windows 1..N on the main thread.
         //    wgpu's raw-window-handle retrieval happens here, still on the
         //    thread that owns the Window.
         let mut per_window: Vec<(Arc<Window>, wgpu::Surface<'static>, f32)> =
@@ -88,25 +110,37 @@ impl ApplicationHandler for App {
             }
         }
 
-        // 4. Spawn render threads behind a Barrier so the main thread waits
+        // 7. Spawn render threads behind a Barrier so the main thread waits
         //    until every swapchain has a valid first frame before any window
-        //    is flipped visible.
+        //    is flipped visible. Each thread receives its monitor's bounds
+        //    so it can compute its slice of the shared snapshot texture.
+        //
+        //    `captured.monitors[i]`, `created[i]`, and `per_window[i]` are
+        //    aligned by construction (we built each list in the same order,
+        //    only ever skipping on error), so zipping is safe.
         let barrier = Arc::new(Barrier::new(per_window.len() + 1));
         let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(per_window.len());
-        for (w, surface, hz) in per_window {
+        for ((w, surface, hz), m) in per_window.into_iter().zip(captured.monitors.iter()) {
             let id = w.id();
-            let handle = spawn_render_thread(w, surface, bootstrap.shared.clone(), hz, barrier.clone());
+            let handle = spawn_render_thread(
+                w,
+                surface,
+                bootstrap.shared.clone(),
+                m.bounds,
+                hz,
+                barrier.clone(),
+            );
             handles.insert(id, handle);
         }
 
-        // 5. Wait until every render thread reports "frame 0 done". If any
+        // 8. Wait until every render thread reports "frame 0 done". If any
         //    thread panics before hitting the barrier this would block
         //    forever — but draw_once handles all wgpu errors without
         //    panicking, so that's not a real concern in normal operation.
         barrier.wait();
 
-        // 6. Flip every window visible in one pass, then focus the first.
-        //    `first_window` is still in scope from step 1, so we can focus
+        // 9. Flip every window visible in one pass, then focus the first.
+        //    `first_window` is still in scope from step 2, so we can focus
         //    it directly without round-tripping through the handles map.
         for handle in handles.values() {
             handle.window.set_visible(true);

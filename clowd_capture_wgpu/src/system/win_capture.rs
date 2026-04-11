@@ -1,6 +1,4 @@
 use anyhow::Result;
-use image::{DynamicImage, RgbaImage};
-use rayon::prelude::*;
 use std::{mem, ops::Deref, ptr};
 use windows::{
     core::PCWSTR,
@@ -10,12 +8,25 @@ use windows::{
             BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateDCW, DeleteDC, DeleteObject, GetDIBits, GetWindowDC, ReleaseDC,
             SelectObject, BITMAPINFO, BITMAPINFOHEADER, CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, SRCCOPY,
         },
-        UI::WindowsAndMessaging::{
-            GetDesktopWindow, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        UI::{
+            HiDpi::GetDpiForSystem,
+            WindowsAndMessaging::{
+                GetDesktopWindow, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+            },
         },
     },
 };
 use crate::geometry::{ScreenRect, RectExt};
+
+/// Raw bitmap product of `capture_desktop`. Public to its own module only;
+/// the public `CapturedDesktop` (defined in `system/mod.rs`) wraps this and
+/// adds per-monitor metadata.
+pub struct DesktopBitmap {
+    pub bgra: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub bounds: ScreenRect,
+}
 
 #[derive(Debug)]
 pub(super) struct BoxHDC {
@@ -102,17 +113,18 @@ impl BoxHBITMAP {
     }
 }
 
-fn to_rgba_image(
+/// Read the bits out of the GDI bitmap into a freshly-allocated `Vec<u8>`
+/// in raw BGRA order. We deliberately *don't* convert to RGBA — the GPU
+/// uploads this buffer straight into a `Bgra8UnormSrgb` texture, where the
+/// sampler hardware does the channel reorder for free. Skipping the CPU
+/// swap removes ~50 MB of memory traffic on a 4K capture and lops the
+/// rayon dispatch overhead off startup latency entirely.
+fn read_dibits_bgra(
     box_hdc_mem: BoxHDC,
     box_h_bitmap: BoxHBITMAP,
     width: i32,
     height: i32,
-) -> Result<(RgbaImage, RgbaImage)> {
-    // Single allocation path: GetDIBits writes BGRA directly into `color`,
-    // then the rayon pass converts `color` to RGBA in-place and computes
-    // `gray` in a second buffer. Previously this allocated a third full
-    // frame buffer and ran rayon with a 4-byte task granularity — fine for
-    // correctness but catastrophic for throughput on a 4K capture.
+) -> Result<Vec<u8>> {
     let byte_count = (width as usize)
         .checked_mul(height as usize)
         .and_then(|n| n.checked_mul(4))
@@ -122,6 +134,9 @@ fn to_rgba_image(
         bmiHeader: BITMAPINFOHEADER {
             biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
             biWidth: width,
+            // Negative height = top-down DIB. Pixel (0,0) is screen
+            // top-left, which matches wgpu's texture coordinate convention,
+            // so the GPU upload needs no Y flip.
             biHeight: -height,
             biPlanes: 1,
             biBitCount: 32,
@@ -132,8 +147,7 @@ fn to_rgba_image(
         ..Default::default()
     };
 
-    let mut color = vec![0u8; byte_count];
-    let mut gray = vec![0u8; byte_count];
+    let mut bgra = vec![0u8; byte_count];
 
     unsafe {
         let scan_lines = GetDIBits(
@@ -141,7 +155,7 @@ fn to_rgba_image(
             *box_h_bitmap,
             0,
             height as u32,
-            Some(color.as_mut_ptr().cast()),
+            Some(bgra.as_mut_ptr().cast()),
             &mut bitmap_info,
             DIB_RGB_COLORS,
         );
@@ -150,46 +164,17 @@ fn to_rgba_image(
         }
     }
 
-    // Chunk at row granularity so rayon tasks are large enough to amortize
-    // scheduling. ~64 rows per task ≈ 1 MB at 4K width — big enough that
-    // scheduler overhead is noise, small enough to keep all cores fed.
-    let row_bytes = (width as usize) * 4;
-    let chunk_bytes = row_bytes.saturating_mul(64).max(row_bytes);
+    Ok(bgra)
+}
 
-    // Pre-combined BT.601 luma + 35% darken in 8-bit fixed point.
-    // 0.299*0.65 ≈ 50/256, 0.587*0.65 ≈ 98/256, 0.114*0.65 ≈ 19/256.
-    // Sum 167/256 ≈ 0.6523 — visually indistinguishable from the old 0.65.
-    color
-        .par_chunks_mut(chunk_bytes)
-        .zip(gray.par_chunks_mut(chunk_bytes))
-        .for_each(|(color_chunk, gray_chunk)| {
-            for (cp, gp) in color_chunk
-                .chunks_exact_mut(4)
-                .zip(gray_chunk.chunks_exact_mut(4))
-            {
-                let b = cp[0] as u32;
-                let g = cp[1] as u32;
-                let r = cp[2] as u32;
-                let a = cp[3];
-
-                let gray_val = ((50 * r + 98 * g + 19 * b) >> 8) as u8;
-                gp[0] = gray_val;
-                gp[1] = gray_val;
-                gp[2] = gray_val;
-                gp[3] = a;
-
-                // In-place BGRA → RGBA. G and A stay put.
-                cp[0] = r as u8;
-                cp[2] = b as u8;
-            }
-        });
-
-    let rgba_image = RgbaImage::from_raw(width as u32, height as u32, color)
-        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
-    let gray_image = RgbaImage::from_raw(width as u32, height as u32, gray)
-        .ok_or_else(|| anyhow!("RgbaImage::from_raw failed"))?;
-
-    Ok((rgba_image, gray_image))
+/// System DPI scale for the current process. On per-monitor DPI aware
+/// processes (which winit configures for us by default in 0.30) this
+/// returns the effective scale of the *primary* monitor — 1.0 = 100%
+/// (96 DPI), 1.5 = 150%, 2.0 = 200%, etc. We treat this as "the" scale of
+/// the captured desktop; callers that need true per-monitor scaling
+/// should enumerate via `all_monitors()`.
+pub fn system_scale_factor() -> f32 {
+    unsafe { GetDpiForSystem() as f32 / 96.0 }
 }
 
 pub fn virtual_desktop() -> ScreenRect {
@@ -202,13 +187,17 @@ pub fn virtual_desktop() -> ScreenRect {
     }
 }
 
-pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
+pub fn capture_desktop() -> Result<DesktopBitmap> {
     unsafe {
-        let rect = virtual_desktop();
-        let vx = rect.min_x();
-        let vy = rect.min_y();
-        let vw = rect.width();
-        let vh = rect.height();
+        let bounds = virtual_desktop();
+        let vx = bounds.min_x();
+        let vy = bounds.min_y();
+        let vw = bounds.width();
+        let vh = bounds.height();
+
+        if vw <= 0 || vh <= 0 {
+            bail!("virtual desktop has invalid dimensions: {}x{}", vw, vh);
+        }
 
         let hwnd = GetDesktopWindow();
         let box_hdc_desktop_window = BoxHDC::from(hwnd);
@@ -220,7 +209,12 @@ pub fn capture_desktop() -> Result<(DynamicImage, DynamicImage)> {
 
         BitBlt(*box_hdc_mem, 0, 0, vw, vh, Some(*box_hdc_desktop_window), vx, vy, SRCCOPY | CAPTUREBLT)?;
 
-        let (rgba, gray) = to_rgba_image(box_hdc_mem, box_h_bitmap, vw, vh)?;
-        Ok((DynamicImage::ImageRgba8(rgba), DynamicImage::ImageRgba8(gray)))
+        let bgra = read_dibits_bgra(box_hdc_mem, box_h_bitmap, vw, vh)?;
+        Ok(DesktopBitmap {
+            bgra,
+            width: vw as u32,
+            height: vh as u32,
+            bounds,
+        })
     }
 }
