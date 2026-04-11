@@ -540,8 +540,15 @@ namespace Clowd.Drawing
 
         public void ReleaseMouseCapture()
         {
-            _capturedPointer?.Capture(null);
+            // Null the field *before* clearing the pointer's capture, because
+            // Pointer.Capture(null) fires OnPointerCaptureLost synchronously.
+            // If _capturedPointer is still set at that point the handler treats
+            // it as an involuntary capture loss and calls AbortOperation, which
+            // destroys the shape the tool was about to finalize. Clearing first
+            // makes explicit release a no-op in OnPointerCaptureLost.
+            var p = _capturedPointer;
             _capturedPointer = null;
+            p?.Capture(null);
         }
 
         public void UnselectAll()
@@ -797,6 +804,7 @@ namespace Clowd.Drawing
             base.OnKeyDown(e);
             var ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
             var shift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+            var alt = (e.KeyModifiers & KeyModifiers.Alt) != 0;
 
             if (ctrl && e.Key == Key.Z)
             {
@@ -842,6 +850,31 @@ namespace Clowd.Drawing
             {
                 MoveSelectionToBack();
                 e.Handled = true;
+            }
+            // --- Single-letter tool shortcuts (no modifiers only so they don't
+            //     collide with Ctrl+A etc). Port of the WPF BareKeyBinding set.
+            else if (!ctrl && !alt && !shift)
+            {
+                ToolType? pick = e.Key switch
+                {
+                    Key.S => ToolType.Pointer,
+                    Key.D => ToolType.None,          // Pan
+                    Key.R => ToolType.Rectangle,
+                    Key.F => ToolType.FilledRectangle,
+                    Key.E => ToolType.Ellipse,
+                    Key.L => ToolType.Line,
+                    Key.A => ToolType.Arrow,
+                    Key.P => ToolType.PolyLine,      // Pencil
+                    Key.T => ToolType.Text,
+                    Key.N => ToolType.Count,         // Numbered step
+                    Key.O => ToolType.Pixelate,      // Obscure
+                    _ => null,
+                };
+                if (pick.HasValue)
+                {
+                    Tool = pick.Value;
+                    e.Handled = true;
+                }
             }
         }
 

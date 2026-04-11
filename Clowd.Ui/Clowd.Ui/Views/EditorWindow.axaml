@@ -12,6 +12,49 @@
     <Window.Resources>
         <converters:SkillFlagConverter x:Key="SkillFlag" />
         <converters:ToolEqualityConverter x:Key="ToolEquals" />
+
+        <!-- ================= Vector icons (ported from WPF VectorIcons.xaml) ================= -->
+        <!-- The Data strings are the exact path-mini-language geometries from
+             C:\Source\Clowd\src\Clowd\Assets\VectorIcons.xaml, sized to fit the
+             44x40 tool buttons / 26x26 command buttons. -->
+
+        <StreamGeometry x:Key="IconToolPointer">M7,2.014l13.162,12.328l-5.377,0.488l-0.977,0.088l0.406,0.894l3.263,7.145l-2.406,1.058l-3.113-7.222 l-0.391-0.91l-0.722,0.678l-3.819,3.582L7,2.014 M7,0.014c-0.27,0-0.54,0.054-0.797,0.166C5.472,0.497,4.999,1.219,5,2.017 l0.026,18.127c0.001,0.797,0.476,1.518,1.206,1.834c0.256,0.109,0.525,0.164,0.793,0.164c0.5,0,0.991-0.188,1.369-0.541 l2.463-2.311l2.377,5.516c0.211,0.489,0.61,0.874,1.104,1.069c0.235,0.093,0.484,0.139,0.732,0.139 c0.274,0,0.549-0.057,0.806-0.169l2.406-1.059c0.489-0.215,0.873-0.618,1.063-1.118c0.19-0.501,0.173-1.056-0.05-1.543l-2.498-5.47 l3.544-0.322c0.785-0.07,1.454-0.596,1.711-1.342c0.256-0.744,0.051-1.57-0.524-2.109L8.367,0.554C7.989,0.2,7.498,0.014,7,0.014 L7,0.014z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolPan">M 12.8125 0 C 12.7375 0.0125 12.64375 0.04375 12.59375 0.09375 C 12.49375 0.19375 9.9125 2.6 8.3125 5 C 8.2125 5.2 8.2125 5.39375 8.3125 5.59375 C 8.4125 5.89375 8.6125 6 8.8125 6 L 11 6 L 11 11 L 6 11 L 6 8.8125 C 6 8.6125 5.8875 8.4125 5.6875 8.3125 C 5.4875 8.2125 5.2 8.2125 5 8.3125 C 2.6 9.9125 0.19375 12.49375 0.09375 12.59375 C 0.09375 12.69375 0 12.9 0 13 C 0 13.1 -0.00625 13.30625 0.09375 13.40625 C 0.19375 13.50625 2.5 16.0875 5 17.6875 C 5.2 17.7875 5.4875 17.7875 5.6875 17.6875 C 5.8875 17.5875 6 17.3875 6 17.1875 L 6 15 L 11 15 L 11 20 L 8.8125 20 C 8.6125 20 8.4125 20.1125 8.3125 20.3125 C 8.2125 20.5125 8.2125 20.70625 8.3125 20.90625 C 9.9125 23.30625 12.49375 25.7125 12.59375 25.8125 C 12.69375 25.9125 12.8 25.90625 13 25.90625 C 13.2 25.90625 13.30625 25.9125 13.40625 25.8125 C 13.50625 25.7125 16.0875 23.40625 17.6875 20.90625 C 17.7875 20.80625 17.7875 20.5125 17.6875 20.3125 C 17.5875 20.1125 17.3875 20 17.1875 20 L 15 20 L 15 15 L 20 15 L 20 17.1875 C 20 17.3875 20.1125 17.5875 20.3125 17.6875 C 20.5125 17.7875 20.70625 17.7875 20.90625 17.6875 C 23.30625 16.0875 25.7125 13.50625 25.8125 13.40625 C 25.9125 13.30625 25.90625 13.2 25.90625 13 C 25.90625 12.8 25.9125 12.69375 25.8125 12.59375 C 25.7125 12.49375 23.40625 9.9125 20.90625 8.3125 C 20.70625 8.2125 20.5125 8.2125 20.3125 8.3125 C 20.1125 8.4125 20 8.6125 20 8.8125 L 20 11 L 15 11 L 15 6 L 17.1875 6 C 17.3875 6 17.5875 5.8875 17.6875 5.6875 C 17.7875 5.4875 17.7875 5.29375 17.6875 5.09375 C 16.0875 2.69375 13.50625 0.2875 13.40625 0.1875 C 13.30625 0.0875 13.1 0 13 0 C 12.95 0 12.8875 -0.0125 12.8125 0 z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolRectangle">M 3 3 C 2.4777778 3 1.9395305 3.1854695 1.5625 3.5625 C 1.1854695 3.9395305 1 4.4777778 1 5 L 1 21 C 1 21.522222 1.1854695 22.060469 1.5625 22.4375 C 1.9395305 22.814531 2.4777778 23 3 23 L 23 23 C 23.522222 23 24.060469 22.814531 24.4375 22.4375 C 24.814531 22.060469 25 21.522222 25 21 L 25 5 C 25 4.4777778 24.814531 3.9395305 24.4375 3.5625 C 24.060469 3.1854695 23.522222 3 23 3 L 3 3 z M 3 5 L 23 5 L 23 21 L 3 21 L 3 5 z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolFilledRectangle">M 3 3 C 2.4777778 3 1.9395305 3.1854695 1.5625 3.5625 C 1.1854695 3.9395305 1 4.4777778 1 5 L 1 21 C 1 21.522222 1.1854695 22.060469 1.5625 22.4375 C 1.9395305 22.814531 2.4777778 23 3 23 L 23 23 C 23.522222 23 24.060469 22.814531 24.4375 22.4375 C 24.814531 22.060469 25 21.522222 25 21 L 25 5 C 25 4.4777778 24.814531 3.9395305 24.4375 3.5625 C 24.060469 3.1854695 23.522222 3 23 3 L 3 3 z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolEllipse">M 13 3 C 9.4836265 3 6.2731443 4.0685793 3.90625 5.84375 C 1.5393557 7.6189207 0 10.154425 0 13 C 0 15.845575 1.5393557 18.381079 3.90625 20.15625 C 6.2731443 21.931421 9.4836265 23 13 23 C 16.516374 23 19.726856 21.931421 22.09375 20.15625 C 24.460644 18.381079 26 15.845575 26 13 C 26 10.154425 24.460644 7.6189207 22.09375 5.84375 C 19.726856 4.0685793 16.516374 3 13 3 z M 13 5 C 16.111043 5 18.898749 5.9553114 20.875 7.4375 C 22.851251 8.9196886 24 10.875012 24 13 C 24 15.124988 22.851251 17.080311 20.875 18.5625 C 18.898749 20.044689 16.111043 21 13 21 C 9.8889565 21 7.1012515 20.044689 5.125 18.5625 C 3.1487485 17.080311 2 15.124988 2 13 C 2 10.875012 3.1487485 8.9196886 5.125 7.4375 C 7.1012515 5.9553114 9.8889565 5 13 5 z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolLine">M 24.09375 0.25 L 0.25 24.09375 L 1.90625 25.78125 L 25.78125 1.90625 L 24.09375 0.25 z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolArrow">M6.938,20.681l4.236,4.236H1.083V14.825l4.253,4.254L24.165,0.25l1.616,1.586L6.938,20.681z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolPolyLine">M 20.09375 0.25 C 19.49925 0.246875 18.91975 0.45525 18.46875 0.90625 L 17.46875 1.9375 L 24.0625 8.5625 L 25.0625 7.53125 C 25.9645 6.62925 25.9745 5.163 25.0625 4.25 L 21.75 0.9375 C 21.294 0.481 20.68825 0.253125 20.09375 0.25 z M 16.34375 2.84375 L 14.78125 4.34375 L 21.65625 11.21875 L 23.25 9.75 L 16.34375 2.84375 z M 13.78125 5.4375 L 2.96875 16.15625 A 0.97509752 0.97509752 0 0 0 2.46875 16.78125 L 0.15625 24.625 A 0.97509752 0.97509752 0 0 0 1.375 25.84375 L 9.21875 23.53125 A 0.97509752 0.97509752 0 0 0 10 22.875 L 20.65625 12.3125 L 19.1875 10.84375 L 8.25 21.8125 L 3.84375 23.09375 L 2.90625 22.15625 L 4.25 17.5625 L 15.09375 6.75 L 13.78125 5.4375 z M 16.15625 7.84375 L 5.1875 18.84375 L 6.78125 19.1875 L 7 20.65625 L 18 9.6875 L 16.15625 7.84375 z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolText">M19.32,26H6.679v-1.076c0.556-0.199,1.117-0.372,1.686-0.52c0.568-0.15,1.18-0.272,1.837-0.373V1.931H5.408 L3.401,7.244H2.455c-0.076-0.495-0.139-1.06-0.19-1.691C2.214,4.924,2.171,4.28,2.132,3.621c-0.039-0.652-0.069-1.3-0.093-1.929 C2.013,1.063,2,0.496,2,0h22c0,0.496-0.014,1.055-0.039,1.672c-0.026,0.619-0.058,1.257-0.097,1.913s-0.075,1.3-0.114,1.932 c-0.038,0.631-0.095,1.209-0.172,1.728h-0.996l-1.99-5.313h-4.756v22.101c0.656,0.125,1.27,0.248,1.836,0.373 c0.569,0.123,1.117,0.295,1.648,0.52V26z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolCount">M0,13C0,5.8,5.8,0,13,0s13,5.8,13,13s-5.8,13-13,13S0,20.2,0,13z M13,23.4 c5.7,0,10.4-4.7,10.4-10.4S18.7,2.6,13,2.6S2.6,7.3,2.6,13S7.3,23.4,13,23.4z M9.6,6.2l-0.3,3H6.7l-0.2,1.7h2.7l-0.4,4.7H6.1 l-0.2,1.7h2.7l-0.2,2.5v0H10l0.2-2.6H15l-0.2,2.5v0h1.7l0.2-2.6h2.9l0.2-1.7h-2.9l0.4-4.7h2.9l0.2-1.7h-2.9l0.3-2.9v0H16l-0.3,3H11 l0.3-2.9v0H9.6z M10.9,10.9h4.7l-0.4,4.7h-4.7L10.9,10.9z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconToolPixelate">M16,0C7.179,0,0,7.18,0,16s7.179,16,16,16c8.82,0,16-7.18,16-16S24.82,0,16,0z M16,2.666c7.38,0,13.333,5.955,13.333,13.334 c0,7.38-5.953,13.333-13.333,13.333C8.621,29.333,2.667,23.38,2.667,16C2.667,8.621,8.621,2.666,16,2.666z M9.049,4.612v4.722H4.443 C5.559,7.399,7.146,5.773,9.049,4.612z M22.382,16V9.334h5.175c1.131,1.959,1.776,4.234,1.776,6.666 c0,0.945-0.098,1.868-0.284,2.757V16H22.382z M9.049,22.667h6.667v6.663c-2.442-0.051-4.719-0.754-6.667-1.942V22.667z M9.049,16 v6.667H4.443c-1.13-1.96-1.777-4.236-1.777-6.667H9.049z M22.382,9.334h-6.667V2.67C15.81,2.668,15.905,2.666,16,2.666 c2.314,0,4.488,0.586,6.382,1.617V9.334z M27.557,22.667c-1.225,2.123-3.019,3.875-5.175,5.049v-5.049H27.557z M15.715,16H9.049 V9.334h6.667V16z M22.382,16v6.667h-6.667V16H22.382z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconUndo">M10.477,1.965c-0.289-0.121-0.625-0.053-0.848,0.168L0.32,9.446c-0.304,0.302-0.304,0.797,0,1.1 l9.309,7.278c0.148,0.15,0.348,0.229,0.549,0.229c0.102,0,0.203-0.021,0.299-0.059c0.291-0.121,0.465-0.404,0.465-0.719v-4.359 c9.955,0,14.309,2.808,13.646,11.751c4.217-14.308-3.877-17.542-13.646-17.542V2.683C10.941,2.368,10.768,2.085,10.477,1.965z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconRedo">M15.059,2.683v4.442c-9.77,0-17.863,3.234-13.646,17.542C0.75,15.724,5.104,12.916,15.059,12.916v4.359 c0,0.314,0.174,0.598,0.465,0.719c0.096,0.038,0.197,0.059,0.299,0.059c0.201,0,0.4-0.078,0.549-0.229l9.309-7.278 c0.304-0.303,0.304-0.798,0-1.1l-9.309-7.313c-0.223-0.221-0.559-0.289-0.848-0.168C15.232,2.085,15.059,2.368,15.059,2.683z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconSave">M 6 4 C 4.895 4 4 4.895 4 6 L 4 24 C 4 25.105 4.895 26 6 26 L 24 26 C 25.105 26 26 25.105 26 24 L 26 8 L 22 4 L 20 4 L 20 10 C 20 10.552 19.552 11 19 11 L 10 11 C 9.448 11 9 10.552 9 10 L 9 4 L 6 4 z M 16 4 L 16 9 L 18 9 L 18 4 L 16 4 z M 10 16 L 20 16 C 21.105 16 22 16.895 22 18 L 22 24 L 8 24 L 8 18 C 8 16.895 8.895 16 10 16 z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconCopy">M 11 2 C 9.895 2 9 2.895 9 4 L 9 20 C 9 21.105 9.895 22 11 22 L 24 22 C 25.105 22 26 21.105 26 20 L 26 8.5 C 26 8.235 25.895031 7.9809687 25.707031 7.7929688 L 20.207031 2.2929688 C 20.019031 2.1049687 19.765 2 19.5 2 L 11 2 z M 19 3.9042969 L 24.095703 9 L 20 9 C 19.448 9 19 8.552 19 8 L 19 3.9042969 z M 6 7 C 4.895 7 4 7.895 4 9 L 4 25 C 4 26.105 4.895 27 6 27 L 19 27 C 20.105 27 21 26.105 21 25 L 21 24 L 11 24 C 8.794 24 7 22.206 7 20 L 7 7 L 6 7 z</StreamGeometry>
+
+        <!-- Upload icon — tray with up arrow. No direct equivalent in the WPF
+             icon set, so synthesized here (Material-style). -->
+        <StreamGeometry x:Key="IconUpload">M13 3 L8 8 L11 8 L11 16 L15 16 L15 8 L18 8 L13 3 z M5 20 L21 20 L21 23 L5 23 z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconPinned">M103.84668,17.84668c-2.91628,0.00077 -5.54133,1.76842 -6.6387,4.47035c-1.09737,2.70194 -0.44824,5.79937 1.64164,7.83336l4.2692,4.26921l-44.42774,35.63737l-7.04069,-7.04069c-1.34928,-1.38698 -3.20203,-2.16948 -5.13704,-2.1696c-2.91628,0.00077 -5.54133,1.76841 -6.6387,4.47035c-1.09737,2.70194 -0.44825,5.79937 1.64163,7.83336l23.6556,23.6556l-41.60026,41.58627c-2.7735,2.7735 -2.7735,7.26263 0,10.03614c2.7735,2.7735 7.26263,2.7735 10.03613,0l41.58627,-41.60026l23.6556,23.6556c1.79752,1.87223 4.46675,2.62641 6.97825,1.97168c2.5115,-0.65472 4.47282,-2.61605 5.12755,-5.12755c0.65472,-2.5115 -0.09946,-5.18073 -1.97168,-6.97825l-6.4248,-6.42481l35.14746,-44.91764l4.14323,4.14323c1.79752,1.87222 4.46674,2.62639 6.97824,1.97166c2.51149,-0.65473 4.47281,-2.61604 5.12754,-5.12754c0.65473,-2.51149 -0.09945,-5.18072 -1.97167,-6.97824l-43,-43c-1.34928,-1.38699 -3.20203,-2.16948 -5.13705,-2.1696z</StreamGeometry>
+
+        <StreamGeometry x:Key="IconReset">M 16.15625 0 C 16.02925 0 15.89825 0.03575 15.78125 0.09375 L 11.53125 4.28125 C 11.27725 4.52125 11.0625 4.692 11.0625 5 C 11.0625 5.307 11.24725 5.46675 11.53125 5.71875 L 15.78125 9.90625 C 16.03525 10.03625 16.35075 10.022 16.59375 9.875 C 16.83875 9.729 17 9.4695 17 9.1875 L 17 7 L 19 7 C 20.681623 7 22 8.3183765 22 10 L 22 16 C 22 17.681623 20.681623 19 19 19 A 2.0002 2.0002 0 1 0 19 23 C 22.842377 23 26 19.842377 26 16 L 26 10 C 26 6.1576235 22.842377 3 19 3 L 17 3 L 17 0.8125 C 17 0.5315 16.83975 0.271 16.59375 0.125 C 16.46275 0.045 16.30725 0 16.15625 0 z M 7 3 C 3.1576235 3 0 6.1576235 0 10 L 0 16 C 0 19.842377 3.1576235 23 7 23 L 9 23 L 9 25.1875 C 9 25.4685 9.16025 25.729 9.40625 25.875 C 9.53725 25.956 9.69275 26 9.84375 26 C 9.97075 26 10.10175 25.96425 10.21875 25.90625 L 14.46875 21.71875 C 14.72275 21.47875 14.9375 21.308 14.9375 21 C 14.9385 20.694 14.75275 20.53325 14.46875 20.28125 L 10.21875 16.09375 C 9.96475 15.96375 9.64925 15.978 9.40625 16.125 C 9.16125 16.271 9 16.5305 9 16.8125 L 9 19 L 7 19 C 5.3183765 19 4 17.681623 4 16 L 4 10 C 4 8.3183765 5.3183765 7 7 7 A 2.0002 2.0002 0 1 0 7 3 z</StreamGeometry>
     </Window.Resources>
 
     <Window.Styles>
@@ -39,6 +82,29 @@
         </Style>
         <Style Selector="Button.tool.active /template/ ContentPresenter">
             <Setter Property="Background" Value="#0078D7" />
+        </Style>
+
+        <!-- Icon sizing for PathIcons inside tool buttons and command buttons. -->
+        <Style Selector="Button.tool PathIcon">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Foreground" Value="#e7e7e7" />
+        </Style>
+        <Style Selector="Button.tool.active PathIcon">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.cmd PathIcon">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Foreground" Value="#e7e7e7" />
+        </Style>
+        <Style Selector="ToggleButton.cmd PathIcon">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Foreground" Value="#e7e7e7" />
+        </Style>
+        <Style Selector="ToggleButton.cmd:checked PathIcon">
+            <Setter Property="Foreground" Value="#ffd54a" />
         </Style>
 
         <!-- Top-bar property section style: a small horizontal stack. -->
@@ -83,23 +149,34 @@
                 <ToggleButton DockPanel.Dock="Right"
                               Classes="cmd"
                               ToolTip.Tip="Always on top"
-                              IsChecked="{Binding $parent[Window].Topmost}"
-                              Content="Pin" />
+                              IsChecked="{Binding $parent[Window].Topmost}">
+                    <PathIcon Data="{StaticResource IconPinned}" />
+                </ToggleButton>
                 <Button DockPanel.Dock="Right" Classes="cmd"
-                        Content="Upload" Click="OnUploadClick"
-                        ToolTip.Tip="Upload (Ctrl+U)" />
+                        Click="OnUploadClick"
+                        ToolTip.Tip="Upload (Ctrl+U)">
+                    <PathIcon Data="{StaticResource IconUpload}" />
+                </Button>
                 <Button DockPanel.Dock="Right" Classes="cmd"
-                        Content="Copy" Click="OnCopyClick"
-                        ToolTip.Tip="Copy (Ctrl+C)" />
+                        Click="OnCopyClick"
+                        ToolTip.Tip="Copy (Ctrl+C)">
+                    <PathIcon Data="{StaticResource IconCopy}" />
+                </Button>
                 <Button DockPanel.Dock="Right" Classes="cmd"
-                        Content="Save" Click="OnSaveClick"
-                        ToolTip.Tip="Save (Ctrl+S)" />
+                        Click="OnSaveClick"
+                        ToolTip.Tip="Save (Ctrl+S)">
+                    <PathIcon Data="{StaticResource IconSave}" />
+                </Button>
                 <Button DockPanel.Dock="Right" Classes="cmd"
-                        Content="Redo" Click="OnRedoClick"
-                        ToolTip.Tip="Redo (Ctrl+Y)" />
+                        Click="OnRedoClick"
+                        ToolTip.Tip="Redo (Ctrl+Y)">
+                    <PathIcon Data="{StaticResource IconRedo}" />
+                </Button>
                 <Button DockPanel.Dock="Right" Classes="cmd"
-                        Content="Undo" Click="OnUndoClick"
-                        ToolTip.Tip="Undo (Ctrl+Z)" />
+                        Click="OnUndoClick"
+                        ToolTip.Tip="Undo (Ctrl+Z)">
+                    <PathIcon Data="{StaticResource IconUndo}" />
+                </Button>
 
                 <!-- Contextual property sections -->
                 <WrapPanel Orientation="Horizontal">
@@ -119,8 +196,10 @@
                                        Increment="0.1"
                                        FormatString="0.00"
                                        Value="{Binding ElementName=Canvas, Path=ContentScale, Mode=OneWay}" />
-                        <Button Classes="cmd" Content="Reset" Click="OnResetZoomClick"
-                                ToolTip.Tip="Reset zoom and pan" />
+                        <Button Classes="cmd" Click="OnResetZoomClick"
+                                ToolTip.Tip="Reset zoom and pan">
+                            <PathIcon Data="{StaticResource IconReset}" />
+                        </Button>
                     </StackPanel>
 
                     <!-- Canvas Background -->
@@ -214,28 +293,50 @@
                     BorderThickness="0,0,1,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Orientation="Vertical" Margin="0,4,0,0">
-                        <Button Classes="tool" Tag="Pointer"         Click="OnToolButtonClick" Content="Sel" ToolTip.Tip="Selection (S)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Pointer}" />
-                        <Button Classes="tool" Tag="None"            Click="OnToolButtonClick" Content="Pan" ToolTip.Tip="Pan (D)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=None}" />
-                        <Button Classes="tool" Tag="Rectangle"       Click="OnToolButtonClick" Content="Rect" ToolTip.Tip="Rectangle (R)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Rectangle}" />
-                        <Button Classes="tool" Tag="FilledRectangle" Click="OnToolButtonClick" Content="Fill" ToolTip.Tip="Filled Rectangle (F)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=FilledRectangle}" />
-                        <Button Classes="tool" Tag="Ellipse"         Click="OnToolButtonClick" Content="Oval" ToolTip.Tip="Ellipse (E)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Ellipse}" />
-                        <Button Classes="tool" Tag="Line"            Click="OnToolButtonClick" Content="Line" ToolTip.Tip="Line (L)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Line}" />
-                        <Button Classes="tool" Tag="Arrow"           Click="OnToolButtonClick" Content="Arr" ToolTip.Tip="Arrow (A)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Arrow}" />
-                        <Button Classes="tool" Tag="PolyLine"        Click="OnToolButtonClick" Content="Pen" ToolTip.Tip="Pencil (P)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=PolyLine}" />
-                        <Button Classes="tool" Tag="Text"            Click="OnToolButtonClick" Content="Txt" ToolTip.Tip="Text (T)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Text}" />
-                        <Button Classes="tool" Tag="Count"           Click="OnToolButtonClick" Content="123" ToolTip.Tip="Numbered Step (N)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Count}" />
-                        <Button Classes="tool" Tag="Pixelate"        Click="OnToolButtonClick" Content="Blur" ToolTip.Tip="Obscure / Pixelate (O)"
-                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Pixelate}" />
+                        <Button Classes="tool" Tag="Pointer"         Click="OnToolButtonClick" ToolTip.Tip="Selection (S)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Pointer}">
+                            <PathIcon Data="{StaticResource IconToolPointer}" />
+                        </Button>
+                        <Button Classes="tool" Tag="None"            Click="OnToolButtonClick" ToolTip.Tip="Pan (D)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=None}">
+                            <PathIcon Data="{StaticResource IconToolPan}" />
+                        </Button>
+                        <Button Classes="tool" Tag="Rectangle"       Click="OnToolButtonClick" ToolTip.Tip="Rectangle (R)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Rectangle}">
+                            <PathIcon Data="{StaticResource IconToolRectangle}" />
+                        </Button>
+                        <Button Classes="tool" Tag="FilledRectangle" Click="OnToolButtonClick" ToolTip.Tip="Filled Rectangle (F)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=FilledRectangle}">
+                            <PathIcon Data="{StaticResource IconToolFilledRectangle}" />
+                        </Button>
+                        <Button Classes="tool" Tag="Ellipse"         Click="OnToolButtonClick" ToolTip.Tip="Ellipse (E)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Ellipse}">
+                            <PathIcon Data="{StaticResource IconToolEllipse}" />
+                        </Button>
+                        <Button Classes="tool" Tag="Line"            Click="OnToolButtonClick" ToolTip.Tip="Line (L)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Line}">
+                            <PathIcon Data="{StaticResource IconToolLine}" />
+                        </Button>
+                        <Button Classes="tool" Tag="Arrow"           Click="OnToolButtonClick" ToolTip.Tip="Arrow (A)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Arrow}">
+                            <PathIcon Data="{StaticResource IconToolArrow}" />
+                        </Button>
+                        <Button Classes="tool" Tag="PolyLine"        Click="OnToolButtonClick" ToolTip.Tip="Pencil (P)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=PolyLine}">
+                            <PathIcon Data="{StaticResource IconToolPolyLine}" />
+                        </Button>
+                        <Button Classes="tool" Tag="Text"            Click="OnToolButtonClick" ToolTip.Tip="Text (T)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Text}">
+                            <PathIcon Data="{StaticResource IconToolText}" />
+                        </Button>
+                        <Button Classes="tool" Tag="Count"           Click="OnToolButtonClick" ToolTip.Tip="Numbered Step (N)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Count}">
+                            <PathIcon Data="{StaticResource IconToolCount}" />
+                        </Button>
+                        <Button Classes="tool" Tag="Pixelate"        Click="OnToolButtonClick" ToolTip.Tip="Obscure / Pixelate (O)"
+                                Classes.active="{Binding ElementName=Canvas, Path=Tool, Converter={StaticResource ToolEquals}, ConverterParameter=Pixelate}">
+                            <PathIcon Data="{StaticResource IconToolPixelate}" />
+                        </Button>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
