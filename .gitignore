@@ -5,3 +5,5 @@ x64/
 bin/
 .vscode/
 .claude/
+obj/
+bin/
