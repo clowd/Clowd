@@ -28,6 +28,10 @@
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
 
+use swash::scale::{Render, ScaleContext, Source};
+use swash::scale::image::Content;
+use swash::zeno::Format;
+use swash::{FontRef, GlyphId};
 use tiny_skia::{FillRule, Paint, Pixmap, PixmapMut, Rect as SkRect, Transform};
 
 use crate::geometry::{RectExt, ScreenRect};
@@ -35,16 +39,15 @@ use crate::geometry::{RectExt, ScreenRect};
 use super::model::{button_defs, NUM_SVG_BUTTONS};
 use super::state::PanelState;
 
-/// Font size for button labels at 100% DPI. Matches the C++
-/// `txtButtonLabel = 10 * myzoom` at DxScreenCapture.cpp:437. The C++
-/// `myzoom` is a UI-level zoom that's separate from per-monitor DPI;
-/// we collapse it into the per-monitor DPI since our "myzoom" is
-/// always 1.
-const LABEL_FONT_PX: f32 = 10.0;
+/// Font size for button labels at 100% DPI. The C++ original used 10
+/// (`txtButtonLabel = 10 * myzoom` at DxScreenCapture.cpp:437); we
+/// bump it by 1 here for legibility — Roboto at 10px is a hair too
+/// thin to feel ClearType-crisp, 11px reads notably better.
+const LABEL_FONT_PX: f32 = 11.0;
 
 /// Font size for the area indicator digits at 100% DPI. Matches
 /// `txtInfo = 12 * myzoom` at DxScreenCapture.cpp:438.
-const AREA_FONT_PX: f32 = 12.0;
+const AREA_FONT_PX: f32 = 11.0;
 
 /// SVG icon draw size at 100% DPI (physical pixels). Matches the
 /// `UNSCALED_BUTTON_ICON_SIZE` constant at DxScreenCapture.cpp:25.
@@ -83,7 +86,12 @@ pub struct BakePanelBackend {
     bgl: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     uniform_buffer: wgpu::Buffer,
-    font: fontdue::Font,
+    /// Roboto font reference. Borrows `FONT_ROBOTO` (a `&'static [u8]`)
+    /// so the lifetime is `'static`. `FontRef` is `Copy`.
+    font: FontRef<'static>,
+    /// Reusable scaler context. Holds caches and scratch buffers for
+    /// glyph rasterization — keep it across renders.
+    scale_ctx: ScaleContext,
     /// Pre-parsed SVG trees, one per button, in `BUTTON_DEFS` order.
     svg_trees: [Arc<usvg::Tree>; NUM_SVG_BUTTONS],
     /// Cached texture + hash of the state that produced it. Skip the
@@ -123,11 +131,11 @@ impl BakePanelBackend {
         });
 
         // --- Load font once -----------------------------------------------
-        let font = fontdue::Font::from_bytes(
-            super::assets::FONT_ROBOTO,
-            fontdue::FontSettings::default(),
-        )
-        .expect("Roboto is valid TTF at build time");
+        // `FontRef` borrows the byte slice; since `FONT_ROBOTO` is
+        // `&'static [u8]`, the FontRef is `'static` too.
+        let font = FontRef::from_index(super::assets::FONT_ROBOTO, 0)
+            .expect("Roboto is valid TTF at build time");
+        let scale_ctx = ScaleContext::new();
 
         // --- Pipeline ------------------------------------------------------
         // Shader lives inline because it's tiny and we don't want a
@@ -250,6 +258,7 @@ impl BakePanelBackend {
             sampler,
             uniform_buffer,
             font,
+            scale_ctx,
             svg_trees,
             cached: None,
             cached_hash: 0,
@@ -296,7 +305,7 @@ impl BakePanelBackend {
     /// We translate them into pixmap-local pixels by subtracting the
     /// panel's own top-left. The pixmap is sized exactly to the panel
     /// bounding box.
-    fn bake_pixmap(&self, s: &PanelState) -> Option<Pixmap> {
+    fn bake_pixmap(&mut self, s: &PanelState) -> Option<Pixmap> {
         let panel = s.layout.panel_rect;
         let w = panel.width().max(1) as u32;
         let h = panel.height().max(1) as u32;
@@ -401,32 +410,20 @@ impl BakePanelBackend {
             );
             blit_pixmap(&mut pixmap, &icon_pm, icon_left as i32, icon_top as i32);
 
-            // Draw the label: rasterize each glyph via fontdue,
-            // blit with per-glyph offset. Underline is a 1-logical-px
-            // rect beneath the `underline_idx` character, scaled to
-            // physical pixels by DPI and snapped to the grid so it
-            // stays a single crisp row.
+            // Draw the label. `draw_text_line` interprets `label_y`
+            // as the top of the visible cap-height box, so we just
+            // pass the y where we want the visible top of the text
+            // to be (no ascent-vs-cap-height compensation needed).
             let label_x =
                 l + (bw / 2.0) - (label_metrics.width / 2.0);
-            // `draw_text_line` treats `label_y` as the top of the line
-            // box (top of ascent), but the visible glyphs sit `ascent -
-            // cap_height` below that — for all-caps labels the empty
-            // space above the caps has to be subtracted out so the
-            // visible text actually lines up with our `v_gap` boundary.
-            let label_ascent = self
-                .font
-                .horizontal_line_metrics(label_px)
-                .map(|m| m.ascent)
-                .unwrap_or(label_px);
-            let label_top_pad = (label_ascent - label_metrics.height).max(0.0);
             // Empirical lift: the SVG icons all have a few pixels of
             // padding inside their viewBox, so the *visible* icon is
             // smaller than its bounding box and the bottom gap looks
             // pinched compared to the others. Pull the label up by
             // ~3 logical pixels (scaled to physical) to compensate.
-            let label_lift = (3.0 * dpi).round();
+            let label_lift = (2.0 * dpi).round();
             let label_y =
-                icon_top + icon_size + v_gap - label_top_pad - label_lift;
+                icon_top + icon_size + v_gap - label_lift;
             let underline_thickness = dpi.round().max(1.0);
             self.draw_text_line(
                 &mut pixmap,
@@ -488,38 +485,49 @@ impl BakePanelBackend {
         Some(pixmap)
     }
 
-    /// Crude left-to-right horizontal advance sum — fontdue is
-    /// per-glyph, we have no shaping needs for ASCII button labels.
+    /// Sum of advance widths for the string at the given px size, plus
+    /// the font's cap-height as a representative "visual" line height.
+    /// We don't shape — these are short ASCII labels (button text and
+    /// area-indicator digits) where ligatures and kerning aren't worth
+    /// the complexity.
     fn measure_line(&self, s: &str, px: f32) -> LineMetrics {
-        let mut total_w = 0.0_f32;
-        let mut max_h = 0.0_f32;
-        for c in s.chars() {
-            let (metrics, _) = self.font.rasterize(c, px);
-            total_w += metrics.advance_width;
-            let h = metrics.height as f32;
-            if h > max_h {
-                max_h = h;
-            }
-        }
-        // Approximate: use the font's line height if characters didn't
-        // report any pixel extent (e.g. spaces).
-        if max_h == 0.0 {
-            let lm = self.font.horizontal_line_metrics(px);
-            max_h = lm.map(|m| m.new_line_size).unwrap_or(px);
-        }
+        let charmap = self.font.charmap();
+        let gm = self.font.glyph_metrics(&[]).scale(px);
+        let total_w: f32 = s
+            .chars()
+            .map(|c| gm.advance_width(charmap.map(c)))
+            .sum();
+        // Use cap-height as the "visual" height of all-caps labels, so
+        // the vertical layout in `bake_pixmap` keeps centering glyphs
+        // by their visible extent (not the full ascent box). Falls back
+        // to ascent if the font doesn't expose cap_height.
+        let m = self.font.metrics(&[]).scale(px);
+        let height = if m.cap_height > 0.0 {
+            m.cap_height
+        } else {
+            m.ascent
+        };
         LineMetrics {
             width: total_w,
-            height: max_h,
+            height,
         }
     }
 
-    /// Rasterize a string character-by-character and blit each glyph's
-    /// coverage data onto the pixmap at white × coverage. `underline`,
-    /// if set, draws a line `underline_thickness` physical pixels tall
+    /// Rasterize a string with swash and stamp each glyph onto the
+    /// pixmap with gamma-correct subpixel compositing. `underline`, if
+    /// set, draws a line `underline_thickness` physical pixels tall
     /// under the char at that index. Pass `0.0` for thickness when
     /// `underline` is `None`.
+    ///
+    /// `y` is the top of the **visible cap-height box** — i.e. the y
+    /// where the top of capital letters / digits will land. We
+    /// deliberately don't use the top of the ascent box: the gap
+    /// between ascent and cap-height (space reserved for diacriticals
+    /// over capitals) is ~2-3 px at 12px Roboto and would make every
+    /// centered string sit visually low. Pass the y you want the
+    /// visible top of the text to be at and the math just works.
     fn draw_text_line(
-        &self,
+        &mut self,
         pixmap: &mut Pixmap,
         text: &str,
         px: f32,
@@ -529,74 +537,91 @@ impl BakePanelBackend {
         underline: Option<usize>,
         underline_thickness: f32,
     ) {
-        // Baseline alignment: fontdue returns glyph metrics with `ymin`
-        // being the distance from the **baseline** to the bottom of
-        // the glyph bitmap. For simple text blitting we can treat `y`
-        // as the top-left of the line box and compute per-glyph top
-        // offset as `(max_ascent - ymin - height)`. fontdue exposes
-        // `horizontal_line_metrics` for that.
-        let lm = self.font.horizontal_line_metrics(px).unwrap_or_else(|| {
-            fontdue::LineMetrics {
-                ascent: px,
-                descent: 0.0,
-                line_gap: 0.0,
-                new_line_size: px,
-            }
-        });
-        let ascent = lm.ascent;
+        let font_metrics = self.font.metrics(&[]).scale(px);
+        // Baseline = top of the cap-height box + cap_height. For
+        // Latin digits and uppercase letters, the bottom of the glyph
+        // sits on the baseline, so this puts the visible top exactly
+        // at `y`. Snapped to an integer row so hinted horizontal
+        // stems land cleanly on pixel rows.
+        let baseline_y: i32 = (y + font_metrics.cap_height).round() as i32;
+
+        let charmap = self.font.charmap();
+        let gm = self.font.glyph_metrics(&[]).scale(px);
+        // Build the scaler once for the whole line — `Render::render`
+        // is called repeatedly with the same scaler.
+        let mut scaler = self
+            .scale_ctx
+            .builder(self.font)
+            .size(px)
+            .hint(true)
+            .build();
 
         let mut underline_x_start = 0.0_f32;
         let mut underline_x_end = 0.0_f32;
         for (i, c) in text.chars().enumerate() {
-            // ClearType-style subpixel rasterization: fontdue returns a
-            // `metrics.width * 3` byte buffer, RGB per pixel column, with
-            // each byte being the coverage of one LCD subpixel stripe.
-            // We low-pass it with the FreeType default LCD filter to
-            // suppress red/blue color fringes, then composite each
-            // channel against the destination in linear light.
+            let gid: GlyphId = charmap.map(c);
+            let advance = gm.advance_width(gid);
+
+            // Pin the pen to the nearest integer pixel column. We
+            // accumulate `x` at float precision (so the running pen
+            // position never drifts from where the layout intends),
+            // then round per-glyph to land on an integer column.
             //
-            // `fix_fontdue_subpixel_offset` corrects a fontdue 0.9 bug
-            // where the glyph is positioned `2 * fract(bounds.xmin)`
-            // subpixels too far left in its canvas — see that function's
-            // doc comment for the gory details. The corrected buffer is
-            // one logical pixel wider so we don't clip the right edge.
-            let (metrics, raw_coverage) = self.font.rasterize_subpixel(c, px);
-            let (shifted, fixed_w) = fix_fontdue_subpixel_offset(
-                &raw_coverage,
-                metrics.width,
-                metrics.height,
-                metrics.bounds.xmin,
-            );
-            let filtered = apply_lcd_filter(&shifted, fixed_w, metrics.height);
-            let top = y + (ascent - metrics.ymin as f32 - metrics.height as f32);
-            let left = x + metrics.xmin as f32;
-            // Truncate-to-int for the blit so the underline can use the
-            // exact same integer x as the glyph bitmap below.
-            let glyph_left_px = left as i32;
-            blit_glyph_subpixel(
-                pixmap,
-                &filtered,
-                fixed_w,
-                metrics.height,
-                glyph_left_px,
-                top as i32,
-                rgba,
-            );
-            if underline == Some(i) {
-                // Match the glyph's actual integer pixel rect — re-rounding
-                // `x + xmin` independently can shift it by a pixel relative
-                // to the truncate-cast above, which made the underline
-                // visibly drift from the letter on certain glyphs.
-                underline_x_start = glyph_left_px as f32;
-                underline_x_end = underline_x_start + metrics.width as f32;
+            // We do NOT pass a fractional offset to swash: this is
+            // standard ClearType-style rendering. Hinted TrueType
+            // outlines + zeno's `Format::Subpixel` artifact badly when
+            // mixed with non-integer X offsets — for `fract_x ≈ 0.5`,
+            // the three subpixel rasterizations at offsets ±0.3 + 0.5
+            // diverge enough that a 1-px stem ends up split across two
+            // columns with chromatic fringes (the "I" in EXIT looking
+            // two lines thick). Integer X + hinted outlines + LCD
+            // subpixel rendering is exactly how Windows ClearType has
+            // always worked.
+            let pen_x = x.round() as i32;
+
+            let image = Render::new(&[Source::Outline])
+                .format(Format::Subpixel)
+                .render(&mut scaler, gid);
+            if let Some(image) = image {
+                if image.content == Content::SubpixelMask
+                    && image.placement.width > 0
+                    && image.placement.height > 0
+                {
+                    // `placement.left` is the offset from the pen x to
+                    // the bitmap's left edge — already accounts for
+                    // the glyph's bearing. `placement.top` is the
+                    // distance from the baseline UP to the top of the
+                    // bitmap.
+                    let blit_x = pen_x + image.placement.left;
+                    let blit_y = baseline_y - image.placement.top;
+                    blit_glyph_subpixel(
+                        pixmap,
+                        &image.data,
+                        image.placement.width as usize,
+                        image.placement.height as usize,
+                        blit_x,
+                        blit_y,
+                        rgba,
+                    );
+                    if underline == Some(i) {
+                        underline_x_start = blit_x as f32;
+                        underline_x_end =
+                            underline_x_start + image.placement.width as f32;
+                    }
+                } else if underline == Some(i) {
+                    // No bitmap (e.g. space) — fall back to advance
+                    // box for underline width.
+                    underline_x_start = x;
+                    underline_x_end = x + advance;
+                }
             }
-            x += metrics.advance_width;
+            x += advance;
         }
         if underline.is_some() && underline_thickness > 0.0 {
-            // Snap y to an integer pixel row so the rect doesn't bleed
-            // across two rows due to fractional positioning. x and width
-            // are already integers from the glyph rect above.
-            let uy = (y + ascent + 1.0).round();
+            // Underline sits one row below the (already pixel-snapped)
+            // baseline. x and width are already integers from the
+            // glyph rect above.
+            let uy = (baseline_y + 1) as f32;
             fill_rect(
                 pixmap,
                 underline_x_start,
@@ -631,14 +656,19 @@ impl BakePanelBackend {
         target_view: &wgpu::TextureView,
         monitor_size_px: (u32, u32),
     ) {
-        let Some(state) = self.state.as_ref() else {
+        // Clone the state so we can hand `&mut self` to `bake_pixmap`
+        // (which now needs to mutate `self.scale_ctx`) without holding
+        // an immutable borrow of `self.state` across the call. The
+        // clone is cheap and only happens when we're about to re-bake
+        // anyway.
+        let Some(state) = self.state.clone() else {
             return;
         };
 
         // Re-bake if the hash changed or no texture is cached yet.
-        let hash = Self::state_hash(state);
+        let hash = Self::state_hash(&state);
         if self.cached.is_none() || hash != self.cached_hash {
-            if let Some(pm) = self.bake_pixmap(state) {
+            if let Some(pm) = self.bake_pixmap(&state) {
                 let w = pm.width();
                 let h = pm.height();
 
@@ -853,22 +883,20 @@ fn blit_pixmap(dst: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
 // ---------------------------------------------------------------------------
 // ClearType-style subpixel text compositing.
 //
-// Three pieces stacked together:
+// swash gives us a 4-byte-per-pixel buffer (`Format::Subpixel`) where
+// each pixel holds three independently-rasterized coverage values: R is
+// the coverage at horizontal offset -0.3 px, G at 0, B at +0.3 px.
+// (The 4th byte — A — is never written by zeno and is left at zero.)
+// This is a clean three-pass rasterization, not the supersample-and-LCD-
+// filter approach FreeType uses. As a result we don't need an explicit
+// LCD filter — the slight overlap between the ±0.3 offsets naturally
+// reduces color fringing.
 //
-//   1. `rasterize_subpixel` (fontdue) renders each glyph at 3x horizontal
-//      resolution with one coverage byte per LCD subpixel stripe.
-//
-//   2. `apply_lcd_filter` runs FreeType's default 5-tap FIR
-//      `[8, 77, 86, 77, 8] / 256` over the 3x-wide buffer to suppress
-//      the red/blue color fringes that naive subpixel rendering
-//      produces. Without this filter the result looks like RGB confetti
-//      around glyph stems; with it, you get clean text.
-//
-//   3. `blit_glyph_subpixel` composites the per-channel coverage onto
-//      the pixmap *in linear light* using sRGB <-> linear LUTs. This is
-//      what makes small text look solid and on-weight instead of thin
-//      and washed out — Microsoft's ClearType depends on this just as
-//      much as it depends on subpixel rendering.
+// `blit_glyph_subpixel` then composites those per-channel coverages
+// onto the pixmap *in linear light* using sRGB <-> linear LUTs. This
+// is what makes small text look solid and on-weight instead of thin
+// and washed out — gamma-correct compositing matters as much as
+// subpixel rendering for the perceived quality.
 //
 // Precondition: the destination pixmap is opaque underneath the text
 // (alpha = 0xFF). The panel always satisfies this — `GRAY_RGBA` and
@@ -877,9 +905,6 @@ fn blit_pixmap(dst: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
 // pixmap onto the screen with premultiplied alpha. We rely on this so
 // we can read the destination RGB as plain sRGB rather than dividing
 // out a fractional alpha.
-
-/// FreeType's `FT_LCD_FILTER_DEFAULT` coefficients (sum to 256).
-const LCD_FILTER: [u32; 5] = [8, 77, 86, 77, 8];
 
 fn srgb_to_linear_lut() -> &'static [f32; 256] {
     static LUT: OnceLock<[f32; 256]> = OnceLock::new();
@@ -914,98 +939,18 @@ fn linear_to_srgb_lut() -> &'static [u8; 4096] {
     })
 }
 
-/// Compensate for a fontdue 0.9 bug in `rasterize_indexed_subpixel`.
+/// Composite a swash subpixel mask onto the pixmap, blending in
+/// linear light. The input buffer is `Format::Subpixel` from
+/// `swash::Render`: 4 bytes per pixel `[R, G, B, _A]` where R/G/B are
+/// per-channel coverage values and the A byte is unused (always 0).
+/// We treat each of R, G, B as the alpha for that channel of the
+/// destination pixel.
 ///
-/// Fontdue computes `offset_x = fract(bounds.xmin)` at the **logical**
-/// scale (one unit = one logical pixel), then passes it verbatim to
-/// `Raster::draw` *with* a horizontal scale of `3 * scale`. The raster
-/// adds the offset to the already-3x-scaled glyph coordinates as if it
-/// were in subpixel units. Net effect: every glyph is rendered
-/// `2 * fract(bounds.xmin)` subpixels too far left in its canvas. For
-/// glyphs whose `fract(bounds.xmin)` is large (V, E, I, X all qualify
-/// in Roboto), the shift is 1-2 subpixels = up to 0.66 logical pixels,
-/// which is enough to make 1px gaps between adjacent letters disappear
-/// entirely.
-///
-/// We compensate by shifting the raw subpixel buffer right by
-/// `round(2 * fract(bounds.xmin))` subpixel columns into a buffer that
-/// is one logical pixel wider. The extra column on the right is filled
-/// with zeros and is enough to hold the shifted content without
-/// clipping.
-fn fix_fontdue_subpixel_offset(
-    raw: &[u8],
-    w_logical: usize,
-    h: usize,
-    bounds_xmin: f32,
-) -> (Vec<u8>, usize) {
-    let new_w_logical = w_logical + 1;
-    let new_stride = new_w_logical * 3;
-    let mut out = vec![0u8; new_stride * h];
-    if w_logical == 0 || h == 0 {
-        return (out, new_w_logical);
-    }
-    let old_stride = w_logical * 3;
-    let frac = bounds_xmin - bounds_xmin.floor(); // in [0, 1)
-    // Shift in subpixel columns. `2 * frac` is in [0, 2), so the
-    // rounded shift is 0, 1, or 2.
-    let shift = (2.0 * frac).round() as usize;
-    let shift = shift.min(new_stride.saturating_sub(old_stride));
-    for row in 0..h {
-        let src_off = row * old_stride;
-        let dst_off = row * new_stride + shift;
-        let copy_len = old_stride.min(new_stride - shift);
-        out[dst_off..dst_off + copy_len]
-            .copy_from_slice(&raw[src_off..src_off + copy_len]);
-    }
-    (out, new_w_logical)
-}
-
-/// Apply a 5-tap FreeType LCD filter to a fontdue subpixel coverage
-/// buffer. Input is `metrics.width * 3` bytes per row (R, G, B per
-/// pixel column). Output is the same shape — out-of-bounds samples at
-/// row edges are treated as zero.
-fn apply_lcd_filter(buf: &[u8], w_logical: usize, h: usize) -> Vec<u8> {
-    let stride = w_logical * 3;
-    if stride == 0 || h == 0 {
-        return Vec::new();
-    }
-    let mut out = vec![0u8; buf.len()];
-    for row in 0..h {
-        let row_off = row * stride;
-        for x in 0..stride {
-            let s0 = if x >= 2 { buf[row_off + x - 2] as u32 } else { 0 };
-            let s1 = if x >= 1 { buf[row_off + x - 1] as u32 } else { 0 };
-            let s2 = buf[row_off + x] as u32;
-            let s3 = if x + 1 < stride {
-                buf[row_off + x + 1] as u32
-            } else {
-                0
-            };
-            let s4 = if x + 2 < stride {
-                buf[row_off + x + 2] as u32
-            } else {
-                0
-            };
-            let v = LCD_FILTER[0] * s0
-                + LCD_FILTER[1] * s1
-                + LCD_FILTER[2] * s2
-                + LCD_FILTER[3] * s3
-                + LCD_FILTER[4] * s4;
-            // Filter sums to 256, so v <= 256 * 255 = 65280.
-            out[row_off + x] = ((v + 128) / 256).min(255) as u8;
-        }
-    }
-    out
-}
-
-/// Composite a per-subpixel coverage buffer onto the pixmap, treating
-/// the three coverage values for each pixel as the alpha for the R, G,
-/// B channels respectively. Blends in linear light. Assumes the
-/// destination pixel is opaque (alpha = 0xFF) — see the module-level
-/// comment for why that holds for the panel.
+/// Assumes the destination pixel is opaque (alpha = 0xFF) — see the
+/// module-level comment for why that always holds inside the panel.
 fn blit_glyph_subpixel(
     dst: &mut Pixmap,
-    coverage_rgb: &[u8],
+    coverage_rgba: &[u8],
     w: usize,
     h: usize,
     x: i32,
@@ -1028,22 +973,22 @@ fn blit_glyph_subpixel(
         s2l[text_rgba[2] as usize],
     ];
 
-    let stride_3 = w * 3;
+    let src_stride = w * 4;
     for gy in 0..(h as i32) {
         let dy = y + gy;
         if dy < 0 || dy >= dst_h {
             continue;
         }
-        let row_off = (gy as usize) * stride_3;
+        let row_off = (gy as usize) * src_stride;
         for gx in 0..(w as i32) {
             let dx = x + gx;
             if dx < 0 || dx >= dst_w {
                 continue;
             }
-            let pix_off = row_off + (gx as usize) * 3;
-            let cov_r = coverage_rgb[pix_off] as f32 * (1.0 / 255.0) * text_alpha;
-            let cov_g = coverage_rgb[pix_off + 1] as f32 * (1.0 / 255.0) * text_alpha;
-            let cov_b = coverage_rgb[pix_off + 2] as f32 * (1.0 / 255.0) * text_alpha;
+            let pix_off = row_off + (gx as usize) * 4;
+            let cov_r = coverage_rgba[pix_off] as f32 * (1.0 / 255.0) * text_alpha;
+            let cov_g = coverage_rgba[pix_off + 1] as f32 * (1.0 / 255.0) * text_alpha;
+            let cov_b = coverage_rgba[pix_off + 2] as f32 * (1.0 / 255.0) * text_alpha;
             if cov_r == 0.0 && cov_g == 0.0 && cov_b == 0.0 {
                 continue;
             }
