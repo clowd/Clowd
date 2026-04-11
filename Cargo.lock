@@ -1892,6 +1892,12 @@ dependencies = [
 [[package]]
 name = "clowd_capture_wgpu"
 version = "0.0.0-local"
+dependencies = [
+ "anyhow",
+ "euclid",
+ "image",
+ "windows 0.61.3",
+]
 
 [[package]]
 name = "clowd_ui"
