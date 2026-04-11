@@ -122,8 +122,19 @@ namespace Clowd.Drawing.Graphics
             DrawObjectImpl(context, !Editing);
             if (IsSelected && !Editing)
             {
-                DrawRotationTracker(context, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1, uiscale), uiscale);
-                DrawDashedBorder(context, UnrotatedBounds);
+                // Selection UI has to follow the rotation, same as for a plain
+                // GraphicRectangle. DrawObjectImpl already pushes its own
+                // transform; push a matching one here for the trackers / border.
+                var rotateMatrix =
+                    Matrix.CreateTranslation(-CenterOfRotation.X, -CenterOfRotation.Y) *
+                    Matrix.CreateRotation(Angle * Math.PI / 180.0) *
+                    Matrix.CreateTranslation(CenterOfRotation.X, CenterOfRotation.Y);
+
+                using (context.PushTransform(rotateMatrix))
+                {
+                    DrawRotationTracker(context, new Point(Right, ((Bottom - Top) / 2) + Top), GetHandleRectangle(1, uiscale), uiscale);
+                    DrawDashedBorder(context, UnrotatedBounds);
+                }
             }
         }
 
@@ -152,9 +163,16 @@ namespace Clowd.Drawing.Graphics
 
         internal override void Activate(object canvas)
         {
-            // TODO Phase 8/12: open in-place TextBox via DrawingCanvas.ToolText.
-            // For Phase 6 we just toggle Editing so the user can see the state.
-            Editing = !Editing;
+            // Raise a TextEditRequested event on the canvas. The shell (e.g.
+            // EditorWindow) owns the overlay TextBox and is responsible for
+            // positioning / focus / commit. We just flag Editing so the
+            // graphic's Draw() method hides the baked-in text while the
+            // TextBox overlay is visible.
+            if (canvas is DrawingCanvas dc)
+            {
+                Editing = true;
+                dc.RequestTextEdit(this);
+            }
         }
 
         internal override void Normalize()

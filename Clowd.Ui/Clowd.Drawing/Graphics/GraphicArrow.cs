@@ -30,9 +30,17 @@ namespace Clowd.Drawing.Graphics
             var tipLength = Math.Min(length / 3, LineWidth * 8);
             var shaftLength = Math.Max(0, length - tipLength / 2);
 
-            var pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
+            var brush = new SolidColorBrush(ObjectColor);
+
+            // Shaft — round caps so the start (tail) is a soft dot and the
+            // far end tucks cleanly into the base of the triangle.
+            var shaftPen = new Pen(brush, LineWidth)
+            {
+                LineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round,
+            };
             var shaftEnd = new Point(LineStart.X + ux * shaftLength, LineStart.Y + uy * shaftLength);
-            ctx.DrawLine(pen, LineStart, shaftEnd);
+            ctx.DrawLine(shaftPen, LineStart, shaftEnd);
 
             // Triangle: apex at LineEnd; base at LineEnd - tipLength * unit ± perpendicular * (tipLength/2)
             var halfWidth = tipLength * 0.5;
@@ -51,7 +59,17 @@ namespace Clowd.Drawing.Graphics
                 sgc.LineTo(b2);
                 sgc.EndFigure(isClosed: true);
             }
-            ctx.DrawGeometry(new SolidColorBrush(ObjectColor), null, head);
+
+            // Fill + stroke the triangle with the same colour. The round-joined
+            // stroke bevels the apex and the two base corners by roughly
+            // LineWidth/4 px, giving the "slight rounding" the user asked for
+            // without resorting to a hand-rolled filleted path.
+            var headPen = new Pen(brush, Math.Max(LineWidth * 0.5, 1.0))
+            {
+                LineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round,
+            };
+            ctx.DrawGeometry(brush, headPen, head);
         }
     }
 }

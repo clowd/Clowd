@@ -127,7 +127,11 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawObject(DrawingContext ctx)
         {
-            var pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
+            var pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth)
+            {
+                LineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round,
+            };
             ctx.DrawLine(pen, LineStart, LineEnd);
         }
     }
