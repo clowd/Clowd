@@ -22,3 +22,13 @@ num = "0.4"
 pollster = "0.4"
 bytemuck = { version = "1", features = ["derive"] }
 simplelog = "0.12"
+
+# --- panel rendering -------------------------------------------------------
+# resvg reuses usvg + tiny-skia under the hood, so their versions are pinned
+# together. fontdue is a pure-Rust glyph rasterizer we use for the button
+# labels + area-indicator digits; `cosmic-text` / `ab_glyph` would also work,
+# fontdue is the leanest option that still handles underlines and Latin text.
+resvg      = { version = "0.47", default-features = false }
+usvg       = { version = "0.47", default-features = false }
+tiny-skia  = "0.12"
+fontdue    = "0.9"

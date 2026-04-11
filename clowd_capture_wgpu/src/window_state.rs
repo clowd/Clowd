@@ -7,6 +7,7 @@ use winit::window::Window;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::{SharedGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::panel::{BakePanelBackend, PanelState};
 use crate::settings::CapturerSettings;
 
 /// Duration of the colour → grayscale fade after the window first becomes
@@ -35,6 +36,13 @@ pub enum RenderMsg {
         selection: Option<ScreenRect>,
         captured: bool,
     },
+    /// Panel visibility / content on this monitor. `Some(state)` is
+    /// sent only to the render thread whose monitor contains the
+    /// panel; every other render thread receives `None` (so the
+    /// backend can drop any cached GPU resources). The app thread
+    /// re-sends this whenever the selection changes, hover moves
+    /// between buttons, or the panel flips onto a different monitor.
+    PanelState(Option<PanelState>),
     Shutdown,
 }
 
@@ -71,6 +79,10 @@ impl WindowHandle {
             selection,
             captured,
         });
+    }
+
+    pub fn update_panel_state(&self, state: Option<PanelState>) {
+        let _ = self.tx.send(RenderMsg::PanelState(state));
     }
 }
 
@@ -265,10 +277,21 @@ fn render_thread_main(
         }
     });
 
+    // Construct this monitor's panel backend. Each render thread owns
+    // its own instance because each holds its own wgpu pipeline + bind
+    // group cache.
+    let mut panel_backend = BakePanelBackend::new(&gpu.device, gpu.surface_format);
+
     // Frame 0 — the "first render before visible" requirement. Present
     // synchronously, then signal the main thread so it can flip visibility.
     // Fade is 0.0 here so the user's first glimpse is the original colour.
-    draw_once(&surface, &gpu, &config, snapshot_state.as_ref());
+    draw_once(
+        &surface,
+        &gpu,
+        &config,
+        snapshot_state.as_ref(),
+        &mut panel_backend,
+    );
     first_frame_barrier.wait();
 
     // Start the animation clock AFTER the barrier. The barrier wait is an
@@ -310,6 +333,9 @@ fn render_thread_main(
                     zoom = z;
                     selection = sel;
                     captured = cap;
+                }
+                Ok(RenderMsg::PanelState(state)) => {
+                    panel_backend.on_state_change(state.as_ref());
                 }
                 Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
                 Err(mpsc::TryRecvError::Empty) => break,
@@ -436,7 +462,13 @@ fn render_thread_main(
         // + Dx12UseFrameLatencyWaitableObject::Wait). We wake up ~one frame
         // before the next scanout — the last reasonable moment to begin
         // rendering before we must hand a frame to the compositor.
-        draw_once(&surface, &gpu, &config, snapshot_state.as_ref());
+        draw_once(
+            &surface,
+            &gpu,
+            &config,
+            snapshot_state.as_ref(),
+            &mut panel_backend,
+        );
     }
 }
 
@@ -457,6 +489,7 @@ fn draw_once(
     gpu: &SharedGpu,
     config: &wgpu::SurfaceConfiguration,
     snapshot_state: Option<&SnapshotState>,
+    panel_backend: &mut BakePanelBackend,
 ) {
     let frame = match surface.get_current_texture() {
         wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
@@ -510,6 +543,17 @@ fn draw_once(
         // calling `set_pipeline` is fine but we don't issue a draw — the
         // clear colour is what the user sees.
     }
+
+    // Second render pass: the panel backend composes its UI (if any)
+    // on top of the just-drawn desktop/selection layer. Backends that
+    // don't have a panel to draw early-out cheaply.
+    panel_backend.render(
+        &gpu.device,
+        &gpu.queue,
+        &mut encoder,
+        &view,
+        (config.width, config.height),
+    );
 
     gpu.queue.submit(std::iter::once(encoder.finish()));
     frame.present();

@@ -10,6 +10,7 @@ use winit::window::{CursorIcon, Window, WindowId, WindowLevel};
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
 use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
+use crate::panel::{self, PanelState};
 use crate::platform;
 use crate::settings::CapturerSettings;
 use crate::system::SystemInterop;
@@ -173,6 +174,16 @@ struct InputState {
     /// "snap back when cursor returns into bounds" behaviour the user
     /// asked for.
     drag_anchor_selection: Option<ScreenRect>,
+    /// Cached panel state for the currently-finalised selection, or
+    /// `None` when no panel is visible. Computed on capture and
+    /// refreshed whenever the selection changes. The app thread's
+    /// own copy is used for hit-testing; a clone is shipped to the
+    /// relevant render thread via `RenderMsg::PanelState`.
+    panel_state: Option<PanelState>,
+    /// Index of the monitor (into `monitor_bounds`) whose window
+    /// currently owns the panel, or `None` if no panel is live. Used
+    /// to route panel state updates to only that thread.
+    panel_monitor_idx: Option<usize>,
 }
 
 pub struct App {
@@ -180,6 +191,11 @@ pub struct App {
     gpu: Option<Arc<SharedGpu>>,
     instance: Option<wgpu::Instance>,
     windows: HashMap<WindowId, WindowHandle>,
+    /// Stable, index-order list of window IDs parallel to
+    /// `monitor_bounds` / `monitor_dpi`. Populated in `resumed()` in
+    /// the same order windows are created; used by the panel plumbing
+    /// to look up the `WindowHandle` for a given monitor index.
+    monitor_window_ids: Vec<WindowId>,
     /// Populated once in `resumed()`. Used by `clamp_to_nearest_monitor`
     /// so the virtual cursor can't escape all physical screens while the
     /// OS cursor is pinned to the anchor, and by the mouse-down handler
@@ -207,6 +223,7 @@ impl App {
             gpu: None,
             instance: None,
             windows: HashMap::new(),
+            monitor_window_ids: Vec::new(),
             monitor_bounds: Vec::new(),
             monitor_dpi: Vec::new(),
             vd_bounds: ScreenRect::zero(),
@@ -227,6 +244,8 @@ impl App {
                 hittest: Hittest::Outside,
                 drag_mode: None,
                 drag_anchor_selection: None,
+                panel_state: None,
+                panel_monitor_idx: None,
             },
         }
     }
@@ -247,6 +266,104 @@ impl App {
             );
         }
     }
+
+    /// Recompute the panel layout from the currently-captured selection
+    /// and ship the new state to every render thread (`None` to
+    /// non-panel monitors, `Some(...)` to the one whose monitor owns
+    /// the panel). Called on initial capture, after move/resize
+    /// drags, and on hover changes.
+    ///
+    /// The panel lives on **one** monitor at a time: whichever one
+    /// contains the selection's centre. That matches the C++ behaviour
+    /// — `SetButtonPanelPositions` is called per-monitor with the same
+    /// selection, and only the monitor whose clipped selection rect
+    /// overlaps produces a visible panel.
+    fn recompute_panel(&mut self) {
+        let (sel, dpi, monitor_idx, monitor_bounds) = match (
+            self.input.selection,
+            self.monitor_bounds.is_empty(),
+        ) {
+            (Some(sel), false) => {
+                // Pick the monitor containing the selection's centre.
+                // Matches the "intersect the selection with the
+                // monitor's workspace" logic in the C++ — the centre
+                // lookup is a simpler equivalent for the common case.
+                let cx = (sel.left() + sel.right()) / 2;
+                let cy = (sel.top() + sel.bottom()) / 2;
+                let found = self
+                    .monitor_bounds
+                    .iter()
+                    .enumerate()
+                    .find(|(_, m)| {
+                        cx >= m.left() && cx < m.right() && cy >= m.top() && cy < m.bottom()
+                    })
+                    .map(|(i, m)| (i, *m));
+                match found {
+                    Some((i, mb)) => {
+                        let d = self.monitor_dpi.get(i).copied().unwrap_or(1.0);
+                        (sel, d, i, mb)
+                    }
+                    None => {
+                        self.clear_panel();
+                        return;
+                    }
+                }
+            }
+            _ => {
+                self.clear_panel();
+                return;
+            }
+        };
+
+        let Some(layout) = panel::compute_layout(monitor_bounds, sel, dpi) else {
+            self.clear_panel();
+            return;
+        };
+
+        // Fold the existing hover index forward if still valid —
+        // otherwise clear it. The caller updates hover after this
+        // returns when the user is actively moving the cursor.
+        let hover_idx = self.input.panel_state.as_ref().and_then(|p| p.hover_idx);
+
+        let new_state = PanelState {
+            layout,
+            hover_idx,
+            selection_size: (sel.width(), sel.height()),
+            monitor_bounds,
+            dpi_scale: dpi,
+            accent_color: self.settings.crosshair_color,
+        };
+
+        self.input.panel_state = Some(new_state.clone());
+        self.input.panel_monitor_idx = Some(monitor_idx);
+
+        // Broadcast: Some(...) to the owning monitor, None to the rest.
+        for (i, wid) in self.monitor_window_ids.iter().enumerate() {
+            if let Some(h) = self.windows.get(wid) {
+                if i == monitor_idx {
+                    h.update_panel_state(Some(new_state.clone()));
+                } else {
+                    h.update_panel_state(None);
+                }
+            }
+        }
+    }
+
+    /// Drop the current panel state and tell every render thread to
+    /// clear its backend. Called when capture is reset, when the
+    /// selection is dragged off-screen, or when a selection doesn't
+    /// overlap any monitor.
+    fn clear_panel(&mut self) {
+        if self.input.panel_state.is_none() && self.input.panel_monitor_idx.is_none() {
+            return;
+        }
+        self.input.panel_state = None;
+        self.input.panel_monitor_idx = None;
+        for h in self.windows.values() {
+            h.update_panel_state(None);
+        }
+    }
+
 }
 
 /// Hit-test the cursor (in virtual-desktop pixels) against a captured
@@ -555,10 +672,13 @@ impl ApplicationHandler for App {
             hittest: Hittest::Outside,
             drag_mode: None,
             drag_anchor_selection: None,
+            panel_state: None,
+            panel_monitor_idx: None,
         };
         self.monitor_bounds = captured.monitors.iter().map(|m| m.bounds).collect();
         self.monitor_dpi = captured.monitors.iter().map(|m| m.scale_factor).collect();
         self.vd_bounds = captured.bounds;
+        self.monitor_window_ids.clear();
 
         // 2. Create one hidden, borderless window per monitor.
         let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(captured.monitors.len());
@@ -652,6 +772,7 @@ impl ApplicationHandler for App {
                 barrier.clone(),
             );
             handles.insert(id, handle);
+            self.monitor_window_ids.push(id);
         }
 
         // 8. Wait until every render thread reports "frame 0 done". If any
@@ -679,9 +800,21 @@ impl ApplicationHandler for App {
         id: WindowId,
         event: WindowEvent,
     ) {
-        let Some(handle) = self.windows.get(&id) else {
-            return;
+        // Extract the bits of the window handle we need upfront and
+        // drop the `self.windows` borrow immediately. Keeping a live
+        // `&WindowHandle` across the match blocks all the panel
+        // mutators (`recompute_panel`, `clear_panel`) from running
+        // because they need `&mut self`. `Arc<Window>` is cheap to
+        // clone and `ScreenRect` is Copy, so this is effectively free.
+        let (window, this_monitor_bounds) = match self.windows.get(&id) {
+            Some(h) => (h.window.clone(), h.monitor_bounds),
+            None => return,
         };
+        // Alias to keep the downstream code readable without touching
+        // every call site that used `handle.window` and
+        // `handle.monitor_bounds`.
+        let handle_window = &window;
+        let handle_monitor_bounds = this_monitor_bounds;
 
         match event {
             WindowEvent::CloseRequested => {
@@ -698,13 +831,19 @@ impl ApplicationHandler for App {
             } => {
                 event_loop.exit();
             }
-            WindowEvent::Resized(new_size) => handle.resize(new_size),
+            WindowEvent::Resized(new_size) => {
+                // Re-borrow `self.windows` briefly. No other mutation is
+                // in flight here, so this is safe.
+                if let Some(h) = self.windows.get(&id) {
+                    h.resize(new_size);
+                }
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 // winit hands us a position in this window's local physical
                 // pixels. Reconstruct the OS cursor in virtual-desktop
                 // coords so we can compare against the anchor (itself in
                 // virtual-desktop coords).
-                let bounds = handle.monitor_bounds;
+                let bounds = handle_monitor_bounds;
                 let os_vd = ScreenPoint::new(
                     bounds.min_x() + position.x.round() as i32,
                     bounds.min_y() + position.y.round() as i32,
@@ -823,6 +962,11 @@ impl ApplicationHandler for App {
                             )),
                         };
                         self.input.selection = new_sel;
+                        // Selection geometry changed during a drag
+                        // after capture → re-layout the panel so it
+                        // rides with the selection and the area
+                        // indicator text updates.
+                        self.recompute_panel();
                     } else if let Some(sel) = self.input.selection {
                         // Hover hit-test only when no drag is active.
                         // The cursor is determined by the hover state;
@@ -837,7 +981,47 @@ impl ApplicationHandler for App {
                         let ht = hit_test(self.input.virtual_cursor, sel, dpi);
                         if ht != self.input.hittest {
                             self.input.hittest = ht;
-                            handle.window.set_cursor(ht.cursor());
+                            handle_window.set_cursor(ht.cursor());
+                        }
+
+                        // Panel hover tracking: if the cursor is over
+                        // one of the panel buttons, swap the cursor to
+                        // a click pointer and update the panel state
+                        // so the bake backend redraws the hovered
+                        // button with the 30% white overlay. A hover
+                        // change always rebroadcasts the panel state.
+                        let new_hover =
+                            self.input.panel_state.as_ref().and_then(|p| {
+                                p.layout.hit_test(
+                                    self.input.virtual_cursor.x,
+                                    self.input.virtual_cursor.y,
+                                )
+                            });
+                        let old_hover =
+                            self.input.panel_state.as_ref().and_then(|p| p.hover_idx);
+                        if new_hover != old_hover {
+                            if let Some(p) = self.input.panel_state.as_mut() {
+                                p.hover_idx = new_hover;
+                            }
+                            // Rebroadcast the panel state to the owning
+                            // monitor only (other monitors already
+                            // have their panel cleared).
+                            if let (Some(idx), Some(state)) =
+                                (self.input.panel_monitor_idx, self.input.panel_state.clone())
+                            {
+                                if let Some(wid) = self.monitor_window_ids.get(idx) {
+                                    if let Some(h) = self.windows.get(wid) {
+                                        h.update_panel_state(Some(state));
+                                    }
+                                }
+                            }
+                            if new_hover.is_some() {
+                                handle_window.set_cursor(CursorIcon::Pointer);
+                            } else {
+                                // Fall back to whichever cursor the
+                                // selection hit-test wanted.
+                                handle_window.set_cursor(self.input.hittest.cursor());
+                            }
                         }
                     }
                 }
@@ -852,6 +1036,23 @@ impl ApplicationHandler for App {
                 match state {
                     ElementState::Pressed => {
                         if self.input.captured {
+                            // Panel click: if the cursor is over a
+                            // button, dispatch the action and exit.
+                            // Matches the v1 scope — real handlers
+                            // for save/copy/upload/etc. are deferred.
+                            if let Some(idx) =
+                                self.input.panel_state.as_ref().and_then(|p| {
+                                    p.layout.hit_test(
+                                        self.input.virtual_cursor.x,
+                                        self.input.virtual_cursor.y,
+                                    )
+                                })
+                            {
+                                let def = panel::button_defs()[idx];
+                                info!("panel click: {:?}", def.action);
+                                event_loop.exit();
+                                return;
+                            }
                             // Captured: this mouse-down enters either
                             // Move (clicked inside the rect) or
                             // Resize (clicked on a handle). Anywhere
@@ -915,7 +1116,11 @@ impl ApplicationHandler for App {
                         {
                             self.input.captured = false;
                             self.input.hittest = Hittest::Outside;
-                            handle.window.set_cursor(CursorIcon::Default);
+                            handle_window.set_cursor(CursorIcon::Default);
+                            // Selection dragged off-screen: tear down
+                            // the panel so we don't leave a ghost on
+                            // the previous monitor.
+                            self.clear_panel();
                         }
                         if finalising {
                             self.input.captured = true;
@@ -952,8 +1157,20 @@ impl ApplicationHandler for App {
                                     dpi,
                                 );
                                 self.input.hittest = ht;
-                                handle.window.set_cursor(ht.cursor());
+                                handle_window.set_cursor(ht.cursor());
                             }
+                            // Compute the panel layout for the new
+                            // selection and broadcast it to the
+                            // render thread of the monitor that owns
+                            // the panel.
+                            self.recompute_panel();
+                        } else if self.input.captured
+                            && self.input.selection.is_some()
+                        {
+                            // A move/resize drag just ended with the
+                            // selection still alive — update the panel
+                            // layout for the settled selection.
+                            self.recompute_panel();
                         }
                         self.broadcast_mouse_state();
                     }

@@ -1,6 +1,7 @@
 mod app;
 mod geometry;
 mod gpu;
+mod panel;
 mod platform;
 mod settings;
 mod system;
