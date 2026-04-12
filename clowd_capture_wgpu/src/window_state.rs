@@ -6,7 +6,7 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
-use crate::gpu::{SharedGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::{WindowGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::panel::{BakePanelBackend, PanelState};
 use crate::settings::CapturerSettings;
 
@@ -99,14 +99,16 @@ impl Drop for WindowHandle {
 
 /// Spawn a render thread for a single window.
 ///
-/// The render thread takes ownership of `surface`, an `Arc<SharedGpu>`, a
-/// receiver, and the `Barrier`. It renders frame 0, hits the barrier, and
-/// then enters a blocking-present loop. It never touches `Window` — that
-/// Arc stays parked on the main thread.
+/// The render thread takes ownership of `surface` and `gpu` — one complete
+/// GPU stack per window. Each window gets its own DX12 device + command
+/// queue so swap chain presents are fully independent across monitors
+/// (Hardware: Independent Flip). The GPU bootstrap happens on the main
+/// thread (winit's window handle is only available there); the render
+/// thread configures the surface and enters the blocking-present loop.
 ///
 /// `monitor_bounds` is this window's monitor in virtual-desktop screen
 /// coordinates. The thread uses it (combined with the snapshot's
-/// virtual-desktop bounds) to compute its slice of the shared texture.
+/// virtual-desktop bounds) to compute its slice of the desktop texture.
 /// `scale_factor` is this monitor's DPI scale (1.0 = 100 %) and is
 /// written once into the uniform so the shader can size the coloured
 /// crosshair arms in physical pixels. `settings` is the shared
@@ -121,7 +123,7 @@ impl Drop for WindowHandle {
 pub fn spawn_render_thread(
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
-    gpu: Arc<SharedGpu>,
+    gpu: WindowGpu,
     settings: Arc<CapturerSettings>,
     monitor_bounds: ScreenRect,
     scale_factor: f32,
@@ -130,7 +132,6 @@ pub fn spawn_render_thread(
     first_frame_barrier: Arc<Barrier>,
 ) -> WindowHandle {
     let (tx, rx) = mpsc::channel();
-    let initial_size = window.inner_size();
     let thread_name = format!("render-{:?}", window.id());
     let thread = thread::Builder::new()
         .name(thread_name)
@@ -140,7 +141,6 @@ pub fn spawn_render_thread(
                 gpu,
                 settings,
                 rx,
-                initial_size,
                 monitor_bounds,
                 scale_factor,
                 refresh_hz,
@@ -159,10 +159,9 @@ pub fn spawn_render_thread(
 
 fn render_thread_main(
     surface: wgpu::Surface<'static>,
-    gpu: Arc<SharedGpu>,
+    gpu: WindowGpu,
     settings: Arc<CapturerSettings>,
     rx: mpsc::Receiver<RenderMsg>,
-    size: PhysicalSize<u32>,
     monitor_bounds: ScreenRect,
     scale_factor: f32,
     refresh_hz: f32,
@@ -178,12 +177,16 @@ fn render_thread_main(
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format: gpu.surface_format,
-        width: size.width.max(1),
-        height: size.height.max(1),
+        width: (monitor_bounds.width() as u32).max(1),
+        height: (monitor_bounds.height() as u32).max(1),
         // Fifo + DX12 waitable gives vsynced presentation while
         // get_current_texture() wakes us right before the next scanout.
         present_mode: wgpu::PresentMode::Fifo,
-        alpha_mode: wgpu::CompositeAlphaMode::Auto,
+        // Opaque — tells DWM this surface has no transparency, matching
+        // the C++ version's DXGI_ALPHA_MODE_IGNORE. `Auto` can resolve
+        // to PreMultiplied on some configurations, which forces DWM to
+        // compose rather than direct-flip.
+        alpha_mode: wgpu::CompositeAlphaMode::Opaque,
         view_formats: vec![],
         desired_maximum_frame_latency: 1,
     };
@@ -224,16 +227,6 @@ fn render_thread_main(
         let init_local_x = initial_mouse.x - monitor_bounds.min_x() as f32;
         let init_local_y = initial_mouse.y - monitor_bounds.min_y() as f32;
 
-        // params[3] = DPI scale factor. This value is constant for the
-        // lifetime of the window (winit delivers ScaleFactorChanged on
-        // actual DPI changes, which we don't currently handle), so we
-        // only write it here and leave the per-frame path touching
-        // params[0..3] for fade + cursor. `crosshair_color` is also
-        // immutable from the GPU's POV — copied from settings once at
-        // startup, never updated again.
-        // Frame-0 uniforms: zoom=1 (which means the folded uv_offset_scale
-        // equals the baseline), fade=0, cursor at the pre-window position,
-        // empty selection rect (right<=left sentinel), animation clock at 0.
         let uniforms = WindowUniforms {
             uv_offset_scale: base_uv_offset_scale,
             params: [0.0, init_local_x, init_local_y, scale_factor],
@@ -344,15 +337,6 @@ fn render_thread_main(
 
         // Update the fade factor and push it to the GPU. Cheap; the
         // staging ring buffer absorbs this without blocking.
-        //
-        // Ease-out quart (1 - (1 - t)^4): the sweet spot between a
-        // mechanical-feeling cubic and the near-instant expo — enough
-        // snap at the front that the darken feels like a deliberate
-        // gesture, with room in the tail to actually settle into the
-        // grayscale rather than slamming into it. If you want to retune:
-        //   ease-out cubic:  1 - inv*inv*inv           (gentler snap)
-        //   ease-out quint:  1 - inv*inv*inv*inv*inv   (more snap)
-        //   ease-out expo:   1 - (-10 * t).exp2()      (near-instant)
         if let Some(state) = snapshot_state.as_mut() {
             let elapsed = start.elapsed().as_secs_f32();
             let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
@@ -360,37 +344,12 @@ fn render_thread_main(
             let fade = 1.0 - inv * inv * inv * inv;
             state.uniforms.params[0] = fade;
 
-            // Cursor in window-local physical pixels (f32 so sub-pixel
-            // motion at high zoom is preserved for the UV math below).
-            // Out-of-range values (cursor on another monitor) are passed
-            // through as-is — the crosshair shader floors to int and then
-            // integer-compares, so no line appears on windows that the
-            // cursor isn't over. The position came from the main thread
-            // via RenderMsg::MouseState and was cached into `mouse_pos`
-            // during the drain above.
             let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;
             let local_y = mouse_pos.y - monitor_bounds.min_y() as f32;
             state.uniforms.params[1] = local_x;
             state.uniforms.params[2] = local_y;
 
             // Fold the zoom-around-cursor transform into uv_offset_scale.
-            //
-            //   window_uv' = (window_uv - cursor_win_uv) / zoom + cursor_win_uv
-            //   vd_uv      = base_offset + window_uv' * base_scale
-            //
-            //   new_offset = base_offset + base_scale * cursor_win_uv * (1 - 1/zoom)
-            //   new_scale  = base_scale / zoom
-            //
-            // At zoom=1 the formulas degenerate to the baseline, so the
-            // zoom=1 path is byte-identical to the pre-zoom build. The
-            // shader still computes `vd_uv = offset + window_uv * scale`;
-            // all the zoom math lives here on the CPU side.
-            //
-            // Per the "all monitors zoom uniformly" design: even monitors
-            // that don't contain the cursor apply the same transform, so
-            // cursor_win_uv can land outside [0, 1] on those. The sampler's
-            // ClampToEdge address mode means any off-region sample just
-            // hugs the texture edge on those monitors.
             if zoom <= 1.0 {
                 state.uniforms.uv_offset_scale = state.base_uv_offset_scale;
             } else {
@@ -409,17 +368,6 @@ fn render_thread_main(
             }
 
             // Selection rect (if any) → window-local physical pixels.
-            //
-            //   local_cx = cx - mx                    (cursor in window-local px)
-            //   window_x = (vd_x - cx) * zoom + local_cx
-            //
-            // At zoom=1 this collapses to `vd_x - mx` (the trivial subtract-
-            // monitor-origin case). At zoom>1 the rect expands around the
-            // cursor by the same factor as the desktop content under it,
-            // so the border stays glued to whatever desktop pixels were
-            // selected. The captured-and-zoomed combination never renders
-            // (zoom snaps back to 1 on capture in app.rs), so the only
-            // time this branch matters is during an active drag.
             if let Some(sel) = selection {
                 let cx = mouse_pos.x;
                 let cy = mouse_pos.y;
@@ -435,21 +383,9 @@ fn render_thread_main(
                 let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
                 state.uniforms.selection_rect = [l, t, r, b];
             } else {
-                // Sentinel: any rect with right<=left or bottom<=top is
-                // treated as "no selection" by the shader.
                 state.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
             }
 
-            // selection_params:
-            //   [0] = animation clock for the marching-ants phase
-            //         (always written so the dashes don't freeze when
-            //         a selection appears mid-second; cheap, and a
-            //         no-op when there's no selection — the shader's
-            //         emptiness sentinel short-circuits).
-            //   [1] = `captured` flag as a float; the shader compares
-            //         > 0.5 to suppress the crosshair entirely.
-            //   [2] = current zoom; the shader scales border thickness
-            //         and dash period by `1 / zoom`.
             state.uniforms.selection_params[0] = elapsed;
             state.uniforms.selection_params[1] = if captured { 1.0 } else { 0.0 };
             state.uniforms.selection_params[2] = zoom;
@@ -486,7 +422,7 @@ struct SnapshotState {
 
 fn draw_once(
     surface: &wgpu::Surface<'static>,
-    gpu: &SharedGpu,
+    gpu: &WindowGpu,
     config: &wgpu::SurfaceConfiguration,
     snapshot_state: Option<&SnapshotState>,
     panel_backend: &mut BakePanelBackend,
@@ -539,14 +475,10 @@ fn draw_once(
             rpass.set_bind_group(0, &state.bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
-        // Without a snapshot the pipeline has no bind group layout, so
-        // calling `set_pipeline` is fine but we don't issue a draw — the
-        // clear colour is what the user sees.
     }
 
     // Second render pass: the panel backend composes its UI (if any)
-    // on top of the just-drawn desktop/selection layer. Backends that
-    // don't have a panel to draw early-out cheaply.
+    // on top of the just-drawn desktop/selection layer.
     panel_backend.render(
         &gpu.device,
         &gpu.queue,

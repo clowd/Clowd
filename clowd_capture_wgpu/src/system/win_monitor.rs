@@ -1,15 +1,20 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use std::collections::HashMap;
 use std::mem;
 use windows::{
     core::PCWSTR,
     Win32::{
         Foundation::{LPARAM, POINT, RECT, TRUE},
-        Graphics::Gdi::{
-            EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint, DEVMODEW, DMDO_180, DMDO_270, DMDO_90,
-            DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONULL,
-            MONITOR_DEFAULTTOPRIMARY,
+        Graphics::{
+            Dxgi::{CreateDXGIFactory1, IDXGIFactory1},
+            Gdi::{
+                EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint,
+                DEVMODEW, DMDO_180, DMDO_270, DMDO_90, DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, HDC,
+                HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONULL,
+                MONITOR_DEFAULTTOPRIMARY,
+            },
         },
         UI::{HiDpi::GetDpiForMonitor, WindowsAndMessaging::MONITORINFOF_PRIMARY},
     },
@@ -194,4 +199,62 @@ impl ImplMonitor {
 /// `Monitor` wrapper just cloned every `ImplMonitor` to serve the same data.
 pub fn all() -> Result<Vec<ImplMonitor>> {
     ImplMonitor::all()
+}
+
+/// Walk DXGI adapters → outputs and build a map of GDI device name
+/// (e.g. `\\.\DISPLAY1`) → `(vendor_id, device_id)`. This tells the GPU
+/// bootstrap which wgpu adapter to select for each monitor, matching the
+/// C++ version's per-monitor `display.AdapterIdx`.
+pub fn build_dxgi_adapter_map() -> HashMap<String, (u32, u32)> {
+    let mut map = HashMap::new();
+
+    let factory: IDXGIFactory1 = match unsafe { CreateDXGIFactory1() } {
+        Ok(f) => f,
+        Err(e) => {
+            error!("CreateDXGIFactory1 failed: {e:?}");
+            return map;
+        }
+    };
+
+    let mut adapter_idx: u32 = 0;
+    loop {
+        let adapter = match unsafe { factory.EnumAdapters1(adapter_idx) } {
+            Ok(a) => a,
+            Err(_) => break, // No more adapters
+        };
+        adapter_idx += 1;
+
+        let desc = match unsafe { adapter.GetDesc1() } {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let vendor_id = desc.VendorId;
+        let device_id = desc.DeviceId;
+
+        let mut output_idx: u32 = 0;
+        loop {
+            let output = match unsafe { adapter.EnumOutputs(output_idx) } {
+                Ok(o) => o,
+                Err(_) => break, // No more outputs on this adapter
+            };
+            output_idx += 1;
+
+            let out_desc = match unsafe { output.GetDesc() } {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+
+            // DeviceName is a [u16; 32] null-terminated wide string matching
+            // MONITORINFOEXW::szDevice (e.g. `\\.\DISPLAY1`).
+            if let Ok(name) = wide_string_to_string(&out_desc.DeviceName) {
+                info!(
+                    "DXGI output {:?} → adapter vendor=0x{:04X} device=0x{:04X}",
+                    name, vendor_id, device_id
+                );
+                map.insert(name, (vendor_id, device_id));
+            }
+        }
+    }
+
+    map
 }
