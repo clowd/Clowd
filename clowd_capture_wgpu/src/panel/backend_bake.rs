@@ -940,9 +940,16 @@ fn blit_pixmap(dst: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
 // ClearType-style subpixel text compositing.
 //
 // swash gives us a 4-byte-per-pixel buffer (`Format::Subpixel`) where
-// each pixel holds three independently-rasterized coverage values: R is
-// the coverage at horizontal offset -0.3 px, G at 0, B at +0.3 px.
+// each pixel holds three independently-rasterized coverage values at
+// horizontal offsets -0.3, 0, +0.3 px stored in bytes 0, 1, 2.
 // (The 4th byte — A — is never written by zeno and is left at zero.)
+// Because the offset shifts the *glyph* (not the sampling grid),
+// byte 0 (offset -0.3, glyph shifted left) gives the coverage at the
+// *rightmost* subpixel position (blue on an RGB LCD), and byte 2
+// (offset +0.3, glyph shifted right) gives the *leftmost* (red).
+// `blit_glyph_subpixel` swaps R↔B when reading the coverage buffer
+// to match the standard RGB subpixel layout.
+//
 // This is a clean three-pass rasterization, not the supersample-and-LCD-
 // filter approach FreeType uses. As a result we don't need an explicit
 // LCD filter — the slight overlap between the ±0.3 offsets naturally
@@ -1042,9 +1049,16 @@ fn blit_glyph_subpixel(
                 continue;
             }
             let pix_off = row_off + (gx as usize) * 4;
-            let cov_r = coverage_rgba[pix_off] as f32 * (1.0 / 255.0) * text_alpha;
+            // zeno's Format::Subpixel rasterizes at offsets [-0.3, 0, +0.3]
+            // and stores coverage in bytes [0, 1, 2]. Offset -0.3 shifts
+            // the glyph LEFT, so each pixel samples 0.3 px to the RIGHT of
+            // the glyph — that's the BLUE physical subpixel on an RGB LCD.
+            // Offset +0.3 shifts RIGHT → pixel samples LEFT → RED subpixel.
+            // So byte 0 = blue coverage, byte 2 = red coverage — we must
+            // swap R and B to match the standard RGB subpixel layout.
+            let cov_r = coverage_rgba[pix_off + 2] as f32 * (1.0 / 255.0) * text_alpha;
             let cov_g = coverage_rgba[pix_off + 1] as f32 * (1.0 / 255.0) * text_alpha;
-            let cov_b = coverage_rgba[pix_off + 2] as f32 * (1.0 / 255.0) * text_alpha;
+            let cov_b = coverage_rgba[pix_off] as f32 * (1.0 / 255.0) * text_alpha;
             if cov_r == 0.0 && cov_g == 0.0 && cov_b == 0.0 {
                 continue;
             }
