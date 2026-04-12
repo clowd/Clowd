@@ -23,6 +23,9 @@ fn main() -> anyhow::Result<()> {
         simplelog::ColorChoice::Auto,
     );
 
+    // Initialize platform dialog subsystem (required for retry/cancel dialogs).
+    system::SystemInterop::init_dialogs();
+
     let event_loop = winit::event_loop::EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
 
