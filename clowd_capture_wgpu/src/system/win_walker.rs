@@ -98,11 +98,18 @@ impl WindowWalker {
     /// before overlay windows are created, so our own windows are excluded.
     pub fn snapshot() -> Self {
         let vdm: Option<IVirtualDesktopManager> = unsafe {
-            CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL).ok()
+            match CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    warn!(
+                        "Could not create IVirtualDesktopManager (0x{:08X}: {}) \
+                         — virtual-desktop filtering disabled",
+                        e.code().0, e
+                    );
+                    None
+                }
+            }
         };
-        if vdm.is_none() {
-            warn!("Could not create IVirtualDesktopManager — virtual-desktop filtering disabled");
-        }
 
         // Collect raw HWNDs via EnumWindows (front-to-back Z-order).
         let mut hwnds: Vec<HWND> = Vec::new();

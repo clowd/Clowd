@@ -16,7 +16,6 @@ mod win_walker;
 #[cfg(not(windows))]
 mod xcap_impl;
 
-#[cfg(windows)]
 pub use win_walker::WindowWalker;
 
 use crate::geometry::{ScreenPoint, ScreenRect};
@@ -97,8 +96,12 @@ impl SystemInterop {
             .collect()
     }
 
-    /// Initialize dialog subsystem. Must be called once at startup.
-    pub fn init_dialogs() {
+    /// One-time platform init. Must be called early in `main()` before
+    /// any other `SystemInterop` methods. Initializes COM and the
+    /// native dialog subsystem.
+    pub fn init() {
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+        let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
         win_dialog::init();
     }
 
@@ -126,9 +129,9 @@ impl SystemInterop {
         unimplemented!("xcap path not wired to BGRA capture");
     }
 
-    /// Initialize dialog subsystem. Must be called once at startup.
-    pub fn init_dialogs() {
-        // TODO: macOS implementation using CFUserNotificationDisplayAlert
+    /// One-time platform init. Must be called early in `main()`.
+    pub fn init() {
+        // TODO: macOS implementation
     }
 
     /// Show a retry/cancel error dialog. Returns true if Retry, false if Cancel.
