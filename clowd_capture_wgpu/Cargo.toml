@@ -34,4 +34,8 @@ windows = { version = "0.62", features = [
     "Win32_System_SystemInformation",
 ] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25"
+core-foundation = "0.10"
+
 # Build dependencies removed - using nagac CLI for shader compilation
