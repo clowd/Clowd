@@ -27,8 +27,10 @@ xdialog = { version = "2.0", features = ["win32-direct"] }
 windows = { version = "0.62", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
+    "Win32_UI_Shell",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",
+    "Win32_System_Com",
     "Win32_System_SystemInformation",
 ] }
 
