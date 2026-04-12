@@ -10,10 +10,17 @@ mod win_mouse;
 #[cfg(windows)]
 mod win_walker;
 
-#[cfg(not(windows))]
-mod xcap_impl;
-
+#[cfg(windows)]
 pub use win_walker::WindowWalker;
+
+#[cfg(target_os = "macos")]
+mod mac_capture;
+
+#[cfg(target_os = "macos")]
+mod mac_monitor;
+
+#[cfg(target_os = "macos")]
+mod mac_mouse;
 
 use crate::geometry::{ScreenPoint, ScreenRect};
 
@@ -122,25 +129,53 @@ impl SystemInterop {
     }
 }
 
+// --- WindowWalker stub for non-Windows ---
 #[cfg(not(windows))]
-impl SystemInterop {
-    pub fn get_mouse_position() -> ScreenPoint {}
+pub struct WindowWalker;
 
-    pub fn set_mouse_position(pos: ScreenPoint) {}
-
-    pub fn capture_desktop() -> CapturedDesktop {
-        let _ = xcap_impl::capture_desktop();
-        unimplemented!("xcap path not wired to BGRA capture");
+#[cfg(not(windows))]
+impl WindowWalker {
+    pub fn snapshot() -> Self {
+        WindowWalker
     }
+    pub fn hit_test(&self, _point: ScreenPoint) -> Option<ScreenRect> {
+        None
+    }
+}
 
+#[cfg(target_os = "macos")]
+#[allow(dead_code)]
+impl SystemInterop {
     /// One-time platform init. Must be called early in `main()`.
     pub fn init() {
         xdialog::init_maccf_direct();
     }
 
-    /// Show a retry/cancel error dialog. Returns true if Retry, false if Cancel.
-    pub fn show_error_retry_cancel(_title: &str, _message: &str) -> bool {
-        // TODO: macOS implementation using CFUserNotificationDisplayAlert
-        false
+    pub fn get_mouse_position() -> ScreenPoint {
+        mac_mouse::get_position()
+    }
+
+    pub fn set_mouse_position(pos: ScreenPoint) {
+        mac_mouse::set_position(pos)
+    }
+
+    pub fn capture_desktop() -> CapturedDesktop {
+        let (bitmap, monitors) =
+            mac_capture::capture_desktop().expect("Unable to capture desktop");
+        CapturedDesktop {
+            bgra: bitmap.bgra,
+            width: bitmap.width,
+            height: bitmap.height,
+            bounds: bitmap.bounds,
+            monitors,
+        }
+    }
+
+    pub fn all_monitors() -> Vec<MonitorInfo> {
+        mac_monitor::all_monitors().expect("Unable to enumerate monitors")
+    }
+
+    pub fn snapshot_windows() -> WindowWalker {
+        WindowWalker::snapshot()
     }
 }
