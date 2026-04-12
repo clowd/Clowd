@@ -62,10 +62,7 @@ pub struct ButtonDef {
 /// Accelerator keys (not stored — the runtime only dispatches
 /// `ButtonAction`):
 ///   0: UPLOAD — U   (0x55)
-///   1: EDIT   — E on the `E` in `EDIT`? C++ uses P (0x50) which is
-///              weird — underline_idx 0 is on `E`, but the vkey is
-///              `P`. Leaving the mismatch intact for parity; if we
-///              ever wire keyboard accels we'll revisit.
+///   1: EDIT   — E
 ///   2: VIDEO  — V   (0x56)
 ///   3: COPY   — C   (0x43)
 ///   4: SAVE   — S   (0x53)
@@ -123,8 +120,30 @@ const BUTTON_DEFS: [ButtonDef; NUM_SVG_BUTTONS] = [
     },
 ];
 
+impl ButtonDef {
+    /// The keyboard accelerator character for this button, derived from
+    /// the underlined position in the label. Always lowercase.
+    pub fn accel_key(&self) -> char {
+        self.label
+            .chars()
+            .nth(self.underline_idx)
+            .expect("underline_idx out of bounds")
+            .to_ascii_lowercase()
+    }
+}
+
 /// The static list of buttons, as a fixed-size array reference so the
 /// invariant `len == NUM_SVG_BUTTONS` is guaranteed at the type level.
 pub const fn button_defs() -> &'static [ButtonDef; NUM_SVG_BUTTONS] {
     &BUTTON_DEFS
+}
+
+/// Look up a `ButtonAction` by its accelerator key (case-insensitive).
+/// Returns `None` if no button matches.
+pub fn lookup_action_by_key(c: char) -> Option<ButtonAction> {
+    let lower = c.to_ascii_lowercase();
+    button_defs()
+        .iter()
+        .find(|def| def.accel_key() == lower)
+        .map(|def| def.action)
 }
