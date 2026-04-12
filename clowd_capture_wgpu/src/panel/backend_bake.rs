@@ -4,22 +4,20 @@
 //! ## Strategy
 //!
 //! 1. **Once** (per render thread, at construction): parse all SVGs via
-//!    `usvg::Tree::from_data`, load the TTF via `fontdue::Font::from_bytes`,
-//!    build a minimal textured-quad `wgpu::RenderPipeline` + bind group
-//!    layout.
+//!    `usvg::Tree::from_data`, load the TTF via `swash`, build a minimal
+//!    textured-quad `wgpu::RenderPipeline` + bind group layout.
 //!
-//! 2. **On state change**: hash `(layout, hover, selection_size, dpi,
-//!    accent)` and short-circuit if unchanged. Otherwise allocate a
+//! 2. **On state change**: hash `(layout, selection_size, dpi, accent)`
+//!    and short-circuit if unchanged. Otherwise allocate a
 //!    `tiny_skia::Pixmap` sized to the panel in physical pixels at this
-//!    monitor's DPI, fill backgrounds, rasterize SVGs, rasterize text
-//!    with fontdue, apply the hover overlay, and upload the result to a
-//!    wgpu texture.
+//!    monitor's DPI, fill backgrounds, rasterize SVGs, rasterize text,
+//!    and upload the result to a wgpu texture. Hover state is excluded
+//!    from the hash — it's handled by the shader.
 //!
-//! 3. **On render**: if a texture is cached, begin a `LoadOp::Load`
-//!    render pass against the swapchain view, write a small uniform
-//!    block describing the panel's destination NDC rect, bind the
-//!    cached texture, draw 3 vertices (fullscreen-tri clipped by the
-//!    vertex shader to the panel quad).
+//! 3. **On render**: advance the `HoverAnimator` to compute per-button
+//!    fade values, write uniforms (NDC rect + button rects + fades),
+//!    begin a `LoadOp::Load` render pass, draw the cached texture as a
+//!    quad. The fragment shader applies hover overlays based on fades.
 //!
 //! The entire bake path runs on the render thread, which is cheap —
 //! the panel pixmap is at most a few thousand pixels, and tiny-skia /
@@ -27,6 +25,7 @@
 
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
+use std::time::Instant;
 
 use swash::scale::{Render, ScaleContext, Source};
 use swash::scale::image::Content;
@@ -36,6 +35,7 @@ use tiny_skia::{FillRule, Paint, Pixmap, PixmapMut, Rect as SkRect, Transform};
 
 use crate::geometry::{RectExt, ScreenRect};
 
+use super::hover::HoverAnimator;
 use super::model::{button_defs, NUM_SVG_BUTTONS};
 use super::state::PanelState;
 
@@ -57,17 +57,23 @@ const ICON_UNSCALED_PX: f32 = 26.0;
 /// DxScreenCapture.cpp:446.
 const GRAY_RGBA: [u8; 4] = [0x37, 0x37, 0x37, 0xFF];
 
-/// Hover overlay — 30% white. `brushWhite30` at DxScreenCapture.cpp:445.
-const HOVER_RGBA: [u8; 4] = [0xFF, 0xFF, 0xFF, (0.30 * 255.0) as u8];
-
-/// Small uniform block for the textured-quad pipeline. Carries the
-/// destination NDC rect as `(min_x, min_y, size_x, size_y)`. 16-byte
-/// aligned so `bytemuck` is happy without padding.
+/// Uniform block for the textured-quad pipeline. Carries the destination
+/// NDC rect plus per-button hover state for shader-based overlay.
+///
+/// WGSL alignment: vec4 is 16-byte aligned. We use vec4 arrays for
+/// button data to match WGSL's uniform buffer layout requirements.
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct QuadUniforms {
+    /// Destination rect in NDC: (min_x, min_y, size_x, size_y).
     ndc_rect: [f32; 4],
-    _pad: [f32; 4],
+    /// Button rects in texture UV coords: (u_min, v_min, u_max, v_max).
+    /// 7 buttons, each as a vec4.
+    button_rects: [[f32; 4]; NUM_SVG_BUTTONS],
+    /// Button fade values packed into vec4s: [0-3] in first, [4-6 + pad]
+    /// in second. Each fade is in [0.0, 1.0].
+    button_fades_0: [f32; 4],
+    button_fades_1: [f32; 4],
 }
 
 /// GPU-side resources cached for a single panel bake. Rebuilt whenever
@@ -79,6 +85,9 @@ struct CachedPanel {
     /// bottom). Converted to NDC in `render()` against the current
     /// swapchain size.
     dest_px: [f32; 4],
+    /// Button rects in texture UV coords (0..1). Computed once per bake
+    /// from the layout; doesn't change until the panel is re-laid-out.
+    button_rects_uv: [[f32; 4]; NUM_SVG_BUTTONS],
 }
 
 pub struct BakePanelBackend {
@@ -102,6 +111,12 @@ pub struct BakePanelBackend {
     /// lazily re-bake on first-frame-after-change without forcing the
     /// app thread to double-broadcast.
     state: Option<PanelState>,
+    /// Hover animation state. Owns per-button fade values that the
+    /// shader uses for smooth crossfade effects. Updated each frame
+    /// based on `state.hover_idx`.
+    hover_animator: HoverAnimator,
+    /// Last render time for computing animation delta.
+    last_render_time: Option<Instant>,
 }
 
 impl BakePanelBackend {
@@ -264,6 +279,8 @@ impl BakePanelBackend {
             cached: None,
             cached_hash: 0,
             state: None,
+            hover_animator: HoverAnimator::new(),
+            last_render_time: None,
         }
     }
 
@@ -273,6 +290,10 @@ impl BakePanelBackend {
     /// move the panel within the monitor) are still rehashed and may
     /// cause a spurious re-bake; cheap enough that we don't bother
     /// suppressing them.
+    ///
+    /// Note: `hover_idx` is deliberately excluded — hover state is
+    /// handled by the `HoverAnimator` and rendered in the shader,
+    /// so hover changes don't require a texture re-bake.
     fn state_hash(s: &PanelState) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         let layout = &s.layout;
@@ -286,7 +307,7 @@ impl BakePanelBackend {
             b.right().hash(&mut h);
             b.bottom().hash(&mut h);
         }
-        s.hover_idx.hash(&mut h);
+        // hover_idx excluded — HoverAnimator + shader handle hover overlay
         s.selection_size.0.hash(&mut h);
         s.selection_size.1.hash(&mut h);
         // DPI + accent coerced to integers for stable hashing — `f32`
@@ -333,9 +354,7 @@ impl BakePanelBackend {
             let def = &button_defs()[i];
             let fill = if def.primary { accent_u8 } else { GRAY_RGBA };
             fill_rect(&mut pixmap, l, t, r - l, bt - t, fill);
-            if Some(i) == s.hover_idx {
-                fill_rect(&mut pixmap, l, t, r - l, bt - t, HOVER_RGBA);
-            }
+            // Hover overlay is now applied in the shader, not baked here.
         }
 
         // --- Area indicator background + contents -------------------------
@@ -646,6 +665,9 @@ impl BakePanelBackend {
         if self.state.is_none() {
             self.cached = None;
             self.cached_hash = 0;
+            // Reset hover animation when panel is hidden.
+            self.hover_animator = HoverAnimator::new();
+            self.last_render_time = None;
         }
     }
 
@@ -665,6 +687,18 @@ impl BakePanelBackend {
         let Some(state) = self.state.clone() else {
             return;
         };
+
+        // Advance hover animation. Compute dt from last render time.
+        let now = Instant::now();
+        let dt = self
+            .last_render_time
+            .map(|t| now.duration_since(t).as_secs_f32())
+            .unwrap_or(0.0);
+        self.last_render_time = Some(now);
+
+        // Update hover state and advance animation.
+        self.hover_animator.set_hover(state.hover_idx);
+        self.hover_animator.advance(dt);
 
         // Re-bake if the hash changed or no texture is cached yet.
         let hash = Self::state_hash(&state);
@@ -742,10 +776,25 @@ impl BakePanelBackend {
                     (panel.bottom() - mon.top()) as f32,
                 ];
 
+                // Compute button rects in texture UV coords (0..1).
+                // These are stable until the layout changes.
+                let panel_w = panel.width() as f32;
+                let panel_h = panel.height() as f32;
+                let button_rects_uv: [[f32; 4]; NUM_SVG_BUTTONS] =
+                    std::array::from_fn(|i| {
+                        let b = state.layout.buttons[i];
+                        let l = (b.left() - panel.left()) as f32 / panel_w;
+                        let t = (b.top() - panel.top()) as f32 / panel_h;
+                        let r = (b.right() - panel.left()) as f32 / panel_w;
+                        let bt = (b.bottom() - panel.top()) as f32 / panel_h;
+                        [l, t, r, bt]
+                    });
+
                 self.cached = Some(CachedPanel {
                     texture,
                     bind_group,
                     dest_px,
+                    button_rects_uv,
                 });
                 self.cached_hash = hash;
             } else {
@@ -765,9 +814,15 @@ impl BakePanelBackend {
         let min_y = 1.0 - (cached.dest_px[3] / mh) * 2.0;
         let max_x = (cached.dest_px[2] / mw) * 2.0 - 1.0;
         let max_y = 1.0 - (cached.dest_px[1] / mh) * 2.0;
+
+        // Pack button fades into two vec4s for WGSL alignment.
+        // Fades come from the hover animator, not the state.
+        let fades = self.hover_animator.fades();
         let uniforms = QuadUniforms {
             ndc_rect: [min_x, min_y, max_x - min_x, max_y - min_y],
-            _pad: [0.0; 4],
+            button_rects: cached.button_rects_uv,
+            button_fades_0: [fades[0], fades[1], fades[2], fades[3]],
+            button_fades_1: [fades[4], fades[5], fades[6], 0.0],
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 
@@ -1026,11 +1081,20 @@ fn blit_glyph_subpixel(
 // the texture and returns it as-is; alpha blend is in the pipeline.
 
 const QUAD_WGSL: &str = r#"
+// Number of buttons in the panel.
+const NUM_BUTTONS: u32 = 7u;
+// Hover overlay opacity (30% white).
+const HOVER_OPACITY: f32 = 0.30;
+
 struct QuadUniforms {
     // xy = bottom-left corner of the quad in NDC (y-up).
     // zw = size in NDC (positive).
     ndc_rect: vec4<f32>,
-    _pad:     vec4<f32>,
+    // Button rects in texture UV coords: (u_min, v_min, u_max, v_max).
+    button_rects: array<vec4<f32>, 7>,
+    // Button fade values packed into vec4s: [0-3] in first, [4-6 + pad] in second.
+    button_fades_0: vec4<f32>,
+    button_fades_1: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: QuadUniforms;
@@ -1065,9 +1129,43 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
     return out;
 }
 
+// Get the fade value for button `i` from the packed vec4s.
+fn get_fade(i: u32) -> f32 {
+    if (i < 4u) {
+        return u.button_fades_0[i];
+    } else {
+        return u.button_fades_1[i - 4u];
+    }
+}
+
+// Check if `uv` is inside the button rect at index `i`.
+fn in_button(uv: vec2<f32>, i: u32) -> bool {
+    let r = u.button_rects[i];
+    return uv.x >= r.x && uv.x < r.z && uv.y >= r.y && uv.y < r.w;
+}
+
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    return textureSample(tex, samp, in.uv);
+    var color = textureSample(tex, samp, in.uv);
+
+    // Apply hover overlay for any button with a non-zero fade.
+    // Multiple buttons can have fades during crossfade transitions.
+    for (var i = 0u; i < NUM_BUTTONS; i = i + 1u) {
+        let fade = get_fade(i);
+        if (fade > 0.0 && in_button(in.uv, i)) {
+            // Blend 30% white at the current fade level.
+            // Source-over in premultiplied space: out = src + dst * (1 - src.a)
+            // src = (1, 1, 1, fade * 0.3) premultiplied = (fade*0.3, fade*0.3, fade*0.3, fade*0.3)
+            let overlay_a = fade * HOVER_OPACITY;
+            let overlay_rgb = vec3<f32>(overlay_a);
+            color = vec4<f32>(
+                color.rgb * (1.0 - overlay_a) + overlay_rgb,
+                color.a * (1.0 - overlay_a) + overlay_a
+            );
+        }
+    }
+
+    return color;
 }
 "#;
 

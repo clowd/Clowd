@@ -15,6 +15,7 @@
 
 pub mod assets;
 pub mod backend_bake;
+pub mod hover;
 pub mod layout;
 pub mod model;
 pub mod state;
