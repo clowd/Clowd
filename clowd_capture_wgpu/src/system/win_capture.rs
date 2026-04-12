@@ -1,3 +1,4 @@
+use crate::geometry::{RectExt, ScreenRect};
 use anyhow::Result;
 use std::{mem, ops::Deref, ptr};
 use windows::{
@@ -8,15 +9,11 @@ use windows::{
             BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateDCW, DeleteDC, DeleteObject, GetDIBits, GetWindowDC, ReleaseDC,
             SelectObject, BITMAPINFO, BITMAPINFOHEADER, CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, SRCCOPY,
         },
-        UI::{
-            HiDpi::GetDpiForSystem,
-            WindowsAndMessaging::{
-                GetDesktopWindow, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
-            },
+        UI::WindowsAndMessaging::{
+            GetDesktopWindow, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
         },
     },
 };
-use crate::geometry::{ScreenRect, RectExt};
 
 /// Raw bitmap product of `capture_desktop`. Public to its own module only;
 /// the public `CapturedDesktop` (defined in `system/mod.rs`) wraps this and
@@ -119,12 +116,7 @@ impl BoxHBITMAP {
 /// sampler hardware does the channel reorder for free. Skipping the CPU
 /// swap removes ~50 MB of memory traffic on a 4K capture and lops the
 /// rayon dispatch overhead off startup latency entirely.
-fn read_dibits_bgra(
-    box_hdc_mem: BoxHDC,
-    box_h_bitmap: BoxHBITMAP,
-    width: i32,
-    height: i32,
-) -> Result<Vec<u8>> {
+fn read_dibits_bgra(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, height: i32) -> Result<Vec<u8>> {
     let byte_count = (width as usize)
         .checked_mul(height as usize)
         .and_then(|n| n.checked_mul(4))
@@ -167,16 +159,6 @@ fn read_dibits_bgra(
     Ok(bgra)
 }
 
-/// System DPI scale for the current process. On per-monitor DPI aware
-/// processes (which winit configures for us by default in 0.30) this
-/// returns the effective scale of the *primary* monitor — 1.0 = 100%
-/// (96 DPI), 1.5 = 150%, 2.0 = 200%, etc. We treat this as "the" scale of
-/// the captured desktop; callers that need true per-monitor scaling
-/// should enumerate via `all_monitors()`.
-pub fn system_scale_factor() -> f32 {
-    unsafe { GetDpiForSystem() as f32 / 96.0 }
-}
-
 pub fn virtual_desktop() -> ScreenRect {
     unsafe {
         let vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -207,7 +189,17 @@ pub fn capture_desktop() -> Result<DesktopBitmap> {
 
         SelectObject(*box_hdc_mem, (*box_h_bitmap).into());
 
-        BitBlt(*box_hdc_mem, 0, 0, vw, vh, Some(*box_hdc_desktop_window), vx, vy, SRCCOPY | CAPTUREBLT)?;
+        BitBlt(
+            *box_hdc_mem,
+            0,
+            0,
+            vw,
+            vh,
+            Some(*box_hdc_desktop_window),
+            vx,
+            vy,
+            SRCCOPY | CAPTUREBLT,
+        )?;
 
         let bgra = read_dibits_bgra(box_hdc_mem, box_h_bitmap, vw, vh)?;
         Ok(DesktopBitmap {

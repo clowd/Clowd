@@ -14,13 +14,13 @@
 //!   * Render loop               — DxScreenCapture.cpp:833-906
 
 pub mod assets;
-pub mod backend_bake;
+pub mod renderer;
 pub mod hover;
 pub mod layout;
 pub mod model;
 pub mod state;
 
-pub use backend_bake::BakePanelBackend;
+pub use renderer::BakePanelBackend;
 pub use layout::compute_layout;
 pub use model::{button_defs, ButtonAction};
 pub use state::PanelState;
