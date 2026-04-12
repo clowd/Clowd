@@ -15,7 +15,7 @@ use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
 use crate::panel::{self, PanelState};
 use crate::platform;
 use crate::settings::CapturerSettings;
-use crate::system::{CapturedDesktop, SystemInterop};
+use crate::system::{CapturedDesktop, SystemInterop, WindowWalker};
 use crate::window_state::{spawn_render_thread, WindowHandle};
 
 /// Minimum zoom. The magnifier only ever enlarges the source.
@@ -228,6 +228,8 @@ pub struct App {
     input: InputState,
     /// Retained desktop pixel data for Copy/Save operations.
     desktop_buffer: Option<CapturedDesktop>,
+    /// Window walker: pre-detected window rects for click-to-select.
+    walker: Option<WindowWalker>,
 }
 
 impl App {
@@ -242,6 +244,7 @@ impl App {
             monitor_dpi: Vec::new(),
             vd_bounds: ScreenRect::zero(),
             desktop_buffer: None,
+            walker: None,
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
             // Zero here is a placeholder that never gets broadcast.
@@ -531,6 +534,14 @@ impl App {
 
         // Reset cursor
         window.set_cursor(CursorIcon::Default);
+
+        // Re-query the walker so the highlight reappears immediately
+        // under the cursor without waiting for the next mouse-move.
+        let pt = ScreenPoint::new(
+            self.input.virtual_cursor.x.round() as i32,
+            self.input.virtual_cursor.y.round() as i32,
+        );
+        self.input.selection = self.walker.as_ref().and_then(|w| w.hit_test(pt));
 
         // Broadcast cleared state to render threads
         self.broadcast_mouse_state();
@@ -853,6 +864,13 @@ impl ApplicationHandler for App {
         self.vd_bounds = captured.bounds;
         self.monitor_window_ids.clear();
 
+        // Snapshot visible windows for click-to-select. Done after the
+        // desktop capture but before our overlay windows are created so
+        // our own windows aren't in the enumeration.
+        let walker = SystemInterop::snapshot_windows();
+        self.input.selection = walker.hit_test(initial_mouse);
+        self.walker = Some(walker);
+
         // 2. Create one hidden, borderless window per monitor.
         let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(captured.monitors.len());
         for (i, m) in captured.monitors.iter().enumerate() {
@@ -1059,6 +1077,21 @@ impl ApplicationHandler for App {
                     // zoom-in transition doesn't need a GetCursorPos.
                     self.input.virtual_cursor =
                         ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
+                }
+
+                // Walker hover: when idle (no button held, no finalised
+                // selection) ask the window walker for the best capture
+                // target under the cursor. The result becomes the
+                // pre-highlight selection that a single click finalises.
+                if !self.input.mouse_down && !self.input.captured {
+                    let pt = ScreenPoint::new(
+                        self.input.virtual_cursor.x.round() as i32,
+                        self.input.virtual_cursor.y.round() as i32,
+                    );
+                    self.input.selection = self
+                        .walker
+                        .as_ref()
+                        .and_then(|w| w.hit_test(pt));
                 }
 
                 // Drag tracking: if the user is mid-press and hasn't yet
@@ -1318,13 +1351,23 @@ impl ApplicationHandler for App {
                         );
                         self.input.dragging = false;
                         // Selection itself is left alone here so a single
-                        // tap (no drag) doesn't blow away anything that
-                        // was pre-painted by the seed path. In practice
-                        // it should already be None at this point.
+                        // click on a walker-highlighted window keeps the
+                        // walker rect visible during the pending-drag
+                        // state. If the drag threshold is crossed the
+                        // selection switches to freeform; if the user
+                        // releases without crossing it the walker rect
+                        // is finalised as-is.
                     }
                     ElementState::Released => {
-                        let finalising =
-                            self.input.dragging && self.input.selection.is_some();
+                        // Finalise if we have a selection, haven't
+                        // captured yet, and a real press was tracked.
+                        // The `mouse_down` guard prevents panel button
+                        // clicks (which `return` before setting
+                        // `mouse_down`) from accidentally finalising
+                        // the walker rect that reset just restored.
+                        let finalising = self.input.mouse_down
+                            && !self.input.captured
+                            && self.input.selection.is_some();
                         let was_move_drag = matches!(
                             self.input.drag_mode,
                             Some(DragMode::Move),
