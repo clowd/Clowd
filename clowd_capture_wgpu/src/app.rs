@@ -6,14 +6,14 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
-use winit::window::{CursorIcon, Window, WindowId, WindowLevel};
+use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
 use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
 use crate::panel::{self, PanelState};
 use crate::platform;
 use crate::settings::CapturerSettings;
-use crate::system::SystemInterop;
+use crate::system::{CapturedDesktop, SystemInterop};
 use crate::window_state::{spawn_render_thread, WindowHandle};
 
 /// Minimum zoom. The magnifier only ever enlarges the source.
@@ -68,6 +68,16 @@ impl Hittest {
             Hittest::TopRight | Hittest::BottomLeft => CursorIcon::NeswResize,
         }
     }
+}
+
+/// Result of a Copy or Save action.
+enum ActionResult {
+    /// Operation completed successfully.
+    Success,
+    /// User cancelled the operation (e.g. dismissed save dialog).
+    Cancelled,
+    /// Operation failed with an error message.
+    Failed(String),
 }
 
 /// What kind of drag is currently in progress. Set on mouse-down,
@@ -214,6 +224,8 @@ pub struct App {
     /// DxScreenCapture.cpp:1844-1845).
     vd_bounds: ScreenRect,
     input: InputState,
+    /// Retained desktop pixel data for Copy/Save operations.
+    desktop_buffer: Option<CapturedDesktop>,
 }
 
 impl App {
@@ -227,6 +239,7 @@ impl App {
             monitor_bounds: Vec::new(),
             monitor_dpi: Vec::new(),
             vd_bounds: ScreenRect::zero(),
+            desktop_buffer: None,
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
             // Zero here is a placeholder that never gets broadcast.
@@ -264,6 +277,20 @@ impl App {
                 self.input.selection,
                 self.input.captured,
             );
+        }
+    }
+
+    /// Hide all capture windows.
+    fn hide_all_windows(&self) {
+        for h in self.windows.values() {
+            h.window.set_visible(false);
+        }
+    }
+
+    /// Show all capture windows.
+    fn show_all_windows(&self) {
+        for h in self.windows.values() {
+            h.window.set_visible(true);
         }
     }
 
@@ -364,6 +391,150 @@ impl App {
         }
     }
 
+    /// Extract the selected region from the desktop buffer, converting BGRA to RGBA.
+    /// Returns `None` if selection is outside bounds or buffer is missing.
+    fn extract_selection_rgba(&self) -> Option<(Vec<u8>, u32, u32)> {
+        let selection = self.input.selection?;
+        let buffer = self.desktop_buffer.as_ref()?;
+
+        // Convert selection from virtual-desktop coords to buffer-local coords
+        let buf_x = (selection.left() - buffer.bounds.left()).max(0) as u32;
+        let buf_y = (selection.top() - buffer.bounds.top()).max(0) as u32;
+        let sel_w = selection.width() as u32;
+        let sel_h = selection.height() as u32;
+
+        // Clamp to buffer bounds
+        if buf_x >= buffer.width || buf_y >= buffer.height {
+            return None;
+        }
+        let copy_w = sel_w.min(buffer.width - buf_x);
+        let copy_h = sel_h.min(buffer.height - buf_y);
+
+        if copy_w == 0 || copy_h == 0 {
+            return None;
+        }
+
+        // Extract sub-region with BGRA→RGBA conversion
+        let stride = (buffer.width * 4) as usize;
+        let mut rgba = Vec::with_capacity((copy_w * copy_h * 4) as usize);
+
+        for row in 0..copy_h {
+            let src_start = ((buf_y + row) as usize * stride) + (buf_x as usize * 4);
+            let src_end = src_start + (copy_w as usize * 4);
+            let src_row = &buffer.bgra[src_start..src_end];
+
+            for chunk in src_row.chunks_exact(4) {
+                // BGRA → RGBA: swap B and R
+                rgba.push(chunk[2]); // R
+                rgba.push(chunk[1]); // G
+                rgba.push(chunk[0]); // B
+                rgba.push(chunk[3]); // A
+            }
+        }
+
+        Some((rgba, copy_w, copy_h))
+    }
+
+    /// Copy the selected region to the clipboard.
+    fn handle_copy(&self) -> ActionResult {
+        let Some((rgba, width, height)) = self.extract_selection_rgba() else {
+            log::warn!("copy: no selection or failed to extract");
+            return ActionResult::Failed("No selection to copy".to_string());
+        };
+
+        match arboard::Clipboard::new() {
+            Ok(mut clipboard) => {
+                let img = arboard::ImageData {
+                    width: width as usize,
+                    height: height as usize,
+                    bytes: std::borrow::Cow::Owned(rgba),
+                };
+                if let Err(e) = clipboard.set_image(img) {
+                    log::error!("copy: clipboard set_image failed: {e}");
+                    ActionResult::Failed(format!("Failed to copy to clipboard: {e}"))
+                } else {
+                    log::info!("copied {}x{} image to clipboard", width, height);
+                    ActionResult::Success
+                }
+            }
+            Err(e) => {
+                log::error!("copy: failed to open clipboard: {e}");
+                ActionResult::Failed(format!("Failed to open clipboard: {e}"))
+            }
+        }
+    }
+
+    /// Save the selected region to a file via save dialog.
+    /// Save the selected region to a file via save dialog. Returns true on success.
+    /// Save the selected region to a file via save dialog.
+    fn handle_save(&self, window: &Window) -> ActionResult {
+        let Some((rgba, width, height)) = self.extract_selection_rgba() else {
+            log::warn!("save: no selection or failed to extract");
+            return ActionResult::Failed("No selection to save".to_string());
+        };
+
+        // Show save dialog (parented to capture window so it can't fall behind)
+        let path = rfd::FileDialog::new()
+            .add_filter("PNG Image", &["png"])
+            .add_filter("JPEG Image", &["jpg", "jpeg"])
+            .set_file_name("screenshot.png")
+            .set_parent(window)
+            .save_file();
+
+        let Some(mut path) = path else {
+            log::info!("save: dialog cancelled");
+            return ActionResult::Cancelled;
+        };
+
+        // Auto-append extension if missing
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase());
+
+        let format = match ext.as_deref() {
+            Some("png") => image::ImageFormat::Png,
+            Some("jpg") | Some("jpeg") => image::ImageFormat::Jpeg,
+            _ => {
+                // Default to PNG if no/unknown extension
+                path.set_extension("png");
+                image::ImageFormat::Png
+            }
+        };
+
+        // Create image and save
+        let img: image::RgbaImage =
+            image::ImageBuffer::from_raw(width, height, rgba).expect("buffer size matches");
+
+        if let Err(e) = img.save_with_format(&path, format) {
+            log::error!("save: failed to write {:?}: {e}", path);
+            ActionResult::Failed(format!("Failed to save file: {e}"))
+        } else {
+            log::info!("saved {}x{} image to {:?}", width, height, path);
+            ActionResult::Success
+        }
+    }
+
+    /// Reset the selection and return to draw mode.
+    fn handle_reset(&mut self, window: &Window) {
+        // Clear selection state
+        self.input.selection = None;
+        self.input.captured = false;
+        self.input.hittest = Hittest::Outside;
+        self.input.drag_mode = None;
+        self.input.drag_anchor_selection = None;
+
+        // Clear panel
+        self.clear_panel();
+
+        // Reset cursor
+        window.set_cursor(CursorIcon::Default);
+
+        // Broadcast cleared state to render threads
+        self.broadcast_mouse_state();
+
+        log::info!("selection reset");
+    }
 }
 
 /// Hit-test the cursor (in virtual-desktop pixels) against a captured
@@ -731,6 +902,10 @@ impl ApplicationHandler for App {
         //    to a plain dark clear.
         let snapshot = create_desktop_snapshot(&core.device, &core.queue, &captured);
 
+        // Store the captured desktop for Copy/Save operations. We move it here
+        // after the GPU upload (which only borrowed the data).
+        self.desktop_buffer = Some(captured);
+
         // 5. Finalise: build the pipeline using the snapshot's bind group
         //    layout (or no bind groups in the fallback path).
         let bootstrap = core.finalize(snapshot);
@@ -753,12 +928,13 @@ impl ApplicationHandler for App {
         //    is flipped visible. Each thread receives its monitor's bounds
         //    so it can compute its slice of the shared snapshot texture.
         //
-        //    `captured.monitors[i]`, `created[i]`, and `per_window[i]` are
-        //    aligned by construction (we built each list in the same order,
-        //    only ever skipping on error), so zipping is safe.
+        //    `desktop_buffer.monitors[i]`, `created[i]`, and `per_window[i]`
+        //    are aligned by construction (we built each list in the same
+        //    order, only ever skipping on error), so zipping is safe.
         let barrier = Arc::new(Barrier::new(per_window.len() + 1));
         let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(per_window.len());
-        for ((w, surface, hz), m) in per_window.into_iter().zip(captured.monitors.iter()) {
+        let monitors = &self.desktop_buffer.as_ref().unwrap().monitors;
+        for ((w, surface, hz), m) in per_window.into_iter().zip(monitors.iter()) {
             let id = w.id();
             let handle = spawn_render_thread(
                 w,
@@ -1050,7 +1226,54 @@ impl ApplicationHandler for App {
                             {
                                 let def = panel::button_defs()[idx];
                                 info!("panel click: {:?}", def.action);
-                                event_loop.exit();
+                                match def.action {
+                                    panel::ButtonAction::Copy => {
+                                        match self.handle_copy() {
+                                            ActionResult::Success => {
+                                                event_loop.exit();
+                                            }
+                                            ActionResult::Cancelled => {}
+                                            ActionResult::Failed(msg) => {
+                                                self.hide_all_windows();
+                                                if SystemInterop::show_error_retry_cancel("Copy Failed", &msg) {
+                                                    // Retry: just re-show windows, user can try again
+                                                    self.show_all_windows();
+                                                } else {
+                                                    // Cancel: exit app
+                                                    event_loop.exit();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    panel::ButtonAction::Save => {
+                                        match self.handle_save(handle_window) {
+                                            ActionResult::Success => {
+                                                event_loop.exit();
+                                            }
+                                            ActionResult::Cancelled => {}
+                                            ActionResult::Failed(msg) => {
+                                                self.hide_all_windows();
+                                                if SystemInterop::show_error_retry_cancel("Save Failed", &msg) {
+                                                    // Retry: just re-show windows, user can try again
+                                                    self.show_all_windows();
+                                                } else {
+                                                    // Cancel: exit app
+                                                    event_loop.exit();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    panel::ButtonAction::Reset => {
+                                        self.handle_reset(handle_window);
+                                    }
+                                    panel::ButtonAction::Exit => {
+                                        event_loop.exit();
+                                    }
+                                    // Upload, Edit, Video not yet implemented
+                                    _ => {
+                                        info!("action {:?} not yet implemented", def.action);
+                                    }
+                                }
                                 return;
                             }
                             // Captured: this mouse-down enters either

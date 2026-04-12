@@ -22,5 +22,5 @@ pub mod state;
 
 pub use backend_bake::BakePanelBackend;
 pub use layout::compute_layout;
-pub use model::button_defs;
+pub use model::{button_defs, ButtonAction};
 pub use state::PanelState;

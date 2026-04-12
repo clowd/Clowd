@@ -2,6 +2,9 @@
 mod win_capture;
 
 #[cfg(windows)]
+mod win_dialog;
+
+#[cfg(windows)]
 mod win_monitor;
 
 #[cfg(windows)]
@@ -97,6 +100,16 @@ impl SystemInterop {
             })
             .collect()
     }
+
+    /// Initialize dialog subsystem. Must be called once at startup.
+    pub fn init_dialogs() {
+        win_dialog::init();
+    }
+
+    /// Show a retry/cancel error dialog. Returns true if Retry, false if Cancel.
+    pub fn show_error_retry_cancel(title: &str, message: &str) -> bool {
+        win_dialog::show_error_retry_cancel(title, message)
+    }
 }
 
 #[cfg(not(windows))]
@@ -112,5 +125,16 @@ impl SystemInterop {
     pub fn capture_desktop() -> CapturedDesktop {
         let _ = xcap_impl::capture_desktop();
         unimplemented!("xcap path not wired to BGRA capture");
+    }
+
+    /// Initialize dialog subsystem. Must be called once at startup.
+    pub fn init_dialogs() {
+        // TODO: macOS implementation using CFUserNotificationDisplayAlert
+    }
+
+    /// Show a retry/cancel error dialog. Returns true if Retry, false if Cancel.
+    pub fn show_error_retry_cancel(_title: &str, _message: &str) -> bool {
+        // TODO: macOS implementation using CFUserNotificationDisplayAlert
+        false
     }
 }

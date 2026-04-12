@@ -18,8 +18,12 @@ resvg = { version = "0.47", default-features = false }
 usvg = { version = "0.47", default-features = false }
 tiny-skia = "0.12"
 swash = "0.2"
+arboard = "3.4"
+rfd = "0.15"
 
 [target.'cfg(windows)'.dependencies]
+xdialog = { version = "2.0", features = ["win32-direct"] }
+
 windows = { version = "0.62", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
