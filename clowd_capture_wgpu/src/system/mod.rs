@@ -10,8 +10,14 @@ mod win_monitor;
 #[cfg(windows)]
 mod win_mouse;
 
+#[cfg(windows)]
+mod win_walker;
+
 #[cfg(not(windows))]
 mod xcap_impl;
+
+#[cfg(windows)]
+pub use win_walker::WindowWalker;
 
 use crate::geometry::{ScreenPoint, ScreenRect};
 
@@ -99,6 +105,13 @@ impl SystemInterop {
     /// Show a retry/cancel error dialog. Returns true if Retry, false if Cancel.
     pub fn show_error_retry_cancel(title: &str, message: &str) -> bool {
         win_dialog::show_error_retry_cancel(title, message)
+    }
+
+    /// Enumerate visible top-level windows on the current virtual desktop.
+    /// Call once at capture startup, after the desktop bitmap is grabbed but
+    /// before overlay windows are created.
+    pub fn snapshot_windows() -> WindowWalker {
+        WindowWalker::snapshot()
     }
 }
 
