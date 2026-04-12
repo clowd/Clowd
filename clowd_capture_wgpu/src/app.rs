@@ -545,6 +545,64 @@ impl App {
 
         log::info!("selection reset");
     }
+
+    /// Dispatch a panel button action. Called from both mouse-click and
+    /// keyboard accelerator paths.
+    fn dispatch_button_action(
+        &mut self,
+        action: panel::ButtonAction,
+        event_loop: &ActiveEventLoop,
+        window: &Window,
+    ) {
+        log::info!("dispatch action: {:?}", action);
+        match action {
+            panel::ButtonAction::Copy => {
+                self.hide_all_windows();
+                match self.handle_copy() {
+                    ActionResult::Success => {
+                        event_loop.exit();
+                    }
+                    ActionResult::Cancelled => {
+                        self.show_all_windows();
+                    }
+                    ActionResult::Failed(msg) => {
+                        if SystemInterop::show_error_retry_cancel("Copy Failed", &msg) {
+                            self.show_all_windows();
+                        } else {
+                            event_loop.exit();
+                        }
+                    }
+                }
+            }
+            panel::ButtonAction::Save => {
+                self.hide_all_windows();
+                match self.handle_save(window) {
+                    ActionResult::Success => {
+                        event_loop.exit();
+                    }
+                    ActionResult::Cancelled => {
+                        self.show_all_windows();
+                    }
+                    ActionResult::Failed(msg) => {
+                        if SystemInterop::show_error_retry_cancel("Save Failed", &msg) {
+                            self.show_all_windows();
+                        } else {
+                            event_loop.exit();
+                        }
+                    }
+                }
+            }
+            panel::ButtonAction::Reset => {
+                self.handle_reset(window);
+            }
+            panel::ButtonAction::Exit => {
+                event_loop.exit();
+            }
+            _ => {
+                log::info!("action {:?} not yet implemented", action);
+            }
+        }
+    }
 }
 
 /// Hit-test the cursor (in virtual-desktop pixels) against a captured
@@ -1017,6 +1075,24 @@ impl ApplicationHandler for App {
             } => {
                 event_loop.exit();
             }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        state: ElementState::Pressed,
+                        logical_key: Key::Character(ref ch),
+                        repeat: false,
+                        ..
+                    },
+                ..
+            } => {
+                if self.input.captured {
+                    if let Some(c) = ch.chars().next() {
+                        if let Some(action) = panel::lookup_action_by_key(c) {
+                            self.dispatch_button_action(action, event_loop, handle_window);
+                        }
+                    }
+                }
+            }
             WindowEvent::Resized(new_size) => {
                 // Re-borrow `self.windows` briefly. No other mutation is
                 // in flight here, so this is safe.
@@ -1250,55 +1326,7 @@ impl ApplicationHandler for App {
                                 })
                             {
                                 let def = panel::button_defs()[idx];
-                                info!("panel click: {:?}", def.action);
-                                match def.action {
-                                    panel::ButtonAction::Copy => {
-                                        match self.handle_copy() {
-                                            ActionResult::Success => {
-                                                event_loop.exit();
-                                            }
-                                            ActionResult::Cancelled => {}
-                                            ActionResult::Failed(msg) => {
-                                                self.hide_all_windows();
-                                                if SystemInterop::show_error_retry_cancel("Copy Failed", &msg) {
-                                                    // Retry: just re-show windows, user can try again
-                                                    self.show_all_windows();
-                                                } else {
-                                                    // Cancel: exit app
-                                                    event_loop.exit();
-                                                }
-                                            }
-                                        }
-                                    }
-                                    panel::ButtonAction::Save => {
-                                        match self.handle_save(handle_window) {
-                                            ActionResult::Success => {
-                                                event_loop.exit();
-                                            }
-                                            ActionResult::Cancelled => {}
-                                            ActionResult::Failed(msg) => {
-                                                self.hide_all_windows();
-                                                if SystemInterop::show_error_retry_cancel("Save Failed", &msg) {
-                                                    // Retry: just re-show windows, user can try again
-                                                    self.show_all_windows();
-                                                } else {
-                                                    // Cancel: exit app
-                                                    event_loop.exit();
-                                                }
-                                            }
-                                        }
-                                    }
-                                    panel::ButtonAction::Reset => {
-                                        self.handle_reset(handle_window);
-                                    }
-                                    panel::ButtonAction::Exit => {
-                                        event_loop.exit();
-                                    }
-                                    // Upload, Edit, Video not yet implemented
-                                    _ => {
-                                        info!("action {:?} not yet implemented", def.action);
-                                    }
-                                }
+                                self.dispatch_button_action(def.action, event_loop, handle_window);
                                 return;
                             }
                             // Captured: this mouse-down enters either
