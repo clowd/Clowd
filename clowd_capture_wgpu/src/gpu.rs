@@ -196,7 +196,7 @@ impl GpuCore {
     pub fn finalize(self, snapshot: Option<Arc<DesktopSnapshot>>) -> GpuBootstrap {
         let shader = self
             .device
-            .create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+            .create_shader_module(wgpu::include_wgsl!("../shaders/desktop.wgsl"));
 
         // The pipeline must reference whichever bind groups the shader
         // expects. With a snapshot we use the snapshot's BGL (binding 0/1/2
