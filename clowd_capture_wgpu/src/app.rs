@@ -6,6 +6,8 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
+#[cfg(windows)]
+use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
@@ -856,7 +858,8 @@ impl ApplicationHandler for App {
         for (i, m) in captured.monitors.iter().enumerate() {
             let width = m.bounds.size.width.max(1) as u32;
             let height = m.bounds.size.height.max(1) as u32;
-            let attrs = Window::default_attributes()
+            #[allow(unused_mut)]
+            let mut attrs = Window::default_attributes()
                 .with_title("clowd capture")
                 .with_decorations(false)
                 .with_resizable(false)
@@ -866,6 +869,12 @@ impl ApplicationHandler for App {
                 // .with_window_level(WindowLevel::AlwaysOnTop)
                 .with_position(PhysicalPosition::new(m.bounds.origin.x, m.bounds.origin.y))
                 .with_inner_size(PhysicalSize::new(width, height));
+            // WS_EX_NOREDIRECTIONBITMAP: tells DWM not to create a redirection
+            // surface. Required for proper DXGI flip-model swap chain timing.
+            #[cfg(windows)]
+            {
+                attrs = attrs.with_no_redirection_bitmap(true);
+            }
             match event_loop.create_window(attrs) {
                 Ok(w) => {
                     let w = Arc::new(w);
