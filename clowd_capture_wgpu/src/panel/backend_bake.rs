@@ -235,12 +235,13 @@ impl BakePanelBackend {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            // Linear mag/min — the panel texture is always rendered
-            // near 1:1 (it was baked at the monitor's native DPI), but
-            // sub-pixel alignment at the quad edges benefits from a
-            // linear filter.
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            // Nearest filtering is critical for subpixel text. The baked
+            // texture contains per-RGB-channel coverage values that must
+            // hit the screen pixels exactly. Linear filtering would
+            // interpolate between texels and destroy the subpixel
+            // rendering, making text look blurry/washed-out.
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
