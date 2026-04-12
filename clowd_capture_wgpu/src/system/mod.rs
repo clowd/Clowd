@@ -47,11 +47,6 @@ pub struct CapturedDesktop {
     /// capture. May have negative origin coordinates when secondary
     /// monitors extend left/up of the primary.
     pub bounds: ScreenRect,
-    /// System DPI scale — equal to the *primary* monitor's scale on
-    /// per-monitor DPI aware processes (which winit configures by default).
-    /// 1.0 = 100% (96 DPI), 1.5 = 150%, 2.0 = 200%, etc. For the scale
-    /// of any other monitor, see `monitors`.
-    pub scale_factor: f32,
     /// Snapshot of the monitor topology at the same instant as the
     /// bitmap. Each entry carries that monitor's bounds (in the same
     /// raw-pixel virtual-desktop coordinate space as `bounds`) and its
@@ -72,10 +67,6 @@ impl SystemInterop {
         win_mouse::set_position(pos)
     }
 
-    pub fn virtual_desktop_bounds() -> ScreenRect {
-        win_capture::virtual_desktop()
-    }
-
     pub fn capture_desktop() -> CapturedDesktop {
         let bitmap = win_capture::capture_desktop().expect("Unable to capture desktop");
         CapturedDesktop {
@@ -83,7 +74,6 @@ impl SystemInterop {
             width: bitmap.width,
             height: bitmap.height,
             bounds: bitmap.bounds,
-            scale_factor: win_capture::system_scale_factor(),
             monitors: Self::all_monitors(),
         }
     }
@@ -117,10 +107,6 @@ impl SystemInterop {
     pub fn get_mouse_position() -> ScreenPoint {}
 
     pub fn set_mouse_position(pos: ScreenPoint) {}
-
-    pub fn virtual_desktop_bounds() -> ScreenRect {
-        xcap_impl::virtual_desktop_and_monitors().0
-    }
 
     pub fn capture_desktop() -> CapturedDesktop {
         let _ = xcap_impl::capture_desktop();

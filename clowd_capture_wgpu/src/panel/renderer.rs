@@ -27,11 +27,11 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
-use swash::scale::{Render, ScaleContext, Source};
 use swash::scale::image::Content;
+use swash::scale::{Render, ScaleContext, Source};
 use swash::zeno::Format;
 use swash::{FontRef, GlyphId};
-use tiny_skia::{FillRule, Paint, Pixmap, PixmapMut, Rect as SkRect, Transform};
+use tiny_skia::{Pixmap, Transform};
 
 use crate::geometry::{RectExt, ScreenRect};
 
@@ -135,11 +135,8 @@ impl BakePanelBackend {
                     // populated; we'll render the background without
                     // an icon. Using `from_str` with an empty <svg/>.
                     Arc::new(
-                        usvg::Tree::from_str(
-                            "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
-                            &usvg::Options::default(),
-                        )
-                        .expect("empty SVG parses"),
+                        usvg::Tree::from_str("<svg xmlns=\"http://www.w3.org/2000/svg\"/>", &usvg::Options::default())
+                            .expect("empty SVG parses"),
                     )
                 }
             }
@@ -148,8 +145,7 @@ impl BakePanelBackend {
         // --- Load font once -----------------------------------------------
         // `FontRef` borrows the byte slice; since `FONT_ROBOTO` is
         // `&'static [u8]`, the FontRef is `'static` too.
-        let font = FontRef::from_index(super::assets::FONT_ROBOTO, 0)
-            .expect("Roboto is valid TTF at build time");
+        let font = FontRef::from_index(super::assets::FONT_ROBOTO, 0).expect("Roboto is valid TTF at build time");
         let scale_ctx = ScaleContext::new();
 
         // --- Pipeline ------------------------------------------------------
@@ -158,9 +154,7 @@ impl BakePanelBackend {
         // existing fullscreen pass output.
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("panel bake quad shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("../../shaders/buttonpanel.wgsl").into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../../shaders/buttonpanel.wgsl").into()),
         });
 
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -172,9 +166,7 @@ impl BakePanelBackend {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(
-                            std::mem::size_of::<QuadUniforms>() as u64,
-                        ),
+                        min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<QuadUniforms>() as u64),
                     },
                     count: None,
                 },
@@ -182,7 +174,9 @@ impl BakePanelBackend {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        sample_type: wgpu::TextureSampleType::Float {
+                            filterable: true,
+                        },
                         view_dimension: wgpu::TextureViewDimension::D2,
                         multisampled: false,
                     },
@@ -405,8 +399,7 @@ impl BakePanelBackend {
             // (icon, label) — gap = (bh - icon - label) / 3. Falls back
             // to a non-negative gap if the button is too short.
             let v_gap = ((bh - icon_size - label_metrics.height) / 3.0).max(0.0);
-            let icon_left =
-                l + (bw / 2.0) - (icon_size / 2.0);
+            let icon_left = l + (bw / 2.0) - (icon_size / 2.0);
             let icon_top = t + v_gap;
 
             // Rasterize the SVG into a sub-pixmap sized to the icon,
@@ -423,27 +416,21 @@ impl BakePanelBackend {
                 Some(p) => p,
                 None => continue,
             };
-            resvg::render(
-                tree,
-                Transform::from_scale(sx, sy),
-                &mut icon_pm.as_mut(),
-            );
+            resvg::render(tree, Transform::from_scale(sx, sy), &mut icon_pm.as_mut());
             blit_pixmap(&mut pixmap, &icon_pm, icon_left as i32, icon_top as i32);
 
             // Draw the label. `draw_text_line` interprets `label_y`
             // as the top of the visible cap-height box, so we just
             // pass the y where we want the visible top of the text
             // to be (no ascent-vs-cap-height compensation needed).
-            let label_x =
-                l + (bw / 2.0) - (label_metrics.width / 2.0);
+            let label_x = l + (bw / 2.0) - (label_metrics.width / 2.0);
             // Empirical lift: the SVG icons all have a few pixels of
             // padding inside their viewBox, so the *visible* icon is
             // smaller than its bounding box and the bottom gap looks
             // pinched compared to the others. Pull the label up by
             // ~3 logical pixels (scaled to physical) to compensate.
             let label_lift = (2.0 * dpi).round();
-            let label_y =
-                icon_top + icon_size + v_gap - label_lift;
+            let label_y = icon_top + icon_size + v_gap - label_lift;
             let underline_thickness = dpi.round().max(1.0);
             self.draw_text_line(
                 &mut pixmap,
@@ -522,11 +509,7 @@ impl BakePanelBackend {
         // by their visible extent (not the full ascent box). Falls back
         // to ascent if the font doesn't expose cap_height.
         let m = self.font.metrics(&[]).scale(px);
-        let height = if m.cap_height > 0.0 {
-            m.cap_height
-        } else {
-            m.ascent
-        };
+        let height = if m.cap_height > 0.0 { m.cap_height } else { m.ascent };
         LineMetrics {
             width: total_w,
             height,
@@ -603,10 +586,7 @@ impl BakePanelBackend {
                 .format(Format::Subpixel)
                 .render(&mut scaler, gid);
             if let Some(image) = image {
-                if image.content == Content::SubpixelMask
-                    && image.placement.width > 0
-                    && image.placement.height > 0
-                {
+                if image.content == Content::SubpixelMask && image.placement.width > 0 && image.placement.height > 0 {
                     // `placement.left` is the offset from the pen x to
                     // the bitmap's left edge — already accounts for
                     // the glyph's bearing. `placement.top` is the
@@ -625,8 +605,7 @@ impl BakePanelBackend {
                     );
                     if underline == Some(i) {
                         underline_x_start = blit_x as f32;
-                        underline_x_end =
-                            underline_x_start + image.placement.width as f32;
+                        underline_x_end = underline_x_start + image.placement.width as f32;
                     }
                 } else if underline == Some(i) {
                     // No bitmap (e.g. space) — fall back to advance
@@ -697,7 +676,8 @@ impl BakePanelBackend {
         self.last_render_time = Some(now);
 
         // Update hover state and advance animation.
-        self.hover_animator.set_hover(state.hover_idx);
+        self.hover_animator
+            .set_hover(state.hover_idx);
         self.hover_animator.advance(dt);
 
         // Re-bake if the hash changed or no texture is cached yet.
@@ -718,8 +698,7 @@ impl BakePanelBackend {
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
                     format: wgpu::TextureFormat::Rgba8Unorm,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_DST,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                     view_formats: &[],
                 });
                 queue.write_texture(
@@ -780,15 +759,14 @@ impl BakePanelBackend {
                 // These are stable until the layout changes.
                 let panel_w = panel.width() as f32;
                 let panel_h = panel.height() as f32;
-                let button_rects_uv: [[f32; 4]; NUM_SVG_BUTTONS] =
-                    std::array::from_fn(|i| {
-                        let b = state.layout.buttons[i];
-                        let l = (b.left() - panel.left()) as f32 / panel_w;
-                        let t = (b.top() - panel.top()) as f32 / panel_h;
-                        let r = (b.right() - panel.left()) as f32 / panel_w;
-                        let bt = (b.bottom() - panel.top()) as f32 / panel_h;
-                        [l, t, r, bt]
-                    });
+                let button_rects_uv: [[f32; 4]; NUM_SVG_BUTTONS] = std::array::from_fn(|i| {
+                    let b = state.layout.buttons[i];
+                    let l = (b.left() - panel.left()) as f32 / panel_w;
+                    let t = (b.top() - panel.top()) as f32 / panel_h;
+                    let r = (b.right() - panel.left()) as f32 / panel_w;
+                    let bt = (b.bottom() - panel.top()) as f32 / panel_h;
+                    [l, t, r, bt]
+                });
 
                 self.cached = Some(CachedPanel {
                     texture,
@@ -926,12 +904,9 @@ fn blit_pixmap(dst: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
             }
             let inv_a = 255 - src_a;
             dst_data[di] = (src_data[si] as u32 + (dst_data[di] as u32 * inv_a + 127) / 255) as u8;
-            dst_data[di + 1] =
-                (src_data[si + 1] as u32 + (dst_data[di + 1] as u32 * inv_a + 127) / 255) as u8;
-            dst_data[di + 2] =
-                (src_data[si + 2] as u32 + (dst_data[di + 2] as u32 * inv_a + 127) / 255) as u8;
-            dst_data[di + 3] =
-                (src_data[si + 3] as u32 + (dst_data[di + 3] as u32 * inv_a + 127) / 255) as u8;
+            dst_data[di + 1] = (src_data[si + 1] as u32 + (dst_data[di + 1] as u32 * inv_a + 127) / 255) as u8;
+            dst_data[di + 2] = (src_data[si + 2] as u32 + (dst_data[di + 2] as u32 * inv_a + 127) / 255) as u8;
+            dst_data[di + 3] = (src_data[si + 3] as u32 + (dst_data[di + 3] as u32 * inv_a + 127) / 255) as u8;
         }
     }
 }
@@ -975,11 +950,7 @@ fn srgb_to_linear_lut() -> &'static [f32; 256] {
         let mut lut = [0.0f32; 256];
         for (i, slot) in lut.iter_mut().enumerate() {
             let c = i as f32 / 255.0;
-            *slot = if c <= 0.04045 {
-                c / 12.92
-            } else {
-                ((c + 0.055) / 1.055).powf(2.4)
-            };
+            *slot = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
         }
         lut
     })
@@ -1011,15 +982,7 @@ fn linear_to_srgb_lut() -> &'static [u8; 4096] {
 ///
 /// Assumes the destination pixel is opaque (alpha = 0xFF) — see the
 /// module-level comment for why that always holds inside the panel.
-fn blit_glyph_subpixel(
-    dst: &mut Pixmap,
-    coverage_rgba: &[u8],
-    w: usize,
-    h: usize,
-    x: i32,
-    y: i32,
-    text_rgba: [u8; 4],
-) {
+fn blit_glyph_subpixel(dst: &mut Pixmap, coverage_rgba: &[u8], w: usize, h: usize, x: i32, y: i32, text_rgba: [u8; 4]) {
     if w == 0 || h == 0 {
         return;
     }
@@ -1030,11 +993,7 @@ fn blit_glyph_subpixel(
     let l2s = linear_to_srgb_lut();
 
     let text_alpha = text_rgba[3] as f32 / 255.0;
-    let text_lin = [
-        s2l[text_rgba[0] as usize],
-        s2l[text_rgba[1] as usize],
-        s2l[text_rgba[2] as usize],
-    ];
+    let text_lin = [s2l[text_rgba[0] as usize], s2l[text_rgba[1] as usize], s2l[text_rgba[2] as usize]];
 
     let src_stride = w * 4;
     for gy in 0..(h as i32) {
@@ -1066,11 +1025,7 @@ fn blit_glyph_subpixel(
             // Dst is premultiplied sRGB. Because dst alpha is 0xFF here
             // (panel precondition), the premultiplied bytes equal the
             // straight-sRGB bytes, so we can index the LUT directly.
-            let dst_lin = [
-                s2l[data[di] as usize],
-                s2l[data[di + 1] as usize],
-                s2l[data[di + 2] as usize],
-            ];
+            let dst_lin = [s2l[data[di] as usize], s2l[data[di + 1] as usize], s2l[data[di + 2] as usize]];
             let out_lin = [
                 text_lin[0] * cov_r + dst_lin[0] * (1.0 - cov_r),
                 text_lin[1] * cov_g + dst_lin[1] * (1.0 - cov_g),
@@ -1087,16 +1042,4 @@ fn blit_glyph_subpixel(
             // the swapchain.
         }
     }
-}
-
-// These are unused right now but kept available for a later pass that
-// wants to draw filled paths (e.g. rounded corners). Suppress warnings.
-#[allow(dead_code)]
-fn _keep_tiny_skia_path_imports(
-    _: FillRule,
-    _: Paint<'_>,
-    _: PixmapMut<'_>,
-    _: SkRect,
-    _: Transform,
-) {
 }

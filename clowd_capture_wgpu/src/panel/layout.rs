@@ -50,8 +50,6 @@ pub struct PanelLayout {
     pub area_rect: ScreenRect,
     /// Clickable button rects in the same order as `BUTTON_DEFS`.
     pub buttons: [ScreenRect; NUM_SVG_BUTTONS],
-    /// Which direction the buttons extend from the area indicator.
-    pub orientation: PanelOrientation,
     /// The full panel bounding box (union of `area_rect` and all
     /// `buttons`). Cached because both backends need it for hit-testing
     /// and for converting the panel rect into the backend's local
@@ -234,7 +232,6 @@ pub fn compute_layout(
     Some(PanelLayout {
         area_rect,
         buttons,
-        orientation,
         panel_rect,
     })
 }
