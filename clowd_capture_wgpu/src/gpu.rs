@@ -110,12 +110,24 @@ pub fn bootstrap_window_gpu(
     adapter_hint: Option<(u32, u32)>,
 ) -> Result<(WindowGpu, wgpu::Surface<'static>)> {
     pollster::block_on(async {
+        #[allow(unused_mut)]
         let mut backend_options = wgpu::BackendOptions::default();
-        backend_options.dx12.latency_waitable_object =
-            wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
+
+        #[cfg(windows)]
+        {
+            backend_options.dx12.latency_waitable_object =
+                wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
+        }
+
+        #[cfg(windows)]
+        let backends = wgpu::Backends::DX12;
+        #[cfg(target_os = "macos")]
+        let backends = wgpu::Backends::METAL;
+        #[cfg(not(any(windows, target_os = "macos")))]
+        let backends = wgpu::Backends::VULKAN;
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::DX12,
+            backends,
             backend_options,
             ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
@@ -133,7 +145,7 @@ pub fn bootstrap_window_gpu(
                     vendor, device
                 );
                 let adapters = instance
-                    .enumerate_adapters(wgpu::Backends::DX12)
+                    .enumerate_adapters(backends)
                     .await;
                 let matched = adapters
                     .into_iter()
