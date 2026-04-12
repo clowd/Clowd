@@ -128,11 +128,16 @@ struct InputState {
     virtual_cursor: ScreenPointF,
     /// Magnifier scale in [ZOOM_MIN, ZOOM_MAX]. 1.0 = unzoomed (no anchor).
     zoom: f32,
-    /// Whether the OS cursor is currently pinned to `anchor`. Implied by
-    /// `zoom > 1`, but tracked explicitly so the start/stop transitions
-    /// (which need a single SetCursorPos warp) are driven by the wheel
-    /// handler and not by every CursorMoved event.
+    /// Whether the OS cursor is currently pinned to `anchor`. Once set
+    /// (when zoom first exceeds 1.0), persists until capture finalization
+    /// regardless of zoom level — "sticky" virtual-cursor mode avoids
+    /// glitchy physical↔virtual bouncing on rapid zoom changes.
     anchored: bool,
+    /// Set to `true` when `anchored` transitions from false to true.
+    /// The CursorMoved handler uses this to discard stale OS cursor
+    /// events that arrive before the SetCursorPos warp takes effect.
+    /// Cleared once a non-stale CursorMoved processes in anchored mode.
+    anchor_just_engaged: bool,
     /// Fixed point in virtual-desktop pixels (== real screen coords, since
     /// the origin of the virtual desktop *is* where primary monitor origin
     /// plus screen = real coords match). Computed once at startup as the
@@ -249,6 +254,7 @@ impl App {
                 virtual_cursor: ScreenPointF::new(0.0, 0.0),
                 zoom: 1.0,
                 anchored: false,
+                anchor_just_engaged: false,
                 anchor: ScreenPoint::new(0, 0),
                 mouse_down: false,
                 mouse_down_pt: None,
@@ -902,6 +908,7 @@ impl ApplicationHandler for App {
             virtual_cursor: initial_mouse_f,
             zoom: 1.0,
             anchored: false,
+            anchor_just_engaged: false,
             anchor,
             mouse_down: false,
             mouse_down_pt: None,
@@ -1120,6 +1127,25 @@ impl ApplicationHandler for App {
                     // Screens.cpp:IsAnchorPt + DxScreenCapture.cpp:1389.
                     if os_vd == self.input.anchor {
                         return;
+                    }
+                    // Stale-event guard: the first CursorMoved after
+                    // engaging the anchor may carry the *pre-warp* OS
+                    // cursor position. Detect by checking whether the
+                    // raw (unscaled) distance from anchor exceeds a
+                    // reasonable single-frame mouse displacement.
+                    if self.input.anchor_just_engaged {
+                        const STALE_THRESHOLD: f32 = 75.0;
+                        let raw_dx = (os_vd.x - self.input.anchor.x) as f32;
+                        let raw_dy = (os_vd.y - self.input.anchor.y) as f32;
+                        if raw_dx * raw_dx + raw_dy * raw_dy
+                            > STALE_THRESHOLD * STALE_THRESHOLD
+                        {
+                            // Almost certainly a stale pre-warp event.
+                            SystemInterop::set_mouse_position(self.input.anchor);
+                            return;
+                        }
+                        // Small delta — real post-warp movement.
+                        self.input.anchor_just_engaged = false;
                     }
                     let zoom = self.input.zoom;
                     let dx = (os_vd.x - self.input.anchor.x) as f32 / zoom;
@@ -1414,13 +1440,13 @@ impl ApplicationHandler for App {
                             // Snap zoom back to 1 and tear down the
                             // anchor when a selection is finalised
                             // (matches FrameMakeSelection at
-                            // DxScreenCapture.cpp:1816). The unanchor
-                            // sequence is the mirror of the wheel
-                            // handler's MouseAnchorStop branch below:
-                            // warp the OS cursor to the virtual cursor
-                            // so there's no visual jump.
+                            // DxScreenCapture.cpp:1816). This is the
+                            // sole exit from sticky virtual-cursor
+                            // mode: warp the OS cursor to the virtual
+                            // cursor so there's no visual jump.
                             if self.input.anchored {
                                 self.input.anchored = false;
+                                self.input.anchor_just_engaged = false;
                                 let restore = ScreenPoint::new(
                                     self.input.virtual_cursor.x.floor() as i32,
                                     self.input.virtual_cursor.y.floor() as i32,
@@ -1501,28 +1527,19 @@ impl ApplicationHandler for App {
                     return;
                 }
 
-                let was_anchored = self.input.anchored;
-                let will_anchor = new_zoom > 1.0;
-
-                if !was_anchored && will_anchor {
+                if !self.input.anchored && new_zoom > 1.0 {
                     // MouseAnchorStart (Screens.cpp:130-137): pin the OS
                     // cursor to the anchor. `virtual_cursor` already tracks
                     // the current cursor position, so the zoom appears
                     // centered on wherever the user was pointing.
                     self.input.anchored = true;
+                    self.input.anchor_just_engaged = true;
                     SystemInterop::set_mouse_position(self.input.anchor);
-                } else if was_anchored && !will_anchor {
-                    // MouseAnchorStop (Screens.cpp:161-167): un-pin by
-                    // moving the real OS cursor to where the virtual
-                    // cursor currently sits — no visual jump because the
-                    // virtual cursor was what the user saw.
-                    self.input.anchored = false;
-                    let restore = ScreenPoint::new(
-                        self.input.virtual_cursor.x.floor() as i32,
-                        self.input.virtual_cursor.y.floor() as i32,
-                    );
-                    SystemInterop::set_mouse_position(restore);
                 }
+                // Virtual cursor mode is sticky: once engaged it persists
+                // until capture finalization (mouse-up with a selection).
+                // At zoom=1 the delta math is (os-anchor)/1.0 — equivalent
+                // to physical tracking but via the anchor warp loop.
 
                 self.input.zoom = new_zoom;
                 self.broadcast_mouse_state();
