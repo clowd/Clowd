@@ -79,6 +79,7 @@ struct QuadUniforms {
 /// GPU-side resources cached for a single panel bake. Rebuilt whenever
 /// the panel texture changes size.
 struct CachedPanel {
+    #[allow(dead_code)]
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
     /// Destination in window-local physical pixels (left, top, right,
