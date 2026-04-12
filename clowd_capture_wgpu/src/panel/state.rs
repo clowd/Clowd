@@ -16,8 +16,8 @@ use super::layout::PanelLayout;
 ///   * the layout (button rects + area-indicator rect, all in
 ///     virtual-desktop pixels),
 ///   * the hover index (the button index under the cursor, if any) —
-///     so the bake backend can tint it with the 30% white overlay
-///     without having to see discrete mouse events,
+///     the render thread's `HoverAnimator` uses this to drive smooth
+///     crossfade animations handled in the shader,
 ///   * the selection's (width, height) — which drives the area
 ///     indicator text,
 ///   * the containing monitor's bounds and DPI — so the backend can
@@ -30,8 +30,8 @@ use super::layout::PanelLayout;
 pub struct PanelState {
     pub layout: PanelLayout,
     /// Index (0..NUM_SVG_BUTTONS) of the button currently under the
-    /// cursor, or `None`. The area indicator is never "hovered" —
-    /// hovering over it returns `None`.
+    /// cursor, or `None`. The render thread's `HoverAnimator` converts
+    /// this into per-button fade values for smooth crossfade animations.
     pub hover_idx: Option<usize>,
     /// Selection width / height in virtual-desktop pixels. Drives the
     /// `123 × 456` text in the area indicator.

@@ -34,3 +34,4 @@ resvg      = { version = "0.47", default-features = false }
 usvg       = { version = "0.47", default-features = false }
 tiny-skia  = "0.12"
 swash      = "0.2"
+
