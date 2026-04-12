@@ -7,6 +7,19 @@ edition = "2021"
 anyhow = "1.0"
 image = "0.25"
 euclid = "0.22"
+log = "0.4"
+simplelog = "0.12"
+winit = "0.30"
+wgpu = "29.0"
+num = "0.4"
+pollster = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
+resvg = { version = "0.47", default-features = false }
+usvg = { version = "0.47", default-features = false }
+tiny-skia = "0.12"
+swash = "0.2"
+
+[target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
@@ -14,24 +27,5 @@ windows = { version = "0.62", features = [
     "Win32_Graphics_Dwm",
     "Win32_System_SystemInformation",
 ] }
-winit = "0.30"
-wgpu = "29.0"
-rayon = "1.11"
-log = "0.4"
-num = "0.4"
-pollster = "0.4"
-bytemuck = { version = "1", features = ["derive"] }
-simplelog = "0.12"
 
-# --- panel rendering -------------------------------------------------------
-# resvg reuses usvg + tiny-skia under the hood, so their versions are pinned
-# together. swash handles all the font work — outline rasterization with
-# true LCD subpixel rendering (Format::Subpixel) and fractional positioning.
-# Used by cosmic-text under the hood; same code path Google's font stack
-# trusts. We previously used fontdue but it has a positioning bug in its
-# subpixel rasterizer.
-resvg      = { version = "0.47", default-features = false }
-usvg       = { version = "0.47", default-features = false }
-tiny-skia  = "0.12"
-swash      = "0.2"
-
+# Build dependencies removed - using nagac CLI for shader compilation
