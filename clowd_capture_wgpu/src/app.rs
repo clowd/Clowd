@@ -11,7 +11,7 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
-use crate::gpu::{create_desktop_snapshot, GpuCore, SharedGpu};
+use crate::gpu::bootstrap_window_gpu;
 use crate::panel::{self, PanelState};
 use crate::platform;
 use crate::settings::CapturerSettings;
@@ -200,8 +200,6 @@ struct InputState {
 
 pub struct App {
     settings: Arc<CapturerSettings>,
-    gpu: Option<Arc<SharedGpu>>,
-    instance: Option<wgpu::Instance>,
     windows: HashMap<WindowId, WindowHandle>,
     /// Stable, index-order list of window IDs parallel to
     /// `monitor_bounds` / `monitor_dpi`. Populated in `resumed()` in
@@ -226,8 +224,9 @@ pub struct App {
     /// DxScreenCapture.cpp:1844-1845).
     vd_bounds: ScreenRect,
     input: InputState,
-    /// Retained desktop pixel data for Copy/Save operations.
-    desktop_buffer: Option<CapturedDesktop>,
+    /// Retained desktop pixel data for Copy/Save operations. Shared
+    /// with render threads via Arc (read-only after capture).
+    desktop_buffer: Option<Arc<CapturedDesktop>>,
     /// Window walker: pre-detected window rects for click-to-select.
     walker: Option<WindowWalker>,
 }
@@ -236,8 +235,6 @@ impl App {
     pub fn new(settings: Arc<CapturerSettings>) -> Self {
         Self {
             settings,
-            gpu: None,
-            instance: None,
             windows: HashMap::new(),
             monitor_window_ids: Vec::new(),
             monitor_bounds: Vec::new(),
@@ -798,7 +795,7 @@ fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[ScreenRect]) {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // `resumed` can fire more than once on some platforms; only bootstrap once.
-        if self.gpu.is_some() {
+        if !self.windows.is_empty() {
             return;
         }
 
@@ -909,64 +906,57 @@ impl ApplicationHandler for App {
             return;
         }
 
-        // 3. Bootstrap wgpu core against the first window. We need the
-        //    device + queue before we can upload the snapshot, but we can't
-        //    build the pipeline yet because its layout depends on whether
-        //    the snapshot exists.
+        // 3. Wrap the captured desktop in Arc — shared read-only with
+        //    GPU bootstrap (for texture upload) and retained by the main
+        //    thread for Copy/Save operations. No copies; each consumer
+        //    just bumps the refcount.
         let first_window = created[0].0.clone();
-        let core = match pollster::block_on(GpuCore::new(first_window.clone())) {
-            Ok(c) => c,
-            Err(e) => {
-                error!("failed to initialize wgpu: {e:?}");
-                event_loop.exit();
-                return;
-            }
-        };
+        let captured = Arc::new(captured);
+        self.desktop_buffer = Some(captured.clone());
 
-        // 4. Upload the captured desktop into a shared GPU texture. Returns
-        //    `None` if the bitmap is larger than the adapter's max 2D
-        //    texture dimension — in that case the render threads fall back
-        //    to a plain dark clear.
-        let snapshot = create_desktop_snapshot(&core.device, &core.queue, &captured);
-
-        // Store the captured desktop for Copy/Save operations. We move it here
-        // after the GPU upload (which only borrowed the data).
-        self.desktop_buffer = Some(captured);
-
-        // 5. Finalise: build the pipeline using the snapshot's bind group
-        //    layout (or no bind groups in the fallback path).
-        let bootstrap = core.finalize(snapshot);
-
-        // 6. Build surfaces for windows 1..N on the main thread.
-        //    wgpu's raw-window-handle retrieval happens here, still on the
-        //    thread that owns the Window.
-        let mut per_window: Vec<(Arc<Window>, wgpu::Surface<'static>, f32)> =
-            Vec::with_capacity(created.len());
-        per_window.push((first_window.clone(), bootstrap.first_surface, created[0].1));
-        for (w, hz) in created.iter().skip(1) {
-            match bootstrap.instance.create_surface(w.clone()) {
-                Ok(s) => per_window.push((w.clone(), s, *hz)),
-                Err(e) => error!("failed to create surface for extra window: {e:?}"),
+        // 4. Bootstrap a separate wgpu Instance / Adapter / Device /
+        //    Queue per window **on the main thread** (winit's window
+        //    handle is only available here). Each window gets its own
+        //    DX12 command queue so swap chain presents are fully
+        //    independent — the prerequisite for Hardware: Independent
+        //    Flip on multi-monitor setups.
+        let monitors = &captured.monitors;
+        let mut gpu_setups: Vec<_> = Vec::with_capacity(created.len());
+        for ((w, _hz), m) in created.iter().zip(monitors.iter()) {
+            match bootstrap_window_gpu(w.clone(), &captured, m.adapter_id) {
+                Ok(pair) => gpu_setups.push(Some(pair)),
+                Err(e) => {
+                    error!("failed to bootstrap GPU for monitor {:?}: {e:?}", m.bounds);
+                    gpu_setups.push(None);
+                }
             }
         }
 
-        // 7. Spawn render threads behind a Barrier so the main thread waits
-        //    until every swapchain has a valid first frame before any window
-        //    is flipped visible. Each thread receives its monitor's bounds
-        //    so it can compute its slice of the shared snapshot texture.
-        //
-        //    `desktop_buffer.monitors[i]`, `created[i]`, and `per_window[i]`
-        //    are aligned by construction (we built each list in the same
-        //    order, only ever skipping on error), so zipping is safe.
-        let barrier = Arc::new(Barrier::new(per_window.len() + 1));
-        let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(per_window.len());
-        let monitors = &self.desktop_buffer.as_ref().unwrap().monitors;
-        for ((w, surface, hz), m) in per_window.into_iter().zip(monitors.iter()) {
+        // 5. Spawn render threads behind a Barrier so the main thread
+        //    waits until every swapchain has a valid first frame before
+        //    any window is flipped visible.
+        let ok_count = gpu_setups.iter().filter(|s| s.is_some()).count();
+        if ok_count == 0 {
+            error!("no GPU could be bootstrapped; exiting");
+            event_loop.exit();
+            return;
+        }
+        let barrier = Arc::new(Barrier::new(ok_count + 1));
+        let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(ok_count);
+        for (((w, hz), m), gpu_setup) in created
+            .into_iter()
+            .zip(monitors.iter())
+            .zip(gpu_setups.into_iter())
+        {
+            let (gpu, surface) = match gpu_setup {
+                Some(pair) => pair,
+                None => continue,
+            };
             let id = w.id();
             let handle = spawn_render_thread(
                 w,
                 surface,
-                bootstrap.shared.clone(),
+                gpu,
                 self.settings.clone(),
                 m.bounds,
                 m.scale_factor,
@@ -978,22 +968,15 @@ impl ApplicationHandler for App {
             self.monitor_window_ids.push(id);
         }
 
-        // 8. Wait until every render thread reports "frame 0 done". If any
-        //    thread panics before hitting the barrier this would block
-        //    forever — but draw_once handles all wgpu errors without
-        //    panicking, so that's not a real concern in normal operation.
+        // 6. Wait until every render thread reports "frame 0 done".
         barrier.wait();
 
-        // 9. Flip every window visible in one pass, then focus the first.
-        //    `first_window` is still in scope from step 2, so we can focus
-        //    it directly without round-tripping through the handles map.
+        // 7. Flip every window visible in one pass, then focus the first.
         for handle in handles.values() {
             handle.window.set_visible(true);
         }
         first_window.focus_window();
 
-        self.gpu = Some(bootstrap.shared);
-        self.instance = Some(bootstrap.instance);
         self.windows = handles;
     }
 

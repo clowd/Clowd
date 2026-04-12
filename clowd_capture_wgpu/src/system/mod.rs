@@ -32,6 +32,11 @@ pub struct MonitorInfo {
     pub scale_factor: f32,
     pub is_primary: bool,
     pub refresh_hz: f32,
+    /// PCI vendor + device IDs of the DXGI adapter driving this monitor.
+    /// Used by `bootstrap_window_gpu` to select the correct wgpu adapter
+    /// per window, matching the C++ version's per-monitor `AdapterIdx`.
+    /// `None` if DXGI enumeration failed (fallback to wgpu's default).
+    pub adapter_id: Option<(u32, u32)>,
 }
 
 /// Raw virtual-desktop snapshot. The pixel data is in BGRA byte order
@@ -84,14 +89,21 @@ impl SystemInterop {
     }
 
     pub fn all_monitors() -> Vec<MonitorInfo> {
+        // Build a map of GDI device name → (vendor_id, device_id) from DXGI.
+        let dxgi_map = win_monitor::build_dxgi_adapter_map();
+
         win_monitor::all()
             .expect("Unable to enumerate monitors")
             .into_iter()
-            .map(|m| MonitorInfo {
-                bounds: m.bounds(),
-                scale_factor: m.scale_factor,
-                is_primary: m.is_primary,
-                refresh_hz: m.frequency,
+            .map(|m| {
+                let adapter_id = dxgi_map.get(&m.name).copied();
+                MonitorInfo {
+                    bounds: m.bounds(),
+                    scale_factor: m.scale_factor,
+                    is_primary: m.is_primary,
+                    refresh_hz: m.frequency,
+                    adapter_id,
+                }
             })
             .collect()
     }

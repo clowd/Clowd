@@ -59,8 +59,7 @@ pub struct WindowUniforms {
 pub const WINDOW_UNIFORMS_SIZE: u64 = std::mem::size_of::<WindowUniforms>() as u64;
 
 /// The frozen-desktop snapshot uploaded to the GPU at startup. One per
-/// process — every render thread reads from the same `texture`/`view` and
-/// shares the same `bind_group_layout`.
+/// render thread — each thread uploads its own copy to its own device.
 pub struct DesktopSnapshot {
     /// Held to keep the GPU texture alive for the lifetime of the snapshot.
     /// Sampling goes through `view`; we never touch `texture` directly
@@ -78,76 +77,102 @@ pub struct DesktopSnapshot {
     pub vdesktop_size: [f32; 2],
 }
 
-/// GPU state shared by every render thread. Cheap to clone via `Arc`.
-/// The fields are all `Send + Sync` in wgpu 29.
-pub struct SharedGpu {
+/// GPU state owned by a single render thread. Each window gets its own
+/// device + queue so that swap chain presents are fully independent —
+/// the prerequisite for Hardware: Independent Flip on multi-monitor
+/// setups. In the C++ version each monitor had its own D3D11 device;
+/// this is the wgpu equivalent.
+pub struct WindowGpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub pipeline: wgpu::RenderPipeline,
     pub surface_format: wgpu::TextureFormat,
     /// `None` only if the desktop capture failed or its bitmap is larger
-    /// than the adapter's max 2D texture size. The render threads then fall
-    /// back to a plain dark clear.
+    /// than the adapter's max 2D texture size. The render thread then
+    /// falls back to a plain dark clear.
     pub snapshot: Option<Arc<DesktopSnapshot>>,
 }
 
-/// Phase 1 of GPU bootstrap: instance / adapter / device / queue / first
-/// surface. We need the device + queue to upload the desktop snapshot, but
-/// we can't create the render pipeline until we know whether the snapshot
-/// exists (because the pipeline layout depends on the snapshot's bind group
-/// layout). So bootstrap is split: build a `GpuCore`, optionally build a
-/// snapshot from it, then call `finalize` to produce the final `SharedGpu`.
-pub struct GpuCore {
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub instance: wgpu::Instance,
-    pub first_surface: wgpu::Surface<'static>,
-    pub surface_format: wgpu::TextureFormat,
-}
-
-/// Result of `GpuCore::finalize`. The `instance` is retained on the main
-/// thread so additional surfaces can be created for windows 1..N, and the
-/// `first_surface` (created against `first_window`) can be handed straight
-/// to the first render thread without re-creating it.
-pub struct GpuBootstrap {
-    pub shared: Arc<SharedGpu>,
-    pub instance: wgpu::Instance,
-    pub first_surface: wgpu::Surface<'static>,
-}
-
-impl GpuCore {
-    /// Bootstrap wgpu from the first window. DX12-only and explicitly
-    /// configured with `Dx12UseFrameLatencyWaitableObject::Wait` so that
-    /// `Surface::get_current_texture()` blocks on DXGI's frame-latency
-    /// waitable — the render thread's natural pacing source.
-    pub async fn new(first_window: Arc<Window>) -> Result<Self> {
-        // Explicit for reader clarity: `Wait` is already the Default, but we
-        // pin it so the intent survives future wgpu upgrades.
+/// Bootstrap a complete, independent wgpu stack for a single window.
+/// Called once per render thread so every swap chain gets its own DX12
+/// command queue — without this, multiple swap chains sharing a single
+/// device degrade from Hardware: Independent Flip to Composed: Flip
+/// because the shared command queue serialises their presents.
+///
+/// `adapter_hint` is the `(vendor_id, device_id)` of the DXGI adapter
+/// physically driving this monitor (populated from DXGI output
+/// enumeration). When present, we enumerate all wgpu adapters and
+/// prefer the one matching those IDs — so multi-GPU setups create
+/// each device on the adapter that actually scans out that monitor.
+pub fn bootstrap_window_gpu(
+    window: Arc<Window>,
+    captured: &CapturedDesktop,
+    adapter_hint: Option<(u32, u32)>,
+) -> Result<(WindowGpu, wgpu::Surface<'static>)> {
+    pollster::block_on(async {
         let mut backend_options = wgpu::BackendOptions::default();
         backend_options.dx12.latency_waitable_object =
             wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            // We rely on DX12 for the frame-latency waitable object, so
-            // force the backend rather than accepting whatever PRIMARY picks.
             backends: wgpu::Backends::DX12,
             backend_options,
             ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
 
-        let first_surface = instance.create_surface(first_window)?;
+        let surface = instance.create_surface(window)?;
 
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&first_surface),
-                force_fallback_adapter: false,
-            })
-            .await?;
+        // Try to pick the adapter that physically drives this monitor.
+        // If we have a DXGI adapter hint, enumerate all wgpu adapters and
+        // match by PCI vendor + device IDs. Fall back to request_adapter
+        // if the hint is missing or no match is found.
+        let adapter = match adapter_hint {
+            Some((vendor, device)) => {
+                info!(
+                    "adapter hint: vendor=0x{:04X} device=0x{:04X}",
+                    vendor, device
+                );
+                let adapters = instance
+                    .enumerate_adapters(wgpu::Backends::DX12)
+                    .await;
+                let matched = adapters
+                    .into_iter()
+                    .find(|a: &wgpu::Adapter| {
+                        let info = a.get_info();
+                        info.vendor == vendor
+                            && info.device == device
+                            && !surface.get_capabilities(a).formats.is_empty()
+                    });
+                if matched.is_some() {
+                    info!("matched DXGI adapter hint to wgpu adapter");
+                } else {
+                    warn!("no wgpu adapter matched DXGI hint; falling back to request_adapter");
+                }
+                matched
+            }
+            None => {
+                info!("no DXGI adapter hint; using request_adapter fallback");
+                None
+            }
+        };
+        let adapter = match adapter {
+            Some(a) => a,
+            None => {
+                instance
+                    .request_adapter(&wgpu::RequestAdapterOptions {
+                        power_preference: wgpu::PowerPreference::HighPerformance,
+                        compatible_surface: Some(&surface),
+                        force_fallback_adapter: false,
+                    })
+                    .await?
+            }
+        };
+        let adapter_info = adapter.get_info();
+        info!(
+            "selected adapter: \"{}\" (vendor=0x{:04X} device=0x{:04X} type={:?})",
+            adapter_info.name, adapter_info.vendor, adapter_info.device, adapter_info.device_type
+        );
 
-        // Bump max_texture_dimension_2d to whatever the adapter supports
-        // (DX12 reports 16384, vs. the default 8192). Multi-monitor virtual
-        // desktops can easily exceed 8192 wide.
         let adapter_limits = adapter.limits();
         let required_limits = wgpu::Limits {
             max_texture_dimension_2d: adapter_limits.max_texture_dimension_2d,
@@ -174,7 +199,7 @@ impl GpuCore {
         // colour shift at the moment of the window uncloaking, because the
         // user's eye has a direct "live desktop vs. our render" reference
         // in that instant. Non-sRGB in and non-sRGB out is byte-identical.
-        let caps = first_surface.get_capabilities(&adapter);
+        let caps = surface.get_capabilities(&adapter);
         let surface_format = caps
             .formats
             .iter()
@@ -182,80 +207,57 @@ impl GpuCore {
             .find(|f| !f.is_srgb())
             .unwrap_or(caps.formats[0]);
 
-        Ok(Self {
-            device,
-            queue,
-            instance,
-            first_surface,
-            surface_format,
-        })
-    }
+        let snapshot = create_desktop_snapshot(&device, &queue, captured);
 
-    /// Build the render pipeline (against the snapshot's BGL if present)
-    /// and assemble the shared GPU state. Consumes the core.
-    pub fn finalize(self, snapshot: Option<Arc<DesktopSnapshot>>) -> GpuBootstrap {
-        let shader = self
-            .device
+        let shader = device
             .create_shader_module(wgpu::include_wgsl!("../shaders/desktop.wgsl"));
 
-        // The pipeline must reference whichever bind groups the shader
-        // expects. With a snapshot we use the snapshot's BGL (binding 0/1/2
-        // = uniform/texture/sampler). Without a snapshot the render threads
-        // skip the draw entirely and rely on the clear colour, so the
-        // pipeline can be built with no bind groups — but it still has to
-        // be a valid pipeline because the render thread reaches `set_pipeline`
-        // unconditionally.
         let bind_group_layouts: Vec<Option<&wgpu::BindGroupLayout>> = match &snapshot {
             Some(snap) => vec![Some(&snap.bind_group_layout)],
             None => vec![],
         };
-        let layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("desktop pipeline layout"),
-                bind_group_layouts: &bind_group_layouts,
-                immediate_size: 0,
-            });
-        let pipeline = self
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("desktop pipeline"),
-                layout: Some(&layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: self.surface_format,
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                multiview_mask: None,
-                cache: None,
-            });
-
-        GpuBootstrap {
-            shared: Arc::new(SharedGpu {
-                device: self.device,
-                queue: self.queue,
-                pipeline,
-                surface_format: self.surface_format,
-                snapshot,
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("desktop pipeline layout"),
+            bind_group_layouts: &bind_group_layouts,
+            immediate_size: 0,
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("desktop pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
             }),
-            instance: self.instance,
-            first_surface: self.first_surface,
-        }
-    }
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        Ok((
+            WindowGpu {
+                device,
+                queue,
+                pipeline,
+                surface_format,
+                snapshot,
+            },
+            surface,
+        ))
+    })
 }
 
 /// Build the desktop snapshot: upload the captured BGRA bytes to a
@@ -264,7 +266,7 @@ impl GpuCore {
 /// define the bind group layout that the render pipeline + per-window bind
 /// groups will share. Returns `None` if the image is larger than the
 /// device's max 2D texture size — caller falls back to no-snapshot mode.
-pub fn create_desktop_snapshot(
+fn create_desktop_snapshot(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     captured: &CapturedDesktop,
@@ -323,8 +325,8 @@ pub fn create_desktop_snapshot(
         size,
     );
     // Force the upload to flush now rather than piggybacking on the first
-    // render thread's submission. Keeps "startup texture upload latency"
-    // attributable to the main thread.
+    // render submission. Keeps "startup texture upload latency"
+    // attributable to the bootstrap path.
     queue.submit(std::iter::empty());
 
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
