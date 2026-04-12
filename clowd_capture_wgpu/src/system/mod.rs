@@ -2,9 +2,6 @@
 mod win_capture;
 
 #[cfg(windows)]
-mod win_dialog;
-
-#[cfg(windows)]
 mod win_monitor;
 
 #[cfg(windows)]
@@ -114,12 +111,7 @@ impl SystemInterop {
     pub fn init() {
         use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
         let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-        win_dialog::init();
-    }
-
-    /// Show a retry/cancel error dialog. Returns true if Retry, false if Cancel.
-    pub fn show_error_retry_cancel(title: &str, message: &str) -> bool {
-        win_dialog::show_error_retry_cancel(title, message)
+        xdialog::init_win32_direct();
     }
 
     /// Enumerate visible top-level windows on the current virtual desktop.
@@ -143,7 +135,7 @@ impl SystemInterop {
 
     /// One-time platform init. Must be called early in `main()`.
     pub fn init() {
-        // TODO: macOS implementation
+        xdialog::init_maccf_direct();
     }
 
     /// Show a retry/cancel error dialog. Returns true if Retry, false if Cancel.

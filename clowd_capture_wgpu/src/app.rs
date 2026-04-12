@@ -554,6 +554,7 @@ impl App {
         event_loop: &ActiveEventLoop,
         window: &Window,
     ) {
+        use xdialog::XDialogIcon::Error as ErrorIcon;
         log::info!("dispatch action: {:?}", action);
         match action {
             panel::ButtonAction::Copy => {
@@ -566,7 +567,7 @@ impl App {
                         self.show_all_windows();
                     }
                     ActionResult::Failed(msg) => {
-                        if SystemInterop::show_error_retry_cancel("Copy Failed", &msg) {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             event_loop.exit();
@@ -584,7 +585,7 @@ impl App {
                         self.show_all_windows();
                     }
                     ActionResult::Failed(msg) => {
-                        if SystemInterop::show_error_retry_cancel("Save Failed", &msg) {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Save Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             event_loop.exit();

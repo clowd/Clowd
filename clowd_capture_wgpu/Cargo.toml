@@ -20,10 +20,9 @@ tiny-skia = "0.12"
 swash = "0.2"
 arboard = "3.4"
 rfd = "0.17"
+xdialog = { version = "2.1", features = ["win32-direct", "maccf-direct"] }
 
 [target.'cfg(windows)'.dependencies]
-xdialog = { version = "2.0", features = ["win32-direct"] }
-
 windows = { version = "0.62", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
