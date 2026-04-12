@@ -91,6 +91,13 @@ fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(floor(in.pos.xy));
     let captured = u.selection_params.y > 0.5;
+    let fade = clamp(u.params.x, 0.0, 1.0);
+
+    // Sample the desktop texture once — needed both for the grayscale
+    // path and as the base colour that overlay elements (crosshair,
+    // selection border) blend on top of during the fade-in.
+    let color = textureSample(desktop_tex, desktop_samp, in.uv);
+    let base = vec4<f32>(color.rgb, 1.0);
 
     // Crosshair: only when not captured. Once the user has finalised
     // a selection, the OS cursor takes over and the rendered crosshair
@@ -158,7 +165,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let on_thick_v_colour = adx <= wide_half && ady > chunk && ady <= chunk2;
         let on_thick_h_colour = ady <= wide_half && adx > chunk && adx <= chunk2;
         if (on_thin_colour || on_thick_v_colour || on_thick_h_colour) {
-            return u.crosshair_color;
+            return mix(base, u.crosshair_color, fade);
         }
 
         if (on_v_line || on_h_line) {
@@ -173,9 +180,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             let dash_coord = select(px.x, px.y, on_v_line);
             let phase = dash_coord % 8;
             if (phase < 4) {
-                return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+                return mix(base, vec4<f32>(0.0, 0.0, 0.0, 1.0), fade);
             }
-            return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+            return mix(base, vec4<f32>(1.0, 1.0, 1.0, 1.0), fade);
         }
     }
 
@@ -258,9 +265,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             let raw = f32(arc) - t_offset;
             let phase = raw - period * floor(raw / period);
             if (phase < half) {
-                return u.crosshair_color;
+                return mix(base, u.crosshair_color, fade);
             }
-            return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+            return mix(base, vec4<f32>(1.0, 1.0, 1.0, 1.0), fade);
         }
 
         // Fill area: the rect minus the 1-px inner ring reserved
@@ -270,16 +277,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let in_fill = px.x >= sx + 1 && px.x <= sz - 2
                    && px.y >= sy + 1 && px.y <= sw - 2;
         if (in_fill) {
-            // Skip the grayscale fade entirely — same bit-exact
-            // pass-through path as the existing fade==0.0 branch
-            // below.
-            let c = textureSample(desktop_tex, desktop_samp, in.uv);
-            return vec4<f32>(c.rgb, 1.0);
+            return base;
         }
     }
-
-    let color = textureSample(desktop_tex, desktop_samp, in.uv);
-    let fade = clamp(u.params.x, 0.0, 1.0);
 
     // fade = 0 is the common case during the hold phase. Pass through
     // bit-exactly — no sRGB math, no lerp rounding — so the rendered
@@ -287,7 +287,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // themselves are pixel-identical to what DWM was displaying. This
     // is what eliminates the "subtle colour shift" at window appearance.
     if (fade == 0.0) {
-        return vec4<f32>(color.rgb, 1.0);
+        return base;
     }
 
     // fade > 0: decode to linear light, apply the grayscale + darken,
