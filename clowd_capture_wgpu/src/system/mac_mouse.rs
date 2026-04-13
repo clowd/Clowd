@@ -8,6 +8,7 @@ extern "C" {
     fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;
     fn CGEventGetLocation(event: *const std::ffi::c_void) -> CGPoint;
     fn CFRelease(cf: *const std::ffi::c_void);
+    fn CGAssociateMouseAndMouseCursorPosition(connected: i32) -> i32;
 }
 
 pub fn get_position() -> ScreenPoint {
@@ -29,6 +30,12 @@ pub fn set_position(pos: ScreenPoint) {
     let scale = display_scale_at_physical_point(pos) as f64;
     let logical_pt = CGPoint::new(pos.x as f64 / scale, pos.y as f64 / scale);
     let _ = CGDisplay::warp_mouse_cursor_position(logical_pt);
+    // macOS suppresses mouse-moved events for ~0.25s after a cursor warp.
+    // Re-associating the mouse clears the suppression so the anchor-warp
+    // loop in the virtual cursor receives continuous CursorMoved events.
+    unsafe {
+        CGAssociateMouseAndMouseCursorPosition(1);
+    }
 }
 
 /// Find the scale factor of the display whose logical (CG point) bounds
