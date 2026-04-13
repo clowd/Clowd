@@ -23,6 +23,8 @@ const MIN_WINDOW_SIZE: i32 = 25;
 
 struct WindowEntry {
     rect: ScreenRect,
+    /// Window title text.
+    title: String,
 }
 
 /// Snapshot of the top-level window list in Z-order. Created once at capture
@@ -73,6 +75,15 @@ impl WindowWalker {
             .find(|w| w.rect.contains(point))
             .map(|w| w.rect)
     }
+
+    /// Same as [`hit_test`] but also returns the title of the top-level window
+    /// that contains the point.
+    pub fn hit_test_with_title(&self, point: ScreenPoint) -> Option<(ScreenRect, String)> {
+        self.windows
+            .iter()
+            .find(|w| w.rect.contains(point))
+            .map(|w| (w.rect, w.title.clone()))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +131,16 @@ fn evaluate_window(dict: &CFDictionary, accepted: &[WindowEntry]) -> Option<Wind
         return None;
     }
 
-    Some(WindowEntry { rect })
+    // Read the window title (kCGWindowName), defaulting to empty string.
+    let title = get_raw_value(dict, unsafe { window::kCGWindowName })
+        .map(|ptr| {
+            let cf_str: CFString =
+                unsafe { TCFType::wrap_under_get_rule(ptr as core_foundation::string::CFStringRef) };
+            cf_str.to_string()
+        })
+        .unwrap_or_default();
+
+    Some(WindowEntry { rect, title })
 }
 
 // ---------------------------------------------------------------------------

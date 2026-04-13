@@ -79,6 +79,8 @@ struct WindowEntry {
     hwnd: HWND,
     /// True visual bounds in system (virtual-desktop) coordinates.
     rect: ScreenRect,
+    /// Window title text.
+    title: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +218,88 @@ impl WindowWalker {
             None
         }
     }
+
+    /// Same as [`hit_test`] but also returns the title of the top-level window
+    /// that contains the point.
+    pub fn hit_test_with_title(&self, point: ScreenPoint) -> Option<(ScreenRect, String)> {
+        // Find the topmost (first in Z-order) window containing the point.
+        let top = self.windows.iter().find(|w| w.rect.contains(point))?;
+
+        let top_rect = top.rect;
+        let top_title = top.title.clone();
+        let mut ideal_rect = top_rect;
+
+        let sys_pt = POINT {
+            x: point.x,
+            y: point.y,
+        };
+
+        let mut current_hwnd = top.hwnd;
+        let mut parent_rect = top_rect;
+        let mut visible = true;
+
+        for _ in 0..MAX_CHILD_DEPTH {
+            // Convert the screen point to client coordinates of current window.
+            let mut client_pt = sys_pt;
+            unsafe {
+                let _ = ClientToScreen(current_hwnd, &mut client_pt);
+            }
+            // ClientToScreen goes client->screen; we need screen->client, so
+            // compute the offset and invert.
+            let offset_x = client_pt.x - sys_pt.x;
+            let offset_y = client_pt.y - sys_pt.y;
+            let child_pt = POINT {
+                x: sys_pt.x - offset_x,
+                y: sys_pt.y - offset_y,
+            };
+
+            let child = unsafe { RealChildWindowFromPoint(current_hwnd, child_pt) };
+            if child.0.is_null() || child == current_hwnd {
+                break;
+            }
+
+            // Get child's client rect in screen coordinates.
+            let Some(child_rect) = child_screen_rect(child) else {
+                break;
+            };
+
+            // Evaluate visibility of this child.
+            let ex_style = unsafe { GetWindowLongPtrW(child, GWL_EXSTYLE) } as u32;
+
+            if !visible {
+                // Inherited invisibility — parent was a toolbar or too small.
+            } else if (ex_style & WS_EX_TOOLWINDOW.0) != 0 {
+                visible = false; // floating toolbar
+            } else if child_rect.width() < MIN_WINDOW_CHILD_SIZE
+                || child_rect.height() < MIN_WINDOW_CHILD_SIZE
+            {
+                visible = false; // too small
+            }
+
+            // "Similar to parent" — child fills nearly the whole parent.
+            // Don't update ideal but keep walking for a more specific child.
+            let similar_to_parent = (child_rect.min_x() - parent_rect.min_x()).abs()
+                < MERGE_WITH_PARENT_THRESHOLD
+                && (child_rect.min_y() - parent_rect.min_y()).abs() < MERGE_WITH_PARENT_THRESHOLD
+                && (child_rect.max_x() - parent_rect.max_x()).abs() < MERGE_WITH_PARENT_THRESHOLD
+                && (child_rect.max_y() - parent_rect.max_y()).abs() < MERGE_WITH_PARENT_THRESHOLD;
+
+            if visible && !similar_to_parent {
+                ideal_rect = child_rect;
+            }
+
+            current_hwnd = child;
+            parent_rect = child_rect;
+        }
+
+        // Clip to the top-level window bounds.
+        let clipped = ideal_rect.intersection(&top_rect)?;
+        if clipped.width() > 0 && clipped.height() > 0 {
+            Some((clipped, top_title))
+        } else {
+            None
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +401,8 @@ fn evaluate_window(
             return None;
         }
 
-        Some(WindowEntry { hwnd, rect })
+        let title = get_window_text(hwnd);
+        Some(WindowEntry { hwnd, rect, title })
     }
 }
 

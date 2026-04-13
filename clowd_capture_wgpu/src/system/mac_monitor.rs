@@ -11,7 +11,7 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
     let main_id = unsafe { CGMainDisplayID() };
 
     let mut monitors = Vec::with_capacity(display_ids.len());
-    for &id in &display_ids {
+    for (i, &id) in display_ids.iter().enumerate() {
         let display = CGDisplay::new(id);
         let cg_bounds = display.bounds();
         let phys_w = display.pixels_wide() as u32;
@@ -40,6 +40,7 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
             scale_factor: scale,
             is_primary: id == main_id,
             refresh_hz,
+            name: format!("Display {}", i + 1),
             adapter_id: None,
         });
     }
