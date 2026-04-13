@@ -144,7 +144,6 @@ impl WindowWalker {
 }
 
 #[cfg(target_os = "macos")]
-#[allow(dead_code)]
 impl SystemInterop {
     /// One-time platform init. Must be called early in `main()`.
     pub fn init() {
@@ -160,8 +159,7 @@ impl SystemInterop {
     }
 
     pub fn capture_desktop() -> CapturedDesktop {
-        let (bitmap, monitors) =
-            mac_capture::capture_desktop().expect("Unable to capture desktop");
+        let (bitmap, monitors) = mac_capture::capture_desktop().expect("Unable to capture desktop");
         CapturedDesktop {
             bgra: bitmap.bgra,
             width: bitmap.width,
@@ -171,6 +169,7 @@ impl SystemInterop {
         }
     }
 
+    #[allow(dead_code)]
     pub fn all_monitors() -> Vec<MonitorInfo> {
         mac_monitor::all_monitors().expect("Unable to enumerate monitors")
     }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 
 use winit::application::ApplicationHandler;
@@ -234,6 +235,16 @@ pub struct App {
     desktop_buffer: Option<Arc<CapturedDesktop>>,
     /// Window walker: pre-detected window rects for click-to-select.
     walker: Option<WindowWalker>,
+    /// macOS: render threads increment this counter after frame 0.
+    /// `about_to_wait` snaps alpha to 1 once all threads have reported.
+    /// `None` after the reveal is complete (or on Windows where it's unused).
+    pending_show: Option<PendingShow>,
+}
+
+struct PendingShow {
+    ready_count: Arc<AtomicUsize>,
+    expected: usize,
+    visible_barrier: Arc<Barrier>,
 }
 
 impl App {
@@ -247,6 +258,7 @@ impl App {
             vd_bounds: ScreenRect::zero(),
             desktop_buffer: None,
             walker: None,
+            pending_show: None,
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
             // Zero here is a placeholder that never gets broadcast.
@@ -934,7 +946,11 @@ impl ApplicationHandler for App {
         self.input.selection = walker.hit_test(initial_mouse);
         self.walker = Some(walker);
 
-        // 2. Create one hidden, borderless window per monitor.
+        // 2. Create one borderless window per monitor.
+        //    On Windows: hidden (visible=false) — WS_EX_NOREDIRECTIONBITMAP
+        //    makes the later set_visible(true) instantaneous.
+        //    On macOS: visible but alpha=0 so Metal can render into it
+        //    without the hidden→visible compositor lag.
         let mut created: Vec<(Arc<Window>, f32)> = Vec::with_capacity(captured.monitors.len());
         for (i, m) in captured.monitors.iter().enumerate() {
             let width = m.bounds.size.width.max(1) as u32;
@@ -944,7 +960,7 @@ impl ApplicationHandler for App {
                 .with_title("clowd capture")
                 .with_decorations(false)
                 .with_resizable(false)
-                .with_visible(false)
+                .with_visible(cfg!(target_os = "macos"))
                 .with_transparent(false)
                 .with_active(i == 0)
                 // .with_window_level(WindowLevel::AlwaysOnTop)
@@ -976,7 +992,6 @@ impl ApplicationHandler for App {
         //    GPU bootstrap (for texture upload) and retained by the main
         //    thread for Copy/Save operations. No copies; each consumer
         //    just bumps the refcount.
-        let first_window = created[0].0.clone();
         let captured = Arc::new(captured);
         self.desktop_buffer = Some(captured.clone());
 
@@ -1007,7 +1022,13 @@ impl ApplicationHandler for App {
             event_loop.exit();
             return;
         }
-        let barrier = Arc::new(Barrier::new(ok_count + 1));
+        // Atomic counter: each render thread increments after frame 0.
+        let ready_count = Arc::new(AtomicUsize::new(0));
+        // Visible barrier: render threads wait here until the main thread
+        // confirms the windows are on screen, so the fade animation doesn't
+        // run while the window is still invisible.
+        let visible_barrier = Arc::new(Barrier::new(ok_count + 1));
+
         let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(ok_count);
         for (((w, hz), m), gpu_setup) in created
             .into_iter()
@@ -1028,22 +1049,46 @@ impl ApplicationHandler for App {
                 m.scale_factor,
                 hz,
                 initial_mouse_f,
-                barrier.clone(),
+                ready_count.clone(),
+                visible_barrier.clone(),
             );
             handles.insert(id, handle);
             self.monitor_window_ids.push(id);
         }
 
-        // 6. Wait until every render thread reports "frame 0 done".
-        barrier.wait();
-
-        // 7. Flip every window visible in one pass, then focus the first.
-        for handle in handles.values() {
-            handle.window.set_visible(true);
-        }
-        first_window.focus_window();
+        // Don't block — return to the event loop immediately. The loop
+        // is in Poll mode so `about_to_wait` fires on the next tick,
+        // checks if all render threads have finished frame 0, and reveals
+        // the windows + releases the visible barrier at that point. This
+        // keeps the run loop responsive on all platforms (critical on macOS
+        // where blocking prevents visual changes from taking effect).
+        self.pending_show = Some(PendingShow {
+            ready_count,
+            expected: ok_count,
+            visible_barrier,
+        });
 
         self.windows = handles;
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Check if all render threads have finished frame 0. If so,
+        // reveal the windows (set_visible / snap alpha), release the
+        // visible barrier so render threads start the colour→grayscale
+        // fade, then switch back to Wait mode so the loop idles.
+        if let Some(ref pending) = self.pending_show {
+            if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
+                platform::show_windows_atomically(self.windows.values().map(|h| &h.window));
+                if let Some(first_id) = self.monitor_window_ids.first() {
+                    if let Some(h) = self.windows.get(first_id) {
+                        h.window.focus_window();
+                    }
+                }
+                pending.visible_barrier.wait();
+                self.pending_show = None;
+                event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+            }
+        }
     }
 
     fn window_event(

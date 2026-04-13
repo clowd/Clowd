@@ -37,5 +37,6 @@ windows = { version = "0.62", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.25"
 core-foundation = "0.10"
-
-# Build dependencies removed - using nagac CLI for shader compilation
+objc2 = "0.5"
+objc2-app-kit = "0.2"
+objc2-foundation = "0.2"
