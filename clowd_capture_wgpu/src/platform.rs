@@ -43,6 +43,10 @@ pub fn apply_capture_window_tweaks(window: &winit::window::Window) {
             return;
         };
 
+        // Place above the Dock (level 20) and menu bar (level 24).
+        // winit's AlwaysOnTop only maps to NSFloatingWindowLevel (3).
+        ns_window.setLevel(25); // NSStatusWindowLevel
+
         let black = NSColor::blackColor();
         ns_window.setBackgroundColor(Some(&black));
         ns_window.setOpaque(true);
