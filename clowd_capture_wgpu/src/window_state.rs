@@ -129,7 +129,8 @@ pub fn spawn_render_thread(
     scale_factor: f32,
     refresh_hz: f32,
     initial_mouse: ScreenPointF,
-    first_frame_barrier: Arc<Barrier>,
+    ready_count: Arc<std::sync::atomic::AtomicUsize>,
+    visible_barrier: Arc<Barrier>,
 ) -> WindowHandle {
     let (tx, rx) = mpsc::channel();
     let thread_name = format!("render-{:?}", window.id());
@@ -145,7 +146,8 @@ pub fn spawn_render_thread(
                 scale_factor,
                 refresh_hz,
                 initial_mouse,
-                first_frame_barrier,
+                ready_count,
+                visible_barrier,
             );
         })
         .expect("spawn render thread");
@@ -166,7 +168,8 @@ fn render_thread_main(
     scale_factor: f32,
     refresh_hz: f32,
     initial_mouse: ScreenPointF,
-    first_frame_barrier: Arc<Barrier>,
+    ready_count: Arc<std::sync::atomic::AtomicUsize>,
+    visible_barrier: Arc<Barrier>,
 ) {
     // `refresh_hz` is accepted (and logged) for future use — DXGI's waitable
     // object handles the actual pacing, so we don't need the value for timing.
@@ -275,9 +278,10 @@ fn render_thread_main(
     // group cache.
     let mut panel_backend = BakePanelBackend::new(&gpu.device, gpu.surface_format);
 
-    // Frame 0 — the "first render before visible" requirement. Present
-    // synchronously, then signal the main thread so it can flip visibility.
-    // Fade is 0.0 here so the user's first glimpse is the original colour.
+    // Frame 0 — render once before the window is revealed so the first
+    // visible frame has content. On macOS the window starts at alpha=0;
+    // on Windows it starts hidden. Either way, this frame is never seen
+    // directly — it just primes the swap chain.
     draw_once(
         &surface,
         &gpu,
@@ -285,11 +289,24 @@ fn render_thread_main(
         snapshot_state.as_ref(),
         &mut panel_backend,
     );
-    first_frame_barrier.wait();
+    // Wait for all submitted GPU work to complete so the presented
+    // drawable is fully resolved before the window becomes visible.
+    let _ = gpu.device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: Some(std::time::Duration::from_secs(5)),
+    });
 
-    // Start the animation clock AFTER the barrier. The barrier wait is an
-    // unbounded interval (slowest render thread + main-thread set_visible
-    // hop), and we don't want any of that to eat into the 500ms budget.
+    // Signal the main thread that this render thread's frame 0 is done.
+    ready_count.fetch_add(1, std::sync::atomic::Ordering::Release);
+
+    // Wait for the main thread to actually reveal the windows (snap alpha
+    // to 1 / set_visible). Only then start the animation clock — otherwise
+    // the colour→grayscale fade runs while the window is still invisible.
+    visible_barrier.wait();
+
+    // Start the animation clock AFTER the visible barrier. The barrier
+    // waits are unbounded intervals and we don't want any of that to eat
+    // into the fade budget.
     let start = Instant::now();
 
     // Latest cursor position (virtual-desktop pixels, f32), zoom level,
@@ -339,9 +356,14 @@ fn render_thread_main(
         // staging ring buffer absorbs this without blocking.
         if let Some(state) = snapshot_state.as_mut() {
             let elapsed = start.elapsed().as_secs_f32();
-            let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
-            let inv = 1.0 - t;
-            let fade = 1.0 - inv * inv * inv * inv;
+            let fade = if cfg!(target_os = "macos") {
+                // macOS: skip the GPU fade — the window fades in via alpha.
+                1.0
+            } else {
+                let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
+                let inv = 1.0 - t;
+                1.0 - inv * inv * inv * inv
+            };
             state.uniforms.params[0] = fade;
 
             let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;

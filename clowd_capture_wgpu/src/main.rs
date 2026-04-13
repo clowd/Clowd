@@ -27,7 +27,10 @@ fn main() -> anyhow::Result<()> {
     system::SystemInterop::init();
 
     let event_loop = winit::event_loop::EventLoop::new()?;
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+    // Start in Poll mode so `about_to_wait` fires continuously while
+    // we wait for render threads to finish frame 0. Switched to Wait
+    // once the windows are revealed.
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
     // Built once and shared (Arc) with the App and every render thread.
     // The struct will grow over time; constructing it here keeps the
