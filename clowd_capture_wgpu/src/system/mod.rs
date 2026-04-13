@@ -22,6 +22,9 @@ mod mac_monitor;
 #[cfg(target_os = "macos")]
 mod mac_mouse;
 
+#[cfg(target_os = "macos")]
+mod mac_walker;
+
 use crate::geometry::{ScreenPoint, ScreenRect};
 
 /// Information about a single monitor, bundled together so callers don't
@@ -129,19 +132,8 @@ impl SystemInterop {
     }
 }
 
-// --- WindowWalker stub for non-Windows ---
-#[cfg(not(windows))]
-pub struct WindowWalker;
-
-#[cfg(not(windows))]
-impl WindowWalker {
-    pub fn snapshot() -> Self {
-        WindowWalker
-    }
-    pub fn hit_test(&self, _point: ScreenPoint) -> Option<ScreenRect> {
-        None
-    }
-}
+#[cfg(target_os = "macos")]
+pub use mac_walker::WindowWalker;
 
 #[cfg(target_os = "macos")]
 impl SystemInterop {

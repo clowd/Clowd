@@ -1086,6 +1086,10 @@ impl ApplicationHandler for App {
                 }
                 pending.visible_barrier.wait();
                 self.pending_show = None;
+                // Send the initial selection (from the pre-window walker
+                // hit-test) to every render thread so the highlight appears
+                // on the very first visible frame.
+                self.broadcast_mouse_state();
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
             }
         }
