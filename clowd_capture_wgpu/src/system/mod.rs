@@ -39,6 +39,10 @@ pub struct MonitorInfo {
     pub scale_factor: f32,
     pub is_primary: bool,
     pub refresh_hz: f32,
+    /// Human-readable display name (e.g. `\\.\DISPLAY1` on Windows, or
+    /// `"Display 1"` on macOS). Used by the Tips & Hotkeys panel to show
+    /// "Select monitor '[name]'" entries.
+    pub name: String,
     /// PCI vendor + device IDs of the DXGI adapter driving this monitor.
     /// Used by `bootstrap_window_gpu` to select the correct wgpu adapter
     /// per window, matching the C++ version's per-monitor `AdapterIdx`.
@@ -109,6 +113,7 @@ impl SystemInterop {
                     scale_factor: m.scale_factor,
                     is_primary: m.is_primary,
                     refresh_hz: m.frequency,
+                    name: m.name,
                     adapter_id,
                 }
             })
