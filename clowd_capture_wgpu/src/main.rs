@@ -2,12 +2,12 @@ mod app;
 mod geometry;
 mod gpu;
 mod img;
-mod panel;
 mod platform;
 mod render;
 mod selection;
 mod settings;
 mod system;
+mod ui;
 
 #[macro_use]
 extern crate log;

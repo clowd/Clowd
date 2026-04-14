@@ -1,5 +1,6 @@
-//! CPU drawing operations on `tiny_skia::Pixmap` buffers: rect fills,
-//! pixmap compositing, and ClearType-style subpixel text rasterization.
+//! Generic CPU drawing operations on `tiny_skia::Pixmap` buffers: rect
+//! fills, pixmap compositing, and ClearType-style subpixel text
+//! rasterization. Shared by every UI component that bakes a pixmap.
 
 use std::sync::OnceLock;
 
@@ -58,7 +59,7 @@ pub fn fill_rect(pixmap: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, rgba: [u8;
 
 /// Composite a smaller pre-rendered pixmap onto the main pixmap at a
 /// pixel offset. Both are premultiplied sRGBA. Used for stamping
-/// resvg output onto the panel.
+/// resvg output into a component's baked pixmap.
 pub fn blit_pixmap(dst: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
     let dst_w = dst.width() as i32;
     let dst_h = dst.height() as i32;
@@ -122,10 +123,9 @@ pub fn blit_pixmap(dst: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
 // subpixel rendering for the perceived quality.
 //
 // Precondition: the destination pixmap is opaque underneath the text
-// (alpha = 0xFF). The panel always satisfies this — `GRAY_RGBA` and
-// the accent colour are both opaque, the hover overlay leaves dst alpha
-// at 0xFF, and the textured-quad pipeline blends the *whole* baked
-// pixmap onto the screen with premultiplied alpha. We rely on this so
+// (alpha = 0xFF). Components that draw text on a transparent background
+// will render incorrectly. The textured-quad pipeline blends the *whole*
+// baked pixmap onto the screen with premultiplied alpha, so we rely on
 // we can read the destination RGB as plain sRGB rather than dividing
 // out a fractional alpha.
 
@@ -215,8 +215,8 @@ fn blit_glyph_subpixel(
             }
             let di = ((dy * dst_w + dx) * 4) as usize;
             // Dst is premultiplied sRGB. Because dst alpha is 0xFF here
-            // (panel precondition), the premultiplied bytes equal the
-            // straight-sRGB bytes, so we can index the LUT directly.
+            // (opaque-background precondition), the premultiplied bytes
+            // equal the straight-sRGB bytes, so we can index the LUT directly.
             let dst_lin = [
                 s2l[data[di] as usize],
                 s2l[data[di + 1] as usize],
