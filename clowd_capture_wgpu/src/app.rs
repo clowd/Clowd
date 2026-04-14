@@ -11,10 +11,11 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
-use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
+use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
 use crate::img::{self, ActionResult};
 use crate::gpu::bootstrap_window_gpu;
-use crate::panel::{self, PanelState};
+use crate::ui::command::Command;
+use crate::ui::components::panel::{self, ButtonPanelComponent};
 use crate::platform;
 use crate::selection::{
     clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode,
@@ -23,6 +24,8 @@ use crate::selection::{
 use crate::settings::CapturerSettings;
 use crate::system::{CapturedDesktop, SystemInterop, WindowWalker};
 use crate::render::{spawn_render_thread, RenderThreadParams, WindowHandle};
+use crate::ui::component::{AppContext, CursorHint, MonitorInfo, MouseEvent};
+use crate::ui::host::ComponentHost;
 
 /// Minimum zoom. The magnifier only ever enlarges the source.
 const ZOOM_MIN: f32 = 1.0;
@@ -121,16 +124,6 @@ struct InputState {
     /// "snap back when cursor returns into bounds" behaviour the user
     /// asked for.
     drag_anchor_selection: Option<ScreenRect>,
-    /// Cached panel state for the currently-finalised selection, or
-    /// `None` when no panel is visible. Computed on capture and
-    /// refreshed whenever the selection changes. The app thread's
-    /// own copy is used for hit-testing; a clone is shipped to the
-    /// relevant render thread via `RenderMsg::PanelState`.
-    panel_state: Option<PanelState>,
-    /// Index of the monitor (into `monitor_bounds`) whose window
-    /// currently owns the panel, or `None` if no panel is live. Used
-    /// to route panel state updates to only that thread.
-    panel_monitor_idx: Option<usize>,
 }
 
 pub struct App {
@@ -164,6 +157,11 @@ pub struct App {
     desktop_buffer: Option<Arc<CapturedDesktop>>,
     /// Window walker: pre-detected window rects for click-to-select.
     walker: Option<WindowWalker>,
+    /// Generic UI component manager. Owns all registered UI components
+    /// (button panel today; future: color picker, zoom readout, …).
+    /// `App` does not know what components exist — it only pushes
+    /// `AppContext` via `sync_components` and dispatches actions.
+    component_host: ComponentHost,
     /// macOS: render threads increment this counter after frame 0.
     /// `about_to_wait` snaps alpha to 1 once all threads have reported.
     /// `None` after the reveal is complete (or on Windows where it's unused).
@@ -178,6 +176,12 @@ struct PendingShow {
 
 impl App {
     pub fn new(settings: Arc<CapturerSettings>) -> Self {
+        // Register every component once at startup. The host drives their
+        // visibility from `AppContext` on each `sync_components` call.
+        // Adding a new component = one more `component_host.add(...)` line.
+        let mut component_host = ComponentHost::new();
+        component_host.add(Box::new(ButtonPanelComponent::new()));
+
         Self {
             settings,
             windows: HashMap::new(),
@@ -187,6 +191,7 @@ impl App {
             vd_bounds: ScreenRect::zero(),
             desktop_buffer: None,
             walker: None,
+            component_host,
             pending_show: None,
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
@@ -206,8 +211,6 @@ impl App {
                 hittest: Hittest::Outside,
                 drag_mode: None,
                 drag_anchor_selection: None,
-                panel_state: None,
-                panel_monitor_idx: None,
             },
         }
     }
@@ -243,110 +246,35 @@ impl App {
         }
     }
 
-    /// Recompute the panel layout from the currently-captured selection
-    /// and ship the new state to every render thread (`None` to
-    /// non-panel monitors, `Some(...)` to the one whose monitor owns
-    /// the panel). Called on initial capture, after move/resize
-    /// drags, and on hover changes.
+    /// Push the latest app state to all registered components. Each
+    /// component re-evaluates its placement and re-bakes as needed,
+    /// and the host ships snapshots to the appropriate render threads.
     ///
-    /// The panel lives on **one** monitor at a time: whichever one
-    /// contains the selection's centre. That matches the C++ behaviour
-    /// — `SetButtonPanelPositions` is called per-monitor with the same
-    /// selection, and only the monitor whose clipped selection rect
-    /// overlaps produces a visible panel.
-    fn recompute_panel(&mut self) {
-        let (sel, dpi, monitor_idx, monitor_bounds) = match (
-            self.input.selection,
-            self.monitor_bounds.is_empty(),
-        ) {
-            (Some(sel), false) => {
-                // Pick the monitor containing the selection's centre.
-                // Matches the "intersect the selection with the
-                // monitor's workspace" logic in the C++ — the centre
-                // lookup is a simpler equivalent for the common case.
-                let cx = (sel.left() + sel.right()) / 2;
-                let cy = (sel.top() + sel.bottom()) / 2;
-                let found = self
-                    .monitor_bounds
-                    .iter()
-                    .enumerate()
-                    .find(|(_, m)| {
-                        cx >= m.left() && cx < m.right() && cy >= m.top() && cy < m.bottom()
-                    })
-                    .map(|(i, m)| (i, *m));
-                match found {
-                    Some((i, mb)) => {
-                        let d = self.monitor_dpi.get(i).copied().unwrap_or(1.0);
-                        (sel, d, i, mb)
-                    }
-                    None => {
-                        self.clear_panel();
-                        return;
-                    }
-                }
-            }
-            _ => {
-                self.clear_panel();
-                return;
-            }
-        };
-
-        let Some(layout) = panel::compute_layout(monitor_bounds, sel, dpi) else {
-            self.clear_panel();
-            return;
-        };
-
-        // Fold the existing hover index forward if still valid —
-        // otherwise clear it. The caller updates hover after this
-        // returns when the user is actively moving the cursor.
-        let hover_idx = self.input.panel_state.as_ref().and_then(|p| p.hover_idx);
-
-        let new_state = PanelState {
-            layout,
-            hover_idx,
-            selection_size: (sel.width(), sel.height()),
-            monitor_bounds,
-            dpi_scale: dpi,
+    /// This is the *only* mechanism by which components observe app-level
+    /// state. If a new component needs new data to decide its layout,
+    /// add a field to `AppContext` here and populate it below.
+    fn sync_components(&mut self) {
+        let monitors: Vec<MonitorInfo> = self
+            .monitor_bounds
+            .iter()
+            .zip(self.monitor_dpi.iter())
+            .map(|(b, d)| MonitorInfo {
+                bounds: *b,
+                dpi_scale: *d,
+            })
+            .collect();
+        let ctx = AppContext {
+            monitors: &monitors,
+            selection: self.input.selection,
+            captured: self.input.captured,
+            virtual_cursor: self.input.virtual_cursor,
             accent_color: self.settings.crosshair_color,
         };
-
-        self.input.panel_state = Some(new_state.clone());
-        self.input.panel_monitor_idx = Some(monitor_idx);
-
-        // Broadcast: Some(...) to the owning monitor, None to the rest.
-        for (i, wid) in self.monitor_window_ids.iter().enumerate() {
-            if let Some(h) = self.windows.get(wid) {
-                if i == monitor_idx {
-                    h.update_panel_state(Some(new_state.clone()));
-                } else {
-                    h.update_panel_state(None);
-                }
-            }
-        }
-    }
-
-    /// Drop the current panel state and tell every render thread to
-    /// clear its backend. Called when capture is reset, when the
-    /// selection is dragged off-screen, or when a selection doesn't
-    /// overlap any monitor.
-    fn clear_panel(&mut self) {
-        if self.input.panel_state.is_none() && self.input.panel_monitor_idx.is_none() {
-            return;
-        }
-        self.input.panel_state = None;
-        self.input.panel_monitor_idx = None;
-        for h in self.windows.values() {
-            h.update_panel_state(None);
-        }
-    }
-
-    /// Hit-test the virtual cursor against the panel's buttons.
-    /// Returns `Some(button_index)` if over a button, `None` otherwise.
-    fn panel_button_under_cursor(&self) -> Option<usize> {
-        self.input.panel_state.as_ref().and_then(|p| {
-            p.layout
-                .hit_test(self.input.virtual_cursor.x, self.input.virtual_cursor.y)
-        })
+        self.component_host.sync(
+            &ctx,
+            &self.windows,
+            &self.monitor_window_ids,
+        );
     }
 
     /// Reset the selection and return to draw mode.
@@ -358,8 +286,8 @@ impl App {
         self.input.drag_mode = None;
         self.input.drag_anchor_selection = None;
 
-        // Clear panel
-        self.clear_panel();
+        // Components observe the cleared state and hide themselves.
+        self.sync_components();
 
         // Reset cursor
         window.set_cursor(CursorIcon::Default);
@@ -378,30 +306,27 @@ impl App {
         log::info!("selection reset");
     }
 
-    /// Dispatch a panel button action. Called from both mouse-click and
-    /// keyboard accelerator paths.
-    fn dispatch_button_action(
+    /// Dispatch a `Command` emitted by a component (or by a keyboard
+    /// accelerator). The single central place where the app maps the
+    /// shared `Command` vocabulary to concrete app-level effects.
+    fn dispatch_command(
         &mut self,
-        action: panel::ButtonAction,
+        command: Command,
         event_loop: &ActiveEventLoop,
         window: &Window,
     ) {
         use xdialog::XDialogIcon::Error as ErrorIcon;
-        log::info!("dispatch action: {:?}", action);
-        match action {
-            panel::ButtonAction::Copy => {
+        log::info!("dispatch command: {:?}", command);
+        match command {
+            Command::Copy => {
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => img::copy_to_clipboard(sel, buf),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
-                    ActionResult::Success => {
-                        event_loop.exit();
-                    }
-                    ActionResult::Cancelled => {
-                        self.show_all_windows();
-                    }
+                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
@@ -411,19 +336,15 @@ impl App {
                     }
                 }
             }
-            panel::ButtonAction::Save => {
+            Command::Save => {
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => img::save_to_file(sel, buf, window),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
-                    ActionResult::Success => {
-                        event_loop.exit();
-                    }
-                    ActionResult::Cancelled => {
-                        self.show_all_windows();
-                    }
+                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Save Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
@@ -433,14 +354,10 @@ impl App {
                     }
                 }
             }
-            panel::ButtonAction::Reset => {
-                self.handle_reset(window);
-            }
-            panel::ButtonAction::Exit => {
-                event_loop.exit();
-            }
-            _ => {
-                log::info!("action {:?} not yet implemented", action);
+            Command::Reset => self.handle_reset(window),
+            Command::Exit => event_loop.exit(),
+            Command::Upload | Command::Edit | Command::Video => {
+                log::info!("command {:?} not yet implemented", command);
             }
         }
     }
@@ -509,8 +426,6 @@ impl ApplicationHandler for App {
             hittest: Hittest::Outside,
             drag_mode: None,
             drag_anchor_selection: None,
-            panel_state: None,
-            panel_monitor_idx: None,
         };
         self.monitor_bounds = captured.monitors.iter().map(|m| m.bounds).collect();
         self.monitor_dpi = captured.monitors.iter().map(|m| m.scale_factor).collect();
@@ -681,10 +596,9 @@ impl ApplicationHandler for App {
     ) {
         // Extract the bits of the window handle we need upfront and
         // drop the `self.windows` borrow immediately. Keeping a live
-        // `&WindowHandle` across the match blocks all the panel
-        // mutators (`recompute_panel`, `clear_panel`) from running
-        // because they need `&mut self`. `Arc<Window>` is cheap to
-        // clone and `ScreenRect` is Copy, so this is effectively free.
+        // `&WindowHandle` across the match blocks `sync_components`
+        // from running because it needs `&mut self`. `Arc<Window>` is
+        // cheap to clone and `ScreenRect` is Copy, so this is effectively free.
         let (window, this_monitor_bounds) = match self.windows.get(&id) {
             Some(h) => (h.window.clone(), h.monitor_bounds),
             None => return,
@@ -722,8 +636,8 @@ impl ApplicationHandler for App {
             } => {
                 if self.input.captured {
                     if let Some(c) = ch.chars().next() {
-                        if let Some(action) = panel::lookup_action_by_key(c) {
-                            self.dispatch_button_action(action, event_loop, handle_window);
+                        if let Some(cmd) = panel::lookup_command_by_key(c) {
+                            self.dispatch_command(cmd, event_loop, handle_window);
                         }
                     }
                 }
@@ -893,11 +807,10 @@ impl ApplicationHandler for App {
                             )),
                         };
                         self.input.selection = new_sel;
-                        // Selection geometry changed during a drag
-                        // after capture → re-layout the panel so it
-                        // rides with the selection and the area
-                        // indicator text updates.
-                        self.recompute_panel();
+                        // Selection geometry changed during a drag after
+                        // capture → let every component observe the new
+                        // state and re-layout itself as needed.
+                        self.sync_components();
                     } else if let Some(sel) = self.input.selection {
                         // Hover hit-test only when no drag is active.
                         // The cursor is determined by the hover state;
@@ -915,39 +828,33 @@ impl ApplicationHandler for App {
                             handle_window.set_cursor(ht.cursor());
                         }
 
-                        // Panel hover tracking: if the cursor is over
-                        // one of the panel buttons, swap the cursor to
-                        // a click pointer and update the panel state
-                        // so the bake backend redraws the hovered
-                        // button with the 30% white overlay. A hover
-                        // change always rebroadcasts the panel state.
-                        let new_hover = self.panel_button_under_cursor();
-                        let old_hover =
-                            self.input.panel_state.as_ref().and_then(|p| p.hover_idx);
-                        if new_hover != old_hover {
-                            if let Some(p) = self.input.panel_state.as_mut() {
-                                p.hover_idx = new_hover;
-                            }
-                            // Rebroadcast the panel state to the owning
-                            // monitor only (other monitors already
-                            // have their panel cleared).
-                            if let (Some(idx), Some(state)) =
-                                (self.input.panel_monitor_idx, self.input.panel_state.clone())
-                            {
-                                if let Some(wid) = self.monitor_window_ids.get(idx) {
-                                    if let Some(h) = self.windows.get(wid) {
-                                        h.update_panel_state(Some(state));
-                                    }
-                                }
-                            }
-                            if new_hover.is_some() {
-                                handle_window.set_cursor(CursorIcon::Pointer);
-                            } else {
-                                // Fall back to whichever cursor the
-                                // selection hit-test wanted.
-                                handle_window.set_cursor(self.input.hittest.cursor());
-                            }
-                        }
+                        // Component hover tracking. The host decides
+                        // whether any component claims the cursor and
+                        // self-refreshes any component whose state
+                        // changed — the app just reads back the cursor
+                        // hint to pick an icon.
+                        let pos = self.input.virtual_cursor;
+                        let hint = self
+                            .component_host
+                            .hit_test(pos)
+                            .map(|(_id, h)| h)
+                            .unwrap_or(CursorHint::Default);
+                        let cursor = match hint {
+                            CursorHint::Pointer => CursorIcon::Pointer,
+                            CursorHint::Default => self.input.hittest.cursor(),
+                        };
+                        handle_window.set_cursor(cursor);
+                        // Deliver move to every visible component so hover
+                        // state can clear when the cursor leaves. The
+                        // host re-bakes/re-ships on NeedsOverlayUpdate/
+                        // NeedsRedraw internally; the app only cares
+                        // about Action/Dismiss here (neither fires on
+                        // a pure Move today).
+                        let _ = self.component_host.route_mouse_event(
+                            MouseEvent::Move { pos },
+                            &self.windows,
+                            &self.monitor_window_ids,
+                        );
                     }
                 }
 
@@ -961,14 +868,16 @@ impl ApplicationHandler for App {
                 match state {
                     ElementState::Pressed => {
                         if self.input.captured {
-                            // Panel click: if the cursor is over a
-                            // button, dispatch the action and exit.
-                            // Matches the v1 scope — real handlers
-                            // for save/copy/upload/etc. are deferred.
-                            if let Some(idx) = self.panel_button_under_cursor()
-                            {
-                                let def = panel::button_defs()[idx];
-                                self.dispatch_button_action(def.action, event_loop, handle_window);
+                            // Component click: route to the component
+                            // host. If a component emits a Command,
+                            // dispatch it.
+                            let pos = self.input.virtual_cursor;
+                            if let Some(cmd) = self.component_host.route_mouse_event(
+                                MouseEvent::Press { pos },
+                                &self.windows,
+                                &self.monitor_window_ids,
+                            ) {
+                                self.dispatch_command(cmd, event_loop, handle_window);
                                 return;
                             }
                             // Captured: this mouse-down enters either
@@ -1045,10 +954,9 @@ impl ApplicationHandler for App {
                             self.input.captured = false;
                             self.input.hittest = Hittest::Outside;
                             handle_window.set_cursor(CursorIcon::Default);
-                            // Selection dragged off-screen: tear down
-                            // the panel so we don't leave a ghost on
-                            // the previous monitor.
-                            self.clear_panel();
+                            // Selection dragged off-screen: let components
+                            // observe the cleared state and hide themselves.
+                            self.sync_components();
                         }
                         if finalising {
                             self.input.captured = true;
@@ -1087,18 +995,16 @@ impl ApplicationHandler for App {
                                 self.input.hittest = ht;
                                 handle_window.set_cursor(ht.cursor());
                             }
-                            // Compute the panel layout for the new
-                            // selection and broadcast it to the
-                            // render thread of the monitor that owns
-                            // the panel.
-                            self.recompute_panel();
+                            // Capture finalised: let every component see
+                            // the new state and place/bake itself.
+                            self.sync_components();
                         } else if self.input.captured
                             && self.input.selection.is_some()
                         {
                             // A move/resize drag just ended with the
-                            // selection still alive — update the panel
-                            // layout for the settled selection.
-                            self.recompute_panel();
+                            // selection still alive — re-sync so
+                            // components settle on the final rect.
+                            self.sync_components();
                         }
                         self.broadcast_mouse_state();
                     }

@@ -7,8 +7,9 @@ use winit::window::Window;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::{WindowGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
-use crate::panel::{BakePanelBackend, PanelState};
 use crate::settings::CapturerSettings;
+use crate::ui::backend::OverlayBackend;
+use crate::ui::component::{ComponentId, ComponentSnapshot};
 
 /// Duration of the colour → grayscale fade after the window first becomes
 /// visible. Tuned to feel "snappy but not snap" — under 300ms reads as a
@@ -36,14 +37,18 @@ pub enum RenderMsg {
         selection: Option<ScreenRect>,
         captured: bool,
     },
-    /// Panel visibility / content on this monitor. `Some(state)` is
-    /// sent only to the render thread whose monitor contains the
-    /// panel; every other render thread receives `None` (so the
-    /// backend can drop any cached GPU resources). The app thread
-    /// re-sends this whenever the selection changes, hover moves
-    /// between buttons, or the panel flips onto a different monitor.
-    PanelState(Option<PanelState>),
+    /// Component UI update. The render thread routes this to its
+    /// `OverlayBackend`. Replaces the old `PanelState` variant.
+    ComponentUpdate(ComponentUpdate),
     Shutdown,
+}
+
+/// A single component state update sent to a render thread.
+pub enum ComponentUpdate {
+    /// Show or update a component on this monitor.
+    Snapshot(ComponentSnapshot),
+    /// Remove a component from this monitor.
+    Remove(ComponentId),
 }
 
 /// Handle to a render thread, held by the main thread. Dropping it sends a
@@ -81,8 +86,8 @@ impl WindowHandle {
         });
     }
 
-    pub fn update_panel_state(&self, state: Option<PanelState>) {
-        let _ = self.tx.send(RenderMsg::PanelState(state));
+    pub fn send_component_update(&self, update: ComponentUpdate) {
+        let _ = self.tx.send(RenderMsg::ComponentUpdate(update));
     }
 }
 
@@ -261,10 +266,11 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         }
     });
 
-    // Construct this monitor's panel backend. Each render thread owns
+    // Construct this monitor's overlay backend. Each render thread owns
     // its own instance because each holds its own wgpu pipeline + bind
-    // group cache.
-    let mut panel_backend = BakePanelBackend::new(&gpu.device, gpu.surface_format);
+    // group cache. The backend is generic — it renders any component's
+    // pixmap as a textured quad.
+    let mut overlay_backend = OverlayBackend::new(&gpu.device, gpu.surface_format);
 
     // Frame 0 — render once before the window is revealed so the first
     // visible frame has content. On macOS the window starts at alpha=0;
@@ -275,7 +281,8 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         &gpu,
         &config,
         snapshot_state.as_ref(),
-        &mut panel_backend,
+        &mut overlay_backend,
+        monitor_bounds,
     );
     // Wait for all submitted GPU work to complete so the presented
     // drawable is fully resolved before the window becomes visible.
@@ -332,9 +339,10 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
                     selection = sel;
                     captured = cap;
                 }
-                Ok(RenderMsg::PanelState(state)) => {
-                    panel_backend.on_state_change(state.as_ref());
-                }
+                Ok(RenderMsg::ComponentUpdate(update)) => match update {
+                    ComponentUpdate::Snapshot(snap) => overlay_backend.on_snapshot(snap),
+                    ComponentUpdate::Remove(id) => overlay_backend.remove(id),
+                },
                 Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
                 Err(mpsc::TryRecvError::Empty) => break,
             }
@@ -366,7 +374,8 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             &gpu,
             &config,
             snapshot_state.as_ref(),
-            &mut panel_backend,
+            &mut overlay_backend,
+            monitor_bounds,
         );
     }
 }
@@ -472,7 +481,8 @@ fn draw_once(
     gpu: &WindowGpu,
     config: &wgpu::SurfaceConfiguration,
     snapshot_state: Option<&SnapshotState>,
-    panel_backend: &mut BakePanelBackend,
+    overlay_backend: &mut OverlayBackend,
+    monitor_bounds: ScreenRect,
 ) {
     let frame = match surface.get_current_texture() {
         wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
@@ -524,14 +534,15 @@ fn draw_once(
         }
     }
 
-    // Second render pass: the panel backend composes its UI (if any)
+    // Second render pass: the overlay backend composes all UI components
     // on top of the just-drawn desktop/selection layer.
-    panel_backend.render(
+    overlay_backend.render(
         &gpu.device,
         &gpu.queue,
         &mut encoder,
         &view,
         (config.width, config.height),
+        monitor_bounds,
     );
 
     gpu.queue.submit(std::iter::once(encoder.finish()));

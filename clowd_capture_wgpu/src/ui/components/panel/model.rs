@@ -1,4 +1,4 @@
-//! Button metadata — the static list of actions the panel exposes.
+//! Button metadata — the static list of commands the panel exposes.
 //!
 //! Mirrors `captureButtonDetails` at
 //! `clowd_capture_dx/DxScreenCapture.cpp:52-60`. Order matters: the same
@@ -7,24 +7,12 @@
 //! array — it lives at `buttonPositions[NUM_SVG_BUTTONS]` in the C++
 //! and as a separate field on `PanelLayout` here.
 
+use crate::ui::command::Command;
+
 /// Number of SVG buttons in the panel. Must match `NUM_SVG_BUTTONS` at
 /// `clowd_capture_dx/DxScreenCapture.h:9` and the length of
 /// `BUTTON_DEFS`. Used by the layout code to size the button row.
 pub const NUM_SVG_BUTTONS: usize = 7;
-
-/// What a button click dispatches. For this milestone all actions are
-/// logged + exit (see the plan); real handlers for save/copy/upload are
-/// deferred to a follow-up.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ButtonAction {
-    Upload,
-    Edit,
-    Video,
-    Copy,
-    Save,
-    Reset,
-    Exit,
-}
 
 /// Static metadata for one button. Fields mirror the C++
 /// `captureButtonDetail` struct at `DxScreenCapture.h:24-33`, plus the
@@ -32,10 +20,8 @@ pub enum ButtonAction {
 /// through `assets.rs` for lookups.
 #[derive(Debug, Clone, Copy)]
 pub struct ButtonDef {
-    /// Action this button dispatches on click. Matches the vkey in the
-    /// C++ code — we don't actually simulate WM_KEYDOWN, we route the
-    /// action directly instead.
-    pub action: ButtonAction,
+    /// Command this button emits on click.
+    pub command: Command,
     /// Display label. The C++ uses wide strings; we store UTF-8 and
     /// rasterize ASCII-only — no glyph in the labels needs shaping.
     pub label: &'static str,
@@ -59,8 +45,7 @@ pub struct ButtonDef {
 /// rather than this constant directly so the `NUM_SVG_BUTTONS`
 /// invariant is enforced by the return type.
 ///
-/// Accelerator keys (not stored — the runtime only dispatches
-/// `ButtonAction`):
+/// Accelerator keys (not stored — derived from `underline_idx`):
 ///   0: UPLOAD — U   (0x55)
 ///   1: EDIT   — E
 ///   2: VIDEO  — V   (0x56)
@@ -70,53 +55,53 @@ pub struct ButtonDef {
 ///   6: EXIT   — X   (0x58), underlined on the second char
 const BUTTON_DEFS: [ButtonDef; NUM_SVG_BUTTONS] = [
     ButtonDef {
-        action: ButtonAction::Upload,
+        command: Command::Upload,
         label: "UPLOAD",
         underline_idx: 0,
         primary: true,
-        svg_bytes: crate::panel::assets::SVG_UPLOAD,
+        svg_bytes: super::assets::SVG_UPLOAD,
     },
     ButtonDef {
-        action: ButtonAction::Edit,
+        command: Command::Edit,
         label: "EDIT",
         underline_idx: 0,
         primary: true,
-        svg_bytes: crate::panel::assets::SVG_EDIT,
+        svg_bytes: super::assets::SVG_EDIT,
     },
     ButtonDef {
-        action: ButtonAction::Video,
+        command: Command::Video,
         label: "VIDEO",
         underline_idx: 0,
         primary: true,
-        svg_bytes: crate::panel::assets::SVG_VIDEO,
+        svg_bytes: super::assets::SVG_VIDEO,
     },
     ButtonDef {
-        action: ButtonAction::Copy,
+        command: Command::Copy,
         label: "COPY",
         underline_idx: 0,
         primary: true,
-        svg_bytes: crate::panel::assets::SVG_COPY,
+        svg_bytes: super::assets::SVG_COPY,
     },
     ButtonDef {
-        action: ButtonAction::Save,
+        command: Command::Save,
         label: "SAVE",
         underline_idx: 0,
         primary: true,
-        svg_bytes: crate::panel::assets::SVG_SAVE,
+        svg_bytes: super::assets::SVG_SAVE,
     },
     ButtonDef {
-        action: ButtonAction::Reset,
+        command: Command::Reset,
         label: "RESET",
         underline_idx: 0,
         primary: false,
-        svg_bytes: crate::panel::assets::SVG_RESET,
+        svg_bytes: super::assets::SVG_RESET,
     },
     ButtonDef {
-        action: ButtonAction::Exit,
+        command: Command::Exit,
         label: "EXIT",
         underline_idx: 1,
         primary: false,
-        svg_bytes: crate::panel::assets::SVG_EXIT,
+        svg_bytes: super::assets::SVG_EXIT,
     },
 ];
 
@@ -138,12 +123,12 @@ pub const fn button_defs() -> &'static [ButtonDef; NUM_SVG_BUTTONS] {
     &BUTTON_DEFS
 }
 
-/// Look up a `ButtonAction` by its accelerator key (case-insensitive).
-/// Returns `None` if no button matches.
-pub fn lookup_action_by_key(c: char) -> Option<ButtonAction> {
+/// Look up a panel button `Command` by its accelerator key
+/// (case-insensitive). Returns `None` if no button matches.
+pub fn lookup_command_by_key(c: char) -> Option<Command> {
     let lower = c.to_ascii_lowercase();
     button_defs()
         .iter()
         .find(|def| def.accel_key() == lower)
-        .map(|def| def.action)
+        .map(|def| def.command)
 }
