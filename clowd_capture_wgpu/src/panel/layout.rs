@@ -14,6 +14,7 @@
 //! identical pixel positions at every DPI.
 
 use crate::geometry::{RectExt, ScreenRect};
+use crate::selection::intersect_rects;
 
 use super::model::NUM_SVG_BUTTONS;
 
@@ -95,7 +96,7 @@ pub fn compute_layout(
     // Clip the selection to the monitor. Mirrors
     // `Gdiplus::Rect::Intersect(selection, screenBounds, ...)` at
     // DxScreenCapture.cpp:130.
-    let sel = intersect(monitor_bounds, selection)?;
+    let sel = intersect_rects(monitor_bounds, selection)?;
 
     // `dpi_zoom = screen.dpi / BASE_DPI` in the C++. Our caller already
     // hands us that ratio as `dpi_scale` (1.0 = 100%, 1.5 = 150%, …), so
@@ -236,18 +237,3 @@ pub fn compute_layout(
     })
 }
 
-/// Integer rect intersection. Returns `None` if the rects don't overlap.
-/// Duplicated here (rather than reusing `app::intersect_rects`) so this
-/// module stays free of `app` dependencies — the test of "layout is
-/// pure" is that it can be exercised without bringing up winit or wgpu.
-fn intersect(a: ScreenRect, b: ScreenRect) -> Option<ScreenRect> {
-    let l = a.left().max(b.left());
-    let t = a.top().max(b.top());
-    let r = a.right().min(b.right());
-    let bot = a.bottom().min(b.bottom());
-    if r > l && bot > t {
-        Some(ScreenRect::from_exact(l, t, r, bot))
-    } else {
-        None
-    }
-}

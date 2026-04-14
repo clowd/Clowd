@@ -97,6 +97,28 @@ impl Drop for WindowHandle {
     }
 }
 
+/// Per-monitor parameters for spawning a render thread.
+pub struct RenderThreadParams {
+    pub window: Arc<Window>,
+    pub surface: wgpu::Surface<'static>,
+    pub gpu: WindowGpu,
+    pub settings: Arc<CapturerSettings>,
+    /// This window's monitor in virtual-desktop screen coordinates.
+    pub monitor_bounds: ScreenRect,
+    /// DPI scale (1.0 = 100%). Written into the uniform so the shader
+    /// can size the coloured crosshair arms in physical pixels.
+    pub scale_factor: f32,
+    /// Monitor refresh rate. Accepted for future non-DX12 backends.
+    pub refresh_hz: f32,
+    /// Cursor position (virtual-desktop pixels, f32) sampled *before*
+    /// any window was created, so frame 0 renders the crosshair correctly.
+    pub initial_mouse: ScreenPointF,
+    /// Atomically incremented when this thread finishes frame 0.
+    pub ready_count: Arc<std::sync::atomic::AtomicUsize>,
+    /// Blocks until the main thread reveals all windows.
+    pub visible_barrier: Arc<Barrier>,
+}
+
 /// Spawn a render thread for a single window.
 ///
 /// The render thread takes ownership of `surface` and `gpu` — one complete
@@ -105,50 +127,15 @@ impl Drop for WindowHandle {
 /// (Hardware: Independent Flip). The GPU bootstrap happens on the main
 /// thread (winit's window handle is only available there); the render
 /// thread configures the surface and enters the blocking-present loop.
-///
-/// `monitor_bounds` is this window's monitor in virtual-desktop screen
-/// coordinates. The thread uses it (combined with the snapshot's
-/// virtual-desktop bounds) to compute its slice of the desktop texture.
-/// `scale_factor` is this monitor's DPI scale (1.0 = 100 %) and is
-/// written once into the uniform so the shader can size the coloured
-/// crosshair arms in physical pixels. `settings` is the shared
-/// `CapturerSettings`; the render thread reads it once at startup
-/// (currently only `crosshair_color`) and stashes the values into the
-/// per-window uniform.
-///
-/// `initial_mouse` is the cursor position (virtual-desktop screen
-/// pixels, as f32) sampled by the main thread *before* any window was
-/// created, so the very first frame can render the crosshair at the
-/// correct spot without ever querying the OS from the render thread.
-pub fn spawn_render_thread(
-    window: Arc<Window>,
-    surface: wgpu::Surface<'static>,
-    gpu: WindowGpu,
-    settings: Arc<CapturerSettings>,
-    monitor_bounds: ScreenRect,
-    scale_factor: f32,
-    refresh_hz: f32,
-    initial_mouse: ScreenPointF,
-    ready_count: Arc<std::sync::atomic::AtomicUsize>,
-    visible_barrier: Arc<Barrier>,
-) -> WindowHandle {
+pub fn spawn_render_thread(params: RenderThreadParams) -> WindowHandle {
     let (tx, rx) = mpsc::channel();
+    let monitor_bounds = params.monitor_bounds;
+    let window = params.window.clone();
     let thread_name = format!("render-{:?}", window.id());
     let thread = thread::Builder::new()
         .name(thread_name)
         .spawn(move || {
-            render_thread_main(
-                surface,
-                gpu,
-                settings,
-                rx,
-                monitor_bounds,
-                scale_factor,
-                refresh_hz,
-                initial_mouse,
-                ready_count,
-                visible_barrier,
-            );
+            render_thread_main(params, rx);
         })
         .expect("spawn render thread");
     WindowHandle {
@@ -159,18 +146,19 @@ pub fn spawn_render_thread(
     }
 }
 
-fn render_thread_main(
-    surface: wgpu::Surface<'static>,
-    gpu: WindowGpu,
-    settings: Arc<CapturerSettings>,
-    rx: mpsc::Receiver<RenderMsg>,
-    monitor_bounds: ScreenRect,
-    scale_factor: f32,
-    refresh_hz: f32,
-    initial_mouse: ScreenPointF,
-    ready_count: Arc<std::sync::atomic::AtomicUsize>,
-    visible_barrier: Arc<Barrier>,
-) {
+fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>) {
+    let RenderThreadParams {
+        window: _,
+        surface,
+        gpu,
+        settings,
+        monitor_bounds,
+        scale_factor,
+        refresh_hz,
+        initial_mouse,
+        ready_count,
+        visible_barrier,
+    } = params;
     // `refresh_hz` is accepted (and logged) for future use — DXGI's waitable
     // object handles the actual pacing, so we don't need the value for timing.
     // If we ever port to a non-DX12 backend we'll need an explicit sleep
