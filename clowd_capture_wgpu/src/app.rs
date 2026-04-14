@@ -16,6 +16,7 @@ use crate::img::{self, ActionResult};
 use crate::gpu::bootstrap_window_gpu;
 use crate::ui::command::Command;
 use crate::ui::components::panel::{self, ButtonPanelComponent};
+use crate::ui::components::tips::TipsPanelComponent;
 use crate::platform;
 use crate::selection::{
     clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode,
@@ -124,27 +125,33 @@ struct InputState {
     /// "snap back when cursor returns into bounds" behaviour the user
     /// asked for.
     drag_anchor_selection: Option<ScreenRect>,
+    /// Whether the Tips & Hotkeys overlay is currently displayed. Toggled
+    /// by the T key (`DxScreenCapture.cpp:1248-1251`). Defaults to `true`.
+    tips_visible: bool,
 }
 
 pub struct App {
     settings: Arc<CapturerSettings>,
     windows: HashMap<WindowId, WindowHandle>,
-    /// Stable, index-order list of window IDs parallel to
-    /// `monitor_bounds` / `monitor_dpi`. Populated in `resumed()` in
-    /// the same order windows are created; used by the panel plumbing
-    /// to look up the `WindowHandle` for a given monitor index.
+    /// Stable, index-order list of window IDs parallel to `monitors`.
+    /// Populated in `resumed()` in the same order windows are created;
+    /// used by the panel plumbing to look up the `WindowHandle` for a
+    /// given monitor index.
     monitor_window_ids: Vec<WindowId>,
     /// Populated once in `resumed()`. Used by `clamp_to_nearest_monitor`
     /// so the virtual cursor can't escape all physical screens while the
     /// OS cursor is pinned to the anchor, and by the mouse-down handler
     /// to find the monitor under the press point for the drag-threshold
     /// DPI lookup.
-    monitor_bounds: Vec<ScreenRect>,
-    /// Per-monitor DPI scale, parallel-indexed with `monitor_bounds`.
-    /// Read at mouse-down to seed `InputState::mouse_down_dpi` so the
-    /// drag-distance threshold matches the C++ `dpizoom` factor at
-    /// DxScreenCapture.cpp:1497.
-    monitor_dpi: Vec<f32>,
+    /// Monitor topology snapshot taken at capture startup. Single source
+    /// of truth for per-monitor bounds, DPI scale, primary flag, display
+    /// name, etc. Ordering is stable from capture-time and is what all
+    /// `monitor_idx` indices in `monitor_window_ids`/render threads refer to.
+    monitors: Vec<crate::system::MonitorInfo>,
+    /// Scratch storage for the window title reported by
+    /// `WindowWalker::hit_test_with_title` — kept on `self` so
+    /// `sync_components` can lend it out as `&str` through `AppContext`.
+    cached_hovered_title: Option<String>,
     /// Union rect of the virtual desktop in physical pixels — same value
     /// as `captured.bounds` from the startup snapshot. Used to soft-
     /// clamp the selection during move/resize so it can't be pushed off
@@ -181,13 +188,14 @@ impl App {
         // Adding a new component = one more `component_host.add(...)` line.
         let mut component_host = ComponentHost::new();
         component_host.add(Box::new(ButtonPanelComponent::new()));
+        component_host.add(Box::new(TipsPanelComponent::new()));
 
         Self {
             settings,
             windows: HashMap::new(),
             monitor_window_ids: Vec::new(),
-            monitor_bounds: Vec::new(),
-            monitor_dpi: Vec::new(),
+            monitors: Vec::new(),
+            cached_hovered_title: None,
             vd_bounds: ScreenRect::zero(),
             desktop_buffer: None,
             walker: None,
@@ -211,6 +219,7 @@ impl App {
                 hittest: Hittest::Outside,
                 drag_mode: None,
                 drag_anchor_selection: None,
+                tips_visible: true,
             },
         }
     }
@@ -254,21 +263,55 @@ impl App {
     /// state. If a new component needs new data to decide its layout,
     /// add a field to `AppContext` here and populate it below.
     fn sync_components(&mut self) {
-        let monitors: Vec<MonitorInfo> = self
-            .monitor_bounds
+        let ui_monitors: Vec<MonitorInfo> = self
+            .monitors
             .iter()
-            .zip(self.monitor_dpi.iter())
-            .map(|(b, d)| MonitorInfo {
-                bounds: *b,
-                dpi_scale: *d,
+            .map(|m| MonitorInfo {
+                bounds: m.bounds,
+                dpi_scale: m.scale_factor,
             })
             .collect();
+
+        let cursor = self.input.virtual_cursor;
+        let cursor_pt = ScreenPoint::new(cursor.x.round() as i32, cursor.y.round() as i32);
+
+        let primary_monitor_idx = self.monitors.iter().position(|m| m.is_primary);
+
+        let hovered_monitor_name = self
+            .monitors
+            .iter()
+            .find(|m| m.bounds.contains(cursor_pt))
+            .map(|m| m.name.as_str());
+
+        // Top-level window title under the cursor — `None` over the
+        // desktop background or before the walker is initialised. Stash
+        // the owned String on `self` so we can hand out a borrow that
+        // lives as long as `self` during this call.
+        self.cached_hovered_title = self
+            .walker
+            .as_ref()
+            .and_then(|w| w.hit_test_with_title(cursor_pt))
+            .map(|(_, title)| title);
+        let hovered_window_title = self.cached_hovered_title.as_deref();
+
+        // Sample the BGRA pixel under the cursor from the captured desktop.
+        let hovered_pixel_bgra = self
+            .desktop_buffer
+            .as_deref()
+            .and_then(|buf| sample_bgra(buf, cursor_pt));
+
         let ctx = AppContext {
-            monitors: &monitors,
+            monitors: &ui_monitors,
             selection: self.input.selection,
             captured: self.input.captured,
+            mouse_down: self.input.mouse_down,
             virtual_cursor: self.input.virtual_cursor,
             accent_color: self.settings.crosshair_color,
+            primary_monitor_idx,
+            tips_visible: self.input.tips_visible,
+            hovered_monitor_name,
+            hovered_window_title,
+            hovered_pixel_bgra,
         };
         self.component_host.sync(
             &ctx,
@@ -426,9 +469,9 @@ impl ApplicationHandler for App {
             hittest: Hittest::Outside,
             drag_mode: None,
             drag_anchor_selection: None,
+            tips_visible: true,
         };
-        self.monitor_bounds = captured.monitors.iter().map(|m| m.bounds).collect();
-        self.monitor_dpi = captured.monitors.iter().map(|m| m.scale_factor).collect();
+        self.monitors = captured.monitors.clone();
         self.vd_bounds = captured.bounds;
         self.monitor_window_ids.clear();
 
@@ -583,6 +626,10 @@ impl ApplicationHandler for App {
                 // hit-test) to every render thread so the highlight appears
                 // on the very first visible frame.
                 self.broadcast_mouse_state();
+                // And do the first component sync so pre-capture overlays
+                // (Tips & Hotkeys panel, …) render on the first frame
+                // rather than waiting for the first cursor move.
+                self.sync_components();
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
             }
         }
@@ -634,11 +681,18 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                if self.input.captured {
-                    if let Some(c) = ch.chars().next() {
+                if let Some(c) = ch.chars().next() {
+                    let c_lower = c.to_ascii_lowercase();
+                    if self.input.captured {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
                             self.dispatch_command(cmd, event_loop, handle_window);
                         }
+                    } else if c_lower == 't' {
+                        // Toggle the Tips & Hotkeys overlay. Mirrors
+                        // `DxScreenCapture.cpp:1248-1251` — the T key
+                        // is a no-op once a selection has been captured.
+                        self.input.tips_visible = !self.input.tips_visible;
+                        self.sync_components();
                     }
                 }
             }
@@ -695,7 +749,7 @@ impl ApplicationHandler for App {
                     self.input.virtual_cursor.y += dy;
                     clamp_to_nearest_monitor(
                         &mut self.input.virtual_cursor,
-                        &self.monitor_bounds,
+                        &self.monitors,
                     );
                     SystemInterop::set_mouse_position(self.input.anchor);
                 } else {
@@ -819,8 +873,7 @@ impl ApplicationHandler for App {
                         // resize-drag feel).
                         let dpi = dpi_at_point(
                             self.input.virtual_cursor,
-                            &self.monitor_bounds,
-                            &self.monitor_dpi,
+                            &self.monitors,
                         );
                         let ht = hit_test(self.input.virtual_cursor, sel, dpi);
                         if ht != self.input.hittest {
@@ -857,6 +910,14 @@ impl ApplicationHandler for App {
                         );
                     }
                 }
+
+                // Re-sync components on every cursor move so overlays
+                // that depend on cursor-driven context (the Tips &
+                // Hotkeys panel's hovered window/monitor/pixel color,
+                // and its anchor-flip when the cursor gets near it)
+                // pick up the new state. The host's hash-based dedup
+                // means unchanged components don't re-ship.
+                self.sync_components();
 
                 self.broadcast_mouse_state();
             }
@@ -908,10 +969,13 @@ impl ApplicationHandler for App {
                         self.input.mouse_down_pt = Some(self.input.virtual_cursor);
                         self.input.mouse_down_dpi = dpi_at_point(
                             self.input.virtual_cursor,
-                            &self.monitor_bounds,
-                            &self.monitor_dpi,
+                            &self.monitors,
                         );
                         self.input.dragging = false;
+                        // Hide the Tips & Hotkeys panel while the user is
+                        // actively dragging — matches the C++
+                        // `!data.mouseDown` gate on the tips draw path.
+                        self.sync_components();
                         // Selection itself is left alone here so a single
                         // click on a walker-highlighted window keeps the
                         // walker rect visible during the pending-drag
@@ -984,8 +1048,7 @@ impl ApplicationHandler for App {
                             if let Some(sel) = self.input.selection {
                                 let dpi = dpi_at_point(
                                     self.input.virtual_cursor,
-                                    &self.monitor_bounds,
-                                    &self.monitor_dpi,
+                                    &self.monitors,
                                 );
                                 let ht = hit_test(
                                     self.input.virtual_cursor,
@@ -1004,6 +1067,12 @@ impl ApplicationHandler for App {
                             // A move/resize drag just ended with the
                             // selection still alive — re-sync so
                             // components settle on the final rect.
+                            self.sync_components();
+                        } else {
+                            // Release without finalising / while uncaptured
+                            // (e.g. click-and-release without a drag): the
+                            // mouse_down flag just cleared, so the Tips
+                            // panel should reappear.
                             self.sync_components();
                         }
                         self.broadcast_mouse_state();
@@ -1068,4 +1137,24 @@ impl ApplicationHandler for App {
             _ => {}
         }
     }
+}
+
+/// Sample the BGRA pixel from a captured-desktop snapshot at the given
+/// virtual-desktop coordinate. Returns `None` when the point falls
+/// outside the captured bounds (multi-monitor gaps, etc.). The returned
+/// byte order matches the raw BGRA in `CapturedDesktop::bgra` — callers
+/// that want `#RRGGBB` must re-order bytes themselves.
+fn sample_bgra(buf: &CapturedDesktop, p: ScreenPoint) -> Option<[u8; 4]> {
+    let dx = p.x - buf.bounds.min_x();
+    let dy = p.y - buf.bounds.min_y();
+    if dx < 0 || dy < 0 {
+        return None;
+    }
+    let (w, h) = (buf.width as i32, buf.height as i32);
+    if dx >= w || dy >= h {
+        return None;
+    }
+    let idx = ((dy * w + dx) as usize) * 4;
+    let s = buf.bgra.get(idx..idx + 4)?;
+    Some([s[0], s[1], s[2], s[3]])
 }
