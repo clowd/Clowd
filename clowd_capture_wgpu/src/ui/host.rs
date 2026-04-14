@@ -217,6 +217,7 @@ impl ComponentHost {
     ) {
         let baked = entry.component.bake();
         let overlay = entry.component.overlay_regions();
+        let base_opacity = entry.component.base_opacity();
 
         let bake_hash = hash_pixmap(baked.as_ref());
         let overlay_hash = hash_overlay(&overlay);
@@ -231,6 +232,7 @@ impl ComponentHost {
             id: entry.component.id(),
             pixmap: baked,
             overlay_regions: overlay,
+            base_opacity,
         };
         if let Some(wid) = monitor_window_ids.get(monitor_idx) {
             if let Some(h) = windows.get(wid) {
@@ -261,11 +263,13 @@ fn hash_pixmap(baked: Option<&BakedPixmap>) -> u64 {
             b.dest_vd.top().hash(&mut h);
             b.dest_vd.right().hash(&mut h);
             b.dest_vd.bottom().hash(&mut h);
-            b.data.len().hash(&mut h);
-            if b.data.len() >= 16 {
-                b.data[..8].hash(&mut h);
-                b.data[b.data.len() - 8..].hash(&mut h);
-            }
+            // Hash the full pixel data. Earlier we only sampled the
+            // first/last 8 bytes, but any component whose visible content
+            // changes in the interior (e.g. the Tips panel's color
+            // sampler, which sits in the middle of the pixmap) would
+            // miss re-ships. Hashing the whole thing is cheap compared
+            // to the texture upload it gates.
+            b.data.hash(&mut h);
         }
     }
     h.finish()

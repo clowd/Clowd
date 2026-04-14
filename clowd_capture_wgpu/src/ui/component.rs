@@ -48,12 +48,30 @@ pub struct AppContext<'a> {
     pub selection: Option<ScreenRect>,
     /// `true` once the user has finalised a selection (post mouse-up).
     pub captured: bool,
-    /// Virtual cursor in virtual-desktop pixels. Unused by the current
-    /// components but exposed for future ones (e.g. a zoom readout).
-    #[allow(dead_code)]
+    /// Left mouse button currently held (set on press, cleared on release).
+    /// Components that want to hide while the user is actively dragging
+    /// (e.g. the Tips & Hotkeys panel) read this.
+    pub mouse_down: bool,
+    /// Virtual cursor in virtual-desktop pixels.
     pub virtual_cursor: ScreenPointF,
     /// Accent color for components that want to match the capture overlay.
     pub accent_color: [f32; 4],
+    /// Index into `monitors` of the primary display, or `None` if no
+    /// monitor reports as primary (defensive fallback).
+    pub primary_monitor_idx: Option<usize>,
+    /// Whether the user has toggled the Tips & Hotkeys panel on. Only
+    /// the tips panel reads this.
+    pub tips_visible: bool,
+    /// Human-readable display name of the monitor currently under the
+    /// virtual cursor, or `None` if the cursor is off-screen.
+    pub hovered_monitor_name: Option<&'a str>,
+    /// Title of the top-level window under the virtual cursor, or `None`
+    /// if the cursor is over the desktop background.
+    pub hovered_window_title: Option<&'a str>,
+    /// BGRA sample of the captured-desktop pixel directly under the
+    /// virtual cursor, or `None` if the cursor is outside the captured
+    /// bounds. Used by the Tips & Hotkeys color-sampler row.
+    pub hovered_pixel_bgra: Option<[u8; 4]>,
 }
 
 /// Return value of `Component::update` — where (if anywhere) the
@@ -136,6 +154,11 @@ pub struct ComponentSnapshot {
     pub pixmap: Option<BakedPixmap>,
     /// Overlay regions for shader-driven animation.
     pub overlay_regions: Vec<OverlayRegion>,
+    /// Multiplier applied to the sampled pixmap at composite time.
+    /// 1.0 = fully opaque (default). Values in [0.0, 1.0] let a component
+    /// bake fully opaque content and have the shader fade it during
+    /// compositing, keeping text/edges crisp.
+    pub base_opacity: f32,
 }
 
 /// The trait every UI component implements. All methods run on the
@@ -169,6 +192,14 @@ pub trait Component: Send {
 
     /// Produce the current overlay regions for shader-driven animation.
     fn overlay_regions(&self) -> Vec<OverlayRegion>;
+
+    /// Component-wide alpha applied in the overlay shader. Lets a
+    /// component bake fully opaque content and composite at a constant
+    /// opacity without muddying its interior (e.g. the Tips & Hotkeys
+    /// panel at 0.7). Default is fully opaque.
+    fn base_opacity(&self) -> f32 {
+        1.0
+    }
 }
 
 /// Helper: pick the monitor whose bounds contain the center of `rect`.

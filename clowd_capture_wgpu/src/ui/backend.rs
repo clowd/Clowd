@@ -204,7 +204,10 @@ impl OverlayBackend {
     }
 
     /// Hash the pixmap-affecting parts of a snapshot. Overlay regions
-    /// are excluded — they're handled by the animator/shader.
+    /// are excluded — they're handled by the animator/shader. Hashes
+    /// the full pixel buffer so components whose visible content
+    /// changes in the pixmap interior (e.g. the Tips panel's color
+    /// sampler) don't get missed.
     fn snapshot_hash(snap: &ComponentSnapshot) -> u64 {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         if let Some(ref baked) = snap.pixmap {
@@ -214,14 +217,7 @@ impl OverlayBackend {
             baked.dest_vd.top().hash(&mut h);
             baked.dest_vd.right().hash(&mut h);
             baked.dest_vd.bottom().hash(&mut h);
-            // Hash a sample of the data rather than all of it — the
-            // data only changes when dest/size changes anyway (same
-            // bake produces same pixels for same inputs).
-            baked.data.len().hash(&mut h);
-            if baked.data.len() >= 16 {
-                baked.data[..8].hash(&mut h);
-                baked.data[baked.data.len() - 8..].hash(&mut h);
-            }
+            baked.data.hash(&mut h);
         }
         h.finish()
     }
@@ -390,7 +386,12 @@ impl OverlayBackend {
 
             let uniforms = QuadUniforms {
                 ndc_rect: [min_x, min_y, max_x - min_x, max_y - min_y],
-                region_meta: [region_count as f32, 0.0, 0.0, 0.0],
+                region_meta: [
+                    region_count as f32,
+                    snapshot.base_opacity.clamp(0.0, 1.0),
+                    0.0,
+                    0.0,
+                ],
                 region_rects,
                 region_fades,
             };

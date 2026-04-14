@@ -4,3 +4,4 @@
 //! in `App::new`.
 
 pub mod panel;
+pub mod tips;

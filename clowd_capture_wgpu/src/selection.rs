@@ -1,6 +1,7 @@
 use winit::window::CursorIcon;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
+use crate::system::MonitorInfo;
 
 /// Pre-DPI radius (in virtual-desktop pixels) of the resize-handle hit
 /// boxes used once a selection is captured. Matches
@@ -252,14 +253,14 @@ pub fn resize_with_clamp(
 /// dragging across a monitor boundary doesn't change the threshold mid-
 /// gesture (matches the C++ behaviour at DxScreenCapture.cpp:1497, which
 /// reads `dpizoom` once from the monitor under `mouseDownPt`).
-pub fn dpi_at_point(p: ScreenPointF, monitors: &[ScreenRect], dpis: &[f32]) -> f32 {
-    for (i, m) in monitors.iter().enumerate() {
-        let mx = m.min_x() as f32;
-        let my = m.min_y() as f32;
-        let mw = m.width() as f32;
-        let mh = m.height() as f32;
+pub fn dpi_at_point(p: ScreenPointF, monitors: &[MonitorInfo]) -> f32 {
+    for m in monitors {
+        let mx = m.bounds.min_x() as f32;
+        let my = m.bounds.min_y() as f32;
+        let mw = m.bounds.width() as f32;
+        let mh = m.bounds.height() as f32;
         if p.x >= mx && p.x < mx + mw && p.y >= my && p.y < my + mh {
-            return dpis.get(i).copied().unwrap_or(1.0);
+            return m.scale_factor;
         }
     }
     1.0
@@ -270,16 +271,16 @@ pub fn dpi_at_point(p: ScreenPointF, monitors: &[ScreenRect], dpis: &[f32]) -> f
 /// is subtracted from the max edge so the point never lands on the
 /// exclusive right/bottom of a rect (matches Screens.cpp:147-153 which
 /// subtracts 0.001 from the right/bottom bounds).
-pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[ScreenRect]) {
+pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[MonitorInfo]) {
     if monitors.is_empty() {
         return;
     }
     // First try: already inside a monitor? Leave it alone.
     for m in monitors {
-        let mx = m.min_x() as f32;
-        let my = m.min_y() as f32;
-        let mw = m.width() as f32;
-        let mh = m.height() as f32;
+        let mx = m.bounds.min_x() as f32;
+        let my = m.bounds.min_y() as f32;
+        let mw = m.bounds.width() as f32;
+        let mh = m.bounds.height() as f32;
         if p.x >= mx && p.x < mx + mw && p.y >= my && p.y < my + mh {
             return;
         }
@@ -292,8 +293,8 @@ pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[ScreenRect]) {
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            let cx = m.min_x() as f32 + m.width() as f32 * 0.5;
-            let cy = m.min_y() as f32 + m.height() as f32 * 0.5;
+            let cx = m.bounds.min_x() as f32 + m.bounds.width() as f32 * 0.5;
+            let cy = m.bounds.min_y() as f32 + m.bounds.height() as f32 * 0.5;
             let dx = p.x - cx;
             let dy = p.y - cy;
             (i, dx * dx + dy * dy)
@@ -305,7 +306,7 @@ pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[ScreenRect]) {
                 (bi, bd)
             }
         });
-    let m = &monitors[best_ix];
+    let m = &monitors[best_ix].bounds;
     let min_x = m.min_x() as f32;
     let min_y = m.min_y() as f32;
     let max_x = (m.min_x() + m.width()) as f32 - 0.001;

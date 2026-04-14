@@ -9,7 +9,10 @@ struct QuadUniforms {
     // xy = bottom-left corner of the quad in NDC (y-up).
     // zw = size in NDC (positive).
     ndc_rect: vec4<f32>,
-    // x = number of active overlay regions, yzw = padding.
+    // x = number of active overlay regions.
+    // y = base alpha multiplier applied to the sampled pixmap
+    //     (1.0 = fully opaque, <1.0 blends the whole component).
+    // zw = padding.
     region_meta: vec4<f32>,
     // Overlay region UV rects: (u_min, v_min, u_max, v_max) each.
     region_rects: array<vec4<f32>, 16>,
@@ -58,6 +61,13 @@ fn get_fade(i: u32) -> f32 {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var color = textureSample(tex, samp, in.uv);
+
+    // Per-component base alpha. The pixmap is baked with premultiplied
+    // alpha, and scaling the whole vec4 preserves premultiplication, so
+    // components can render their content fully opaque and let the
+    // shader composite them at any opacity via this uniform.
+    let base_alpha = u.region_meta.y;
+    color = color * base_alpha;
 
     let count = u32(u.region_meta.x);
     for (var i = 0u; i < count && i < MAX_REGIONS; i = i + 1u) {
