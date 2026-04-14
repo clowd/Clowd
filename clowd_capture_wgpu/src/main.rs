@@ -4,10 +4,10 @@ mod gpu;
 mod img;
 mod panel;
 mod platform;
+mod render;
 mod selection;
 mod settings;
 mod system;
-mod window_state;
 
 #[macro_use]
 extern crate log;

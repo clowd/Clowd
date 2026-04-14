@@ -24,19 +24,17 @@
 //! resvg / fontdue are all pure-Rust SIMD.
 
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Instant;
 
-use swash::scale::image::Content;
-use swash::scale::{Render, ScaleContext, Source};
-use swash::zeno::Format;
-use swash::{FontRef, GlyphId};
+use swash::FontRef;
 use tiny_skia::{Pixmap, Transform};
 
 use crate::geometry::{RectExt, ScreenRect};
 
 use super::hover::HoverAnimator;
 use super::model::{button_defs, NUM_SVG_BUTTONS};
+use super::draw::{blit_pixmap, fill_rect, TextLine, TextRenderer};
 use super::state::PanelState;
 
 /// Font size for button labels at 100% DPI. The C++ original used 10
@@ -56,17 +54,6 @@ const ICON_UNSCALED_PX: f32 = 26.0;
 /// Gray button background ~ `#373737`. Matches `brushGray` at
 /// DxScreenCapture.cpp:446.
 const GRAY_RGBA: [u8; 4] = [0x37, 0x37, 0x37, 0xFF];
-
-/// Parameters for drawing a single line of text into a pixmap.
-struct TextLine<'a> {
-    text: &'a str,
-    px: f32,
-    x: f32,
-    y: f32,
-    rgba: [u8; 4],
-    underline: Option<usize>,
-    underline_thickness: f32,
-}
 
 /// Uniform block for the textured-quad pipeline. Carries the destination
 /// NDC rect plus per-button hover state for shader-based overlay.
@@ -107,12 +94,7 @@ pub struct BakePanelBackend {
     bgl: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     uniform_buffer: wgpu::Buffer,
-    /// Roboto font reference. Borrows `FONT_ROBOTO` (a `&'static [u8]`)
-    /// so the lifetime is `'static`. `FontRef` is `Copy`.
-    font: FontRef<'static>,
-    /// Reusable scaler context. Holds caches and scratch buffers for
-    /// glyph rasterization — keep it across renders.
-    scale_ctx: ScaleContext,
+    text: TextRenderer,
     /// Pre-parsed SVG trees, one per button, in `BUTTON_DEFS` order.
     svg_trees: [Arc<usvg::Tree>; NUM_SVG_BUTTONS],
     /// Cached texture + hash of the state that produced it. Skip the
@@ -157,8 +139,9 @@ impl BakePanelBackend {
         // --- Load font once -----------------------------------------------
         // `FontRef` borrows the byte slice; since `FONT_ROBOTO` is
         // `&'static [u8]`, the FontRef is `'static` too.
-        let font = FontRef::from_index(super::assets::FONT_ROBOTO, 0).expect("Roboto is valid TTF at build time");
-        let scale_ctx = ScaleContext::new();
+        let font = FontRef::from_index(super::assets::FONT_ROBOTO, 0)
+            .expect("Roboto is valid TTF at build time");
+        let text = TextRenderer::new(font);
 
         // --- Pipeline ------------------------------------------------------
         // Quad shader generates a quad in NDC from the `ndc_rect` uniform
@@ -279,8 +262,7 @@ impl BakePanelBackend {
             bgl,
             sampler,
             uniform_buffer,
-            font,
-            scale_ctx,
+            text,
             svg_trees,
             cached: None,
             cached_hash: 0,
@@ -404,7 +386,7 @@ impl BakePanelBackend {
             // C++ `br.top + (bh - metricsText.height) / 2 - svgIconSize / 2`
             // offset).
             let def = &button_defs()[i];
-            let label_metrics = self.measure_line(def.label, label_px);
+            let label_metrics = self.text.measure_line(def.label, label_px);
 
             // Vertical layout: equal gap above icon, between icon and
             // label, and below label. Three gaps, two stacked items
@@ -444,7 +426,7 @@ impl BakePanelBackend {
             let label_lift = (2.0 * dpi).round();
             let label_y = icon_top + icon_size + v_gap - label_lift;
             let underline_thickness = dpi.round().max(1.0);
-            self.draw_text_line(
+            self.text.draw_text_line(
                 &mut pixmap,
                 TextLine {
                     text: def.label,
@@ -467,11 +449,11 @@ impl BakePanelBackend {
         let width_str = s.selection_size.0.to_string();
         let height_str = s.selection_size.1.to_string();
         let x_str = "\u{00D7}"; // multiplication sign
-        let mw = self.measure_line(&width_str, area_px);
-        let mh = self.measure_line(&height_str, area_px);
-        let mx = self.measure_line(x_str, area_px);
+        let mw = self.text.measure_line(&width_str, area_px);
+        let mh = self.text.measure_line(&height_str, area_px);
+        let mx = self.text.measure_line(x_str, area_px);
 
-        self.draw_text_line(
+        self.text.draw_text_line(
             &mut pixmap,
             TextLine {
                 text: &width_str,
@@ -483,7 +465,7 @@ impl BakePanelBackend {
                 underline_thickness: 0.0,
             },
         );
-        self.draw_text_line(
+        self.text.draw_text_line(
             &mut pixmap,
             TextLine {
                 text: &height_str,
@@ -496,7 +478,7 @@ impl BakePanelBackend {
             },
         );
         // × glyph: drawn at 70% white to match brushWhite70.
-        self.draw_text_line(
+        self.text.draw_text_line(
             &mut pixmap,
             TextLine {
                 text: x_str,
@@ -512,149 +494,6 @@ impl BakePanelBackend {
         Some(pixmap)
     }
 
-    /// Sum of advance widths for the string at the given px size, plus
-    /// the font's cap-height as a representative "visual" line height.
-    /// We don't shape — these are short ASCII labels (button text and
-    /// area-indicator digits) where ligatures and kerning aren't worth
-    /// the complexity.
-    fn measure_line(&self, s: &str, px: f32) -> LineMetrics {
-        let charmap = self.font.charmap();
-        let gm = self.font.glyph_metrics(&[]).scale(px);
-        let total_w: f32 = s
-            .chars()
-            .map(|c| gm.advance_width(charmap.map(c)))
-            .sum();
-        // Use cap-height as the "visual" height of all-caps labels, so
-        // the vertical layout in `bake_pixmap` keeps centering glyphs
-        // by their visible extent (not the full ascent box). Falls back
-        // to ascent if the font doesn't expose cap_height.
-        let m = self.font.metrics(&[]).scale(px);
-        let height = if m.cap_height > 0.0 { m.cap_height } else { m.ascent };
-        LineMetrics {
-            width: total_w,
-            height,
-        }
-    }
-
-    /// Rasterize a string with swash and stamp each glyph onto the
-    /// pixmap with gamma-correct subpixel compositing. `underline`, if
-    /// set, draws a line `underline_thickness` physical pixels tall
-    /// under the char at that index. Pass `0.0` for thickness when
-    /// `underline` is `None`.
-    ///
-    /// `y` is the top of the **visible cap-height box** — i.e. the y
-    /// where the top of capital letters / digits will land. We
-    /// deliberately don't use the top of the ascent box: the gap
-    /// between ascent and cap-height (space reserved for diacriticals
-    /// over capitals) is ~2-3 px at 12px Roboto and would make every
-    /// centered string sit visually low. Pass the y you want the
-    /// visible top of the text to be at and the math just works.
-    fn draw_text_line(&mut self, pixmap: &mut Pixmap, tl: TextLine<'_>) {
-        let TextLine {
-            text,
-            px,
-            mut x,
-            y,
-            rgba,
-            underline,
-            underline_thickness,
-        } = tl;
-        let font_metrics = self.font.metrics(&[]).scale(px);
-        // Baseline = top of the cap-height box + cap_height. For
-        // Latin digits and uppercase letters, the bottom of the glyph
-        // sits on the baseline, so this puts the visible top exactly
-        // at `y`. Snapped to an integer row so hinted horizontal
-        // stems land cleanly on pixel rows.
-        let baseline_y: i32 = (y + font_metrics.cap_height).round() as i32;
-
-        let charmap = self.font.charmap();
-        let gm = self.font.glyph_metrics(&[]).scale(px);
-        // Build the scaler once for the whole line — `Render::render`
-        // is called repeatedly with the same scaler.
-        let mut scaler = self
-            .scale_ctx
-            .builder(self.font)
-            .size(px)
-            .hint(true)
-            .build();
-
-        let mut underline_x_start = 0.0_f32;
-        let mut underline_x_end = 0.0_f32;
-        for (i, c) in text.chars().enumerate() {
-            let gid: GlyphId = charmap.map(c);
-            let advance = gm.advance_width(gid);
-
-            // Pin the pen to the nearest integer pixel column. We
-            // accumulate `x` at float precision (so the running pen
-            // position never drifts from where the layout intends),
-            // then round per-glyph to land on an integer column.
-            //
-            // We do NOT pass a fractional offset to swash: this is
-            // standard ClearType-style rendering. Hinted TrueType
-            // outlines + zeno's `Format::Subpixel` artifact badly when
-            // mixed with non-integer X offsets — for `fract_x ≈ 0.5`,
-            // the three subpixel rasterizations at offsets ±0.3 + 0.5
-            // diverge enough that a 1-px stem ends up split across two
-            // columns with chromatic fringes (the "I" in EXIT looking
-            // two lines thick). Integer X + hinted outlines + LCD
-            // subpixel rendering is exactly how Windows ClearType has
-            // always worked.
-            let pen_x = x.round() as i32;
-
-            let image = Render::new(&[Source::Outline])
-                .format(Format::Subpixel)
-                .render(&mut scaler, gid);
-            if let Some(image) = image {
-                if image.content == Content::SubpixelMask && image.placement.width > 0 && image.placement.height > 0 {
-                    // `placement.left` is the offset from the pen x to
-                    // the bitmap's left edge — already accounts for
-                    // the glyph's bearing. `placement.top` is the
-                    // distance from the baseline UP to the top of the
-                    // bitmap.
-                    let blit_x = pen_x + image.placement.left;
-                    let blit_y = baseline_y - image.placement.top;
-                    blit_glyph_subpixel(
-                        pixmap,
-                        &image.data,
-                        image.placement.width as usize,
-                        image.placement.height as usize,
-                        blit_x,
-                        blit_y,
-                        rgba,
-                    );
-                    if underline == Some(i) {
-                        underline_x_start = blit_x as f32;
-                        underline_x_end = underline_x_start + image.placement.width as f32;
-                    }
-                } else if underline == Some(i) {
-                    // No bitmap (e.g. space) — fall back to advance
-                    // box for underline width.
-                    underline_x_start = x;
-                    underline_x_end = x + advance;
-                }
-            }
-            x += advance;
-        }
-        if underline.is_some() && underline_thickness > 0.0 {
-            // Underline sits one row below the (already pixel-snapped)
-            // baseline. x and width are already integers from the
-            // glyph rect above.
-            let uy = (baseline_y + 1) as f32;
-            fill_rect(
-                pixmap,
-                underline_x_start,
-                uy,
-                underline_x_end - underline_x_start,
-                underline_thickness,
-                rgba,
-            );
-        }
-    }
-}
-
-struct LineMetrics {
-    width: f32,
-    height: f32,
 }
 
 impl BakePanelBackend {
@@ -678,9 +517,9 @@ impl BakePanelBackend {
         monitor_size_px: (u32, u32),
     ) {
         // Clone the state so we can hand `&mut self` to `bake_pixmap`
-        // (which now needs to mutate `self.scale_ctx`) without holding
-        // an immutable borrow of `self.state` across the call. The
-        // clone is cheap and only happens when we're about to re-bake
+        // (which needs to mutate `self.text`) without holding an
+        // immutable borrow of `self.state` across the call. The clone
+        // is cheap and only happens when we're about to re-bake
         // anyway.
         let Some(state) = self.state.clone() else {
             return;
@@ -846,219 +685,3 @@ impl BakePanelBackend {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Small helpers operating directly on Pixmap bytes. We avoid the higher-
-// level `Paint`/`Path` API for simple fills + blits — it's noticeably
-// faster to write premultiplied bytes directly, and we don't need path
-// rendering anyway.
-
-/// Fill an axis-aligned rect with the given sRGB colour. Premultiplies
-/// before writing (tiny-skia stores premultiplied bytes). Clips to
-/// pixmap bounds; silently no-ops if the rect is entirely outside.
-fn fill_rect(pixmap: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, rgba: [u8; 4]) {
-    if w <= 0.0 || h <= 0.0 {
-        return;
-    }
-    let pm_w = pixmap.width() as i32;
-    let pm_h = pixmap.height() as i32;
-    let x0 = x.floor().max(0.0) as i32;
-    let y0 = y.floor().max(0.0) as i32;
-    let x1 = ((x + w).ceil() as i32).min(pm_w);
-    let y1 = ((y + h).ceil() as i32).min(pm_h);
-    if x0 >= x1 || y0 >= y1 {
-        return;
-    }
-    let src_a = rgba[3] as u32;
-    // Premultiply: (C * A + 127) / 255 keeps rounding in the
-    // middle-bin tie-breaker consistent.
-    let src_r = ((rgba[0] as u32 * src_a + 127) / 255) as u8;
-    let src_g = ((rgba[1] as u32 * src_a + 127) / 255) as u8;
-    let src_b = ((rgba[2] as u32 * src_a + 127) / 255) as u8;
-    let src_a_u8 = rgba[3];
-    let data = pixmap.data_mut();
-    let stride = pm_w * 4;
-    for yy in y0..y1 {
-        let row_start = (yy * stride) as usize;
-        for xx in x0..x1 {
-            let idx = row_start + (xx as usize) * 4;
-            // Source-over blend in premultiplied space.
-            let dst_r = data[idx] as u32;
-            let dst_g = data[idx + 1] as u32;
-            let dst_b = data[idx + 2] as u32;
-            let dst_a = data[idx + 3] as u32;
-            let inv_a = 255 - src_a;
-            data[idx] = (src_r as u32 + (dst_r * inv_a + 127) / 255) as u8;
-            data[idx + 1] = (src_g as u32 + (dst_g * inv_a + 127) / 255) as u8;
-            data[idx + 2] = (src_b as u32 + (dst_b * inv_a + 127) / 255) as u8;
-            data[idx + 3] = (src_a_u8 as u32 + (dst_a * inv_a + 127) / 255) as u8;
-        }
-    }
-}
-
-/// Composite a smaller pre-rendered pixmap onto the main pixmap at a
-/// pixel offset. Both are premultiplied sRGBA. Used for stamping
-/// resvg output onto the panel.
-fn blit_pixmap(dst: &mut Pixmap, src: &Pixmap, x: i32, y: i32) {
-    let dst_w = dst.width() as i32;
-    let dst_h = dst.height() as i32;
-    let sw = src.width() as i32;
-    let sh = src.height() as i32;
-    let src_data = src.data();
-    let dst_data = dst.data_mut();
-    for sy in 0..sh {
-        let dy = y + sy;
-        if dy < 0 || dy >= dst_h {
-            continue;
-        }
-        for sx in 0..sw {
-            let dx = x + sx;
-            if dx < 0 || dx >= dst_w {
-                continue;
-            }
-            let si = ((sy * sw + sx) * 4) as usize;
-            let di = ((dy * dst_w + dx) * 4) as usize;
-            let src_a = src_data[si + 3] as u32;
-            if src_a == 0 {
-                continue;
-            }
-            let inv_a = 255 - src_a;
-            dst_data[di] = (src_data[si] as u32 + (dst_data[di] as u32 * inv_a + 127) / 255) as u8;
-            dst_data[di + 1] = (src_data[si + 1] as u32 + (dst_data[di + 1] as u32 * inv_a + 127) / 255) as u8;
-            dst_data[di + 2] = (src_data[si + 2] as u32 + (dst_data[di + 2] as u32 * inv_a + 127) / 255) as u8;
-            dst_data[di + 3] = (src_data[si + 3] as u32 + (dst_data[di + 3] as u32 * inv_a + 127) / 255) as u8;
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ClearType-style subpixel text compositing.
-//
-// swash gives us a 4-byte-per-pixel buffer (`Format::Subpixel`) where
-// each pixel holds three independently-rasterized coverage values at
-// horizontal offsets -0.3, 0, +0.3 px stored in bytes 0, 1, 2.
-// (The 4th byte — A — is never written by zeno and is left at zero.)
-// Because the offset shifts the *glyph* (not the sampling grid),
-// byte 0 (offset -0.3, glyph shifted left) gives the coverage at the
-// *rightmost* subpixel position (blue on an RGB LCD), and byte 2
-// (offset +0.3, glyph shifted right) gives the *leftmost* (red).
-// `blit_glyph_subpixel` swaps R↔B when reading the coverage buffer
-// to match the standard RGB subpixel layout.
-//
-// This is a clean three-pass rasterization, not the supersample-and-LCD-
-// filter approach FreeType uses. As a result we don't need an explicit
-// LCD filter — the slight overlap between the ±0.3 offsets naturally
-// reduces color fringing.
-//
-// `blit_glyph_subpixel` then composites those per-channel coverages
-// onto the pixmap *in linear light* using sRGB <-> linear LUTs. This
-// is what makes small text look solid and on-weight instead of thin
-// and washed out — gamma-correct compositing matters as much as
-// subpixel rendering for the perceived quality.
-//
-// Precondition: the destination pixmap is opaque underneath the text
-// (alpha = 0xFF). The panel always satisfies this — `GRAY_RGBA` and
-// the accent colour are both opaque, the hover overlay leaves dst alpha
-// at 0xFF, and the textured-quad pipeline blends the *whole* baked
-// pixmap onto the screen with premultiplied alpha. We rely on this so
-// we can read the destination RGB as plain sRGB rather than dividing
-// out a fractional alpha.
-
-fn srgb_to_linear_lut() -> &'static [f32; 256] {
-    static LUT: OnceLock<[f32; 256]> = OnceLock::new();
-    LUT.get_or_init(|| {
-        let mut lut = [0.0f32; 256];
-        for (i, slot) in lut.iter_mut().enumerate() {
-            let c = i as f32 / 255.0;
-            *slot = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
-        }
-        lut
-    })
-}
-
-fn linear_to_srgb_lut() -> &'static [u8; 4096] {
-    static LUT: OnceLock<[u8; 4096]> = OnceLock::new();
-    LUT.get_or_init(|| {
-        let mut lut = [0u8; 4096];
-        for (i, slot) in lut.iter_mut().enumerate() {
-            let lin = i as f32 / 4095.0;
-            let srgb = if lin <= 0.003_130_8 {
-                lin * 12.92
-            } else {
-                1.055 * lin.powf(1.0 / 2.4) - 0.055
-            };
-            *slot = (srgb.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
-        }
-        lut
-    })
-}
-
-/// Composite a swash subpixel mask onto the pixmap, blending in
-/// linear light. The input buffer is `Format::Subpixel` from
-/// `swash::Render`: 4 bytes per pixel `[R, G, B, _A]` where R/G/B are
-/// per-channel coverage values and the A byte is unused (always 0).
-/// We treat each of R, G, B as the alpha for that channel of the
-/// destination pixel.
-///
-/// Assumes the destination pixel is opaque (alpha = 0xFF) — see the
-/// module-level comment for why that always holds inside the panel.
-fn blit_glyph_subpixel(dst: &mut Pixmap, coverage_rgba: &[u8], w: usize, h: usize, x: i32, y: i32, text_rgba: [u8; 4]) {
-    if w == 0 || h == 0 {
-        return;
-    }
-    let dst_w = dst.width() as i32;
-    let dst_h = dst.height() as i32;
-    let data = dst.data_mut();
-    let s2l = srgb_to_linear_lut();
-    let l2s = linear_to_srgb_lut();
-
-    let text_alpha = text_rgba[3] as f32 / 255.0;
-    let text_lin = [s2l[text_rgba[0] as usize], s2l[text_rgba[1] as usize], s2l[text_rgba[2] as usize]];
-
-    let src_stride = w * 4;
-    for gy in 0..(h as i32) {
-        let dy = y + gy;
-        if dy < 0 || dy >= dst_h {
-            continue;
-        }
-        let row_off = (gy as usize) * src_stride;
-        for gx in 0..(w as i32) {
-            let dx = x + gx;
-            if dx < 0 || dx >= dst_w {
-                continue;
-            }
-            let pix_off = row_off + (gx as usize) * 4;
-            // zeno's Format::Subpixel rasterizes at offsets [-0.3, 0, +0.3]
-            // and stores coverage in bytes [0, 1, 2]. Offset -0.3 shifts
-            // the glyph LEFT, so each pixel samples 0.3 px to the RIGHT of
-            // the glyph — that's the BLUE physical subpixel on an RGB LCD.
-            // Offset +0.3 shifts RIGHT → pixel samples LEFT → RED subpixel.
-            // So byte 0 = blue coverage, byte 2 = red coverage — we must
-            // swap R and B to match the standard RGB subpixel layout.
-            let cov_r = coverage_rgba[pix_off + 2] as f32 * (1.0 / 255.0) * text_alpha;
-            let cov_g = coverage_rgba[pix_off + 1] as f32 * (1.0 / 255.0) * text_alpha;
-            let cov_b = coverage_rgba[pix_off] as f32 * (1.0 / 255.0) * text_alpha;
-            if cov_r == 0.0 && cov_g == 0.0 && cov_b == 0.0 {
-                continue;
-            }
-            let di = ((dy * dst_w + dx) * 4) as usize;
-            // Dst is premultiplied sRGB. Because dst alpha is 0xFF here
-            // (panel precondition), the premultiplied bytes equal the
-            // straight-sRGB bytes, so we can index the LUT directly.
-            let dst_lin = [s2l[data[di] as usize], s2l[data[di + 1] as usize], s2l[data[di + 2] as usize]];
-            let out_lin = [
-                text_lin[0] * cov_r + dst_lin[0] * (1.0 - cov_r),
-                text_lin[1] * cov_g + dst_lin[1] * (1.0 - cov_g),
-                text_lin[2] * cov_b + dst_lin[2] * (1.0 - cov_b),
-            ];
-            // Quantize linear -> 12-bit LUT index, then look up the
-            // sRGB-encoded byte. clamp() handles tiny float overshoot
-            // from rounding in the lerp.
-            data[di] = l2s[(out_lin[0].clamp(0.0, 1.0) * 4095.0) as usize];
-            data[di + 1] = l2s[(out_lin[1].clamp(0.0, 1.0) * 4095.0) as usize];
-            data[di + 2] = l2s[(out_lin[2].clamp(0.0, 1.0) * 4095.0) as usize];
-            // Leave alpha alone — dst stays opaque so the textured quad
-            // fully replaces what's underneath when it's blended onto
-            // the swapchain.
-        }
-    }
-}

@@ -343,65 +343,18 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         // Update the fade factor and push it to the GPU. Cheap; the
         // staging ring buffer absorbs this without blocking.
         if let Some(state) = snapshot_state.as_mut() {
-            let elapsed = start.elapsed().as_secs_f32();
-            let fade = if cfg!(target_os = "macos") {
-                // macOS: skip the GPU fade — the window fades in via alpha.
-                1.0
-            } else {
-                let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
-                let inv = 1.0 - t;
-                1.0 - inv * inv * inv * inv
-            };
-            state.uniforms.params[0] = fade;
-
-            let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;
-            let local_y = mouse_pos.y - monitor_bounds.min_y() as f32;
-            state.uniforms.params[1] = local_x;
-            state.uniforms.params[2] = local_y;
-
-            // Fold the zoom-around-cursor transform into uv_offset_scale.
-            if zoom <= 1.0 {
-                state.uniforms.uv_offset_scale = state.base_uv_offset_scale;
-            } else {
-                let w = config.width as f32;
-                let h = config.height as f32;
-                let cu = local_x / w;
-                let cv = local_y / h;
-                let k = 1.0 - 1.0 / zoom;
-                let base = state.base_uv_offset_scale;
-                state.uniforms.uv_offset_scale = [
-                    base[0] + base[2] * cu * k,
-                    base[1] + base[3] * cv * k,
-                    base[2] / zoom,
-                    base[3] / zoom,
-                ];
-            }
-
-            // Selection rect (if any) → window-local physical pixels.
-            if let Some(sel) = selection {
-                let cx = mouse_pos.x;
-                let cy = mouse_pos.y;
-                let local_cx = cx - monitor_bounds.min_x() as f32;
-                let local_cy = cy - monitor_bounds.min_y() as f32;
-                let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
-                    (
-                        (vd_x - cx) * zoom + local_cx,
-                        (vd_y - cy) * zoom + local_cy,
-                    )
-                };
-                let (l, t) = to_local(sel.left() as f32, sel.top() as f32);
-                let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
-                state.uniforms.selection_rect = [l, t, r, b];
-            } else {
-                state.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
-            }
-
-            state.uniforms.selection_params[0] = elapsed;
-            state.uniforms.selection_params[1] = if captured { 1.0 } else { 0.0 };
-            state.uniforms.selection_params[2] = zoom;
-
-            gpu.queue
-                .write_buffer(&state.ubo, 0, bytemuck::bytes_of(&state.uniforms));
+            state.update_uniforms(
+                &gpu.queue,
+                &FrameState {
+                    monitor_bounds,
+                    mouse_pos,
+                    zoom,
+                    selection,
+                    captured,
+                    elapsed: start.elapsed().as_secs_f32(),
+                    surface_size: (config.width, config.height),
+                },
+            );
         }
 
         // This call blocks on the DXGI waitable object (because Backends::DX12
@@ -428,6 +381,90 @@ struct SnapshotState {
     /// the current zoom-around-cursor transform into this to produce
     /// `uniforms.uv_offset_scale`. At zoom=1 they're identical.
     base_uv_offset_scale: [f32; 4],
+}
+
+/// Per-frame input for uniform computation.
+struct FrameState {
+    monitor_bounds: ScreenRect,
+    mouse_pos: ScreenPointF,
+    zoom: f32,
+    selection: Option<ScreenRect>,
+    captured: bool,
+    elapsed: f32,
+    surface_size: (u32, u32),
+}
+
+impl SnapshotState {
+    /// Recompute all per-frame uniform values (fade, cursor, zoom,
+    /// selection rect) and write them to the GPU buffer.
+    fn update_uniforms(&mut self, queue: &wgpu::Queue, frame: &FrameState) {
+        let FrameState {
+            monitor_bounds,
+            mouse_pos,
+            zoom,
+            selection,
+            captured,
+            elapsed,
+            surface_size,
+        } = *frame;
+        let fade = if cfg!(target_os = "macos") {
+            // macOS: skip the GPU fade — the window fades in via alpha.
+            1.0
+        } else {
+            let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
+            let inv = 1.0 - t;
+            1.0 - inv * inv * inv * inv
+        };
+        self.uniforms.params[0] = fade;
+
+        let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;
+        let local_y = mouse_pos.y - monitor_bounds.min_y() as f32;
+        self.uniforms.params[1] = local_x;
+        self.uniforms.params[2] = local_y;
+
+        // Fold the zoom-around-cursor transform into uv_offset_scale.
+        if zoom <= 1.0 {
+            self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
+        } else {
+            let w = surface_size.0 as f32;
+            let h = surface_size.1 as f32;
+            let cu = local_x / w;
+            let cv = local_y / h;
+            let k = 1.0 - 1.0 / zoom;
+            let base = self.base_uv_offset_scale;
+            self.uniforms.uv_offset_scale = [
+                base[0] + base[2] * cu * k,
+                base[1] + base[3] * cv * k,
+                base[2] / zoom,
+                base[3] / zoom,
+            ];
+        }
+
+        // Selection rect (if any) → window-local physical pixels.
+        if let Some(sel) = selection {
+            let cx = mouse_pos.x;
+            let cy = mouse_pos.y;
+            let local_cx = cx - monitor_bounds.min_x() as f32;
+            let local_cy = cy - monitor_bounds.min_y() as f32;
+            let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
+                (
+                    (vd_x - cx) * zoom + local_cx,
+                    (vd_y - cy) * zoom + local_cy,
+                )
+            };
+            let (l, t) = to_local(sel.left() as f32, sel.top() as f32);
+            let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
+            self.uniforms.selection_rect = [l, t, r, b];
+        } else {
+            self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
+        }
+
+        self.uniforms.selection_params[0] = elapsed;
+        self.uniforms.selection_params[1] = if captured { 1.0 } else { 0.0 };
+        self.uniforms.selection_params[2] = zoom;
+
+        queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
+    }
 }
 
 fn draw_once(

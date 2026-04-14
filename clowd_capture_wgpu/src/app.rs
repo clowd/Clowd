@@ -22,7 +22,7 @@ use crate::selection::{
 };
 use crate::settings::CapturerSettings;
 use crate::system::{CapturedDesktop, SystemInterop, WindowWalker};
-use crate::window_state::{spawn_render_thread, RenderThreadParams, WindowHandle};
+use crate::render::{spawn_render_thread, RenderThreadParams, WindowHandle};
 
 /// Minimum zoom. The magnifier only ever enlarges the source.
 const ZOOM_MIN: f32 = 1.0;
