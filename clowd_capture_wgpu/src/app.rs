@@ -12,12 +12,17 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
+use crate::img::{self, ActionResult};
 use crate::gpu::bootstrap_window_gpu;
 use crate::panel::{self, PanelState};
 use crate::platform;
+use crate::selection::{
+    clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode,
+    Hittest,
+};
 use crate::settings::CapturerSettings;
 use crate::system::{CapturedDesktop, SystemInterop, WindowWalker};
-use crate::window_state::{spawn_render_thread, WindowHandle};
+use crate::window_state::{spawn_render_thread, RenderThreadParams, WindowHandle};
 
 /// Minimum zoom. The magnifier only ever enlarges the source.
 const ZOOM_MIN: f32 = 1.0;
@@ -27,82 +32,6 @@ const ZOOM_MAX: f32 = 256.0;
 /// Multiplicative step per wheel tick. Coarse by design — no modifier-key
 /// fine-grained step in v1.
 const ZOOM_STEP: f32 = 2.0;
-
-/// Pre-DPI radius (in virtual-desktop pixels) of the resize-handle hit
-/// boxes used once a selection is captured. Matches
-/// `UNSCALED_DRAG_HANDLE_SIZE` at DxScreenCapture.cpp:23. The C++ scales
-/// it by `dpizoom = monitor.dpi / BASE_DPI`; we do the same per-monitor
-/// using `monitor_dpi`.
-const UNSCALED_DRAG_HANDLE_SIZE: f32 = 10.0;
-
-/// Result of hit-testing the cursor against a captured selection rect.
-/// Drives both the cursor-icon swap (one-to-one with `IDC_*` cursors in
-/// `FrameSetCursor` at DxScreenCapture.cpp:1732-1798) and the resize/move
-/// drag mode that mouse-down promotes it to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Hittest {
-    /// Cursor is outside the selection (and not on any handle). Default
-    /// arrow cursor; mouse-down does nothing in this state.
-    Outside,
-    /// Cursor is inside the selection's interior. Move cursor;
-    /// mouse-down enters MoveDrag.
-    Inside,
-    Top,
-    Right,
-    Bottom,
-    Left,
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
-}
-
-impl Hittest {
-    /// Map this hittest to the cursor icon that should be displayed
-    /// while hovering. Mirrors `FrameSetCursor`'s switch at
-    /// DxScreenCapture.cpp:1736.
-    fn cursor(self) -> CursorIcon {
-        match self {
-            Hittest::Outside => CursorIcon::Default,
-            Hittest::Inside => CursorIcon::Move,
-            Hittest::Top | Hittest::Bottom => CursorIcon::NsResize,
-            Hittest::Left | Hittest::Right => CursorIcon::EwResize,
-            Hittest::TopLeft | Hittest::BottomRight => CursorIcon::NwseResize,
-            Hittest::TopRight | Hittest::BottomLeft => CursorIcon::NeswResize,
-        }
-    }
-}
-
-/// Result of a Copy or Save action.
-enum ActionResult {
-    /// Operation completed successfully.
-    Success,
-    /// User cancelled the operation (e.g. dismissed save dialog).
-    Cancelled,
-    /// Operation failed with an error message.
-    Failed(String),
-}
-
-/// What kind of drag is currently in progress. Set on mouse-down,
-/// consumed by every CursorMoved until mouse-up. The pre-capture
-/// "drawing a new selection" path doesn't use this enum (it's still
-/// driven by `mouse_down` + `dragging`); these variants only fire
-/// once `captured` is true.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DragMode {
-    /// Translating the whole rect. Each frame the rect is shifted by
-    /// `(virtual_cursor - mouse_down_pt)` from the snapshotted anchor
-    /// selection, then soft-clamped to keep it on-screen *without*
-    /// changing its size.
-    Move,
-    /// Resizing via one of the eight handles. The handle's edges are
-    /// dragged to the cursor each frame; the un-touched edges keep
-    /// their value from the snapshotted anchor selection. Hard-clamp
-    /// each moved edge to vd bounds, then normalise via min/max so
-    /// the rect stays well-formed even when the user drags past the
-    /// opposite edge (matches the C++ `Xy12Rect` normalisation).
-    Resize(Hittest),
-}
 
 /// Virtual-cursor + magnifier + selection state owned by the event-loop
 /// thread.
@@ -411,128 +340,13 @@ impl App {
         }
     }
 
-    /// Extract the selected region from the desktop buffer, converting BGRA to RGBA.
-    /// Returns `None` if selection is outside bounds or buffer is missing.
-    fn extract_selection_rgba(&self) -> Option<(Vec<u8>, u32, u32)> {
-        let selection = self.input.selection?;
-        let buffer = self.desktop_buffer.as_ref()?;
-
-        // Convert selection from virtual-desktop coords to buffer-local coords
-        let buf_x = (selection.left() - buffer.bounds.left()).max(0) as u32;
-        let buf_y = (selection.top() - buffer.bounds.top()).max(0) as u32;
-        let sel_w = selection.width() as u32;
-        let sel_h = selection.height() as u32;
-
-        // Clamp to buffer bounds
-        if buf_x >= buffer.width || buf_y >= buffer.height {
-            return None;
-        }
-        let copy_w = sel_w.min(buffer.width - buf_x);
-        let copy_h = sel_h.min(buffer.height - buf_y);
-
-        if copy_w == 0 || copy_h == 0 {
-            return None;
-        }
-
-        // Extract sub-region with BGRA→RGBA conversion
-        let stride = (buffer.width * 4) as usize;
-        let mut rgba = Vec::with_capacity((copy_w * copy_h * 4) as usize);
-
-        for row in 0..copy_h {
-            let src_start = ((buf_y + row) as usize * stride) + (buf_x as usize * 4);
-            let src_end = src_start + (copy_w as usize * 4);
-            let src_row = &buffer.bgra[src_start..src_end];
-
-            for chunk in src_row.chunks_exact(4) {
-                // BGRA → RGBA: swap B and R
-                rgba.push(chunk[2]); // R
-                rgba.push(chunk[1]); // G
-                rgba.push(chunk[0]); // B
-                rgba.push(chunk[3]); // A
-            }
-        }
-
-        Some((rgba, copy_w, copy_h))
-    }
-
-    /// Copy the selected region to the clipboard.
-    fn handle_copy(&self) -> ActionResult {
-        let Some((rgba, width, height)) = self.extract_selection_rgba() else {
-            log::warn!("copy: no selection or failed to extract");
-            return ActionResult::Failed("No selection to copy".to_string());
-        };
-
-        match arboard::Clipboard::new() {
-            Ok(mut clipboard) => {
-                let img = arboard::ImageData {
-                    width: width as usize,
-                    height: height as usize,
-                    bytes: std::borrow::Cow::Owned(rgba),
-                };
-                if let Err(e) = clipboard.set_image(img) {
-                    log::error!("copy: clipboard set_image failed: {e}");
-                    ActionResult::Failed(format!("Failed to copy to clipboard: {e}"))
-                } else {
-                    log::info!("copied {}x{} image to clipboard", width, height);
-                    ActionResult::Success
-                }
-            }
-            Err(e) => {
-                log::error!("copy: failed to open clipboard: {e}");
-                ActionResult::Failed(format!("Failed to open clipboard: {e}"))
-            }
-        }
-    }
-
-    /// Save the selected region to a file via save dialog.
-    /// Save the selected region to a file via save dialog. Returns true on success.
-    /// Save the selected region to a file via save dialog.
-    fn handle_save(&self, window: &Window) -> ActionResult {
-        let Some((rgba, width, height)) = self.extract_selection_rgba() else {
-            log::warn!("save: no selection or failed to extract");
-            return ActionResult::Failed("No selection to save".to_string());
-        };
-
-        // Show save dialog (parented to capture window so it can't fall behind)
-        let path = rfd::FileDialog::new()
-            .add_filter("PNG Image", &["png"])
-            .add_filter("JPEG Image", &["jpg", "jpeg"])
-            .set_file_name("screenshot.png")
-            .set_parent(window)
-            .save_file();
-
-        let Some(mut path) = path else {
-            log::info!("save: dialog cancelled");
-            return ActionResult::Cancelled;
-        };
-
-        // Auto-append extension if missing
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|s| s.to_lowercase());
-
-        let format = match ext.as_deref() {
-            Some("png") => image::ImageFormat::Png,
-            Some("jpg") | Some("jpeg") => image::ImageFormat::Jpeg,
-            _ => {
-                // Default to PNG if no/unknown extension
-                path.set_extension("png");
-                image::ImageFormat::Png
-            }
-        };
-
-        // Create image and save
-        let img: image::RgbaImage =
-            image::ImageBuffer::from_raw(width, height, rgba).expect("buffer size matches");
-
-        if let Err(e) = img.save_with_format(&path, format) {
-            log::error!("save: failed to write {:?}: {e}", path);
-            ActionResult::Failed(format!("Failed to save file: {e}"))
-        } else {
-            log::info!("saved {}x{} image to {:?}", width, height, path);
-            ActionResult::Success
-        }
+    /// Hit-test the virtual cursor against the panel's buttons.
+    /// Returns `Some(button_index)` if over a button, `None` otherwise.
+    fn panel_button_under_cursor(&self) -> Option<usize> {
+        self.input.panel_state.as_ref().and_then(|p| {
+            p.layout
+                .hit_test(self.input.virtual_cursor.x, self.input.virtual_cursor.y)
+        })
     }
 
     /// Reset the selection and return to draw mode.
@@ -577,7 +391,11 @@ impl App {
         match action {
             panel::ButtonAction::Copy => {
                 self.hide_all_windows();
-                match self.handle_copy() {
+                let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
+                    (Some(sel), Some(buf)) => img::copy_to_clipboard(sel, buf),
+                    _ => ActionResult::Failed("No selection or buffer".into()),
+                };
+                match result {
                     ActionResult::Success => {
                         event_loop.exit();
                     }
@@ -595,7 +413,11 @@ impl App {
             }
             panel::ButtonAction::Save => {
                 self.hide_all_windows();
-                match self.handle_save(window) {
+                let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
+                    (Some(sel), Some(buf)) => img::save_to_file(sel, buf, window),
+                    _ => ActionResult::Failed("No selection or buffer".into()),
+                };
+                match result {
                     ActionResult::Success => {
                         event_loop.exit();
                     }
@@ -624,250 +446,6 @@ impl App {
     }
 }
 
-/// Hit-test the cursor (in virtual-desktop pixels) against a captured
-/// selection rect. The handle radius is `UNSCALED_DRAG_HANDLE_SIZE *
-/// dpi_scale` rounded down, mirroring DxScreenCapture.cpp:1676. Corners
-/// are tested before edges so they win at the corner squares (same
-/// loop order as DxScreenCapture.cpp:1695-1721).
-fn hit_test(cursor: ScreenPointF, sel: ScreenRect, dpi_scale: f32) -> Hittest {
-    let r = (UNSCALED_DRAG_HANDLE_SIZE * dpi_scale).floor() as i32;
-    let cx = cursor.x.floor() as i32;
-    let cy = cursor.y.floor() as i32;
-
-    // Corner: a `(2r+1) × (2r+1)` square centred on the corner pixel,
-    // matching `PtToWidenedRect` at rectex.h:119-127.
-    let in_corner = |x: i32, y: i32| -> bool {
-        cx >= x - r && cx <= x + r && cy >= y - r && cy <= y + r
-    };
-    // Edge: a rect widened by `r` on every side around the line
-    // segment. Same shape as the corners on the perpendicular axis,
-    // but stretched along the edge — matching `LineToWidenedRect` at
-    // rectex.h:129-137.
-    let in_edge = |x1: i32, y1: i32, x2: i32, y2: i32| -> bool {
-        let lx = x1.min(x2) - r;
-        let rx = x1.max(x2) + r;
-        let ty = y1.min(y2) - r;
-        let by = y1.max(y2) + r;
-        cx >= lx && cx <= rx && cy >= ty && cy <= by
-    };
-
-    let l = sel.left();
-    let t = sel.top();
-    let r_edge = sel.right();
-    let b = sel.bottom();
-
-    // Order matches the C++ handles[] array at DxScreenCapture.cpp:1695:
-    // four corners first, then four edges, with first-hit-wins.
-    if in_corner(l, t) {
-        return Hittest::TopLeft;
-    }
-    if in_corner(r_edge, t) {
-        return Hittest::TopRight;
-    }
-    if in_corner(r_edge, b) {
-        return Hittest::BottomRight;
-    }
-    if in_corner(l, b) {
-        return Hittest::BottomLeft;
-    }
-    if in_edge(l, t, r_edge, t) {
-        return Hittest::Top;
-    }
-    if in_edge(r_edge, t, r_edge, b) {
-        return Hittest::Right;
-    }
-    if in_edge(r_edge, b, l, b) {
-        return Hittest::Bottom;
-    }
-    if in_edge(l, t, l, b) {
-        return Hittest::Left;
-    }
-
-    // Fall through: inside the rect (move) or fully outside.
-    if cx >= l && cx < r_edge && cy >= t && cy < b {
-        Hittest::Inside
-    } else {
-        Hittest::Outside
-    }
-}
-
-/// Translate the anchor rect by `(delta_x, delta_y)` and return its
-/// intersection with the virtual desktop bounds, or `None` if the
-/// translated rect is fully outside the vd. This is the "move" path's
-/// core: the underlying logical position is free-form (whatever the
-/// cursor points at), and what gets drawn + eventually saved is the
-/// *cropped* rect so the selection can't "run off" a display — it
-/// visually shrinks against the boundary and reappears when the
-/// cursor comes back, all without mutating the anchor.
-fn move_and_crop(
-    anchor: ScreenRect,
-    delta_x: i32,
-    delta_y: i32,
-    vd: ScreenRect,
-) -> Option<ScreenRect> {
-    let moved = ScreenRect::from_xy_size(
-        anchor.left() + delta_x,
-        anchor.top() + delta_y,
-        anchor.width(),
-        anchor.height(),
-    );
-    intersect_rects(moved, vd)
-}
-
-/// Intersection of two rects, or `None` if they don't overlap. Used by
-/// the move-and-crop path to clip the translated rect to vd bounds
-/// each frame.
-fn intersect_rects(a: ScreenRect, b: ScreenRect) -> Option<ScreenRect> {
-    let l = a.left().max(b.left());
-    let t = a.top().max(b.top());
-    let r = a.right().min(b.right());
-    let bot = a.bottom().min(b.bottom());
-    if r > l && bot > t {
-        Some(ScreenRect::from_exact(l, t, r, bot))
-    } else {
-        None
-    }
-}
-
-/// Apply a `Resize` drag to an anchor selection rect via the cursor's
-/// current virtual-desktop position. Each handle pulls a different
-/// subset of the four edges:
-///   * corners drag two edges (the corner-opposite stays fixed)
-///   * edges drag one edge (the other three stay fixed)
-///   * inside / outside don't enter resize mode
-/// Each moved edge is hard-clamped to the vd bounds before the rect is
-/// re-normalised, so dragging the right edge past the left flips the
-/// rect (matches the C++ `Xy12Rect` normalisation at rectex.h:111-117
-/// and DxScreenCapture.cpp:1419-1458).
-fn resize_with_clamp(
-    anchor: ScreenRect,
-    handle: Hittest,
-    cursor_x: i32,
-    cursor_y: i32,
-    vd: ScreenRect,
-) -> ScreenRect {
-    let mut left = anchor.left();
-    let mut top = anchor.top();
-    let mut right = anchor.right();
-    let mut bottom = anchor.bottom();
-    // Each handle pins the opposite corner and drags the named one(s).
-    match handle {
-        Hittest::Top => {
-            top = cursor_y;
-        }
-        Hittest::Bottom => {
-            bottom = cursor_y;
-        }
-        Hittest::Left => {
-            left = cursor_x;
-        }
-        Hittest::Right => {
-            right = cursor_x;
-        }
-        Hittest::TopLeft => {
-            left = cursor_x;
-            top = cursor_y;
-        }
-        Hittest::TopRight => {
-            right = cursor_x;
-            top = cursor_y;
-        }
-        Hittest::BottomLeft => {
-            left = cursor_x;
-            bottom = cursor_y;
-        }
-        Hittest::BottomRight => {
-            right = cursor_x;
-            bottom = cursor_y;
-        }
-        // The Inside/Outside hittests aren't valid resize handles —
-        // mouse-down dispatch routes them to Move / no-op respectively,
-        // so we should never see them here. Defensive no-op.
-        Hittest::Inside | Hittest::Outside => {}
-    }
-    // Clamp every edge — even ones we didn't move — so an anchor that
-    // was already partly off-screen can't escape further. The C++
-    // `ClipRectBy` only runs at finalisation, but here we want the
-    // soft-clamp behaviour live on every frame.
-    left = left.clamp(vd.left(), vd.right());
-    right = right.clamp(vd.left(), vd.right());
-    top = top.clamp(vd.top(), vd.bottom());
-    bottom = bottom.clamp(vd.top(), vd.bottom());
-    // Normalise into a min/max rect (mirrors `Xy12Rect`).
-    let nl = left.min(right);
-    let nr = left.max(right);
-    let nt = top.min(bottom);
-    let nb = top.max(bottom);
-    ScreenRect::from_exact(nl, nt, nr, nb)
-}
-
-/// Look up the DPI scale of whichever monitor currently contains `p`,
-/// returning `1.0` if the point falls in the multi-monitor dead zone.
-/// Used at mouse-down to seed the drag-distance threshold so that
-/// dragging across a monitor boundary doesn't change the threshold mid-
-/// gesture (matches the C++ behaviour at DxScreenCapture.cpp:1497, which
-/// reads `dpizoom` once from the monitor under `mouseDownPt`).
-fn dpi_at_point(p: ScreenPointF, monitors: &[ScreenRect], dpis: &[f32]) -> f32 {
-    for (i, m) in monitors.iter().enumerate() {
-        let mx = m.min_x() as f32;
-        let my = m.min_y() as f32;
-        let mw = m.width() as f32;
-        let mh = m.height() as f32;
-        if p.x >= mx && p.x < mx + mw && p.y >= my && p.y < my + mh {
-            return dpis.get(i).copied().unwrap_or(1.0);
-        }
-    }
-    1.0
-}
-
-/// Clamp the point to whichever monitor currently contains it, or to the
-/// nearest monitor if it's in the multi-monitor dead zone. A tiny epsilon
-/// is subtracted from the max edge so the point never lands on the
-/// exclusive right/bottom of a rect (matches Screens.cpp:147-153 which
-/// subtracts 0.001 from the right/bottom bounds).
-fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[ScreenRect]) {
-    if monitors.is_empty() {
-        return;
-    }
-    // First try: already inside a monitor? Leave it alone.
-    for m in monitors {
-        let mx = m.min_x() as f32;
-        let my = m.min_y() as f32;
-        let mw = m.width() as f32;
-        let mh = m.height() as f32;
-        if p.x >= mx && p.x < mx + mw && p.y >= my && p.y < my + mh {
-            return;
-        }
-    }
-    // Not inside any monitor — pick the one whose centre is closest and
-    // clamp into its bounds. Distance-to-centre is good enough as a
-    // "nearest monitor" heuristic for a cursor that's just crossed a
-    // boundary.
-    let (best_ix, _) = monitors
-        .iter()
-        .enumerate()
-        .map(|(i, m)| {
-            let cx = m.min_x() as f32 + m.width() as f32 * 0.5;
-            let cy = m.min_y() as f32 + m.height() as f32 * 0.5;
-            let dx = p.x - cx;
-            let dy = p.y - cy;
-            (i, dx * dx + dy * dy)
-        })
-        .fold((0usize, f32::INFINITY), |(bi, bd), (i, d)| {
-            if d < bd {
-                (i, d)
-            } else {
-                (bi, bd)
-            }
-        });
-    let m = &monitors[best_ix];
-    let min_x = m.min_x() as f32;
-    let min_y = m.min_y() as f32;
-    let max_x = (m.min_x() + m.width()) as f32 - 0.001;
-    let max_y = (m.min_y() + m.height()) as f32 - 0.001;
-    p.x = p.x.clamp(min_x, max_x);
-    p.y = p.y.clamp(min_y, max_y);
-}
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -1040,18 +618,18 @@ impl ApplicationHandler for App {
                 None => continue,
             };
             let id = w.id();
-            let handle = spawn_render_thread(
-                w,
+            let handle = spawn_render_thread(RenderThreadParams {
+                window: w,
                 surface,
                 gpu,
-                self.settings.clone(),
-                m.bounds,
-                m.scale_factor,
-                hz,
-                initial_mouse_f,
-                ready_count.clone(),
-                visible_barrier.clone(),
-            );
+                settings: self.settings.clone(),
+                monitor_bounds: m.bounds,
+                scale_factor: m.scale_factor,
+                refresh_hz: hz,
+                initial_mouse: initial_mouse_f,
+                ready_count: ready_count.clone(),
+                visible_barrier: visible_barrier.clone(),
+            });
             handles.insert(id, handle);
             self.monitor_window_ids.push(id);
         }
@@ -1250,7 +828,7 @@ impl ApplicationHandler for App {
                         if !self.input.dragging {
                             let threshold = 6.0
                                 / (self.input.mouse_down_dpi * self.input.zoom);
-                            let crossed = psel.map_or(false, |r| {
+                            let crossed = psel.is_some_and(|r| {
                                 (r.width() as f32) > threshold
                                     || (r.height() as f32) > threshold
                             });
@@ -1343,13 +921,7 @@ impl ApplicationHandler for App {
                         // so the bake backend redraws the hovered
                         // button with the 30% white overlay. A hover
                         // change always rebroadcasts the panel state.
-                        let new_hover =
-                            self.input.panel_state.as_ref().and_then(|p| {
-                                p.layout.hit_test(
-                                    self.input.virtual_cursor.x,
-                                    self.input.virtual_cursor.y,
-                                )
-                            });
+                        let new_hover = self.panel_button_under_cursor();
                         let old_hover =
                             self.input.panel_state.as_ref().and_then(|p| p.hover_idx);
                         if new_hover != old_hover {
@@ -1393,13 +965,7 @@ impl ApplicationHandler for App {
                             // button, dispatch the action and exit.
                             // Matches the v1 scope — real handlers
                             // for save/copy/upload/etc. are deferred.
-                            if let Some(idx) =
-                                self.input.panel_state.as_ref().and_then(|p| {
-                                    p.layout.hit_test(
-                                        self.input.virtual_cursor.x,
-                                        self.input.virtual_cursor.y,
-                                    )
-                                })
+                            if let Some(idx) = self.panel_button_under_cursor()
                             {
                                 let def = panel::button_defs()[idx];
                                 self.dispatch_button_action(def.action, event_loop, handle_window);

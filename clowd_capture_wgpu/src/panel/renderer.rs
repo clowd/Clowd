@@ -57,6 +57,17 @@ const ICON_UNSCALED_PX: f32 = 26.0;
 /// DxScreenCapture.cpp:446.
 const GRAY_RGBA: [u8; 4] = [0x37, 0x37, 0x37, 0xFF];
 
+/// Parameters for drawing a single line of text into a pixmap.
+struct TextLine<'a> {
+    text: &'a str,
+    px: f32,
+    x: f32,
+    y: f32,
+    rgba: [u8; 4],
+    underline: Option<usize>,
+    underline_thickness: f32,
+}
+
 /// Uniform block for the textured-quad pipeline. Carries the destination
 /// NDC rect plus per-button hover state for shader-based overlay.
 ///
@@ -435,13 +446,15 @@ impl BakePanelBackend {
             let underline_thickness = dpi.round().max(1.0);
             self.draw_text_line(
                 &mut pixmap,
-                def.label,
-                label_px,
-                label_x,
-                label_y,
-                white_rgba,
-                Some(def.underline_idx),
-                underline_thickness,
+                TextLine {
+                    text: def.label,
+                    px: label_px,
+                    x: label_x,
+                    y: label_y,
+                    rgba: white_rgba,
+                    underline: Some(def.underline_idx),
+                    underline_thickness,
+                },
             );
         }
 
@@ -460,34 +473,40 @@ impl BakePanelBackend {
 
         self.draw_text_line(
             &mut pixmap,
-            &width_str,
-            area_px,
-            al + (aw / 2.0) - (mw.width / 2.0),
-            at + (ah / 4.0) - (mw.height / 2.0),
-            white_rgba,
-            None,
-            0.0,
+            TextLine {
+                text: &width_str,
+                px: area_px,
+                x: al + (aw / 2.0) - (mw.width / 2.0),
+                y: at + (ah / 4.0) - (mw.height / 2.0),
+                rgba: white_rgba,
+                underline: None,
+                underline_thickness: 0.0,
+            },
         );
         self.draw_text_line(
             &mut pixmap,
-            &height_str,
-            area_px,
-            al + (aw / 2.0) - (mh.width / 2.0),
-            at + (ah / 1.34) - (mh.height / 2.0),
-            white_rgba,
-            None,
-            0.0,
+            TextLine {
+                text: &height_str,
+                px: area_px,
+                x: al + (aw / 2.0) - (mh.width / 2.0),
+                y: at + (ah / 1.34) - (mh.height / 2.0),
+                rgba: white_rgba,
+                underline: None,
+                underline_thickness: 0.0,
+            },
         );
         // × glyph: drawn at 70% white to match brushWhite70.
         self.draw_text_line(
             &mut pixmap,
-            x_str,
-            area_px,
-            al + (aw / 2.0) - (mx.width / 2.0),
-            at + (ah / 2.0) - (mx.height / 2.0),
-            [0xFF, 0xFF, 0xFF, (0.70 * 255.0) as u8],
-            None,
-            0.0,
+            TextLine {
+                text: x_str,
+                px: area_px,
+                x: al + (aw / 2.0) - (mx.width / 2.0),
+                y: at + (ah / 2.0) - (mx.height / 2.0),
+                rgba: [0xFF, 0xFF, 0xFF, (0.70 * 255.0) as u8],
+                underline: None,
+                underline_thickness: 0.0,
+            },
         );
 
         Some(pixmap)
@@ -530,17 +549,16 @@ impl BakePanelBackend {
     /// over capitals) is ~2-3 px at 12px Roboto and would make every
     /// centered string sit visually low. Pass the y you want the
     /// visible top of the text to be at and the math just works.
-    fn draw_text_line(
-        &mut self,
-        pixmap: &mut Pixmap,
-        text: &str,
-        px: f32,
-        mut x: f32,
-        y: f32,
-        rgba: [u8; 4],
-        underline: Option<usize>,
-        underline_thickness: f32,
-    ) {
+    fn draw_text_line(&mut self, pixmap: &mut Pixmap, tl: TextLine<'_>) {
+        let TextLine {
+            text,
+            px,
+            mut x,
+            y,
+            rgba,
+            underline,
+            underline_thickness,
+        } = tl;
         let font_metrics = self.font.metrics(&[]).scale(px);
         // Baseline = top of the cap-height box + cap_height. For
         // Latin digits and uppercase letters, the bottom of the glyph
@@ -868,7 +886,7 @@ fn fill_rect(pixmap: &mut Pixmap, x: f32, y: f32, w: f32, h: f32, rgba: [u8; 4])
             let dst_g = data[idx + 1] as u32;
             let dst_b = data[idx + 2] as u32;
             let dst_a = data[idx + 3] as u32;
-            let inv_a = 255 - src_a as u32;
+            let inv_a = 255 - src_a;
             data[idx] = (src_r as u32 + (dst_r * inv_a + 127) / 255) as u8;
             data[idx + 1] = (src_g as u32 + (dst_g * inv_a + 127) / 255) as u8;
             data[idx + 2] = (src_b as u32 + (dst_b * inv_a + 127) / 255) as u8;

@@ -42,6 +42,7 @@ pub struct MonitorInfo {
     /// Human-readable display name (e.g. `\\.\DISPLAY1` on Windows, or
     /// `"Display 1"` on macOS). Used by the Tips & Hotkeys panel to show
     /// "Select monitor '[name]'" entries.
+    #[allow(dead_code)]
     pub name: String,
     /// PCI vendor + device IDs of the DXGI adapter driving this monitor.
     /// Used by `bootstrap_window_gpu` to select the correct wgpu adapter

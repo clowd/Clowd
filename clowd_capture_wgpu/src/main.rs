@@ -1,8 +1,10 @@
 mod app;
 mod geometry;
 mod gpu;
+mod img;
 mod panel;
 mod platform;
+mod selection;
 mod settings;
 mod system;
 mod window_state;
