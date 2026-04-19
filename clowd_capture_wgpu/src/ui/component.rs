@@ -133,15 +133,37 @@ pub struct BakedPixmap {
     pub dest_vd: ScreenRect,
 }
 
+/// How a region's pixels should be modified at composite time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // Darken is part of the public effect set; no consumer yet.
+pub enum RegionMode {
+    /// Blend toward white by `amount` (0..1). `amount = 0` is no
+    /// change; `amount = 1` is fully white. Used for hover highlights.
+    Lighten,
+    /// Blend toward black by `amount` (0..1).
+    Darken,
+    /// Composite this region at absolute alpha `amount` (0..1),
+    /// replacing the component-wide `base_opacity` for these pixels.
+    /// Used by the tips panel drop shadow to sit at 30% while the rest
+    /// of the panel sits at 70%.
+    Fade,
+}
+
 /// A rectangular region within the baked texture that receives a
-/// shader-driven hover overlay. Expressed in texture UV coordinates.
+/// shader-driven effect. Expressed in texture UV coordinates. If
+/// regions overlap, the first one (in `Vec` order) wins for that
+/// pixel.
 #[derive(Clone, Copy)]
 pub struct OverlayRegion {
     /// UV rect within the texture: (u_min, v_min, u_max, v_max).
     pub uv_rect: [f32; 4],
-    /// Target overlay opacity in [0.0, 1.0]. The render thread's
-    /// `OverlayAnimator` smoothly interpolates toward this value.
-    pub target_opacity: f32,
+    /// What kind of effect this region applies.
+    pub mode: RegionMode,
+    /// Target strength in [0.0, 1.0]. The render thread's
+    /// `OverlayAnimator` smoothly interpolates the live value toward
+    /// this. Newly added regions start at this value (no first-frame
+    /// fade-in), so static effects don't animate on the first appearance.
+    pub target_amount: f32,
 }
 
 /// Type-erased snapshot shipped from the app thread to a render thread.

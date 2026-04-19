@@ -59,6 +59,11 @@ pub struct TipsLayout {
     pub color_rgb_y: f32,
     /// DPI scale this layout was computed at.
     pub dpi_scale: f32,
+    /// Width / height (px) of the drop-shadow strip extending out of
+    /// the panel's right and bottom edges. The bake pixmap is enlarged
+    /// by this on the right and bottom so the shadow has somewhere to
+    /// sit. Mirrors `paddingHalf` in DxScreenCapture.cpp:784-787.
+    pub shadow_extension_px: f32,
 }
 
 /// Compute panel placement and internal metrics.
@@ -179,5 +184,6 @@ pub fn compute_layout(
         color_hex_y,
         color_rgb_y,
         dpi_scale: dpi,
+        shadow_extension_px: padding_half,
     })
 }

@@ -11,7 +11,7 @@ use std::time::Instant;
 use crate::geometry::{RectExt, ScreenRect};
 
 use super::animation::OverlayAnimator;
-use super::component::{ComponentId, ComponentSnapshot};
+use super::component::{ComponentId, ComponentSnapshot, RegionMode};
 
 /// Maximum overlay regions the shader supports per component.
 pub const MAX_OVERLAY_REGIONS: usize = 16;
@@ -25,12 +25,15 @@ pub const MAX_OVERLAY_REGIONS: usize = 16;
 struct QuadUniforms {
     /// Destination rect in NDC: (min_x, min_y, size_x, size_y).
     ndc_rect: [f32; 4],
-    /// Number of active overlay regions (x), padding (yzw).
+    /// Number of active overlay regions (x), base alpha (y), padding (zw).
     region_meta: [f32; 4],
     /// Overlay region UV rects: (u_min, v_min, u_max, v_max) each.
     region_rects: [[f32; 4]; MAX_OVERLAY_REGIONS],
-    /// Overlay fade values packed into vec4s (16 floats = 4 vec4s).
-    region_fades: [[f32; 4]; MAX_OVERLAY_REGIONS / 4],
+    /// Per-region effect strength (animated), packed into vec4s.
+    region_amounts: [[f32; 4]; MAX_OVERLAY_REGIONS / 4],
+    /// Per-region effect mode, encoded as `RegionMode as u32`. Packed
+    /// into vec4<u32>; matches `MODE_*` constants in the shader.
+    region_modes: [[u32; 4]; MAX_OVERLAY_REGIONS / 4],
 }
 
 /// Per-component cached GPU resources.
@@ -42,6 +45,8 @@ struct CachedTexture {
     dest_px: [f32; 4],
     /// Overlay region UV rects, mirroring the snapshot's overlay_regions.
     overlay_uv_rects: Vec<[f32; 4]>,
+    /// Per-region effect mode, parallel to `overlay_uv_rects`.
+    overlay_modes: Vec<RegionMode>,
 }
 
 /// Per-component state tracked by the backend.
@@ -337,12 +342,19 @@ impl OverlayBackend {
                     .take(MAX_OVERLAY_REGIONS)
                     .map(|r| r.uv_rect)
                     .collect();
+                let overlay_modes: Vec<RegionMode> = snapshot
+                    .overlay_regions
+                    .iter()
+                    .take(MAX_OVERLAY_REGIONS)
+                    .map(|r| r.mode)
+                    .collect();
 
                 entry.cached = Some(CachedTexture {
                     texture,
                     bind_group,
                     dest_px,
                     overlay_uv_rects,
+                    overlay_modes,
                 });
                 entry.cached_hash = hash;
             }
@@ -355,6 +367,12 @@ impl OverlayBackend {
                     .iter()
                     .take(MAX_OVERLAY_REGIONS)
                     .map(|r| r.uv_rect)
+                    .collect();
+                cached.overlay_modes = snapshot
+                    .overlay_regions
+                    .iter()
+                    .take(MAX_OVERLAY_REGIONS)
+                    .map(|r| r.mode)
                     .collect();
             }
 
@@ -377,11 +395,23 @@ impl OverlayBackend {
                 region_rects[i] = *r;
             }
 
-            let mut region_fades = [[0.0f32; 4]; MAX_OVERLAY_REGIONS / 4];
+            let mut region_amounts = [[0.0f32; 4]; MAX_OVERLAY_REGIONS / 4];
             for i in 0..region_count {
                 let vec_idx = i / 4;
                 let comp_idx = i % 4;
-                region_fades[vec_idx][comp_idx] = entry.animator.fade_at(i);
+                region_amounts[vec_idx][comp_idx] = entry.animator.fade_at(i);
+            }
+
+            let mut region_modes = [[0u32; 4]; MAX_OVERLAY_REGIONS / 4];
+            for (i, mode) in cached
+                .overlay_modes
+                .iter()
+                .enumerate()
+                .take(region_count)
+            {
+                let vec_idx = i / 4;
+                let comp_idx = i % 4;
+                region_modes[vec_idx][comp_idx] = *mode as u32;
             }
 
             let uniforms = QuadUniforms {
@@ -393,7 +423,8 @@ impl OverlayBackend {
                     0.0,
                 ],
                 region_rects,
-                region_fades,
+                region_amounts,
+                region_modes,
             };
             queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 

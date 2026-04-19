@@ -6,17 +6,19 @@
 //! or once a selection has been captured. The `T` key toggles it on
 //! and off entirely.
 //!
-//! Unlike the old version this panel does NOT have a drop shadow and
-//! does NOT bake its own 70% alpha into the fills. Instead all content
-//! is rasterized fully opaque and the shader applies `base_opacity =
-//! 0.7` per-component at composite time (see `overlay_quad.wgsl` and
-//! `Component::base_opacity`). Text stays crisp; the whole panel fades
-//! together.
+//! All pixmap content is rasterized fully opaque; the shader applies
+//! `base_opacity = 0.70` per-component at composite time (see
+//! `overlay_quad.wgsl` and `Component::base_opacity`), keeping text
+//! crisp while the panel composites at 70%. The drop shadow uses the
+//! per-region alpha override (`OverlayRegion::alpha_override`) to
+//! composite the right/bottom strips at `SHADOW_ALPHA = 0.30` instead,
+//! matching the C++ panel's `brushOverlay30` shadow at
+//! DxScreenCapture.cpp:784-787.
 
 use swash::FontRef;
 use tiny_skia::Pixmap;
 
-use crate::geometry::ScreenPointF;
+use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::ui::component::*;
 use crate::ui::draw::{fill_rect, LineMetrics, TextLine, TextRenderer};
 
@@ -31,9 +33,15 @@ use super::model::{
 /// keeping text/edges crisp because the bake itself is fully opaque.
 const BASE_OPACITY: f32 = 0.70;
 
+/// Drop-shadow composite alpha. Mirrors `brushOverlay30` in the old
+/// C++ code. Applied via per-region alpha override so the shadow
+/// composites at this value while the rest of the panel stays at
+/// `BASE_OPACITY`.
+const SHADOW_ALPHA: f32 = 0.30;
+
 /// Premultiplied white (body background and title text).
 const WHITE_RGBA: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
-/// Premultiplied black (body text and color-sampler outline).
+/// Premultiplied black (body text, color-sampler outline, drop shadow).
 const BLACK_RGBA: [u8; 4] = [0x00, 0x00, 0x00, 0xFF];
 
 pub struct TipsPanelComponent {
@@ -115,17 +123,28 @@ impl TipsPanelComponent {
     }
 
     /// Rasterize the panel into a pixmap. Called from `bake()`.
+    ///
+    /// The pixmap is `body_w + shadow` wide and `body_h + shadow` tall:
+    /// the body+title cover (0..body_w, 0..body_h), and the right /
+    /// bottom strips of the extension carry the drop shadow. Pixels
+    /// outside both stay transparent.
     fn bake_pixmap(&mut self) -> Option<Pixmap> {
         let layout = self.layout?;
-        let w = layout.panel_rect.width().max(1) as u32;
-        let h = layout.panel_rect.height().max(1) as u32;
-        let mut pixmap = Pixmap::new(w, h)?;
+        let body_w = layout.panel_rect.width().max(1) as u32;
+        let body_h = layout.panel_rect.height().max(1) as u32;
+        let shadow_ext = layout.shadow_extension_px.round().max(0.0) as u32;
+        let pixmap_w = body_w + shadow_ext;
+        let pixmap_h = body_h + shadow_ext;
+        let mut pixmap = Pixmap::new(pixmap_w, pixmap_h)?;
 
         let body_px = (BODY_FONT_PX * layout.dpi_scale).floor();
         let title_px = (TITLE_FONT_PX * layout.dpi_scale).floor();
+        let body_w_f = body_w as f32;
+        let body_h_f = body_h as f32;
+        let shadow_f = shadow_ext as f32;
 
         // --- Body background (white, opaque — shader applies 0.7) ---
-        fill_rect(&mut pixmap, 0.0, 0.0, w as f32, h as f32, WHITE_RGBA);
+        fill_rect(&mut pixmap, 0.0, 0.0, body_w_f, body_h_f, WHITE_RGBA);
 
         // --- Title bar (accent color, opaque) ---
         let title_h = layout.title_rect.height() as f32;
@@ -135,11 +154,37 @@ impl TipsPanelComponent {
             (self.accent_color[2].clamp(0.0, 1.0) * 255.0) as u8,
             0xFF,
         ];
-        fill_rect(&mut pixmap, 0.0, 0.0, w as f32, title_h, accent_u8);
+        fill_rect(&mut pixmap, 0.0, 0.0, body_w_f, title_h, accent_u8);
 
-        // Title text — Roboto Bold, white, centered in the title bar.
+        // --- Drop shadow (opaque black; shader composites at
+        // SHADOW_ALPHA via per-region alpha override). Two strips form
+        // an "L" hugging the bottom-right; top-right and bottom-left
+        // corners stay clear so the shadow reads as a directional drop.
+        // Mirrors DxScreenCapture.cpp:784-787.
+        if shadow_ext > 0 {
+            // Right strip: x ∈ [body_w, body_w + shadow], y ∈ [shadow, body_h + shadow]
+            fill_rect(
+                &mut pixmap,
+                body_w_f,
+                shadow_f,
+                shadow_f,
+                body_h_f,
+                BLACK_RGBA,
+            );
+            // Bottom strip: x ∈ [shadow, body_w], y ∈ [body_h, body_h + shadow]
+            fill_rect(
+                &mut pixmap,
+                shadow_f,
+                body_h_f,
+                body_w_f - shadow_f,
+                shadow_f,
+                BLACK_RGBA,
+            );
+        }
+
+        // Title text — bold mono, white, centered in the title bar.
         let title_metrics = self.text_bold.measure_line(TITLE, title_px);
-        let title_x = (w as f32 - title_metrics.width) * 0.5;
+        let title_x = (body_w_f - title_metrics.width) * 0.5;
         let title_y = (title_h - title_metrics.height) * 0.5;
         self.text_bold.draw_text_line(
             &mut pixmap,
@@ -381,17 +426,53 @@ impl Component for TipsPanelComponent {
     fn bake(&mut self) -> Option<BakedPixmap> {
         let layout = self.layout?;
         let pixmap = self.bake_pixmap()?;
+        // Extend the destination rect right & down by the shadow strip
+        // so the L-shaped shadow has somewhere to land. The body+title
+        // still occupy the original panel_rect at the top-left of the
+        // bake.
+        let shadow_ext = layout.shadow_extension_px.round().max(0.0) as i32;
+        let dest_vd = ScreenRect::from_xy_size(
+            layout.panel_rect.left(),
+            layout.panel_rect.top(),
+            layout.panel_rect.width() + shadow_ext,
+            layout.panel_rect.height() + shadow_ext,
+        );
         Some(BakedPixmap {
             data: pixmap.data().to_vec(),
             width: pixmap.width(),
             height: pixmap.height(),
-            dest_vd: layout.panel_rect,
+            dest_vd,
         })
     }
 
     fn overlay_regions(&self) -> Vec<OverlayRegion> {
-        // No hover interactivity; shader doesn't need any regions.
-        Vec::new()
+        // Two regions for the drop shadow's right & bottom strips.
+        // Fade mode replaces the panel's base alpha (0.70) with
+        // SHADOW_ALPHA (0.30) inside these strips. The shadow texels
+        // are baked opaque black; the shader takes care of compositing.
+        let Some(layout) = self.layout else { return Vec::new() };
+        let body_w = layout.panel_rect.width() as f32;
+        let body_h = layout.panel_rect.height() as f32;
+        let shadow = layout.shadow_extension_px.round();
+        if body_w <= 0.0 || body_h <= 0.0 || shadow <= 0.0 {
+            return Vec::new();
+        }
+        let pw = body_w + shadow;
+        let ph = body_h + shadow;
+        vec![
+            // Right strip
+            OverlayRegion {
+                uv_rect: [body_w / pw, shadow / ph, 1.0, 1.0],
+                mode: RegionMode::Fade,
+                target_amount: SHADOW_ALPHA,
+            },
+            // Bottom strip
+            OverlayRegion {
+                uv_rect: [shadow / pw, body_h / ph, body_w / pw, 1.0],
+                mode: RegionMode::Fade,
+                target_amount: SHADOW_ALPHA,
+            },
+        ]
     }
 
     fn base_opacity(&self) -> f32 {

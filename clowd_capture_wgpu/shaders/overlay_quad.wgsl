@@ -1,23 +1,35 @@
 // Generic overlay quad shader — renders a CPU-baked pixmap as a textured
-// quad with per-region hover overlays. Generalization of the button panel
-// shader to support up to MAX_REGIONS interactive regions.
+// quad. Each component can attach up to MAX_REGIONS rectangular regions,
+// each tagged with a `mode` and an `amount`. The first matching region
+// (in array order) wins for any given pixel; overlap is not blended.
+//
+// Modes (must match `RegionMode as u32` in src/ui/component.rs):
+//   0 LIGHTEN  blend toward white by `amount` (overlay applied AFTER base alpha)
+//   1 DARKEN   blend toward black by `amount`
+//   2 FADE     replace the component-wide base alpha with `amount`
 
 const MAX_REGIONS: u32 = 16u;
-const HOVER_OPACITY: f32 = 0.30;
+
+const MODE_LIGHTEN: u32 = 0u;
+const MODE_DARKEN:  u32 = 1u;
+const MODE_FADE:    u32 = 2u;
 
 struct QuadUniforms {
     // xy = bottom-left corner of the quad in NDC (y-up).
     // zw = size in NDC (positive).
     ndc_rect: vec4<f32>,
-    // x = number of active overlay regions.
+    // x = number of active regions.
     // y = base alpha multiplier applied to the sampled pixmap
     //     (1.0 = fully opaque, <1.0 blends the whole component).
     // zw = padding.
     region_meta: vec4<f32>,
-    // Overlay region UV rects: (u_min, v_min, u_max, v_max) each.
+    // Region UV rects: (u_min, v_min, u_max, v_max) each.
     region_rects: array<vec4<f32>, 16>,
-    // Fade values packed into vec4s: 16 floats in 4 vec4s.
-    region_fades: array<vec4<f32>, 4>,
+    // Per-region effect strength (animated). 16 floats in 4 vec4s.
+    region_amounts: array<vec4<f32>, 4>,
+    // Per-region mode (one of the MODE_* constants). Packed as
+    // vec4<u32>; 16 modes in 4 vec4s.
+    region_modes: array<vec4<u32>, 4>,
 };
 
 @group(0) @binding(0) var<uniform> u: QuadUniforms;
@@ -51,37 +63,64 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
     return out;
 }
 
-// Get the fade value for region `i` from the packed vec4s.
-fn get_fade(i: u32) -> f32 {
-    let vec_idx = i / 4u;
-    let comp_idx = i % 4u;
-    return u.region_fades[vec_idx][comp_idx];
+fn get_amount(i: u32) -> f32 {
+    let vi = i / 4u;
+    let ci = i % 4u;
+    return u.region_amounts[vi][ci];
+}
+
+fn get_mode(i: u32) -> u32 {
+    let vi = i / 4u;
+    let ci = i % 4u;
+    return u.region_modes[vi][ci];
+}
+
+fn rect_contains(uv: vec2<f32>, r: vec4<f32>) -> bool {
+    return uv.x >= r.x && uv.x < r.z && uv.y >= r.y && uv.y < r.w;
 }
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var color = textureSample(tex, samp, in.uv);
-
-    // Per-component base alpha. The pixmap is baked with premultiplied
-    // alpha, and scaling the whole vec4 preserves premultiplication, so
-    // components can render their content fully opaque and let the
-    // shader composite them at any opacity via this uniform.
-    let base_alpha = u.region_meta.y;
-    color = color * base_alpha;
-
     let count = u32(u.region_meta.x);
+
+    // Walk regions once, picking the first match for this pixel.
+    var matched: bool = false;
+    var matched_mode: u32 = 0u;
+    var matched_amount: f32 = 0.0;
     for (var i = 0u; i < count && i < MAX_REGIONS; i = i + 1u) {
-        let fade = get_fade(i);
-        if (fade > 0.0) {
-            let r = u.region_rects[i];
-            if (in.uv.x >= r.x && in.uv.x < r.z && in.uv.y >= r.y && in.uv.y < r.w) {
-                let overlay_a = fade * HOVER_OPACITY;
-                let overlay_rgb = vec3<f32>(overlay_a);
-                color = vec4<f32>(
-                    color.rgb * (1.0 - overlay_a) + overlay_rgb,
-                    color.a * (1.0 - overlay_a) + overlay_a
-                );
-            }
+        if (rect_contains(in.uv, u.region_rects[i])) {
+            matched = true;
+            matched_mode = get_mode(i);
+            matched_amount = get_amount(i);
+            break;
+        }
+    }
+
+    // Apply the base-alpha multiplier. Fade replaces it; everything
+    // else uses the component-wide base. Pixmap is premultiplied, so
+    // scaling the whole vec4 keeps premultiplication.
+    var alpha = u.region_meta.y;
+    if (matched && matched_mode == MODE_FADE) {
+        alpha = matched_amount;
+    }
+    color = color * alpha;
+
+    // Apply the overlay (Lighten/Darken). Skipped if the region wasn't
+    // matched, or if the strength rounds to zero.
+    if (matched && matched_amount > 0.0) {
+        if (matched_mode == MODE_LIGHTEN) {
+            let a = matched_amount;
+            color = vec4<f32>(
+                color.rgb * (1.0 - a) + vec3<f32>(a),
+                color.a   * (1.0 - a) + a
+            );
+        } else if (matched_mode == MODE_DARKEN) {
+            let a = matched_amount;
+            color = vec4<f32>(
+                color.rgb * (1.0 - a),
+                color.a   * (1.0 - a) + a
+            );
         }
     }
 
