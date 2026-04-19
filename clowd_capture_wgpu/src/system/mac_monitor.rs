@@ -14,8 +14,19 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
     for (i, &id) in display_ids.iter().enumerate() {
         let display = CGDisplay::new(id);
         let cg_bounds = display.bounds();
-        let phys_w = display.pixels_wide() as u32;
-        let phys_h = display.pixels_high() as u32;
+
+        // Use CGDisplayMode to get the true physical pixel dimensions.
+        // CGDisplayPixelsWide/High are deprecated and return the logical
+        // resolution on modern Retina displays, which breaks DPI scaling.
+        let mode = display.display_mode();
+        let (phys_w, phys_h, refresh_hz) = if let Some(ref mode) = mode {
+            let pw = mode.pixel_width() as u32;
+            let ph = mode.pixel_height() as u32;
+            let hz = mode.refresh_rate() as f32;
+            (pw, ph, hz)
+        } else {
+            (display.pixels_wide() as u32, display.pixels_high() as u32, 0.0)
+        };
 
         let scale = if cg_bounds.size.width > 0.0 {
             phys_w as f32 / cg_bounds.size.width as f32
@@ -29,10 +40,6 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
         let phys_y = (cg_bounds.origin.y * scale as f64).round() as i32;
 
         // ProMotion / variable refresh displays report 0 Hz.
-        let refresh_hz = display
-            .display_mode()
-            .map(|m| m.refresh_rate() as f32)
-            .unwrap_or(0.0);
         let refresh_hz = if refresh_hz <= 0.0 { 60.0 } else { refresh_hz };
 
         monitors.push(MonitorInfo {
