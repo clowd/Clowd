@@ -8,8 +8,8 @@ use winit::window::Window;
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::{WindowGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
-use crate::ui::backend::OverlayBackend;
-use crate::ui::component::{ComponentId, ComponentSnapshot};
+use crate::ui::gpu::UiRenderer;
+use crate::ui::shared::{UiMonitor, UiSharedState};
 
 /// Duration of the colour → grayscale fade after the window first becomes
 /// visible. Tuned to feel "snappy but not snap" — under 300ms reads as a
@@ -37,18 +37,12 @@ pub enum RenderMsg {
         selection: Option<ScreenRect>,
         captured: bool,
     },
-    /// Component UI update. The render thread routes this to its
-    /// `OverlayBackend`. Replaces the old `PanelState` variant.
-    ComponentUpdate(ComponentUpdate),
+    /// Shared UI state broadcast from the app thread. Every render thread
+    /// receives the same `Arc` on every tick; each one independently
+    /// decides which components belong on its monitor using the pure
+    /// rules in [`crate::ui::shared`].
+    UiState(Arc<UiSharedState>),
     Shutdown,
-}
-
-/// A single component state update sent to a render thread.
-pub enum ComponentUpdate {
-    /// Show or update a component on this monitor.
-    Snapshot(ComponentSnapshot),
-    /// Remove a component from this monitor.
-    Remove(ComponentId),
 }
 
 /// Handle to a render thread, held by the main thread. Dropping it sends a
@@ -86,8 +80,8 @@ impl WindowHandle {
         });
     }
 
-    pub fn send_component_update(&self, update: ComponentUpdate) {
-        let _ = self.tx.send(RenderMsg::ComponentUpdate(update));
+    pub fn update_ui_state(&self, state: Arc<UiSharedState>) {
+        let _ = self.tx.send(RenderMsg::UiState(state));
     }
 }
 
@@ -110,6 +104,10 @@ pub struct RenderThreadParams {
     pub settings: Arc<CapturerSettings>,
     /// This window's monitor in virtual-desktop screen coordinates.
     pub monitor_bounds: ScreenRect,
+    /// Full UI-facing description of this window's monitor (bounds + DPI
+    /// + primary flag). Passed to the `UiRenderer` so each render thread
+    /// can run the shared visibility rules against its own monitor.
+    pub this_monitor: UiMonitor,
     /// DPI scale (1.0 = 100%). Written into the uniform so the shader
     /// can size the coloured crosshair arms in physical pixels.
     pub scale_factor: f32,
@@ -158,6 +156,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         gpu,
         settings,
         monitor_bounds,
+        this_monitor,
         scale_factor,
         refresh_hz,
         initial_mouse,
@@ -266,11 +265,12 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         }
     });
 
-    // Construct this monitor's overlay backend. Each render thread owns
-    // its own instance because each holds its own wgpu pipeline + bind
-    // group cache. The backend is generic — it renders any component's
-    // pixmap as a textured quad.
-    let mut overlay_backend = OverlayBackend::new(&gpu.device, gpu.surface_format);
+    // Construct this monitor's UI renderer. Each render thread owns its
+    // own because each owns its own wgpu device and associated pipelines
+    // / buffers. The renderer decides per-component visibility for THIS
+    // monitor every frame using the pure rules in `ui::shared`.
+    let mut ui_renderer =
+        UiRenderer::new(&gpu.device, &gpu.queue, gpu.surface_format, this_monitor);
 
     // Frame 0 — render once before the window is revealed so the first
     // visible frame has content. On macOS the window starts at alpha=0;
@@ -281,8 +281,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         &gpu,
         &config,
         snapshot_state.as_ref(),
-        &mut overlay_backend,
-        monitor_bounds,
+        &mut ui_renderer,
     );
     // Wait for all submitted GPU work to complete so the presented
     // drawable is fully resolved before the window becomes visible.
@@ -339,10 +338,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
                     selection = sel;
                     captured = cap;
                 }
-                Ok(RenderMsg::ComponentUpdate(update)) => match update {
-                    ComponentUpdate::Snapshot(snap) => overlay_backend.on_snapshot(snap),
-                    ComponentUpdate::Remove(id) => overlay_backend.remove(id),
-                },
+                Ok(RenderMsg::UiState(state)) => ui_renderer.set_state(state),
                 Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
                 Err(mpsc::TryRecvError::Empty) => break,
             }
@@ -374,8 +370,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             &gpu,
             &config,
             snapshot_state.as_ref(),
-            &mut overlay_backend,
-            monitor_bounds,
+            &mut ui_renderer,
         );
     }
 }
@@ -481,8 +476,7 @@ fn draw_once(
     gpu: &WindowGpu,
     config: &wgpu::SurfaceConfiguration,
     snapshot_state: Option<&SnapshotState>,
-    overlay_backend: &mut OverlayBackend,
-    monitor_bounds: ScreenRect,
+    ui_renderer: &mut UiRenderer,
 ) {
     let frame = match surface.get_current_texture() {
         wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
@@ -534,15 +528,15 @@ fn draw_once(
         }
     }
 
-    // Second render pass: the overlay backend composes all UI components
-    // on top of the just-drawn desktop/selection layer.
-    overlay_backend.render(
+    // Second render pass: the UI renderer draws all components that
+    // belong on this monitor on top of the just-drawn desktop/selection
+    // layer.
+    ui_renderer.render(
         &gpu.device,
         &gpu.queue,
         &mut encoder,
         &view,
         (config.width, config.height),
-        monitor_bounds,
     );
 
     gpu.queue.submit(std::iter::once(encoder.finish()));

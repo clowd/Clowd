@@ -1,7 +1,6 @@
-//! Concrete UI components that live on top of the generic framework in
-//! `ui::{component, host, backend, animation}`. Each submodule is a
-//! drop-in component — to add one, create a new subdir and register it
-//! in `App::new`.
+//! Concrete UI components. Each subdir holds the pure layout/model logic
+//! for one component. Per-monitor rendering lives in [`crate::ui::gpu`];
+//! visibility rules in [`crate::ui::shared`].
 
 pub mod panel;
 pub mod tips;

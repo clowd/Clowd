@@ -14,10 +14,9 @@ wgpu = "29.0"
 num = "0.4"
 pollster = "0.4"
 bytemuck = { version = "1", features = ["derive"] }
-resvg = { version = "0.47", default-features = false }
 usvg = { version = "0.47", default-features = false }
-tiny-skia = "0.12"
-swash = "0.2"
+glyphon = "0.11"
+lyon = "1.0"
 arboard = "3.4"
 rfd = "0.17"
 xdialog = { version = "2.1", features = ["win32-direct", "maccf-direct"] }

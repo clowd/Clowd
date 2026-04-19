@@ -1,0 +1,96 @@
+//! Shared UI state + visibility rules.
+//!
+//! The app thread builds one [`UiSharedState`] per tick and broadcasts it
+//! (as an [`Arc`]) to every render thread. Every render thread runs the
+//! **same** pure visibility/layout rules against its own monitor to decide
+//! what to draw — no coordination needed between threads.
+//!
+//! The app thread also calls the same functions to route clicks: it knows
+//! exactly where every component is because those positions are a pure
+//! function of the state it just broadcast.
+
+use std::sync::Arc;
+
+use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
+use crate::ui::components::panel::layout::{compute_layout as compute_panel_layout, PanelLayout};
+
+/// Minimal per-monitor info the UI layout rules need.
+///
+/// Mirrors a subset of `system::MonitorInfo` without the fields the UI
+/// doesn't use (refresh rate, DXGI adapter id, raw OS name). `is_primary`
+/// is the only field beyond geometry because the Tips panel anchors to
+/// the primary display.
+#[derive(Debug, Clone, Copy)]
+pub struct UiMonitor {
+    pub bounds: ScreenRect,
+    pub dpi_scale: f32,
+    pub is_primary: bool,
+}
+
+/// The single app-wide state snapshot broadcast to every render thread
+/// every tick.
+///
+/// Fields are owned (not borrowed), so the struct is `Send + 'static` and
+/// trivially wrappable in `Arc`. Strings are cloned on build — they're
+/// tiny and only change on mouse move.
+#[derive(Debug, Clone)]
+pub struct UiSharedState {
+    pub monitors: Arc<[UiMonitor]>,
+    pub selection: Option<ScreenRect>,
+    pub captured: bool,
+    pub mouse_down: bool,
+    pub virtual_cursor: ScreenPointF,
+    pub accent_color: [f32; 4],
+    pub tips_visible: bool,
+    pub hovered_monitor_name: Option<String>,
+    pub hovered_window_title: Option<String>,
+    pub hovered_pixel_bgra: Option<[u8; 4]>,
+}
+
+/// Return the monitor whose bounds contain the center of `rect`. `None`
+/// when no monitor contains the center.
+fn pick_monitor_containing_center(
+    monitors: &[UiMonitor],
+    rect: ScreenRect,
+) -> Option<UiMonitor> {
+    let cx = (rect.left() + rect.right()) / 2;
+    let cy = (rect.top() + rect.bottom()) / 2;
+    monitors.iter().find_map(|m| {
+        let b = m.bounds;
+        if cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom() {
+            Some(*m)
+        } else {
+            None
+        }
+    })
+}
+
+/// Result of evaluating the button-panel visibility rule.
+pub struct PanelVisibility {
+    pub monitor: UiMonitor,
+    /// Fully-computed layout (panel rect + per-button rects) in
+    /// virtual-desktop pixels.
+    pub layout: PanelLayout,
+}
+
+/// Decide whether the button panel is visible and where. Pure function —
+/// the app thread and every render thread call this with the same state.
+pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
+    if !state.captured {
+        return None;
+    }
+    let sel = state.selection?;
+    let monitor = pick_monitor_containing_center(&state.monitors, sel)?;
+    let layout = compute_panel_layout(monitor.bounds, sel, monitor.dpi_scale)?;
+    Some(PanelVisibility { monitor, layout })
+}
+
+/// Decide whether the tips panel is visible and on which monitor.
+pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
+    if state.captured || state.mouse_down || !state.tips_visible {
+        return None;
+    }
+    let idx = state.monitors.iter().position(|m| m.is_primary)?;
+    let monitor = *state.monitors.get(idx)?;
+    Some((idx, monitor))
+}
