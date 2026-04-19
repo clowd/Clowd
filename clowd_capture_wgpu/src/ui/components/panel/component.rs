@@ -29,6 +29,10 @@ const ICON_UNSCALED_PX: f32 = 26.0;
 /// Gray button background ~ `#373737`.
 const GRAY_RGBA: [u8; 4] = [0x37, 0x37, 0x37, 0xFF];
 
+/// White-overlay strength for hovered buttons. Drives `Lighten`
+/// regions; the animator interpolates from 0 to this on hover.
+const HOVER_OVERLAY_STRENGTH: f32 = 0.30;
+
 pub struct ButtonPanelComponent {
     id: ComponentId,
     /// Cached layout from the last successful `update()`. `None` while
@@ -345,7 +349,12 @@ impl Component for ButtonPanelComponent {
                 let bt = (b.bottom() - panel.top()) as f32 / ph;
                 OverlayRegion {
                     uv_rect: [l, t, r, bt],
-                    target_opacity: if self.hover_idx == Some(i) { 1.0 } else { 0.0 },
+                    mode: RegionMode::Lighten,
+                    target_amount: if self.hover_idx == Some(i) {
+                        HOVER_OVERLAY_STRENGTH
+                    } else {
+                        0.0
+                    },
                 }
             })
             .collect()

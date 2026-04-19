@@ -48,12 +48,18 @@ impl OverlayAnimator {
     }
 
     /// Update targets from a new set of overlay regions. Regions are
-    /// matched by index. If the region count changed, new regions start
-    /// at fade 0.
+    /// matched by index. New regions (added past the current count)
+    /// start at their target value so static effects don't fade in on
+    /// first appearance; only target changes from a stable state
+    /// animate.
     pub fn update_targets(&mut self, regions: &[OverlayRegion]) {
+        let old_len = self.fades.len();
         self.fades.resize(regions.len(), FadeState::default());
         for (i, region) in regions.iter().enumerate() {
-            self.fades[i].target = region.target_opacity;
+            self.fades[i].target = region.target_amount;
+            if i >= old_len {
+                self.fades[i].current = region.target_amount;
+            }
         }
     }
 

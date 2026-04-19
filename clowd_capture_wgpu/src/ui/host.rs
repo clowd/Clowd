@@ -279,9 +279,10 @@ fn hash_overlay(regions: &[OverlayRegion]) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     regions.len().hash(&mut h);
     for r in regions {
-        for f in r.uv_rect.iter().chain(std::iter::once(&r.target_opacity)) {
+        for f in r.uv_rect.iter().chain(std::iter::once(&r.target_amount)) {
             f.to_bits().hash(&mut h);
         }
+        (r.mode as u32).hash(&mut h);
     }
     h.finish()
 }
