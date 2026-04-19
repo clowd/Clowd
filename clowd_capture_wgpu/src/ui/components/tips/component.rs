@@ -20,7 +20,7 @@ use crate::geometry::ScreenPointF;
 use crate::ui::component::*;
 use crate::ui::draw::{fill_rect, LineMetrics, TextLine, TextRenderer};
 
-use super::assets::{FONT_ROBOTO_BOLD, FONT_ROBOTO_MONO};
+use super::assets::{FONT_MONO_BOLD, FONT_MONO_REGULAR};
 use super::layout::{compute_layout, TipsLayout, BODY_FONT_PX, TITLE_FONT_PX};
 use super::model::{
     render_description, COLOR_ROW_HOTKEY, HOTKEY_GAP, TIPS_BOTTOM, TIPS_TOP, TITLE,
@@ -53,10 +53,10 @@ pub struct TipsPanelComponent {
 
 impl TipsPanelComponent {
     pub fn new() -> Self {
-        let mono = FontRef::from_index(FONT_ROBOTO_MONO, 0)
-            .expect("Roboto Mono is valid TTF at build time");
-        let bold = FontRef::from_index(FONT_ROBOTO_BOLD, 0)
-            .expect("Roboto Bold is valid TTF at build time");
+        let mono = FontRef::from_index(FONT_MONO_REGULAR, 0)
+            .expect("Cascadia Mono Regular is valid TTF at build time");
+        let bold = FontRef::from_index(FONT_MONO_BOLD, 0)
+            .expect("Cascadia Mono Bold is valid TTF at build time");
         Self {
             id: ComponentId::new(),
             layout: None,
