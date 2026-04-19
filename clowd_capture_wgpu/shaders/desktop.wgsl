@@ -148,6 +148,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // original C++ source = 50.
         let chunk = i32(round(50.0 * scale));
         let chunk2 = chunk * 2;
+        // Stepped DPI factor in whole pixels: 1 at 100–199 %, 2 at
+        // 200–299 %, … . `floor()` rather than `round()` so the jump
+        // happens AT the DPI boundary, not half-way — matches the
+        // selection-border treatment below.
+        let dpi_step = i32(floor(scale));
         // Thick-segment half-width; total pixel count = 2*wide_half
         // + 1, always odd so the segment sits pixel-sharp on the
         // cursor column/row. ~5 physical pixels wide at 100 %,
@@ -170,16 +175,24 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
         if (on_v_line || on_h_line) {
             // Dash runs ALONG the line: along Y for the vertical
-            // line, along X for the horizontal one. 4 black + 4
-            // white pixels per period, anchored to absolute window
+            // line, along X for the horizontal one. 6 black + 6
+            // white pixels per period at 100 %, scaled by the
+            // whole-pixel DPI step so the dashes are the same
+            // physical size on every display (12-px period at
+            // 100 %, 24 at 200 %, …). Anchored to absolute window
             // coordinates so the dashes feel screen-fixed rather
             // than swimming with the cursor. At the intersection
             // both axes are on the line; we arbitrarily pick the
             // vertical line's phase — the pixel only gets one colour
             // anyway.
             let dash_coord = select(px.x, px.y, on_v_line);
-            let phase = dash_coord % 8;
-            if (phase < 4) {
+            let period = 12 * dpi_step;
+            let half_period = period / 2;
+            // WGSL signed `%` preserves sign of the dividend; add
+            // `period` before the second `%` so negative window
+            // coordinates still yield a non-negative phase.
+            let phase = ((dash_coord % period) + period) % period;
+            if (phase < half_period) {
                 return mix(base, vec4<f32>(0.0, 0.0, 0.0, 1.0), fade);
             }
             return mix(base, vec4<f32>(1.0, 1.0, 1.0, 1.0), fade);
@@ -189,12 +202,12 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Mouse-drag selection. The rect lives in window-local physical
     // pixels (already through the same zoom transform as the UV path,
     // done CPU-side in the render thread), so the comparison is just
-    // against the framebuffer pixel index. The 2-pixel border
-    // straddles the rect's edge (1 px inside + 1 px outside),
-    // matching the C++ D2D centred stroke at
-    // DxScreenCapture.cpp:644-645. The dash period scales with DPI
-    // (`params.w`) so the dashes are the same physical size on every
-    // display.
+    // against the framebuffer pixel index. The border straddles the
+    // rect's edge evenly (`half` px inside + `half` px outside), with
+    // `half` stepped on whole-pixel DPI boundaries — 2 px at 100–199 %,
+    // 4 px at 200–299 %, … — so the stroke stays pixel-sharp on every
+    // display. The dash period scales on the same step so dashes and
+    // stroke width grow together.
     let sr = u.selection_rect;
     let sr_empty = sr.z <= sr.x || sr.w <= sr.y;
     if (!sr_empty) {
@@ -203,79 +216,94 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let sz = i32(sr.z);
         let sw = i32(sr.w);
 
-        // Classify the pixel into one of the four border slabs.
-        // Each slab is 2 px thick. Top/bottom claim the 2×2 corner
-        // squares so the left/right slabs can be strictly interior
-        // on the y-axis — gives a disjoint classification, which
-        // the clockwise perimeter walk below relies on.
-        let slab_top    = px.y == sy - 1 || px.y == sy;
-        let slab_bottom = px.y == sw - 1 || px.y == sw;
-        let slab_left   = px.x == sx - 1 || px.x == sx;
-        let slab_right  = px.x == sz - 1 || px.x == sz;
+        let dpi_scale = max(u.params.w, 1.0);
+        let sel_step = i32(floor(dpi_scale));               // 1 / 1 / 2 / …
+        // `half` is the border's half-thickness in physical pixels.
+        // Total stroke width = 2*half (2 / 2 / 4 / 6 / …). Using
+        // `floor()` means 150 % stays at 2 px and 200 % is where the
+        // step fires; matches the crosshair handle treatment above.
+        let half = sel_step;
+        let inner_top    = sy + half;
+        let inner_bottom = sw - half - 1;
+        let inner_left   = sx + half;
+        let inner_right  = sz - half - 1;
+        let outer_top    = sy - half;
+        let outer_bottom = sw + half - 1;
+        let outer_left   = sx - half;
+        let outer_right  = sz + half - 1;
 
-        let on_top    = slab_top    && px.x >= sx - 1 && px.x <= sz;
-        let on_bottom = slab_bottom && px.x >= sx - 1 && px.x <= sz;
+        // Classify the pixel into one of the four border slabs.
+        // Each slab is 2*half px thick. Top/bottom claim the
+        // (2*half)×(2*half) corner squares so the left/right slabs
+        // can be strictly interior on the y-axis — gives a disjoint
+        // classification, which the clockwise perimeter walk below
+        // relies on.
+        let slab_top    = px.y >= outer_top    && px.y <= outer_top    + 2 * half - 1;
+        let slab_bottom = px.y >= outer_bottom - 2 * half + 1 && px.y <= outer_bottom;
+        let slab_left   = px.x >= outer_left   && px.x <= outer_left   + 2 * half - 1;
+        let slab_right  = px.x >= outer_right  - 2 * half + 1 && px.x <= outer_right;
+
+        let on_top    = slab_top    && px.x >= outer_left && px.x <= outer_right;
+        let on_bottom = slab_bottom && px.x >= outer_left && px.x <= outer_right;
         let on_right  = !on_top && !on_bottom && slab_right
-                        && px.y >= sy + 1 && px.y <= sw - 2;
+                        && px.y >= inner_top && px.y <= inner_bottom;
         let on_left   = !on_top && !on_bottom && slab_left
-                        && px.y >= sy + 1 && px.y <= sw - 2;
+                        && px.y >= inner_top && px.y <= inner_bottom;
         let in_border = on_top || on_bottom || on_right || on_left;
 
         if (in_border) {
             // Walk the border clockwise from the outside-top-left
             // corner: top → right → bottom → left → back to start.
             // `arc` is the cumulative pixel count along that walk,
-            // constant across the 2-px slab thickness so both rows
-            // (or both columns) of a slab at a given axis position
-            // get the same arc value and the dash reads as a solid
-            // stripe. `phase = arc - t_offset`; increasing
-            // `t_offset` shifts dashes toward higher arc, which is
-            // clockwise.
-            let outer_left = sx - 1;
-            let outer_right = sz;
+            // constant across each slab's thickness so every row
+            // (or column) at a given axis position gets the same
+            // arc value and the dash reads as a solid stripe.
+            // `phase = arc - t_offset`; increasing `t_offset` shifts
+            // dashes toward higher arc, which is clockwise.
+            //
             // Top/bottom slabs span the full outer width (including
-            // the 2×2 corners). Left/right slabs span only the
+            // the corner squares). Left/right slabs span only the
             // inner-y strip strictly between them.
-            let top_len = (outer_right - outer_left) + 1;       // inclusive
-            let side_len = (sw - 2) - (sy + 1) + 1;             // inclusive
+            let top_len  = (outer_right - outer_left) + 1;
+            let side_len = (inner_bottom - inner_top) + 1;
 
             var arc: i32;
             if (on_top) {
                 arc = px.x - outer_left;
             } else if (on_right) {
-                arc = top_len + (px.y - (sy + 1));
+                arc = top_len + (px.y - inner_top);
             } else if (on_bottom) {
                 arc = top_len + side_len + (outer_right - px.x);
             } else { // on_left
-                arc = 2 * top_len + side_len + ((sw - 2) - px.y);
+                arc = 2 * top_len + side_len + (inner_bottom - px.y);
             }
 
-            // Dash pattern: 16 DIPs on, 16 DIPs off, 32 DIPs per
-            // full cycle — matches the C++ D2D stroke style values
-            // of {8, 8} in stroke-width units × 2 DIPs stroke width
-            // at DxScreenCapture.cpp:638-645. Multiply by DPI so
-            // the dashes are the same physical size on every
-            // display (1× at 96 DPI, 2× at 192 DPI, etc). The
-            // animation completes one full cycle per second.
-            // WGSL has no f32 `%`, so fold with floor() instead.
-            let dpi = max(u.params.w, 1.0);
-            let period = 32.0 * dpi;
-            let half = period * 0.5;
+            // Dash pattern: 16 px on, 16 px off at 100 %, stepped
+            // on the same whole-pixel DPI ladder as the stroke
+            // width so dashes and stroke grow together (32 px
+            // period at 100 %, 64 at 200 %, …). Matches the C++
+            // D2D stroke style values of {8, 8} in stroke-width
+            // units × 2 DIPs stroke width at
+            // DxScreenCapture.cpp:638-645. The animation completes
+            // one full cycle per second. WGSL has no f32 `%`, so
+            // fold with floor() instead.
+            let period = 32.0 * f32(sel_step);
+            let half_period = period * 0.5;
             let t_offset = u.selection_params.x * period;
             let raw = f32(arc) - t_offset;
             let phase = raw - period * floor(raw / period);
-            if (phase < half) {
+            if (phase < half_period) {
                 return mix(base, u.crosshair_color, fade);
             }
             return mix(base, vec4<f32>(1.0, 1.0, 1.0, 1.0), fade);
         }
 
-        // Fill area: the rect minus the 1-px inner ring reserved
-        // for the "inside half" of the straddling border. Border
-        // cells win above; everything strictly interior to them
-        // gets the un-faded desktop colour.
-        let in_fill = px.x >= sx + 1 && px.x <= sz - 2
-                   && px.y >= sy + 1 && px.y <= sw - 2;
+        // Fill area: the rect minus the `half`-px inner ring
+        // reserved for the "inside half" of the straddling border.
+        // Border cells win above; everything strictly interior to
+        // them gets the un-faded desktop colour.
+        let in_fill = px.x >= inner_left && px.x <= inner_right
+                   && px.y >= inner_top  && px.y <= inner_bottom;
         if (in_fill) {
             return base;
         }
