@@ -11,12 +11,11 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
-use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
+use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
 use crate::img::{self, ActionResult};
 use crate::gpu::bootstrap_window_gpu;
 use crate::ui::command::Command;
-use crate::ui::components::panel::{self, ButtonPanelComponent};
-use crate::ui::components::tips::TipsPanelComponent;
+use crate::ui::components::panel;
 use crate::platform;
 use crate::selection::{
     clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode,
@@ -25,8 +24,7 @@ use crate::selection::{
 use crate::settings::CapturerSettings;
 use crate::system::{CapturedDesktop, SystemInterop, WindowWalker};
 use crate::render::{spawn_render_thread, RenderThreadParams, WindowHandle};
-use crate::ui::component::{AppContext, CursorHint, MonitorInfo, MouseEvent};
-use crate::ui::host::ComponentHost;
+use crate::ui::shared::{UiMonitor, UiSharedState};
 
 /// Minimum zoom. The magnifier only ever enlarges the source.
 const ZOOM_MIN: f32 = 1.0;
@@ -150,7 +148,7 @@ pub struct App {
     monitors: Vec<crate::system::MonitorInfo>,
     /// Scratch storage for the window title reported by
     /// `WindowWalker::hit_test_with_title` — kept on `self` so
-    /// `sync_components` can lend it out as `&str` through `AppContext`.
+    /// `broadcast_ui_state` can clone it into the shared state struct.
     cached_hovered_title: Option<String>,
     /// Union rect of the virtual desktop in physical pixels — same value
     /// as `captured.bounds` from the startup snapshot. Used to soft-
@@ -164,11 +162,6 @@ pub struct App {
     desktop_buffer: Option<Arc<CapturedDesktop>>,
     /// Window walker: pre-detected window rects for click-to-select.
     walker: Option<WindowWalker>,
-    /// Generic UI component manager. Owns all registered UI components
-    /// (button panel today; future: color picker, zoom readout, …).
-    /// `App` does not know what components exist — it only pushes
-    /// `AppContext` via `sync_components` and dispatches actions.
-    component_host: ComponentHost,
     /// macOS: render threads increment this counter after frame 0.
     /// `about_to_wait` snaps alpha to 1 once all threads have reported.
     /// `None` after the reveal is complete (or on Windows where it's unused).
@@ -183,13 +176,6 @@ struct PendingShow {
 
 impl App {
     pub fn new(settings: Arc<CapturerSettings>) -> Self {
-        // Register every component once at startup. The host drives their
-        // visibility from `AppContext` on each `sync_components` call.
-        // Adding a new component = one more `component_host.add(...)` line.
-        let mut component_host = ComponentHost::new();
-        component_host.add(ButtonPanelComponent::new());
-        component_host.add(TipsPanelComponent::new());
-
         Self {
             settings,
             windows: HashMap::new(),
@@ -199,7 +185,6 @@ impl App {
             vd_bounds: ScreenRect::zero(),
             desktop_buffer: None,
             walker: None,
-            component_host,
             pending_show: None,
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
@@ -255,69 +240,85 @@ impl App {
         }
     }
 
-    /// Push the latest app state to all registered components. Each
-    /// component re-evaluates its placement and re-bakes as needed,
-    /// and the host ships snapshots to the appropriate render threads.
-    ///
-    /// This is the *only* mechanism by which components observe app-level
-    /// state. If a new component needs new data to decide its layout,
-    /// add a field to `AppContext` here and populate it below.
-    fn sync_components(&mut self) {
-        let ui_monitors: Vec<MonitorInfo> = self
-            .monitors
-            .iter()
-            .map(|m| MonitorInfo {
-                bounds: m.bounds,
-                dpi_scale: m.scale_factor,
-            })
-            .collect();
+    /// Compute the current button-panel layout (or `None` if the panel
+    /// is not visible). Pure function of `input` + `monitors`; used by
+    /// the click / hover handlers to hit-test without having to wait for
+    /// a state round-trip from a render thread.
+    fn current_panel_layout(
+        &self,
+    ) -> Option<crate::ui::components::panel::layout::PanelLayout> {
+        if !self.input.captured {
+            return None;
+        }
+        let sel = self.input.selection?;
+        let cx = (sel.left() + sel.right()) / 2;
+        let cy = (sel.top() + sel.bottom()) / 2;
+        let mon = self.monitors.iter().find(|m| {
+            let b = m.bounds;
+            cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+        })?;
+        crate::ui::components::panel::layout::compute_layout(
+            mon.bounds,
+            sel,
+            mon.scale_factor,
+        )
+    }
 
+    /// Build a fresh [`UiSharedState`] from the current app state and
+    /// broadcast it to every render thread as an `Arc`. This is the one
+    /// and only channel through which the GPU UI observes app-level
+    /// state; add a field here when a new component needs new data.
+    ///
+    /// Cheap: one struct build + one `Arc` bump per render thread. The
+    /// monitors list is itself Arc-backed and reused until the topology
+    /// changes (today: never after `resumed()`).
+    fn broadcast_ui_state(&mut self) {
         let cursor = self.input.virtual_cursor;
         let cursor_pt = ScreenPoint::new(cursor.x.round() as i32, cursor.y.round() as i32);
-
-        let primary_monitor_idx = self.monitors.iter().position(|m| m.is_primary);
 
         let hovered_monitor_name = self
             .monitors
             .iter()
             .find(|m| m.bounds.contains(cursor_pt))
-            .map(|m| m.name.as_str());
+            .map(|m| m.name.clone());
 
-        // Top-level window title under the cursor — `None` over the
-        // desktop background or before the walker is initialised. Stash
-        // the owned String on `self` so we can hand out a borrow that
-        // lives as long as `self` during this call.
         self.cached_hovered_title = self
             .walker
             .as_ref()
             .and_then(|w| w.hit_test_with_title(cursor_pt))
             .map(|(_, title)| title);
-        let hovered_window_title = self.cached_hovered_title.as_deref();
 
-        // Sample the BGRA pixel under the cursor from the captured desktop.
         let hovered_pixel_bgra = self
             .desktop_buffer
             .as_deref()
             .and_then(|buf| sample_bgra(buf, cursor_pt));
 
-        let ctx = AppContext {
-            monitors: &ui_monitors,
+        let monitors: Arc<[UiMonitor]> = self
+            .monitors
+            .iter()
+            .map(|m| UiMonitor {
+                bounds: m.bounds,
+                dpi_scale: m.scale_factor,
+                is_primary: m.is_primary,
+            })
+            .collect();
+
+        let state = Arc::new(UiSharedState {
+            monitors,
             selection: self.input.selection,
             captured: self.input.captured,
             mouse_down: self.input.mouse_down,
             virtual_cursor: self.input.virtual_cursor,
             accent_color: self.settings.crosshair_color,
-            primary_monitor_idx,
             tips_visible: self.input.tips_visible,
             hovered_monitor_name,
-            hovered_window_title,
+            hovered_window_title: self.cached_hovered_title.clone(),
             hovered_pixel_bgra,
-        };
-        self.component_host.sync(
-            &ctx,
-            &self.windows,
-            &self.monitor_window_ids,
-        );
+        });
+
+        for h in self.windows.values() {
+            h.update_ui_state(state.clone());
+        }
     }
 
     /// Reset the selection and return to draw mode.
@@ -330,7 +331,7 @@ impl App {
         self.input.drag_anchor_selection = None;
 
         // Components observe the cleared state and hide themselves.
-        self.sync_components();
+        self.broadcast_ui_state();
 
         // Reset cursor
         window.set_cursor(CursorIcon::Default);
@@ -582,6 +583,11 @@ impl ApplicationHandler for App {
                 gpu,
                 settings: self.settings.clone(),
                 monitor_bounds: m.bounds,
+                this_monitor: UiMonitor {
+                    bounds: m.bounds,
+                    dpi_scale: m.scale_factor,
+                    is_primary: m.is_primary,
+                },
                 scale_factor: m.scale_factor,
                 refresh_hz: hz,
                 initial_mouse: initial_mouse_f,
@@ -629,7 +635,7 @@ impl ApplicationHandler for App {
                 // And do the first component sync so pre-capture overlays
                 // (Tips & Hotkeys panel, …) render on the first frame
                 // rather than waiting for the first cursor move.
-                self.sync_components();
+                self.broadcast_ui_state();
                 event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
             }
         }
@@ -643,7 +649,7 @@ impl ApplicationHandler for App {
     ) {
         // Extract the bits of the window handle we need upfront and
         // drop the `self.windows` borrow immediately. Keeping a live
-        // `&WindowHandle` across the match blocks `sync_components`
+        // `&WindowHandle` across the match blocks `broadcast_ui_state`
         // from running because it needs `&mut self`. `Arc<Window>` is
         // cheap to clone and `ScreenRect` is Copy, so this is effectively free.
         let (window, this_monitor_bounds) = match self.windows.get(&id) {
@@ -692,7 +698,7 @@ impl ApplicationHandler for App {
                         // `DxScreenCapture.cpp:1248-1251` — the T key
                         // is a no-op once a selection has been captured.
                         self.input.tips_visible = !self.input.tips_visible;
-                        self.sync_components();
+                        self.broadcast_ui_state();
                     }
                 }
             }
@@ -864,7 +870,7 @@ impl ApplicationHandler for App {
                         // Selection geometry changed during a drag after
                         // capture → let every component observe the new
                         // state and re-layout itself as needed.
-                        self.sync_components();
+                        self.broadcast_ui_state();
                     } else if let Some(sel) = self.input.selection {
                         // Hover hit-test only when no drag is active.
                         // The cursor is determined by the hover state;
@@ -881,33 +887,21 @@ impl ApplicationHandler for App {
                             handle_window.set_cursor(ht.cursor());
                         }
 
-                        // Component hover tracking. The host decides
-                        // whether any component claims the cursor and
-                        // self-refreshes any component whose state
-                        // changed — the app just reads back the cursor
-                        // hint to pick an icon.
+                        // Component hover tracking: run the same pure
+                        // panel-visibility rule the render threads use to
+                        // decide whether the virtual cursor is over a
+                        // button, and pick Pointer vs the hittest cursor.
                         let pos = self.input.virtual_cursor;
-                        let hint = self
-                            .component_host
-                            .hit_test(pos)
-                            .map(|(_id, h)| h)
-                            .unwrap_or(CursorHint::Default);
-                        let cursor = match hint {
-                            CursorHint::Pointer => CursorIcon::Pointer,
-                            CursorHint::Default => self.input.hittest.cursor(),
+                        let over_button = self
+                            .current_panel_layout()
+                            .and_then(|l| l.hit_test(pos.x, pos.y))
+                            .is_some();
+                        let cursor = if over_button {
+                            CursorIcon::Pointer
+                        } else {
+                            self.input.hittest.cursor()
                         };
                         handle_window.set_cursor(cursor);
-                        // Deliver move to every visible component so hover
-                        // state can clear when the cursor leaves. The
-                        // host re-bakes/re-ships on NeedsOverlayUpdate/
-                        // NeedsRedraw internally; the app only cares
-                        // about Action/Dismiss here (neither fires on
-                        // a pure Move today).
-                        let _ = self.component_host.route_mouse_event(
-                            MouseEvent::Move { pos },
-                            &self.windows,
-                            &self.monitor_window_ids,
-                        );
                     }
                 }
 
@@ -917,7 +911,7 @@ impl ApplicationHandler for App {
                 // and its anchor-flip when the cursor gets near it)
                 // pick up the new state. The host's hash-based dedup
                 // means unchanged components don't re-ship.
-                self.sync_components();
+                self.broadcast_ui_state();
 
                 self.broadcast_mouse_state();
             }
@@ -929,17 +923,21 @@ impl ApplicationHandler for App {
                 match state {
                     ElementState::Pressed => {
                         if self.input.captured {
-                            // Component click: route to the component
-                            // host. If a component emits a Command,
-                            // dispatch it.
+                            // Button-panel click: run the same pure
+                            // layout the render threads use, hit-test,
+                            // dispatch the mapped command.
                             let pos = self.input.virtual_cursor;
-                            if let Some(cmd) = self.component_host.route_mouse_event(
-                                MouseEvent::Press { pos },
-                                &self.windows,
-                                &self.monitor_window_ids,
-                            ) {
-                                self.dispatch_command(cmd, event_loop, handle_window);
-                                return;
+                            if let Some(layout) = self.current_panel_layout() {
+                                if let Some(idx) = layout.hit_test(pos.x, pos.y) {
+                                    let cmd =
+                                        panel::model::button_defs()[idx].command;
+                                    self.dispatch_command(
+                                        cmd,
+                                        event_loop,
+                                        handle_window,
+                                    );
+                                    return;
+                                }
                             }
                             // Captured: this mouse-down enters either
                             // Move (clicked inside the rect) or
@@ -975,7 +973,7 @@ impl ApplicationHandler for App {
                         // Hide the Tips & Hotkeys panel while the user is
                         // actively dragging — matches the C++
                         // `!data.mouseDown` gate on the tips draw path.
-                        self.sync_components();
+                        self.broadcast_ui_state();
                         // Selection itself is left alone here so a single
                         // click on a walker-highlighted window keeps the
                         // walker rect visible during the pending-drag
@@ -1020,7 +1018,7 @@ impl ApplicationHandler for App {
                             handle_window.set_cursor(CursorIcon::Default);
                             // Selection dragged off-screen: let components
                             // observe the cleared state and hide themselves.
-                            self.sync_components();
+                            self.broadcast_ui_state();
                         }
                         if finalising {
                             self.input.captured = true;
@@ -1060,20 +1058,20 @@ impl ApplicationHandler for App {
                             }
                             // Capture finalised: let every component see
                             // the new state and place/bake itself.
-                            self.sync_components();
+                            self.broadcast_ui_state();
                         } else if self.input.captured
                             && self.input.selection.is_some()
                         {
                             // A move/resize drag just ended with the
                             // selection still alive — re-sync so
                             // components settle on the final rect.
-                            self.sync_components();
+                            self.broadcast_ui_state();
                         } else {
                             // Release without finalising / while uncaptured
                             // (e.g. click-and-release without a drag): the
                             // mouse_down flag just cleared, so the Tips
                             // panel should reappear.
-                            self.sync_components();
+                            self.broadcast_ui_state();
                         }
                         self.broadcast_mouse_state();
                     }

@@ -4,11 +4,12 @@
 //! buttons (UPLOAD / EDIT / VIDEO / COPY / SAVE / RESET / EXIT) plus a
 //! non-clickable area indicator that shows the selected width×height with
 //! decorative corner brackets.
+//!
+//! Pure layout/model logic only — GPU rendering lives in
+//! [`crate::ui::gpu`].
 
 pub mod assets;
-pub mod component;
 pub mod layout;
 pub mod model;
 
-pub use component::ButtonPanelComponent;
 pub use model::lookup_command_by_key;
