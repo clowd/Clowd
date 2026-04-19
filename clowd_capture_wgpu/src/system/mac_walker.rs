@@ -189,9 +189,14 @@ fn display_scale_at_logical_point(x: f64, y: f64) -> f32 {
                 && y >= b.origin.y
                 && y < b.origin.y + b.size.height
             {
+                // Use CGDisplayMode::pixel_width() for the true physical
+                // pixel count. CGDisplayPixelsWide is deprecated and returns
+                // the logical resolution on modern Retina displays.
                 let logical_w = b.size.width as f32;
                 if logical_w > 0.0 {
-                    return d.pixels_wide() as f32 / logical_w;
+                    if let Some(mode) = d.display_mode() {
+                        return mode.pixel_width() as f32 / logical_w;
+                    }
                 }
             }
         }

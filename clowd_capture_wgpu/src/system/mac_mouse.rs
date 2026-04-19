@@ -38,6 +38,18 @@ pub fn set_position(pos: ScreenPoint) {
     }
 }
 
+/// Compute the scale factor for a display from its CGDisplayMode.
+/// Falls back to 1.0 if the mode is unavailable or logical width is zero.
+fn display_scale(d: &CGDisplay) -> f32 {
+    let logical_w = d.bounds().size.width as f32;
+    if logical_w > 0.0 {
+        if let Some(mode) = d.display_mode() {
+            return mode.pixel_width() as f32 / logical_w;
+        }
+    }
+    1.0
+}
+
 /// Find the scale factor of the display whose logical (CG point) bounds
 /// contain the given point.
 fn display_scale_at_logical_point(pt: CGPoint) -> f32 {
@@ -50,10 +62,7 @@ fn display_scale_at_logical_point(pt: CGPoint) -> f32 {
                 && pt.y >= b.origin.y
                 && pt.y < b.origin.y + b.size.height
             {
-                let logical_w = b.size.width as f32;
-                if logical_w > 0.0 {
-                    return d.pixels_wide() as f32 / logical_w;
-                }
+                return display_scale(&d);
             }
         }
     }
@@ -68,18 +77,20 @@ fn display_scale_at_physical_point(pt: ScreenPoint) -> f32 {
         for id in ids {
             let d = CGDisplay::new(id);
             let b = d.bounds();
-            let phys_w = d.pixels_wide() as f32;
-            let logical_w = b.size.width as f32;
-            let scale = if logical_w > 0.0 {
-                phys_w / logical_w
-            } else {
-                1.0
-            };
+            let scale = display_scale(&d);
 
             let phys_x = (b.origin.x * scale as f64).round() as i32;
             let phys_y = (b.origin.y * scale as f64).round() as i32;
-            let phys_w_i = d.pixels_wide() as i32;
-            let phys_h_i = d.pixels_high() as i32;
+            let phys_w_i = if let Some(mode) = d.display_mode() {
+                mode.pixel_width() as i32
+            } else {
+                (b.size.width * scale as f64).round() as i32
+            };
+            let phys_h_i = if let Some(mode) = d.display_mode() {
+                mode.pixel_height() as i32
+            } else {
+                (b.size.height * scale as f64).round() as i32
+            };
 
             if pt.x >= phys_x
                 && pt.x < phys_x + phys_w_i
