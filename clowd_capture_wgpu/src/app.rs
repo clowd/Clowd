@@ -187,8 +187,8 @@ impl App {
         // visibility from `AppContext` on each `sync_components` call.
         // Adding a new component = one more `component_host.add(...)` line.
         let mut component_host = ComponentHost::new();
-        component_host.add(Box::new(ButtonPanelComponent::new()));
-        component_host.add(Box::new(TipsPanelComponent::new()));
+        component_host.add(ButtonPanelComponent::new());
+        component_host.add(TipsPanelComponent::new());
 
         Self {
             settings,

@@ -64,6 +64,12 @@ pub struct TipsLayout {
     /// by this on the right and bottom so the shadow has somewhere to
     /// sit. Mirrors `paddingHalf` in DxScreenCapture.cpp:784-787.
     pub shadow_extension_px: f32,
+    /// `true` if the cursor occupies the bottom-right quadrant where
+    /// the default right-anchored panel would sit, so we fell back to
+    /// anchoring bottom-left. The component lifts this into its
+    /// hashed `State` so the cursor itself (which changes every mouse
+    /// move) can stay out of the hash.
+    pub use_left_fallback: bool,
 }
 
 /// Compute panel placement and internal metrics.
@@ -185,5 +191,6 @@ pub fn compute_layout(
         color_rgb_y,
         dpi_scale: dpi,
         shadow_extension_px: padding_half,
+        use_left_fallback,
     })
 }

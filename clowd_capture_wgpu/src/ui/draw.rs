@@ -2,6 +2,7 @@
 //! fills, pixmap compositing, and ClearType-style subpixel text
 //! rasterization. Shared by every UI component that bakes a pixmap.
 
+use std::cell::RefCell;
 use std::sync::OnceLock;
 
 use swash::scale::image::Content;
@@ -266,15 +267,17 @@ pub struct TextRenderer {
     /// so the lifetime is `'static`. `FontRef` is `Copy`.
     pub font: FontRef<'static>,
     /// Reusable scaler context. Holds caches and scratch buffers for
-    /// glyph rasterization — keep it across renders.
-    scale_ctx: ScaleContext,
+    /// glyph rasterization — keep it across renders. Wrapped in a
+    /// `RefCell` so `draw_text_line` can run through `&self` (assets
+    /// passed to `Component::bake` are immutable by contract).
+    scale_ctx: RefCell<ScaleContext>,
 }
 
 impl TextRenderer {
     pub fn new(font: FontRef<'static>) -> Self {
         Self {
             font,
-            scale_ctx: ScaleContext::new(),
+            scale_ctx: RefCell::new(ScaleContext::new()),
         }
     }
 
@@ -308,7 +311,7 @@ impl TextRenderer {
     /// between ascent and cap-height (space reserved for diacriticals
     /// over capitals) is ~2-3 px at 12px Roboto and would make every
     /// centered string sit visually low.
-    pub fn draw_text_line(&mut self, pixmap: &mut Pixmap, tl: TextLine<'_>) {
+    pub fn draw_text_line(&self, pixmap: &mut Pixmap, tl: TextLine<'_>) {
         let TextLine {
             text,
             px,
@@ -323,8 +326,8 @@ impl TextRenderer {
 
         let charmap = self.font.charmap();
         let gm = self.font.glyph_metrics(&[]).scale(px);
-        let mut scaler = self
-            .scale_ctx
+        let mut scale_ctx = self.scale_ctx.borrow_mut();
+        let mut scaler = scale_ctx
             .builder(self.font)
             .size(px)
             .hint(true)

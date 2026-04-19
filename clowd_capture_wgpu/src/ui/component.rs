@@ -8,10 +8,14 @@
 //! State flows from the app to components in exactly one direction: the
 //! app builds an `AppContext` snapshotting the current input/selection/
 //! monitor state and passes it to `ComponentHost::sync`, which calls
-//! `Component::update` on every registered component. The component
-//! decides for itself whether (and on which monitor) to be visible, and
-//! internally caches any data it needs for `bake()` later in the same
-//! sync pass.
+//! `Component::derive_state` on every registered component. The component
+//! returns a minimal, hashable `State` describing everything `bake` reads;
+//! the host hashes it and only calls `bake` when the hash changes. Because
+//! `bake` is an associated function taking only `&Assets` and `&State`,
+//! the compiler structurally prevents it from reading anything that
+//! isn't in the hashed state.
+
+use std::hash::{Hash, Hasher};
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use super::command::Command;
@@ -74,16 +78,18 @@ pub struct AppContext<'a> {
     pub hovered_pixel_bgra: Option<[u8; 4]>,
 }
 
-/// Return value of `Component::update` — where (if anywhere) the
-/// component wants to be drawn this frame.
+/// Where (if anywhere) a component wants to be drawn this frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Placement {
-    /// Not visible this frame; host drops any snapshot on the previously
-    /// assigned monitor.
     Hidden,
-    /// Visible on `monitor_idx` — the component has already cached whatever
-    /// per-monitor state (DPI, bounds) it needs for `bake()`.
     Visible { monitor_idx: usize },
+}
+
+/// Result of `Component::derive_state`: either the component is hidden,
+/// or it's visible on a given monitor with a concrete hashable state.
+pub enum DeriveResult<S> {
+    Hidden,
+    Visible { monitor_idx: usize, state: S },
 }
 
 /// What a component wants to happen after processing a mouse event.
@@ -95,20 +101,18 @@ pub enum EventResponse {
     /// sub-regions). Ships updated overlay targets to the render thread
     /// but does NOT re-bake the pixmap.
     NeedsOverlayUpdate,
-    /// The component's visual content changed; re-bake the pixmap.
+    /// The component's internal state changed in a way that affects its
+    /// `derive_state` output. Host re-derives using the cached context
+    /// and re-bakes if the state hash changed.
     NeedsRedraw,
     /// The component requests an app-level command be dispatched.
-    /// The host extracts the command from `route_mouse_event` and returns
-    /// it to the app; everything else is handled internally.
     Command(Command),
 }
 
 /// Cursor icon hint from a component's hit-test.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CursorHint {
-    /// Component doesn't care -- use whatever the app would normally use.
     Default,
-    /// Component wants a pointer cursor (e.g. for clickable elements).
     Pointer,
 }
 
@@ -135,98 +139,229 @@ pub struct BakedPixmap {
 
 /// How a region's pixels should be modified at composite time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Darken is part of the public effect set; no consumer yet.
+#[allow(dead_code)]
 pub enum RegionMode {
-    /// Blend toward white by `amount` (0..1). `amount = 0` is no
-    /// change; `amount = 1` is fully white. Used for hover highlights.
     Lighten,
-    /// Blend toward black by `amount` (0..1).
     Darken,
-    /// Composite this region at absolute alpha `amount` (0..1),
-    /// replacing the component-wide `base_opacity` for these pixels.
-    /// Used by the tips panel drop shadow to sit at 30% while the rest
-    /// of the panel sits at 70%.
     Fade,
 }
 
 /// A rectangular region within the baked texture that receives a
-/// shader-driven effect. Expressed in texture UV coordinates. If
-/// regions overlap, the first one (in `Vec` order) wins for that
-/// pixel.
+/// shader-driven effect. Expressed in texture UV coordinates.
 #[derive(Clone, Copy)]
 pub struct OverlayRegion {
-    /// UV rect within the texture: (u_min, v_min, u_max, v_max).
     pub uv_rect: [f32; 4],
-    /// What kind of effect this region applies.
     pub mode: RegionMode,
-    /// Target strength in [0.0, 1.0]. The render thread's
-    /// `OverlayAnimator` smoothly interpolates the live value toward
-    /// this. Newly added regions start at this value (no first-frame
-    /// fade-in), so static effects don't animate on the first appearance.
     pub target_amount: f32,
 }
 
+/// The pixmap half of a component snapshot. `Keep` means the render
+/// thread should leave its cached texture alone — only overlay regions
+/// or opacity moved. This replaces the old "hash the whole pixel buffer
+/// on both ends" detection.
+#[derive(Clone)]
+pub enum SnapshotPixmap {
+    Replace(BakedPixmap),
+    Keep,
+}
+
 /// Type-erased snapshot shipped from the app thread to a render thread.
-/// Contains everything the render thread needs: pixmap bytes, destination
-/// rect, and overlay region targets.
 #[derive(Clone)]
 pub struct ComponentSnapshot {
     pub id: ComponentId,
-    /// Baked pixel data, or `None` to hide (render thread drops its cache).
-    pub pixmap: Option<BakedPixmap>,
-    /// Overlay regions for shader-driven animation.
+    /// Hash of the component's `State` when this snapshot was produced.
+    /// The render thread uses this to detect when a fresh pixmap upload
+    /// is needed.
+    pub state_hash: u64,
+    pub pixmap: SnapshotPixmap,
     pub overlay_regions: Vec<OverlayRegion>,
-    /// Multiplier applied to the sampled pixmap at composite time.
-    /// 1.0 = fully opaque (default). Values in [0.0, 1.0] let a component
-    /// bake fully opaque content and have the shader fade it during
-    /// compositing, keeping text/edges crisp.
     pub base_opacity: f32,
 }
 
+/// What `ErasedComponent::try_bake` produced this frame.
+pub enum BakeOutcome {
+    /// Component isn't visible — no state.
+    Hidden,
+    /// State hash matched last bake; render thread should reuse its cached texture.
+    Unchanged { state_hash: u64 },
+    /// State hash differed; fresh pixmap attached.
+    Fresh {
+        state_hash: u64,
+        pixmap: BakedPixmap,
+    },
+}
+
 /// The trait every UI component implements. All methods run on the
-/// app thread (CPU only). The GPU backend is completely generic and
-/// never calls anything component-specific.
+/// app thread. The GPU backend never calls anything component-specific.
+///
+/// `Assets` and `State` are split so `bake` — an associated function,
+/// not a method — can only read immutable resources plus the hashed
+/// state. The compiler prevents `bake` from reaching for anything else
+/// the component shell might be carrying.
 pub trait Component: Send {
-    /// Unique ID for this component instance.
+    /// Immutable-interface render resources (fonts, parsed SVG trees,
+    /// static glyph caches). Lives for the component's lifetime and
+    /// stays on the app thread — only `Send` is required so the
+    /// component itself can cross a thread boundary at startup.
+    type Assets: Send;
+
+    /// Hashable snapshot of every ctx-derived input that affects the
+    /// bake. The host hashes this and skips `bake` if the hash matches.
+    type State: Hash + Eq + Send;
+
     fn id(&self) -> ComponentId;
 
-    /// Fold new app state into this component. Returns where (if anywhere)
-    /// the component wants to be drawn this frame. The component is
-    /// expected to cache the chosen monitor's DPI/bounds internally so
-    /// `bake()` is parameterless.
-    fn update(&mut self, ctx: &AppContext) -> Placement;
+    /// Read-only view of the component's render assets.
+    fn assets(&self) -> &Self::Assets;
+
+    /// Cheap field reads from AppContext → `State`. Takes `&mut self`
+    /// so shells can cache derived data (e.g. layout) for `hit_test`
+    /// and `overlay_regions` — these caches are NOT hashed and must
+    /// never affect the bake. Returning `Hidden` skips all baking.
+    fn derive_state(&mut self, ctx: &AppContext) -> DeriveResult<Self::State>;
+
+    /// Rasterize the pixmap from `Assets` + `State`. Takes no `self` —
+    /// the signature structurally guarantees we're not reading anything
+    /// outside the hashed state.
+    fn bake(assets: &Self::Assets, state: &Self::State) -> Option<BakedPixmap>;
 
     /// Hit-test a point (virtual-desktop pixels) against the component.
-    /// Returns `true` if the component considers the point "inside" and
-    /// wants to receive mouse events for it.
     fn hit_test(&self, pos: ScreenPointF) -> bool;
 
     /// Cursor hint when the mouse is over this component.
     fn cursor_hint(&self, pos: ScreenPointF) -> CursorHint;
 
-    /// Handle a mouse event. The component updates its internal state
-    /// and returns what should happen next.
+    /// Handle a mouse event.
     fn on_mouse_event(&mut self, event: MouseEvent) -> EventResponse;
 
-    /// Rasterize the component's current visual state into a pixmap.
-    /// Called by the host after a successful `update(..) → Placement::Visible`.
-    fn bake(&mut self) -> Option<BakedPixmap>;
-
-    /// Produce the current overlay regions for shader-driven animation.
+    /// Current overlay regions (hover highlights, shadow fade, etc).
     fn overlay_regions(&self) -> Vec<OverlayRegion>;
 
-    /// Component-wide alpha applied in the overlay shader. Lets a
-    /// component bake fully opaque content and composite at a constant
-    /// opacity without muddying its interior (e.g. the Tips & Hotkeys
-    /// panel at 0.7). Default is fully opaque.
+    /// Component-wide alpha applied in the overlay shader.
     fn base_opacity(&self) -> f32 {
         1.0
     }
 }
 
+/// Type-erased component interface consumed by `ComponentHost`. Hides
+/// each component's `Assets`/`State` associated types so the host can
+/// store `Box<dyn ErasedComponent>`.
+pub trait ErasedComponent: Send {
+    fn id(&self) -> ComponentId;
+
+    /// Run `derive_state`, stash the resulting state inside the box, and
+    /// return the placement decision.
+    fn sync_derive(&mut self, ctx: &AppContext) -> Placement;
+
+    /// Bake if the stashed state's hash differs from the last bake.
+    fn try_bake(&mut self) -> BakeOutcome;
+
+    /// Invalidate the cached hash, forcing the next `try_bake` to bake.
+    /// Called when the host sends a `Remove` (e.g. monitor migration)
+    /// so the first snapshot on the new monitor always ships a pixmap.
+    fn invalidate_bake_cache(&mut self);
+
+    fn hit_test(&self, pos: ScreenPointF) -> bool;
+    fn cursor_hint(&self, pos: ScreenPointF) -> CursorHint;
+    fn on_mouse_event(&mut self, event: MouseEvent) -> EventResponse;
+    fn overlay_regions(&self) -> Vec<OverlayRegion>;
+    fn base_opacity(&self) -> f32;
+}
+
+/// Wraps a concrete `Component` and carries the pending state + hash
+/// cache so the type-erased host can drive it.
+pub struct ComponentBox<C: Component> {
+    inner: C,
+    pending_state: Option<C::State>,
+    last_state_hash: u64,
+}
+
+impl<C: Component> ComponentBox<C> {
+    pub fn new(inner: C) -> Self {
+        Self {
+            inner,
+            pending_state: None,
+            last_state_hash: 0,
+        }
+    }
+}
+
+impl<C: Component> ErasedComponent for ComponentBox<C> {
+    fn id(&self) -> ComponentId {
+        self.inner.id()
+    }
+
+    fn sync_derive(&mut self, ctx: &AppContext) -> Placement {
+        match self.inner.derive_state(ctx) {
+            DeriveResult::Hidden => {
+                self.pending_state = None;
+                Placement::Hidden
+            }
+            DeriveResult::Visible { monitor_idx, state } => {
+                self.pending_state = Some(state);
+                Placement::Visible { monitor_idx }
+            }
+        }
+    }
+
+    fn try_bake(&mut self) -> BakeOutcome {
+        let Some(state) = self.pending_state.as_ref() else {
+            return BakeOutcome::Hidden;
+        };
+        let hash = hash_one(state);
+        if hash == self.last_state_hash {
+            return BakeOutcome::Unchanged { state_hash: hash };
+        }
+        match C::bake(self.inner.assets(), state) {
+            Some(pixmap) => {
+                self.last_state_hash = hash;
+                BakeOutcome::Fresh {
+                    state_hash: hash,
+                    pixmap,
+                }
+            }
+            None => {
+                // Force retry on the next sync; keep pending_state so
+                // the host's reconcile flow doesn't treat this as Hidden.
+                self.last_state_hash = 0;
+                BakeOutcome::Hidden
+            }
+        }
+    }
+
+    fn invalidate_bake_cache(&mut self) {
+        self.last_state_hash = 0;
+    }
+
+    fn hit_test(&self, pos: ScreenPointF) -> bool {
+        self.inner.hit_test(pos)
+    }
+
+    fn cursor_hint(&self, pos: ScreenPointF) -> CursorHint {
+        self.inner.cursor_hint(pos)
+    }
+
+    fn on_mouse_event(&mut self, event: MouseEvent) -> EventResponse {
+        self.inner.on_mouse_event(event)
+    }
+
+    fn overlay_regions(&self) -> Vec<OverlayRegion> {
+        self.inner.overlay_regions()
+    }
+
+    fn base_opacity(&self) -> f32 {
+        self.inner.base_opacity()
+    }
+}
+
+/// Hash a single `Hash` value with `DefaultHasher`.
+pub fn hash_one<T: Hash + ?Sized>(value: &T) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    value.hash(&mut h);
+    h.finish()
+}
+
 /// Helper: pick the monitor whose bounds contain the center of `rect`.
-/// Returns `(index, MonitorInfo)` or `None` if no monitor contains the
-/// center (e.g. a selection dragged between monitors into a gap).
 pub fn pick_monitor_containing_center(
     monitors: &[MonitorInfo],
     rect: ScreenRect,

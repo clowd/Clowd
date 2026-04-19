@@ -5,13 +5,12 @@
 //! knowing anything about what those components contain.
 
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::time::Instant;
 
 use crate::geometry::{RectExt, ScreenRect};
 
 use super::animation::OverlayAnimator;
-use super::component::{ComponentId, ComponentSnapshot, RegionMode};
+use super::component::{BakedPixmap, ComponentId, ComponentSnapshot, RegionMode, SnapshotPixmap};
 
 /// Maximum overlay regions the shader supports per component.
 pub const MAX_OVERLAY_REGIONS: usize = 16;
@@ -52,9 +51,25 @@ struct CachedTexture {
 /// Per-component state tracked by the backend.
 struct OverlayEntry {
     cached: Option<CachedTexture>,
-    cached_hash: u64,
-    snapshot: Option<ComponentSnapshot>,
+    /// State hash of the pixmap currently uploaded in `cached.texture`.
+    /// Set from `ComponentSnapshot::state_hash`; host guarantees this
+    /// only differs when a new pixmap has been baked.
+    cached_state_hash: u64,
+    /// Baked pixmap staged by the most recent `Replace` snapshot,
+    /// awaiting upload on the next `render()` call. `None` means the
+    /// cached texture is still valid.
+    pending_pixmap: Option<BakedPixmap>,
+    /// Latest snapshot metadata (state_hash, overlay regions, opacity).
+    /// The pixmap half is consumed into `pending_pixmap` on Replace.
+    snapshot: Option<SnapshotMeta>,
     animator: OverlayAnimator,
+}
+
+/// Pixmap-free metadata from the most recent snapshot.
+struct SnapshotMeta {
+    state_hash: u64,
+    overlay_regions: Vec<super::component::OverlayRegion>,
+    base_opacity: f32,
 }
 
 /// Generic GPU backend that renders any component's pixmap as a textured
@@ -195,36 +210,32 @@ impl OverlayBackend {
             .entry(snapshot.id)
             .or_insert_with(|| OverlayEntry {
                 cached: None,
-                cached_hash: 0,
+                cached_state_hash: 0,
+                pending_pixmap: None,
                 snapshot: None,
                 animator: OverlayAnimator::new(),
             });
         entry.animator.update_targets(&snapshot.overlay_regions);
-        entry.snapshot = Some(snapshot);
+        let ComponentSnapshot {
+            id: _,
+            state_hash,
+            pixmap,
+            overlay_regions,
+            base_opacity,
+        } = snapshot;
+        if let SnapshotPixmap::Replace(baked) = pixmap {
+            entry.pending_pixmap = Some(baked);
+        }
+        entry.snapshot = Some(SnapshotMeta {
+            state_hash,
+            overlay_regions,
+            base_opacity,
+        });
     }
 
     /// Remove a component.
     pub fn remove(&mut self, id: ComponentId) {
         self.components.remove(&id);
-    }
-
-    /// Hash the pixmap-affecting parts of a snapshot. Overlay regions
-    /// are excluded — they're handled by the animator/shader. Hashes
-    /// the full pixel buffer so components whose visible content
-    /// changes in the pixmap interior (e.g. the Tips panel's color
-    /// sampler) don't get missed.
-    fn snapshot_hash(snap: &ComponentSnapshot) -> u64 {
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        if let Some(ref baked) = snap.pixmap {
-            baked.width.hash(&mut h);
-            baked.height.hash(&mut h);
-            baked.dest_vd.left().hash(&mut h);
-            baked.dest_vd.top().hash(&mut h);
-            baked.dest_vd.right().hash(&mut h);
-            baked.dest_vd.bottom().hash(&mut h);
-            baked.data.hash(&mut h);
-        }
-        h.finish()
     }
 
     /// Render all active components. Called once per frame after the
@@ -254,109 +265,109 @@ impl OverlayBackend {
             let Some(snapshot) = entry.snapshot.as_ref() else {
                 continue;
             };
-            let Some(ref baked) = snapshot.pixmap else {
-                continue;
-            };
 
             // Advance animation.
             entry.animator.advance(dt);
 
-            // Re-upload texture if needed.
-            let hash = Self::snapshot_hash(snapshot);
-            if entry.cached.is_none() || hash != entry.cached_hash {
-                let w = baked.width;
-                let h = baked.height;
+            // Re-upload texture only if a fresh pixmap is staged and
+            // the state hash differs from what we've already uploaded.
+            // If `pending_pixmap` is None, the last snapshot was Keep
+            // and we should reuse the existing texture.
+            if let Some(baked) = entry.pending_pixmap.take() {
+                if entry.cached.is_none() || entry.cached_state_hash != snapshot.state_hash {
+                    let w = baked.width;
+                    let h = baked.height;
 
-                let texture = device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("overlay texture"),
-                    size: wgpu::Extent3d {
-                        width: w,
-                        height: h,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING
-                        | wgpu::TextureUsages::COPY_DST,
-                    view_formats: &[],
-                });
-                queue.write_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &texture,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    &baked.data,
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(4 * w),
-                        rows_per_image: Some(h),
-                    },
-                    wgpu::Extent3d {
-                        width: w,
-                        height: h,
-                        depth_or_array_layers: 1,
-                    },
-                );
-
-                let view =
-                    texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let bind_group =
-                    device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("overlay bind group"),
-                        layout: &self.bgl,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: self.uniform_buffer.as_entire_binding(),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::TextureView(&view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 2,
-                                resource: wgpu::BindingResource::Sampler(
-                                    &self.sampler,
-                                ),
-                            },
-                        ],
+                    let texture = device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("overlay texture"),
+                        size: wgpu::Extent3d {
+                            width: w,
+                            height: h,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_DST,
+                        view_formats: &[],
                     });
+                    queue.write_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        &baked.data,
+                        wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(4 * w),
+                            rows_per_image: Some(h),
+                        },
+                        wgpu::Extent3d {
+                            width: w,
+                            height: h,
+                            depth_or_array_layers: 1,
+                        },
+                    );
 
-                // VD → window-local physical pixels.
-                let dest = baked.dest_vd;
-                let mon = monitor_bounds;
-                let dest_px = [
-                    (dest.left() - mon.left()) as f32,
-                    (dest.top() - mon.top()) as f32,
-                    (dest.right() - mon.left()) as f32,
-                    (dest.bottom() - mon.top()) as f32,
-                ];
+                    let view =
+                        texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    let bind_group =
+                        device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: Some("overlay bind group"),
+                            layout: &self.bgl,
+                            entries: &[
+                                wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: self.uniform_buffer.as_entire_binding(),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 1,
+                                    resource: wgpu::BindingResource::TextureView(&view),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 2,
+                                    resource: wgpu::BindingResource::Sampler(
+                                        &self.sampler,
+                                    ),
+                                },
+                            ],
+                        });
 
-                let overlay_uv_rects: Vec<[f32; 4]> = snapshot
-                    .overlay_regions
-                    .iter()
-                    .take(MAX_OVERLAY_REGIONS)
-                    .map(|r| r.uv_rect)
-                    .collect();
-                let overlay_modes: Vec<RegionMode> = snapshot
-                    .overlay_regions
-                    .iter()
-                    .take(MAX_OVERLAY_REGIONS)
-                    .map(|r| r.mode)
-                    .collect();
+                    let dest = baked.dest_vd;
+                    let mon = monitor_bounds;
+                    let dest_px = [
+                        (dest.left() - mon.left()) as f32,
+                        (dest.top() - mon.top()) as f32,
+                        (dest.right() - mon.left()) as f32,
+                        (dest.bottom() - mon.top()) as f32,
+                    ];
 
-                entry.cached = Some(CachedTexture {
-                    texture,
-                    bind_group,
-                    dest_px,
-                    overlay_uv_rects,
-                    overlay_modes,
-                });
-                entry.cached_hash = hash;
+                    let overlay_uv_rects: Vec<[f32; 4]> = snapshot
+                        .overlay_regions
+                        .iter()
+                        .take(MAX_OVERLAY_REGIONS)
+                        .map(|r| r.uv_rect)
+                        .collect();
+                    let overlay_modes: Vec<RegionMode> = snapshot
+                        .overlay_regions
+                        .iter()
+                        .take(MAX_OVERLAY_REGIONS)
+                        .map(|r| r.mode)
+                        .collect();
+
+                    entry.cached = Some(CachedTexture {
+                        texture,
+                        bind_group,
+                        dest_px,
+                        overlay_uv_rects,
+                        overlay_modes,
+                    });
+                    entry.cached_state_hash = snapshot.state_hash;
+                }
             }
 
             // Update overlay UV rects from latest snapshot (they can
