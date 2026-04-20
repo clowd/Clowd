@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 #[cfg(windows)]
@@ -33,6 +33,19 @@ const ZOOM_MAX: f32 = 256.0;
 /// Multiplicative step per wheel tick. Coarse by design — no modifier-key
 /// fine-grained step in v1.
 const ZOOM_STEP: f32 = 2.0;
+/// Pixels of touchpad `PixelDelta` scroll equivalent to one ×2 zoom.
+/// Zoom is applied continuously via `2^(dy / PIXELS_PER_DOUBLING)` so
+/// the gesture feels smooth rather than clicking through ×2 detents —
+/// a deliberate two-finger swipe produces a gradual ~1.5–3× change.
+const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
+/// If a `TouchPhase::Started` arrives within this window after the
+/// previous `Ended`/`Cancelled`, we treat the follow-up PixelDelta
+/// burst as macOS momentum (inertial) scrolling and drop it. macOS
+/// re-fires a full Started→Moved→Ended sequence for momentum with
+/// effectively zero gap from the direct Ended, whereas a fresh
+/// user-initiated gesture requires fingers to reposition and can't
+/// realistically start this fast.
+const MOMENTUM_GAP: Duration = Duration::from_millis(50);
 
 /// Virtual-cursor + magnifier + selection state owned by the event-loop
 /// thread.
@@ -128,6 +141,15 @@ struct InputState {
     /// Whether the debug/instrumentation panels are displayed. Toggled by
     /// the D key (`DxScreenCapture.cpp:1209-1213`). Defaults to `false`.
     debug_visible: bool,
+    /// Timestamp of the most recent touchpad `TouchPhase::Ended` /
+    /// `Cancelled` on a scroll event. Used to detect macOS momentum
+    /// scrolling: if the next `Started` arrives within `MOMENTUM_GAP`
+    /// we flag the follow-up burst as momentum and ignore its deltas.
+    last_scroll_end: Option<Instant>,
+    /// Set to `true` when the current touchpad scroll sequence is the
+    /// post-release momentum burst. Cleared on the next
+    /// user-initiated `Started` that arrives outside the momentum gap.
+    scroll_momentum: bool,
     /// Master overlay switch. Toggled by Q
     /// (`DxScreenCapture.cpp:1234-1239`; the legacy flag was named
     /// `data.crosshair`, but it actually gates every overlay the app
@@ -237,6 +259,8 @@ impl App {
                 drag_anchor_selection: None,
                 tips_visible: true,
                 debug_visible: false,
+                last_scroll_end: None,
+                scroll_momentum: false,
                 overlays_visible: true,
             },
         }
@@ -256,6 +280,32 @@ impl App {
                 self.input.selection,
                 self.input.captured,
             );
+        }
+    }
+
+    /// Multiply the current zoom by `factor`, clamped to
+    /// `[ZOOM_MIN, ZOOM_MAX]`. Handles the zoom=1→>1 anchor engagement
+    /// (Screens.cpp:130-137) and broadcasts to render threads. Shared
+    /// by the mouse-wheel and pinch-gesture handlers.
+    fn apply_zoom_factor(&mut self, factor: f32) {
+        if !factor.is_finite() || factor <= 0.0 {
+            return;
+        }
+        let new_zoom = (self.input.zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
+        if (new_zoom - self.input.zoom).abs() < f32::EPSILON {
+            return;
+        }
+
+        if !self.input.anchored && new_zoom > 1.0 {
+            self.input.anchored = true;
+            self.input.anchor_just_engaged = true;
+            SystemInterop::set_mouse_position(self.input.anchor);
+        }
+
+        self.input.zoom = new_zoom;
+        self.broadcast_mouse_state();
+        if self.input.debug_visible {
+            self.broadcast_ui_state();
         }
     }
 
@@ -552,6 +602,8 @@ impl ApplicationHandler for App {
             drag_anchor_selection: None,
             tips_visible: true,
             debug_visible: false,
+            last_scroll_end: None,
+            scroll_momentum: false,
             overlays_visible: true,
         };
         self.monitors = captured.monitors.clone();
@@ -1186,6 +1238,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseWheel {
                 delta,
+                phase,
                 ..
             } => {
                 // After a selection has been finalised the wheel is a
@@ -1201,52 +1254,69 @@ impl ApplicationHandler for App {
                 if self.input.captured {
                     return;
                 }
-                // Normalise the two winit delta variants into a single
-                // scalar "step" whose sign is all we care about for a
-                // coarse ×2/÷2 zoom. LineDelta is the desktop-mouse case;
-                // PixelDelta comes from touchpads in physical pixels and
-                // needs taming so one scroll gesture isn't twenty zoom
-                // steps.
-                let step = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => y,
-                    MouseScrollDelta::PixelDelta(p) => (p.y / 50.0) as f32,
+                // Mouse wheel (`LineDelta`) stays discrete ×2/÷2 per
+                // notch — matches the original C++ capturer's detent
+                // feel. Touchpad (`PixelDelta`) is continuous: zoom is
+                // multiplied by `2^(dy / PIXELS_PER_DOUBLING)` so every
+                // tiny delta is applied, giving a smooth gesture rather
+                // than clicking through ×2 stops. Horizontal axis is
+                // ignored on both. macOS momentum events are dropped
+                // via phase-based detection on the PixelDelta branch.
+                let factor = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => {
+                        if y > 0.0 {
+                            ZOOM_STEP
+                        } else if y < 0.0 {
+                            1.0 / ZOOM_STEP
+                        } else {
+                            return;
+                        }
+                    }
+                    MouseScrollDelta::PixelDelta(p) => {
+                        // Momentum detection: a `Started` arriving
+                        // within `MOMENTUM_GAP` of the previous `Ended`
+                        // is the macOS momentum burst (winit re-fires a
+                        // fresh Started→Moved→Ended sequence for it).
+                        // Flag the whole burst and drop its deltas.
+                        match phase {
+                            TouchPhase::Started => {
+                                self.input.scroll_momentum = self
+                                    .input
+                                    .last_scroll_end
+                                    .is_some_and(|t| t.elapsed() < MOMENTUM_GAP);
+                            }
+                            TouchPhase::Ended | TouchPhase::Cancelled => {
+                                self.input.last_scroll_end = Some(Instant::now());
+                            }
+                            _ => {}
+                        }
+                        if self.input.scroll_momentum {
+                            return;
+                        }
+                        let dy = p.y as f32;
+                        if dy == 0.0 {
+                            return;
+                        }
+                        2_f32.powf(dy / TOUCHPAD_PIXELS_PER_DOUBLING)
+                    }
                 };
-                if step == 0.0 {
+                self.apply_zoom_factor(factor);
+            }
+            WindowEvent::PinchGesture { delta, .. } => {
+                // macOS-only in winit 0.30. Trackpad pinch fires many
+                // small magnification deltas per gesture (typically
+                // ~0.005–0.05 each, summing to roughly ±1 over a full
+                // pinch). Apple's convention: multiply the current
+                // zoom by `(1 + delta)` per event, which approximately
+                // doubles / halves over a full gesture — matches
+                // Preview, Photos, etc.
+                if self.input.captured {
                     return;
                 }
-
-                let new_zoom = if step > 0.0 {
-                    self.input.zoom * ZOOM_STEP
-                } else {
-                    self.input.zoom / ZOOM_STEP
-                };
-                let new_zoom = new_zoom.clamp(ZOOM_MIN, ZOOM_MAX);
-                if (new_zoom - self.input.zoom).abs() < f32::EPSILON {
+                if delta == 0.0 {
                     return;
                 }
-
-                if !self.input.anchored && new_zoom > 1.0 {
-                    // MouseAnchorStart (Screens.cpp:130-137): pin the OS
-                    // cursor to the anchor. `virtual_cursor` already tracks
-                    // the current cursor position, so the zoom appears
-                    // centered on wherever the user was pointing.
-                    self.input.anchored = true;
-                    self.input.anchor_just_engaged = true;
-                    SystemInterop::set_mouse_position(self.input.anchor);
-                }
-                // Virtual cursor mode is sticky: once engaged it persists
-                // until capture finalization (mouse-up with a selection).
-                // At zoom=1 the delta math is (os-anchor)/1.0 — equivalent
-                // to physical tracking but via the anchor warp loop.
-
-                self.input.zoom = new_zoom;
-                self.broadcast_mouse_state();
-                // Zoom is published in `UiSharedState` so the debug panel
-                // can render it. Keep the broadcast conditional — when the
-                // panel is off, the extra Arc build is pointless.
-                if self.input.debug_visible {
-                    self.broadcast_ui_state();
-                }
+                self.apply_zoom_factor(1.0 + delta as f32);
             }
             _ => {}
         }
