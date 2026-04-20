@@ -278,17 +278,21 @@ impl TipsRenderer {
             None => [0.0, 0.0, 0.0, 1.0],
         };
 
-        // Shadow strips first (drawn behind panel body).
+        // Shadow strips first (drawn behind panel body). The right strip
+        // extends all the way down to `panel_h + shadow` so it covers
+        // the bottom-right corner too; the bottom strip stops at
+        // `panel_w` (which is where the right strip begins on X), so
+        // there's no overdraw.
         if shadow > 0.0 {
-            // Right strip
+            // Right strip (including the corner).
             rects.push(RectInstance::filled(
                 panel_left_w + panel_w,
                 panel_top_w + shadow,
                 panel_left_w + panel_w + shadow,
-                panel_top_w + panel_h,
+                panel_top_w + panel_h + shadow,
                 black_shadow,
             ));
-            // Bottom strip
+            // Bottom strip (left of the corner only).
             rects.push(RectInstance::filled(
                 panel_left_w + shadow,
                 panel_top_w + panel_h,
