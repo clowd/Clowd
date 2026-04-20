@@ -192,10 +192,24 @@ pub fn bootstrap_window_gpu(
             ..wgpu::Limits::default()
         };
 
+        // Opt into TIMESTAMP_QUERY when the adapter supports it, so the
+        // debug panel's GPU-time readout is populated. Gated on the
+        // same master switch as the rest of the GPU timing path so
+        // turning one off turns the whole feature off — merely
+        // enabling the feature on the device has measurable per-frame
+        // overhead on some backends.
+        let adapter_features = adapter.features();
+        let mut required_features = wgpu::Features::empty();
+        if crate::ui::gpu::gpu_timing::GPU_TIMING_ENABLED
+            && adapter_features.contains(wgpu::Features::TIMESTAMP_QUERY)
+        {
+            required_features |= wgpu::Features::TIMESTAMP_QUERY;
+        }
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("clowd_capture_wgpu device"),
-                required_features: wgpu::Features::empty(),
+                required_features,
                 required_limits,
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,

@@ -111,6 +111,7 @@ impl UiRenderer {
         resolve_view: &wgpu::TextureView,
         viewport_px: (u32, u32),
         perf: &PerfTracker,
+        timestamp_writes: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
         let now = Instant::now();
         let dt = self
@@ -126,8 +127,16 @@ impl UiRenderer {
         self.text
             .update_viewport(queue, viewport_px.0, viewport_px.1);
 
-        let mut rect_instances: Vec<RectInstance> = Vec::new();
-        let mut svg_draws: Vec<(usize, SvgInstance)> = Vec::new();
+        // Pre-size the rect buffer. The debug sparkline alone emits a
+        // few hundred rects (bars × segments + legend + reference
+        // lines). Starting at zero means the vector grows-and-copies
+        // 8-9 times per frame just to reach that size — one extra
+        // memcpy per growth of the pushed bytes, which compounds into
+        // a measurable CPU cost on a hot path. A fixed upper starting
+        // capacity means zero growth allocations for the typical
+        // frame.
+        let mut rect_instances: Vec<RectInstance> = Vec::with_capacity(512);
+        let mut svg_draws: Vec<(usize, SvgInstance)> = Vec::with_capacity(16);
 
         self.tips
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
@@ -177,7 +186,7 @@ impl UiRenderer {
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes,
             occlusion_query_set: None,
             multiview_mask: None,
         });
