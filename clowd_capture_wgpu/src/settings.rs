@@ -20,12 +20,7 @@ impl Default for CapturerSettings {
     fn default() -> Self {
         Self {
             // #3B97D2 — the legacy "clowd blue" accent.
-            crosshair_color: [
-                0x3B as f32 / 255.0,
-                0x97 as f32 / 255.0,
-                0xD2 as f32 / 255.0,
-                1.0,
-            ],
+            crosshair_color: [0x3B as f32 / 255.0, 0x97 as f32 / 255.0, 0xD2 as f32 / 255.0, 1.0],
         }
     }
 }

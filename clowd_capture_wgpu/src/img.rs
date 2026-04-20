@@ -16,10 +16,7 @@ pub enum ActionResult {
 
 /// Extract the selected region from the desktop buffer, converting BGRA to RGBA.
 /// Returns `None` if selection is outside bounds.
-pub fn extract_selection_rgba(
-    selection: ScreenRect,
-    buffer: &CapturedDesktop,
-) -> Option<(Vec<u8>, u32, u32)> {
+pub fn extract_selection_rgba(selection: ScreenRect, buffer: &CapturedDesktop) -> Option<(Vec<u8>, u32, u32)> {
     // Convert selection from virtual-desktop coords to buffer-local coords
     let buf_x = (selection.left() - buffer.bounds.left()).max(0) as u32;
     let buf_y = (selection.top() - buffer.bounds.top()).max(0) as u32;
@@ -88,11 +85,7 @@ pub fn copy_to_clipboard(selection: ScreenRect, buffer: &CapturedDesktop) -> Act
 }
 
 /// Save the selected region to a file via save dialog.
-pub fn save_to_file(
-    selection: ScreenRect,
-    buffer: &CapturedDesktop,
-    window: &Window,
-) -> ActionResult {
+pub fn save_to_file(selection: ScreenRect, buffer: &CapturedDesktop, window: &Window) -> ActionResult {
     let Some((rgba, width, height)) = extract_selection_rgba(selection, buffer) else {
         log::warn!("save: no selection or failed to extract");
         return ActionResult::Failed("No selection to save".to_string());
@@ -128,8 +121,7 @@ pub fn save_to_file(
     };
 
     // Create image and save
-    let img: image::RgbaImage =
-        image::ImageBuffer::from_raw(width, height, rgba).expect("buffer size matches");
+    let img: image::RgbaImage = image::ImageBuffer::from_raw(width, height, rgba).expect("buffer size matches");
 
     if let Err(e) = img.save_with_format(&path, format) {
         log::error!("save: failed to write {:?}: {e}", path);

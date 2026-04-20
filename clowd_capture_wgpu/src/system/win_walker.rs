@@ -13,19 +13,15 @@ use windows::{
         Foundation::{HWND, LPARAM, POINT, RECT, TRUE},
         Graphics::{
             Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS},
-            Gdi::{
-                ClientToScreen, GetMonitorInfoW, MonitorFromWindow, MONITORINFO,
-                MONITOR_DEFAULTTONEAREST,
-            },
+            Gdi::{ClientToScreen, GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
         },
         System::Com::{CoCreateInstance, CLSCTX_ALL},
         UI::{
             Shell::{IVirtualDesktopManager, VirtualDesktopManager},
             WindowsAndMessaging::{
-                EnumWindows, FindWindowExW, GetClassNameW, GetClientRect, GetWindowLongPtrW,
-                GetWindowRect, GetWindowTextW, IsIconic, IsWindowVisible, IsZoomed,
-                RealChildWindowFromPoint, GWL_EXSTYLE, GWL_STYLE, WS_CAPTION, WS_EX_LAYERED,
-                WS_EX_TOOLWINDOW, WS_VISIBLE,
+                EnumWindows, FindWindowExW, GetClassNameW, GetClientRect, GetWindowLongPtrW, GetWindowRect, GetWindowTextW, IsIconic,
+                IsWindowVisible, IsZoomed, RealChildWindowFromPoint, GWL_EXSTYLE, GWL_STYLE, WS_CAPTION, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
+                WS_VISIBLE,
             },
         },
     },
@@ -106,7 +102,8 @@ impl WindowWalker {
                     warn!(
                         "Could not create IVirtualDesktopManager (0x{:08X}: {}) \
                          — virtual-desktop filtering disabled",
-                        e.code().0, e
+                        e.code().0,
+                        e
                     );
                     None
                 }
@@ -116,10 +113,7 @@ impl WindowWalker {
         // Collect raw HWNDs via EnumWindows (front-to-back Z-order).
         let mut hwnds: Vec<HWND> = Vec::new();
         unsafe {
-            let _ = EnumWindows(
-                Some(enum_windows_cb),
-                LPARAM(&mut hwnds as *mut Vec<HWND> as isize),
-            );
+            let _ = EnumWindows(Some(enum_windows_cb), LPARAM(&mut hwnds as *mut Vec<HWND> as isize));
         }
 
         let mut windows: Vec<WindowEntry> = Vec::new();
@@ -131,7 +125,9 @@ impl WindowWalker {
         }
 
         info!("WindowWalker: captured {} top-level windows", windows.len());
-        WindowWalker { windows }
+        WindowWalker {
+            windows,
+        }
     }
 
     /// Given a cursor position in virtual-desktop physical pixels, return the
@@ -142,7 +138,10 @@ impl WindowWalker {
     /// captured window contains the point).
     pub fn hit_test(&self, point: ScreenPoint) -> Option<ScreenRect> {
         // Find the topmost (first in Z-order) window containing the point.
-        let top = self.windows.iter().find(|w| w.rect.contains(point))?;
+        let top = self
+            .windows
+            .iter()
+            .find(|w| w.rect.contains(point))?;
 
         let top_rect = top.rect;
         let mut ideal_rect = top_rect;
@@ -188,16 +187,13 @@ impl WindowWalker {
                 // Inherited invisibility — parent was a toolbar or too small.
             } else if (ex_style & WS_EX_TOOLWINDOW.0) != 0 {
                 visible = false; // floating toolbar
-            } else if child_rect.width() < MIN_WINDOW_CHILD_SIZE
-                || child_rect.height() < MIN_WINDOW_CHILD_SIZE
-            {
+            } else if child_rect.width() < MIN_WINDOW_CHILD_SIZE || child_rect.height() < MIN_WINDOW_CHILD_SIZE {
                 visible = false; // too small
             }
 
             // "Similar to parent" — child fills nearly the whole parent.
             // Don't update ideal but keep walking for a more specific child.
-            let similar_to_parent = (child_rect.min_x() - parent_rect.min_x()).abs()
-                < MERGE_WITH_PARENT_THRESHOLD
+            let similar_to_parent = (child_rect.min_x() - parent_rect.min_x()).abs() < MERGE_WITH_PARENT_THRESHOLD
                 && (child_rect.min_y() - parent_rect.min_y()).abs() < MERGE_WITH_PARENT_THRESHOLD
                 && (child_rect.max_x() - parent_rect.max_x()).abs() < MERGE_WITH_PARENT_THRESHOLD
                 && (child_rect.max_y() - parent_rect.max_y()).abs() < MERGE_WITH_PARENT_THRESHOLD;
@@ -223,7 +219,10 @@ impl WindowWalker {
     /// that contains the point.
     pub fn hit_test_with_title(&self, point: ScreenPoint) -> Option<(ScreenRect, String)> {
         // Find the topmost (first in Z-order) window containing the point.
-        let top = self.windows.iter().find(|w| w.rect.contains(point))?;
+        let top = self
+            .windows
+            .iter()
+            .find(|w| w.rect.contains(point))?;
 
         let top_rect = top.rect;
         let top_title = top.title.clone();
@@ -270,16 +269,13 @@ impl WindowWalker {
                 // Inherited invisibility — parent was a toolbar or too small.
             } else if (ex_style & WS_EX_TOOLWINDOW.0) != 0 {
                 visible = false; // floating toolbar
-            } else if child_rect.width() < MIN_WINDOW_CHILD_SIZE
-                || child_rect.height() < MIN_WINDOW_CHILD_SIZE
-            {
+            } else if child_rect.width() < MIN_WINDOW_CHILD_SIZE || child_rect.height() < MIN_WINDOW_CHILD_SIZE {
                 visible = false; // too small
             }
 
             // "Similar to parent" — child fills nearly the whole parent.
             // Don't update ideal but keep walking for a more specific child.
-            let similar_to_parent = (child_rect.min_x() - parent_rect.min_x()).abs()
-                < MERGE_WITH_PARENT_THRESHOLD
+            let similar_to_parent = (child_rect.min_x() - parent_rect.min_x()).abs() < MERGE_WITH_PARENT_THRESHOLD
                 && (child_rect.min_y() - parent_rect.min_y()).abs() < MERGE_WITH_PARENT_THRESHOLD
                 && (child_rect.max_x() - parent_rect.max_x()).abs() < MERGE_WITH_PARENT_THRESHOLD
                 && (child_rect.max_y() - parent_rect.max_y()).abs() < MERGE_WITH_PARENT_THRESHOLD;
@@ -320,11 +316,7 @@ extern "system" fn enum_windows_cb(hwnd: HWND, lparam: LPARAM) -> windows::core:
 
 /// Run the full filter pipeline on a single HWND. Returns `Some(WindowEntry)`
 /// if the window passes all checks, `None` otherwise.
-fn evaluate_window(
-    hwnd: HWND,
-    vdm: &Option<IVirtualDesktopManager>,
-    accepted: &[WindowEntry],
-) -> Option<WindowEntry> {
+fn evaluate_window(hwnd: HWND, vdm: &Option<IVirtualDesktopManager>, accepted: &[WindowEntry]) -> Option<WindowEntry> {
     unsafe {
         // 1. Basic visibility.
         if !IsWindowVisible(hwnd).as_bool() {
@@ -402,7 +394,11 @@ fn evaluate_window(
         }
 
         let title = get_window_text(hwnd);
-        Some(WindowEntry { hwnd, rect, title })
+        Some(WindowEntry {
+            hwnd,
+            rect,
+            title,
+        })
     }
 }
 
@@ -506,10 +502,7 @@ fn child_screen_rect(hwnd: HWND) -> Option<ScreenRect> {
 /// rect fully contains `rect`.
 fn is_fully_occluded(rect: &ScreenRect, accepted: &[WindowEntry]) -> bool {
     accepted.iter().any(|w| {
-        w.rect.min_x() <= rect.min_x()
-            && w.rect.min_y() <= rect.min_y()
-            && w.rect.max_x() >= rect.max_x()
-            && w.rect.max_y() >= rect.max_y()
+        w.rect.min_x() <= rect.min_x() && w.rect.min_y() <= rect.min_y() && w.rect.max_x() >= rect.max_x() && w.rect.max_y() >= rect.max_y()
     })
 }
 
@@ -520,9 +513,7 @@ fn has_core_window_child(hwnd: HWND) -> bool {
         FindWindowExW(
             Some(hwnd),
             None,
-            PCWSTR::from_raw(
-                windows::core::w!("Windows.UI.Core.CoreWindow").as_ptr(),
-            ),
+            PCWSTR::from_raw(windows::core::w!("Windows.UI.Core.CoreWindow").as_ptr()),
             PCWSTR::null(),
         )
         .is_ok()

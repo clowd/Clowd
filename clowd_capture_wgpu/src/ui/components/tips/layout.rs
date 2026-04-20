@@ -121,8 +121,7 @@ pub fn compute_layout(
     let right_anchor_left = primary_bounds.right() as f32 - margin - panel_w;
     let anchor_top = primary_bounds.bottom() as f32 - margin - panel_h;
 
-    let use_left_fallback = cursor.x > right_anchor_left - margin * 2.0
-        && cursor.y > anchor_top - margin * 2.0;
+    let use_left_fallback = cursor.x > right_anchor_left - margin * 2.0 && cursor.y > anchor_top - margin * 2.0;
 
     let panel_left = if use_left_fallback {
         primary_bounds.left() as f32 + margin
@@ -138,12 +137,7 @@ pub fn compute_layout(
         panel_h.round() as i32,
     );
 
-    let title_rect = ScreenRect::from_xy_size(
-        panel_rect.left(),
-        panel_rect.top(),
-        panel_rect.width(),
-        title_h.round() as i32,
-    );
+    let title_rect = ScreenRect::from_xy_size(panel_rect.left(), panel_rect.top(), panel_rect.width(), title_h.round() as i32);
 
     // Inner layout (panel-local coordinates).
     let body_top = title_h;

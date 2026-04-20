@@ -39,20 +39,21 @@ pub struct UiSharedState {
     pub selection: Option<ScreenRect>,
     pub captured: bool,
     pub mouse_down: bool,
+    pub dragging: bool,
+    pub zoom: f32,
     pub virtual_cursor: ScreenPointF,
     pub accent_color: [f32; 4],
     pub tips_visible: bool,
+    pub debug_visible: bool,
     pub hovered_monitor_name: Option<String>,
     pub hovered_window_title: Option<String>,
+    pub hovered_window_bounds: Option<ScreenRect>,
     pub hovered_pixel_bgra: Option<[u8; 4]>,
 }
 
 /// Return the monitor whose bounds contain the center of `rect`. `None`
 /// when no monitor contains the center.
-fn pick_monitor_containing_center(
-    monitors: &[UiMonitor],
-    rect: ScreenRect,
-) -> Option<UiMonitor> {
+fn pick_monitor_containing_center(monitors: &[UiMonitor], rect: ScreenRect) -> Option<UiMonitor> {
     let cx = (rect.left() + rect.right()) / 2;
     let cy = (rect.top() + rect.bottom()) / 2;
     monitors.iter().find_map(|m| {
@@ -82,7 +83,10 @@ pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
     let sel = state.selection?;
     let monitor = pick_monitor_containing_center(&state.monitors, sel)?;
     let layout = compute_panel_layout(monitor.bounds, sel, monitor.dpi_scale)?;
-    Some(PanelVisibility { monitor, layout })
+    Some(PanelVisibility {
+        monitor,
+        layout,
+    })
 }
 
 /// Decide whether the tips panel is visible and on which monitor.
@@ -90,7 +94,30 @@ pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
     if state.captured || state.mouse_down || !state.tips_visible {
         return None;
     }
-    let idx = state.monitors.iter().position(|m| m.is_primary)?;
+    let idx = state
+        .monitors
+        .iter()
+        .position(|m| m.is_primary)?;
     let monitor = *state.monitors.get(idx)?;
     Some((idx, monitor))
+}
+
+/// Whether the per-monitor debug panel is visible on `this` monitor. Shown
+/// on **every** monitor when the `D`-key toggle is on, mirroring
+/// `DxScreenCapture.cpp:915-933`.
+pub fn debug_monitor_visibility(state: &UiSharedState, _this: &UiMonitor) -> bool {
+    state.debug_visible
+}
+
+/// Whether the primary (cursor-follow) debug panel is visible on `this`
+/// monitor. Shown on exactly one monitor — the one containing the virtual
+/// cursor. Mirrors `DxScreenCapture.cpp:935-977`.
+pub fn debug_primary_visibility(state: &UiSharedState, this: &UiMonitor) -> bool {
+    if !state.debug_visible {
+        return false;
+    }
+    let cx = state.virtual_cursor.x.round() as i32;
+    let cy = state.virtual_cursor.y.round() as i32;
+    let b = this.bounds;
+    cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
 }

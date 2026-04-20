@@ -9,6 +9,7 @@
 //!   * [`tips`]   — per-frame tips-panel draw (Phase 3)
 //!   * [`renderer`] — the top-level `UiRenderer` (Phase 2)
 
+pub mod debug;
 pub mod panel;
 pub mod rect;
 pub mod renderer;

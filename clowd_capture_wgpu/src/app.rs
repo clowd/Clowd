@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, OnceLock};
+use std::time::Duration;
 
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -12,18 +13,16 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
-use crate::img::{self, ActionResult};
 use crate::gpu::bootstrap_window_gpu;
-use crate::ui::command::Command;
-use crate::ui::components::panel;
+use crate::img::{self, ActionResult};
 use crate::platform;
-use crate::selection::{
-    clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode,
-    Hittest,
-};
+use crate::render::{spawn_render_thread, RenderThreadParams, WindowHandle};
+use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
 use crate::settings::CapturerSettings;
 use crate::system::{CapturedDesktop, SystemInterop, WindowWalker};
-use crate::render::{spawn_render_thread, RenderThreadParams, WindowHandle};
+use crate::ui::command::Command;
+use crate::ui::components::debug::startup::StartupTimings;
+use crate::ui::components::panel;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
 /// Minimum zoom. The magnifier only ever enlarges the source.
@@ -126,6 +125,9 @@ struct InputState {
     /// Whether the Tips & Hotkeys overlay is currently displayed. Toggled
     /// by the T key (`DxScreenCapture.cpp:1248-1251`). Defaults to `true`.
     tips_visible: bool,
+    /// Whether the debug/instrumentation panels are displayed. Toggled by
+    /// the D key (`DxScreenCapture.cpp:1209-1213`). Defaults to `false`.
+    debug_visible: bool,
 }
 
 pub struct App {
@@ -166,6 +168,21 @@ pub struct App {
     /// `about_to_wait` snaps alpha to 1 once all threads have reported.
     /// `None` after the reveal is complete (or on Windows where it's unused).
     pending_show: Option<PendingShow>,
+    /// Startup timing markers, populated incrementally on the main thread
+    /// during bootstrap. Wrapped in `Arc` and cloned into each render
+    /// thread when they're spawned so the debug panel can display them.
+    startup: Arc<StartupTimings>,
+    /// Scratch builder for startup markers — consumed into `startup` once
+    /// window creation finishes. Separated from the Arc so callers can
+    /// mutate it up until the render threads spawn.
+    startup_builder: StartupTimings,
+    /// Wall-clock offset (from `startup.t_start`) at which every window
+    /// became visible atomically. Set **once** on the main thread right
+    /// after `show_windows_atomically` in `about_to_wait`. Shared by
+    /// `Arc` with every render thread so the debug panel can display it
+    /// — before this point the user sees nothing, so it's the most
+    /// meaningful "time to first render" value across the app.
+    shown_time: Arc<OnceLock<Duration>>,
 }
 
 struct PendingShow {
@@ -175,7 +192,7 @@ struct PendingShow {
 }
 
 impl App {
-    pub fn new(settings: Arc<CapturerSettings>) -> Self {
+    pub fn new(settings: Arc<CapturerSettings>, startup: StartupTimings) -> Self {
         Self {
             settings,
             windows: HashMap::new(),
@@ -186,6 +203,9 @@ impl App {
             desktop_buffer: None,
             walker: None,
             pending_show: None,
+            startup: Arc::new(StartupTimings::default()),
+            startup_builder: startup,
+            shown_time: Arc::new(OnceLock::new()),
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
             // Zero here is a placeholder that never gets broadcast.
@@ -205,6 +225,7 @@ impl App {
                 drag_mode: None,
                 drag_anchor_selection: None,
                 tips_visible: true,
+                debug_visible: false,
             },
         }
     }
@@ -244,9 +265,7 @@ impl App {
     /// is not visible). Pure function of `input` + `monitors`; used by
     /// the click / hover handlers to hit-test without having to wait for
     /// a state round-trip from a render thread.
-    fn current_panel_layout(
-        &self,
-    ) -> Option<crate::ui::components::panel::layout::PanelLayout> {
+    fn current_panel_layout(&self) -> Option<crate::ui::components::panel::layout::PanelLayout> {
         if !self.input.captured {
             return None;
         }
@@ -257,11 +276,7 @@ impl App {
             let b = m.bounds;
             cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
         })?;
-        crate::ui::components::panel::layout::compute_layout(
-            mon.bounds,
-            sel,
-            mon.scale_factor,
-        )
+        crate::ui::components::panel::layout::compute_layout(mon.bounds, sel, mon.scale_factor)
     }
 
     /// Build a fresh [`UiSharedState`] from the current app state and
@@ -282,11 +297,14 @@ impl App {
             .find(|m| m.bounds.contains(cursor_pt))
             .map(|m| m.name.clone());
 
-        self.cached_hovered_title = self
+        let hovered_window = self
             .walker
             .as_ref()
-            .and_then(|w| w.hit_test_with_title(cursor_pt))
-            .map(|(_, title)| title);
+            .and_then(|w| w.hit_test_with_title(cursor_pt));
+        self.cached_hovered_title = hovered_window
+            .as_ref()
+            .map(|(_, t)| t.clone());
+        let hovered_window_bounds = hovered_window.as_ref().map(|(r, _)| *r);
 
         let hovered_pixel_bgra = self
             .desktop_buffer
@@ -308,11 +326,15 @@ impl App {
             selection: self.input.selection,
             captured: self.input.captured,
             mouse_down: self.input.mouse_down,
+            dragging: self.input.dragging,
+            zoom: self.input.zoom,
             virtual_cursor: self.input.virtual_cursor,
             accent_color: self.settings.crosshair_color,
             tips_visible: self.input.tips_visible,
+            debug_visible: self.input.debug_visible,
             hovered_monitor_name,
             hovered_window_title: self.cached_hovered_title.clone(),
+            hovered_window_bounds,
             hovered_pixel_bgra,
         });
 
@@ -342,7 +364,10 @@ impl App {
             self.input.virtual_cursor.x.round() as i32,
             self.input.virtual_cursor.y.round() as i32,
         );
-        self.input.selection = self.walker.as_ref().and_then(|w| w.hit_test(pt));
+        self.input.selection = self
+            .walker
+            .as_ref()
+            .and_then(|w| w.hit_test(pt));
 
         // Broadcast cleared state to render threads
         self.broadcast_mouse_state();
@@ -353,12 +378,7 @@ impl App {
     /// Dispatch a `Command` emitted by a component (or by a keyboard
     /// accelerator). The single central place where the app maps the
     /// shared `Command` vocabulary to concrete app-level effects.
-    fn dispatch_command(
-        &mut self,
-        command: Command,
-        event_loop: &ActiveEventLoop,
-        window: &Window,
-    ) {
+    fn dispatch_command(&mut self, command: Command, event_loop: &ActiveEventLoop, window: &Window) {
         use xdialog::XDialogIcon::Error as ErrorIcon;
         log::info!("dispatch command: {:?}", command);
         match command {
@@ -372,7 +392,8 @@ impl App {
                     ActionResult::Success => event_loop.exit(),
                     ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false) {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
+                        {
                             self.show_all_windows();
                         } else {
                             event_loop.exit();
@@ -407,7 +428,6 @@ impl App {
     }
 }
 
-
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // `resumed` can fire more than once on some platforms; only bootstrap once.
@@ -424,6 +444,7 @@ impl ApplicationHandler for App {
         //    GetDIBits + a single Vec allocation. The bundled `monitors`
         //    field is the topology snapshot taken at the same instant.
         let captured = SystemInterop::capture_desktop();
+        self.startup_builder.mark_desktop_search();
 
         if captured.monitors.is_empty() {
             error!("no monitors detected; nothing to render to");
@@ -437,8 +458,7 @@ impl ApplicationHandler for App {
         // main thread keeps every render thread in sync by translating
         // WindowEvent::CursorMoved into RenderMsg::MouseState.
         let initial_mouse = SystemInterop::get_mouse_position();
-        let initial_mouse_f =
-            ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
+        let initial_mouse_f = ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
 
         // Populate the InputState we drive the zoom + virtual cursor from.
         // The anchor is the real-screen centre of the primary monitor (per
@@ -471,6 +491,7 @@ impl ApplicationHandler for App {
             drag_mode: None,
             drag_anchor_selection: None,
             tips_visible: true,
+            debug_visible: false,
         };
         self.monitors = captured.monitors.clone();
         self.vd_bounds = captured.bounds;
@@ -524,6 +545,10 @@ impl ApplicationHandler for App {
             event_loop.exit();
             return;
         }
+        self.startup_builder.mark_window_create();
+        // Freeze the startup markers — from here on they're shared by Arc
+        // with every render thread and never change.
+        self.startup = Arc::new(self.startup_builder);
 
         // 3. Wrap the captured desktop in Arc — shared read-only with
         //    GPU bootstrap (for texture upload) and retained by the main
@@ -553,7 +578,10 @@ impl ApplicationHandler for App {
         // 5. Spawn render threads behind a Barrier so the main thread
         //    waits until every swapchain has a valid first frame before
         //    any window is flipped visible.
-        let ok_count = gpu_setups.iter().filter(|s| s.is_some()).count();
+        let ok_count = gpu_setups
+            .iter()
+            .filter(|s| s.is_some())
+            .count();
         if ok_count == 0 {
             error!("no GPU could be bootstrapped; exiting");
             event_loop.exit();
@@ -567,10 +595,11 @@ impl ApplicationHandler for App {
         let visible_barrier = Arc::new(Barrier::new(ok_count + 1));
 
         let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(ok_count);
-        for (((w, hz), m), gpu_setup) in created
+        for (monitor_idx, (((w, hz), m), gpu_setup)) in created
             .into_iter()
             .zip(monitors.iter())
             .zip(gpu_setups.into_iter())
+            .enumerate()
         {
             let (gpu, surface) = match gpu_setup {
                 Some(pair) => pair,
@@ -588,9 +617,13 @@ impl ApplicationHandler for App {
                     dpi_scale: m.scale_factor,
                     is_primary: m.is_primary,
                 },
+                monitor_index: monitor_idx,
+                monitor_name: m.name.clone(),
                 scale_factor: m.scale_factor,
                 refresh_hz: hz,
                 initial_mouse: initial_mouse_f,
+                startup: self.startup.clone(),
+                shown_time: self.shown_time.clone(),
                 ready_count: ready_count.clone(),
                 visible_barrier: visible_barrier.clone(),
             });
@@ -621,6 +654,12 @@ impl ApplicationHandler for App {
         if let Some(ref pending) = self.pending_show {
             if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
                 platform::show_windows_atomically(self.windows.values().map(|h| &h.window));
+                // Record "user can see anything now" the instant after
+                // `show_windows_atomically` returns. This is the debug
+                // panel's canonical "time to first render" — the same
+                // value on every display because the windows flip
+                // together.
+                let _ = self.shown_time.set(self.startup.t_start.elapsed());
                 if let Some(first_id) = self.monitor_window_ids.first() {
                     if let Some(h) = self.windows.get(first_id) {
                         h.window.focus_window();
@@ -641,12 +680,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        id: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         // Extract the bits of the window handle we need upfront and
         // drop the `self.windows` borrow immediately. Keeping a live
         // `&WindowHandle` across the match blocks `broadcast_ui_state`
@@ -689,7 +723,15 @@ impl ApplicationHandler for App {
             } => {
                 if let Some(c) = ch.chars().next() {
                     let c_lower = c.to_ascii_lowercase();
-                    if self.input.captured {
+                    // The debug toggle works regardless of capture state —
+                    // it's a dev/diagnostic overlay and useful at every
+                    // phase of the selection flow. Mirrors
+                    // `DxScreenCapture.cpp:1209-1213` where `D` is handled
+                    // before any capture-state gating.
+                    if c_lower == 'd' {
+                        self.input.debug_visible = !self.input.debug_visible;
+                        self.broadcast_ui_state();
+                    } else if self.input.captured {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
                             self.dispatch_command(cmd, event_loop, handle_window);
                         }
@@ -709,7 +751,10 @@ impl ApplicationHandler for App {
                     h.resize(new_size);
                 }
             }
-            WindowEvent::CursorMoved { position, .. } => {
+            WindowEvent::CursorMoved {
+                position,
+                ..
+            } => {
                 // winit hands us a position in this window's local physical
                 // pixels. Reconstruct the OS cursor in virtual-desktop
                 // coords so we can compare against the anchor (itself in
@@ -738,9 +783,7 @@ impl ApplicationHandler for App {
                         const STALE_THRESHOLD: f32 = 75.0;
                         let raw_dx = (os_vd.x - self.input.anchor.x) as f32;
                         let raw_dy = (os_vd.y - self.input.anchor.y) as f32;
-                        if raw_dx * raw_dx + raw_dy * raw_dy
-                            > STALE_THRESHOLD * STALE_THRESHOLD
-                        {
+                        if raw_dx * raw_dx + raw_dy * raw_dy > STALE_THRESHOLD * STALE_THRESHOLD {
                             // Almost certainly a stale pre-warp event.
                             SystemInterop::set_mouse_position(self.input.anchor);
                             return;
@@ -753,17 +796,13 @@ impl ApplicationHandler for App {
                     let dy = (os_vd.y - self.input.anchor.y) as f32 / zoom;
                     self.input.virtual_cursor.x += dx;
                     self.input.virtual_cursor.y += dy;
-                    clamp_to_nearest_monitor(
-                        &mut self.input.virtual_cursor,
-                        &self.monitors,
-                    );
+                    clamp_to_nearest_monitor(&mut self.input.virtual_cursor, &self.monitors);
                     SystemInterop::set_mouse_position(self.input.anchor);
                 } else {
                     // Unanchored (zoom == 1): the OS cursor is truth. We
                     // still keep `virtual_cursor` updated so a subsequent
                     // zoom-in transition doesn't need a GetCursorPos.
-                    self.input.virtual_cursor =
-                        ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
+                    self.input.virtual_cursor = ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
                 }
 
                 // Walker hover: when idle (no button held, no finalised
@@ -793,19 +832,11 @@ impl ApplicationHandler for App {
                 // `None` briefly hides the rect, matching the C++ feel.
                 if self.input.mouse_down && !self.input.captured {
                     if let Some(start) = self.input.mouse_down_pt {
-                        let psel = ScreenRect::from_rounded_threshold(
-                            start.x,
-                            start.y,
-                            self.input.virtual_cursor.x,
-                            self.input.virtual_cursor.y,
-                        );
+                        let psel =
+                            ScreenRect::from_rounded_threshold(start.x, start.y, self.input.virtual_cursor.x, self.input.virtual_cursor.y);
                         if !self.input.dragging {
-                            let threshold = 6.0
-                                / (self.input.mouse_down_dpi * self.input.zoom);
-                            let crossed = psel.is_some_and(|r| {
-                                (r.width() as f32) > threshold
-                                    || (r.height() as f32) > threshold
-                            });
+                            let threshold = 6.0 / (self.input.mouse_down_dpi * self.input.zoom);
+                            let crossed = psel.is_some_and(|r| (r.width() as f32) > threshold || (r.height() as f32) > threshold);
                             if crossed {
                                 self.input.dragging = true;
                             }
@@ -826,11 +857,9 @@ impl ApplicationHandler for App {
                 // the WM_MOUSEMOVE handlers at
                 // DxScreenCapture.cpp:1402-1490/1670/1732.
                 if self.input.captured {
-                    if let (Some(mode), Some(anchor), Some(start)) = (
-                        self.input.drag_mode,
-                        self.input.drag_anchor_selection,
-                        self.input.mouse_down_pt,
-                    ) {
+                    if let (Some(mode), Some(anchor), Some(start)) =
+                        (self.input.drag_mode, self.input.drag_anchor_selection, self.input.mouse_down_pt)
+                    {
                         let cur_x = self.input.virtual_cursor.x.floor() as i32;
                         let cur_y = self.input.virtual_cursor.y.floor() as i32;
                         let new_sel = match mode {
@@ -843,28 +872,11 @@ impl ApplicationHandler for App {
                                 // fully off-screen produces `None`
                                 // and makes the selection disappear;
                                 // dragging back brings it back.
-                                let dx = (self.input.virtual_cursor.x
-                                    - start.x)
-                                    .round()
-                                    as i32;
-                                let dy = (self.input.virtual_cursor.y
-                                    - start.y)
-                                    .round()
-                                    as i32;
-                                move_and_crop(
-                                    anchor,
-                                    dx,
-                                    dy,
-                                    self.vd_bounds,
-                                )
+                                let dx = (self.input.virtual_cursor.x - start.x).round() as i32;
+                                let dy = (self.input.virtual_cursor.y - start.y).round() as i32;
+                                move_and_crop(anchor, dx, dy, self.vd_bounds)
                             }
-                            DragMode::Resize(handle) => Some(resize_with_clamp(
-                                anchor,
-                                handle,
-                                cur_x,
-                                cur_y,
-                                self.vd_bounds,
-                            )),
+                            DragMode::Resize(handle) => Some(resize_with_clamp(anchor, handle, cur_x, cur_y, self.vd_bounds)),
                         };
                         self.input.selection = new_sel;
                         // Selection geometry changed during a drag after
@@ -877,10 +889,7 @@ impl ApplicationHandler for App {
                         // during a drag the OS cursor stays whatever
                         // it was at mouse-down (matches Windows native
                         // resize-drag feel).
-                        let dpi = dpi_at_point(
-                            self.input.virtual_cursor,
-                            &self.monitors,
-                        );
+                        let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
                         let ht = hit_test(self.input.virtual_cursor, sel, dpi);
                         if ht != self.input.hittest {
                             self.input.hittest = ht;
@@ -929,13 +938,8 @@ impl ApplicationHandler for App {
                             let pos = self.input.virtual_cursor;
                             if let Some(layout) = self.current_panel_layout() {
                                 if let Some(idx) = layout.hit_test(pos.x, pos.y) {
-                                    let cmd =
-                                        panel::model::button_defs()[idx].command;
-                                    self.dispatch_command(
-                                        cmd,
-                                        event_loop,
-                                        handle_window,
-                                    );
+                                    let cmd = panel::model::button_defs()[idx].command;
+                                    self.dispatch_command(cmd, event_loop, handle_window);
                                     return;
                                 }
                             }
@@ -951,11 +955,9 @@ impl ApplicationHandler for App {
                             };
                             if drag_mode.is_some() {
                                 self.input.mouse_down = true;
-                                self.input.mouse_down_pt =
-                                    Some(self.input.virtual_cursor);
+                                self.input.mouse_down_pt = Some(self.input.virtual_cursor);
                                 self.input.drag_mode = drag_mode;
-                                self.input.drag_anchor_selection =
-                                    self.input.selection;
+                                self.input.drag_anchor_selection = self.input.selection;
                             }
                             return;
                         }
@@ -965,10 +967,7 @@ impl ApplicationHandler for App {
                         // CursorMoved.
                         self.input.mouse_down = true;
                         self.input.mouse_down_pt = Some(self.input.virtual_cursor);
-                        self.input.mouse_down_dpi = dpi_at_point(
-                            self.input.virtual_cursor,
-                            &self.monitors,
-                        );
+                        self.input.mouse_down_dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
                         self.input.dragging = false;
                         // Hide the Tips & Hotkeys panel while the user is
                         // actively dragging — matches the C++
@@ -989,13 +988,8 @@ impl ApplicationHandler for App {
                         // clicks (which `return` before setting
                         // `mouse_down`) from accidentally finalising
                         // the walker rect that reset just restored.
-                        let finalising = self.input.mouse_down
-                            && !self.input.captured
-                            && self.input.selection.is_some();
-                        let was_move_drag = matches!(
-                            self.input.drag_mode,
-                            Some(DragMode::Move),
-                        );
+                        let finalising = self.input.mouse_down && !self.input.captured && self.input.selection.is_some();
+                        let was_move_drag = matches!(self.input.drag_mode, Some(DragMode::Move),);
                         self.input.mouse_down = false;
                         self.input.mouse_down_pt = None;
                         self.input.dragging = false;
@@ -1009,10 +1003,7 @@ impl ApplicationHandler for App {
                         // starts a fresh draw instead of an impossible
                         // move/resize. Mirrors the C++ `rEmpty`
                         // branch at DxScreenCapture.cpp:1820-1830.
-                        if was_move_drag
-                            && self.input.captured
-                            && self.input.selection.is_none()
-                        {
+                        if was_move_drag && self.input.captured && self.input.selection.is_none() {
                             self.input.captured = false;
                             self.input.hittest = Hittest::Outside;
                             handle_window.set_cursor(CursorIcon::Default);
@@ -1044,24 +1035,15 @@ impl ApplicationHandler for App {
                             // to the right resize/move icon without
                             // having to wiggle the mouse.
                             if let Some(sel) = self.input.selection {
-                                let dpi = dpi_at_point(
-                                    self.input.virtual_cursor,
-                                    &self.monitors,
-                                );
-                                let ht = hit_test(
-                                    self.input.virtual_cursor,
-                                    sel,
-                                    dpi,
-                                );
+                                let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
+                                let ht = hit_test(self.input.virtual_cursor, sel, dpi);
                                 self.input.hittest = ht;
                                 handle_window.set_cursor(ht.cursor());
                             }
                             // Capture finalised: let every component see
                             // the new state and place/bake itself.
                             self.broadcast_ui_state();
-                        } else if self.input.captured
-                            && self.input.selection.is_some()
-                        {
+                        } else if self.input.captured && self.input.selection.is_some() {
                             // A move/resize drag just ended with the
                             // selection still alive — re-sync so
                             // components settle on the final rect.
@@ -1077,7 +1059,10 @@ impl ApplicationHandler for App {
                     }
                 }
             }
-            WindowEvent::MouseWheel { delta, .. } => {
+            WindowEvent::MouseWheel {
+                delta,
+                ..
+            } => {
                 // After a selection has been finalised the wheel is a
                 // no-op — matches DxScreenCapture.cpp:1527's `if
                 // (data.captured) return 0;`. While a drag is *in
@@ -1131,6 +1116,12 @@ impl ApplicationHandler for App {
 
                 self.input.zoom = new_zoom;
                 self.broadcast_mouse_state();
+                // Zoom is published in `UiSharedState` so the debug panel
+                // can render it. Keep the broadcast conditional — when the
+                // panel is off, the extra Arc build is pointless.
+                if self.input.debug_visible {
+                    self.broadcast_ui_state();
+                }
             }
             _ => {}
         }

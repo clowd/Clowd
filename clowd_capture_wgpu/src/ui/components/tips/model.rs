@@ -61,11 +61,7 @@ pub const FALLBACK: &str = "n/a";
 
 /// Render the body of a single tip row (description only, without hotkey
 /// or gap) with runtime substitutions applied.
-pub fn render_description(
-    template: &str,
-    hovered_window: Option<&str>,
-    hovered_monitor: Option<&str>,
-) -> String {
+pub fn render_description(template: &str, hovered_window: Option<&str>, hovered_monitor: Option<&str>) -> String {
     template
         .replace("{window}", hovered_window.unwrap_or(FALLBACK))
         .replace("{monitor}", hovered_monitor.unwrap_or(FALLBACK))

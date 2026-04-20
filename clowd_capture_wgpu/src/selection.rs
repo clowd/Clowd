@@ -81,9 +81,7 @@ pub fn hit_test(cursor: ScreenPointF, sel: ScreenRect, dpi_scale: f32) -> Hittes
 
     // Corner: a `(2r+1) × (2r+1)` square centred on the corner pixel,
     // matching `PtToWidenedRect` at rectex.h:119-127.
-    let in_corner = |x: i32, y: i32| -> bool {
-        cx >= x - r && cx <= x + r && cy >= y - r && cy <= y + r
-    };
+    let in_corner = |x: i32, y: i32| -> bool { cx >= x - r && cx <= x + r && cy >= y - r && cy <= y + r };
     // Edge: a rect widened by `r` on every side around the line
     // segment. Same shape as the corners on the perpendicular axis,
     // but stretched along the edge — matching `LineToWidenedRect` at
@@ -144,18 +142,8 @@ pub fn hit_test(cursor: ScreenPointF, sel: ScreenRect, dpi_scale: f32) -> Hittes
 /// *cropped* rect so the selection can't "run off" a display — it
 /// visually shrinks against the boundary and reappears when the
 /// cursor comes back, all without mutating the anchor.
-pub fn move_and_crop(
-    anchor: ScreenRect,
-    delta_x: i32,
-    delta_y: i32,
-    vd: ScreenRect,
-) -> Option<ScreenRect> {
-    let moved = ScreenRect::from_xy_size(
-        anchor.left() + delta_x,
-        anchor.top() + delta_y,
-        anchor.width(),
-        anchor.height(),
-    );
+pub fn move_and_crop(anchor: ScreenRect, delta_x: i32, delta_y: i32, vd: ScreenRect) -> Option<ScreenRect> {
+    let moved = ScreenRect::from_xy_size(anchor.left() + delta_x, anchor.top() + delta_y, anchor.width(), anchor.height());
     intersect_rects(moved, vd)
 }
 
@@ -185,13 +173,7 @@ pub fn intersect_rects(a: ScreenRect, b: ScreenRect) -> Option<ScreenRect> {
 /// re-normalised, so dragging the right edge past the left flips the
 /// rect (matches the C++ `Xy12Rect` normalisation at rectex.h:111-117
 /// and DxScreenCapture.cpp:1419-1458).
-pub fn resize_with_clamp(
-    anchor: ScreenRect,
-    handle: Hittest,
-    cursor_x: i32,
-    cursor_y: i32,
-    vd: ScreenRect,
-) -> ScreenRect {
+pub fn resize_with_clamp(anchor: ScreenRect, handle: Hittest, cursor_x: i32, cursor_y: i32, vd: ScreenRect) -> ScreenRect {
     let mut left = anchor.left();
     let mut top = anchor.top();
     let mut right = anchor.right();
@@ -299,13 +281,7 @@ pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[MonitorInfo]) 
             let dy = p.y - cy;
             (i, dx * dx + dy * dy)
         })
-        .fold((0usize, f32::INFINITY), |(bi, bd), (i, d)| {
-            if d < bd {
-                (i, d)
-            } else {
-                (bi, bd)
-            }
-        });
+        .fold((0usize, f32::INFINITY), |(bi, bd), (i, d)| if d < bd { (i, d) } else { (bi, bd) });
     let m = &monitors[best_ix].bounds;
     let min_x = m.min_x() as f32;
     let min_y = m.min_y() as f32;

@@ -24,13 +24,7 @@ pub struct RectInstance {
 
 impl RectInstance {
     /// Simple filled rect with no border, no hover lighten.
-    pub fn filled(
-        min_x: f32,
-        min_y: f32,
-        max_x: f32,
-        max_y: f32,
-        rgba: [f32; 4],
-    ) -> Self {
+    pub fn filled(min_x: f32, min_y: f32, max_x: f32, max_y: f32, rgba: [f32; 4]) -> Self {
         Self {
             dest_px: [min_x, min_y, max_x, max_y],
             fill_rgba: rgba,
@@ -65,9 +59,7 @@ pub struct RectPipeline {
 
 impl RectPipeline {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
-        let shader = device.create_shader_module(wgpu::include_wgsl!(
-            "../../../shaders/ui_rect.wgsl"
-        ));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../../../shaders/ui_rect.wgsl"));
 
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("ui_rect bgl"),
@@ -77,9 +69,7 @@ impl RectPipeline {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(
-                        std::mem::size_of::<RectUniforms>() as u64,
-                    ),
+                    min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<RectUniforms>() as u64),
                 },
                 count: None,
             }],
@@ -101,12 +91,11 @@ impl RectPipeline {
             }],
         });
 
-        let pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("ui_rect pipeline layout"),
-                bind_group_layouts: &[Some(&bgl)],
-                immediate_size: 0,
-            });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("ui_rect pipeline layout"),
+            bind_group_layouts: &[Some(&bgl)],
+            immediate_size: 0,
+        });
 
         let instance_stride = std::mem::size_of::<RectInstance>() as u64;
         let instance_layout = wgpu::VertexBufferLayout {
@@ -199,13 +188,7 @@ impl RectPipeline {
 
     /// Upload uniforms + instances. Call once per frame before `draw()`.
     /// Empty `instances` is fine — the next `draw()` becomes a no-op.
-    pub fn prepare(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        viewport_px: (u32, u32),
-        instances: &[RectInstance],
-    ) {
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), instances: &[RectInstance]) {
         let uniforms = RectUniforms {
             viewport_px: [viewport_px.0 as f32, viewport_px.1 as f32],
             _pad: [0.0; 2],

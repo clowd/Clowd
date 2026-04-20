@@ -9,9 +9,7 @@
 use bytemuck::{Pod, Zeroable};
 use lyon::math::Point;
 use lyon::path::PathEvent;
-use lyon::tessellation::{
-    BuffersBuilder, FillOptions, FillTessellator, FillVertex, FillVertexConstructor, VertexBuffers,
-};
+use lyon::tessellation::{BuffersBuilder, FillOptions, FillTessellator, FillVertex, FillVertexConstructor, VertexBuffers};
 use usvg::tiny_skia_path;
 use wgpu::util::DeviceExt;
 
@@ -75,9 +73,7 @@ struct SvgDraw {
 
 impl SvgPipeline {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
-        let shader = device.create_shader_module(wgpu::include_wgsl!(
-            "../../../shaders/ui_svg.wgsl"
-        ));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../../../shaders/ui_svg.wgsl"));
 
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("ui_svg bgl"),
@@ -87,9 +83,7 @@ impl SvgPipeline {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(
-                        std::mem::size_of::<SvgUniforms>() as u64,
-                    ),
+                    min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<SvgUniforms>() as u64),
                 },
                 count: None,
             }],
@@ -240,13 +234,7 @@ impl SvgPipeline {
 
     /// Stage the per-frame instance buffer + per-draw record list.
     /// `draws` pairs each mesh index with its per-draw instance data.
-    pub fn prepare(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        viewport_px: (u32, u32),
-        draws: &[(usize, SvgInstance)],
-    ) {
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), draws: &[(usize, SvgInstance)]) {
         let uniforms = SvgUniforms {
             viewport_px: [viewport_px.0 as f32, viewport_px.1 as f32],
             _pad: [0.0; 2],
@@ -274,11 +262,7 @@ impl SvgPipeline {
         }
 
         let instances: Vec<SvgInstance> = draws.iter().map(|(_, inst)| *inst).collect();
-        queue.write_buffer(
-            &self.instance_buf,
-            0,
-            bytemuck::cast_slice(&instances),
-        );
+        queue.write_buffer(&self.instance_buf, 0, bytemuck::cast_slice(&instances));
         for (i, (mesh_idx, _)) in draws.iter().enumerate() {
             self.draws.push(SvgDraw {
                 mesh_idx: *mesh_idx,
@@ -360,7 +344,9 @@ impl<'a> Iterator for PathConvIter<'a> {
                     self.needs_end = false;
                     self.prev = at;
                     self.first = at;
-                    self.deferred = Some(PathEvent::Begin { at });
+                    self.deferred = Some(PathEvent::Begin {
+                        at,
+                    });
                     Some(PathEvent::End {
                         last,
                         first,
@@ -370,7 +356,9 @@ impl<'a> Iterator for PathConvIter<'a> {
                     self.first = at;
                     self.prev = at;
                     self.needs_end = true;
-                    Some(PathEvent::Begin { at })
+                    Some(PathEvent::Begin {
+                        at,
+                    })
                 }
             }
             Some(tiny_skia_path::PathSegment::LineTo(pt)) => {
@@ -440,11 +428,7 @@ fn convert_path(p: &usvg::Path) -> PathConvIter<'_> {
     }
 }
 
-fn walk_group(
-    group: &usvg::Group,
-    tess: &mut FillTessellator,
-    mesh: &mut VertexBuffers<SvgVertex, u32>,
-) {
+fn walk_group(group: &usvg::Group, tess: &mut FillTessellator, mesh: &mut VertexBuffers<SvgVertex, u32>) {
     for node in group.children() {
         match node {
             usvg::Node::Group(g) => walk_group(g, tess, mesh),
@@ -454,12 +438,7 @@ fn walk_group(
                     continue;
                 };
                 let a = fill.opacity().get();
-                let color = [
-                    c.red as f32 / 255.0,
-                    c.green as f32 / 255.0,
-                    c.blue as f32 / 255.0,
-                    a,
-                ];
+                let color = [c.red as f32 / 255.0, c.green as f32 / 255.0, c.blue as f32 / 255.0, a];
                 let transform = node.abs_transform();
                 // tolerance is in SVG viewBox units (typically ~100
                 // per icon); 0.02 keeps curve approximation error below
@@ -469,7 +448,13 @@ fn walk_group(
                 let _ = tess.tessellate(
                     convert_path(p),
                     &FillOptions::tolerance(0.02),
-                    &mut BuffersBuilder::new(mesh, Ctor { color, transform }),
+                    &mut BuffersBuilder::new(
+                        mesh,
+                        Ctor {
+                            color,
+                            transform,
+                        },
+                    ),
                 );
             }
             _ => {}

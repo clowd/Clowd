@@ -12,9 +12,7 @@ use core_foundation::number::CFNumber;
 use core_foundation::string::CFString;
 use core_graphics::display::CGDisplay;
 use core_graphics::geometry::CGRect;
-use core_graphics::window::{
-    self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly,
-};
+use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 
@@ -54,15 +52,16 @@ impl WindowWalker {
         let mut windows: Vec<WindowEntry> = Vec::new();
 
         for ptr in ptrs {
-            let dict: CFDictionary =
-                unsafe { TCFType::wrap_under_get_rule(ptr as CFDictionaryRef) };
+            let dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(ptr as CFDictionaryRef) };
             if let Some(entry) = evaluate_window(&dict, &windows) {
                 windows.push(entry);
             }
         }
 
         info!("WindowWalker: captured {} top-level windows", windows.len());
-        WindowWalker { windows }
+        WindowWalker {
+            windows,
+        }
     }
 
     /// Given a cursor position in virtual-desktop physical pixels, return the
@@ -105,8 +104,7 @@ fn evaluate_window(dict: &CFDictionary, accepted: &[WindowEntry]) -> Option<Wind
 
     // 3. Parse bounds from the kCGWindowBounds sub-dictionary.
     let bounds_ptr = get_raw_value(dict, unsafe { window::kCGWindowBounds })?;
-    let bounds_dict: CFDictionary =
-        unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
+    let bounds_dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
     let cg_rect = CGRect::from_dict_representation(&bounds_dict)?;
 
     // 4. Convert logical CG points → physical pixels.
@@ -134,13 +132,15 @@ fn evaluate_window(dict: &CFDictionary, accepted: &[WindowEntry]) -> Option<Wind
     // Read the window title (kCGWindowName), defaulting to empty string.
     let title = get_raw_value(dict, unsafe { window::kCGWindowName })
         .map(|ptr| {
-            let cf_str: CFString =
-                unsafe { TCFType::wrap_under_get_rule(ptr as core_foundation::string::CFStringRef) };
+            let cf_str: CFString = unsafe { TCFType::wrap_under_get_rule(ptr as core_foundation::string::CFStringRef) };
             cf_str.to_string()
         })
         .unwrap_or_default();
 
-    Some(WindowEntry { rect, title })
+    Some(WindowEntry {
+        rect,
+        title,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -184,11 +184,7 @@ fn display_scale_at_logical_point(x: f64, y: f64) -> f32 {
         for id in ids {
             let d = CGDisplay::new(id);
             let b = d.bounds();
-            if x >= b.origin.x
-                && x < b.origin.x + b.size.width
-                && y >= b.origin.y
-                && y < b.origin.y + b.size.height
-            {
+            if x >= b.origin.x && x < b.origin.x + b.size.width && y >= b.origin.y && y < b.origin.y + b.size.height {
                 // Use CGDisplayMode::pixel_width() for the true physical
                 // pixel count. CGDisplayPixelsWide is deprecated and returns
                 // the logical resolution on modern Retina displays.
@@ -209,9 +205,6 @@ fn display_scale_at_logical_point(x: f64, y: f64) -> f32 {
 /// rect fully contains `rect`.
 fn is_fully_occluded(rect: &ScreenRect, accepted: &[WindowEntry]) -> bool {
     accepted.iter().any(|w| {
-        w.rect.min_x() <= rect.min_x()
-            && w.rect.min_y() <= rect.min_y()
-            && w.rect.max_x() >= rect.max_x()
-            && w.rect.max_y() >= rect.max_y()
+        w.rect.min_x() <= rect.min_x() && w.rect.min_y() <= rect.min_y() && w.rect.max_x() >= rect.max_x() && w.rect.max_y() >= rect.max_y()
     })
 }

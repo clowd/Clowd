@@ -18,6 +18,11 @@ extern crate anyhow;
 use std::sync::Arc;
 
 fn main() -> anyhow::Result<()> {
+    // Record the app-entry instant as early as possible so the debug
+    // panel's "startup total" reflects the full cold-start. The logger
+    // init below takes a few ms on some terminals.
+    let mut startup = ui::components::debug::startup::StartupTimings::new();
+
     let _ = simplelog::TermLogger::init(
         log::LevelFilter::Info,
         simplelog::Config::default(),
@@ -27,6 +32,7 @@ fn main() -> anyhow::Result<()> {
 
     // One-time platform init (COM, dialog subsystem, etc.).
     system::SystemInterop::init();
+    startup.mark_initialize();
 
     let event_loop = winit::event_loop::EventLoop::new()?;
     // Start in Poll mode so `about_to_wait` fires continuously while
@@ -39,7 +45,7 @@ fn main() -> anyhow::Result<()> {
     // call site honest about which knobs the capturer is launched with.
     let settings = Arc::new(settings::CapturerSettings::default());
 
-    let mut app = app::App::new(settings);
+    let mut app = app::App::new(settings, startup);
     event_loop.run_app(&mut app)?;
     Ok(())
 }
