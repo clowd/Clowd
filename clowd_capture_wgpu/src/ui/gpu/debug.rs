@@ -10,7 +10,7 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 
 use crate::geometry::{RectExt, ScreenRect};
 use crate::ui::components::debug::layout::{compute_layout, DebugPanelLayout, PanelAnchor, BODY_FONT_PX};
-use crate::ui::components::debug::model::{MonitorPanelData, PrimaryPanelData};
+use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPanelData};
 use std::time::Duration;
 
 use crate::ui::components::debug::perf::{PerfSample, PerfTracker};
@@ -111,6 +111,10 @@ pub struct DebugRenderer {
     lines: Vec<CachedLine>,
     positions: Vec<PositionedLine>,
     monitor_index: usize,
+    /// Reused across frames to avoid heap allocations in the
+    /// `MonitorPanelData::write_lines` / `PrimaryPanelData::write_lines`
+    /// hot path. Cleared before each write.
+    line_buf: LineBuf,
 }
 
 impl DebugRenderer {
@@ -119,6 +123,7 @@ impl DebugRenderer {
             lines: Vec::new(),
             positions: Vec::new(),
             monitor_index,
+            line_buf: LineBuf::new(),
         }
     }
 
@@ -158,13 +163,14 @@ impl DebugRenderer {
                 perf,
                 target_period: perf.target_period(),
             };
-            let text_lines = data.lines();
-            let layout = self.render_panel(
+            data.write_lines(&mut self.line_buf);
+            let layout = render_panel_inner(
+                &mut self.lines,
+                &mut self.positions,
                 ts,
                 this_monitor,
-                dpi,
                 font_px,
-                &text_lines,
+                self.line_buf.as_slice(),
                 PanelAnchor::TopLeft,
                 SPARKLINE_ENABLED,
                 rects,
@@ -190,72 +196,19 @@ impl DebugRenderer {
                 hovered_window_title: state.hovered_window_title.as_deref(),
                 hovered_window_bounds: state.hovered_window_bounds,
             };
-            let text_lines = data.lines();
-            self.render_panel(
+            data.write_lines(&mut self.line_buf);
+            render_panel_inner(
+                &mut self.lines,
+                &mut self.positions,
                 ts,
                 this_monitor,
-                dpi,
                 font_px,
-                &text_lines,
+                self.line_buf.as_slice(),
                 PanelAnchor::TopRight,
                 false,
                 rects,
             );
         }
-    }
-
-    /// Shared path for both panels. Returns the final layout so the
-    /// caller can emit sparkline content inside `graph_rect` when
-    /// present.
-    #[allow(clippy::too_many_arguments)]
-    fn render_panel(
-        &mut self,
-        ts: &mut TextStack,
-        this_monitor: &UiMonitor,
-        _dpi: f32,
-        font_px: f32,
-        text_lines: &[String],
-        anchor: PanelAnchor,
-        include_graph: bool,
-        rects: &mut Vec<RectInstance>,
-    ) -> DebugPanelLayout {
-        let first_idx = self.positions.len();
-        self.ensure_capacity(ts, first_idx + text_lines.len(), font_px);
-
-        let mut longest = 0.0f32;
-        for (i, text) in text_lines.iter().enumerate() {
-            let line = &mut self.lines[first_idx + i];
-            line.set(ts, text, font_px);
-            longest = longest.max(line.width());
-        }
-
-        let layout = compute_layout(
-            this_monitor.bounds,
-            this_monitor.dpi_scale.max(0.1),
-            longest,
-            text_lines.len(),
-            anchor,
-            include_graph,
-        );
-
-        emit_background_rect(&layout, this_monitor, rects);
-
-        let mon_left = this_monitor.bounds.left() as f32;
-        let mon_top = this_monitor.bounds.top() as f32;
-        let local_panel_left = layout.panel_rect.left() as f32 - mon_left;
-        let local_panel_top = layout.panel_rect.top() as f32 - mon_top;
-        let x = local_panel_left + layout.padding_px;
-        let mut y = local_panel_top + layout.padding_px;
-        for i in 0..text_lines.len() {
-            self.positions.push(PositionedLine {
-                idx: first_idx + i,
-                x,
-                y,
-            });
-            y += layout.row_height;
-        }
-
-        layout
     }
 
     fn ensure_capacity(&mut self, ts: &mut TextStack, n: usize, font_px: f32) {
@@ -264,26 +217,82 @@ impl DebugRenderer {
         }
     }
 
-    pub fn text_areas(&self, viewport_px: (u32, u32)) -> Vec<TextArea<'_>> {
+    pub fn text_areas<'a>(&'a self, viewport_px: (u32, u32), out: &mut Vec<TextArea<'a>>) {
         let (vw, vh) = (viewport_px.0 as i32, viewport_px.1 as i32);
-        self.positions
-            .iter()
-            .map(|p| TextArea {
-                buffer: &self.lines[p.idx].buffer,
-                left: p.x,
-                top: p.y,
-                scale: 1.0,
-                bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: vw,
-                    bottom: vh,
-                },
-                default_color: Color::rgba(0xFF, 0xFF, 0xFF, 0xFF),
-                custom_glyphs: &[],
-            })
-            .collect()
+        out.extend(self.positions.iter().map(|p| TextArea {
+            buffer: &self.lines[p.idx].buffer,
+            left: p.x,
+            top: p.y,
+            scale: 1.0,
+            bounds: TextBounds {
+                left: 0,
+                top: 0,
+                right: vw,
+                bottom: vh,
+            },
+            default_color: Color::rgba(0xFF, 0xFF, 0xFF, 0xFF),
+            custom_glyphs: &[],
+        }));
     }
+}
+
+/// Shared path for both panels. Takes mutable slices over the renderer's
+/// own fields rather than `&mut DebugRenderer` so the caller can pass in
+/// `self.line_buf.as_slice()` without a borrow-checker conflict against
+/// the other `&mut self` field accesses it needs. Returns the final
+/// layout so the caller can emit sparkline content inside `graph_rect`
+/// when present.
+#[allow(clippy::too_many_arguments)]
+fn render_panel_inner(
+    lines: &mut Vec<CachedLine>,
+    positions: &mut Vec<PositionedLine>,
+    ts: &mut TextStack,
+    this_monitor: &UiMonitor,
+    font_px: f32,
+    text_lines: &[String],
+    anchor: PanelAnchor,
+    include_graph: bool,
+    rects: &mut Vec<RectInstance>,
+) -> DebugPanelLayout {
+    let first_idx = positions.len();
+    while lines.len() < first_idx + text_lines.len() {
+        lines.push(CachedLine::new(ts, font_px));
+    }
+
+    let mut longest = 0.0f32;
+    for (i, text) in text_lines.iter().enumerate() {
+        let line = &mut lines[first_idx + i];
+        line.set(ts, text, font_px);
+        longest = longest.max(line.width());
+    }
+
+    let layout = compute_layout(
+        this_monitor.bounds,
+        this_monitor.dpi_scale.max(0.1),
+        longest,
+        text_lines.len(),
+        anchor,
+        include_graph,
+    );
+
+    emit_background_rect(&layout, this_monitor, rects);
+
+    let mon_left = this_monitor.bounds.left() as f32;
+    let mon_top = this_monitor.bounds.top() as f32;
+    let local_panel_left = layout.panel_rect.left() as f32 - mon_left;
+    let local_panel_top = layout.panel_rect.top() as f32 - mon_top;
+    let x = local_panel_left + layout.padding_px;
+    let mut y = local_panel_top + layout.padding_px;
+    for i in 0..text_lines.len() {
+        positions.push(PositionedLine {
+            idx: first_idx + i,
+            x,
+            y,
+        });
+        y += layout.row_height;
+    }
+
+    layout
 }
 
 fn emit_background_rect(layout: &DebugPanelLayout, this_monitor: &UiMonitor, rects: &mut Vec<RectInstance>) {

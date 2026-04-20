@@ -674,23 +674,35 @@ fn draw_once(
             label: Some("frame encoder"),
         });
 
+    // Stage all per-frame UI CPU work (text shape, rect/svg instance
+    // uploads, glyphon atlas) before opening the render pass. Must
+    // happen outside the pass so the queue writes land first and the
+    // pass only does GPU work.
+    ui_renderer.prepare(
+        &gpu.device,
+        &gpu.queue,
+        (config.width, config.height),
+        perf,
+    );
+
     // Reserve a timestamp-query slot for this frame if the GPU-timing
     // ring has a free one. When it's full (shouldn't happen in steady
     // state) we skip timestamps for this frame rather than stall.
     let begin_frame = gpu_timing.and_then(|gt| gt.begin_frame());
-    let (desktop_ts, ui_ts, slot_id) = match &begin_frame {
-        Some(bf) => (Some(bf.desktop.clone()), Some(bf.ui.clone()), Some(bf.id)),
-        None => (None, None, None),
+    let (pass_ts, slot_id) = match &begin_frame {
+        Some(bf) => (Some(bf.pass.clone()), Some(bf.id)),
+        None => (None, None),
     };
 
-    // Both passes write into the MSAA color target and resolve into
-    // the swapchain view on Store. Doing it in both passes (instead of
-    // only the final one) keeps the MSAA target self-consistent while
-    // the render pass is open — the resolve on Store is what actually
-    // fills the swapchain texture.
+    // Single combined render pass. Desktop triangle first (loads
+    // snapshot into the MSAA tile, writes result), UI draws blend on
+    // top of it in the SAME pass. On M1 TBDR this keeps the MSAA
+    // surface in tile memory end-to-end — no store/load round-trip
+    // through main memory between desktop and UI, which was ~160 MB
+    // per frame at 2880×1800×4 samples.
     {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("desktop pass"),
+            label: Some("frame pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &msaa.view,
                 resolve_target: Some(&view),
@@ -709,7 +721,7 @@ fn draw_once(
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: desktop_ts,
+            timestamp_writes: pass_ts,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -718,22 +730,8 @@ fn draw_once(
             rpass.set_bind_group(0, &state.bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
+        ui_renderer.draw(&mut rpass);
     }
-
-    // Second render pass: the UI renderer draws all components that
-    // belong on this monitor on top of the just-drawn desktop/selection
-    // layer. We pass the MSAA view; the UI renderer sets up its own
-    // color attachment with `resolve_target: Some(&view)` internally.
-    ui_renderer.render(
-        &gpu.device,
-        &gpu.queue,
-        &mut encoder,
-        &msaa.view,
-        &view,
-        (config.width, config.height),
-        perf,
-        ui_ts,
-    );
 
     if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
         gt.resolve(&mut encoder, id);
@@ -744,6 +742,7 @@ fn draw_once(
     if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
         gt.after_submit(id);
     }
+    ui_renderer.trim();
     let draw = t_draw_start.elapsed();
 
     let t_present_start = Instant::now();

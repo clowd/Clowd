@@ -1,10 +1,14 @@
 //! Top-level per-monitor UI renderer.
 //!
-//! One instance per render thread. Every frame `render()` decides which
-//! components belong on THIS monitor using the shared visibility rules
-//! and draws them directly on the GPU — no CPU rasterisation.
+//! One instance per render thread. Every frame the caller first invokes
+//! [`UiRenderer::prepare`] to decide what belongs on this monitor and
+//! upload all per-frame GPU data (rect/svg instance buffers, glyphon
+//! shape+atlas), then hands the renderer an open `RenderPass` via
+//! [`UiRenderer::draw`]. The two-phase split lets the caller fold the UI
+//! draw into the same render pass as the desktop triangle, avoiding an
+//! MSAA tile store+load on M1 TBDR between a separate desktop and UI pass.
 //!
-//! Pass structure per frame (single render pass, Load + Store):
+//! Draw order inside the pass:
 //!   1. `rect` pipeline: backgrounds, borders, shadow, color swatch,
 //!      area indicator brackets, label underlines.
 //!   2. `svg` pipeline: button icons (lyon-tessellated meshes).
@@ -49,6 +53,12 @@ pub struct UiRenderer {
     /// `mark_first_visible_frame` on the render thread, after the
     /// visible barrier releases. `None` until then.
     time_to_first_render: Option<Duration>,
+    /// Set by `prepare()`, consumed by `draw()`. `false` when there's
+    /// nothing to render (no state yet), so `draw()` becomes a no-op.
+    has_prepared: bool,
+    /// Set by `prepare()` when at least one text area was shaped — tells
+    /// `draw()` whether to issue the glyphon draw.
+    any_text: bool,
 }
 
 impl UiRenderer {
@@ -85,6 +95,8 @@ impl UiRenderer {
             startup,
             shown_time,
             time_to_first_render: None,
+            has_prepared: false,
+            any_text: false,
         }
     }
 
@@ -101,18 +113,23 @@ impl UiRenderer {
             .get_or_insert_with(|| self.startup.t_start.elapsed());
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn render(
+    /// Stage all per-frame work: component visibility decisions,
+    /// rect/svg instance uploads, glyphon shape + atlas prep. After
+    /// `prepare` returns the caller may open a render pass and invoke
+    /// [`UiRenderer::draw`] to issue the UI draw calls into it. Split
+    /// from `draw` so the UI can share the same render pass as the
+    /// desktop triangle — on M1 TBDR this avoids an MSAA tile
+    /// store+load between passes.
+    pub fn prepare(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        msaa_view: &wgpu::TextureView,
-        resolve_view: &wgpu::TextureView,
         viewport_px: (u32, u32),
         perf: &PerfTracker,
-        timestamp_writes: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
+        self.has_prepared = false;
+        self.any_text = false;
+
         let now = Instant::now();
         let dt = self
             .last_frame_time
@@ -160,46 +177,43 @@ impl UiRenderer {
         self.svg
             .prepare(device, queue, viewport_px, &svg_draws);
 
-        // Gather text areas. Panel must come before tips so the overlap
-        // case (shouldn't happen, but harmless) has panel-on-top ordering
-        // matching the rect order.
-        let mut text_areas = self.tips.text_areas(viewport_px);
-        text_areas.extend(self.panel.text_areas(viewport_px));
-        text_areas.extend(self.debug.text_areas(viewport_px));
-        let any_text = match self.text.prepare(device, queue, text_areas) {
+        // Gather text areas into a single Vec so the glyphon prepare
+        // step sees one contiguous slice. With_capacity(48) covers the
+        // worst case (tips + panel + debug panels + sparkline labels)
+        // so the Vec never grows.
+        let mut text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(48);
+        self.tips.text_areas(viewport_px, &mut text_areas);
+        self.panel.text_areas(viewport_px, &mut text_areas);
+        self.debug.text_areas(viewport_px, &mut text_areas);
+        self.any_text = match self.text.prepare(device, queue, &text_areas) {
             Ok(b) => b,
             Err(e) => {
                 log::warn!("glyphon prepare error: {:?}", e);
                 false
             }
         };
+        self.has_prepared = true;
+    }
 
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("ui pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: msaa_view,
-                resolve_target: Some(resolve_view),
-                depth_slice: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-
-        self.rect.draw(&mut rpass);
-        self.svg.draw(&mut rpass, &self.panel.icons);
-        if any_text {
-            if let Err(e) = self.text.draw(&mut rpass) {
+    /// Issue UI draw calls into an already-open render pass. The caller
+    /// is responsible for having invoked [`UiRenderer::prepare`] earlier
+    /// in the frame on the same instance, with the same viewport.
+    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>) {
+        if !self.has_prepared {
+            return;
+        }
+        self.rect.draw(rpass);
+        self.svg.draw(rpass, &self.panel.icons);
+        if self.any_text {
+            if let Err(e) = self.text.draw(rpass) {
                 log::warn!("glyphon render error: {:?}", e);
             }
         }
-        drop(rpass);
+    }
 
+    /// Free glyphon atlas entries that went unused this frame. Safe to
+    /// call even when `prepare` skipped the frame (no-op in that case).
+    pub fn trim(&mut self) {
         self.text.trim();
     }
 }

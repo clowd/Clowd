@@ -2,9 +2,9 @@
 //!
 //! Per render thread. Maintains a ring of independent slots so up to
 //! `RING_SIZE` frames can be in flight on the GPU before we need to stall
-//! for a readback. Each slot owns 4 timestamp indices (desktop begin/end,
-//! ui begin/end) inside a shared `QuerySet`, a region of a shared resolve
-//! buffer, and a dedicated `MAP_READ`-usable readback buffer.
+//! for a readback. Each slot owns 2 timestamp indices (pass begin/end)
+//! inside a shared `QuerySet`, a region of a shared resolve buffer, and
+//! a dedicated `MAP_READ`-usable readback buffer.
 //!
 //! Use:
 //!   1. `GpuTimings::new` — returns `None` when the device didn't grant
@@ -14,8 +14,8 @@
 //!      readback buffers whose mapping has landed. Each returned duration
 //!      is handed to `PerfTracker::backfill_next_gpu`.
 //!   3. `begin_frame` — picks a free slot and returns
-//!      `(desktop_writes, ui_writes, FrameSlotId)` to plug into the two
-//!      `RenderPassDescriptor`s. Returns `None` when every slot is
+//!      `(pass_writes, FrameSlotId)` to plug into the combined
+//!      `RenderPassDescriptor`. Returns `None` when every slot is
 //!      still awaiting GPU work (a stall would be worse than skipping
 //!      one frame of GPU timing).
 //!   4. `finish_frame` — appends a `resolve_query_set` + a
@@ -38,13 +38,13 @@ use wgpu::RenderPassTimestampWrites;
 ///     the feature is enabled even if unused.
 pub const GPU_TIMING_ENABLED: bool = true;
 
-const SLOTS_PER_FRAME: u32 = 4;
+const SLOTS_PER_FRAME: u32 = 2;
 /// Number of frames we're willing to have in flight before skipping a
 /// measurement. 3 comfortably covers the present queue depth on DX12.
 const RING_SIZE: usize = 3;
 const QUERIES_TOTAL: u32 = SLOTS_PER_FRAME * RING_SIZE as u32;
 const QUERY_SIZE_BYTES: u64 = 8;
-/// Bytes each slot actually uses (4 × u64 = 32).
+/// Bytes each slot actually uses (2 × u64 = 16).
 const SLOT_USEFUL_BYTES: u64 = QUERY_SIZE_BYTES * SLOTS_PER_FRAME as u64;
 /// Stride between slots in the resolve buffer. `resolve_query_set`
 /// requires destination offsets to be multiples of
@@ -121,11 +121,9 @@ impl GpuTimings {
             if slot.state.load(Ordering::Acquire) == SLOT_READY {
                 let data = slot.readback.slice(..).get_mapped_range();
                 let raw: &[u64] = bytemuck::cast_slice(&data);
-                if raw.len() >= 4 {
-                    let desktop_ticks = raw[1].saturating_sub(raw[0]);
-                    let ui_ticks = raw[3].saturating_sub(raw[2]);
-                    let total_ticks = desktop_ticks + ui_ticks;
-                    let ns = total_ticks as f64 * self.period_ns;
+                if raw.len() >= 2 {
+                    let pass_ticks = raw[1].saturating_sub(raw[0]);
+                    let ns = pass_ticks as f64 * self.period_ns;
                     out.push(Duration::from_nanos(ns as u64));
                 }
                 drop(data);
@@ -136,11 +134,11 @@ impl GpuTimings {
         out
     }
 
-    /// Reserve a slot for this frame. Returns writes for the two render
-    /// passes and a slot id to thread through to `finish_frame`. Returns
-    /// `None` when every slot is busy; the caller then omits timestamp
-    /// writes for this frame and the GPU duration simply won't be
-    /// recorded.
+    /// Reserve a slot for this frame. Returns writes for the combined
+    /// render pass and a slot id to thread through to `finish_frame`.
+    /// Returns `None` when every slot is busy; the caller then omits
+    /// timestamp writes for this frame and the GPU duration simply won't
+    /// be recorded.
     pub fn begin_frame(&self) -> Option<BeginFrame<'_>> {
         let slot_idx = self
             .slots
@@ -149,15 +147,10 @@ impl GpuTimings {
         let base = slot_idx as u32 * SLOTS_PER_FRAME;
         Some(BeginFrame {
             id: FrameSlotId(slot_idx),
-            desktop: RenderPassTimestampWrites {
+            pass: RenderPassTimestampWrites {
                 query_set: &self.query_set,
                 beginning_of_pass_write_index: Some(base),
                 end_of_pass_write_index: Some(base + 1),
-            },
-            ui: RenderPassTimestampWrites {
-                query_set: &self.query_set,
-                beginning_of_pass_write_index: Some(base + 2),
-                end_of_pass_write_index: Some(base + 3),
             },
         })
     }
@@ -209,6 +202,5 @@ impl GpuTimings {
 
 pub struct BeginFrame<'a> {
     pub id: FrameSlotId,
-    pub desktop: RenderPassTimestampWrites<'a>,
-    pub ui: RenderPassTimestampWrites<'a>,
+    pub pass: RenderPassTimestampWrites<'a>,
 }

@@ -360,25 +360,22 @@ impl TipsRenderer {
     /// Build the glyphon `TextArea` list for this frame. Must be called
     /// AFTER `prepare()` and the results must be consumed before any
     /// `&mut self` call (they borrow `self.buffers`).
-    pub fn text_areas(&self, viewport_px: (u32, u32)) -> Vec<TextArea<'_>> {
+    pub fn text_areas<'a>(&'a self, viewport_px: (u32, u32), out: &mut Vec<TextArea<'a>>) {
         let (vw, vh) = (viewport_px.0 as i32, viewport_px.1 as i32);
-        self.positions
-            .iter()
-            .map(|p| TextArea {
-                buffer: &self.buffers[p.buffer_idx].buffer,
-                left: p.x,
-                top: p.y,
-                scale: 1.0,
-                bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: vw,
-                    bottom: vh,
-                },
-                default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
-                custom_glyphs: &[],
-            })
-            .collect()
+        out.extend(self.positions.iter().map(|p| TextArea {
+            buffer: &self.buffers[p.buffer_idx].buffer,
+            left: p.x,
+            top: p.y,
+            scale: 1.0,
+            bounds: TextBounds {
+                left: 0,
+                top: 0,
+                right: vw,
+                bottom: vh,
+            },
+            default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
+            custom_glyphs: &[],
+        }));
     }
 }
 

@@ -79,15 +79,16 @@ impl TextStack {
 
     /// Shape-and-upload all text areas for this frame. Returns `Ok(true)`
     /// when at least one area was prepared (so a `draw()` should happen),
-    /// `Ok(false)` when there was nothing to draw.
+    /// `Ok(false)` when there was nothing to draw. Takes a slice so the
+    /// caller's already-collected Vec flows straight through to glyphon
+    /// without an intermediate collect.
     pub fn prepare<'a>(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        text_areas: impl IntoIterator<Item = TextArea<'a>>,
+        text_areas: &[TextArea<'a>],
     ) -> Result<bool, glyphon::PrepareError> {
-        let areas: Vec<TextArea<'a>> = text_areas.into_iter().collect();
-        if areas.is_empty() {
+        if text_areas.is_empty() {
             return Ok(false);
         }
         self.renderer.prepare(
@@ -96,7 +97,7 @@ impl TextStack {
             &mut self.font_system,
             &mut self.atlas,
             &self.viewport,
-            areas,
+            text_areas.iter().cloned(),
             &mut self.swash_cache,
         )?;
         Ok(true)

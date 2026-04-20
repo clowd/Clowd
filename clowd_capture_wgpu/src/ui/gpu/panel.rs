@@ -123,6 +123,13 @@ pub struct PanelRenderer {
     positions: Vec<PositionedText>,
     /// Per-button lighten amount, animated each frame.
     hover_amounts: [f32; NUM_SVG_BUTTONS],
+    /// Reused string buffers for the selection's width / height digits.
+    /// Only rebuilt when the selection rect actually changes (not every
+    /// frame), avoiding ~2 heap allocations/frame when the panel is
+    /// visible.
+    width_str: String,
+    height_str: String,
+    last_selection: Option<crate::geometry::ScreenRect>,
 }
 
 const IDX_WIDTH: usize = 0;
@@ -161,6 +168,9 @@ impl PanelRenderer {
             buffers,
             positions: Vec::new(),
             hover_amounts: [0.0; NUM_SVG_BUTTONS],
+            width_str: String::new(),
+            height_str: String::new(),
+            last_selection: None,
         }
     }
 
@@ -284,17 +294,22 @@ impl PanelRenderer {
             self.buffers[IDX_LABEL_BASE + i].set(ts, def.label, label_px, Some(def.underline_idx));
         }
 
-        // Area indicator text buffers.
-        let width_str = state
-            .selection
-            .map(|s| s.width().to_string())
-            .unwrap_or_default();
-        let height_str = state
-            .selection
-            .map(|s| s.height().to_string())
-            .unwrap_or_default();
-        self.buffers[IDX_WIDTH].set(ts, &width_str, area_px, None);
-        self.buffers[IDX_HEIGHT].set(ts, &height_str, area_px, None);
+        // Area indicator text buffers. Rebuild the digit strings only
+        // when the selection rect actually changes — otherwise reuse the
+        // cached `width_str` / `height_str` and let `CachedBuffer::set`
+        // noop on the unchanged text.
+        if self.last_selection != state.selection {
+            self.width_str.clear();
+            self.height_str.clear();
+            if let Some(s) = state.selection {
+                use std::fmt::Write;
+                let _ = write!(self.width_str, "{}", s.width());
+                let _ = write!(self.height_str, "{}", s.height());
+            }
+            self.last_selection = state.selection;
+        }
+        self.buffers[IDX_WIDTH].set(ts, &self.width_str, area_px, None);
+        self.buffers[IDX_HEIGHT].set(ts, &self.height_str, area_px, None);
         self.buffers[IDX_CROSS].set(ts, "\u{00D7}", area_px, None);
 
         // Position labels beneath each icon.
@@ -358,24 +373,21 @@ impl PanelRenderer {
         });
     }
 
-    pub fn text_areas(&self, viewport_px: (u32, u32)) -> Vec<TextArea<'_>> {
+    pub fn text_areas<'a>(&'a self, viewport_px: (u32, u32), out: &mut Vec<TextArea<'a>>) {
         let (vw, vh) = (viewport_px.0 as i32, viewport_px.1 as i32);
-        self.positions
-            .iter()
-            .map(|p| TextArea {
-                buffer: &self.buffers[p.buffer_idx].buffer,
-                left: p.x,
-                top: p.y,
-                scale: 1.0,
-                bounds: TextBounds {
-                    left: 0,
-                    top: 0,
-                    right: vw,
-                    bottom: vh,
-                },
-                default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
-                custom_glyphs: &[],
-            })
-            .collect()
+        out.extend(self.positions.iter().map(|p| TextArea {
+            buffer: &self.buffers[p.buffer_idx].buffer,
+            left: p.x,
+            top: p.y,
+            scale: 1.0,
+            bounds: TextBounds {
+                left: 0,
+                top: 0,
+                right: vw,
+                bottom: vh,
+            },
+            default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
+            custom_glyphs: &[],
+        }));
     }
 }
