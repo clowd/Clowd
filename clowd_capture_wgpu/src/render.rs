@@ -404,6 +404,12 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
     // — the OS cursor takes over the visual role. Plumbed via
     // `selection_params.y` (0/1 float).
     let mut captured: bool = false;
+    // Master overlay switch (Q key, `DxScreenCapture.cpp:1234-1239`).
+    // Picked up from every `RenderMsg::UiState` below; fed into
+    // `update_uniforms` so the fade / selection / crosshair all zero
+    // out when Q-passthrough mode is on. Defaults to true so the
+    // normal capture UI draws.
+    let mut overlays_visible: bool = true;
 
     // Marker used to compute the `overall` frame-time (wall-clock gap
     // between consecutive loop iterations). Initialised to `now` so the
@@ -434,7 +440,10 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
                     selection = sel;
                     captured = cap;
                 }
-                Ok(RenderMsg::UiState(state)) => ui_renderer.set_state(state),
+                Ok(RenderMsg::UiState(state)) => {
+                    overlays_visible = state.overlays_visible;
+                    ui_renderer.set_state(state);
+                }
                 Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
                 Err(mpsc::TryRecvError::Empty) => break,
             }
@@ -451,6 +460,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
                     zoom,
                     selection,
                     captured,
+                    overlays_visible,
                     elapsed: start.elapsed().as_secs_f32(),
                     surface_size: (config.width, config.height),
                 },
@@ -507,6 +517,10 @@ struct FrameState {
     zoom: f32,
     selection: Option<ScreenRect>,
     captured: bool,
+    /// Master overlay switch (Q key). When `false`, `update_uniforms`
+    /// feeds neutral values to the shader so the fade / selection rect
+    /// / crosshair all suppress, leaving the raw desktop visible.
+    overlays_visible: bool,
     elapsed: f32,
     surface_size: (u32, u32),
 }
@@ -521,9 +535,31 @@ impl SnapshotState {
             zoom,
             selection,
             captured,
+            overlays_visible,
             elapsed,
             surface_size,
         } = *frame;
+
+        // Q-passthrough mode (`DxScreenCapture.cpp:526-533, 903-908`):
+        // feed neutral uniforms so the shader draws the raw desktop
+        // colour with no fade / selection rect / crosshair. The shader
+        // already treats an empty selection rect and an off-screen
+        // cursor as "don't draw", so no shader changes are needed.
+        if !overlays_visible {
+            self.uniforms.params[0] = 0.0;
+            // Off-screen cursor → integer-equality crosshair test
+            // misses on every pixel, so no crosshair arms draw.
+            self.uniforms.params[1] = -1.0;
+            self.uniforms.params[2] = -1.0;
+            self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
+            self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
+            self.uniforms.selection_params[0] = elapsed;
+            self.uniforms.selection_params[1] = 0.0;
+            self.uniforms.selection_params[2] = 1.0;
+            queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
+            return;
+        }
+
         let fade = if cfg!(target_os = "macos") {
             // macOS: skip the GPU fade — the window fades in via alpha.
             1.0
