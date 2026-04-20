@@ -20,10 +20,7 @@ pub fn get_position() -> ScreenPoint {
     };
 
     let scale = display_scale_at_logical_point(logical_pt) as f64;
-    ScreenPoint::new(
-        (logical_pt.x * scale).round() as i32,
-        (logical_pt.y * scale).round() as i32,
-    )
+    ScreenPoint::new((logical_pt.x * scale).round() as i32, (logical_pt.y * scale).round() as i32)
 }
 
 pub fn set_position(pos: ScreenPoint) {
@@ -57,11 +54,7 @@ fn display_scale_at_logical_point(pt: CGPoint) -> f32 {
         for id in ids {
             let d = CGDisplay::new(id);
             let b = d.bounds();
-            if pt.x >= b.origin.x
-                && pt.x < b.origin.x + b.size.width
-                && pt.y >= b.origin.y
-                && pt.y < b.origin.y + b.size.height
-            {
+            if pt.x >= b.origin.x && pt.x < b.origin.x + b.size.width && pt.y >= b.origin.y && pt.y < b.origin.y + b.size.height {
                 return display_scale(&d);
             }
         }
@@ -92,11 +85,7 @@ fn display_scale_at_physical_point(pt: ScreenPoint) -> f32 {
                 (b.size.height * scale as f64).round() as i32
             };
 
-            if pt.x >= phys_x
-                && pt.x < phys_x + phys_w_i
-                && pt.y >= phys_y
-                && pt.y < phys_y + phys_h_i
-            {
+            if pt.x >= phys_x && pt.x < phys_x + phys_w_i && pt.y >= phys_y && pt.y < phys_y + phys_h_i {
                 return scale;
             }
         }

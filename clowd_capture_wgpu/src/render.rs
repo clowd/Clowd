@@ -1,6 +1,6 @@
-use std::sync::{mpsc, Arc, Barrier};
+use std::sync::{mpsc, Arc, Barrier, OnceLock};
 use std::thread::{self, JoinHandle};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
@@ -8,6 +8,8 @@ use winit::window::Window;
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::{WindowGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
+use crate::ui::components::debug::perf::{PerfSample, PerfTracker};
+use crate::ui::components::debug::startup::StartupTimings;
 use crate::ui::gpu::UiRenderer;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
@@ -36,12 +38,7 @@ struct MsaaTarget {
 }
 
 impl MsaaTarget {
-    fn new(
-        device: &wgpu::Device,
-        format: wgpu::TextureFormat,
-        width: u32,
-        height: u32,
-    ) -> Self {
+    fn new(device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32) -> Self {
         let tex = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("msaa color target"),
             size: wgpu::Extent3d {
@@ -120,13 +117,7 @@ impl WindowHandle {
         let _ = self.tx.send(RenderMsg::Resize(size));
     }
 
-    pub fn update_mouse_state(
-        &self,
-        pos: ScreenPointF,
-        zoom: f32,
-        selection: Option<ScreenRect>,
-        captured: bool,
-    ) {
+    pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32, selection: Option<ScreenRect>, captured: bool) {
         let _ = self.tx.send(RenderMsg::MouseState {
             pos,
             zoom,
@@ -159,10 +150,16 @@ pub struct RenderThreadParams {
     pub settings: Arc<CapturerSettings>,
     /// This window's monitor in virtual-desktop screen coordinates.
     pub monitor_bounds: ScreenRect,
-    /// Full UI-facing description of this window's monitor (bounds + DPI
-    /// + primary flag). Passed to the `UiRenderer` so each render thread
+    /// Full UI-facing description of this window's monitor (bounds, DPI,
+    /// primary flag). Passed to the `UiRenderer` so each render thread
     /// can run the shared visibility rules against its own monitor.
     pub this_monitor: UiMonitor,
+    /// Zero-based index of this monitor in the enumeration order, shown
+    /// as the `N:` prefix in the debug monitor-info panel.
+    pub monitor_index: usize,
+    /// Human-readable monitor name (e.g. `\\.\DISPLAY1` on Windows).
+    /// Shown in the debug panel header.
+    pub monitor_name: String,
     /// DPI scale (1.0 = 100%). Written into the uniform so the shader
     /// can size the coloured crosshair arms in physical pixels.
     pub scale_factor: f32,
@@ -171,6 +168,13 @@ pub struct RenderThreadParams {
     /// Cursor position (virtual-desktop pixels, f32) sampled *before*
     /// any window was created, so frame 0 renders the crosshair correctly.
     pub initial_mouse: ScreenPointF,
+    /// Startup timing markers, frozen at spawn time. Used by the debug
+    /// panel to show the same startup breakdown as the C++ version.
+    pub startup: Arc<StartupTimings>,
+    /// Shared one-shot for the "all windows visible" timestamp. Set by
+    /// the main thread in `about_to_wait` right after
+    /// `show_windows_atomically`. Render threads only read.
+    pub shown_time: Arc<OnceLock<Duration>>,
     /// Atomically incremented when this thread finishes frame 0.
     pub ready_count: Arc<std::sync::atomic::AtomicUsize>,
     /// Blocks until the main thread reveals all windows.
@@ -212,12 +216,17 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         settings,
         monitor_bounds,
         this_monitor,
+        monitor_index,
+        monitor_name,
         scale_factor,
         refresh_hz,
         initial_mouse,
+        startup,
+        shown_time,
         ready_count,
         visible_barrier,
     } = params;
+    let adapter_name = gpu.adapter_name.clone();
     // `refresh_hz` is accepted (and logged) for future use — DXGI's waitable
     // object handles the actual pacing, so we don't need the value for timing.
     // If we ever port to a non-DX12 backend we'll need an explicit sleep
@@ -262,12 +271,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         let vd_y = snap.vdesktop_origin[1];
         let vd_w = snap.vdesktop_size[0];
         let vd_h = snap.vdesktop_size[1];
-        let base_uv_offset_scale = [
-            (m_x - vd_x) / vd_w,
-            (m_y - vd_y) / vd_h,
-            m_w / vd_w,
-            m_h / vd_h,
-        ];
+        let base_uv_offset_scale = [(m_x - vd_x) / vd_w, (m_y - vd_y) / vd_h, m_w / vd_w, m_h / vd_h];
 
         // Seed the cursor position for the very first (frame-0) draw, so
         // the crosshair appears at the correct spot the instant the window
@@ -285,32 +289,37 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             selection_params: [0.0, 0.0, 0.0, 0.0],
         };
 
-        let ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("window uniforms"),
-            size: WINDOW_UNIFORMS_SIZE,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        gpu.queue.write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
+        let ubo = gpu
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("window uniforms"),
+                size: WINDOW_UNIFORMS_SIZE,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        gpu.queue
+            .write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
 
-        let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("window snapshot bind group"),
-            layout: &snap.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: ubo.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&snap.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&snap.sampler),
-                },
-            ],
-        });
+        let bind_group = gpu
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("window snapshot bind group"),
+                layout: &snap.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: ubo.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&snap.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&snap.sampler),
+                    },
+                ],
+            });
 
         SnapshotState {
             ubo,
@@ -324,8 +333,22 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
     // own because each owns its own wgpu device and associated pipelines
     // / buffers. The renderer decides per-component visibility for THIS
     // monitor every frame using the pure rules in `ui::shared`.
-    let mut ui_renderer =
-        UiRenderer::new(&gpu.device, &gpu.queue, gpu.surface_format, this_monitor);
+    let mut ui_renderer = UiRenderer::new(
+        &gpu.device,
+        &gpu.queue,
+        gpu.surface_format,
+        this_monitor,
+        monitor_index,
+        monitor_name.clone(),
+        adapter_name,
+        startup,
+        shown_time,
+    );
+
+    // Frame-timing tracker for the debug panel. Thread-local: this
+    // render thread both produces and consumes the samples, so there's
+    // no reason to route them through the cross-thread broadcast.
+    let mut perf = PerfTracker::new();
 
     let mut msaa = MsaaTarget::new(&gpu.device, gpu.surface_format, config.width, config.height);
 
@@ -339,7 +362,9 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         &config,
         snapshot_state.as_ref(),
         &mut ui_renderer,
+        &perf,
         &msaa,
+        &mut None,
     );
     // Wait for all submitted GPU work to complete so the presented
     // drawable is fully resolved before the window becomes visible.
@@ -372,6 +397,11 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
     // — the OS cursor takes over the visual role. Plumbed via
     // `selection_params.y` (0/1 float).
     let mut captured: bool = false;
+
+    // Marker used to compute the `overall` frame-time (wall-clock gap
+    // between consecutive loop iterations). Initialised to `now` so the
+    // first sample has a sane-but-discardable value.
+    let mut last_iter = Instant::now();
 
     loop {
         // Drain *all* pending commands non-blockingly before the blocking
@@ -420,6 +450,16 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             );
         }
 
+        // Timing bracket: `overall` is the gap between consecutive loop
+        // iterations (reciprocal ≈ FPS). Sampled here so it survives
+        // early-returns from `draw_once`.
+        let now = Instant::now();
+        let overall = now.duration_since(last_iter);
+        last_iter = now;
+
+        // `draw_once` produces a `PerfSample` covering wait / draw /
+        // present; we fill in `overall` and record it afterwards.
+        let mut sample: Option<PerfSample> = None;
         // This call blocks on the DXGI waitable object (because Backends::DX12
         // + Dx12UseFrameLatencyWaitableObject::Wait). We wake up ~one frame
         // before the next scanout — the last reasonable moment to begin
@@ -430,8 +470,14 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             &config,
             snapshot_state.as_ref(),
             &mut ui_renderer,
+            &perf,
             &msaa,
+            &mut sample,
         );
+        if let Some(mut s) = sample {
+            s.overall = overall;
+            perf.record(s);
+        }
     }
 }
 
@@ -510,12 +556,7 @@ impl SnapshotState {
             let cy = mouse_pos.y;
             let local_cx = cx - monitor_bounds.min_x() as f32;
             let local_cy = cy - monitor_bounds.min_y() as f32;
-            let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
-                (
-                    (vd_x - cx) * zoom + local_cx,
-                    (vd_y - cy) * zoom + local_cy,
-                )
-            };
+            let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cx, (vd_y - cy) * zoom + local_cy) };
             let (l, t) = to_local(sel.left() as f32, sel.top() as f32);
             let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
             self.uniforms.selection_rect = [l, t, r, b];
@@ -531,14 +572,22 @@ impl SnapshotState {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_once(
     surface: &wgpu::Surface<'static>,
     gpu: &WindowGpu,
     config: &wgpu::SurfaceConfiguration,
     snapshot_state: Option<&SnapshotState>,
     ui_renderer: &mut UiRenderer,
+    perf: &PerfTracker,
     msaa: &MsaaTarget,
+    out_sample: &mut Option<PerfSample>,
 ) {
+    // Wait sample — `get_current_texture()` blocks on the DXGI waitable
+    // object on Windows, so this is where the wait-for-vsync time lives.
+    // On other backends it's effectively instantaneous; the sample just
+    // reads near-zero and is still useful for regression comparisons.
+    let t_wait_start = Instant::now();
     let frame = match surface.get_current_texture() {
         wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
         wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return,
@@ -548,7 +597,9 @@ fn draw_once(
         }
         wgpu::CurrentSurfaceTexture::Validation => return,
     };
+    let wait = t_wait_start.elapsed();
 
+    let t_draw_start = Instant::now();
     let view = frame
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
@@ -605,8 +656,21 @@ fn draw_once(
         &msaa.view,
         &view,
         (config.width, config.height),
+        perf,
     );
 
-    gpu.queue.submit(std::iter::once(encoder.finish()));
+    gpu.queue
+        .submit(std::iter::once(encoder.finish()));
+    let draw = t_draw_start.elapsed();
+
+    let t_present_start = Instant::now();
     frame.present();
+    let present = t_present_start.elapsed();
+
+    *out_sample = Some(PerfSample {
+        wait,
+        draw,
+        present,
+        overall: std::time::Duration::ZERO,
+    });
 }

@@ -45,8 +45,7 @@ pub fn capture_desktop() -> Result<(DesktopBitmap, Vec<MonitorInfo>)> {
         bail!("No active displays found");
     }
 
-    let display_ids = CGDisplay::active_displays()
-        .map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
+    let display_ids = CGDisplay::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
 
     let vd = super::mac_monitor::virtual_desktop_bounds(&monitors);
     let vd_w = vd.width() as usize;
@@ -64,10 +63,7 @@ pub fn capture_desktop() -> Result<(DesktopBitmap, Vec<MonitorInfo>)> {
         let image = match display.image() {
             Some(img) => img,
             None => {
-                warn!(
-                    "CGDisplayCreateImage returned null for display {} — skipping",
-                    display_id
-                );
+                warn!("CGDisplayCreateImage returned null for display {} — skipping", display_id);
                 continue;
             }
         };
@@ -78,10 +74,7 @@ pub fn capture_desktop() -> Result<(DesktopBitmap, Vec<MonitorInfo>)> {
         let bpp = image.bits_per_pixel();
 
         if bpp != 32 {
-            warn!(
-                "Display {} has unexpected bits_per_pixel={}, skipping",
-                display_id, bpp
-            );
+            warn!("Display {} has unexpected bits_per_pixel={}, skipping", display_id, bpp);
             continue;
         }
 

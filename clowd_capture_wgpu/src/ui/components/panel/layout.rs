@@ -83,11 +83,7 @@ impl PanelLayout {
 /// Returns `None` if the selection doesn't overlap the monitor at all
 /// (i.e. the intersect produced an empty rect) — the caller handles
 /// that by not showing a panel on this monitor.
-pub fn compute_layout(
-    monitor_bounds: ScreenRect,
-    selection: ScreenRect,
-    dpi_scale: f32,
-) -> Option<PanelLayout> {
+pub fn compute_layout(monitor_bounds: ScreenRect, selection: ScreenRect, dpi_scale: f32) -> Option<PanelLayout> {
     // Clip the selection to the monitor. Mirrors
     // `Gdiplus::Rect::Intersect(selection, screenBounds, ...)` at
     // DxScreenCapture.cpp:130.
@@ -105,8 +101,7 @@ pub fn compute_layout(
     let button_spacing = (3.0 * dpi_zoom).ceil() as i32;
     let svg_button_size = ((UNSCALED_BUTTON_SIZE as f64) * dpi_zoom).floor() as i32;
     let area_size = svg_button_size;
-    let long_edge_px =
-        svg_button_size * NUM_SVG_BUTTONS as i32 + button_spacing * 2 + area_size;
+    let long_edge_px = svg_button_size * NUM_SVG_BUTTONS as i32 + button_spacing * 2 + area_size;
     let short_edge_px = svg_button_size;
 
     // Available space on each side of the selection (C++ lines 132-134).
@@ -114,12 +109,9 @@ pub fn compute_layout(
     // edge; can become negative if the selection already pushes past
     // that gap, which is fine — the comparisons below treat that as
     // "no space".
-    let bottom_space =
-        (monitor_bounds.bottom() - sel.bottom()).max(0) - min_distance;
-    let right_space =
-        (monitor_bounds.right() - sel.right()).max(0) - min_distance;
-    let left_space =
-        (sel.left() - monitor_bounds.left()).max(0) - min_distance;
+    let bottom_space = (monitor_bounds.bottom() - sel.bottom()).max(0) - min_distance;
+    let right_space = (monitor_bounds.right() - sel.right()).max(0) - min_distance;
+    let left_space = (sel.left() - monitor_bounds.left()).max(0) - min_distance;
 
     // Pick orientation + initial anchor point. Four priority cases from
     // the C++: below → right → left → inside. `vert` in the C++ is
@@ -182,8 +174,7 @@ pub fn compute_layout(
     // Place the area indicator at the panel's origin, then walk the
     // buttons after it along the major axis (x for Horizontal, y for
     // Vertical). Matches the C++ `vchange += ...` loop at lines 184-194.
-    let area_rect =
-        ScreenRect::from_xy_size(panel_left, panel_top, area_size, area_size);
+    let area_rect = ScreenRect::from_xy_size(panel_left, panel_top, area_size, area_size);
 
     let mut buttons = [ScreenRect::zero(); NUM_SVG_BUTTONS];
     let (mut cursor_x, mut cursor_y) = match orientation {
@@ -197,8 +188,7 @@ pub fn compute_layout(
         }
     };
     for (i, slot) in buttons.iter_mut().enumerate() {
-        *slot =
-            ScreenRect::from_xy_size(cursor_x, cursor_y, svg_button_size, svg_button_size);
+        *slot = ScreenRect::from_xy_size(cursor_x, cursor_y, svg_button_size, svg_button_size);
         // The C++ has an `if (i == 0) *vchange += buttonSpacing;` after
         // the first button. That spacing is already consumed above
         // (we skipped ahead before placing button[0]), so we don't
@@ -218,6 +208,8 @@ pub fn compute_layout(
         }
     }
 
-    Some(PanelLayout { area_rect, buttons })
+    Some(PanelLayout {
+        area_rect,
+        buttons,
+    })
 }
-

@@ -28,12 +28,7 @@ use crate::ui::shared::{panel_visibility, UiMonitor, UiSharedState};
 const LABEL_FONT_PX: f32 = 11.0;
 const AREA_FONT_PX: f32 = 11.0;
 const ICON_UNSCALED_PX: f32 = 26.0;
-const GRAY_RGBA: [f32; 4] = [
-    0x37 as f32 / 255.0,
-    0x37 as f32 / 255.0,
-    0x37 as f32 / 255.0,
-    1.0,
-];
+const GRAY_RGBA: [f32; 4] = [0x37 as f32 / 255.0, 0x37 as f32 / 255.0, 0x37 as f32 / 255.0, 1.0];
 const HOVER_OVERLAY_STRENGTH: f32 = 0.30;
 /// Speed of the exponential ease-out on hover transitions. `12.0` matches
 /// the old `animation.rs` value (~200 ms to reach 90 % of target at 60 FPS).
@@ -146,11 +141,8 @@ impl PanelRenderer {
                 Ok(t) => t,
                 Err(e) => {
                     log::error!("failed to parse SVG for button {i}: {e:?}");
-                    usvg::Tree::from_str(
-                        "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
-                        &usvg::Options::default(),
-                    )
-                    .expect("empty SVG parses")
+                    usvg::Tree::from_str("<svg xmlns=\"http://www.w3.org/2000/svg\"/>", &usvg::Options::default())
+                        .expect("empty SVG parses")
                 }
             };
             icons.push(svg.load_mesh(device, &tree));
@@ -202,11 +194,7 @@ impl PanelRenderer {
         let cursor = state.virtual_cursor;
         let hovered_idx = layout.hit_test(cursor.x, cursor.y);
         for i in 0..NUM_SVG_BUTTONS {
-            let target = if Some(i) == hovered_idx {
-                HOVER_OVERLAY_STRENGTH
-            } else {
-                0.0
-            };
+            let target = if Some(i) == hovered_idx { HOVER_OVERLAY_STRENGTH } else { 0.0 };
             let diff = target - self.hover_amounts[i];
             if diff.abs() <= 0.01 {
                 self.hover_amounts[i] = target;
@@ -274,16 +262,8 @@ impl PanelRenderer {
             let icon_left = l + (bw / 2.0) - (icon_size / 2.0);
             let icon_top = t + v_gap;
             let mesh = &self.icons[i];
-            let sx = if mesh.size[0] > 0.0 {
-                icon_size / mesh.size[0]
-            } else {
-                1.0
-            };
-            let sy = if mesh.size[1] > 0.0 {
-                icon_size / mesh.size[1]
-            } else {
-                1.0
-            };
+            let sx = if mesh.size[0] > 0.0 { icon_size / mesh.size[0] } else { 1.0 };
+            let sy = if mesh.size[1] > 0.0 { icon_size / mesh.size[1] } else { 1.0 };
             svg_draws.push((
                 i,
                 SvgInstance {
@@ -305,7 +285,10 @@ impl PanelRenderer {
         }
 
         // Area indicator text buffers.
-        let width_str = state.selection.map(|s| s.width().to_string()).unwrap_or_default();
+        let width_str = state
+            .selection
+            .map(|s| s.width().to_string())
+            .unwrap_or_default();
         let height_str = state
             .selection
             .map(|s| s.height().to_string())
@@ -339,19 +322,11 @@ impl PanelRenderer {
             // byte index directly.
             let def = &button_defs()[i];
             let label_buf = &self.buffers[IDX_LABEL_BASE + i];
-            if let Some((glyph_x, glyph_w)) =
-                label_buf.glyph_bounds_at_byte(def.underline_idx)
-            {
+            if let Some((glyph_x, glyph_w)) = label_buf.glyph_bounds_at_byte(def.underline_idx) {
                 let u_x = label_x + glyph_x;
                 let u_y = label_y + label_line_h - (dpi.round().max(1.0));
                 let u_h = dpi.round().max(1.0);
-                rects.push(RectInstance::filled(
-                    u_x,
-                    u_y,
-                    u_x + glyph_w,
-                    u_y + u_h,
-                    [1.0, 1.0, 1.0, 1.0],
-                ));
+                rects.push(RectInstance::filled(u_x, u_y, u_x + glyph_w, u_y + u_h, [1.0, 1.0, 1.0, 1.0]));
             }
         }
 

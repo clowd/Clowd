@@ -19,12 +19,8 @@
 use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
 use crate::geometry::RectExt;
-use crate::ui::components::tips::layout::{
-    compute_layout as compute_tips_layout, BODY_FONT_PX, TITLE_FONT_PX,
-};
-use crate::ui::components::tips::model::{
-    render_description, COLOR_ROW_HOTKEY, HOTKEY_GAP, TIPS_BOTTOM, TIPS_TOP, TITLE,
-};
+use crate::ui::components::tips::layout::{compute_layout as compute_tips_layout, BODY_FONT_PX, TITLE_FONT_PX};
+use crate::ui::components::tips::model::{render_description, COLOR_ROW_HOTKEY, HOTKEY_GAP, TIPS_BOTTOM, TIPS_TOP, TITLE};
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_MONO};
 use crate::ui::shared::{tips_visibility, UiMonitor, UiSharedState};
@@ -66,7 +62,8 @@ impl CachedBuffer {
         }
         if font_changed {
             let metrics = Metrics::new(font_px, font_px * 1.2);
-            self.buffer.set_metrics(&mut ts.font_system, metrics);
+            self.buffer
+                .set_metrics(&mut ts.font_system, metrics);
             self.last_font_px = font_px;
             self.last_bold = bold;
         }
@@ -76,7 +73,8 @@ impl CachedBuffer {
         }
         self.buffer
             .set_text(&mut ts.font_system, text, &attrs, Shaping::Advanced, None);
-        self.buffer.shape_until_scroll(&mut ts.font_system, false);
+        self.buffer
+            .shape_until_scroll(&mut ts.font_system, false);
         if text_changed {
             self.last_text.clear();
             self.last_text.push_str(text);
@@ -149,13 +147,7 @@ impl TipsRenderer {
     /// Run the full tips-panel logic for this monitor. Emits rect
     /// instances into `rects`; stores computed text positions inside
     /// `self` so `text_areas()` can produce the final `TextArea` list.
-    pub fn prepare(
-        &mut self,
-        ts: &mut TextStack,
-        state: &UiSharedState,
-        this_monitor: &UiMonitor,
-        rects: &mut Vec<RectInstance>,
-    ) {
+    pub fn prepare(&mut self, ts: &mut TextStack, state: &UiSharedState, this_monitor: &UiMonitor, rects: &mut Vec<RectInstance>) {
         self.positions.clear();
 
         // Visibility rule.
@@ -182,20 +174,14 @@ impl TipsRenderer {
             self.buffers[IDX_TOP_BASE + i].set(ts, &combined, body_px, false);
         }
         let (hex_text, rgb_text) = match state.hovered_pixel_bgra {
-            Some([b, g, r, _]) => (
-                format!("#{:02X}{:02X}{:02X}", r, g, b),
-                format!("rgb({}, {}, {})", r, g, b),
-            ),
+            Some([b, g, r, _]) => (format!("#{:02X}{:02X}{:02X}", r, g, b), format!("rgb({}, {}, {})", r, g, b)),
             None => ("#------".to_string(), String::new()),
         };
         self.buffers[IDX_COLOR_HOTKEY].set(ts, COLOR_ROW_HOTKEY, body_px, false);
         self.buffers[IDX_COLOR_HEX].set(ts, &hex_text, body_px, false);
         self.buffers[IDX_COLOR_RGB].set(ts, &rgb_text, body_px, false);
         for (i, row) in TIPS_BOTTOM.iter().enumerate() {
-            let combined = format!(
-                "{}{}{}",
-                row.hotkey, HOTKEY_GAP, row.description_template
-            );
+            let combined = format!("{}{}{}", row.hotkey, HOTKEY_GAP, row.description_template);
             self.buffers[IDX_BOTTOM_BASE + i].set(ts, &combined, body_px, false);
         }
 
@@ -254,12 +240,7 @@ impl TipsRenderer {
         let black_shadow = [0.0, 0.0, 0.0, SHADOW_ALPHA];
         let swatch_border = [0.0, 0.0, 0.0, 1.0];
         let swatch_fill = match state.hovered_pixel_bgra {
-            Some([b, g, r, _]) => [
-                r as f32 / 255.0,
-                g as f32 / 255.0,
-                b as f32 / 255.0,
-                1.0,
-            ],
+            Some([b, g, r, _]) => [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0],
             None => [0.0, 0.0, 0.0, 1.0],
         };
 

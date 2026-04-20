@@ -10,9 +10,8 @@ use windows::{
         Graphics::{
             Dxgi::{CreateDXGIFactory1, IDXGIFactory1},
             Gdi::{
-                EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint,
-                DEVMODEW, DMDO_180, DMDO_270, DMDO_90, DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, HDC,
-                HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONULL,
+                EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW, MonitorFromPoint, DEVMODEW, DMDO_180, DMDO_270, DMDO_90,
+                DMDO_DEFAULT, ENUM_CURRENT_SETTINGS, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONULL,
                 MONITOR_DEFAULTTOPRIMARY,
             },
         },

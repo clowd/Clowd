@@ -87,6 +87,10 @@ pub struct WindowGpu {
     pub queue: wgpu::Queue,
     pub pipeline: wgpu::RenderPipeline,
     pub surface_format: wgpu::TextureFormat,
+    /// Human-readable adapter name (e.g. "NVIDIA GeForce RTX 4080"). Shown
+    /// in the debug instrumentation panel — the Rust equivalent of the
+    /// C++ `GetAdapterDesc()` string at `Screens.cpp:27-54`.
+    pub adapter_name: String,
     /// `None` only if the desktop capture failed or its bitmap is larger
     /// than the adapter's max 2D texture size. The render thread then
     /// falls back to a plain dark clear.
@@ -115,8 +119,7 @@ pub fn bootstrap_window_gpu(
 
         #[cfg(windows)]
         {
-            backend_options.dx12.latency_waitable_object =
-                wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
+            backend_options.dx12.latency_waitable_object = wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
         }
 
         #[cfg(windows)]
@@ -140,20 +143,18 @@ pub fn bootstrap_window_gpu(
         // if the hint is missing or no match is found.
         let adapter = match adapter_hint {
             Some((vendor, device)) => {
-                info!(
-                    "adapter hint: vendor=0x{:04X} device=0x{:04X}",
-                    vendor, device
-                );
-                let adapters = instance
-                    .enumerate_adapters(backends)
-                    .await;
+                info!("adapter hint: vendor=0x{:04X} device=0x{:04X}", vendor, device);
+                let adapters = instance.enumerate_adapters(backends).await;
                 let matched = adapters
                     .into_iter()
                     .find(|a: &wgpu::Adapter| {
                         let info = a.get_info();
                         info.vendor == vendor
                             && info.device == device
-                            && !surface.get_capabilities(a).formats.is_empty()
+                            && !surface
+                                .get_capabilities(a)
+                                .formats
+                                .is_empty()
                     });
                 if matched.is_some() {
                     info!("matched DXGI adapter hint to wgpu adapter");
@@ -221,8 +222,7 @@ pub fn bootstrap_window_gpu(
 
         let snapshot = create_desktop_snapshot(&device, &queue, captured);
 
-        let shader = device
-            .create_shader_module(wgpu::include_wgsl!("../shaders/desktop.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../shaders/desktop.wgsl"));
 
         let bind_group_layouts: Vec<Option<&wgpu::BindGroupLayout>> = match &snapshot {
             Some(snap) => vec![Some(&snap.bind_group_layout)],
@@ -269,6 +269,7 @@ pub fn bootstrap_window_gpu(
                 queue,
                 pipeline,
                 surface_format,
+                adapter_name: adapter_info.name.clone(),
                 snapshot,
             },
             surface,
@@ -282,11 +283,7 @@ pub fn bootstrap_window_gpu(
 /// define the bind group layout that the render pipeline + per-window bind
 /// groups will share. Returns `None` if the image is larger than the
 /// device's max 2D texture size — caller falls back to no-snapshot mode.
-fn create_desktop_snapshot(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    captured: &CapturedDesktop,
-) -> Option<Arc<DesktopSnapshot>> {
+fn create_desktop_snapshot(device: &wgpu::Device, queue: &wgpu::Queue, captured: &CapturedDesktop) -> Option<Arc<DesktopSnapshot>> {
     let width = captured.width;
     let height = captured.height;
     let max = device.limits().max_texture_dimension_2d;
@@ -379,7 +376,9 @@ fn create_desktop_snapshot(
                 binding: 1,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    sample_type: wgpu::TextureSampleType::Float {
+                        filterable: true,
+                    },
                     view_dimension: wgpu::TextureViewDimension::D2,
                     multisampled: false,
                 },
@@ -399,13 +398,7 @@ fn create_desktop_snapshot(
         view,
         sampler,
         bind_group_layout,
-        vdesktop_origin: [
-            captured.bounds.min_x() as f32,
-            captured.bounds.min_y() as f32,
-        ],
-        vdesktop_size: [
-            captured.bounds.width() as f32,
-            captured.bounds.height() as f32,
-        ],
+        vdesktop_origin: [captured.bounds.min_x() as f32, captured.bounds.min_y() as f32],
+        vdesktop_size: [captured.bounds.width() as f32, captured.bounds.height() as f32],
     }))
 }

@@ -6,18 +6,13 @@
 //! with all the text areas for the frame, then `draw` inside a render
 //! pass.
 
-use glyphon::{
-    Cache, FontSystem, Resolution, SwashCache, TextArea, TextAtlas, TextRenderer, Viewport,
-};
+use glyphon::{Cache, FontSystem, Resolution, SwashCache, TextArea, TextAtlas, TextRenderer, Viewport};
 
 // Embedded fonts. Loaded into the per-thread FontSystem at construction
 // time so downstream components can reference them by family name.
-pub const FONT_MONO_REGULAR: &[u8] =
-    include_bytes!("../../../assets/fonts/CascadiaMono-Regular.ttf");
-pub const FONT_MONO_BOLD: &[u8] =
-    include_bytes!("../../../assets/fonts/CascadiaMono-Bold.ttf");
-pub const FONT_ROBOTO_REGULAR: &[u8] =
-    include_bytes!("../../../assets/fonts/Roboto-Regular.ttf");
+pub const FONT_MONO_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/CascadiaMono-Regular.ttf");
+pub const FONT_MONO_BOLD: &[u8] = include_bytes!("../../../assets/fonts/CascadiaMono-Bold.ttf");
+pub const FONT_ROBOTO_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/Roboto-Regular.ttf");
 
 /// Family name to pass in `Attrs::family(Family::Name(...))` for each
 /// font. We rely on cosmic-text to distinguish Regular vs Bold by the
@@ -34,16 +29,14 @@ pub struct TextStack {
 }
 
 impl TextStack {
-    pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        surface_format: wgpu::TextureFormat,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, surface_format: wgpu::TextureFormat) -> Self {
         let mut font_system = FontSystem::new();
         font_system
             .db_mut()
             .load_font_data(FONT_MONO_REGULAR.to_vec());
-        font_system.db_mut().load_font_data(FONT_MONO_BOLD.to_vec());
+        font_system
+            .db_mut()
+            .load_font_data(FONT_MONO_BOLD.to_vec());
         font_system
             .db_mut()
             .load_font_data(FONT_ROBOTO_REGULAR.to_vec());
@@ -75,7 +68,13 @@ impl TextStack {
     /// Update the viewport resolution. Cheap; call every frame before
     /// `prepare` to account for window resize.
     pub fn update_viewport(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
-        self.viewport.update(queue, Resolution { width, height });
+        self.viewport.update(
+            queue,
+            Resolution {
+                width,
+                height,
+            },
+        );
     }
 
     /// Shape-and-upload all text areas for this frame. Returns `Ok(true)`
@@ -106,7 +105,8 @@ impl TextStack {
     /// Issue the glyphon draw. Call inside an existing render pass after
     /// `prepare()` returned `Ok(true)`.
     pub fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) -> Result<(), glyphon::RenderError> {
-        self.renderer.render(&self.atlas, &self.viewport, pass)
+        self.renderer
+            .render(&self.atlas, &self.viewport, pass)
     }
 
     /// Free cached glyph atlas entries for texture variants no longer in

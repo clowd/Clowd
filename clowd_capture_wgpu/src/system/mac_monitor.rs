@@ -5,8 +5,7 @@ use crate::geometry::{RectExt, ScreenRect};
 use crate::system::MonitorInfo;
 
 pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
-    let display_ids = CGDisplay::active_displays()
-        .map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
+    let display_ids = CGDisplay::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
 
     let main_id = unsafe { CGMainDisplayID() };
 

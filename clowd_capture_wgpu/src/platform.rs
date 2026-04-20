@@ -2,11 +2,9 @@
 
 #[cfg(windows)]
 pub fn apply_capture_window_tweaks(window: &winit::window::Window) {
-    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Dwm::{
-        DWMWA_EXCLUDED_FROM_PEEK, DWMWA_TRANSITIONS_FORCEDISABLED, DwmSetWindowAttribute,
-    };
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_EXCLUDED_FROM_PEEK, DWMWA_TRANSITIONS_FORCEDISABLED};
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
     let Ok(handle) = window.window_handle() else {
         return;
@@ -68,8 +66,8 @@ pub fn apply_capture_window_tweaks(window: &winit::window::Window) {
 /// instantaneous thanks to `WS_EX_NOREDIRECTIONBITMAP`.
 #[cfg(target_os = "macos")]
 pub fn show_windows_atomically<'a>(windows: impl Iterator<Item = &'a std::sync::Arc<winit::window::Window>>) {
-    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use objc2_app_kit::NSView;
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
     for w in windows {
         let Ok(handle) = w.window_handle() else { continue };

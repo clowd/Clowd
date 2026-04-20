@@ -10,9 +10,12 @@
 //!   2. `svg` pipeline: button icons (lyon-tessellated meshes).
 //!   3. glyphon text: labels, tips body, area-indicator digits.
 
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
+use crate::ui::components::debug::perf::PerfTracker;
+use crate::ui::components::debug::startup::StartupTimings;
+use crate::ui::gpu::debug::DebugRenderer;
 use crate::ui::gpu::panel::PanelRenderer;
 use crate::ui::gpu::rect::{RectInstance, RectPipeline};
 use crate::ui::gpu::svg::{SvgInstance, SvgPipeline};
@@ -26,32 +29,56 @@ pub struct UiRenderer {
     text: TextStack,
     tips: TipsRenderer,
     panel: PanelRenderer,
+    debug: DebugRenderer,
     last_frame_time: Option<Instant>,
     state: Option<Arc<UiSharedState>>,
     this_monitor: UiMonitor,
+    /// Stable per-render-thread context for the debug panel — values that
+    /// never change after startup (monitor name, adapter, startup
+    /// timings). `perf` is the only live source; see `render()`.
+    monitor_name: String,
+    adapter_name: String,
+    startup: Arc<StartupTimings>,
+    /// Shared one-shot holding the "all windows visible" timestamp
+    /// (offset from `startup.t_start`). The main thread sets it the
+    /// instant `show_windows_atomically` returns; every render thread's
+    /// debug panel reads it. Remains `None` until that moment.
+    shown_time: Arc<OnceLock<Duration>>,
 }
 
 impl UiRenderer {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         surface_format: wgpu::TextureFormat,
         this_monitor: UiMonitor,
+        monitor_index: usize,
+        monitor_name: String,
+        adapter_name: String,
+        startup: Arc<StartupTimings>,
+        shown_time: Arc<OnceLock<Duration>>,
     ) -> Self {
         let rect = RectPipeline::new(device, surface_format);
         let svg = SvgPipeline::new(device, surface_format);
         let mut text = TextStack::new(device, queue, surface_format);
         let tips = TipsRenderer::new(&mut text);
         let panel = PanelRenderer::new(device, &svg, &mut text);
+        let debug = DebugRenderer::new(monitor_index);
         Self {
             rect,
             svg,
             text,
             tips,
             panel,
+            debug,
             last_frame_time: None,
             state: None,
             this_monitor,
+            monitor_name,
+            adapter_name,
+            startup,
+            shown_time,
         }
     }
 
@@ -59,6 +86,7 @@ impl UiRenderer {
         self.state = Some(state);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
         device: &wgpu::Device,
@@ -67,6 +95,7 @@ impl UiRenderer {
         msaa_view: &wgpu::TextureView,
         resolve_view: &wgpu::TextureView,
         viewport_px: (u32, u32),
+        perf: &PerfTracker,
     ) {
         let now = Instant::now();
         let dt = self
@@ -87,24 +116,31 @@ impl UiRenderer {
 
         self.tips
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
-        self.panel.prepare(
+        self.panel
+            .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances, &mut svg_draws, dt);
+        self.debug.prepare(
             &mut self.text,
             &state,
             &self.this_monitor,
+            &self.monitor_name,
+            &self.adapter_name,
+            perf,
+            &self.startup,
+            self.shown_time.get().copied(),
             &mut rect_instances,
-            &mut svg_draws,
-            dt,
         );
 
         self.rect
             .prepare(device, queue, viewport_px, &rect_instances);
-        self.svg.prepare(device, queue, viewport_px, &svg_draws);
+        self.svg
+            .prepare(device, queue, viewport_px, &svg_draws);
 
         // Gather text areas. Panel must come before tips so the overlap
         // case (shouldn't happen, but harmless) has panel-on-top ordering
         // matching the rect order.
         let mut text_areas = self.tips.text_areas(viewport_px);
         text_areas.extend(self.panel.text_areas(viewport_px));
+        text_areas.extend(self.debug.text_areas(viewport_px));
         let any_text = match self.text.prepare(device, queue, text_areas) {
             Ok(b) => b,
             Err(e) => {
