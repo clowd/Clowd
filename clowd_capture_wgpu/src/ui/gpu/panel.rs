@@ -111,6 +111,19 @@ impl CachedBuffer {
             .map(|r| r.line_w)
             .fold(0.0f32, f32::max)
     }
+
+    /// Return the pixel x offset + advance of the glyph whose source
+    /// byte index matches `byte_idx`. Uses the first shaped line — button
+    /// labels are always one line. Returns `None` if the index doesn't
+    /// land on a glyph start (only possible with mid-cluster indices,
+    /// which our ASCII-only button labels don't produce).
+    fn glyph_bounds_at_byte(&self, byte_idx: usize) -> Option<(f32, f32)> {
+        let run = self.buffer.layout_runs().next()?;
+        run.glyphs
+            .iter()
+            .find(|g| g.start == byte_idx)
+            .map(|g| (g.x, g.w))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -336,23 +349,27 @@ impl PanelRenderer {
                 color: [0xFF, 0xFF, 0xFF, 0xFF],
             });
 
-            // Underline bar for the accelerator key. Position uses a
-            // simple monospace-ish assumption: width of one char ≈
-            // label_width / char_count. It's only visible as an
-            // accent hint, so exact tracking isn't critical.
+            // Underline bar for the accelerator key. Roboto is
+            // proportional, so we can't approximate by averaging —
+            // read the real glyph bounds from glyphon's shaping output.
+            // For ASCII labels, `char index == byte index`; we pass the
+            // byte index directly.
             let def = &button_defs()[i];
-            let char_count = def.label.chars().count().max(1) as f32;
-            let char_w = label_width / char_count;
-            let u_x = label_x + def.underline_idx as f32 * char_w;
-            let u_y = label_y + label_line_h - (dpi.round().max(1.0));
-            let u_h = dpi.round().max(1.0);
-            rects.push(RectInstance::filled(
-                u_x,
-                u_y,
-                u_x + char_w,
-                u_y + u_h,
-                [1.0, 1.0, 1.0, 1.0],
-            ));
+            let label_buf = &self.buffers[IDX_LABEL_BASE + i];
+            if let Some((glyph_x, glyph_w)) =
+                label_buf.glyph_bounds_at_byte(def.underline_idx)
+            {
+                let u_x = label_x + glyph_x;
+                let u_y = label_y + label_line_h - (dpi.round().max(1.0));
+                let u_h = dpi.round().max(1.0);
+                rects.push(RectInstance::filled(
+                    u_x,
+                    u_y,
+                    u_x + glyph_w,
+                    u_y + u_h,
+                    [1.0, 1.0, 1.0, 1.0],
+                ));
+            }
         }
 
         // Area indicator layout (W above, × in the middle, H below).
