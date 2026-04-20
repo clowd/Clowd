@@ -64,6 +64,11 @@ pub struct SvgPipeline {
     /// Draw records produced by the most recent `prepare()`. Each entry
     /// references a mesh by index into the caller's mesh list.
     draws: Vec<SvgDraw>,
+    /// Scratch packed `SvgInstance` buffer, reused across frames. Holds
+    /// just the instance payload (without the mesh_idx companion) so we
+    /// can `write_buffer` a contiguous slice into the GPU instance buffer
+    /// without allocating a new Vec per frame.
+    instance_scratch: Vec<SvgInstance>,
 }
 
 struct SvgDraw {
@@ -208,6 +213,7 @@ impl SvgPipeline {
             instance_buf,
             instance_capacity,
             draws: Vec::new(),
+            instance_scratch: Vec::new(),
         }
     }
 
@@ -261,8 +267,14 @@ impl SvgPipeline {
             self.instance_capacity = new_cap;
         }
 
-        let instances: Vec<SvgInstance> = draws.iter().map(|(_, inst)| *inst).collect();
-        queue.write_buffer(&self.instance_buf, 0, bytemuck::cast_slice(&instances));
+        self.instance_scratch.clear();
+        self.instance_scratch
+            .extend(draws.iter().map(|(_, inst)| *inst));
+        queue.write_buffer(
+            &self.instance_buf,
+            0,
+            bytemuck::cast_slice(&self.instance_scratch),
+        );
         for (i, (mesh_idx, _)) in draws.iter().enumerate() {
             self.draws.push(SvgDraw {
                 mesh_idx: *mesh_idx,

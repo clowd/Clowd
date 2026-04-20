@@ -3,25 +3,74 @@
 //! Two structs (`MonitorPanelData`, `PrimaryPanelData`) hold everything
 //! the two debug panels display.
 
+use std::fmt::{Arguments, Write};
 use std::time::Duration;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::ui::components::debug::perf::{PerfStats, PerfTracker, Series};
 use crate::ui::components::debug::startup::StartupTimings;
 
-fn fmt_rect(r: ScreenRect) -> String {
-    format!("RECT[{}, {}, {}, {}]", r.left(), r.top(), r.width(), r.height())
+/// Reusable line buffer. Holds `Vec<String>` across frames so the debug
+/// panel's per-line `format!` calls can write into existing allocations
+/// via `String::clear()` + `write!`. After the first few frames no
+/// allocation happens unless the rendered text grows (which it doesn't
+/// in steady state). Before each use the caller must call
+/// [`LineBuf::reset`]; after writing it exposes the populated lines via
+/// [`LineBuf::as_slice`].
+#[derive(Default)]
+pub struct LineBuf {
+    lines: Vec<String>,
+    len: usize,
+}
+
+impl LineBuf {
+    pub fn new() -> Self {
+        Self {
+            lines: Vec::with_capacity(20),
+            len: 0,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.len = 0;
+    }
+
+    /// Append a formatted line. Reuses an existing `String`'s backing
+    /// allocation when available; only the first few frames actually
+    /// grow the pool.
+    pub fn push(&mut self, args: Arguments<'_>) {
+        if self.lines.len() <= self.len {
+            self.lines.push(String::new());
+        }
+        let s = &mut self.lines[self.len];
+        s.clear();
+        let _ = s.write_fmt(args);
+        self.len += 1;
+    }
+
+    pub fn push_empty(&mut self) {
+        if self.lines.len() <= self.len {
+            self.lines.push(String::new());
+        }
+        self.lines[self.len].clear();
+        self.len += 1;
+    }
+
+    pub fn as_slice(&self) -> &[String] {
+        &self.lines[..self.len]
+    }
 }
 
 /// Render one stats row with a left-justified label column and
 /// percentile / 1%-low columns. The caller guarantees `label` is <=
 /// `LABEL_WIDTH`; wider labels wrap the columns but still read clearly.
-fn fmt_stats_row(label: &str, s: PerfStats) -> String {
+fn write_stats_row(out: &mut LineBuf, label: &str, s: PerfStats) {
     const LABEL_WIDTH: usize = 7;
     if s.count == 0 {
-        return format!("{:<width$} n/a", label, width = LABEL_WIDTH);
+        out.push(format_args!("{:<width$} n/a", label, width = LABEL_WIDTH));
+        return;
     }
-    format!(
+    out.push(format_args!(
         "{:<width$} p50 {:>5.2}  p95 {:>5.2}  p99 {:>5.2}  low1 {:>5.2} ({})",
         label,
         s.p50_ms,
@@ -30,24 +79,47 @@ fn fmt_stats_row(label: &str, s: PerfStats) -> String {
         s.low1_ms,
         s.count,
         width = LABEL_WIDTH,
-    )
+    ));
 }
 
-fn fmt_ms(d: Duration) -> String {
-    format!("{:.2}ms", d.as_secs_f64() * 1000.0)
+/// Format helper: wall-clock duration as "x.xx ms" (two decimals).
+/// Used inside `format_args!` via `DisplayMs(d)` so the calling
+/// `write!` assembles straight into the target string without an
+/// intermediate heap allocation.
+struct DisplayMs(Duration);
+
+impl std::fmt::Display for DisplayMs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:.2}ms", self.0.as_secs_f64() * 1000.0)
+    }
 }
 
-fn fmt_session_elapsed(d: Duration) -> String {
-    let secs = d.as_secs();
-    let h = secs / 3600;
-    let m = (secs / 60) % 60;
-    let s = secs % 60;
-    if h > 0 {
-        format!("{}h{:02}m{:02}s", h, m, s)
-    } else if m > 0 {
-        format!("{}m{:02}s", m, s)
-    } else {
-        format!("{}s", s)
+/// Format helper: wall-clock duration as "1h02m03s" / "2m03s" / "5s".
+struct DisplaySessionElapsed(Duration);
+
+impl std::fmt::Display for DisplaySessionElapsed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let secs = self.0.as_secs();
+        let h = secs / 3600;
+        let m = (secs / 60) % 60;
+        let s = secs % 60;
+        if h > 0 {
+            write!(f, "{}h{:02}m{:02}s", h, m, s)
+        } else if m > 0 {
+            write!(f, "{}m{:02}s", m, s)
+        } else {
+            write!(f, "{}s", s)
+        }
+    }
+}
+
+/// Format helper for a `ScreenRect` as "RECT[x, y, w, h]".
+struct DisplayRect(ScreenRect);
+
+impl std::fmt::Display for DisplayRect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let r = self.0;
+        write!(f, "RECT[{}, {}, {}, {}]", r.left(), r.top(), r.width(), r.height())
     }
 }
 
@@ -67,32 +139,30 @@ pub struct MonitorPanelData<'a> {
 }
 
 impl<'a> MonitorPanelData<'a> {
-    /// Build one `String` per panel line.
-    pub fn lines(&self) -> Vec<String> {
-        let mut out = Vec::with_capacity(16);
+    /// Write one line per panel entry into `out`. Reuses existing
+    /// allocations; on the steady-state frame no heap allocations happen.
+    pub fn write_lines(&self, out: &mut LineBuf) {
+        out.reset();
 
-        let header = if self.is_primary {
-            format!("{}: {} (PRIMARY)", self.index, self.name)
+        if self.is_primary {
+            out.push(format_args!("{}: {} (PRIMARY)", self.index, self.name));
         } else {
-            format!("{}: {}", self.index, self.name)
-        };
-        out.push(header);
-        out.push(self.adapter.to_string());
-        let dpi_line = match self.target_period {
+            out.push(format_args!("{}: {}", self.index, self.name));
+        }
+        out.push(format_args!("{}", self.adapter));
+        match self.target_period {
             Some(p) => {
                 let hz = 1.0 / p.as_secs_f64();
-                format!("dpi: {}  refresh: {:.0} Hz", self.dpi, hz)
+                out.push(format_args!("dpi: {}  refresh: {:.0} Hz", self.dpi, hz));
             }
-            None => format!("dpi: {}", self.dpi),
-        };
-        out.push(dpi_line);
-        out.push(format!("pos: {}", fmt_rect(self.bounds)));
-        let first_render_line = match self.time_to_first_render {
-            Some(d) => format!("first render: {}", fmt_ms(d)),
-            None => "first render: ...".to_string(),
-        };
-        out.push(first_render_line);
-        out.push(String::new());
+            None => out.push(format_args!("dpi: {}", self.dpi)),
+        }
+        out.push(format_args!("pos: {}", DisplayRect(self.bounds)));
+        match self.time_to_first_render {
+            Some(d) => out.push(format_args!("first render: {}", DisplayMs(d))),
+            None => out.push(format_args!("first render: ...")),
+        }
+        out.push_empty();
 
         let overall = self.perf.stats(Series::Overall);
         // Headline FPS uses only the recent tail so the number feels
@@ -101,14 +171,14 @@ impl<'a> MonitorPanelData<'a> {
         let fps = if recent_ms > 0.0 { 1000.0 / recent_ms } else { 0.0 };
         let low1_fps = if overall.low1_ms > 0.0 { 1000.0 / overall.low1_ms } else { 0.0 };
         let session = self.perf.session();
-        out.push(format!(
+        out.push(format_args!(
             "fps: {:04.0}  1%low: {:04.0}  dropped: {}  session: {}",
             fps,
             low1_fps,
             session.drops,
-            fmt_session_elapsed(session.started.elapsed()),
+            DisplaySessionElapsed(session.started.elapsed()),
         ));
-        out.push(String::new());
+        out.push_empty();
 
         // cpu  = CPU work from "drawable acquired" to "frame.present()
         //        returned" (= draw + present). The time the CPU is
@@ -121,29 +191,28 @@ impl<'a> MonitorPanelData<'a> {
         // overall = wall-clock frame time (= 1/fps). The gap between
         // `cpu + gpu` and `overall` is vsync slack (what used to show
         // up as `wait`).
-        out.push(fmt_stats_row("cpu", self.perf.stats(Series::Cpu)));
+        write_stats_row(out, "cpu", self.perf.stats(Series::Cpu));
         let gpu = self.perf.stats(Series::Gpu);
         if gpu.count > 0 {
-            out.push(fmt_stats_row("gpu", gpu));
+            write_stats_row(out, "gpu", gpu);
         } else {
-            out.push("gpu     n/a".to_string());
+            out.push(format_args!("gpu     n/a"));
         }
-        out.push(fmt_stats_row("overall", overall));
+        write_stats_row(out, "overall", overall);
 
         // Session footer: per-series lifetime min/max for the overall
         // series, plus total frame count.
-        out.push(String::new());
+        out.push_empty();
         if session.seen[Series::Overall as usize] {
             let min = session.min_ms[Series::Overall as usize];
             let max = session.max_ms[Series::Overall as usize];
-            out.push(format!(
+            out.push(format_args!(
                 "session overall: min {:.2}  max {:.2}  frames {}",
                 min, max, session.total_frames,
             ));
         } else {
-            out.push(format!("session frames: {}", session.total_frames));
+            out.push(format_args!("session frames: {}", session.total_frames));
         }
-        out
     }
 }
 
@@ -162,70 +231,73 @@ pub struct PrimaryPanelData<'a> {
 }
 
 impl<'a> PrimaryPanelData<'a> {
-    pub fn lines(&self) -> Vec<String> {
-        let mut out = Vec::with_capacity(16);
+    pub fn write_lines(&self, out: &mut LineBuf) {
+        out.reset();
 
         let total = self
             .shown_time
             .unwrap_or_else(|| self.startup.total());
-        out.push(format!("startup: {} total", fmt_ms(total)));
+        out.push(format_args!("startup: {} total", DisplayMs(total)));
 
         let mut prev = Duration::ZERO;
-        let mut push_phase = |out: &mut Vec<String>, label: &str, offset: Duration| {
+        let mut push_phase = |out: &mut LineBuf, label: &str, offset: Duration| {
             let delta = offset.saturating_sub(prev);
-            out.push(format!("  {} +{}", label, fmt_ms(delta)));
+            out.push(format_args!("  {} +{}", label, DisplayMs(delta)));
             prev = offset;
         };
         if let Some(d) = self.startup.t_initialize {
-            push_phase(&mut out, "initialize    ", d);
+            push_phase(out, "initialize    ", d);
         }
         if let Some(d) = self.startup.t_desktop_search {
-            push_phase(&mut out, "desktop search", d);
+            push_phase(out, "desktop search", d);
         }
         if let Some(d) = self.startup.t_window_create {
-            push_phase(&mut out, "window create ", d);
+            push_phase(out, "window create ", d);
         }
         if let Some(d) = self.shown_time {
-            push_phase(&mut out, "shown         ", d);
+            push_phase(out, "shown         ", d);
         }
-        out.push(String::new());
+        out.push_empty();
 
-        out.push(format!("zoom: {:.2}", self.zoom));
-        out.push(format!("mouse: {:.2}, {:.2}", self.cursor.x, self.cursor.y));
-        let color_line = match self.color_bgra {
-            Some([b, g, r, _]) => format!("color: rgb({}, {}, {})", r, g, b),
-            None => "color: rgb(-, -, -)".to_string(),
-        };
-        out.push(color_line);
-        out.push(format!("dragging: {}", self.dragging));
-        out.push(format!("captured: {}", self.captured));
-        let sel_line = match self.selection {
-            Some(s) => format!("select: {}", fmt_rect(s)),
-            None => "select: (none)".to_string(),
-        };
-        out.push(sel_line);
+        out.push(format_args!("zoom: {:.2}", self.zoom));
+        out.push(format_args!("mouse: {:.2}, {:.2}", self.cursor.x, self.cursor.y));
+        match self.color_bgra {
+            Some([b, g, r, _]) => out.push(format_args!("color: rgb({}, {}, {})", r, g, b)),
+            None => out.push(format_args!("color: rgb(-, -, -)")),
+        }
+        out.push(format_args!("dragging: {}", self.dragging));
+        out.push(format_args!("captured: {}", self.captured));
+        match self.selection {
+            Some(s) => out.push(format_args!("select: {}", DisplayRect(s))),
+            None => out.push(format_args!("select: (none)")),
+        }
 
         if let Some(title) = self.hovered_window_title {
-            out.push(String::new());
-            out.push(format!("wnd_title: {}", truncate_display(title, 60)));
+            out.push_empty();
+            out.push(format_args!("wnd_title: {}", TruncatedTitle(title, 60)));
             if let Some(b) = self.hovered_window_bounds {
-                out.push(format!("wnd_bounds: {}", fmt_rect(b)));
+                out.push(format_args!("wnd_bounds: {}", DisplayRect(b)));
             }
         }
-
-        out
     }
 }
 
-fn truncate_display(s: &str, max_chars: usize) -> String {
-    if s.chars().count() <= max_chars {
-        s.to_string()
-    } else {
-        let mut out: String = s
-            .chars()
-            .take(max_chars.saturating_sub(1))
-            .collect();
-        out.push('…');
-        out
+/// Format helper that writes `s` straight into the formatter, truncating
+/// to `max_chars` with an ellipsis. Avoids the intermediate `String`
+/// allocation that the old `truncate_display` returned.
+struct TruncatedTitle<'a>(&'a str, usize);
+
+impl<'a> std::fmt::Display for TruncatedTitle<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = self.0;
+        let max_chars = self.1;
+        if s.chars().count() <= max_chars {
+            f.write_str(s)
+        } else {
+            for ch in s.chars().take(max_chars.saturating_sub(1)) {
+                f.write_char(ch)?;
+            }
+            f.write_char('…')
+        }
     }
 }
