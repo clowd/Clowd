@@ -128,6 +128,17 @@ struct InputState {
     /// Whether the debug/instrumentation panels are displayed. Toggled by
     /// the D key (`DxScreenCapture.cpp:1209-1213`). Defaults to `false`.
     debug_visible: bool,
+    /// Master overlay switch. Toggled by Q
+    /// (`DxScreenCapture.cpp:1234-1239`; the legacy flag was named
+    /// `data.crosshair`, but it actually gates every overlay the app
+    /// draws). While `false`, the fade, selection rect, crosshair, tips,
+    /// debug, and panel are all suppressed and left-clicks are ignored —
+    /// a raw passthrough preview of the desktop under our borderless
+    /// windows. `finalise_selection` unconditionally flips this back to
+    /// `true` per `.cpp:1818`, so the dim / selection border / panel
+    /// reappear for the captured UI even if the user entered capture
+    /// from Q-passthrough mode.
+    overlays_visible: bool,
 }
 
 pub struct App {
@@ -226,6 +237,7 @@ impl App {
                 drag_anchor_selection: None,
                 tips_visible: true,
                 debug_visible: false,
+                overlays_visible: true,
             },
         }
     }
@@ -332,6 +344,7 @@ impl App {
             accent_color: self.settings.crosshair_color,
             tips_visible: self.input.tips_visible,
             debug_visible: self.input.debug_visible,
+            overlays_visible: self.input.overlays_visible,
             hovered_monitor_name,
             hovered_window_title: self.cached_hovered_title.clone(),
             hovered_window_bounds,
@@ -341,6 +354,53 @@ impl App {
         for h in self.windows.values() {
             h.update_ui_state(state.clone());
         }
+    }
+
+    /// Programmatic counterpart to the mouse-up finalisation at
+    /// `MouseInput::Released`. Mirrors `FrameMakeSelection` from
+    /// `DxScreenCapture.cpp:1812-1850`: sets the selection, clobbers
+    /// drag state, snaps zoom to 1, tears down the anchor, enters
+    /// captured state, re-enables overlays (so the dim / selection
+    /// border / panel reappear even if the user entered capture from
+    /// Q-passthrough mode), hit-tests against the new rect, sets the
+    /// cursor icon, and broadcasts.
+    ///
+    /// Called by the W/F/A key handlers. The mouse-up path keeps its
+    /// own inline finalisation because it has drag-specific edge cases
+    /// (the `was_move_drag` off-screen cancel branch, the `finalising`
+    /// guard against panel button clicks) that don't apply to
+    /// programmatic entry.
+    fn finalise_selection(&mut self, rect: ScreenRect, window: &Window) {
+        self.input.selection = Some(rect);
+        self.input.mouse_down = false;
+        self.input.mouse_down_pt = None;
+        self.input.dragging = false;
+        self.input.drag_mode = None;
+        self.input.drag_anchor_selection = None;
+        self.input.captured = true;
+        self.input.overlays_visible = true;
+
+        // Snap zoom back to 1 and tear down the anchor (cpp:1816).
+        if self.input.anchored {
+            self.input.anchored = false;
+            self.input.anchor_just_engaged = false;
+            let restore = ScreenPoint::new(
+                self.input.virtual_cursor.x.floor() as i32,
+                self.input.virtual_cursor.y.floor() as i32,
+            );
+            SystemInterop::set_mouse_position(restore);
+        }
+        self.input.zoom = 1.0;
+
+        // Immediately hit-test against the new selection so the cursor
+        // flips to the right resize/move icon without a mouse wiggle.
+        let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
+        let ht = hit_test(self.input.virtual_cursor, rect, dpi);
+        self.input.hittest = ht;
+        window.set_cursor(ht.cursor());
+
+        self.broadcast_ui_state();
+        self.broadcast_mouse_state();
     }
 
     /// Reset the selection and return to draw mode.
@@ -492,6 +552,7 @@ impl ApplicationHandler for App {
             drag_anchor_selection: None,
             tips_visible: true,
             debug_visible: false,
+            overlays_visible: true,
         };
         self.monitors = captured.monitors.clone();
         self.vd_bounds = captured.bounds;
@@ -735,12 +796,69 @@ impl ApplicationHandler for App {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
                             self.dispatch_command(cmd, event_loop, handle_window);
                         }
-                    } else if c_lower == 't' {
-                        // Toggle the Tips & Hotkeys overlay. Mirrors
-                        // `DxScreenCapture.cpp:1248-1251` — the T key
-                        // is a no-op once a selection has been captured.
-                        self.input.tips_visible = !self.input.tips_visible;
-                        self.broadcast_ui_state();
+                    } else if self.input.mouse_down {
+                        // Mid-drag: W/F/A/Q/T are all no-ops. The user is
+                        // actively drawing a selection with the mouse;
+                        // swallow the key so we don't clobber the
+                        // in-progress gesture.
+                    } else {
+                        match c_lower {
+                            // Toggle the Tips & Hotkeys overlay. Mirrors
+                            // `DxScreenCapture.cpp:1248-1251`.
+                            't' => {
+                                self.input.tips_visible = !self.input.tips_visible;
+                                self.broadcast_ui_state();
+                            }
+                            // Toggle the master overlay switch — all
+                            // dim / crosshair / selection / tips / debug /
+                            // panel rendering disappears so the desktop
+                            // shows through. `broadcast_mouse_state` is
+                            // also called so the render thread reruns
+                            // `update_uniforms` with the new flag and
+                            // immediately zeroes the shader uniforms.
+                            // Mirrors `DxScreenCapture.cpp:1234-1239`.
+                            'q' => {
+                                self.input.overlays_visible = !self.input.overlays_visible;
+                                self.broadcast_ui_state();
+                                self.broadcast_mouse_state();
+                            }
+                            // Select the window under the cursor. No-op
+                            // if no window is hit (walker returns None
+                            // over bare desktop). Mirrors
+                            // `DxScreenCapture.cpp:1294-1299`.
+                            'w' => {
+                                let pt = ScreenPoint::new(
+                                    self.input.virtual_cursor.x.round() as i32,
+                                    self.input.virtual_cursor.y.round() as i32,
+                                );
+                                if let Some(rect) = self.walker.as_ref().and_then(|w| w.hit_test(pt)) {
+                                    self.finalise_selection(rect, handle_window);
+                                }
+                            }
+                            // Select the monitor under the cursor.
+                            // Mirrors `DxScreenCapture.cpp:1215-1221`.
+                            'f' => {
+                                let pt = ScreenPoint::new(
+                                    self.input.virtual_cursor.x.round() as i32,
+                                    self.input.virtual_cursor.y.round() as i32,
+                                );
+                                if let Some(bounds) = self
+                                    .monitors
+                                    .iter()
+                                    .find(|m| m.bounds.contains(pt))
+                                    .map(|m| m.bounds)
+                                {
+                                    self.finalise_selection(bounds, handle_window);
+                                }
+                            }
+                            // Select the whole virtual desktop (union of
+                            // all monitors). Mirrors
+                            // `DxScreenCapture.cpp:1191-1196`.
+                            'a' => {
+                                self.finalise_selection(self.vd_bounds, handle_window);
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -929,6 +1047,13 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
+                // Q-passthrough mode: ignore left-clicks so the raw
+                // desktop preview is truly non-interactive. Mirrors
+                // `DxScreenCapture.cpp:1344-1345` ("short-circuit if no
+                // cursor") and `.cpp:1201`.
+                if !self.input.overlays_visible {
+                    return;
+                }
                 match state {
                     ElementState::Pressed => {
                         if self.input.captured {

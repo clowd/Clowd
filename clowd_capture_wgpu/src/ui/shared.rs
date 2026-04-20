@@ -45,6 +45,11 @@ pub struct UiSharedState {
     pub accent_color: [f32; 4],
     pub tips_visible: bool,
     pub debug_visible: bool,
+    /// Master overlay switch. When `false`, every UI overlay (tips,
+    /// debug, panel, selection border, crosshair, dim) is suppressed so
+    /// the desktop shows through unobstructed. Toggled by the Q key
+    /// (`DxScreenCapture.cpp:1234-1239`).
+    pub overlays_visible: bool,
     pub hovered_monitor_name: Option<String>,
     pub hovered_window_title: Option<String>,
     pub hovered_window_bounds: Option<ScreenRect>,
@@ -77,6 +82,9 @@ pub struct PanelVisibility {
 /// Decide whether the button panel is visible and where. Pure function —
 /// the app thread and every render thread call this with the same state.
 pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
+    if !state.overlays_visible {
+        return None;
+    }
     if !state.captured {
         return None;
     }
@@ -91,6 +99,9 @@ pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
 
 /// Decide whether the tips panel is visible and on which monitor.
 pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
+    if !state.overlays_visible {
+        return None;
+    }
     if state.captured || state.mouse_down || !state.tips_visible {
         return None;
     }
@@ -106,13 +117,16 @@ pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
 /// on **every** monitor when the `D`-key toggle is on, mirroring
 /// `DxScreenCapture.cpp:915-933`.
 pub fn debug_monitor_visibility(state: &UiSharedState, _this: &UiMonitor) -> bool {
-    state.debug_visible
+    state.overlays_visible && state.debug_visible
 }
 
 /// Whether the primary (cursor-follow) debug panel is visible on `this`
 /// monitor. Shown on exactly one monitor — the one containing the virtual
 /// cursor. Mirrors `DxScreenCapture.cpp:935-977`.
 pub fn debug_primary_visibility(state: &UiSharedState, this: &UiMonitor) -> bool {
+    if !state.overlays_visible {
+        return false;
+    }
     if !state.debug_visible {
         return false;
     }
