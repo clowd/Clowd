@@ -14,9 +14,7 @@
 //! Click routing runs on the app thread via the same shared layout
 //! function — this renderer never sends anything back.
 
-use glyphon::{
-    Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap,
-};
+use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Wrap};
 
 use crate::geometry::RectExt;
 use crate::ui::components::panel::layout::PanelLayout;
@@ -40,22 +38,6 @@ const HOVER_OVERLAY_STRENGTH: f32 = 0.30;
 /// Speed of the exponential ease-out on hover transitions. `12.0` matches
 /// the old `animation.rs` value (~200 ms to reach 90 % of target at 60 FPS).
 const HOVER_ANIM_SPEED: f32 = 12.0;
-
-/// SVG byte blobs per button, in `BUTTON_DEFS` order. Embedded at build
-/// time via the existing `panel::assets` module so this doesn't duplicate
-/// the include_bytes paths.
-fn svg_blob(i: usize) -> &'static [u8] {
-    use crate::ui::components::panel::assets::*;
-    match i {
-        0 => SVG_UPLOAD,
-        1 => SVG_EDIT,
-        2 => SVG_VIDEO,
-        3 => SVG_COPY,
-        4 => SVG_SAVE,
-        5 => SVG_RESET,
-        _ => SVG_EXIT,
-    }
-}
 
 /// One glyphon buffer + content cache for change detection.
 struct CachedBuffer {
@@ -157,9 +139,10 @@ impl PanelRenderer {
     pub fn new(device: &wgpu::Device, svg: &SvgPipeline, ts: &mut TextStack) -> Self {
         // Tessellate all 7 SVGs up-front.
         let usvg_opts = usvg::Options::default();
+        let defs = button_defs();
         let mut icons: Vec<SvgMesh> = Vec::with_capacity(NUM_SVG_BUTTONS);
         for i in 0..NUM_SVG_BUTTONS {
-            let tree = match usvg::Tree::from_data(svg_blob(i), &usvg_opts) {
+            let tree = match usvg::Tree::from_data(defs[i].svg_bytes, &usvg_opts) {
                 Ok(t) => t,
                 Err(e) => {
                     log::error!("failed to parse SVG for button {i}: {e:?}");

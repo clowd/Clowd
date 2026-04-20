@@ -34,12 +34,6 @@ use crate::ui::shared::{tips_visibility, UiMonitor, UiSharedState};
 const BASE_OPACITY: f32 = 0.70;
 /// Shadow strip opacity — black * this alpha.
 const SHADOW_ALPHA: f32 = 0.30;
-/// Cursor sentinel mapping `use_left_fallback=true` back to a cursor the
-/// shared layout fn will classify identically. Arbitrary — the rules in
-/// `compute_layout` only compare cursor vs thresholds, not absolute
-/// position.
-const CURSOR_FAR: f32 = f32::MAX;
-const CURSOR_NEAR: f32 = f32::MIN;
 
 /// Cached glyphon buffer + last-rendered content for change detection.
 struct CachedBuffer {
@@ -233,15 +227,6 @@ impl TipsRenderer {
         let title_height = title_px * 0.7;
 
         let primary = target.bounds;
-        let cursor_val = if state.virtual_cursor.x > 0.0 {
-            CURSOR_FAR
-        } else {
-            CURSOR_NEAR
-        };
-        // Use the REAL cursor via the shared layout so `use_left_fallback`
-        // is computed correctly. That function is pure, and same-input
-        // produces same layout on every render thread.
-        let _ = cursor_val;
         let Some(layout) = compute_tips_layout(
             primary,
             state.virtual_cursor,
