@@ -16,6 +16,61 @@ use crate::ui::shared::{UiMonitor, UiSharedState};
 /// pop, over 700ms feels sluggish.
 const FADE_DURATION_SECS: f32 = 0.3;
 
+/// MSAA sample count applied to every render pipeline in the frame. 4
+/// is the maximum guaranteed across wgpu's supported formats (the
+/// WebGPU spec requires support for counts 1 and 4 on Bgra8Unorm; many
+/// devices including Apple Silicon top out at 4). Higher counts would
+/// mean a runtime-queried value threaded through the pipelines; not
+/// worth the complexity until a user reports visibly stepped edges
+/// that SSAA can't fix.
+pub const MSAA_SAMPLES: u32 = 4;
+
+/// MSAA-resolve color target. Every color attachment in the frame renders
+/// into this texture at `MSAA_SAMPLES` samples and resolves into the
+/// swapchain view on pass store — the final swapchain texture only ever
+/// sees the already-resolved pixels. Recreated on `Resize`.
+struct MsaaTarget {
+    view: wgpu::TextureView,
+    width: u32,
+    height: u32,
+}
+
+impl MsaaTarget {
+    fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        let tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("msaa color target"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: MSAA_SAMPLES,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+        Self {
+            view,
+            width,
+            height,
+        }
+    }
+
+    fn ensure(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32) {
+        if self.width != w || self.height != h {
+            *self = Self::new(device, format, w, h);
+        }
+    }
+}
+
 /// Messages the main thread can send to a render thread.
 pub enum RenderMsg {
     Resize(PhysicalSize<u32>),
@@ -272,6 +327,8 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
     let mut ui_renderer =
         UiRenderer::new(&gpu.device, &gpu.queue, gpu.surface_format, this_monitor);
 
+    let mut msaa = MsaaTarget::new(&gpu.device, gpu.surface_format, config.width, config.height);
+
     // Frame 0 — render once before the window is revealed so the first
     // visible frame has content. On macOS the window starts at alpha=0;
     // on Windows it starts hidden. Either way, this frame is never seen
@@ -282,6 +339,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         &config,
         snapshot_state.as_ref(),
         &mut ui_renderer,
+        &msaa,
     );
     // Wait for all submitted GPU work to complete so the presented
     // drawable is fully resolved before the window becomes visible.
@@ -326,6 +384,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
                     config.width = new_size.width.max(1);
                     config.height = new_size.height.max(1);
                     surface.configure(&gpu.device, &config);
+                    msaa.ensure(&gpu.device, gpu.surface_format, config.width, config.height);
                 }
                 Ok(RenderMsg::MouseState {
                     pos,
@@ -371,6 +430,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             &config,
             snapshot_state.as_ref(),
             &mut ui_renderer,
+            &msaa,
         );
     }
 }
@@ -477,6 +537,7 @@ fn draw_once(
     config: &wgpu::SurfaceConfiguration,
     snapshot_state: Option<&SnapshotState>,
     ui_renderer: &mut UiRenderer,
+    msaa: &MsaaTarget,
 ) {
     let frame = match surface.get_current_texture() {
         wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
@@ -496,12 +557,17 @@ fn draw_once(
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("frame encoder"),
         });
+    // Both passes write into the MSAA color target and resolve into
+    // the swapchain view on Store. Doing it in both passes (instead of
+    // only the final one) keeps the MSAA target self-consistent while
+    // the render pass is open — the resolve on Store is what actually
+    // fills the swapchain texture.
     {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("desktop pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
+                view: &msaa.view,
+                resolve_target: Some(&view),
                 depth_slice: None,
                 ops: wgpu::Operations {
                     // Dark fallback for the no-snapshot path. With a
@@ -530,11 +596,13 @@ fn draw_once(
 
     // Second render pass: the UI renderer draws all components that
     // belong on this monitor on top of the just-drawn desktop/selection
-    // layer.
+    // layer. We pass the MSAA view; the UI renderer sets up its own
+    // color attachment with `resolve_target: Some(&view)` internally.
     ui_renderer.render(
         &gpu.device,
         &gpu.queue,
         &mut encoder,
+        &msaa.view,
         &view,
         (config.width, config.height),
     );

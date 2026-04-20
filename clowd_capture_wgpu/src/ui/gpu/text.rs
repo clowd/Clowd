@@ -55,7 +55,11 @@ impl TextStack {
         let renderer = TextRenderer::new(
             &mut atlas,
             device,
-            wgpu::MultisampleState::default(),
+            wgpu::MultisampleState {
+                count: crate::render::MSAA_SAMPLES,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
             None,
         );
 
