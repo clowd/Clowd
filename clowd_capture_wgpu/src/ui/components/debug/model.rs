@@ -1,24 +1,35 @@
 //! Debug-panel content models.
 //!
 //! Two structs (`MonitorPanelData`, `PrimaryPanelData`) hold everything
-//! the two debug panels display, with `Display` impls that produce the
-//! line-by-line text exactly matching the C++ format strings at
-//! `DxScreenCapture.cpp:915-977`.
+//! the two debug panels display.
 
 use std::time::Duration;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
-use crate::ui::components::debug::perf::{PerfStats, PerfTracker};
+use crate::ui::components::debug::perf::{PerfStats, PerfTracker, Series};
 use crate::ui::components::debug::startup::StartupTimings;
 
 fn fmt_rect(r: ScreenRect) -> String {
     format!("RECT[{}, {}, {}, {}]", r.left(), r.top(), r.width(), r.height())
 }
 
-fn fmt_stats(label: &str, s: PerfStats) -> String {
+/// Render one stats row with a left-justified label column and
+/// percentile / 1%-low columns. The caller guarantees `label` is <=
+/// `LABEL_WIDTH`; wider labels wrap the columns but still read clearly.
+fn fmt_stats_row(label: &str, s: PerfStats) -> String {
+    const LABEL_WIDTH: usize = 7;
+    if s.count == 0 {
+        return format!("{:<width$} n/a", label, width = LABEL_WIDTH);
+    }
     format!(
-        "{} avg: {:.2}, min: {:.2}, max: {:.2} // sd: {:.2} ({} samples)",
-        label, s.avg_ms, s.min_ms, s.max_ms, s.stdev_ms, s.count
+        "{:<width$} p50 {:>5.2}  p95 {:>5.2}  p99 {:>5.2}  low1 {:>5.2} ({})",
+        label,
+        s.p50_ms,
+        s.p95_ms,
+        s.p99_ms,
+        s.low1_ms,
+        s.count,
+        width = LABEL_WIDTH,
     )
 }
 
@@ -26,9 +37,21 @@ fn fmt_ms(d: Duration) -> String {
     format!("{:.2}ms", d.as_secs_f64() * 1000.0)
 }
 
-/// Everything rendered in the top-left "Monitor Info" panel, built fresh
-/// on every frame the panel is visible. Field order matches the C++
-/// layout at `DxScreenCapture.cpp:915-933`.
+fn fmt_session_elapsed(d: Duration) -> String {
+    let secs = d.as_secs();
+    let h = secs / 3600;
+    let m = (secs / 60) % 60;
+    let s = secs % 60;
+    if h > 0 {
+        format!("{}h{:02}m{:02}s", h, m, s)
+    } else if m > 0 {
+        format!("{}m{:02}s", m, s)
+    } else {
+        format!("{}s", s)
+    }
+}
+
+/// Everything rendered in the top-left "Monitor Info" panel.
 pub struct MonitorPanelData<'a> {
     pub index: usize,
     pub name: &'a str,
@@ -36,21 +59,17 @@ pub struct MonitorPanelData<'a> {
     pub adapter: &'a str,
     pub dpi: u32,
     pub bounds: ScreenRect,
-    pub time_to_render: Duration,
-    /// Wall-clock offset at which THIS display rendered frame 0 (the
-    /// first frame ever, rendered hidden and then revealed by
-    /// `show_windows_atomically`). C++ parity: `to_time_ms(t0, trender)`
-    /// in `DxScreenCapture.cpp:925`. `None` only in the vanishing
-    /// window before frame 0 completes on this thread.
     pub time_to_first_render: Option<Duration>,
     pub perf: &'a PerfTracker,
+    /// Target frame period from the monitor's refresh rate, used to show
+    /// the effective refresh in the header. `None` when unknown.
+    pub target_period: Option<Duration>,
 }
 
 impl<'a> MonitorPanelData<'a> {
-    /// Build one `String` per panel line. Order: header, adapter, dpi,
-    /// pos, blank, time_to_render, fps/dropped, blank, 4 perf stat blocks.
+    /// Build one `String` per panel line.
     pub fn lines(&self) -> Vec<String> {
-        let mut out = Vec::with_capacity(12);
+        let mut out = Vec::with_capacity(16);
 
         let header = if self.is_primary {
             format!("{}: {} (PRIMARY)", self.index, self.name)
@@ -59,7 +78,14 @@ impl<'a> MonitorPanelData<'a> {
         };
         out.push(header);
         out.push(self.adapter.to_string());
-        out.push(format!("dpi: {}", self.dpi));
+        let dpi_line = match self.target_period {
+            Some(p) => {
+                let hz = 1.0 / p.as_secs_f64();
+                format!("dpi: {}  refresh: {:.0} Hz", self.dpi, hz)
+            }
+            None => format!("dpi: {}", self.dpi),
+        };
+        out.push(dpi_line);
         out.push(format!("pos: {}", fmt_rect(self.bounds)));
         let first_render_line = match self.time_to_first_render {
             Some(d) => format!("first render: {}", fmt_ms(d)),
@@ -67,34 +93,63 @@ impl<'a> MonitorPanelData<'a> {
         };
         out.push(first_render_line);
         out.push(String::new());
-        out.push(format!("time_to_render: {}", fmt_ms(self.time_to_render)));
 
-        let overall = self.perf.stats(|s| s.overall);
-        let fps = if overall.avg_ms > 0.0 { 1000.0 / overall.avg_ms } else { 0.0 };
-        // C++ shows `fps: 0120, dropped: 0`. We don't track dropped
-        // frames today (DXGI GetFrameStatistics would be invasive through
-        // wgpu); placeholder matches the format for visual parity.
-        out.push(format!("fps: {:04.0}, dropped: {}", fps, 0));
+        let overall = self.perf.stats(Series::Overall);
+        // Headline FPS uses only the recent tail so the number feels
+        // live; the full-window average shows up in the stats row.
+        let recent_ms = self.perf.recent_overall_avg().as_secs_f64() * 1000.0;
+        let fps = if recent_ms > 0.0 { 1000.0 / recent_ms } else { 0.0 };
+        let low1_fps = if overall.low1_ms > 0.0 { 1000.0 / overall.low1_ms } else { 0.0 };
+        let session = self.perf.session();
+        out.push(format!(
+            "fps: {:04.0}  1%low: {:04.0}  dropped: {}  session: {}",
+            fps,
+            low1_fps,
+            session.drops,
+            fmt_session_elapsed(session.started.elapsed()),
+        ));
         out.push(String::new());
 
-        out.push(fmt_stats("wait", self.perf.stats(|s| s.wait)));
-        out.push(fmt_stats("draw", self.perf.stats(|s| s.draw)));
-        out.push(fmt_stats("present", self.perf.stats(|s| s.present)));
-        out.push(fmt_stats("overall", overall));
+        // cpu  = CPU work from "drawable acquired" to "frame.present()
+        //        returned" (= draw + present). The time the CPU is
+        //        actually doing work for this frame.
+        // gpu  = GPU execution time for this frame's commands.
+        // With `frame_latency: 1` the next frame's drawable can't be
+        // acquired until this frame's GPU work finishes, so the
+        // critical path is `cpu + gpu`; the budget to stay vsync-locked
+        // at 60 Hz is `cpu + gpu ≤ 16.67 ms`, *per frame*, every frame.
+        // overall = wall-clock frame time (= 1/fps). The gap between
+        // `cpu + gpu` and `overall` is vsync slack (what used to show
+        // up as `wait`).
+        out.push(fmt_stats_row("cpu", self.perf.stats(Series::Cpu)));
+        let gpu = self.perf.stats(Series::Gpu);
+        if gpu.count > 0 {
+            out.push(fmt_stats_row("gpu", gpu));
+        } else {
+            out.push("gpu     n/a".to_string());
+        }
+        out.push(fmt_stats_row("overall", overall));
+
+        // Session footer: per-series lifetime min/max for the overall
+        // series, plus total frame count.
+        out.push(String::new());
+        if session.seen[Series::Overall as usize] {
+            let min = session.min_ms[Series::Overall as usize];
+            let max = session.max_ms[Series::Overall as usize];
+            out.push(format!(
+                "session overall: min {:.2}  max {:.2}  frames {}",
+                min, max, session.total_frames,
+            ));
+        } else {
+            out.push(format!("session frames: {}", session.total_frames));
+        }
         out
     }
 }
 
-/// Everything rendered in the top-right "Primary Debug" panel. Shown only
-/// on the monitor containing the virtual cursor. Mirrors
-/// `DxScreenCapture.cpp:935-977`.
+/// Everything rendered in the top-right "Primary Debug" panel.
 pub struct PrimaryPanelData<'a> {
     pub startup: &'a StartupTimings,
-    /// Wall-clock offset at which every window became visible atomically
-    /// — the "user can see anything" moment, same value on every
-    /// display. This marks the END of startup; the total at the top of
-    /// the block is this value when available. Per-display render time
-    /// lives on the Monitor Info panel instead.
     pub shown_time: Option<Duration>,
     pub zoom: f32,
     pub cursor: ScreenPointF,
@@ -110,12 +165,6 @@ impl<'a> PrimaryPanelData<'a> {
     pub fn lines(&self) -> Vec<String> {
         let mut out = Vec::with_capacity(16);
 
-        // Startup block. Total = `shown_time` when available — that's
-        // when the user can first see anything, i.e. when startup is
-        // effectively complete. Falls back to the latest recorded phase
-        // while we're still bootstrapping. Each sub-line is the *delta*
-        // from the previous phase so you can read elapsed-per-stage at
-        // a glance instead of mentally subtracting cumulative offsets.
         let total = self
             .shown_time
             .unwrap_or_else(|| self.startup.total());
@@ -168,9 +217,6 @@ impl<'a> PrimaryPanelData<'a> {
     }
 }
 
-/// Clip a string for on-screen display. Windows titles can be long
-/// ("Mozilla Firefox — file:///very/long/path/…"); chopping them avoids
-/// pushing the panel past its max width and wrapping.
 fn truncate_display(s: &str, max_chars: usize) -> String {
     if s.chars().count() <= max_chars {
         s.to_string()

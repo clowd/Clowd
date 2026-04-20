@@ -10,6 +10,7 @@
 //!   * [`renderer`] — the top-level `UiRenderer` (Phase 2)
 
 pub mod debug;
+pub mod gpu_timing;
 pub mod panel;
 pub mod rect;
 pub mod renderer;

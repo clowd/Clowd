@@ -10,6 +10,7 @@ use crate::gpu::{WindowGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
 use crate::ui::components::debug::perf::{PerfSample, PerfTracker};
 use crate::ui::components::debug::startup::StartupTimings;
+use crate::ui::gpu::gpu_timing::GpuTimings;
 use crate::ui::gpu::UiRenderer;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
@@ -227,11 +228,6 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         visible_barrier,
     } = params;
     let adapter_name = gpu.adapter_name.clone();
-    // `refresh_hz` is accepted (and logged) for future use — DXGI's waitable
-    // object handles the actual pacing, so we don't need the value for timing.
-    // If we ever port to a non-DX12 backend we'll need an explicit sleep
-    // fallback here that uses it.
-    let _ = refresh_hz;
 
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -348,7 +344,14 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
     // Frame-timing tracker for the debug panel. Thread-local: this
     // render thread both produces and consumes the samples, so there's
     // no reason to route them through the cross-thread broadcast.
-    let mut perf = PerfTracker::new();
+    // `refresh_hz` gives us a target frame period for dropped-frame
+    // detection and a reference line in the sparkline.
+    let mut perf = PerfTracker::new_with_refresh(refresh_hz);
+
+    // GPU-side timestamp queries. `None` on backends / adapters that
+    // don't expose `TIMESTAMP_QUERY`; the debug panel renders an `n/a`
+    // row in that case.
+    let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
 
     let mut msaa = MsaaTarget::new(&gpu.device, gpu.surface_format, config.width, config.height);
 
@@ -364,6 +367,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         &mut ui_renderer,
         &perf,
         &msaa,
+        None,
         &mut None,
     );
     // Wait for all submitted GPU work to complete so the presented
@@ -467,6 +471,22 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             );
         }
 
+        // Drive mapping callbacks from the wgpu device forward. Cheap
+        // (Poll, not Wait); map_async callbacks won't fire otherwise and
+        // the GPU-timing ring would stall.
+        if gpu_timing.is_some() {
+            let _ = gpu.device.poll(wgpu::PollType::Poll);
+        }
+
+        // Drain any GPU timing results that have become readable since
+        // last frame and attach them to pending CPU samples (FIFO —
+        // oldest sample without a GPU time gets the oldest result).
+        if let Some(gt) = gpu_timing.as_mut() {
+            for gpu_dur in gt.poll_completed() {
+                perf.backfill_next_gpu(gpu_dur);
+            }
+        }
+
         // Timing bracket: `overall` is the gap between consecutive loop
         // iterations (reciprocal ≈ FPS). Sampled here so it survives
         // early-returns from `draw_once`.
@@ -489,6 +509,7 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             &mut ui_renderer,
             &perf,
             &msaa,
+            gpu_timing.as_ref(),
             &mut sample,
         );
         if let Some(mut s) = sample {
@@ -624,6 +645,7 @@ fn draw_once(
     ui_renderer: &mut UiRenderer,
     perf: &PerfTracker,
     msaa: &MsaaTarget,
+    gpu_timing: Option<&GpuTimings>,
     out_sample: &mut Option<PerfSample>,
 ) {
     // Wait sample — `get_current_texture()` blocks on the DXGI waitable
@@ -651,6 +673,16 @@ fn draw_once(
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("frame encoder"),
         });
+
+    // Reserve a timestamp-query slot for this frame if the GPU-timing
+    // ring has a free one. When it's full (shouldn't happen in steady
+    // state) we skip timestamps for this frame rather than stall.
+    let begin_frame = gpu_timing.and_then(|gt| gt.begin_frame());
+    let (desktop_ts, ui_ts, slot_id) = match &begin_frame {
+        Some(bf) => (Some(bf.desktop.clone()), Some(bf.ui.clone()), Some(bf.id)),
+        None => (None, None, None),
+    };
+
     // Both passes write into the MSAA color target and resolve into
     // the swapchain view on Store. Doing it in both passes (instead of
     // only the final one) keeps the MSAA target self-consistent while
@@ -677,7 +709,7 @@ fn draw_once(
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes: desktop_ts,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -700,10 +732,18 @@ fn draw_once(
         &view,
         (config.width, config.height),
         perf,
+        ui_ts,
     );
+
+    if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
+        gt.resolve(&mut encoder, id);
+    }
 
     gpu.queue
         .submit(std::iter::once(encoder.finish()));
+    if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
+        gt.after_submit(id);
+    }
     let draw = t_draw_start.elapsed();
 
     let t_present_start = Instant::now();
@@ -715,5 +755,6 @@ fn draw_once(
         draw,
         present,
         overall: std::time::Duration::ZERO,
+        gpu: None,
     });
 }
