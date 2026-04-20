@@ -64,7 +64,8 @@ impl UiRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
+        msaa_view: &wgpu::TextureView,
+        resolve_view: &wgpu::TextureView,
         viewport_px: (u32, u32),
     ) {
         let now = Instant::now();
@@ -115,8 +116,8 @@ impl UiRenderer {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("ui pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                resolve_target: None,
+                view: msaa_view,
+                resolve_target: Some(resolve_view),
                 depth_slice: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,

@@ -190,7 +190,11 @@ impl SvgPipeline {
                 ..Default::default()
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState {
+                count: crate::render::MSAA_SAMPLES,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
             multiview_mask: None,
             cache: None,
         });
@@ -457,9 +461,14 @@ fn walk_group(
                     a,
                 ];
                 let transform = node.abs_transform();
+                // tolerance is in SVG viewBox units (typically ~100
+                // per icon); 0.02 keeps curve approximation error below
+                // ~0.005 px at the 26-px icon render size. Higher values
+                // produce visible chords on the tight bezier curves in
+                // the refresh/upload icons.
                 let _ = tess.tessellate(
                     convert_path(p),
-                    &FillOptions::tolerance(0.2),
+                    &FillOptions::tolerance(0.02),
                     &mut BuffersBuilder::new(mesh, Ctor { color, transform }),
                 );
             }
