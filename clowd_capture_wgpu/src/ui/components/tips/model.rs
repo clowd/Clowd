@@ -59,10 +59,34 @@ pub const HOTKEY_GAP: &str = "   ";
 /// `DxScreenCapture.cpp` which uses the string "n/a" in the same case.
 pub const FALLBACK: &str = "n/a";
 
+/// Max characters (inclusive) before the window title is truncated with an
+/// ellipsis. Keeps long titles from expanding the panel beyond `MIN_PANEL_WIDTH`.
+const WINDOW_TITLE_MAX: usize = 32;
+
+/// Max characters (inclusive) before the monitor name is truncated.
+const MONITOR_NAME_MAX: usize = 28;
+
+fn truncate_ellipsis(s: &str, max_chars: usize) -> String {
+    let mut iter = s.chars();
+    let head: String = iter
+        .by_ref()
+        .take(max_chars)
+        .collect();
+    if iter.next().is_some() {
+        let mut out: String = head.chars().take(max_chars.saturating_sub(1)).collect();
+        out.push('…');
+        out
+    } else {
+        head
+    }
+}
+
 /// Render the body of a single tip row (description only, without hotkey
 /// or gap) with runtime substitutions applied.
 pub fn render_description(template: &str, hovered_window: Option<&str>, hovered_monitor: Option<&str>) -> String {
+    let window = hovered_window.map(|s| truncate_ellipsis(s, WINDOW_TITLE_MAX));
+    let monitor = hovered_monitor.map(|s| truncate_ellipsis(s, MONITOR_NAME_MAX));
     template
-        .replace("{window}", hovered_window.unwrap_or(FALLBACK))
-        .replace("{monitor}", hovered_monitor.unwrap_or(FALLBACK))
+        .replace("{window}", window.as_deref().unwrap_or(FALLBACK))
+        .replace("{monitor}", monitor.as_deref().unwrap_or(FALLBACK))
 }
