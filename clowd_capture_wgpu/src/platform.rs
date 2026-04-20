@@ -88,3 +88,79 @@ pub fn show_windows_atomically<'a>(windows: impl Iterator<Item = &'a std::sync::
         w.set_visible(true);
     }
 }
+
+/// Accumulator + opaque monitor-token for the macOS pinch event tap.
+///
+/// winit 0.30's `magnifyWithEvent:` override ignores events whose
+/// `NSEvent.phase()` isn't `Began/Changed/Ended/Cancelled`
+/// (winit src `view.rs:709-716`). In practice macOS delivers magnify
+/// events with other phases — in particular while a mouse button is
+/// held down during a drag — and winit silently drops them, so
+/// `WindowEvent::PinchGesture` never fires during a drag.
+///
+/// To work around this we install an application-level NSEvent local
+/// monitor on `NSEventMask::Magnify`. The monitor reads
+/// `magnification()` directly, accumulates it into a shared `f64`,
+/// and returns `nil` to swallow the event so winit's NSView override
+/// never sees it (avoids double processing).
+///
+/// The accumulator is drained from the main event loop and turned
+/// into a `zoom *= 1 + delta` application; phase is irrelevant.
+pub struct PinchMonitor {
+    #[cfg(target_os = "macos")]
+    accum: std::sync::Arc<std::sync::Mutex<f64>>,
+    #[cfg(target_os = "macos")]
+    _token: objc2::rc::Retained<objc2::runtime::AnyObject>,
+}
+
+#[cfg(target_os = "macos")]
+pub fn install_pinch_monitor() -> Option<PinchMonitor> {
+    use block2::RcBlock;
+    use core::ptr::NonNull;
+    use objc2_app_kit::{NSEvent, NSEventMask};
+    use std::sync::{Arc, Mutex};
+
+    let accum = Arc::new(Mutex::new(0.0f64));
+    let accum_clone = accum.clone();
+
+    // The block is invoked on the main thread by AppKit as magnify
+    // events are dispatched. We must return a `*mut NSEvent` — nil to
+    // drop the event, or the event itself to let it continue. We
+    // always drop so the unified pinch pipeline lives entirely in
+    // `App::drain_pinch_accum`.
+    let block = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+        let mag = unsafe { event.as_ref().magnification() };
+        if let Ok(mut g) = accum_clone.lock() {
+            *g += mag;
+        }
+        core::ptr::null_mut()
+    });
+
+    let token = unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::Magnify, &block)
+    }?;
+
+    Some(PinchMonitor { accum, _token: token })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn install_pinch_monitor() -> Option<PinchMonitor> {
+    None
+}
+
+impl PinchMonitor {
+    /// Consume and return the accumulated pinch delta since the
+    /// previous drain. Called once per main-loop tick.
+    #[cfg(target_os = "macos")]
+    pub fn drain(&self) -> f64 {
+        let mut g = self.accum.lock().unwrap();
+        let v = *g;
+        *g = 0.0;
+        v
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn drain(&self) -> f64 {
+        0.0
+    }
+}

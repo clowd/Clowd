@@ -216,6 +216,14 @@ pub struct App {
     /// — before this point the user sees nothing, so it's the most
     /// meaningful "time to first render" value across the app.
     shown_time: Arc<OnceLock<Duration>>,
+    /// macOS-only: application-level NSEvent monitor for pinch (magnify)
+    /// gestures. Bypasses winit's `magnifyWithEvent:` phase filter so
+    /// pinch-to-zoom fires even while a mouse button is held during a
+    /// drag selection — which is when winit drops the events. See
+    /// `platform::install_pinch_monitor` for rationale. `None` on
+    /// non-macOS or if installation failed (in which case pinch falls
+    /// back to the winit `WindowEvent::PinchGesture` path).
+    pinch_monitor: Option<platform::PinchMonitor>,
 }
 
 struct PendingShow {
@@ -239,6 +247,7 @@ impl App {
             startup: Arc::new(StartupTimings::default()),
             startup_builder: startup,
             shown_time: Arc::new(OnceLock::new()),
+            pinch_monitor: None,
             // Real values are written in `resumed()` once we know where
             // the primary monitor is and where the cursor currently sits.
             // Zero here is a placeholder that never gets broadcast.
@@ -545,6 +554,13 @@ impl ApplicationHandler for App {
             return;
         }
 
+        // Install the application-level pinch monitor (no-op on non-macOS).
+        // Must happen after NSApp is up, which is guaranteed by the time
+        // `resumed` fires.
+        if self.pinch_monitor.is_none() {
+            self.pinch_monitor = platform::install_pinch_monitor();
+        }
+
         // 1. Capture the virtual desktop FIRST, before any winit window
         //    exists. Hidden windows are not normally composited by DWM, but
         //    capturing before any window creation eliminates the possibility
@@ -760,6 +776,18 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Drain any accumulated magnify delta collected by the macOS
+        // pinch monitor since the last iteration. Applying it here
+        // (rather than inline in the monitor callback) keeps all
+        // `InputState` mutation on the event-loop thread. `drain` is a
+        // no-op and returns 0.0 on non-macOS.
+        if let Some(ref m) = self.pinch_monitor {
+            let delta = m.drain();
+            if delta != 0.0 && !self.input.captured {
+                self.apply_zoom_factor(1.0 + delta as f32);
+            }
+        }
+
         // Check if all render threads have finished frame 0. If so,
         // reveal the windows (set_visible / snap alpha), release the
         // visible barrier so render threads start the colour→grayscale
