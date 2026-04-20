@@ -51,11 +51,6 @@ pub struct PanelLayout {
     pub area_rect: ScreenRect,
     /// Clickable button rects in the same order as `BUTTON_DEFS`.
     pub buttons: [ScreenRect; NUM_SVG_BUTTONS],
-    /// The full panel bounding box (union of `area_rect` and all
-    /// `buttons`). Cached because both backends need it for hit-testing
-    /// and for converting the panel rect into the backend's local
-    /// coordinate space.
-    pub panel_rect: ScreenRect,
 }
 
 impl PanelLayout {
@@ -170,11 +165,6 @@ pub fn compute_layout(
         PanelOrientation::Horizontal => long_edge_px,
         PanelOrientation::Vertical => short_edge_px,
     };
-    let vertical_size = match orientation {
-        PanelOrientation::Horizontal => short_edge_px,
-        PanelOrientation::Vertical => long_edge_px,
-    };
-
     // Clip the left edge so the panel stays on-screen. Matches the
     // C++ horizontal clip at lines 166-169. The vertical clip is
     // implicit in the `min(screenBounds.GetBottom(), …)` pattern above
@@ -188,8 +178,6 @@ pub fn compute_layout(
     }
 
     let panel_top = ind_top;
-    let panel_rect =
-        ScreenRect::from_xy_size(panel_left, panel_top, horizontal_size, vertical_size);
 
     // Place the area indicator at the panel's origin, then walk the
     // buttons after it along the major axis (x for Horizontal, y for
@@ -230,10 +218,6 @@ pub fn compute_layout(
         }
     }
 
-    Some(PanelLayout {
-        area_rect,
-        buttons,
-        panel_rect,
-    })
+    Some(PanelLayout { area_rect, buttons })
 }
 

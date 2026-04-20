@@ -57,19 +57,10 @@ pub struct TipsLayout {
     pub color_hex_y: f32,
     /// Panel-local y for the `rgb(R, G, B)` baseline.
     pub color_rgb_y: f32,
-    /// DPI scale this layout was computed at.
-    pub dpi_scale: f32,
     /// Width / height (px) of the drop-shadow strip extending out of
-    /// the panel's right and bottom edges. The bake pixmap is enlarged
-    /// by this on the right and bottom so the shadow has somewhere to
-    /// sit. Mirrors `paddingHalf` in DxScreenCapture.cpp:784-787.
+    /// the panel's right and bottom edges. Mirrors `paddingHalf` in
+    /// DxScreenCapture.cpp:784-787.
     pub shadow_extension_px: f32,
-    /// `true` if the cursor occupies the bottom-right quadrant where
-    /// the default right-anchored panel would sit, so we fell back to
-    /// anchoring bottom-left. The component lifts this into its
-    /// hashed `State` so the cursor itself (which changes every mouse
-    /// move) can stay out of the hash.
-    pub use_left_fallback: bool,
 }
 
 /// Compute panel placement and internal metrics.
@@ -189,8 +180,6 @@ pub fn compute_layout(
         color_hex_x,
         color_hex_y,
         color_rgb_y,
-        dpi_scale: dpi,
         shadow_extension_px: padding_half,
-        use_left_fallback,
     })
 }
