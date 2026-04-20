@@ -126,6 +126,7 @@ impl DebugRenderer {
         perf: &PerfTracker,
         startup: &StartupTimings,
         shown_time: Option<Duration>,
+        time_to_first_render: Option<Duration>,
         rects: &mut Vec<RectInstance>,
     ) {
         self.positions.clear();
@@ -151,6 +152,7 @@ impl DebugRenderer {
                 dpi: (dpi * 96.0).round() as u32,
                 bounds: this_monitor.bounds,
                 time_to_render: latest_overall,
+                time_to_first_render,
                 perf,
             };
             let text_lines = data.lines();

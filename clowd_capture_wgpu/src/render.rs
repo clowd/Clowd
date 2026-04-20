@@ -373,6 +373,13 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         timeout: Some(std::time::Duration::from_secs(5)),
     });
 
+    // Record "this display's frame 0 is fully rendered" the instant GPU
+    // work completes. Matches C++ `trender` semantics (`DxScreenCapture.cpp:1018`),
+    // which is set after frame 0's EndDraw — BEFORE `ShowWindow`. The
+    // Monitor Info panel's `first render` readout is this minus
+    // `startup.t_start`.
+    ui_renderer.mark_first_visible_frame();
+
     // Signal the main thread that this render thread's frame 0 is done.
     ready_count.fetch_add(1, std::sync::atomic::Ordering::Release);
 
