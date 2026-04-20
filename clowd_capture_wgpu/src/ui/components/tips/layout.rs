@@ -21,7 +21,7 @@ pub const PADDING_HALF: f32 = 10.0;
 pub const PADDING: f32 = PADDING_HALF * 2.0;
 
 /// Minimum panel width (pre-DPI). `DxScreenCapture.cpp:771`.
-pub const MIN_PANEL_WIDTH: f32 = 450.0;
+pub const MIN_PANEL_WIDTH: f32 = 400.0;
 
 /// Body font size in pixels at 100% DPI. `DxScreenCapture.cpp:436`.
 pub const BODY_FONT_PX: f32 = 12.0;
@@ -105,7 +105,7 @@ pub fn compute_layout(
     // the 2×height swatch butts up against the adjacent text rows
     // otherwise.
     let body_lines = 4.0 + 3.0 + 2.0;
-    let color_row_gap = padding_half;
+    let color_row_gap = padding_half * 0.4;
     let body_h = body_row_height_px * body_lines + padding * 2.0 + color_row_gap * 2.0;
 
     // Title bar height: cap-height + half padding above + half padding below.
@@ -142,7 +142,10 @@ pub fn compute_layout(
     // Inner layout (panel-local coordinates).
     let body_top = title_h;
     let col_hotkey_x = padding;
-    let col_desc_x = padding + body_row_height_px * 2.2;
+    // Visually align the description column with the start of description
+    // text in the monospace body rows: the hotkey char + 3-space `HOTKEY_GAP`
+    // = 4 char-widths ≈ 1.7 × row height at Cascadia 12 px.
+    let col_desc_x = padding + body_row_height_px * 1.75;
 
     // Each tip block starts a row's height after the previous one.
     let top_block_y = body_top + padding;
