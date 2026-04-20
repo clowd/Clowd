@@ -44,6 +44,11 @@ pub struct UiRenderer {
     /// instant `show_windows_atomically` returns; every render thread's
     /// debug panel reads it. Remains `None` until that moment.
     shown_time: Arc<OnceLock<Duration>>,
+    /// Offset from `startup.t_start` at which THIS display rendered its
+    /// first visible (post-barrier) frame. Captured in
+    /// `mark_first_visible_frame` on the render thread, after the
+    /// visible barrier releases. `None` until then.
+    time_to_first_render: Option<Duration>,
 }
 
 impl UiRenderer {
@@ -79,11 +84,21 @@ impl UiRenderer {
             adapter_name,
             startup,
             shown_time,
+            time_to_first_render: None,
         }
     }
 
     pub fn set_state(&mut self, state: Arc<UiSharedState>) {
         self.state = Some(state);
+    }
+
+    /// Record the wall-clock offset (from `startup.t_start`) at which
+    /// this display rendered its first visible frame. Call exactly once
+    /// per render thread, after the visible barrier releases. Subsequent
+    /// calls are no-ops so the first-frame time stays captured.
+    pub fn mark_first_visible_frame(&mut self) {
+        self.time_to_first_render
+            .get_or_insert_with(|| self.startup.t_start.elapsed());
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -127,6 +142,7 @@ impl UiRenderer {
             perf,
             &self.startup,
             self.shown_time.get().copied(),
+            self.time_to_first_render,
             &mut rect_instances,
         );
 

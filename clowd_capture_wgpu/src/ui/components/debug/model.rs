@@ -37,6 +37,12 @@ pub struct MonitorPanelData<'a> {
     pub dpi: u32,
     pub bounds: ScreenRect,
     pub time_to_render: Duration,
+    /// Wall-clock offset at which THIS display rendered frame 0 (the
+    /// first frame ever, rendered hidden and then revealed by
+    /// `show_windows_atomically`). C++ parity: `to_time_ms(t0, trender)`
+    /// in `DxScreenCapture.cpp:925`. `None` only in the vanishing
+    /// window before frame 0 completes on this thread.
+    pub time_to_first_render: Option<Duration>,
     pub perf: &'a PerfTracker,
 }
 
@@ -55,6 +61,11 @@ impl<'a> MonitorPanelData<'a> {
         out.push(self.adapter.to_string());
         out.push(format!("dpi: {}", self.dpi));
         out.push(format!("pos: {}", fmt_rect(self.bounds)));
+        let first_render_line = match self.time_to_first_render {
+            Some(d) => format!("first render: {}", fmt_ms(d)),
+            None => "first render: ...".to_string(),
+        };
+        out.push(first_render_line);
         out.push(String::new());
         out.push(format!("time_to_render: {}", fmt_ms(self.time_to_render)));
 
@@ -79,10 +90,11 @@ impl<'a> MonitorPanelData<'a> {
 /// `DxScreenCapture.cpp:935-977`.
 pub struct PrimaryPanelData<'a> {
     pub startup: &'a StartupTimings,
-    /// Wall-clock offset (from app `main()` entry) at which every window
-    /// became visible atomically — the single "user can see anything"
-    /// moment, same value on every display. `None` until the show call
-    /// has fired (only observable on the vanishing first few frames).
+    /// Wall-clock offset at which every window became visible atomically
+    /// — the "user can see anything" moment, same value on every
+    /// display. This marks the END of startup; the total at the top of
+    /// the block is this value when available. Per-display render time
+    /// lives on the Monitor Info panel instead.
     pub shown_time: Option<Duration>,
     pub zoom: f32,
     pub cursor: ScreenPointF,
@@ -98,26 +110,35 @@ impl<'a> PrimaryPanelData<'a> {
     pub fn lines(&self) -> Vec<String> {
         let mut out = Vec::with_capacity(16);
 
-        // Startup block — matches the C++ `startup: XX.XXms total` +
-        // indented sub-lines.
-        out.push(format!("startup: {} total", fmt_ms(self.startup.total())));
+        // Startup block. Total = `shown_time` when available — that's
+        // when the user can first see anything, i.e. when startup is
+        // effectively complete. Falls back to the latest recorded phase
+        // while we're still bootstrapping. Each sub-line is the *delta*
+        // from the previous phase so you can read elapsed-per-stage at
+        // a glance instead of mentally subtracting cumulative offsets.
+        let total = self
+            .shown_time
+            .unwrap_or_else(|| self.startup.total());
+        out.push(format!("startup: {} total", fmt_ms(total)));
+
+        let mut prev = Duration::ZERO;
+        let mut push_phase = |out: &mut Vec<String>, label: &str, offset: Duration| {
+            let delta = offset.saturating_sub(prev);
+            out.push(format!("  {} +{}", label, fmt_ms(delta)));
+            prev = offset;
+        };
         if let Some(d) = self.startup.t_initialize {
-            out.push(format!("  - {} (initialize)", fmt_ms(d)));
+            push_phase(&mut out, "initialize    ", d);
         }
         if let Some(d) = self.startup.t_desktop_search {
-            out.push(format!("  - {} (desktop search)", fmt_ms(d)));
+            push_phase(&mut out, "desktop search", d);
         }
         if let Some(d) = self.startup.t_window_create {
-            out.push(format!("  - {} (window create)", fmt_ms(d)));
+            push_phase(&mut out, "window create ", d);
         }
-        // "All windows visible" moment — the single instant at which the
-        // user can first see anything. Captured on the main thread right
-        // after `show_windows_atomically`. Same value on every display.
-        let shown_line = match self.shown_time {
-            Some(d) => format!("  - {} (shown)", fmt_ms(d)),
-            None => "  - ... (shown)".to_string(),
-        };
-        out.push(shown_line);
+        if let Some(d) = self.shown_time {
+            push_phase(&mut out, "shown         ", d);
+        }
         out.push(String::new());
 
         out.push(format!("zoom: {:.2}", self.zoom));
