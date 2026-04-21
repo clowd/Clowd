@@ -563,20 +563,42 @@ impl SnapshotState {
 
         // Q-passthrough mode (`DxScreenCapture.cpp:526-533, 903-908`):
         // feed neutral uniforms so the shader draws the raw desktop
-        // colour with no fade / selection rect / crosshair. The shader
-        // already treats an empty selection rect and an off-screen
-        // cursor as "don't draw", so no shader changes are needed.
+        // colour with no fade / selection rect / crosshair. The
+        // magnifier stays live, though — Q is meant to act as a pure
+        // magnifier (no UI chrome, but the desktop is still zoomable),
+        // so `uv_offset_scale` still gets the zoom-around-cursor
+        // transform folded in instead of being reset to the un-zoomed
+        // base.
         if !overlays_visible {
             self.uniforms.params[0] = 0.0;
+            let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;
+            let local_y = mouse_pos.y - monitor_bounds.min_y() as f32;
             // Off-screen cursor → integer-equality crosshair test
-            // misses on every pixel, so no crosshair arms draw.
+            // misses on every pixel, so no crosshair arms draw. The
+            // zoom math below uses the real `local_x`/`local_y`, not
+            // these sentinels.
             self.uniforms.params[1] = -1.0;
             self.uniforms.params[2] = -1.0;
-            self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
+            if zoom <= 1.0 {
+                self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
+            } else {
+                let w = surface_size.0 as f32;
+                let h = surface_size.1 as f32;
+                let cu = local_x / w;
+                let cv = local_y / h;
+                let k = 1.0 - 1.0 / zoom;
+                let base = self.base_uv_offset_scale;
+                self.uniforms.uv_offset_scale = [
+                    base[0] + base[2] * cu * k,
+                    base[1] + base[3] * cv * k,
+                    base[2] / zoom,
+                    base[3] / zoom,
+                ];
+            }
             self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
             self.uniforms.selection_params[0] = elapsed;
             self.uniforms.selection_params[1] = 0.0;
-            self.uniforms.selection_params[2] = 1.0;
+            self.uniforms.selection_params[2] = zoom;
             queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
             return;
         }
