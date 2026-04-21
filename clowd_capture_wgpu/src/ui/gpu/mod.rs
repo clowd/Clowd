@@ -8,6 +8,7 @@
 //!   * [`tips`]   — per-frame tips-panel draw
 //!   * [`renderer`] — the top-level `UiRenderer`
 
+pub mod area;
 pub mod debug;
 pub mod gpu_timing;
 pub mod icon;
