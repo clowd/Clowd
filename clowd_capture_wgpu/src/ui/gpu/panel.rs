@@ -321,8 +321,12 @@ impl PanelRenderer {
             let icon_top = t + v_gap;
             let label_width = self.buffers[IDX_LABEL_BASE + i].width();
             let label_x = l + (bw / 2.0) - (label_width / 2.0);
-            let label_lift = (2.0 * dpi).round();
-            let label_y = icon_top + icon_size + v_gap - label_lift;
+            // Round Y to the pixel grid. glyphon's `physical()` truncates
+            // the Y component (cosmic-text `layout.rs`) to hint on the
+            // baseline; feeding it a fractional `top` causes the text to
+            // snap one pixel upward. At low DPI (Windows 100%) that pixel
+            // is a full logical pixel and the label drifts visibly high.
+            let label_y = (icon_top + icon_size + v_gap).round();
             self.positions.push(PositionedText {
                 buffer_idx: IDX_LABEL_BASE + i,
                 x: label_x,
@@ -353,22 +357,24 @@ impl PanelRenderer {
         let ah = ab - at;
         let area_line_h = area_px * 1.2;
 
+        // Round Y so glyphon's `truncf` hinting doesn't steal a pixel.
+        // See the label block above for the full rationale.
         self.positions.push(PositionedText {
             buffer_idx: IDX_WIDTH,
             x: al + (aw - width_w) * 0.5,
-            y: at + (ah / 4.0) - area_line_h * 0.5,
+            y: (at + (ah / 4.0) - area_line_h * 0.5).round(),
             color: [0xFF, 0xFF, 0xFF, 0xFF],
         });
         self.positions.push(PositionedText {
             buffer_idx: IDX_CROSS,
             x: al + (aw - cross_w) * 0.5,
-            y: at + (ah / 2.0) - area_line_h * 0.5,
+            y: (at + (ah / 2.0) - area_line_h * 0.5).round(),
             color: [0xFF, 0xFF, 0xFF, (0.70 * 255.0) as u8],
         });
         self.positions.push(PositionedText {
             buffer_idx: IDX_HEIGHT,
             x: al + (aw - height_w) * 0.5,
-            y: at + (ah * 3.0 / 4.0) - area_line_h * 0.5,
+            y: (at + (ah * 3.0 / 4.0) - area_line_h * 0.5).round(),
             color: [0xFF, 0xFF, 0xFF, 0xFF],
         });
     }
