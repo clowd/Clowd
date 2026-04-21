@@ -15,6 +15,7 @@ use core_graphics::geometry::CGRect;
 use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
+use crate::system::MonitorInfo;
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;
@@ -36,7 +37,7 @@ impl WindowWalker {
     ///
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
-    pub fn snapshot() -> Self {
+    pub fn snapshot(monitors: &[MonitorInfo]) -> Self {
         let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
         let window_list = match window::copy_window_info(options, kCGNullWindowID) {
             Some(list) => list,
@@ -53,7 +54,7 @@ impl WindowWalker {
 
         for ptr in ptrs {
             let dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(ptr as CFDictionaryRef) };
-            if let Some(entry) = evaluate_window(&dict, &windows) {
+            if let Some(entry) = evaluate_window(&dict, &windows, monitors) {
                 windows.push(entry);
             }
         }
@@ -89,7 +90,11 @@ impl WindowWalker {
 // Per-window evaluation
 // ---------------------------------------------------------------------------
 
-fn evaluate_window(dict: &CFDictionary, accepted: &[WindowEntry]) -> Option<WindowEntry> {
+fn evaluate_window(
+    dict: &CFDictionary,
+    accepted: &[WindowEntry],
+    monitors: &[MonitorInfo],
+) -> Option<WindowEntry> {
     // 1. Layer == 0 (normal windows only; skip menu bar, dock, overlays).
     let layer = get_number_i64(dict, unsafe { window::kCGWindowLayer })?;
     if layer != 0 {
@@ -104,18 +109,33 @@ fn evaluate_window(dict: &CFDictionary, accepted: &[WindowEntry]) -> Option<Wind
 
     // 3. Parse bounds from the kCGWindowBounds sub-dictionary.
     let bounds_ptr = get_raw_value(dict, unsafe { window::kCGWindowBounds })?;
-    let bounds_dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
+    let bounds_dict: CFDictionary =
+        unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
     let cg_rect = CGRect::from_dict_representation(&bounds_dict)?;
 
-    // 4. Convert logical CG points → physical pixels.
+    // 4. Convert logical CG points → physical pixels using MonitorInfo.
     let center_x = cg_rect.origin.x + cg_rect.size.width / 2.0;
     let center_y = cg_rect.origin.y + cg_rect.size.height / 2.0;
-    let scale = display_scale_at_logical_point(center_x, center_y) as f64;
 
-    let phys_x = (cg_rect.origin.x * scale).round() as i32;
-    let phys_y = (cg_rect.origin.y * scale).round() as i32;
-    let phys_w = (cg_rect.size.width * scale).round() as i32;
-    let phys_h = (cg_rect.size.height * scale).round() as i32;
+    let (phys_x, phys_y, phys_w, phys_h) =
+        if let Some(m) = find_monitor_for_cg_point(center_x, center_y, monitors) {
+            let (ox, oy) = m.logical_origin;
+            let s = m.scale_factor as f64;
+            (
+                m.bounds.min_x() + ((cg_rect.origin.x - ox) * s).round() as i32,
+                m.bounds.min_y() + ((cg_rect.origin.y - oy) * s).round() as i32,
+                (cg_rect.size.width * s).round() as i32,
+                (cg_rect.size.height * s).round() as i32,
+            )
+        } else {
+            let scale = display_scale_at_logical_point(center_x, center_y) as f64;
+            (
+                (cg_rect.origin.x * scale).round() as i32,
+                (cg_rect.origin.y * scale).round() as i32,
+                (cg_rect.size.width * scale).round() as i32,
+                (cg_rect.size.height * scale).round() as i32,
+            )
+        };
 
     // 5. Size threshold.
     if phys_w < MIN_WINDOW_SIZE || phys_h < MIN_WINDOW_SIZE {
@@ -132,14 +152,28 @@ fn evaluate_window(dict: &CFDictionary, accepted: &[WindowEntry]) -> Option<Wind
     // Read the window title (kCGWindowName), defaulting to empty string.
     let title = get_raw_value(dict, unsafe { window::kCGWindowName })
         .map(|ptr| {
-            let cf_str: CFString = unsafe { TCFType::wrap_under_get_rule(ptr as core_foundation::string::CFStringRef) };
+            let cf_str: CFString = unsafe {
+                TCFType::wrap_under_get_rule(
+                    ptr as core_foundation::string::CFStringRef,
+                )
+            };
             cf_str.to_string()
         })
         .unwrap_or_default();
 
-    Some(WindowEntry {
-        rect,
-        title,
+    Some(WindowEntry { rect, title })
+}
+
+fn find_monitor_for_cg_point<'a>(
+    x: f64,
+    y: f64,
+    monitors: &'a [MonitorInfo],
+) -> Option<&'a MonitorInfo> {
+    monitors.iter().find(|m| {
+        let (ox, oy) = m.logical_origin;
+        let lw = m.bounds.width() as f64 / m.scale_factor as f64;
+        let lh = m.bounds.height() as f64 / m.scale_factor as f64;
+        x >= ox && x < ox + lw && y >= oy && y < oy + lh
     })
 }
 
