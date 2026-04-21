@@ -14,7 +14,8 @@
 //! Click routing runs on the app thread via the same shared layout
 //! function — this renderer never sends anything back.
 
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Wrap};
+use cosmic_text::{Attrs, Buffer, Color, Family, Metrics, Shaping, Wrap};
+use super::text::{TextArea, TextBounds};
 
 use crate::geometry::RectExt;
 use crate::ui::components::panel::layout::PanelLayout;
@@ -403,7 +404,6 @@ impl PanelRenderer {
                 bottom: vh,
             },
             default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
-            custom_glyphs: &[],
         }));
     }
 }

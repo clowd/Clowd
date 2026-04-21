@@ -408,11 +408,12 @@ dependencies = [
  "bytemuck",
  "core-foundation 0.10.1",
  "core-graphics 0.25.0",
- "etagere 0.2.15",
+ "cosmic-text",
+ "etagere",
  "euclid",
- "glyphon",
  "image",
  "log",
+ "lru",
  "num",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
@@ -420,7 +421,9 @@ dependencies = [
  "pollster",
  "resvg",
  "rfd",
+ "rustc-hash 2.1.2",
  "simplelog",
+ "swash",
  "tiny-skia 0.12.0",
  "usvg",
  "wgpu",
@@ -821,15 +824,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "etagere"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ecb5c40d5683a270e077688f53a99eac51c1cb1ae5ba63b55590370cb3536bf"
-dependencies = [
- "euclid",
-]
-
-[[package]]
 name = "euclid"
 version = "0.22.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,19 +1071,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c4ee00b289aba7a9e5306d57c2d05499b2e5dc427f84ac708bd2c090212cf3e"
 dependencies = [
  "gl_generator",
-]
-
-[[package]]
-name = "glyphon"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68dde9640ec6f986f59a265b4c0a5177f61e87e3ba71983b2195dab119cda0fa"
-dependencies = [
- "cosmic-text",
- "etagere 0.3.0",
- "lru",
- "rustc-hash 2.1.2",
- "wgpu",
 ]
 
 [[package]]
@@ -1496,6 +1477,9 @@ name = "lru"
 version = "0.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f66e8d5d03f609abc3a39e6f08e4164ebf1447a732906d39eb9b99b7919ef39"
+dependencies = [
+ "hashbrown 0.16.1",
+]
 
 [[package]]
 name = "lyon_geom"

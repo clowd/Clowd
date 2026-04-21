@@ -179,27 +179,20 @@ impl UiRenderer {
                 .prepare(device, queue, viewport_px, atlas, &icon_draws);
         }
 
-        // Gather text areas into a single Vec so the glyphon prepare
-        // step sees one contiguous slice. With_capacity(48) covers the
-        // worst case (tips + panel + debug panels + sparkline labels)
-        // so the Vec never grows.
-        let mut text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(48);
+        let mut text_areas: Vec<super::text::TextArea<'_>> = Vec::with_capacity(48);
         self.tips.text_areas(viewport_px, &mut text_areas);
         self.panel.text_areas(viewport_px, &mut text_areas);
         self.debug.text_areas(viewport_px, &mut text_areas);
         self.any_text = match self.text.prepare(device, queue, &text_areas) {
             Ok(b) => b,
             Err(e) => {
-                log::warn!("glyphon prepare error: {:?}", e);
+                log::warn!("text prepare error: {:?}", e);
                 false
             }
         };
         self.has_prepared = true;
     }
 
-    /// Issue UI draw calls into an already-open render pass. The caller
-    /// is responsible for having invoked [`UiRenderer::prepare`] earlier
-    /// in the frame on the same instance, with the same viewport.
     pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>) {
         if !self.has_prepared {
             return;
@@ -207,14 +200,10 @@ impl UiRenderer {
         self.rect.draw(rpass);
         self.icon.draw(rpass);
         if self.any_text {
-            if let Err(e) = self.text.draw(rpass) {
-                log::warn!("glyphon render error: {:?}", e);
-            }
+            self.text.draw(rpass);
         }
     }
 
-    /// Free glyphon atlas entries that went unused this frame. Safe to
-    /// call even when `prepare` skipped the frame (no-op in that case).
     pub fn trim(&mut self) {
         self.text.trim();
     }

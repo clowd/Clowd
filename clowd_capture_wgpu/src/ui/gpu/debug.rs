@@ -6,7 +6,8 @@
 //!   * **Primary Debug** — drawn only on the cursor's monitor, anchored
 //!     top-right. Text-only.
 
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
+use cosmic_text::{Attrs, Buffer, Color, Family, Metrics, Shaping, Weight, Wrap};
+use super::text::{TextArea, TextBounds};
 
 use crate::geometry::{RectExt, ScreenRect};
 use crate::ui::components::debug::layout::{compute_layout, DebugPanelLayout, PanelAnchor, BODY_FONT_PX};
@@ -226,7 +227,6 @@ impl DebugRenderer {
                 bottom: vh,
             },
             default_color: p.color,
-            custom_glyphs: &[],
         }));
     }
 }
