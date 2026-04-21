@@ -89,6 +89,11 @@ pub struct WindowWalker {
     windows: Vec<WindowEntry>,
 }
 
+// SAFETY: WindowWalker holds HWND values which are plain integer handles.
+// They are safe to send/share across threads on Windows.
+unsafe impl Send for WindowWalker {}
+unsafe impl Sync for WindowWalker {}
+
 impl WindowWalker {
     /// Enumerate all visible top-level windows on the current virtual desktop.
     ///
