@@ -211,6 +211,14 @@ impl App {
         for h in self.windows.values() {
             h.window.set_visible(true);
         }
+        self.update_cursor_visibility();
+    }
+
+    fn update_cursor_visibility(&self) {
+        let visible = self.input.captured || self.input.debug_visible;
+        for h in self.windows.values() {
+            h.window.set_cursor_visible(visible);
+        }
     }
 
     fn current_panel_layout(&self) -> Option<crate::ui::components::panel::layout::PanelLayout> {
@@ -295,6 +303,7 @@ impl App {
         self.input.drag_anchor_selection = None;
         self.input.captured = true;
         self.input.overlays_visible = true;
+        self.update_cursor_visibility();
 
         if self.input.anchored {
             self.input.anchored = false;
@@ -322,6 +331,7 @@ impl App {
         self.input.hittest = Hittest::Outside;
         self.input.drag_mode = None;
         self.input.drag_anchor_selection = None;
+        self.update_cursor_visibility();
 
         self.broadcast_ui_state();
 
@@ -533,6 +543,7 @@ impl ApplicationHandler for App {
         if let Some(ref pending) = self.pending_show {
             if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
                 platform::show_windows_atomically(self.windows.values().map(|h| &h.window));
+                self.update_cursor_visibility();
                 let _ = self.shown_time.set(self.startup.t_start.elapsed());
                 if let Some(first_id) = self.monitor_window_ids.first() {
                     if let Some(h) = self.windows.get(first_id) {
@@ -585,6 +596,7 @@ impl ApplicationHandler for App {
                     let c_lower = c.to_ascii_lowercase();
                     if c_lower == 'd' {
                         self.input.debug_visible = !self.input.debug_visible;
+                        self.update_cursor_visibility();
                         self.broadcast_ui_state();
                     } else if self.input.captured {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
@@ -816,11 +828,13 @@ impl ApplicationHandler for App {
                         {
                             self.input.captured = false;
                             self.input.hittest = Hittest::Outside;
+                            self.update_cursor_visibility();
                             handle_window.set_cursor(CursorIcon::Default);
                             self.broadcast_ui_state();
                         }
                         if finalising {
                             self.input.captured = true;
+                            self.update_cursor_visibility();
                             if self.input.anchored {
                                 self.input.anchored = false;
                                 self.input.anchor_just_engaged = false;
