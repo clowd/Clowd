@@ -1,4 +1,4 @@
-use crate::geometry::{RectExt, ScreenRect};
+use crate::geometry::ScreenRect;
 use anyhow::Result;
 use std::{mem, ops::Deref, ptr};
 use windows::{
@@ -9,9 +9,7 @@ use windows::{
             BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateDCW, DeleteDC, DeleteObject, GetDIBits, GetWindowDC, ReleaseDC,
             SelectObject, BITMAPINFO, BITMAPINFOHEADER, CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, SRCCOPY,
         },
-        UI::WindowsAndMessaging::{
-            GetDesktopWindow, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
-        },
+        UI::WindowsAndMessaging::GetDesktopWindow,
     },
 };
 
@@ -159,19 +157,9 @@ fn read_dibits_bgra(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, h
     Ok(bgra)
 }
 
-pub fn virtual_desktop() -> ScreenRect {
+pub fn capture_desktop(bounds: &ScreenRect) -> Result<DesktopBitmap> {
     unsafe {
-        let vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        let vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        let vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        let vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-        ScreenRect::from_xy_size(vx, vy, vw, vh)
-    }
-}
-
-pub fn capture_desktop() -> Result<DesktopBitmap> {
-    unsafe {
-        let bounds = virtual_desktop();
+        let bounds = *bounds;
         let vx = bounds.min_x();
         let vy = bounds.min_y();
         let vw = bounds.width();

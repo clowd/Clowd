@@ -1,6 +1,6 @@
 use core_graphics::display::{CGDisplay, CGPoint};
 
-use crate::geometry::ScreenPoint;
+use crate::geometry::{LogicalPoint, ScreenPoint};
 use crate::system::MonitorInfo;
 
 extern "C" {
@@ -11,20 +11,16 @@ extern "C" {
 }
 
 pub fn get_position(monitors: &[MonitorInfo]) -> ScreenPoint {
-    let logical_pt = unsafe {
+    let cg_pt = unsafe {
         let event = CGEventCreate(std::ptr::null());
         let pt = CGEventGetLocation(event);
         CFRelease(event);
         pt
     };
+    let logical_pt = LogicalPoint::new(cg_pt.x, cg_pt.y);
 
     if let Some(m) = find_monitor_for_logical_point(logical_pt, monitors) {
-        let (ox, oy) = m.logical_origin;
-        let s = m.scale_factor as f64;
-        ScreenPoint::new(
-            m.bounds.min_x() + ((logical_pt.x - ox) * s).round() as i32,
-            m.bounds.min_y() + ((logical_pt.y - oy) * s).round() as i32,
-        )
+        m.logical_to_screen(logical_pt)
     } else {
         let s = fallback_scale(monitors) as f64;
         ScreenPoint::new(
@@ -36,12 +32,8 @@ pub fn get_position(monitors: &[MonitorInfo]) -> ScreenPoint {
 
 pub fn set_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
     let logical_pt = if let Some(m) = find_monitor_for_physical_point(pos, monitors) {
-        let (ox, oy) = m.logical_origin;
-        let s = m.scale_factor as f64;
-        CGPoint::new(
-            ox + (pos.x - m.bounds.min_x()) as f64 / s,
-            oy + (pos.y - m.bounds.min_y()) as f64 / s,
-        )
+        let lp = m.screen_to_logical(pos);
+        CGPoint::new(lp.x, lp.y)
     } else {
         let s = fallback_scale(monitors) as f64;
         CGPoint::new(pos.x as f64 / s, pos.y as f64 / s)
@@ -54,11 +46,12 @@ pub fn set_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
 }
 
 fn find_monitor_for_logical_point<'a>(
-    pt: CGPoint,
+    pt: LogicalPoint,
     monitors: &'a [MonitorInfo],
 ) -> Option<&'a MonitorInfo> {
     monitors.iter().find(|m| {
-        let (ox, oy) = m.logical_origin;
+        let ox = m.logical_origin.x;
+        let oy = m.logical_origin.y;
         let lw = m.bounds.width() as f64 / m.scale_factor as f64;
         let lh = m.bounds.height() as f64 / m.scale_factor as f64;
         pt.x >= ox && pt.x < ox + lw && pt.y >= oy && pt.y < oy + lh

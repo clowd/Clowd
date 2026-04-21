@@ -4,8 +4,6 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
-#[cfg(not(target_os = "macos"))]
-use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
@@ -13,7 +11,7 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
-use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded};
+use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded, WindowPoint};
 use crate::gpu;
 use crate::img::{self, ActionResult};
 use crate::platform;
@@ -471,31 +469,15 @@ impl ApplicationHandler for App {
             let width = m.bounds.size.width.max(1) as u32;
             let height = m.bounds.size.height.max(1) as u32;
 
-            // On macOS, window frames are in CG logical points. Use the
-            // stored CG origin directly and derive logical size from the
-            // physical pixel dimensions.
-            #[cfg(target_os = "macos")]
-            let (win_pos, win_size) = {
-                let s = m.scale_factor as f64;
-                let pos: winit::dpi::Position = winit::dpi::LogicalPosition::new(
-                    m.logical_origin.0,
-                    m.logical_origin.1,
-                )
-                .into();
-                let size: winit::dpi::Size = winit::dpi::LogicalSize::new(
-                    width as f64 / s,
-                    height as f64 / s,
-                )
-                .into();
-                (pos, size)
-            };
-            #[cfg(not(target_os = "macos"))]
-            let (win_pos, win_size) = {
-                let pos: winit::dpi::Position =
-                    PhysicalPosition::new(m.bounds.origin.x, m.bounds.origin.y).into();
-                let size: winit::dpi::Size = PhysicalSize::new(width, height).into();
-                (pos, size)
-            };
+            let logical_pos = m.screen_to_logical(ScreenPoint::new(
+                m.bounds.origin.x,
+                m.bounds.origin.y,
+            ));
+            let logical_size = m.physical_to_logical_size(width, height);
+            let win_pos: winit::dpi::Position =
+                winit::dpi::LogicalPosition::new(logical_pos.x, logical_pos.y).into();
+            let win_size: winit::dpi::Size =
+                winit::dpi::LogicalSize::new(logical_size.width, logical_size.height).into();
 
             #[allow(unused_mut)]
             let mut attrs = Window::default_attributes()
@@ -693,9 +675,10 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let bounds = handle_monitor_bounds;
+                let win_pt = WindowPoint::new(position.x as f32, position.y as f32);
                 let os_vd = ScreenPoint::new(
-                    bounds.min_x() + position.x.round() as i32,
-                    bounds.min_y() + position.y.round() as i32,
+                    bounds.min_x() + win_pt.x.round() as i32,
+                    bounds.min_y() + win_pt.y.round() as i32,
                 );
 
                 if self.input.anchored {
