@@ -21,15 +21,15 @@ use crate::ui::components::debug::perf::PerfTracker;
 use crate::ui::components::debug::startup::StartupTimings;
 use crate::ui::gpu::debug::DebugRenderer;
 use crate::ui::gpu::panel::PanelRenderer;
+use crate::ui::gpu::icon::{IconInstance, IconPipeline};
 use crate::ui::gpu::rect::{RectInstance, RectPipeline};
-use crate::ui::gpu::svg::{SvgInstance, SvgPipeline};
 use crate::ui::gpu::text::TextStack;
 use crate::ui::gpu::tips::TipsRenderer;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
 pub struct UiRenderer {
     rect: RectPipeline,
-    svg: SvgPipeline,
+    icon: IconPipeline,
     text: TextStack,
     tips: TipsRenderer,
     panel: PanelRenderer,
@@ -75,14 +75,14 @@ impl UiRenderer {
         shown_time: Arc<OnceLock<Duration>>,
     ) -> Self {
         let rect = RectPipeline::new(device, surface_format);
-        let svg = SvgPipeline::new(device, surface_format);
+        let icon = IconPipeline::new(device, surface_format);
         let mut text = TextStack::new(device, queue, surface_format);
         let tips = TipsRenderer::new(&mut text);
-        let panel = PanelRenderer::new(device, &svg, &mut text);
+        let panel = PanelRenderer::new(&mut text);
         let debug = DebugRenderer::new(monitor_index);
         Self {
             rect,
-            svg,
+            icon,
             text,
             tips,
             panel,
@@ -153,12 +153,12 @@ impl UiRenderer {
         // capacity means zero growth allocations for the typical
         // frame.
         let mut rect_instances: Vec<RectInstance> = Vec::with_capacity(512);
-        let mut svg_draws: Vec<(usize, SvgInstance)> = Vec::with_capacity(16);
+        let mut icon_draws: Vec<IconInstance> = Vec::with_capacity(16);
 
         self.tips
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.panel
-            .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances, &mut svg_draws, dt);
+            .prepare(device, queue, &mut self.text, &state, &self.this_monitor, &mut rect_instances, &mut icon_draws, dt);
         self.debug.prepare(
             &mut self.text,
             &state,
@@ -174,8 +174,10 @@ impl UiRenderer {
 
         self.rect
             .prepare(device, queue, viewport_px, &rect_instances);
-        self.svg
-            .prepare(device, queue, viewport_px, &svg_draws);
+        if let Some(atlas) = self.panel.atlas() {
+            self.icon
+                .prepare(device, queue, viewport_px, atlas, &icon_draws);
+        }
 
         // Gather text areas into a single Vec so the glyphon prepare
         // step sees one contiguous slice. With_capacity(48) covers the
@@ -203,7 +205,7 @@ impl UiRenderer {
             return;
         }
         self.rect.draw(rpass);
-        self.svg.draw(rpass, &self.panel.icons);
+        self.icon.draw(rpass);
         if self.any_text {
             if let Err(e) = self.text.draw(rpass) {
                 log::warn!("glyphon render error: {:?}", e);
