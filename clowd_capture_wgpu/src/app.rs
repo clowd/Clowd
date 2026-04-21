@@ -4,6 +4,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
+#[cfg(not(target_os = "macos"))]
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -191,7 +192,7 @@ impl App {
         if !self.input.anchored && new_zoom > 1.0 {
             self.input.anchored = true;
             self.input.anchor_just_engaged = true;
-            SystemInterop::set_mouse_position(self.input.anchor);
+            SystemInterop::set_mouse_position(self.input.anchor, &self.monitors);
         }
 
         self.input.zoom = new_zoom;
@@ -312,7 +313,7 @@ impl App {
                 self.input.virtual_cursor.x.floor() as i32,
                 self.input.virtual_cursor.y.floor() as i32,
             );
-            SystemInterop::set_mouse_position(restore);
+            SystemInterop::set_mouse_position(restore, &self.monitors);
         }
         self.input.zoom = 1.0;
 
@@ -461,6 +462,33 @@ impl ApplicationHandler for App {
             let m = &self.monitors[i];
             let width = m.bounds.size.width.max(1) as u32;
             let height = m.bounds.size.height.max(1) as u32;
+
+            // On macOS, window frames are in CG logical points. Use the
+            // stored CG origin directly and derive logical size from the
+            // physical pixel dimensions.
+            #[cfg(target_os = "macos")]
+            let (win_pos, win_size) = {
+                let s = m.scale_factor as f64;
+                let pos: winit::dpi::Position = winit::dpi::LogicalPosition::new(
+                    m.logical_origin.0,
+                    m.logical_origin.1,
+                )
+                .into();
+                let size: winit::dpi::Size = winit::dpi::LogicalSize::new(
+                    width as f64 / s,
+                    height as f64 / s,
+                )
+                .into();
+                (pos, size)
+            };
+            #[cfg(not(target_os = "macos"))]
+            let (win_pos, win_size) = {
+                let pos: winit::dpi::Position =
+                    PhysicalPosition::new(m.bounds.origin.x, m.bounds.origin.y).into();
+                let size: winit::dpi::Size = PhysicalSize::new(width, height).into();
+                (pos, size)
+            };
+
             #[allow(unused_mut)]
             let mut attrs = Window::default_attributes()
                 .with_title("clowd capture")
@@ -469,11 +497,8 @@ impl ApplicationHandler for App {
                 .with_visible(cfg!(target_os = "macos"))
                 .with_transparent(false)
                 .with_active(i == 0)
-                .with_position(PhysicalPosition::new(
-                    m.bounds.origin.x,
-                    m.bounds.origin.y,
-                ))
-                .with_inner_size(PhysicalSize::new(width, height));
+                .with_position(win_pos)
+                .with_inner_size(win_size);
             #[cfg(windows)]
             {
                 attrs = attrs.with_no_redirection_bitmap(true);
@@ -671,7 +696,7 @@ impl ApplicationHandler for App {
                         if raw_dx * raw_dx + raw_dy * raw_dy
                             > STALE_THRESHOLD * STALE_THRESHOLD
                         {
-                            SystemInterop::set_mouse_position(self.input.anchor);
+                            SystemInterop::set_mouse_position(self.input.anchor, &self.monitors);
                             return;
                         }
                         self.input.anchor_just_engaged = false;
@@ -682,7 +707,7 @@ impl ApplicationHandler for App {
                     self.input.virtual_cursor.x += dx;
                     self.input.virtual_cursor.y += dy;
                     clamp_to_nearest_monitor(&mut self.input.virtual_cursor, &self.monitors);
-                    SystemInterop::set_mouse_position(self.input.anchor);
+                    SystemInterop::set_mouse_position(self.input.anchor, &self.monitors);
                 } else {
                     self.input.virtual_cursor =
                         ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
@@ -842,7 +867,7 @@ impl ApplicationHandler for App {
                                     self.input.virtual_cursor.x.floor() as i32,
                                     self.input.virtual_cursor.y.floor() as i32,
                                 );
-                                SystemInterop::set_mouse_position(restore);
+                                SystemInterop::set_mouse_position(restore, &self.monitors);
                             }
                             self.input.zoom = 1.0;
                             if let Some(sel) = self.input.selection {

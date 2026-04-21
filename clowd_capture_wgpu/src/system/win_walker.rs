@@ -94,7 +94,7 @@ impl WindowWalker {
     ///
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
-    pub fn snapshot() -> Self {
+    pub fn snapshot(_monitors: &[super::MonitorInfo]) -> Self {
         let vdm: Option<IVirtualDesktopManager> = unsafe {
             match CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL) {
                 Ok(v) => Some(v),

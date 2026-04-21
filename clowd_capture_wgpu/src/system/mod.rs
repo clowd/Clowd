@@ -49,6 +49,11 @@ pub struct MonitorInfo {
     /// per window, matching the C++ version's per-monitor `AdapterIdx`.
     /// `None` if DXGI enumeration failed (fallback to wgpu's default).
     pub adapter_id: Option<(u32, u32)>,
+    /// CG logical-point origin — the raw `CGDisplayBounds().origin` for
+    /// this display. Needed to convert between the physical-pixel virtual
+    /// desktop and macOS's CG point coordinate system.
+    #[cfg(target_os = "macos")]
+    pub logical_origin: (f64, f64),
 }
 
 /// Raw virtual-desktop snapshot. The pixel data is in BGRA byte order
@@ -82,11 +87,11 @@ pub struct SystemInterop;
 
 #[cfg(windows)]
 impl SystemInterop {
-    pub fn get_mouse_position() -> ScreenPoint {
+    pub fn get_mouse_position(_monitors: &[MonitorInfo]) -> ScreenPoint {
         win_mouse::get_position()
     }
 
-    pub fn set_mouse_position(pos: ScreenPoint) {
+    pub fn set_mouse_position(pos: ScreenPoint, _monitors: &[MonitorInfo]) {
         win_mouse::set_position(pos)
     }
 
@@ -136,7 +141,7 @@ impl SystemInterop {
     /// Enumerate visible top-level windows on the current virtual desktop.
     /// Call once at capture startup, after the desktop bitmap is grabbed but
     /// before overlay windows are created.
-    pub fn snapshot_windows() -> WindowWalker {
+    pub fn snapshot_windows(_monitors: &[MonitorInfo]) -> WindowWalker {
         WindowWalker::snapshot()
     }
 }
@@ -151,12 +156,12 @@ impl SystemInterop {
         xdialog::init_maccf_direct();
     }
 
-    pub fn get_mouse_position() -> ScreenPoint {
-        mac_mouse::get_position()
+    pub fn get_mouse_position(monitors: &[MonitorInfo]) -> ScreenPoint {
+        mac_mouse::get_position(monitors)
     }
 
-    pub fn set_mouse_position(pos: ScreenPoint) {
-        mac_mouse::set_position(pos)
+    pub fn set_mouse_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
+        mac_mouse::set_position(pos, monitors)
     }
 
     /// Capture the desktop bitmap using pre-enumerated monitors. On
@@ -178,7 +183,7 @@ impl SystemInterop {
         mac_monitor::all_monitors().expect("Unable to enumerate monitors")
     }
 
-    pub fn snapshot_windows() -> WindowWalker {
-        WindowWalker::snapshot()
+    pub fn snapshot_windows(monitors: &[MonitorInfo]) -> WindowWalker {
+        WindowWalker::snapshot(monitors)
     }
 }

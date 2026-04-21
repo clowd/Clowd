@@ -1,9 +1,8 @@
 use core_graphics::display::{CGDisplay, CGPoint};
 
 use crate::geometry::ScreenPoint;
+use crate::system::MonitorInfo;
 
-// CGEvent FFI — the safe CGEvent::new() requires a non-null CGEventSource,
-// but we just need the current mouse location which only needs a NULL source.
 extern "C" {
     fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;
     fn CGEventGetLocation(event: *const std::ffi::c_void) -> CGPoint;
@@ -11,7 +10,7 @@ extern "C" {
     fn CGAssociateMouseAndMouseCursorPosition(connected: i32) -> i32;
 }
 
-pub fn get_position() -> ScreenPoint {
+pub fn get_position(monitors: &[MonitorInfo]) -> ScreenPoint {
     let logical_pt = unsafe {
         let event = CGEventCreate(std::ptr::null());
         let pt = CGEventGetLocation(event);
@@ -19,76 +18,64 @@ pub fn get_position() -> ScreenPoint {
         pt
     };
 
-    let scale = display_scale_at_logical_point(logical_pt) as f64;
-    ScreenPoint::new((logical_pt.x * scale).round() as i32, (logical_pt.y * scale).round() as i32)
+    if let Some(m) = find_monitor_for_logical_point(logical_pt, monitors) {
+        let (ox, oy) = m.logical_origin;
+        let s = m.scale_factor as f64;
+        ScreenPoint::new(
+            m.bounds.min_x() + ((logical_pt.x - ox) * s).round() as i32,
+            m.bounds.min_y() + ((logical_pt.y - oy) * s).round() as i32,
+        )
+    } else {
+        let s = fallback_scale(monitors) as f64;
+        ScreenPoint::new(
+            (logical_pt.x * s).round() as i32,
+            (logical_pt.y * s).round() as i32,
+        )
+    }
 }
 
-pub fn set_position(pos: ScreenPoint) {
-    let scale = display_scale_at_physical_point(pos) as f64;
-    let logical_pt = CGPoint::new(pos.x as f64 / scale, pos.y as f64 / scale);
+pub fn set_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
+    let logical_pt = if let Some(m) = find_monitor_for_physical_point(pos, monitors) {
+        let (ox, oy) = m.logical_origin;
+        let s = m.scale_factor as f64;
+        CGPoint::new(
+            ox + (pos.x - m.bounds.min_x()) as f64 / s,
+            oy + (pos.y - m.bounds.min_y()) as f64 / s,
+        )
+    } else {
+        let s = fallback_scale(monitors) as f64;
+        CGPoint::new(pos.x as f64 / s, pos.y as f64 / s)
+    };
+
     let _ = CGDisplay::warp_mouse_cursor_position(logical_pt);
-    // macOS suppresses mouse-moved events for ~0.25s after a cursor warp.
-    // Re-associating the mouse clears the suppression so the anchor-warp
-    // loop in the virtual cursor receives continuous CursorMoved events.
     unsafe {
         CGAssociateMouseAndMouseCursorPosition(1);
     }
 }
 
-/// Compute the scale factor for a display from its CGDisplayMode.
-/// Falls back to 1.0 if the mode is unavailable or logical width is zero.
-fn display_scale(d: &CGDisplay) -> f32 {
-    let logical_w = d.bounds().size.width as f32;
-    if logical_w > 0.0 {
-        if let Some(mode) = d.display_mode() {
-            return mode.pixel_width() as f32 / logical_w;
-        }
-    }
-    1.0
+fn find_monitor_for_logical_point<'a>(
+    pt: CGPoint,
+    monitors: &'a [MonitorInfo],
+) -> Option<&'a MonitorInfo> {
+    monitors.iter().find(|m| {
+        let (ox, oy) = m.logical_origin;
+        let lw = m.bounds.width() as f64 / m.scale_factor as f64;
+        let lh = m.bounds.height() as f64 / m.scale_factor as f64;
+        pt.x >= ox && pt.x < ox + lw && pt.y >= oy && pt.y < oy + lh
+    })
 }
 
-/// Find the scale factor of the display whose logical (CG point) bounds
-/// contain the given point.
-fn display_scale_at_logical_point(pt: CGPoint) -> f32 {
-    if let Ok(ids) = CGDisplay::active_displays() {
-        for id in ids {
-            let d = CGDisplay::new(id);
-            let b = d.bounds();
-            if pt.x >= b.origin.x && pt.x < b.origin.x + b.size.width && pt.y >= b.origin.y && pt.y < b.origin.y + b.size.height {
-                return display_scale(&d);
-            }
-        }
-    }
-    // Fallback: assume Retina 2x.
-    2.0
+fn find_monitor_for_physical_point<'a>(
+    pt: ScreenPoint,
+    monitors: &'a [MonitorInfo],
+) -> Option<&'a MonitorInfo> {
+    monitors.iter().find(|m| m.bounds.contains(pt))
 }
 
-/// Find the scale factor of the display whose physical-pixel bounds
-/// contain the given point.
-fn display_scale_at_physical_point(pt: ScreenPoint) -> f32 {
-    if let Ok(ids) = CGDisplay::active_displays() {
-        for id in ids {
-            let d = CGDisplay::new(id);
-            let b = d.bounds();
-            let scale = display_scale(&d);
-
-            let phys_x = (b.origin.x * scale as f64).round() as i32;
-            let phys_y = (b.origin.y * scale as f64).round() as i32;
-            let phys_w_i = if let Some(mode) = d.display_mode() {
-                mode.pixel_width() as i32
-            } else {
-                (b.size.width * scale as f64).round() as i32
-            };
-            let phys_h_i = if let Some(mode) = d.display_mode() {
-                mode.pixel_height() as i32
-            } else {
-                (b.size.height * scale as f64).round() as i32
-            };
-
-            if pt.x >= phys_x && pt.x < phys_x + phys_w_i && pt.y >= phys_y && pt.y < phys_y + phys_h_i {
-                return scale;
-            }
-        }
-    }
-    2.0
+fn fallback_scale(monitors: &[MonitorInfo]) -> f32 {
+    monitors
+        .iter()
+        .find(|m| m.is_primary)
+        .map(|m| m.scale_factor)
+        .unwrap_or(2.0)
 }

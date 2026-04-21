@@ -42,7 +42,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Snapshot the cursor position before any window exists.
-    let initial_mouse = system::SystemInterop::get_mouse_position();
+    let initial_mouse = system::SystemInterop::get_mouse_position(&monitors);
     let initial_mouse_f =
         geometry::ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
 
@@ -131,12 +131,14 @@ fn main() -> anyhow::Result<()> {
 
     let walker_latch = Arc::new(sync::Latch::new());
     {
+        let monitors_for_walker = monitors.clone();
         let latch = walker_latch.clone();
         let startup_bg = startup.clone();
         std::thread::Builder::new()
             .name("walker".into())
             .spawn(move || {
-                let walker = system::SystemInterop::snapshot_windows();
+                let walker =
+                    system::SystemInterop::snapshot_windows(&monitors_for_walker);
                 latch.set(Arc::new(walker));
                 startup_bg
                     .background
