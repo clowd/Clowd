@@ -119,7 +119,8 @@ fn evaluate_window(
 
     let (phys_x, phys_y, phys_w, phys_h) =
         if let Some(m) = find_monitor_for_cg_point(center_x, center_y, monitors) {
-            let (ox, oy) = m.logical_origin;
+            let ox = m.logical_origin.x;
+            let oy = m.logical_origin.y;
             let s = m.scale_factor as f64;
             (
                 m.bounds.min_x() + ((cg_rect.origin.x - ox) * s).round() as i32,
@@ -170,7 +171,8 @@ fn find_monitor_for_cg_point<'a>(
     monitors: &'a [MonitorInfo],
 ) -> Option<&'a MonitorInfo> {
     monitors.iter().find(|m| {
-        let (ox, oy) = m.logical_origin;
+        let ox = m.logical_origin.x;
+        let oy = m.logical_origin.y;
         let lw = m.bounds.width() as f64 / m.scale_factor as f64;
         let lh = m.bounds.height() as f64 / m.scale_factor as f64;
         x >= ox && x < ox + lw && y >= oy && y < oy + lh

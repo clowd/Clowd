@@ -17,10 +17,10 @@ bytemuck = { version = "1", features = ["derive"] }
 usvg = { version = "0.47", default-features = false }
 resvg = { version = "0.47", default-features = false }
 tiny-skia = "0.12"
-etagere = "0.2"
+etagere = "0.3"
 cosmic-text = "0.18"
 swash = "0.2"
-lru = "0.16"
+lru = "0.17"
 rustc-hash = "2"
 arboard = "3.4"
 rfd = "0.17"

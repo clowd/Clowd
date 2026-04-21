@@ -38,7 +38,7 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
         bail!("Screen Recording permission not granted");
     }
 
-    let vd = super::mac_monitor::virtual_desktop_bounds(monitors);
+    let vd = super::virtual_desktop_bounds(monitors);
     let vd_w = vd.width() as usize;
     let vd_h = vd.height() as usize;
 
