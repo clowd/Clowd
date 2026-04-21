@@ -2,7 +2,7 @@
 //!
 //! Per-frame work on this render thread:
 //!   1. Check [`tips_visibility`] against this monitor — early out if
-//!      this thread isn't the primary.
+//!      the tips aren't on this monitor.
 //!   2. Update cached glyphon buffers for each text element whose
 //!      content changed (hovered window/monitor/pixel).
 //!   3. Feed glyphon measurements into the shared `compute_layout`
@@ -212,9 +212,9 @@ impl TipsRenderer {
         // cap-height. For Cascadia at 14/12 px it's ~0.7 × font size.
         let title_height = title_px * 0.7;
 
-        let primary = target.bounds;
+        let monitor_bounds = target.bounds;
         let Some(layout) = compute_tips_layout(
-            primary,
+            monitor_bounds,
             state.virtual_cursor,
             dpi,
             longest_body,

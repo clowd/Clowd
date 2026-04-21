@@ -65,14 +65,14 @@ pub struct TipsLayout {
 
 /// Compute panel placement and internal metrics.
 ///
-/// `primary_bounds` is the primary monitor's rect in virtual-desktop pixels
+/// `monitor_bounds` is the target monitor's rect in virtual-desktop pixels
 /// (where we anchor). `cursor` is the virtual cursor, used to detect whether
 /// the default bottom-right placement would overlap the cursor — in that
-/// case we fall back to bottom-left. `dpi` is the primary monitor's DPI
+/// case we fall back to bottom-left. `dpi` is the target monitor's DPI
 /// scale. `longest_body_row_px` is the pre-measured max width of any body
 /// row at the final pixel font size.
 pub fn compute_layout(
-    primary_bounds: ScreenRect,
+    monitor_bounds: ScreenRect,
     cursor: ScreenPointF,
     dpi: f32,
     longest_body_row_px: f32,
@@ -118,13 +118,13 @@ pub fn compute_layout(
     // zone where it would occlude the panel. Matches
     // DxScreenCapture.cpp:775-779 (the `mx > tr.left - DEBUGBOX_MARGIN*2`
     // fallback).
-    let right_anchor_left = primary_bounds.right() as f32 - margin - panel_w;
-    let anchor_top = primary_bounds.bottom() as f32 - margin - panel_h;
+    let right_anchor_left = monitor_bounds.right() as f32 - margin - panel_w;
+    let anchor_top = monitor_bounds.bottom() as f32 - margin - panel_h;
 
     let use_left_fallback = cursor.x > right_anchor_left - margin * 2.0 && cursor.y > anchor_top - margin * 2.0;
 
     let panel_left = if use_left_fallback {
-        primary_bounds.left() as f32 + margin
+        monitor_bounds.left() as f32 + margin
     } else {
         right_anchor_left
     };
