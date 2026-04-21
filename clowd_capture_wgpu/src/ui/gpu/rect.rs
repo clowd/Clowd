@@ -11,8 +11,9 @@ use bytemuck::{Pod, Zeroable};
 /// One rect to draw.
 ///
 /// `dest_px` is `(min_x, min_y, max_x, max_y)` in window-local physical
-/// pixels. `params` is `(border_px, lighten, _, _)`. Set `border_rgba.a`
-/// to 0 OR `params.x` to 0 to disable the border.
+/// pixels. `params` is `(border_px, lighten, corner_radius, _)`. Set
+/// `border_rgba.a` to 0 OR `params.x` to 0 to disable the border.
+/// `corner_radius` > 0 enables SDF-based rounded corners with AA.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Debug, Default)]
 pub struct RectInstance {

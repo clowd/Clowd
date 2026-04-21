@@ -23,11 +23,13 @@ use swash::zeno::{Format, Vector};
 pub const FONT_MONO_REGULAR: &[u8] =
     include_bytes!("../../../assets/fonts/CascadiaMono-Regular.ttf");
 pub const FONT_MONO_BOLD: &[u8] = include_bytes!("../../../assets/fonts/CascadiaMono-Bold.ttf");
-pub const FONT_ROBOTO_REGULAR: &[u8] =
-    include_bytes!("../../../assets/fonts/Roboto-Regular.ttf");
+pub const FONT_CODE_REGULAR: &[u8] =
+    include_bytes!("../../../assets/fonts/CascadiaCode-Regular.ttf");
+pub const FONT_CODE_BOLD: &[u8] =
+    include_bytes!("../../../assets/fonts/CascadiaCode-Bold.ttf");
 
 pub const FAMILY_MONO: &str = "Cascadia Mono";
-pub const FAMILY_ROBOTO: &str = "Roboto";
+pub const FAMILY_CODE: &str = "Cascadia Code";
 
 // ── Public types ───────────────────────────────────────────────────
 
@@ -321,7 +323,8 @@ impl TextStack {
         let mut db = cosmic_text::fontdb::Database::new();
         db.load_font_data(FONT_MONO_REGULAR.to_vec());
         db.load_font_data(FONT_MONO_BOLD.to_vec());
-        db.load_font_data(FONT_ROBOTO_REGULAR.to_vec());
+        db.load_font_data(FONT_CODE_REGULAR.to_vec());
+        db.load_font_data(FONT_CODE_BOLD.to_vec());
         let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
 
         let scale_context = ScaleContext::new();

@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 
 use crate::ui::components::debug::perf::PerfTracker;
 use crate::ui::components::debug::startup::StartupTimings;
+use crate::ui::gpu::area::AreaRenderer;
 use crate::ui::gpu::debug::DebugRenderer;
 use crate::ui::gpu::panel::PanelRenderer;
 use crate::ui::gpu::icon::{IconInstance, IconPipeline};
@@ -31,6 +32,7 @@ pub struct UiRenderer {
     rect: RectPipeline,
     icon: IconPipeline,
     text: TextStack,
+    area: AreaRenderer,
     tips: TipsRenderer,
     panel: PanelRenderer,
     debug: DebugRenderer,
@@ -77,6 +79,7 @@ impl UiRenderer {
         let rect = RectPipeline::new(device, surface_format);
         let icon = IconPipeline::new(device, surface_format);
         let mut text = TextStack::new(device, queue, surface_format);
+        let area = AreaRenderer::new(&mut text);
         let tips = TipsRenderer::new(&mut text);
         let panel = PanelRenderer::new(&mut text);
         let debug = DebugRenderer::new(monitor_index);
@@ -84,6 +87,7 @@ impl UiRenderer {
             rect,
             icon,
             text,
+            area,
             tips,
             panel,
             debug,
@@ -155,6 +159,8 @@ impl UiRenderer {
         let mut rect_instances: Vec<RectInstance> = Vec::with_capacity(512);
         let mut icon_draws: Vec<IconInstance> = Vec::with_capacity(16);
 
+        self.area
+            .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.tips
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.panel
@@ -180,6 +186,7 @@ impl UiRenderer {
         }
 
         let mut text_areas: Vec<super::text::TextArea<'_>> = Vec::with_capacity(48);
+        self.area.text_areas(viewport_px, &mut text_areas);
         self.tips.text_areas(viewport_px, &mut text_areas);
         self.panel.text_areas(viewport_px, &mut text_areas);
         self.debug.text_areas(viewport_px, &mut text_areas);

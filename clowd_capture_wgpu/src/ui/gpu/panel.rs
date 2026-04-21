@@ -22,7 +22,7 @@ use crate::ui::components::panel::layout::PanelLayout;
 use crate::ui::components::panel::model::{button_defs, NUM_SVG_BUTTONS};
 use crate::ui::gpu::icon::{IconAtlas, IconInstance};
 use crate::ui::gpu::rect::RectInstance;
-use crate::ui::gpu::text::{TextStack, FAMILY_ROBOTO};
+use crate::ui::gpu::text::{TextStack, FAMILY_CODE};
 use crate::ui::shared::{panel_visibility, UiMonitor, UiSharedState};
 
 // Tuning constants (port of the old CPU code).
@@ -71,7 +71,7 @@ impl CachedBuffer {
         // glyphon's `set_rich_text` lets us underline a single glyph via
         // attrs. Simpler: render the whole string uniformly and draw the
         // underline as a rect in the caller.
-        let attrs = Attrs::new().family(Family::Name(FAMILY_ROBOTO));
+        let attrs = Attrs::new().family(Family::Name(FAMILY_CODE));
         self.buffer
             .set_text(&mut ts.font_system, text, &attrs, Shaping::Advanced, None);
         self.buffer
@@ -345,11 +345,7 @@ impl PanelRenderer {
                 color: [0xFF, 0xFF, 0xFF, 0xFF],
             });
 
-            // Underline bar for the accelerator key. Roboto is
-            // proportional, so we can't approximate by averaging —
-            // read the real glyph bounds from glyphon's shaping output.
-            // For ASCII labels, `char index == byte index`; we pass the
-            // byte index directly.
+            // Underline bar for the accelerator key.
             let def = &button_defs()[i];
             let label_buf = &self.buffers[IDX_LABEL_BASE + i];
             if let Some((glyph_x, glyph_w)) = label_buf.glyph_bounds_at_byte(def.underline_idx) {

@@ -114,6 +114,31 @@ pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
     Some((idx, monitor))
 }
 
+/// Result of evaluating the area-indicator visibility rule.
+pub struct AreaIndicatorVisibility {
+    pub monitor: UiMonitor,
+}
+
+/// Decide whether the in-selection area indicator ("W × H" pill) is
+/// visible and on which monitor. Shown on the monitor containing the
+/// cursor, only while a selection exists but has not yet been captured.
+pub fn area_indicator_visibility(state: &UiSharedState) -> Option<AreaIndicatorVisibility> {
+    if !state.overlays_visible {
+        return None;
+    }
+    if state.captured {
+        return None;
+    }
+    let _sel = state.selection?;
+    let cx = state.virtual_cursor.x.round() as i32;
+    let cy = state.virtual_cursor.y.round() as i32;
+    let monitor = state.monitors.iter().find(|m| {
+        let b = m.bounds;
+        cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+    })?;
+    Some(AreaIndicatorVisibility { monitor: *monitor })
+}
+
 /// Whether the per-monitor debug panel is visible on `this` monitor. Shown
 /// on **every** monitor when the `D`-key toggle is on, mirroring
 /// `DxScreenCapture.cpp:915-933`.

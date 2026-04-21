@@ -35,6 +35,7 @@ struct VsOut {
     @location(3) border_rgba: vec4<f32>,
     @location(4) border_px: f32,
     @location(5) lighten: f32,
+    @location(6) corner_radius: f32,
 };
 
 @vertex
@@ -66,6 +67,7 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Instance) -> VsOut {
     out.border_rgba = inst.border_rgba;
     out.border_px = inst.params.x;
     out.lighten = inst.params.y;
+    out.corner_radius = inst.params.z;
     return out;
 }
 
@@ -74,7 +76,29 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let lp = in.local_px;
     let sz = in.size_px;
     let bw = in.border_px;
+    let cr = in.corner_radius;
 
+    if (cr > 0.0) {
+        // Rounded-rect SDF (Inigo Quilez formulation).
+        let half = sz * 0.5;
+        let p = abs(lp - half) - (half - vec2<f32>(cr, cr));
+        let d = length(max(p, vec2<f32>(0.0))) + min(max(p.x, p.y), 0.0) - cr;
+        if (d > 0.5) {
+            discard;
+        }
+        let alpha_edge = 1.0 - smoothstep(-0.5, 0.5, d);
+
+        var rgba = in.fill_rgba;
+        if (bw > 0.0 && in.border_rgba.a > 0.0 && d > -(bw)) {
+            rgba = in.border_rgba;
+        }
+
+        let lit = mix(rgba.rgb, vec3<f32>(1.0, 1.0, 1.0), clamp(in.lighten, 0.0, 1.0));
+        let final_a = rgba.a * alpha_edge;
+        return vec4<f32>(lit * final_a, final_a);
+    }
+
+    // Axis-aligned path (no rounding).
     var rgba = in.fill_rgba;
     if (bw > 0.0 && in.border_rgba.a > 0.0) {
         let in_border =
