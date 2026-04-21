@@ -220,6 +220,7 @@ impl App {
         for h in self.windows.values() {
             h.window.set_cursor_visible(visible);
         }
+        platform::set_cg_cursor_visible(visible);
     }
 
     fn current_panel_layout(&self) -> Option<crate::ui::components::panel::layout::PanelLayout> {
@@ -511,6 +512,7 @@ impl ApplicationHandler for App {
                 }
             };
             platform::apply_capture_window_tweaks(&window);
+            window.set_cursor_visible(false);
 
             let surface = match gpu::create_surface(&self.instance, window.clone()) {
                 Ok(s) => s,
@@ -543,6 +545,7 @@ impl ApplicationHandler for App {
 
         self.startup.mark_window_create();
         self.windows = handles;
+        platform::set_cg_cursor_visible(false);
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -568,13 +571,13 @@ impl ApplicationHandler for App {
         if let Some(ref pending) = self.pending_show {
             if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
                 platform::show_windows_atomically(self.windows.values().map(|h| &h.window));
-                self.update_cursor_visibility();
                 let _ = self.shown_time.set(self.startup.t_start.elapsed());
                 if let Some(first_id) = self.monitor_window_ids.first() {
                     if let Some(h) = self.windows.get(first_id) {
                         h.window.focus_window();
                     }
                 }
+                self.update_cursor_visibility();
                 pending.visible_latch.signal_all();
                 self.pending_show = None;
                 self.broadcast_mouse_state();

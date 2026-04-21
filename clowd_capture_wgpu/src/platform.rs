@@ -57,6 +57,31 @@ pub fn apply_capture_window_tweaks(window: &winit::window::Window) {
     }
 }
 
+/// Hide or show the cursor at the CoreGraphics display level.
+///
+/// Unlike winit's `set_cursor_visible` (which swaps to a transparent cursor
+/// image), this calls `CGDisplayHideCursor`/`CGDisplayShowCursor` which
+/// suppresses macOS "shake to locate" and other compositor-level effects.
+#[cfg(target_os = "macos")]
+pub fn set_cg_cursor_visible(visible: bool) {
+    use core_graphics::display::{CGDisplay, CGMainDisplayID};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static HIDDEN: AtomicBool = AtomicBool::new(false);
+
+    let currently_hidden = HIDDEN.load(Ordering::Relaxed);
+    if visible && currently_hidden {
+        unsafe { CGDisplay::new(CGMainDisplayID()).show_cursor() }.ok();
+        HIDDEN.store(false, Ordering::Relaxed);
+    } else if !visible && !currently_hidden {
+        unsafe { CGDisplay::new(CGMainDisplayID()).hide_cursor() }.ok();
+        HIDDEN.store(true, Ordering::Relaxed);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn set_cg_cursor_visible(_visible: bool) {}
+
 /// Reveal all capture windows after frame 0 is rendered.
 ///
 /// On macOS: windows were created visible but alpha=0. We snap alpha to
