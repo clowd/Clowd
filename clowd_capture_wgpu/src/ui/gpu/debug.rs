@@ -22,12 +22,6 @@ use crate::ui::shared::{debug_monitor_visibility, debug_primary_visibility, UiMo
 /// Panel body opacity.
 const BODY_ALPHA: f32 = 0.70;
 
-/// Sparkline per-bar width pre-DPI. Multiplied by the monitor's DPI
-/// scale so bars stay the same physical size on retina displays
-/// instead of shrinking to invisible — and to cut bar count (and
-/// per-frame rect work) by the scale factor on high-DPI monitors.
-const SPARK_BAR_PX: f32 = 2.0;
-
 /// Scale at which a bar saturates at the full graph height. 1.0 ×
 /// budget → half height; 2.0 × budget → full height. Gives spikes
 /// visual headroom above the budget line before they clip.
@@ -105,6 +99,7 @@ struct PositionedLine {
     idx: usize,
     x: f32,
     y: f32,
+    color: Color,
 }
 
 pub struct DebugRenderer {
@@ -170,7 +165,7 @@ impl DebugRenderer {
                 ts,
                 this_monitor,
                 font_px,
-                self.line_buf.as_slice(),
+                &self.line_buf,
                 PanelAnchor::TopLeft,
                 SPARKLINE_ENABLED,
                 rects,
@@ -203,7 +198,7 @@ impl DebugRenderer {
                 ts,
                 this_monitor,
                 font_px,
-                self.line_buf.as_slice(),
+                &self.line_buf,
                 PanelAnchor::TopRight,
                 false,
                 rects,
@@ -230,7 +225,7 @@ impl DebugRenderer {
                 right: vw,
                 bottom: vh,
             },
-            default_color: Color::rgba(0xFF, 0xFF, 0xFF, 0xFF),
+            default_color: p.color,
             custom_glyphs: &[],
         }));
     }
@@ -238,10 +233,9 @@ impl DebugRenderer {
 
 /// Shared path for both panels. Takes mutable slices over the renderer's
 /// own fields rather than `&mut DebugRenderer` so the caller can pass in
-/// `self.line_buf.as_slice()` without a borrow-checker conflict against
-/// the other `&mut self` field accesses it needs. Returns the final
-/// layout so the caller can emit sparkline content inside `graph_rect`
-/// when present.
+/// the line buf without a borrow-checker conflict against the other
+/// `&mut self` field accesses it needs. Returns the final layout so the
+/// caller can emit sparkline content inside `graph_rect` when present.
 #[allow(clippy::too_many_arguments)]
 fn render_panel_inner(
     lines: &mut Vec<CachedLine>,
@@ -249,11 +243,14 @@ fn render_panel_inner(
     ts: &mut TextStack,
     this_monitor: &UiMonitor,
     font_px: f32,
-    text_lines: &[String],
+    line_buf: &LineBuf,
     anchor: PanelAnchor,
     include_graph: bool,
     rects: &mut Vec<RectInstance>,
 ) -> DebugPanelLayout {
+    let text_lines = line_buf.as_slice();
+    let line_colors = line_buf.colors();
+
     let first_idx = positions.len();
     while lines.len() < first_idx + text_lines.len() {
         lines.push(CachedLine::new(ts, font_px));
@@ -284,10 +281,12 @@ fn render_panel_inner(
     let x = local_panel_left + layout.padding_px;
     let mut y = local_panel_top + layout.padding_px;
     for i in 0..text_lines.len() {
+        let [r, g, b, a] = line_colors[i];
         positions.push(PositionedLine {
             idx: first_idx + i,
             x,
             y,
+            color: Color::rgba(r, g, b, a),
         });
         y += layout.row_height;
     }
@@ -389,34 +388,21 @@ impl DebugRenderer {
         );
     }
 
-    // Draw bars newest-first, starting from the right edge. Bar width
-    // is DPI-scaled so they're visible on retina and to lighten the
-    // per-frame rect-emission load (on 2× retina each bar is 4 physical
-    // pixels = ¼ the bar count = ~¼ the per-frame rect cost).
-    let dpi = this_monitor.dpi_scale.max(1.0);
-    let bar_w = (SPARK_BAR_PX * dpi).max(1.0);
-    let max_bars = (g_w / bar_w).floor() as usize;
+    // Uniform whole-pixel bar width: smallest integer width that
+    // completely fills the graph for the target window size. Newest
+    // samples draw from the right; oldest fall off the left if the
+    // wider bars can't fit them all.
+    let window = perf.window_size().max(1);
+    let bar_w = ((g_w / window as f32).ceil() as usize).max(1);
+    let bar_wf = bar_w as f32;
+    let max_bars = (g_w / bar_wf).floor() as usize;
+
     let mut x_right = g_right;
-    let samples: Vec<&PerfSample> = perf
-        .samples_newest_first()
-        .take(max_bars)
-        .collect();
-    for sample in samples {
-        let x_left = x_right - bar_w;
-        if x_left < g_left {
-            break;
-        }
-        emit_bar_stack(
-            x_left,
-            x_right - 0.5, // 0.5 px gap between bars for readability
-            g_top,
-            g_bottom,
-            g_h,
-            full_scale_ms,
-            sample,
-            rects,
-        );
-        x_right -= bar_w;
+    for sample in perf.samples_newest_first().take(max_bars) {
+        let x_left = x_right - bar_wf;
+        if x_left < g_left { break; }
+        emit_bar_stack(x_left, x_right, g_top, g_bottom, g_h, full_scale_ms, sample, rects);
+        x_right -= bar_wf;
     }
 
     // Legend: cpu / gpu. Matches what the bars actually use. Drops
@@ -475,7 +461,12 @@ impl DebugRenderer {
         let idx = self.positions.len();
         self.ensure_capacity(ts, idx + 1, font_px);
         self.lines[idx].set(ts, text, font_px);
-        self.positions.push(PositionedLine { idx, x, y });
+        self.positions.push(PositionedLine {
+            idx,
+            x,
+            y,
+            color: Color::rgba(0xFF, 0xFF, 0xFF, 0xFF),
+        });
     }
 }
 

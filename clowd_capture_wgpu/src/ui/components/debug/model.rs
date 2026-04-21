@@ -10,16 +10,17 @@ use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::ui::components::debug::perf::{PerfStats, PerfTracker, Series};
 use crate::ui::components::debug::startup::StartupTimings;
 
-/// Reusable line buffer. Holds `Vec<String>` across frames so the debug
-/// panel's per-line `format!` calls can write into existing allocations
-/// via `String::clear()` + `write!`. After the first few frames no
-/// allocation happens unless the rendered text grows (which it doesn't
-/// in steady state). Before each use the caller must call
-/// [`LineBuf::reset`]; after writing it exposes the populated lines via
-/// [`LineBuf::as_slice`].
+pub const COLOR_WHITE: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
+
+/// Reusable line buffer with per-line colour. Holds `Vec<String>` across
+/// frames so the debug panel's per-line `format!` calls can write into
+/// existing allocations via `String::clear()` + `write!`. After the first
+/// few frames no allocation happens unless the rendered text grows (which
+/// it doesn't in steady state).
 #[derive(Default)]
 pub struct LineBuf {
     lines: Vec<String>,
+    colors: Vec<[u8; 4]>,
     len: usize,
 }
 
@@ -27,6 +28,7 @@ impl LineBuf {
     pub fn new() -> Self {
         Self {
             lines: Vec::with_capacity(20),
+            colors: Vec::with_capacity(20),
             len: 0,
         }
     }
@@ -35,57 +37,79 @@ impl LineBuf {
         self.len = 0;
     }
 
-    /// Append a formatted line. Reuses an existing `String`'s backing
-    /// allocation when available; only the first few frames actually
-    /// grow the pool.
     pub fn push(&mut self, args: Arguments<'_>) {
+        self.push_colored(args, COLOR_WHITE);
+    }
+
+    pub fn push_colored(&mut self, args: Arguments<'_>, color: [u8; 4]) {
         if self.lines.len() <= self.len {
             self.lines.push(String::new());
+            self.colors.push(COLOR_WHITE);
         }
         let s = &mut self.lines[self.len];
         s.clear();
         let _ = s.write_fmt(args);
+        self.colors[self.len] = color;
         self.len += 1;
     }
 
     pub fn push_empty(&mut self) {
         if self.lines.len() <= self.len {
             self.lines.push(String::new());
+            self.colors.push(COLOR_WHITE);
         }
         self.lines[self.len].clear();
+        self.colors[self.len] = COLOR_WHITE;
         self.len += 1;
     }
 
     pub fn as_slice(&self) -> &[String] {
         &self.lines[..self.len]
     }
+
+    pub fn colors(&self) -> &[[u8; 4]] {
+        &self.colors[..self.len]
+    }
 }
 
-/// Render one stats row with a left-justified label column and
-/// percentile / 1%-low columns. The caller guarantees `label` is <=
-/// `LABEL_WIDTH`; wider labels wrap the columns but still read clearly.
 fn write_stats_row(out: &mut LineBuf, label: &str, s: PerfStats) {
+    write_stats_row_colored(out, label, s, COLOR_WHITE);
+}
+
+fn write_stats_row_colored(out: &mut LineBuf, label: &str, s: PerfStats, color: [u8; 4]) {
     const LABEL_WIDTH: usize = 7;
     if s.count == 0 {
         out.push(format_args!("{:<width$} n/a", label, width = LABEL_WIDTH));
         return;
     }
-    out.push(format_args!(
-        "{:<width$} p50 {:>5.2}  p95 {:>5.2}  p99 {:>5.2}  low1 {:>5.2} ({})",
-        label,
-        s.p50_ms,
-        s.p95_ms,
-        s.p99_ms,
-        s.low1_ms,
-        s.count,
-        width = LABEL_WIDTH,
-    ));
+    out.push_colored(
+        format_args!(
+            "{:<width$} p50 {:>5.2}  p95 {:>5.2}  p99 {:>5.2}  low1 {:>5.2}",
+            label,
+            s.p50_ms,
+            s.p95_ms,
+            s.p99_ms,
+            s.low1_ms,
+            width = LABEL_WIDTH,
+        ),
+        color,
+    );
+}
+
+/// Green→yellow→red gradient based on `t` in [0, 1].
+fn budget_color(t: f32) -> [u8; 4] {
+    let t = t.clamp(0.0, 1.0);
+    let r = (2.0 * t).min(1.0);
+    let g = (2.0 * (1.0 - t)).min(1.0);
+    [
+        (r * 255.0) as u8,
+        (g * 255.0) as u8,
+        0x00,
+        0xFF,
+    ]
 }
 
 /// Format helper: wall-clock duration as "x.xx ms" (two decimals).
-/// Used inside `format_args!` via `DisplayMs(d)` so the calling
-/// `write!` assembles straight into the target string without an
-/// intermediate heap allocation.
 struct DisplayMs(Duration);
 
 impl std::fmt::Display for DisplayMs {
@@ -133,14 +157,10 @@ pub struct MonitorPanelData<'a> {
     pub bounds: ScreenRect,
     pub time_to_first_render: Option<Duration>,
     pub perf: &'a PerfTracker,
-    /// Target frame period from the monitor's refresh rate, used to show
-    /// the effective refresh in the header. `None` when unknown.
     pub target_period: Option<Duration>,
 }
 
 impl<'a> MonitorPanelData<'a> {
-    /// Write one line per panel entry into `out`. Reuses existing
-    /// allocations; on the steady-state frame no heap allocations happen.
     pub fn write_lines(&self, out: &mut LineBuf) {
         out.reset();
 
@@ -165,8 +185,6 @@ impl<'a> MonitorPanelData<'a> {
         out.push_empty();
 
         let overall = self.perf.stats(Series::Overall);
-        // Headline FPS uses only the recent tail so the number feels
-        // live; the full-window average shows up in the stats row.
         let recent_ms = self.perf.recent_overall_avg().as_secs_f64() * 1000.0;
         let fps = if recent_ms > 0.0 { 1000.0 / recent_ms } else { 0.0 };
         let low1_fps = if overall.low1_ms > 0.0 { 1000.0 / overall.low1_ms } else { 0.0 };
@@ -178,30 +196,47 @@ impl<'a> MonitorPanelData<'a> {
             session.drops,
             DisplaySessionElapsed(session.started.elapsed()),
         ));
+
+        let count = self.perf.sample_count();
+        let secs = self.perf.sample_time_secs();
+        if secs > 0.0 {
+            out.push(format_args!("samples: {} ({:.0}s)", count, secs));
+        } else {
+            out.push(format_args!("samples: {}", count));
+        }
         out.push_empty();
 
-        // cpu  = CPU work from "drawable acquired" to "frame.present()
-        //        returned" (= draw + present). The time the CPU is
-        //        actually doing work for this frame.
-        // gpu  = GPU execution time for this frame's commands.
-        // With `frame_latency: 1` the next frame's drawable can't be
-        // acquired until this frame's GPU work finishes, so the
-        // critical path is `cpu + gpu`; the budget to stay vsync-locked
-        // at 60 Hz is `cpu + gpu ≤ 16.67 ms`, *per frame*, every frame.
-        // overall = wall-clock frame time (= 1/fps). The gap between
-        // `cpu + gpu` and `overall` is vsync slack (what used to show
-        // up as `wait`).
-        write_stats_row(out, "cpu", self.perf.stats(Series::Cpu));
-        let gpu = self.perf.stats(Series::Gpu);
-        if gpu.count > 0 {
-            write_stats_row(out, "gpu", gpu);
+        let cpu_stats = self.perf.stats(Series::Cpu);
+        write_stats_row(out, "cpu", cpu_stats);
+        let gpu_stats = self.perf.stats(Series::Gpu);
+        if gpu_stats.count > 0 {
+            write_stats_row(out, "gpu", gpu_stats);
         } else {
             out.push(format_args!("gpu     n/a"));
         }
-        write_stats_row(out, "overall", overall);
 
-        // Session footer: per-series lifetime min/max for the overall
-        // series, plus total frame count.
+        // "overall" = total work time (cpu + gpu). Summing percentiles
+        // isn't strictly correct but close enough for a debug readout.
+        let work = if gpu_stats.count > 0 {
+            PerfStats {
+                p50_ms: cpu_stats.p50_ms + gpu_stats.p50_ms,
+                p95_ms: cpu_stats.p95_ms + gpu_stats.p95_ms,
+                p99_ms: cpu_stats.p99_ms + gpu_stats.p99_ms,
+                low1_ms: cpu_stats.low1_ms + gpu_stats.low1_ms,
+                count: cpu_stats.count.min(gpu_stats.count),
+            }
+        } else {
+            cpu_stats
+        };
+
+        let budget_ms = self.target_period.map(|p| p.as_secs_f64() * 1000.0);
+        let color = match budget_ms {
+            Some(b) if b > 0.0 => budget_color((work.p50_ms / b) as f32),
+            _ => COLOR_WHITE,
+        };
+        write_stats_row_colored(out, "overall", work, color);
+
+        // Session footer
         out.push_empty();
         if session.seen[Series::Overall as usize] {
             let min = session.min_ms[Series::Overall as usize];
@@ -318,8 +353,7 @@ impl<'a> PrimaryPanelData<'a> {
 }
 
 /// Format helper that writes `s` straight into the formatter, truncating
-/// to `max_chars` with an ellipsis. Avoids the intermediate `String`
-/// allocation that the old `truncate_display` returned.
+/// to `max_chars` with an ellipsis.
 struct TruncatedTitle<'a>(&'a str, usize);
 
 impl<'a> std::fmt::Display for TruncatedTitle<'a> {

@@ -12,8 +12,9 @@
 //!     timestamp readback lands, or permanently `None` on backends that
 //!     don't expose timestamp queries.
 //!
-//! Rolling window: 1200 samples (≈20 s @ 60 Hz / ≈8 s @ 144 Hz). The
-//! instantaneous `fps` / `time_to_render` readouts use only the last
+//! Rolling window: dynamically sized to cover ~10 s of wall-clock time
+//! at the monitor's refresh rate (600 samples @ 60 Hz, 1440 @ 144 Hz).
+//! The instantaneous `fps` / `time_to_render` readouts use only the last
 //! `RECENT_WINDOW` samples so the number feels live; stats (percentiles,
 //! 1% low, min/max) use the full window. Session aggregates run for the
 //! lifetime of the tracker.
@@ -22,14 +23,16 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-/// Full rolling window for percentile / 1%-low stats. At 60 Hz this
-/// is an 8 s window. The stats cache now amortises sorting across
-/// frames (one series per frame, 6-frame rotation), so the per-frame
-/// cost at this window size is dominated by a single O(N log N) sort
-/// on ~480 elements — well under a millisecond.
-pub const PERF_WINDOW: usize = 480;
+/// Target sample window duration in seconds. The actual buffer size
+/// is computed from `refresh_hz * TARGET_SAMPLE_SECONDS` so both
+/// 60 Hz and 144 Hz monitors cover roughly the same wall-clock span.
+const TARGET_SAMPLE_SECONDS: f64 = 10.0;
+
+/// Fallback window size when the refresh rate is unknown (~10 s @ 60 Hz).
+const DEFAULT_PERF_WINDOW: usize = 600;
+
 /// Short tail used for the headline `fps` readout so it reacts within
-/// a second. Capped at `PERF_WINDOW`.
+/// a second.
 pub const RECENT_WINDOW: usize = 60;
 
 /// Which timing series a stats query is about. Matches the order of
@@ -178,14 +181,14 @@ pub struct PerfTracker {
     /// whether a frame's `overall` duration counts as a drop. `None` on
     /// render threads where the refresh rate wasn't supplied.
     target_period: Option<Duration>,
+    /// Dynamic buffer capacity computed from refresh rate ×
+    /// `TARGET_SAMPLE_SECONDS`.
+    window_size: usize,
     /// Cached percentile/1%-low stats. Each entry is refreshed on a
     /// 6-frame rotation (one series per frame) so same-frame `stats()`
     /// calls are warm-cache hits.
     cached_stats: RefCell<Option<CachedFrameStats>>,
-    /// Reusable scratch buffer for percentile computation. Held here
-    /// so `compute_series` doesn't allocate / free a `Vec<f64>` every
-    /// frame — at `PERF_WINDOW = 480` that's 3840 bytes of
-    /// allocator traffic we don't need to pay for on the hot path.
+    /// Reusable scratch buffer for percentile computation.
     scratch: RefCell<Vec<f64>>,
 }
 
@@ -194,32 +197,36 @@ impl PerfTracker {
     /// disabled. Prefer `new_with_refresh`.
     pub fn new() -> Self {
         Self {
-            samples: VecDeque::with_capacity(PERF_WINDOW),
+            samples: VecDeque::with_capacity(DEFAULT_PERF_WINDOW),
             session: SessionStats::new(),
             target_period: None,
+            window_size: DEFAULT_PERF_WINDOW,
             cached_stats: RefCell::new(None),
-            scratch: RefCell::new(Vec::with_capacity(PERF_WINDOW)),
+            scratch: RefCell::new(Vec::with_capacity(DEFAULT_PERF_WINDOW)),
         }
     }
 
     /// Tracker wired with a refresh rate. `hz <= 0` is treated as missing.
     pub fn new_with_refresh(hz: f32) -> Self {
-        let target_period = if hz > 0.0 {
-            Some(Duration::from_secs_f64(1.0 / hz as f64))
+        let (target_period, window_size) = if hz > 0.0 {
+            let period = Duration::from_secs_f64(1.0 / hz as f64);
+            let win = (hz as f64 * TARGET_SAMPLE_SECONDS).round() as usize;
+            (Some(period), win.max(RECENT_WINDOW))
         } else {
-            None
+            (None, DEFAULT_PERF_WINDOW)
         };
         Self {
-            samples: VecDeque::with_capacity(PERF_WINDOW),
+            samples: VecDeque::with_capacity(window_size),
             session: SessionStats::new(),
             target_period,
+            window_size,
             cached_stats: RefCell::new(None),
-            scratch: RefCell::new(Vec::with_capacity(PERF_WINDOW)),
+            scratch: RefCell::new(Vec::with_capacity(window_size)),
         }
     }
 
     pub fn record(&mut self, sample: PerfSample) {
-        if self.samples.len() == PERF_WINDOW {
+        if self.samples.len() == self.window_size {
             self.samples.pop_front();
         }
         self.samples.push_back(sample);
@@ -429,6 +436,24 @@ impl PerfTracker {
     /// render the most-recent N bars.
     pub fn samples_newest_first(&self) -> impl Iterator<Item = &PerfSample> {
         self.samples.iter().rev()
+    }
+
+    /// Maximum buffer capacity (dynamic, based on refresh rate).
+    pub fn window_size(&self) -> usize {
+        self.window_size
+    }
+
+    /// Number of samples currently in the buffer.
+    pub fn sample_count(&self) -> usize {
+        self.samples.len()
+    }
+
+    /// Approximate wall-clock seconds the current samples cover.
+    pub fn sample_time_secs(&self) -> f64 {
+        match self.target_period {
+            Some(p) => self.samples.len() as f64 * p.as_secs_f64(),
+            None => 0.0,
+        }
     }
 }
 
