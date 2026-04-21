@@ -19,8 +19,8 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 use crate::geometry::RectExt;
 use crate::ui::components::panel::layout::PanelLayout;
 use crate::ui::components::panel::model::{button_defs, NUM_SVG_BUTTONS};
+use crate::ui::gpu::icon::{IconAtlas, IconInstance};
 use crate::ui::gpu::rect::RectInstance;
-use crate::ui::gpu::svg::{SvgInstance, SvgMesh, SvgPipeline};
 use crate::ui::gpu::text::{TextStack, FAMILY_ROBOTO};
 use crate::ui::shared::{panel_visibility, UiMonitor, UiSharedState};
 
@@ -112,8 +112,13 @@ struct PositionedText {
 }
 
 pub struct PanelRenderer {
-    /// Icons tessellated once at construction, indexed by button id.
-    pub icons: Vec<SvgMesh>,
+    /// Parsed SVG trees, indexed by button id. Kept around so the atlas
+    /// can be rebuilt at a new DPI without re-parsing.
+    svg_trees: Vec<usvg::Tree>,
+    /// CPU-rasterised icon atlas, built lazily on the first `prepare()`
+    /// and rebuilt whenever the target icon size (DPI) changes.
+    atlas: Option<IconAtlas>,
+    last_icon_px: u32,
     /// 0: width string ("1920")
     /// 1: height string ("1080")
     /// 2: "×" separator
@@ -124,9 +129,6 @@ pub struct PanelRenderer {
     /// Per-button lighten amount, animated each frame.
     hover_amounts: [f32; NUM_SVG_BUTTONS],
     /// Reused string buffers for the selection's width / height digits.
-    /// Only rebuilt when the selection rect actually changes (not every
-    /// frame), avoiding ~2 heap allocations/frame when the panel is
-    /// visible.
     width_str: String,
     height_str: String,
     last_selection: Option<crate::geometry::ScreenRect>,
@@ -138,11 +140,10 @@ const IDX_CROSS: usize = 2;
 const IDX_LABEL_BASE: usize = 3;
 
 impl PanelRenderer {
-    pub fn new(device: &wgpu::Device, svg: &SvgPipeline, ts: &mut TextStack) -> Self {
-        // Tessellate all 7 SVGs up-front.
+    pub fn new(ts: &mut TextStack) -> Self {
         let usvg_opts = usvg::Options::default();
         let defs = button_defs();
-        let mut icons: Vec<SvgMesh> = Vec::with_capacity(NUM_SVG_BUTTONS);
+        let mut svg_trees: Vec<usvg::Tree> = Vec::with_capacity(NUM_SVG_BUTTONS);
         for i in 0..NUM_SVG_BUTTONS {
             let tree = match usvg::Tree::from_data(defs[i].svg_bytes, &usvg_opts) {
                 Ok(t) => t,
@@ -152,7 +153,7 @@ impl PanelRenderer {
                         .expect("empty SVG parses")
                 }
             };
-            icons.push(svg.load_mesh(device, &tree));
+            svg_trees.push(tree);
         }
 
         let mut buffers = Vec::with_capacity(3 + NUM_SVG_BUTTONS);
@@ -164,7 +165,9 @@ impl PanelRenderer {
         }
 
         Self {
-            icons,
+            svg_trees,
+            atlas: None,
+            last_icon_px: 0,
             buffers,
             positions: Vec::new(),
             hover_amounts: [0.0; NUM_SVG_BUTTONS],
@@ -174,15 +177,22 @@ impl PanelRenderer {
         }
     }
 
+    pub fn atlas(&self) -> Option<&IconAtlas> {
+        self.atlas.as_ref()
+    }
+
     /// Run the full panel logic. Appends rect instances to `rects` and
     /// SVG draw records to `svg_draws`, caches text positions internally.
+    #[allow(clippy::too_many_arguments)]
     pub fn prepare(
         &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         ts: &mut TextStack,
         state: &UiSharedState,
         this_monitor: &UiMonitor,
         rects: &mut Vec<RectInstance>,
-        svg_draws: &mut Vec<(usize, SvgInstance)>,
+        icon_draws: &mut Vec<IconInstance>,
         dt_secs: f32,
     ) {
         self.positions.clear();
@@ -260,8 +270,14 @@ impl PanelRenderer {
         rects.push(RectInstance::filled(ar - arm_px, ab - line_px, ar, ab, white));
         rects.push(RectInstance::filled(ar - line_px, ab - arm_px, ar, ab, white));
 
-        // Button SVG icons.
-        let icon_size = (ICON_UNSCALED_PX * dpi).floor();
+        // Button icons (CPU-rasterised atlas).
+        let icon_px = ((ICON_UNSCALED_PX * dpi).round() as u32).max(1);
+        if self.atlas.is_none() || self.last_icon_px != icon_px {
+            self.atlas = Some(IconAtlas::build(device, queue, &self.svg_trees, icon_px));
+            self.last_icon_px = icon_px;
+        }
+        let atlas = self.atlas.as_ref().unwrap();
+        let icon_size = icon_px as f32;
         for (i, b) in layout.buttons.iter().enumerate() {
             let (l, t, r, bt) = to_local(*b);
             let bw = r - l;
@@ -269,20 +285,14 @@ impl PanelRenderer {
             let label_px = (LABEL_FONT_PX * dpi).floor();
             let label_line_h = label_px * 1.2;
             let v_gap = ((bh - icon_size - label_line_h) / 3.0).max(0.0);
-            let icon_left = l + (bw / 2.0) - (icon_size / 2.0);
-            let icon_top = t + v_gap;
-            let mesh = &self.icons[i];
-            let sx = if mesh.size[0] > 0.0 { icon_size / mesh.size[0] } else { 1.0 };
-            let sy = if mesh.size[1] > 0.0 { icon_size / mesh.size[1] } else { 1.0 };
-            svg_draws.push((
-                i,
-                SvgInstance {
-                    offset_px: [icon_left, icon_top],
-                    scale_px: [sx, sy],
-                    alpha_mul: 1.0,
-                    _pad: [0.0; 3],
-                },
-            ));
+            let icon_left = (l + (bw / 2.0) - (icon_size / 2.0)).round();
+            let icon_top = (t + v_gap).round();
+            icon_draws.push(IconInstance {
+                dest_px: [icon_left, icon_top, icon_left + icon_size, icon_top + icon_size],
+                uv: atlas.uv_for(i),
+                alpha_mul: 1.0,
+                _pad: [0.0; 3],
+            });
         }
 
         // Labels (after icons so text lands on top).

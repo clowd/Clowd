@@ -22,45 +22,10 @@ use crate::ui::shared::{UiMonitor, UiSharedState};
 const FADE_DURATION_SECS: f32 = 0.3;
 
 /// MSAA sample count applied to every render pipeline in the frame.
-pub const MSAA_SAMPLES: u32 = 4;
-
-/// MSAA-resolve color target. Recreated on `Resize`.
-struct MsaaTarget {
-    view: wgpu::TextureView,
-    width: u32,
-    height: u32,
-}
-
-impl MsaaTarget {
-    fn new(device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32) -> Self {
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("msaa color target"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: MSAA_SAMPLES,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-        let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
-        Self {
-            view,
-            width,
-            height,
-        }
-    }
-
-    fn ensure(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat, w: u32, h: u32) {
-        if self.width != w || self.height != h {
-            *self = Self::new(device, format, w, h);
-        }
-    }
-}
+/// Set to 1 (no multisampling) — all UI geometry is axis-aligned
+/// (rects, textured quads, glyph quads) so MSAA adds cost without
+/// visual benefit.
+pub const MSAA_SAMPLES: u32 = 1;
 
 // ── Messages ────────────────────────────────────────────────────────
 
@@ -380,7 +345,6 @@ fn render_worker_main(
 
     let mut perf = PerfTracker::new_with_refresh(refresh_hz);
     let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
-    let mut msaa = MsaaTarget::new(&gpu.device, SURFACE_FORMAT, config.width, config.height);
 
     draw_once(
         &surface,
@@ -389,7 +353,6 @@ fn render_worker_main(
         snapshot_state.as_ref(),
         &mut ui_renderer,
         &perf,
-        &msaa,
         None,
         &mut None,
     );
@@ -426,7 +389,6 @@ fn render_worker_main(
                     config.width = new_size.width.max(1);
                     config.height = new_size.height.max(1);
                     surface.configure(&gpu.device, &config);
-                    msaa.ensure(&gpu.device, SURFACE_FORMAT, config.width, config.height);
                 }
                 Ok(RenderMsg::MouseState {
                     pos,
@@ -486,7 +448,6 @@ fn render_worker_main(
             snapshot_state.as_ref(),
             &mut ui_renderer,
             &perf,
-            &msaa,
             gpu_timing.as_ref(),
             &mut sample,
         );
@@ -627,7 +588,6 @@ fn draw_once(
     snapshot_state: Option<&SnapshotState>,
     ui_renderer: &mut UiRenderer,
     perf: &PerfTracker,
-    msaa: &MsaaTarget,
     gpu_timing: Option<&GpuTimings>,
     out_sample: &mut Option<PerfSample>,
 ) {
@@ -666,8 +626,8 @@ fn draw_once(
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("frame pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &msaa.view,
-                resolve_target: Some(&view),
+                view: &view,
+                resolve_target: None,
                 depth_slice: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {

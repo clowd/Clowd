@@ -1,20 +1,19 @@
-//! Pure-GPU UI stack. One `UiRenderer` per render thread. Replaces the
-//! CPU-baked `OverlayBackend` pipeline.
+//! Pure-GPU UI stack. One `UiRenderer` per render thread.
 //!
 //! Submodules:
 //!   * [`rect`]   — instanced colored/bordered rect pipeline
-//!   * [`text`]   — glyphon wrapper (Phase 3)
-//!   * [`svg`]    — usvg + lyon path tessellation (Phase 4)
-//!   * [`panel`]  — per-frame button-panel draw (Phase 4)
-//!   * [`tips`]   — per-frame tips-panel draw (Phase 3)
-//!   * [`renderer`] — the top-level `UiRenderer` (Phase 2)
+//!   * [`icon`]   — CPU-rasterised icon atlas + textured-quad pipeline
+//!   * [`text`]   — glyphon wrapper
+//!   * [`panel`]  — per-frame button-panel draw
+//!   * [`tips`]   — per-frame tips-panel draw
+//!   * [`renderer`] — the top-level `UiRenderer`
 
 pub mod debug;
 pub mod gpu_timing;
+pub mod icon;
 pub mod panel;
 pub mod rect;
 pub mod renderer;
-pub mod svg;
 pub mod text;
 pub mod tips;
 
