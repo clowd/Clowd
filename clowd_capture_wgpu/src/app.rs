@@ -217,10 +217,14 @@ impl App {
 
     fn update_cursor_visibility(&self) {
         let visible = self.input.captured || self.input.debug_visible;
+        // Windows: winit's set_cursor_visible races when broadcast across
+        // overlapping desktop-spanning windows — skip it and rely on the
+        // global Win32 ShowCursor call below. See platform.rs.
+        #[cfg(not(windows))]
         for h in self.windows.values() {
             h.window.set_cursor_visible(visible);
         }
-        platform::set_cg_cursor_visible(visible);
+        platform::set_hardware_cursor_visible(visible);
     }
 
     fn current_panel_layout(&self) -> Option<crate::ui::components::panel::layout::PanelLayout> {
@@ -512,6 +516,7 @@ impl ApplicationHandler for App {
                 }
             };
             platform::apply_capture_window_tweaks(&window);
+            #[cfg(not(windows))]
             window.set_cursor_visible(false);
 
             let surface = match gpu::create_surface(&self.instance, window.clone()) {
@@ -545,7 +550,7 @@ impl ApplicationHandler for App {
 
         self.startup.mark_window_create();
         self.windows = handles;
-        platform::set_cg_cursor_visible(false);
+        platform::set_hardware_cursor_visible(false);
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
