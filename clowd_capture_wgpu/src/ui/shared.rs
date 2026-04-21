@@ -17,9 +17,7 @@ use crate::ui::components::panel::layout::{compute_layout as compute_panel_layou
 /// Minimal per-monitor info the UI layout rules need.
 ///
 /// Mirrors a subset of `system::MonitorInfo` without the fields the UI
-/// doesn't use (refresh rate, DXGI adapter id, raw OS name). `is_primary`
-/// is the only field beyond geometry because the Tips panel anchors to
-/// the primary display.
+/// doesn't use (refresh rate, DXGI adapter id, raw OS name).
 #[derive(Debug, Clone, Copy)]
 pub struct UiMonitor {
     pub bounds: ScreenRect,
@@ -98,6 +96,7 @@ pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
 }
 
 /// Decide whether the tips panel is visible and on which monitor.
+/// Follows the cursor — shown on whichever monitor contains it.
 pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
     if !state.overlays_visible {
         return None;
@@ -105,10 +104,12 @@ pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
     if state.captured || state.mouse_down || !state.tips_visible {
         return None;
     }
-    let idx = state
-        .monitors
-        .iter()
-        .position(|m| m.is_primary)?;
+    let cx = state.virtual_cursor.x.round() as i32;
+    let cy = state.virtual_cursor.y.round() as i32;
+    let idx = state.monitors.iter().position(|m| {
+        let b = m.bounds;
+        cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+    })?;
     let monitor = *state.monitors.get(idx)?;
     Some((idx, monitor))
 }
