@@ -420,7 +420,10 @@ impl App {
                 }
             }
             Command::Reset => self.handle_reset(window),
-            Command::Exit => event_loop.exit(),
+            Command::Exit => {
+                self.hide_all_windows();
+                event_loop.exit();
+            }
             Command::Upload | Command::Edit | Command::Video => {
                 log::info!("command {:?} not yet implemented", command);
             }
@@ -602,6 +605,7 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => {
+                self.hide_all_windows();
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput {
@@ -613,6 +617,7 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
+                self.hide_all_windows();
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput {
