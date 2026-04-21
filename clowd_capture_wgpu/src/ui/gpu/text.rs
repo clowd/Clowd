@@ -30,16 +30,11 @@ pub struct TextStack {
 
 impl TextStack {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, surface_format: wgpu::TextureFormat) -> Self {
-        let mut font_system = FontSystem::new();
-        font_system
-            .db_mut()
-            .load_font_data(FONT_MONO_REGULAR.to_vec());
-        font_system
-            .db_mut()
-            .load_font_data(FONT_MONO_BOLD.to_vec());
-        font_system
-            .db_mut()
-            .load_font_data(FONT_ROBOTO_REGULAR.to_vec());
+        let mut db = glyphon::fontdb::Database::new();
+        db.load_font_data(FONT_MONO_REGULAR.to_vec());
+        db.load_font_data(FONT_MONO_BOLD.to_vec());
+        db.load_font_data(FONT_ROBOTO_REGULAR.to_vec());
+        let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
 
         let swash_cache = SwashCache::new();
         let cache = Cache::new(device);
