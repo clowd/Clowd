@@ -169,7 +169,12 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // for red to appear.
         let on_thick_v_colour = adx <= wide_half && ady > chunk && ady <= chunk2;
         let on_thick_h_colour = ady <= wide_half && adx > chunk && adx <= chunk2;
-        if (on_thin_colour || on_thick_v_colour || on_thick_h_colour) {
+        if (on_thin_colour) {
+            let lum = dot(base.rgb, vec3<f32>(0.299, 0.587, 0.114));
+            let contrast = select(vec4<f32>(1.0, 1.0, 1.0, 1.0), vec4<f32>(0.0, 0.0, 0.0, 1.0), lum > 0.65);
+            return mix(base, contrast, fade);
+        }
+        if (on_thick_v_colour || on_thick_h_colour) {
             return mix(base, u.crosshair_color, fade);
         }
 
