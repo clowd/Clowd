@@ -141,8 +141,8 @@ impl SystemInterop {
     /// Enumerate visible top-level windows on the current virtual desktop.
     /// Call once at capture startup, after the desktop bitmap is grabbed but
     /// before overlay windows are created.
-    pub fn snapshot_windows(_monitors: &[MonitorInfo]) -> WindowWalker {
-        WindowWalker::snapshot()
+    pub fn snapshot_windows(monitors: &[MonitorInfo]) -> WindowWalker {
+        WindowWalker::snapshot(monitors)
     }
 }
 

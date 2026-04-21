@@ -57,13 +57,20 @@ pub fn apply_capture_window_tweaks(window: &winit::window::Window) {
     }
 }
 
-/// Hide or show the cursor at the CoreGraphics display level.
+/// Hide or show the hardware cursor at the compositor/system level.
 ///
-/// Unlike winit's `set_cursor_visible` (which swaps to a transparent cursor
-/// image), this calls `CGDisplayHideCursor`/`CGDisplayShowCursor` which
-/// suppresses macOS "shake to locate" and other compositor-level effects.
+/// On macOS, calls `CGDisplayHideCursor`/`CGDisplayShowCursor` — unlike winit's
+/// `set_cursor_visible` (which swaps to a transparent image), this suppresses
+/// "shake to locate" and other compositor-level effects.
+///
+/// On Windows, calls Win32 `ShowCursor` directly. winit's per-window
+/// `set_cursor_visible` is unusable here: its refresh path unconditionally
+/// calls `set_cursor_hidden(false)` for every window whose client rect doesn't
+/// contain the cursor (winit 0.30 `window_state.rs:536-541`). Since our
+/// capture overlays span the virtual desktop, broadcasting a hide across all
+/// windows produces a race depending on HashMap iteration order.
 #[cfg(target_os = "macos")]
-pub fn set_cg_cursor_visible(visible: bool) {
+pub fn set_hardware_cursor_visible(visible: bool) {
     use core_graphics::display::{CGDisplay, CGMainDisplayID};
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -79,8 +86,25 @@ pub fn set_cg_cursor_visible(visible: bool) {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-pub fn set_cg_cursor_visible(_visible: bool) {}
+#[cfg(windows)]
+pub fn set_hardware_cursor_visible(visible: bool) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use windows::Win32::UI::WindowsAndMessaging::ShowCursor;
+
+    static HIDDEN: AtomicBool = AtomicBool::new(false);
+
+    let currently_hidden = HIDDEN.load(Ordering::Relaxed);
+    if visible && currently_hidden {
+        unsafe { ShowCursor(true) };
+        HIDDEN.store(false, Ordering::Relaxed);
+    } else if !visible && !currently_hidden {
+        unsafe { ShowCursor(false) };
+        HIDDEN.store(true, Ordering::Relaxed);
+    }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+pub fn set_hardware_cursor_visible(_visible: bool) {}
 
 /// Reveal all capture windows after frame 0 is rendered.
 ///
