@@ -241,7 +241,7 @@ impl App {
         }
 
         let cursor = self.input.virtual_cursor;
-        let cursor_pt = ScreenPoint::new(cursor.x.round() as i32, cursor.y.round() as i32);
+        let cursor_pt = ScreenPoint::new(cursor.x.floor() as i32, cursor.y.floor() as i32);
 
         let hovered_monitor_name = self
             .monitors
