@@ -1,4 +1,5 @@
-use std::sync::{mpsc, Arc, Barrier, OnceLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -6,8 +7,10 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
-use crate::gpu::{WindowGpu, WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::{self, WindowGpu, WindowUniforms, SURFACE_FORMAT, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
+use crate::sync::{ReadyGuard, VisibleLatch};
+use crate::system::{CapturedDesktop, MonitorInfo};
 use crate::ui::components::debug::perf::{PerfSample, PerfTracker};
 use crate::ui::components::debug::startup::StartupTimings;
 use crate::ui::gpu::gpu_timing::GpuTimings;
@@ -15,23 +18,13 @@ use crate::ui::gpu::UiRenderer;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
 /// Duration of the colour → grayscale fade after the window first becomes
-/// visible. Tuned to feel "snappy but not snap" — under 300ms reads as a
-/// pop, over 700ms feels sluggish.
+/// visible.
 const FADE_DURATION_SECS: f32 = 0.3;
 
-/// MSAA sample count applied to every render pipeline in the frame. 4
-/// is the maximum guaranteed across wgpu's supported formats (the
-/// WebGPU spec requires support for counts 1 and 4 on Bgra8Unorm; many
-/// devices including Apple Silicon top out at 4). Higher counts would
-/// mean a runtime-queried value threaded through the pipelines; not
-/// worth the complexity until a user reports visibly stepped edges
-/// that SSAA can't fix.
+/// MSAA sample count applied to every render pipeline in the frame.
 pub const MSAA_SAMPLES: u32 = 4;
 
-/// MSAA-resolve color target. Every color attachment in the frame renders
-/// into this texture at `MSAA_SAMPLES` samples and resolves into the
-/// swapchain view on pass store — the final swapchain texture only ever
-/// sees the already-resolved pixels. Recreated on `Resize`.
+/// MSAA-resolve color target. Recreated on `Resize`.
 struct MsaaTarget {
     view: wgpu::TextureView,
     width: u32,
@@ -69,56 +62,71 @@ impl MsaaTarget {
     }
 }
 
-/// Messages the main thread can send to a render thread.
+// ── Messages ────────────────────────────────────────────────────────
+
+/// Messages the main thread sends to a render thread during the frame loop.
 pub enum RenderMsg {
     Resize(PhysicalSize<u32>),
-    /// New cursor + zoom + selection state. `pos` is the *virtual* cursor
-    /// in virtual-desktop pixels (f32 so sub-pixel motion at high zoom
-    /// stays smooth); `zoom` is the current magnifier scale (1.0 .. 256.0);
-    /// `selection` is the current mouse-drag rect in virtual-desktop pixel
-    /// coords (each render thread maps it through its own VD→window-local
-    /// transform every frame); `captured` is true after the user has
-    /// finalised a selection. The render thread caches the latest values
-    /// and uses them on the next frame — the channel is the only
-    /// synchronisation we need. Everything ships in a single message so
-    /// state-transition frames (e.g. finalise-selection-and-snap-zoom)
-    /// land atomically and the render thread never sees a partially-
-    /// updated state across two drains.
     MouseState {
         pos: ScreenPointF,
         zoom: f32,
         selection: Option<ScreenRect>,
         captured: bool,
     },
-    /// Shared UI state broadcast from the app thread. Every render thread
-    /// receives the same `Arc` on every tick; each one independently
-    /// decides which components belong on its monitor using the pure
-    /// rules in [`crate::ui::shared`].
     UiState(Arc<UiSharedState>),
     Shutdown,
 }
 
-/// Handle to a render thread, held by the main thread. Dropping it sends a
-/// `Shutdown` on the channel and joins the thread, so ending the event loop
-/// (and thus dropping the App's HashMap) is enough to tear everything down
-/// cleanly.
+/// Bootstrap messages sent to workers before the render loop starts.
+pub enum WorkerInput {
+    Screenshot(Arc<CapturedDesktop>),
+    Handoff(WindowHandoff),
+}
+
+/// Window + surface pair created on the main thread and delivered to a
+/// render worker via the bootstrap channel.
+pub struct WindowHandoff {
+    pub window: Arc<Window>,
+    pub surface: wgpu::Surface<'static>,
+}
+
+// ── WindowHandle (main thread side) ─────────────────────────────────
+
+/// Handle to a render thread, held by the main thread. Dropping it sends
+/// `Shutdown` and joins the thread.
 pub struct WindowHandle {
     pub window: Arc<Window>,
-    /// This window's monitor in virtual-desktop screen pixels. Cached on
-    /// the main thread so `CursorMoved` (which delivers window-local
-    /// coords) can be converted to virtual-desktop coords without having
-    /// to re-enumerate monitors on every mouse-move.
     pub monitor_bounds: ScreenRect,
     tx: mpsc::Sender<RenderMsg>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl WindowHandle {
+    pub fn new(
+        window: Arc<Window>,
+        monitor_bounds: ScreenRect,
+        tx: mpsc::Sender<RenderMsg>,
+        thread: JoinHandle<()>,
+    ) -> Self {
+        Self {
+            window,
+            monitor_bounds,
+            tx,
+            thread: Some(thread),
+        }
+    }
+
     pub fn resize(&self, size: PhysicalSize<u32>) {
         let _ = self.tx.send(RenderMsg::Resize(size));
     }
 
-    pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32, selection: Option<ScreenRect>, captured: bool) {
+    pub fn update_mouse_state(
+        &self,
+        pos: ScreenPointF,
+        zoom: f32,
+        selection: Option<ScreenRect>,
+        captured: bool,
+    ) {
         let _ = self.tx.send(RenderMsg::MouseState {
             pos,
             zoom,
@@ -134,8 +142,6 @@ impl WindowHandle {
 
 impl Drop for WindowHandle {
     fn drop(&mut self) {
-        // Send Shutdown first so the render thread sees an explicit message
-        // rather than a Disconnected error on the next try_recv.
         let _ = self.tx.send(RenderMsg::Shutdown);
         if let Some(t) = self.thread.take() {
             let _ = t.join();
@@ -143,122 +149,171 @@ impl Drop for WindowHandle {
     }
 }
 
-/// Per-monitor parameters for spawning a render thread.
-pub struct RenderThreadParams {
-    pub window: Arc<Window>,
-    pub surface: wgpu::Surface<'static>,
-    pub gpu: WindowGpu,
-    pub settings: Arc<CapturerSettings>,
-    /// This window's monitor in virtual-desktop screen coordinates.
-    pub monitor_bounds: ScreenRect,
-    /// Full UI-facing description of this window's monitor (bounds, DPI,
-    /// primary flag). Passed to the `UiRenderer` so each render thread
-    /// can run the shared visibility rules against its own monitor.
-    pub this_monitor: UiMonitor,
-    /// Zero-based index of this monitor in the enumeration order, shown
-    /// as the `N:` prefix in the debug monitor-info panel.
+// ── Worker spawn + lifecycle ────────────────────────────────────────
+
+/// Per-worker parameters built in main() before the event loop starts.
+pub struct RenderWorkerParams {
+    pub monitor: MonitorInfo,
     pub monitor_index: usize,
-    /// Human-readable monitor name (e.g. `\\.\DISPLAY1` on Windows).
-    /// Shown in the debug panel header.
-    pub monitor_name: String,
-    /// DPI scale (1.0 = 100%). Written into the uniform so the shader
-    /// can size the coloured crosshair arms in physical pixels.
-    pub scale_factor: f32,
-    /// Monitor refresh rate. Accepted for future non-DX12 backends.
-    pub refresh_hz: f32,
-    /// Cursor position (virtual-desktop pixels, f32) sampled *before*
-    /// any window was created, so frame 0 renders the crosshair correctly.
+    pub settings: Arc<CapturerSettings>,
+    pub instance: Arc<wgpu::Instance>,
     pub initial_mouse: ScreenPointF,
-    /// Startup timing markers, frozen at spawn time. Used by the debug
-    /// panel to show the same startup breakdown as the C++ version.
     pub startup: Arc<StartupTimings>,
-    /// Shared one-shot for the "all windows visible" timestamp. Set by
-    /// the main thread in `about_to_wait` right after
-    /// `show_windows_atomically`. Render threads only read.
     pub shown_time: Arc<OnceLock<Duration>>,
-    /// Atomically incremented when this thread finishes frame 0.
-    pub ready_count: Arc<std::sync::atomic::AtomicUsize>,
-    /// Blocks until the main thread reveals all windows.
-    pub visible_barrier: Arc<Barrier>,
+    pub ready_count: Arc<AtomicUsize>,
+    pub visible_latch: Arc<VisibleLatch>,
 }
 
-/// Spawn a render thread for a single window.
-///
-/// The render thread takes ownership of `surface` and `gpu` — one complete
-/// GPU stack per window. Each window gets its own DX12 device + command
-/// queue so swap chain presents are fully independent across monitors
-/// (Hardware: Independent Flip). The GPU bootstrap happens on the main
-/// thread (winit's window handle is only available there); the render
-/// thread configures the surface and enters the blocking-present loop.
-pub fn spawn_render_thread(params: RenderThreadParams) -> WindowHandle {
-    let (tx, rx) = mpsc::channel();
-    let monitor_bounds = params.monitor_bounds;
-    let window = params.window.clone();
-    let thread_name = format!("render-{:?}", window.id());
+/// Returned from `spawn_render_worker` so the caller can send bootstrap
+/// messages and later build a `WindowHandle`.
+pub struct WorkerSetup {
+    pub input_tx: mpsc::Sender<WorkerInput>,
+    pub render_msg_tx: mpsc::Sender<RenderMsg>,
+    pub thread: JoinHandle<()>,
+    pub monitor_bounds: ScreenRect,
+}
+
+pub fn spawn_render_worker(params: RenderWorkerParams) -> WorkerSetup {
+    let (input_tx, input_rx) = mpsc::channel();
+    let (render_msg_tx, render_msg_rx) = mpsc::channel();
+    let monitor_bounds = params.monitor.bounds;
+    let thread_name = format!("render-worker-{}", params.monitor_index);
     let thread = thread::Builder::new()
         .name(thread_name)
         .spawn(move || {
-            render_thread_main(params, rx);
+            render_worker_main(params, input_rx, render_msg_rx);
         })
-        .expect("spawn render thread");
-    WindowHandle {
-        window,
+        .expect("spawn render worker");
+    WorkerSetup {
+        input_tx,
+        render_msg_tx,
+        thread,
         monitor_bounds,
-        tx,
-        thread: Some(thread),
     }
 }
 
-fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>) {
-    let RenderThreadParams {
-        window: _,
-        surface,
-        gpu,
-        settings,
-        monitor_bounds,
-        this_monitor,
+fn render_worker_main(
+    params: RenderWorkerParams,
+    input_rx: mpsc::Receiver<WorkerInput>,
+    msg_rx: mpsc::Receiver<RenderMsg>,
+) {
+    let RenderWorkerParams {
+        monitor,
         monitor_index,
-        monitor_name,
-        scale_factor,
-        refresh_hz,
+        settings,
+        instance,
         initial_mouse,
         startup,
         shown_time,
         ready_count,
-        visible_barrier,
+        visible_latch,
     } = params;
-    let adapter_name = gpu.adapter_name.clone();
+
+    let mut guard = ReadyGuard::new(ready_count.clone());
+    let monitor_bounds = monitor.bounds;
+    let scale_factor = monitor.scale_factor;
+    let refresh_hz = monitor.refresh_hz;
+    let adapter_hint = monitor.adapter_id;
+    let this_monitor = UiMonitor {
+        bounds: monitor.bounds,
+        dpi_scale: monitor.scale_factor,
+        is_primary: monitor.is_primary,
+    };
+    let monitor_name = monitor.name.clone();
+
+    // ── Stage A: eager GPU prep (no window/surface/screenshot) ──────
+
+    let bundle = match gpu::stage_a_create_device(instance, adapter_hint) {
+        Ok(b) => b,
+        Err(e) => {
+            error!("render worker {monitor_index}: GPU init failed: {e:?}");
+            return;
+        }
+    };
+    let adapter_name = bundle.adapter_name.clone();
+
+    let mut ui_renderer = UiRenderer::new(
+        &bundle.device,
+        &bundle.queue,
+        SURFACE_FORMAT,
+        this_monitor,
+        monitor_index,
+        monitor_name,
+        adapter_name,
+        startup.clone(),
+        shown_time.clone(),
+    );
+
+    startup.background.workers[monitor_index]
+        .render_prep
+        .set_once(startup.t_start.elapsed());
+
+    // ── Event-driven wait for Screenshot + Handoff ──────────────────
+
+    let mut snapshot: Option<Arc<gpu::DesktopSnapshot>> = None;
+    let mut handoff: Option<WindowHandoff> = None;
+
+    while snapshot.is_none() || handoff.is_none() {
+        match input_rx.recv() {
+            Ok(WorkerInput::Screenshot(captured)) => {
+                snapshot = gpu::stage_b_upload_snapshot(
+                    &bundle.device,
+                    &bundle.queue,
+                    &captured,
+                    &bundle.desktop_bgl,
+                    &bundle.desktop_sampler,
+                );
+                startup.background.workers[monitor_index]
+                    .upload
+                    .set_once(startup.t_start.elapsed());
+            }
+            Ok(WorkerInput::Handoff(h)) => {
+                handoff = Some(h);
+                startup.background.workers[monitor_index]
+                    .surface_bind
+                    .set_once(startup.t_start.elapsed());
+            }
+            Err(_) => {
+                error!("render worker {monitor_index}: input channel closed");
+                return;
+            }
+        }
+    }
+
+    let handoff = handoff.unwrap();
+    let _window = handoff.window;
+    let surface = handoff.surface;
+
+    // Verify surface format.
+    let caps = surface.get_capabilities(&bundle.adapter);
+    let actual_format = caps
+        .formats
+        .iter()
+        .copied()
+        .find(|f| !f.is_srgb())
+        .unwrap_or(caps.formats[0]);
+    assert_eq!(
+        actual_format, SURFACE_FORMAT,
+        "surface format mismatch on monitor {monitor_index}"
+    );
+
+    // ── Stage C: assemble final state, configure surface, draw frame 0 ─
+
+    let gpu = gpu::finalise_window_gpu(bundle, snapshot);
 
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: gpu.surface_format,
+        format: SURFACE_FORMAT,
         width: (monitor_bounds.width() as u32).max(1),
         height: (monitor_bounds.height() as u32).max(1),
-        // Fifo + DX12 waitable gives vsynced presentation while
-        // get_current_texture() wakes us right before the next scanout.
         present_mode: wgpu::PresentMode::Fifo,
-        // Opaque — tells DWM this surface has no transparency, matching
-        // the C++ version's DXGI_ALPHA_MODE_IGNORE. `Auto` can resolve
-        // to PreMultiplied on some configurations, which forces DWM to
-        // compose rather than direct-flip.
         alpha_mode: wgpu::CompositeAlphaMode::Opaque,
         view_formats: vec![],
         desired_maximum_frame_latency: 1,
     };
     surface.configure(&gpu.device, &config);
 
-    // Build the per-window uniform buffer + bind group, if (and only if) we
-    // have a snapshot to sample from. Without a snapshot the loop runs but
-    // skips the draw and just clears.
     let mut snapshot_state: Option<SnapshotState> = gpu.snapshot.as_ref().map(|snap| {
-        // UV math: where this monitor begins inside the virtual-desktop
-        // texture, and how much of that texture it covers. Done in f32 so
-        // negative monitor origins (secondary monitors left of/above the
-        // primary) work without underflow. This is the **baseline** — the
-        // zoom-around-cursor transform is folded into it per frame below,
-        // and the uniform's `uv_offset_scale` field carries the post-zoom
-        // result to the shader. At zoom=1 the folded value is identical to
-        // the baseline.
         let m_x = monitor_bounds.min_x() as f32;
         let m_y = monitor_bounds.min_y() as f32;
         let m_w = monitor_bounds.width() as f32;
@@ -267,13 +322,13 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         let vd_y = snap.vdesktop_origin[1];
         let vd_w = snap.vdesktop_size[0];
         let vd_h = snap.vdesktop_size[1];
-        let base_uv_offset_scale = [(m_x - vd_x) / vd_w, (m_y - vd_y) / vd_h, m_w / vd_w, m_h / vd_h];
+        let base_uv_offset_scale = [
+            (m_x - vd_x) / vd_w,
+            (m_y - vd_y) / vd_h,
+            m_w / vd_w,
+            m_h / vd_h,
+        ];
 
-        // Seed the cursor position for the very first (frame-0) draw, so
-        // the crosshair appears at the correct spot the instant the window
-        // becomes visible rather than briefly snapping from the top-left.
-        // The value was sampled by the main thread *before* any window
-        // existed; from here on the position arrives via RenderMsg::MouseState.
         let init_local_x = initial_mouse.x - monitor_bounds.min_x() as f32;
         let init_local_y = initial_mouse.y - monitor_bounds.min_y() as f32;
 
@@ -285,14 +340,12 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             selection_params: [0.0, 0.0, 0.0, 0.0],
         };
 
-        let ubo = gpu
-            .device
-            .create_buffer(&wgpu::BufferDescriptor {
-                label: Some("window uniforms"),
-                size: WINDOW_UNIFORMS_SIZE,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+        let ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("window uniforms"),
+            size: WINDOW_UNIFORMS_SIZE,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         gpu.queue
             .write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
 
@@ -325,40 +378,10 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         }
     });
 
-    // Construct this monitor's UI renderer. Each render thread owns its
-    // own because each owns its own wgpu device and associated pipelines
-    // / buffers. The renderer decides per-component visibility for THIS
-    // monitor every frame using the pure rules in `ui::shared`.
-    let mut ui_renderer = UiRenderer::new(
-        &gpu.device,
-        &gpu.queue,
-        gpu.surface_format,
-        this_monitor,
-        monitor_index,
-        monitor_name.clone(),
-        adapter_name,
-        startup,
-        shown_time,
-    );
-
-    // Frame-timing tracker for the debug panel. Thread-local: this
-    // render thread both produces and consumes the samples, so there's
-    // no reason to route them through the cross-thread broadcast.
-    // `refresh_hz` gives us a target frame period for dropped-frame
-    // detection and a reference line in the sparkline.
     let mut perf = PerfTracker::new_with_refresh(refresh_hz);
-
-    // GPU-side timestamp queries. `None` on backends / adapters that
-    // don't expose `TIMESTAMP_QUERY`; the debug panel renders an `n/a`
-    // row in that case.
     let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
+    let mut msaa = MsaaTarget::new(&gpu.device, SURFACE_FORMAT, config.width, config.height);
 
-    let mut msaa = MsaaTarget::new(&gpu.device, gpu.surface_format, config.width, config.height);
-
-    // Frame 0 — render once before the window is revealed so the first
-    // visible frame has content. On macOS the window starts at alpha=0;
-    // on Windows it starts hidden. Either way, this frame is never seen
-    // directly — it just primes the swap chain.
     draw_once(
         &surface,
         &gpu,
@@ -370,68 +393,40 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
         None,
         &mut None,
     );
-    // Wait for all submitted GPU work to complete so the presented
-    // drawable is fully resolved before the window becomes visible.
     let _ = gpu.device.poll(wgpu::PollType::Wait {
         submission_index: None,
-        timeout: Some(std::time::Duration::from_secs(5)),
+        timeout: Some(Duration::from_secs(5)),
     });
 
-    // Record "this display's frame 0 is fully rendered" the instant GPU
-    // work completes. Matches C++ `trender` semantics (`DxScreenCapture.cpp:1018`),
-    // which is set after frame 0's EndDraw — BEFORE `ShowWindow`. The
-    // Monitor Info panel's `first render` readout is this minus
-    // `startup.t_start`.
     ui_renderer.mark_first_visible_frame();
 
-    // Signal the main thread that this render thread's frame 0 is done.
-    ready_count.fetch_add(1, std::sync::atomic::Ordering::Release);
+    startup.background.workers[monitor_index]
+        .first_render
+        .set_once(startup.t_start.elapsed());
 
-    // Wait for the main thread to actually reveal the windows (snap alpha
-    // to 1 / set_visible). Only then start the animation clock — otherwise
-    // the colour→grayscale fade runs while the window is still invisible.
-    visible_barrier.wait();
+    ready_count.fetch_add(1, Ordering::Release);
+    guard.disarm();
 
-    // Start the animation clock AFTER the visible barrier. The barrier
-    // waits are unbounded intervals and we don't want any of that to eat
-    // into the fade budget.
+    visible_latch.wait();
+
+    // ── Render loop ─────────────────────────────────────────────────
+
     let start = Instant::now();
-
-    // Latest cursor position (virtual-desktop pixels, f32), zoom level,
-    // and selection rect the main thread has told us about. Seeded from
-    // the pre-window snapshot at zoom=1, no selection; every subsequent
-    // value arrives via RenderMsg::MouseState.
     let mut mouse_pos: ScreenPointF = initial_mouse;
     let mut zoom: f32 = 1.0;
     let mut selection: Option<ScreenRect> = None;
-    // Once captured the shader stops drawing the crosshair entirely
-    // — the OS cursor takes over the visual role. Plumbed via
-    // `selection_params.y` (0/1 float).
     let mut captured: bool = false;
-    // Master overlay switch (Q key, `DxScreenCapture.cpp:1234-1239`).
-    // Picked up from every `RenderMsg::UiState` below; fed into
-    // `update_uniforms` so the fade / selection / crosshair all zero
-    // out when Q-passthrough mode is on. Defaults to true so the
-    // normal capture UI draws.
     let mut overlays_visible: bool = true;
-
-    // Marker used to compute the `overall` frame-time (wall-clock gap
-    // between consecutive loop iterations). Initialised to `now` so the
-    // first sample has a sane-but-discardable value.
     let mut last_iter = Instant::now();
 
     loop {
-        // Drain *all* pending commands non-blockingly before the blocking
-        // present. A burst of MouseState events from a fast mouse must
-        // collapse to the latest in a single frame, not lag N frames
-        // behind. Shutdown propagates within at most one frame.
         loop {
-            match rx.try_recv() {
+            match msg_rx.try_recv() {
                 Ok(RenderMsg::Resize(new_size)) => {
                     config.width = new_size.width.max(1);
                     config.height = new_size.height.max(1);
                     surface.configure(&gpu.device, &config);
-                    msaa.ensure(&gpu.device, gpu.surface_format, config.width, config.height);
+                    msaa.ensure(&gpu.device, SURFACE_FORMAT, config.width, config.height);
                 }
                 Ok(RenderMsg::MouseState {
                     pos,
@@ -453,8 +448,6 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             }
         }
 
-        // Update the fade factor and push it to the GPU. Cheap; the
-        // staging ring buffer absorbs this without blocking.
         if let Some(state) = snapshot_state.as_mut() {
             state.update_uniforms(
                 &gpu.queue,
@@ -471,36 +464,21 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
             );
         }
 
-        // Drive mapping callbacks from the wgpu device forward. Cheap
-        // (Poll, not Wait); map_async callbacks won't fire otherwise and
-        // the GPU-timing ring would stall.
         if gpu_timing.is_some() {
             let _ = gpu.device.poll(wgpu::PollType::Poll);
         }
 
-        // Drain any GPU timing results that have become readable since
-        // last frame and attach them to pending CPU samples (FIFO —
-        // oldest sample without a GPU time gets the oldest result).
         if let Some(gt) = gpu_timing.as_mut() {
             for gpu_dur in gt.poll_completed() {
                 perf.backfill_next_gpu(gpu_dur);
             }
         }
 
-        // Timing bracket: `overall` is the gap between consecutive loop
-        // iterations (reciprocal ≈ FPS). Sampled here so it survives
-        // early-returns from `draw_once`.
         let now = Instant::now();
         let overall = now.duration_since(last_iter);
         last_iter = now;
 
-        // `draw_once` produces a `PerfSample` covering wait / draw /
-        // present; we fill in `overall` and record it afterwards.
         let mut sample: Option<PerfSample> = None;
-        // This call blocks on the DXGI waitable object (because Backends::DX12
-        // + Dx12UseFrameLatencyWaitableObject::Wait). We wake up ~one frame
-        // before the next scanout — the last reasonable moment to begin
-        // rendering before we must hand a frame to the compositor.
         draw_once(
             &surface,
             &gpu,
@@ -519,36 +497,27 @@ fn render_thread_main(params: RenderThreadParams, rx: mpsc::Receiver<RenderMsg>)
     }
 }
 
-/// Per-window GPU resources that only exist when we have a desktop snapshot.
+// ── Per-window snapshot state (unchanged) ───────────────────────────
+
 struct SnapshotState {
     ubo: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     uniforms: WindowUniforms,
-    /// This monitor's un-zoomed UV region of the shared desktop texture:
-    /// [u_offset, v_offset, u_scale, v_scale]. The per-frame loop folds
-    /// the current zoom-around-cursor transform into this to produce
-    /// `uniforms.uv_offset_scale`. At zoom=1 they're identical.
     base_uv_offset_scale: [f32; 4],
 }
 
-/// Per-frame input for uniform computation.
 struct FrameState {
     monitor_bounds: ScreenRect,
     mouse_pos: ScreenPointF,
     zoom: f32,
     selection: Option<ScreenRect>,
     captured: bool,
-    /// Master overlay switch (Q key). When `false`, `update_uniforms`
-    /// feeds neutral values to the shader so the fade / selection rect
-    /// / crosshair all suppress, leaving the raw desktop visible.
     overlays_visible: bool,
     elapsed: f32,
     surface_size: (u32, u32),
 }
 
 impl SnapshotState {
-    /// Recompute all per-frame uniform values (fade, cursor, zoom,
-    /// selection rect) and write them to the GPU buffer.
     fn update_uniforms(&mut self, queue: &wgpu::Queue, frame: &FrameState) {
         let FrameState {
             monitor_bounds,
@@ -561,22 +530,10 @@ impl SnapshotState {
             surface_size,
         } = *frame;
 
-        // Q-passthrough mode (`DxScreenCapture.cpp:526-533, 903-908`):
-        // feed neutral uniforms so the shader draws the raw desktop
-        // colour with no fade / selection rect / crosshair. The
-        // magnifier stays live, though — Q is meant to act as a pure
-        // magnifier (no UI chrome, but the desktop is still zoomable),
-        // so `uv_offset_scale` still gets the zoom-around-cursor
-        // transform folded in instead of being reset to the un-zoomed
-        // base.
         if !overlays_visible {
             self.uniforms.params[0] = 0.0;
             let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;
             let local_y = mouse_pos.y - monitor_bounds.min_y() as f32;
-            // Off-screen cursor → integer-equality crosshair test
-            // misses on every pixel, so no crosshair arms draw. The
-            // zoom math below uses the real `local_x`/`local_y`, not
-            // these sentinels.
             self.uniforms.params[1] = -1.0;
             self.uniforms.params[2] = -1.0;
             if zoom <= 1.0 {
@@ -604,7 +561,6 @@ impl SnapshotState {
         }
 
         let fade = if cfg!(target_os = "macos") {
-            // macOS: skip the GPU fade — the window fades in via alpha.
             1.0
         } else {
             let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
@@ -618,7 +574,6 @@ impl SnapshotState {
         self.uniforms.params[1] = local_x;
         self.uniforms.params[2] = local_y;
 
-        // Fold the zoom-around-cursor transform into uv_offset_scale.
         if zoom <= 1.0 {
             self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
         } else {
@@ -636,13 +591,17 @@ impl SnapshotState {
             ];
         }
 
-        // Selection rect (if any) → window-local physical pixels.
         if let Some(sel) = selection {
             let cx = mouse_pos.x;
             let cy = mouse_pos.y;
             let local_cx = cx - monitor_bounds.min_x() as f32;
             let local_cy = cy - monitor_bounds.min_y() as f32;
-            let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cx, (vd_y - cy) * zoom + local_cy) };
+            let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
+                (
+                    (vd_x - cx) * zoom + local_cx,
+                    (vd_y - cy) * zoom + local_cy,
+                )
+            };
             let (l, t) = to_local(sel.left() as f32, sel.top() as f32);
             let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
             self.uniforms.selection_rect = [l, t, r, b];
@@ -658,6 +617,8 @@ impl SnapshotState {
     }
 }
 
+// ── draw_once (unchanged) ───────────────────────────────────────────
+
 #[allow(clippy::too_many_arguments)]
 fn draw_once(
     surface: &wgpu::Surface<'static>,
@@ -670,13 +631,10 @@ fn draw_once(
     gpu_timing: Option<&GpuTimings>,
     out_sample: &mut Option<PerfSample>,
 ) {
-    // Wait sample — `get_current_texture()` blocks on the DXGI waitable
-    // object on Windows, so this is where the wait-for-vsync time lives.
-    // On other backends it's effectively instantaneous; the sample just
-    // reads near-zero and is still useful for regression comparisons.
     let t_wait_start = Instant::now();
     let frame = match surface.get_current_texture() {
-        wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
+        wgpu::CurrentSurfaceTexture::Success(f)
+        | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
         wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return,
         wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
             surface.configure(&gpu.device, config);
@@ -696,32 +654,14 @@ fn draw_once(
             label: Some("frame encoder"),
         });
 
-    // Stage all per-frame UI CPU work (text shape, rect/svg instance
-    // uploads, glyphon atlas) before opening the render pass. Must
-    // happen outside the pass so the queue writes land first and the
-    // pass only does GPU work.
-    ui_renderer.prepare(
-        &gpu.device,
-        &gpu.queue,
-        (config.width, config.height),
-        perf,
-    );
+    ui_renderer.prepare(&gpu.device, &gpu.queue, (config.width, config.height), perf);
 
-    // Reserve a timestamp-query slot for this frame if the GPU-timing
-    // ring has a free one. When it's full (shouldn't happen in steady
-    // state) we skip timestamps for this frame rather than stall.
     let begin_frame = gpu_timing.and_then(|gt| gt.begin_frame());
     let (pass_ts, slot_id) = match &begin_frame {
         Some(bf) => (Some(bf.pass.clone()), Some(bf.id)),
         None => (None, None),
     };
 
-    // Single combined render pass. Desktop triangle first (loads
-    // snapshot into the MSAA tile, writes result), UI draws blend on
-    // top of it in the SAME pass. On M1 TBDR this keeps the MSAA
-    // surface in tile memory end-to-end — no store/load round-trip
-    // through main memory between desktop and UI, which was ~160 MB
-    // per frame at 2880×1800×4 samples.
     {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("frame pass"),
@@ -730,9 +670,6 @@ fn draw_once(
                 resolve_target: Some(&view),
                 depth_slice: None,
                 ops: wgpu::Operations {
-                    // Dark fallback for the no-snapshot path. With a
-                    // snapshot the fullscreen triangle covers every pixel,
-                    // so the clear is never visible.
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: 0.05,
                         g: 0.05,
@@ -759,8 +696,7 @@ fn draw_once(
         gt.resolve(&mut encoder, id);
     }
 
-    gpu.queue
-        .submit(std::iter::once(encoder.finish()));
+    gpu.queue.submit(std::iter::once(encoder.finish()));
     if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
         gt.after_submit(id);
     }
@@ -775,7 +711,7 @@ fn draw_once(
         wait,
         draw,
         present,
-        overall: std::time::Duration::ZERO,
+        overall: Duration::ZERO,
         gpu: None,
     });
 }

@@ -2,52 +2,43 @@ use anyhow::Result;
 use core_graphics::access::ScreenCaptureAccess;
 use core_graphics::display::CGDisplay;
 
-use crate::geometry::ScreenRect;
 use crate::system::MonitorInfo;
 
 pub struct DesktopBitmap {
     pub bgra: Vec<u8>,
     pub width: u32,
     pub height: u32,
-    pub bounds: ScreenRect,
 }
 
-pub fn capture_desktop() -> Result<(DesktopBitmap, Vec<MonitorInfo>)> {
+/// Capture the desktop bitmap using pre-enumerated monitors for
+/// positioning. Checks Screen Recording permission, re-enumerates
+/// display IDs (cheap CG call), and composites each display into a
+/// single BGRA buffer.
+pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
     // --- Screen Recording permission gate ---
     let access = ScreenCaptureAccess;
-    if !access.preflight() {
-        // First attempt: trigger the macOS system prompt (one-time).
-        if !access.request() {
-            use xdialog::XDialogIcon::Warning;
-            let open_settings = xdialog::show_message_ok_cancel(
-                "Clowd Capture",
-                "Screen Recording Permission Required",
-                "Clowd Capture needs Screen Recording permission to capture your screen.\n\n\
-                 Click OK to open System Settings, then enable Clowd Capture in the list.\n\
-                 You may need to restart the app after granting permission.",
-                Warning,
-            )
-            .unwrap_or(false);
+    if !access.preflight() && !access.request() {
+        use xdialog::XDialogIcon::Warning;
+        let open_settings = xdialog::show_message_ok_cancel(
+            "Clowd Capture",
+            "Screen Recording Permission Required",
+            "Clowd Capture needs Screen Recording permission to capture your screen.\n\n\
+             Click OK to open System Settings, then enable Clowd Capture in the list.\n\
+             You may need to restart the app after granting permission.",
+            Warning,
+        )
+        .unwrap_or(false);
 
-            if open_settings {
-                let _ = std::process::Command::new("open")
-                    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-                    .spawn();
-            }
-
-            bail!("Screen Recording permission not granted");
+        if open_settings {
+            let _ = std::process::Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+                .spawn();
         }
+
+        bail!("Screen Recording permission not granted");
     }
 
-    // --- Enumerate monitors and compute virtual desktop ---
-    let monitors = super::mac_monitor::all_monitors()?;
-    if monitors.is_empty() {
-        bail!("No active displays found");
-    }
-
-    let display_ids = CGDisplay::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
-
-    let vd = super::mac_monitor::virtual_desktop_bounds(&monitors);
+    let vd = super::mac_monitor::virtual_desktop_bounds(monitors);
     let vd_w = vd.width() as usize;
     let vd_h = vd.height() as usize;
 
@@ -57,13 +48,22 @@ pub fn capture_desktop() -> Result<(DesktopBitmap, Vec<MonitorInfo>)> {
 
     let mut bgra = vec![0u8; vd_w * vd_h * 4];
 
-    // --- Capture each display and composite into the buffer ---
-    for (monitor, &display_id) in monitors.iter().zip(display_ids.iter()) {
-        let display = CGDisplay::new(display_id);
+    let display_ids = CGDisplay::active_displays()
+        .map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
+
+    // Zip monitors with display_ids; truncate to the shorter list in
+    // case a display connected/disconnected between enumeration and capture.
+    let count = monitors.len().min(display_ids.len());
+    for i in 0..count {
+        let monitor = &monitors[i];
+        let display = CGDisplay::new(display_ids[i]);
         let image = match display.image() {
             Some(img) => img,
             None => {
-                warn!("CGDisplayCreateImage returned null for display {} — skipping", display_id);
+                warn!(
+                    "CGDisplayCreateImage returned null for display {} — skipping",
+                    display_ids[i]
+                );
                 continue;
             }
         };
@@ -74,12 +74,13 @@ pub fn capture_desktop() -> Result<(DesktopBitmap, Vec<MonitorInfo>)> {
         let bpp = image.bits_per_pixel();
 
         if bpp != 32 {
-            warn!("Display {} has unexpected bits_per_pixel={}, skipping", display_id, bpp);
+            warn!(
+                "Display {} has unexpected bits_per_pixel={}, skipping",
+                display_ids[i], bpp
+            );
             continue;
         }
 
-        // CGDisplayCreateImage on macOS returns BGRA natively
-        // (kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little).
         let data = image.data();
         let src = data.bytes();
 
@@ -101,12 +102,9 @@ pub fn capture_desktop() -> Result<(DesktopBitmap, Vec<MonitorInfo>)> {
         }
     }
 
-    let bitmap = DesktopBitmap {
+    Ok(DesktopBitmap {
         bgra,
         width: vd_w as u32,
         height: vd_h as u32,
-        bounds: vd,
-    };
-
-    Ok((bitmap, monitors))
+    })
 }
