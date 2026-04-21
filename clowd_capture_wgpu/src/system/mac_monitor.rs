@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use anyhow::Result;
 use core_graphics::display::{CGDisplay, CGMainDisplayID};
 
-use crate::geometry::{RectExt, ScreenRect};
+use crate::geometry::{LogicalPoint, RectExt, ScreenRect};
 use crate::system::MonitorInfo;
 
 struct RawMonitor {
@@ -79,7 +79,7 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
             refresh_hz: m.refresh_hz,
             name: m.name.clone(),
             adapter_id: None,
-            logical_origin: (m.cg_x, m.cg_y),
+            logical_origin: LogicalPoint::new(m.cg_x, m.cg_y),
         })
         .collect();
 
@@ -185,20 +185,3 @@ fn cg_eq(a: f64, b: f64) -> bool {
     (a - b).abs() < 0.5
 }
 
-/// Bounding box of all monitor physical rects in virtual-desktop coordinates.
-pub fn virtual_desktop_bounds(monitors: &[MonitorInfo]) -> ScreenRect {
-    if monitors.is_empty() {
-        return ScreenRect::from_xy_size(0, 0, 0, 0);
-    }
-    let mut min_x = i32::MAX;
-    let mut min_y = i32::MAX;
-    let mut max_x = i32::MIN;
-    let mut max_y = i32::MIN;
-    for m in monitors {
-        min_x = min_x.min(m.bounds.min_x());
-        min_y = min_y.min(m.bounds.min_y());
-        max_x = max_x.max(m.bounds.max_x());
-        max_y = max_y.max(m.bounds.max_y());
-    }
-    ScreenRect::from_exact(min_x, min_y, max_x, max_y)
-}

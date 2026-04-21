@@ -25,7 +25,7 @@ mod mac_mouse;
 #[cfg(target_os = "macos")]
 mod mac_walker;
 
-use crate::geometry::{ScreenPoint, ScreenRect};
+use crate::geometry::{LogicalPoint, LogicalSize, RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
 
 /// Information about a single monitor, bundled together so callers don't
 /// have to juggle parallel vectors of fields. `bounds` is in raw physical
@@ -49,11 +49,66 @@ pub struct MonitorInfo {
     /// per window, matching the C++ version's per-monitor `AdapterIdx`.
     /// `None` if DXGI enumeration failed (fallback to wgpu's default).
     pub adapter_id: Option<(u32, u32)>,
-    /// CG logical-point origin — the raw `CGDisplayBounds().origin` for
-    /// this display. Needed to convert between the physical-pixel virtual
-    /// desktop and macOS's CG point coordinate system.
-    #[cfg(target_os = "macos")]
-    pub logical_origin: (f64, f64),
+    /// OS logical-coordinate origin for this display. On macOS this is the
+    /// raw `CGDisplayBounds().origin` (CG points). On Windows it is
+    /// computed via BFS topology walk from the physical-pixel positions.
+    pub logical_origin: LogicalPoint,
+}
+
+#[allow(dead_code)]
+impl MonitorInfo {
+    pub fn window_to_screen(&self, pt: WindowPoint) -> ScreenPointF {
+        ScreenPointF::new(
+            pt.x + self.bounds.min_x() as f32,
+            pt.y + self.bounds.min_y() as f32,
+        )
+    }
+
+    pub fn screen_to_window(&self, pt: ScreenPointF) -> WindowPoint {
+        WindowPoint::new(
+            pt.x - self.bounds.min_x() as f32,
+            pt.y - self.bounds.min_y() as f32,
+        )
+    }
+
+    pub fn logical_to_screen(&self, pt: LogicalPoint) -> ScreenPoint {
+        let s = self.scale_factor as f64;
+        ScreenPoint::new(
+            self.bounds.min_x() + ((pt.x - self.logical_origin.x) * s).round() as i32,
+            self.bounds.min_y() + ((pt.y - self.logical_origin.y) * s).round() as i32,
+        )
+    }
+
+    pub fn screen_to_logical(&self, pt: ScreenPoint) -> LogicalPoint {
+        let s = self.scale_factor as f64;
+        LogicalPoint::new(
+            self.logical_origin.x + (pt.x - self.bounds.min_x()) as f64 / s,
+            self.logical_origin.y + (pt.y - self.bounds.min_y()) as f64 / s,
+        )
+    }
+
+    pub fn physical_to_logical_size(&self, w: u32, h: u32) -> LogicalSize {
+        let s = self.scale_factor as f64;
+        LogicalSize::new(w as f64 / s, h as f64 / s)
+    }
+}
+
+/// Bounding box of all monitor physical rects in virtual-desktop coordinates.
+pub fn virtual_desktop_bounds(monitors: &[MonitorInfo]) -> ScreenRect {
+    if monitors.is_empty() {
+        return ScreenRect::from_xy_size(0, 0, 0, 0);
+    }
+    let mut min_x = i32::MAX;
+    let mut min_y = i32::MAX;
+    let mut max_x = i32::MIN;
+    let mut max_y = i32::MIN;
+    for m in monitors {
+        min_x = min_x.min(m.bounds.min_x());
+        min_y = min_y.min(m.bounds.min_y());
+        max_x = max_x.max(m.bounds.max_x());
+        max_y = max_y.max(m.bounds.max_y());
+    }
+    ScreenRect::from_exact(min_x, min_y, max_x, max_y)
 }
 
 /// Raw virtual-desktop snapshot. The pixel data is in BGRA byte order
@@ -99,7 +154,8 @@ impl SystemInterop {
     /// bitmap is a raw BitBlt of the virtual desktop; the monitors are
     /// bundled into the result for downstream consumers.
     pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>) -> CapturedDesktop {
-        let bitmap = win_capture::capture_desktop().expect("Unable to capture desktop");
+        let vd = virtual_desktop_bounds(&monitors);
+        let bitmap = win_capture::capture_desktop(&vd).expect("Unable to capture desktop");
         CapturedDesktop {
             bgra: bitmap.bgra,
             width: bitmap.width,
@@ -112,10 +168,14 @@ impl SystemInterop {
     pub fn all_monitors() -> Vec<MonitorInfo> {
         let dxgi_map = win_monitor::build_dxgi_adapter_map();
 
-        win_monitor::all()
-            .expect("Unable to enumerate monitors")
+        let impl_monitors = win_monitor::all()
+            .expect("Unable to enumerate monitors");
+        let logical_origins = win_monitor::compute_logical_origins(&impl_monitors);
+
+        impl_monitors
             .into_iter()
-            .map(|m| {
+            .zip(logical_origins)
+            .map(|(m, logical_origin)| {
                 let adapter_id = dxgi_map.get(&m.name).copied();
                 MonitorInfo {
                     bounds: m.bounds(),
@@ -124,6 +184,7 @@ impl SystemInterop {
                     refresh_hz: m.frequency,
                     name: m.name,
                     adapter_id,
+                    logical_origin,
                 }
             })
             .collect()
@@ -169,7 +230,7 @@ impl SystemInterop {
     /// capture in the composite buffer.
     pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>) -> CapturedDesktop {
         let bitmap = mac_capture::capture_bitmap(&monitors).expect("Unable to capture desktop");
-        let vd = mac_monitor::virtual_desktop_bounds(&monitors);
+        let vd = virtual_desktop_bounds(&monitors);
         CapturedDesktop {
             bgra: bitmap.bgra,
             width: bitmap.width,

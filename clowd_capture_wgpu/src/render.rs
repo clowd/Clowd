@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
+use crate::geometry::{RectExt, ScreenPointF, ScreenRect, WindowPoint};
 use crate::gpu::{self, WindowGpu, WindowUniforms, SURFACE_FORMAT, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
 use crate::sync::{ReadyGuard, VisibleLatch};
@@ -294,12 +294,14 @@ fn render_worker_main(
             m_h / vd_h,
         ];
 
-        let init_local_x = initial_mouse.x - monitor_bounds.min_x() as f32;
-        let init_local_y = initial_mouse.y - monitor_bounds.min_y() as f32;
+        let init_local = WindowPoint::new(
+            initial_mouse.x - monitor_bounds.min_x() as f32,
+            initial_mouse.y - monitor_bounds.min_y() as f32,
+        );
 
         let uniforms = WindowUniforms {
             uv_offset_scale: base_uv_offset_scale,
-            params: [0.0, init_local_x, init_local_y, scale_factor],
+            params: [0.0, init_local.x, init_local.y, scale_factor],
             crosshair_color: settings.crosshair_color,
             selection_rect: [0.0, 0.0, -1.0, -1.0],
             selection_params: [0.0, 0.0, 0.0, 0.0],
@@ -493,8 +495,10 @@ impl SnapshotState {
 
         if !overlays_visible {
             self.uniforms.params[0] = 0.0;
-            let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;
-            let local_y = mouse_pos.y - monitor_bounds.min_y() as f32;
+            let local = WindowPoint::new(
+                mouse_pos.x - monitor_bounds.min_x() as f32,
+                mouse_pos.y - monitor_bounds.min_y() as f32,
+            );
             self.uniforms.params[1] = -1.0;
             self.uniforms.params[2] = -1.0;
             if zoom <= 1.0 {
@@ -502,8 +506,8 @@ impl SnapshotState {
             } else {
                 let w = surface_size.0 as f32;
                 let h = surface_size.1 as f32;
-                let cu = local_x / w;
-                let cv = local_y / h;
+                let cu = local.x / w;
+                let cv = local.y / h;
                 let k = 1.0 - 1.0 / zoom;
                 let base = self.base_uv_offset_scale;
                 self.uniforms.uv_offset_scale = [
@@ -530,18 +534,20 @@ impl SnapshotState {
         };
         self.uniforms.params[0] = fade;
 
-        let local_x = mouse_pos.x - monitor_bounds.min_x() as f32;
-        let local_y = mouse_pos.y - monitor_bounds.min_y() as f32;
-        self.uniforms.params[1] = local_x;
-        self.uniforms.params[2] = local_y;
+        let local = WindowPoint::new(
+            mouse_pos.x - monitor_bounds.min_x() as f32,
+            mouse_pos.y - monitor_bounds.min_y() as f32,
+        );
+        self.uniforms.params[1] = local.x;
+        self.uniforms.params[2] = local.y;
 
         if zoom <= 1.0 {
             self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
         } else {
             let w = surface_size.0 as f32;
             let h = surface_size.1 as f32;
-            let cu = local_x / w;
-            let cv = local_y / h;
+            let cu = local.x / w;
+            let cv = local.y / h;
             let k = 1.0 - 1.0 / zoom;
             let base = self.base_uv_offset_scale;
             self.uniforms.uv_offset_scale = [
@@ -555,12 +561,14 @@ impl SnapshotState {
         if let Some(sel) = selection {
             let cx = mouse_pos.x;
             let cy = mouse_pos.y;
-            let local_cx = cx - monitor_bounds.min_x() as f32;
-            let local_cy = cy - monitor_bounds.min_y() as f32;
+            let local_cursor = WindowPoint::new(
+                cx - monitor_bounds.min_x() as f32,
+                cy - monitor_bounds.min_y() as f32,
+            );
             let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
                 (
-                    (vd_x - cx) * zoom + local_cx,
-                    (vd_y - cy) * zoom + local_cy,
+                    (vd_x - cx) * zoom + local_cursor.x,
+                    (vd_y - cy) * zoom + local_cursor.y,
                 )
             };
             let (l, t) = to_local(sel.left() as f32, sel.top() as f32);

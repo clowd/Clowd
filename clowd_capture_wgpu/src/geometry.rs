@@ -4,17 +4,24 @@ use euclid::{Point2D, Rect, Size2D};
 use num::traits::real::Real;
 use std::ops;
 
-// Type aliases for screen and window units
+// Physical pixels in virtual-desktop space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ScreenUnit;
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-// pub struct WindowUnit;
 pub type ScreenRect = Rect<i32, ScreenUnit>;
 pub type ScreenRectF = Rect<f32, ScreenUnit>;
 pub type ScreenPoint = Point2D<i32, ScreenUnit>;
 pub type ScreenPointF = Point2D<f32, ScreenUnit>;
-// pub type WindowRectF = Rect<f32, WindowUnit>;
-// pub type WindowPointF = Point2D<f32, WindowUnit>;
+
+// OS logical coordinates (CG points on macOS, DIPs on Windows).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LogicalUnit;
+pub type LogicalPoint = Point2D<f64, LogicalUnit>;
+pub type LogicalSize = Size2D<f64, LogicalUnit>;
+
+// Physical pixels relative to a window's client-area top-left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WindowUnit;
+pub type WindowPoint = Point2D<f32, WindowUnit>;
 
 // Initialise rounded ScreenRect
 const PIXEL_SELECTION_ROUNDING_THRESHOLD: f32 = 0.2;
