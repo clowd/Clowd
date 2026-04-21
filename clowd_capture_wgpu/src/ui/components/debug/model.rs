@@ -239,23 +239,58 @@ impl<'a> PrimaryPanelData<'a> {
             .unwrap_or_else(|| self.startup.total());
         out.push(format_args!("startup: {} total", DisplayMs(total)));
 
-        let mut prev = Duration::ZERO;
-        let mut push_phase = |out: &mut LineBuf, label: &str, offset: Duration| {
-            let delta = offset.saturating_sub(prev);
-            out.push(format_args!("  {} +{}", label, DisplayMs(delta)));
-            prev = offset;
-        };
-        if let Some(d) = self.startup.t_initialize {
-            push_phase(out, "initialize    ", d);
+        if let Some(d) = self.startup.t_initialize.get() {
+            out.push(format_args!("  initialize:    {}", DisplayMs(d)));
         }
-        if let Some(d) = self.startup.t_desktop_search {
-            push_phase(out, "desktop search", d);
+
+        let bg = &self.startup.background;
+        if let Some(gate) = bg.gate() {
+            out.push(format_args!("  background:    {}", DisplayMs(gate)));
         }
-        if let Some(d) = self.startup.t_window_create {
-            push_phase(out, "window create ", d);
+        if let Some(d) = bg.screenshot.get() {
+            out.push(format_args!("    screenshot:  {}", DisplayMs(d)));
+        }
+        if let Some(d) = bg.walker.get() {
+            out.push(format_args!("    walker:      {}", DisplayMs(d)));
+        }
+        let multi = bg.workers.len() > 1;
+        for (i, w) in bg.workers.iter().enumerate() {
+            if let Some(d) = w.render_prep.get() {
+                if multi {
+                    out.push(format_args!("    prep[{}]:     {}", i, DisplayMs(d)));
+                } else {
+                    out.push(format_args!("    prep:        {}", DisplayMs(d)));
+                }
+            }
+            if let Some(d) = w.upload.get() {
+                if multi {
+                    out.push(format_args!("    upload[{}]:   {}", i, DisplayMs(d)));
+                } else {
+                    out.push(format_args!("    upload:      {}", DisplayMs(d)));
+                }
+            }
+            if let Some(d) = w.surface_bind.get() {
+                if multi {
+                    out.push(format_args!("    surface[{}]:  {}", i, DisplayMs(d)));
+                } else {
+                    out.push(format_args!("    surface:     {}", DisplayMs(d)));
+                }
+            }
+        }
+
+        if let Some(d) = self.startup.t_window_create.get() {
+            out.push(format_args!("  window create: {}", DisplayMs(d)));
+        }
+        let first_render = bg
+            .workers
+            .iter()
+            .filter_map(|w| w.first_render.get())
+            .max();
+        if let Some(d) = first_render {
+            out.push(format_args!("  first render:  {}", DisplayMs(d)));
         }
         if let Some(d) = self.shown_time {
-            push_phase(out, "shown         ", d);
+            out.push(format_args!("  shown:         {}", DisplayMs(d)));
         }
         out.push_empty();
 

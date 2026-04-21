@@ -74,6 +74,7 @@ pub struct CapturedDesktop {
     /// raw-pixel virtual-desktop coordinate space as `bounds`) and its
     /// own DPI scale. Bundling them with the bitmap avoids any race
     /// where the topology could change between capture and enumeration.
+    #[allow(dead_code)]
     pub monitors: Vec<MonitorInfo>,
 }
 
@@ -89,19 +90,21 @@ impl SystemInterop {
         win_mouse::set_position(pos)
     }
 
-    pub fn capture_desktop() -> CapturedDesktop {
+    /// Capture the desktop bitmap using pre-enumerated monitors. The
+    /// bitmap is a raw BitBlt of the virtual desktop; the monitors are
+    /// bundled into the result for downstream consumers.
+    pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>) -> CapturedDesktop {
         let bitmap = win_capture::capture_desktop().expect("Unable to capture desktop");
         CapturedDesktop {
             bgra: bitmap.bgra,
             width: bitmap.width,
             height: bitmap.height,
             bounds: bitmap.bounds,
-            monitors: Self::all_monitors(),
+            monitors,
         }
     }
 
     pub fn all_monitors() -> Vec<MonitorInfo> {
-        // Build a map of GDI device name → (vendor_id, device_id) from DXGI.
         let dxgi_map = win_monitor::build_dxgi_adapter_map();
 
         win_monitor::all()
@@ -156,18 +159,21 @@ impl SystemInterop {
         mac_mouse::set_position(pos)
     }
 
-    pub fn capture_desktop() -> CapturedDesktop {
-        let (bitmap, monitors) = mac_capture::capture_desktop().expect("Unable to capture desktop");
+    /// Capture the desktop bitmap using pre-enumerated monitors. On
+    /// macOS the monitor topology is used to position each display's
+    /// capture in the composite buffer.
+    pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>) -> CapturedDesktop {
+        let bitmap = mac_capture::capture_bitmap(&monitors).expect("Unable to capture desktop");
+        let vd = mac_monitor::virtual_desktop_bounds(&monitors);
         CapturedDesktop {
             bgra: bitmap.bgra,
             width: bitmap.width,
             height: bitmap.height,
-            bounds: bitmap.bounds,
+            bounds: vd,
             monitors,
         }
     }
 
-    #[allow(dead_code)]
     pub fn all_monitors() -> Vec<MonitorInfo> {
         mac_monitor::all_monitors().expect("Unable to enumerate monitors")
     }
