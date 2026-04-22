@@ -312,6 +312,7 @@ pub struct TextStack {
     vertex_buffer: wgpu::Buffer,
     vertex_buffer_size: u64,
     glyph_vertices: Vec<GlyphToRender>,
+    contrast_gamma: f32,
 }
 
 impl TextStack {
@@ -372,7 +373,7 @@ impl TextStack {
                 label: Some("text params layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -490,12 +491,17 @@ impl TextStack {
             vertex_buffer,
             vertex_buffer_size,
             glyph_vertices: Vec::new(),
+            contrast_gamma: 1.0 / 1.4,
         }
     }
 
     pub fn update_viewport(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
-        let params: [u32; 4] = [width, height, 0, 0];
+        let params: [u32; 4] = [width, height, self.contrast_gamma.to_bits(), 0];
         queue.write_buffer(&self.params_buffer, 0, bytemuck::cast_slice(&params));
+    }
+
+    pub fn set_contrast_gamma(&mut self, gamma: f32) {
+        self.contrast_gamma = gamma.clamp(0.1, 2.0);
     }
 
     pub fn prepare(

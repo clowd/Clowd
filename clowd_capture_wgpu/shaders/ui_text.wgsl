@@ -19,7 +19,8 @@ struct VertexOutput {
 
 struct Params {
     screen_resolution: vec2<u32>,
-    _pad: vec2<u32>,
+    contrast_gamma: f32,
+    _pad: u32,
 }
 
 @group(0) @binding(0)
@@ -79,8 +80,10 @@ fn fs_main(in_frag: VertexOutput) -> FragOutput {
 
     switch in_frag.content_type {
         case 0u: {
-            // Sub-pixel mask: per-channel coverage in RGB
-            let rgb_cov = tex.rgb * in_frag.color.a;
+            // ClearType-style contrast enhancement: pow() with gamma < 1.0
+            // pushes mid-range coverage toward 1.0, producing sharper edges.
+            let enhanced = pow(tex.rgb, vec3<f32>(params.contrast_gamma));
+            let rgb_cov = enhanced * in_frag.color.a;
             let max_cov = max(max(rgb_cov.r, rgb_cov.g), rgb_cov.b);
             out.color = vec4<f32>(in_frag.color.rgb * rgb_cov, max_cov);
             out.blend = vec4<f32>(rgb_cov, max_cov);
