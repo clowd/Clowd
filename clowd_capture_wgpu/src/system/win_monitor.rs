@@ -19,9 +19,7 @@ use windows::{
     },
 };
 
-use std::collections::VecDeque;
-
-use crate::geometry::{LogicalPoint, RectExt, ScreenRect};
+use crate::geometry::{RectExt, ScreenRect};
 
 #[derive(Debug, Clone)]
 pub struct ImplMonitor {
@@ -258,112 +256,4 @@ pub fn build_dxgi_adapter_map() -> HashMap<String, (u32, u32)> {
     }
 
     map
-}
-
-/// BFS from the primary monitor to compute logical-coordinate origins that
-/// preserve adjacency from the physical-pixel topology.
-///
-/// This is the inverse of the macOS algorithm (`mac_monitor::compute_physical_origins`):
-/// macOS walks CG logical origins → physical origins; here we walk physical
-/// pixel positions → logical origins. The same adjacency-preserving principle
-/// applies: shared edges in physical space become shared edges in logical space,
-/// which is critical for mixed-DPI multi-monitor setups.
-pub fn compute_logical_origins(monitors: &[ImplMonitor]) -> Vec<LogicalPoint> {
-    let n = monitors.len();
-    let mut origins: Vec<Option<LogicalPoint>> = vec![None; n];
-
-    let primary_idx = monitors
-        .iter()
-        .position(|m| m.is_primary)
-        .unwrap_or(0);
-
-    let pm = &monitors[primary_idx];
-    let ps = pm.scale_factor as f64;
-    origins[primary_idx] = Some(LogicalPoint::new(
-        pm.x as f64 / ps,
-        pm.y as f64 / ps,
-    ));
-
-    let mut queue = VecDeque::new();
-    queue.push_back(primary_idx);
-
-    while let Some(pi) = queue.pop_front() {
-        let placed = &monitors[pi];
-        let placed_origin = origins[pi].unwrap();
-        let placed_right = placed.x + placed.width as i32;
-        let placed_bottom = placed.y + placed.height as i32;
-        let placed_scale = placed.scale_factor as f64;
-        let placed_logical_w = placed.width as f64 / placed_scale;
-        let placed_logical_h = placed.height as f64 / placed_scale;
-
-        for (oi, other) in monitors.iter().enumerate() {
-            if origins[oi].is_some() {
-                continue;
-            }
-
-            let other_right = other.x + other.width as i32;
-            let other_bottom = other.y + other.height as i32;
-
-            // Shared vertical edge (horizontal adjacency).
-            let y_touch = placed.y < other_bottom && other.y < placed_bottom;
-            if y_touch {
-                if other.x == placed_right {
-                    let dy = (other.y - placed.y) as f64 / placed_scale;
-                    origins[oi] = Some(LogicalPoint::new(
-                        placed_origin.x + placed_logical_w,
-                        placed_origin.y + dy,
-                    ));
-                    queue.push_back(oi);
-                    continue;
-                }
-                if other_right == placed.x {
-                    let other_scale = other.scale_factor as f64;
-                    let other_logical_w = other.width as f64 / other_scale;
-                    let dy = (other.y - placed.y) as f64 / placed_scale;
-                    origins[oi] = Some(LogicalPoint::new(
-                        placed_origin.x - other_logical_w,
-                        placed_origin.y + dy,
-                    ));
-                    queue.push_back(oi);
-                    continue;
-                }
-            }
-
-            // Shared horizontal edge (vertical adjacency).
-            let x_touch = placed.x < other_right && other.x < placed_right;
-            if x_touch {
-                if other.y == placed_bottom {
-                    let dx = (other.x - placed.x) as f64 / placed_scale;
-                    origins[oi] = Some(LogicalPoint::new(
-                        placed_origin.x + dx,
-                        placed_origin.y + placed_logical_h,
-                    ));
-                    queue.push_back(oi);
-                    continue;
-                }
-                if other_bottom == placed.y {
-                    let other_scale = other.scale_factor as f64;
-                    let other_logical_h = other.height as f64 / other_scale;
-                    let dx = (other.x - placed.x) as f64 / placed_scale;
-                    origins[oi] = Some(LogicalPoint::new(
-                        placed_origin.x + dx,
-                        placed_origin.y - other_logical_h,
-                    ));
-                    queue.push_back(oi);
-                    continue;
-                }
-            }
-        }
-    }
-
-    // Fallback for disconnected monitors (rare).
-    for (i, origin) in origins.iter_mut().enumerate() {
-        if origin.is_none() {
-            let m = &monitors[i];
-            let s = m.scale_factor as f64;
-            *origin = Some(LogicalPoint::new(m.x as f64 / s, m.y as f64 / s));
-        }
-    }
-
-    origins.into_iter().map(|o| o.unwrap()).collect()
 }

@@ -220,14 +220,10 @@ impl SystemInterop {
     pub fn all_monitors() -> Vec<MonitorInfo> {
         let dxgi_map = win_monitor::build_dxgi_adapter_map();
 
-        let impl_monitors = win_monitor::all()
-            .expect("Unable to enumerate monitors");
-        let logical_origins = win_monitor::compute_logical_origins(&impl_monitors);
-
-        impl_monitors
+        win_monitor::all()
+            .expect("Unable to enumerate monitors")
             .into_iter()
-            .zip(logical_origins)
-            .map(|(m, logical_origin)| {
+            .map(|m| {
                 let adapter_id = dxgi_map.get(&m.name).copied();
                 MonitorInfo {
                     bounds: m.bounds(),
@@ -236,7 +232,7 @@ impl SystemInterop {
                     refresh_hz: m.frequency,
                     name: m.name,
                     adapter_id,
-                    logical_origin,
+                    logical_origin: LogicalPoint::new(m.x as f64, m.y as f64),
                 }
             })
             .collect()
