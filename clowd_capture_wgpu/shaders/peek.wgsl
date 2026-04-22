@@ -55,8 +55,22 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     if (!captured) {
         let mouse_x = i32(u.cursor_params.x);
         let mouse_y = i32(u.cursor_params.y);
+        let dx = px.x - mouse_x;
+        let dy = px.y - mouse_y;
+        let adx = abs(dx);
+        let ady = abs(dy);
+        let scale = max(u.cursor_params.z, 1.0);
+        let chunk = i32(round(50.0 * scale));
+        let chunk2 = chunk * 2;
+        let wide_half = clamp(i32(round(2.5 * scale)), 1, 4);
 
-        if (px.x == mouse_x || px.y == mouse_y) {
+        let on_v_line = dx == 0;
+        let on_h_line = dy == 0;
+        let on_thin = (on_v_line && ady <= chunk) || (on_h_line && adx <= chunk);
+        let on_thick_v = adx <= wide_half && ady > chunk && ady <= chunk2;
+        let on_thick_h = ady <= wide_half && adx > chunk && adx <= chunk2;
+
+        if (on_thin || on_thick_v || on_thick_h || on_v_line || on_h_line) {
             discard;
         }
     }
