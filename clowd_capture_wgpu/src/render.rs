@@ -64,6 +64,8 @@ pub struct WindowHandle {
     pub monitor_bounds: ScreenRect,
     tx: mpsc::Sender<RenderMsg>,
     thread: Option<JoinHandle<()>>,
+    #[cfg(target_os = "macos")]
+    pub render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
 }
 
 impl WindowHandle {
@@ -72,12 +74,15 @@ impl WindowHandle {
         monitor_bounds: ScreenRect,
         tx: mpsc::Sender<RenderMsg>,
         thread: JoinHandle<()>,
+        #[cfg(target_os = "macos")] render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
     ) -> Self {
         Self {
             window,
             monitor_bounds,
             tx,
             thread: Some(thread),
+            #[cfg(target_os = "macos")]
+            render_subview,
         }
     }
 
@@ -525,9 +530,7 @@ impl SnapshotState {
             return;
         }
 
-        let fade = if cfg!(target_os = "macos") {
-            1.0
-        } else {
+        let fade = {
             let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
             let inv = 1.0 - t;
             1.0 - inv * inv * inv * inv

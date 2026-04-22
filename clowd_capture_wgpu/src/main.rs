@@ -148,6 +148,13 @@ fn main() -> anyhow::Result<()> {
             .expect("spawn walker thread");
     }
 
+    // ── Wait for the screenshot before entering the event loop ─────
+    // Ensures the desktop bitmap is ready before any windows are
+    // created, so macOS windows open with the screenshot already
+    // painted (no black flash) and the app doesn't activate early.
+
+    let desktop_buffer = screenshot_latch.wait();
+
     // ── Start the event loop ────────────────────────────────────────
 
     let event_loop = winit::event_loop::EventLoop::new()?;
@@ -160,7 +167,7 @@ fn main() -> anyhow::Result<()> {
         monitors,
         initial_mouse_f,
         worker_setups,
-        screenshot_latch,
+        desktop_buffer,
         walker_latch,
         ready_count,
         visible_latch,

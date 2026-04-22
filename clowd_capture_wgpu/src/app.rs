@@ -71,7 +71,6 @@ pub struct App {
     // Parallel bootstrap state — consumed in resumed().
     instance: Arc<wgpu::Instance>,
     worker_setups: Option<Vec<WorkerSetup>>,
-    screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
     walker_latch: Arc<Latch<Arc<WindowWalker>>>,
 }
 
@@ -90,7 +89,7 @@ impl App {
         monitors: Vec<MonitorInfo>,
         initial_mouse: ScreenPointF,
         worker_setups: Vec<WorkerSetup>,
-        screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
+        desktop_buffer: Arc<CapturedDesktop>,
         walker_latch: Arc<Latch<Arc<WindowWalker>>>,
         ready_count: Arc<AtomicUsize>,
         visible_latch: Arc<VisibleLatch>,
@@ -130,7 +129,7 @@ impl App {
             monitors,
             cached_hovered_title: None,
             vd_bounds,
-            desktop_buffer: None,
+            desktop_buffer: Some(desktop_buffer),
             walker: None,
             pending_show: Some(PendingShow {
                 ready_count,
@@ -142,7 +141,6 @@ impl App {
             pinch_monitor: None,
             instance,
             worker_setups: Some(worker_setups),
-            screenshot_latch,
             walker_latch,
             input: InputState {
                 virtual_cursor: initial_mouse,
@@ -241,10 +239,6 @@ impl App {
     }
 
     fn broadcast_ui_state(&mut self) {
-        if self.desktop_buffer.is_none() {
-            self.desktop_buffer = self.screenshot_latch.try_get();
-        }
-
         let cursor = self.input.virtual_cursor;
         let cursor_pt = ScreenPoint::new(cursor.x.floor() as i32, cursor.y.floor() as i32);
 
@@ -361,11 +355,6 @@ impl App {
     ) {
         use xdialog::XDialogIcon::Error as ErrorIcon;
         log::info!("dispatch command: {:?}", command);
-
-        // Lazily load the desktop buffer from the screenshot latch.
-        if self.desktop_buffer.is_none() {
-            self.desktop_buffer = self.screenshot_latch.try_get();
-        }
 
         match command {
             Command::Copy => {
@@ -487,7 +476,6 @@ impl ApplicationHandler for App {
                 .with_resizable(false)
                 .with_visible(cfg!(target_os = "macos"))
                 .with_transparent(false)
-                .with_active(i == 0)
                 .with_position(win_pos)
                 .with_inner_size(win_size);
             #[cfg(windows)]
@@ -505,8 +493,14 @@ impl ApplicationHandler for App {
             #[cfg(not(windows))]
             window.set_cursor_visible(false);
 
-            let surface = match gpu::create_surface(&self.instance, window.clone()) {
-                Ok(s) => s,
+            #[cfg(target_os = "macos")]
+            let screenshot_image = self.desktop_buffer.as_ref()
+                .and_then(|s| platform::crop_screenshot_to_cgimage(s, m.bounds));
+            #[cfg(not(target_os = "macos"))]
+            let screenshot_image = None;
+
+            let bundle = match gpu::create_surface(&self.instance, window.clone(), screenshot_image) {
+                Ok(b) => b,
                 Err(e) => {
                     error!("failed to create surface for monitor {i}: {e:?}");
                     continue;
@@ -518,12 +512,19 @@ impl ApplicationHandler for App {
                 .input_tx
                 .send(WorkerInput::Handoff(WindowHandoff {
                     window: window.clone(),
-                    surface,
+                    surface: bundle.surface,
                 }));
 
             handles.insert(
                 id,
-                WindowHandle::new(window, setup.monitor_bounds, setup.render_msg_tx, setup.thread),
+                WindowHandle::new(
+                    window,
+                    setup.monitor_bounds,
+                    setup.render_msg_tx,
+                    setup.thread,
+                    #[cfg(target_os = "macos")]
+                    bundle.render_subview,
+                ),
             );
             self.monitor_window_ids.push(id);
         }
@@ -539,7 +540,7 @@ impl ApplicationHandler for App {
         platform::set_hardware_cursor_visible(false);
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(ref m) = self.pinch_monitor {
             let delta = m.drain();
             if delta != 0.0 && !self.input.captured {
@@ -561,7 +562,7 @@ impl ApplicationHandler for App {
 
         if let Some(ref pending) = self.pending_show {
             if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
-                platform::show_windows_atomically(self.windows.values().map(|h| &h.window));
+                platform::show_windows_atomically(self.windows.values());
                 let _ = self.shown_time.set(self.startup.t_start.elapsed());
                 if let Some(first_id) = self.monitor_window_ids.first() {
                     if let Some(h) = self.windows.get(first_id) {
@@ -573,7 +574,6 @@ impl ApplicationHandler for App {
                 self.pending_show = None;
                 self.broadcast_mouse_state();
                 self.broadcast_ui_state();
-                event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
             }
         }
     }
