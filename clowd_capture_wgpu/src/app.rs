@@ -15,11 +15,11 @@ use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRect
 use crate::gpu;
 use crate::img::{self, ActionResult};
 use crate::platform;
-use crate::render::{WindowHandle, WorkerInput, WorkerSetup, WindowHandoff};
+use crate::render::{PeekCommand, WindowHandle, WorkerInput, WorkerSetup, WindowHandoff};
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
 use crate::settings::CapturerSettings;
 use crate::sync::{Latch, VisibleLatch};
-use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowWalker};
+use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::ui::command::Command;
 use crate::ui::components::debug::startup::StartupTimings;
 use crate::ui::components::panel;
@@ -59,10 +59,17 @@ pub struct App {
     monitor_window_ids: Vec<WindowId>,
     monitors: Vec<MonitorInfo>,
     cached_hovered_title: Option<String>,
+    cached_peek_command: Option<PeekCommand>,
+    /// Peek command locked at capture time — persists through resize,
+    /// cleared on reset.
+    locked_peek: Option<PeekCommand>,
     vd_bounds: ScreenRect,
     input: InputState,
     desktop_buffer: Option<Arc<CapturedDesktop>>,
     walker: Option<Arc<WindowWalker>>,
+    /// Peek images collected from the walker thread, keyed by window_index.
+    /// Used to composite the peeked window into the final copy/save image.
+    peek_images: HashMap<usize, Arc<WindowPeekImage>>,
     pending_show: Option<PendingShow>,
     startup: Arc<StartupTimings>,
     shown_time: Arc<OnceLock<Duration>>,
@@ -72,6 +79,7 @@ pub struct App {
     instance: Arc<wgpu::Instance>,
     worker_setups: Option<Vec<WorkerSetup>>,
     walker_latch: Arc<Latch<Arc<WindowWalker>>>,
+    peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
 }
 
 struct PendingShow {
@@ -91,6 +99,7 @@ impl App {
         worker_setups: Vec<WorkerSetup>,
         desktop_buffer: Arc<CapturedDesktop>,
         walker_latch: Arc<Latch<Arc<WindowWalker>>>,
+        peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
         ready_count: Arc<AtomicUsize>,
         visible_latch: Arc<VisibleLatch>,
         shown_time: Arc<OnceLock<Duration>>,
@@ -128,9 +137,12 @@ impl App {
             monitor_window_ids: Vec::new(),
             monitors,
             cached_hovered_title: None,
+            cached_peek_command: None,
+            locked_peek: None,
             vd_bounds,
             desktop_buffer: Some(desktop_buffer),
             walker: None,
+            peek_images: HashMap::new(),
             pending_show: Some(PendingShow {
                 ready_count,
                 expected,
@@ -142,6 +154,7 @@ impl App {
             instance,
             worker_setups: Some(worker_setups),
             walker_latch,
+            peek_images_latch,
             input: InputState {
                 virtual_cursor: initial_mouse,
                 zoom: 1.0,
@@ -163,6 +176,16 @@ impl App {
                 scroll_momentum: false,
                 overlays_visible: true,
             },
+        }
+    }
+
+    fn ensure_peek_images(&mut self) {
+        if self.peek_images.is_empty() {
+            if let Some(images) = self.peek_images_latch.try_get() {
+                for img in images.iter() {
+                    self.peek_images.insert(img.window_index, img.clone());
+                }
+            }
         }
     }
 
@@ -248,12 +271,14 @@ impl App {
             .find(|m| m.bounds.contains(cursor_pt))
             .map(|m| m.name.clone());
 
-        let hovered_window = self
+        let hovered_full = self
             .walker
             .as_ref()
-            .and_then(|w| w.hit_test_with_title(cursor_pt));
-        self.cached_hovered_title = hovered_window.as_ref().map(|(_, t)| t.clone());
-        let hovered_window_bounds = hovered_window.as_ref().map(|(r, _)| *r);
+            .and_then(|w| w.hit_test_full(cursor_pt));
+        self.cached_hovered_title = hovered_full.as_ref().map(|h| h.title.clone());
+        let hovered_window_bounds = hovered_full.as_ref().map(|h| h.rect);
+        let hovered_window_index = hovered_full.as_ref().map(|h| h.window_index);
+        let hovered_window_obstructed = hovered_full.as_ref().is_some_and(|h| h.obstructed);
 
         let hovered_pixel_bgra = self
             .desktop_buffer
@@ -285,15 +310,56 @@ impl App {
             hovered_monitor_name,
             hovered_window_title: self.cached_hovered_title.clone(),
             hovered_window_bounds,
+            hovered_window_index,
+            hovered_window_obstructed,
             hovered_pixel_bgra,
         });
 
         for h in self.windows.values() {
             h.update_ui_state(state.clone());
         }
+
+        // Update peek command for render workers.
+        // When captured, keep the locked peek; otherwise follow hover.
+        let new_peek = if self.input.captured {
+            self.locked_peek.clone()
+        } else {
+            hovered_full
+                .as_ref()
+                .filter(|hw| hw.obstructed && self.settings.obscured_window_peek_enabled)
+                .map(|hw| PeekCommand {
+                    window_index: hw.window_index,
+                    window_rect: hw.rect,
+                    captured: false,
+                })
+        };
+        if new_peek != self.cached_peek_command {
+            for h in self.windows.values() {
+                h.update_peek_state(new_peek.clone());
+            }
+            self.cached_peek_command = new_peek;
+        }
     }
 
     fn finalise_selection(&mut self, rect: ScreenRect, window: &Window) {
+        self.finalise_selection_inner(rect, window, false);
+    }
+
+    fn finalise_selection_with_peek(&mut self, rect: ScreenRect, window: &Window) {
+        self.finalise_selection_inner(rect, window, true);
+    }
+
+    fn finalise_selection_inner(&mut self, rect: ScreenRect, window: &Window, lock_peek: bool) {
+        if lock_peek {
+            self.locked_peek = self.cached_peek_command.as_ref().map(|cmd| PeekCommand {
+                window_index: cmd.window_index,
+                window_rect: cmd.window_rect,
+                captured: true,
+            });
+        } else {
+            self.locked_peek = None;
+        }
+
         self.input.selection = Some(rect);
         self.input.mouse_down = false;
         self.input.mouse_down_pt = None;
@@ -325,6 +391,7 @@ impl App {
     }
 
     fn handle_reset(&mut self, window: &Window) {
+        self.locked_peek = None;
         self.input.selection = None;
         self.input.captured = false;
         self.input.hittest = Hittest::Outside;
@@ -356,11 +423,16 @@ impl App {
         use xdialog::XDialogIcon::Error as ErrorIcon;
         log::info!("dispatch command: {:?}", command);
 
+        self.ensure_peek_images();
+        let active_peek_image = self.locked_peek.as_ref().and_then(|cmd| {
+            self.peek_images.get(&cmd.window_index).map(|img| img.as_ref())
+        });
+
         match command {
             Command::Copy => {
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => img::copy_to_clipboard(sel, buf),
+                    (Some(sel), Some(buf)) => img::copy_to_clipboard_with_peek(sel, buf, active_peek_image),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
@@ -385,7 +457,7 @@ impl App {
             Command::Save => {
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => img::save_to_file(sel, buf, window),
+                    (Some(sel), Some(buf)) => img::save_to_file_with_peek(sel, buf, active_peek_image, window),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
@@ -644,7 +716,7 @@ impl ApplicationHandler for App {
                                 if let Some(rect) =
                                     self.walker.as_ref().and_then(|w| w.hit_test(pt))
                                 {
-                                    self.finalise_selection(rect, handle_window);
+                                    self.finalise_selection_with_peek(rect, handle_window);
                                 }
                             }
                             'f' => {
@@ -837,6 +909,7 @@ impl ApplicationHandler for App {
                         let finalising = self.input.mouse_down
                             && !self.input.captured
                             && self.input.selection.is_some();
+                        let was_dragging = self.input.dragging;
                         let was_move_drag =
                             matches!(self.input.drag_mode, Some(DragMode::Move));
                         self.input.mouse_down = false;
@@ -855,6 +928,17 @@ impl ApplicationHandler for App {
                             self.broadcast_ui_state();
                         }
                         if finalising {
+                            // Click (no drag) on a peeked window → lock it.
+                            // Drag-to-select → no peek lock.
+                            if !was_dragging {
+                                self.locked_peek = self.cached_peek_command.as_ref().map(|cmd| PeekCommand {
+                                    window_index: cmd.window_index,
+                                    window_rect: cmd.window_rect,
+                                    captured: true,
+                                });
+                            } else {
+                                self.locked_peek = None;
+                            }
                             self.input.captured = true;
                             self.update_cursor_visibility();
                             if self.input.anchored {
