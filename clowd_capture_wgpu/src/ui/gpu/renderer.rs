@@ -185,7 +185,7 @@ impl UiRenderer {
                 .prepare(device, queue, viewport_px, atlas, &icon_draws);
         }
 
-        let mut text_areas: Vec<super::text::TextArea<'_>> = Vec::with_capacity(48);
+        let mut text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(48);
         self.area.text_areas(viewport_px, &mut text_areas);
         self.tips.text_areas(viewport_px, &mut text_areas);
         self.panel.text_areas(viewport_px, &mut text_areas);
@@ -193,7 +193,7 @@ impl UiRenderer {
         self.any_text = match self.text.prepare(device, queue, &text_areas) {
             Ok(b) => b,
             Err(e) => {
-                log::warn!("text prepare error: {:?}", e);
+                log::warn!("glyphon prepare error: {:?}", e);
                 false
             }
         };
@@ -207,7 +207,9 @@ impl UiRenderer {
         self.rect.draw(rpass);
         self.icon.draw(rpass);
         if self.any_text {
-            self.text.draw(rpass);
+            if let Err(e) = self.text.draw(rpass) {
+                log::warn!("glyphon render error: {:?}", e);
+            }
         }
     }
 
