@@ -536,7 +536,7 @@ impl ApplicationHandler for App {
                 winit::dpi::PhysicalPosition::new(m.bounds.origin.x, m.bounds.origin.y).into(),
                 winit::dpi::PhysicalSize::new(width, height).into(),
             );
-            #[cfg(not(windows))]
+            #[cfg(target_os = "macos")]
             let (win_pos, win_size): (winit::dpi::Position, winit::dpi::Size) = {
                 let logical_pos = m.screen_to_logical(ScreenPoint::new(
                     m.bounds.origin.x,
@@ -658,7 +658,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
         let (window, this_monitor_bounds) = match self.windows.get(&id) {
             Some(h) => (h.window.clone(), h.monitor_bounds),
             None => return,
@@ -753,6 +753,15 @@ impl ApplicationHandler for App {
                 if let Some(h) = self.windows.get(&id) {
                     h.resize(new_size);
                 }
+            }
+            #[cfg(windows)]
+            WindowEvent::ScaleFactorChanged { ref mut inner_size_writer, .. } => {
+                let _ = inner_size_writer.request_inner_size(
+                    winit::dpi::PhysicalSize::new(
+                        handle_monitor_bounds.width() as u32,
+                        handle_monitor_bounds.height() as u32,
+                    )
+                );
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let bounds = handle_monitor_bounds;
