@@ -78,7 +78,13 @@ impl UiRenderer {
     ) -> Self {
         let rect = RectPipeline::new(device, surface_format);
         let icon = IconPipeline::new(device, surface_format);
+        startup.background.workers[monitor_index]
+            .prep_ui_pipelines
+            .set_once(startup.t_start.elapsed());
         let mut text = TextStack::new(device, queue, surface_format);
+        startup.background.workers[monitor_index]
+            .prep_fonts
+            .set_once(startup.t_start.elapsed());
         let area = AreaRenderer::new(&mut text);
         let tips = TipsRenderer::new(&mut text);
         let panel = PanelRenderer::new(&mut text);

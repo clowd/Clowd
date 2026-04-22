@@ -292,26 +292,34 @@ impl<'a> PrimaryPanelData<'a> {
         }
         let multi = bg.workers.len() > 1;
         for (i, w) in bg.workers.iter().enumerate() {
+            let suffix = if multi {
+                format!("[{}]", i)
+            } else {
+                String::new()
+            };
             if let Some(d) = w.render_prep.get() {
-                if multi {
-                    out.push(format_args!("    prep[{}]:     {}", i, DisplayMs(d)));
-                } else {
-                    out.push(format_args!("    prep:        {}", DisplayMs(d)));
-                }
+                out.push(format_args!("    prep{}:       {}", suffix, DisplayMs(d)));
+            }
+            if let Some(d) = w.prep_adapter.get() {
+                out.push(format_args!("      adapter{}:  {}", suffix, DisplayMs(d)));
+            }
+            if let Some(d) = w.prep_device.get() {
+                out.push(format_args!("      device{}:   {}", suffix, DisplayMs(d)));
+            }
+            if let Some(d) = w.prep_pipelines.get() {
+                out.push(format_args!("      pipes{}:    {}", suffix, DisplayMs(d)));
+            }
+            if let Some(d) = w.prep_ui_pipelines.get() {
+                out.push(format_args!("      ui_pipe{}:  {}", suffix, DisplayMs(d)));
+            }
+            if let Some(d) = w.prep_fonts.get() {
+                out.push(format_args!("      fonts{}:    {}", suffix, DisplayMs(d)));
             }
             if let Some(d) = w.upload.get() {
-                if multi {
-                    out.push(format_args!("    upload[{}]:   {}", i, DisplayMs(d)));
-                } else {
-                    out.push(format_args!("    upload:      {}", DisplayMs(d)));
-                }
+                out.push(format_args!("    upload{}:     {}", suffix, DisplayMs(d)));
             }
             if let Some(d) = w.surface_bind.get() {
-                if multi {
-                    out.push(format_args!("    surface[{}]:  {}", i, DisplayMs(d)));
-                } else {
-                    out.push(format_args!("    surface:     {}", DisplayMs(d)));
-                }
+                out.push(format_args!("    surface{}:    {}", suffix, DisplayMs(d)));
             }
         }
 

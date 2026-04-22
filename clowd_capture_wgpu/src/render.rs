@@ -208,7 +208,8 @@ fn render_worker_main(
 
     // ── Stage A: eager GPU prep (no window/surface/screenshot) ──────
 
-    let bundle = match gpu::stage_a_create_device(instance, adapter_hint) {
+    let worker_timings = &startup.background.workers[monitor_index];
+    let bundle = match gpu::stage_a_create_device(instance, adapter_hint, startup.t_start, worker_timings) {
         Ok(b) => b,
         Err(e) => {
             error!("render worker {monitor_index}: GPU init failed: {e:?}");
@@ -229,7 +230,7 @@ fn render_worker_main(
         shown_time.clone(),
     );
 
-    startup.background.workers[monitor_index]
+    worker_timings
         .render_prep
         .set_once(startup.t_start.elapsed());
 
