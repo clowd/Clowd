@@ -100,6 +100,12 @@ impl WindowWalker {
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
     pub fn snapshot(_monitors: &[super::MonitorInfo]) -> Self {
+        // COM is per-thread; this may run on a background thread.
+        unsafe {
+            use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        }
+
         let vdm: Option<IVirtualDesktopManager> = unsafe {
             match CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL) {
                 Ok(v) => Some(v),
