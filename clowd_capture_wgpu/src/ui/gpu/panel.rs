@@ -132,6 +132,7 @@ pub struct PanelRenderer {
     width_str: String,
     height_str: String,
     last_selection: Option<crate::geometry::ScreenRect>,
+    dpi_scale: f32,
 }
 
 const IDX_WIDTH: usize = 0;
@@ -174,6 +175,7 @@ impl PanelRenderer {
             width_str: String::new(),
             height_str: String::new(),
             last_selection: None,
+            dpi_scale: 1.0,
         }
     }
 
@@ -208,6 +210,7 @@ impl PanelRenderer {
 
         let layout: PanelLayout = vis.layout;
         let dpi = vis.monitor.dpi_scale.max(0.1);
+        self.dpi_scale = dpi;
 
         // Hover animation. Hit-test happens in VD coords since that's
         // what the broadcast cursor + layout both use.
@@ -387,19 +390,25 @@ impl PanelRenderer {
 
     pub fn text_areas<'a>(&'a self, viewport_px: (u32, u32), out: &mut Vec<TextArea<'a>>) {
         let (vw, vh) = (viewport_px.0 as i32, viewport_px.1 as i32);
-        out.extend(self.positions.iter().map(|p| TextArea {
-            buffer: &self.buffers[p.buffer_idx].buffer,
-            left: p.x,
-            top: p.y,
-            scale: 1.0,
-            bounds: TextBounds {
-                left: 0,
-                top: 0,
-                right: vw,
-                bottom: vh,
-            },
-            default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
-            custom_glyphs: &[],
-        }));
+        for p in &self.positions {
+            let area = TextArea {
+                buffer: &self.buffers[p.buffer_idx].buffer,
+                left: p.x,
+                top: p.y,
+                scale: 1.0,
+                bounds: TextBounds {
+                    left: 0,
+                    top: 0,
+                    right: vw,
+                    bottom: vh,
+                },
+                default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
+                custom_glyphs: &[],
+            };
+            if self.dpi_scale < 1.01 {
+                out.push(area.clone());
+            }
+            out.push(area);
+        }
     }
 }

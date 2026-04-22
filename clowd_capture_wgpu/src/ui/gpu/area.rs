@@ -76,6 +76,7 @@ pub struct AreaRenderer {
     position: Option<PositionedText>,
     text_buf: String,
     last_selection: Option<crate::geometry::ScreenRect>,
+    dpi_scale: f32,
 }
 
 impl AreaRenderer {
@@ -85,6 +86,7 @@ impl AreaRenderer {
             position: None,
             text_buf: String::new(),
             last_selection: None,
+            dpi_scale: 1.0,
         }
     }
 
@@ -114,6 +116,7 @@ impl AreaRenderer {
         };
 
         let dpi = vis.monitor.dpi_scale.max(0.1);
+        self.dpi_scale = dpi;
         let font_px = (AREA_FONT_PX * dpi).floor();
         let padding = (AREA_PADDING_PX * dpi).floor();
 
@@ -201,7 +204,7 @@ impl AreaRenderer {
             return;
         };
         let (vw, vh) = (viewport_px.0 as i32, viewport_px.1 as i32);
-        out.push(TextArea {
+        let area = TextArea {
             buffer: &self.buffer.buffer,
             left: pos.x,
             top: pos.y,
@@ -214,6 +217,10 @@ impl AreaRenderer {
             },
             default_color: Color::rgba(0, 0, 0, 0xFF),
             custom_glyphs: &[],
-        });
+        };
+        if self.dpi_scale < 1.01 {
+            out.push(area.clone());
+        }
+        out.push(area);
     }
 }
