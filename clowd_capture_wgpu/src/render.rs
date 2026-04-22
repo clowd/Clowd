@@ -40,9 +40,16 @@ pub enum RenderMsg {
         captured: bool,
     },
     UiState(Arc<UiSharedState>),
+    BlurredDesktop(Arc<BlurredDesktopImage>),
     PeekImage(Arc<WindowPeekImage>),
     ShowPeek(Option<PeekCommand>),
     Shutdown,
+}
+
+pub struct BlurredDesktopImage {
+    pub bgra: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Tells render workers which obstructed window to peek at this frame.
@@ -400,6 +407,7 @@ fn render_worker_main(
 
     let mut peek_textures: HashMap<usize, PeekTextureEntry> = HashMap::new();
     let mut active_peek: Option<PeekCommand> = None;
+    let mut blurred_desktop: Option<(wgpu::Texture, wgpu::TextureView)> = None;
 
     let peek_ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("peek uniforms"),
@@ -440,6 +448,47 @@ fn render_worker_main(
                 Ok(RenderMsg::UiState(state)) => {
                     overlays_visible = state.overlays_visible;
                     ui_renderer.set_state(state);
+                }
+                Ok(RenderMsg::BlurredDesktop(bd)) => {
+                    let max_dim = gpu.device.limits().max_texture_dimension_2d;
+                    if bd.width > max_dim || bd.height > max_dim
+                        || bd.width == 0 || bd.height == 0
+                    {
+                        continue;
+                    }
+                    let size = wgpu::Extent3d {
+                        width: bd.width,
+                        height: bd.height,
+                        depth_or_array_layers: 1,
+                    };
+                    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("blurred desktop texture"),
+                        size,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_DST,
+                        view_formats: &[],
+                    });
+                    gpu.queue.write_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        &bd.bgra,
+                        wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(4 * bd.width),
+                            rows_per_image: Some(bd.height),
+                        },
+                        size,
+                    );
+                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    blurred_desktop = Some((texture, view));
                 }
                 Ok(RenderMsg::PeekImage(peek)) => {
                     let max_dim = gpu.device.limits().max_texture_dimension_2d;
@@ -523,6 +572,7 @@ fn render_worker_main(
         let peek_bind_group = active_peek.as_ref().and_then(|cmd| {
             let pt = peek_textures.get(&cmd.window_index)?;
             let snap = gpu.snapshot.as_ref()?;
+            let (_, ref blurred_view) = *blurred_desktop.as_ref()?;
 
             // Compute peek uniforms in monitor-local coords.
             let sel = selection?;
@@ -609,7 +659,7 @@ fn render_worker_main(
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::TextureView(&snap.view),
+                        resource: wgpu::BindingResource::TextureView(blurred_view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,

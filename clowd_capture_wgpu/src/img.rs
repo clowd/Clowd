@@ -1,8 +1,24 @@
+use image::imageops;
 use winit::window::Window;
 
 use crate::geometry::RectExt;
 use crate::geometry::ScreenRect;
 use crate::system::{CapturedDesktop, WindowPeekImage};
+
+pub fn blur_desktop_bgra(bgra: &[u8], width: u32, height: u32, sigma: f32) -> Vec<u8> {
+    let mut rgba = bgra.to_vec();
+    for chunk in rgba.chunks_exact_mut(4) {
+        chunk.swap(0, 2);
+    }
+    let img = image::RgbaImage::from_raw(width, height, rgba)
+        .expect("buffer size matches dimensions");
+    let blurred = imageops::blur(&img, sigma);
+    let mut out = blurred.into_raw();
+    for chunk in out.chunks_exact_mut(4) {
+        chunk.swap(0, 2);
+    }
+    out
+}
 
 /// Result of a Copy or Save action.
 pub enum ActionResult {

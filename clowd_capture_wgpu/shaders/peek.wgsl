@@ -106,18 +106,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return vec4(window_color.rgb, 1.0);
     }
 
-    // 5×5 box blur with 2-texel stride — covers a 10×10 texel area
-    // with only 25 samples instead of the original 121.
-    let texel_size = vec2(1.0) / vec2<f32>(textureDimensions(desktop_tex));
-    var blur_sum = vec3(0.0);
-    for (var dy = -2; dy <= 2; dy++) {
-        for (var dx = -2; dx <= 2; dx++) {
-            let offset = vec2<f32>(f32(dx), f32(dy)) * texel_size * 2.0;
-            let s = textureSample(desktop_tex, samp, in.desktop_uv + offset);
-            blur_sum += s.rgb;
-        }
-    }
-    blur_sum /= 25.0;
+    let blur_sum = textureSample(desktop_tex, samp, in.desktop_uv).rgb;
 
     // Gentle grayscale — keep it readable, just softened.
     let luma = dot(blur_sum, vec3(0.2126, 0.7152, 0.0722)) * 0.82;

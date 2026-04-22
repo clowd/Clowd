@@ -147,6 +147,7 @@ fn main() -> anyhow::Result<()> {
         let startup_bg = startup.clone();
         let peek_enabled = settings.obscured_window_peek_enabled;
         let visibility_threshold = settings.obscured_window_detection_threshold;
+        let screenshot_latch_for_walker = screenshot_latch.clone();
         std::thread::Builder::new()
             .name("walker".into())
             .spawn(move || {
@@ -162,6 +163,25 @@ fn main() -> anyhow::Result<()> {
                     .background
                     .walker
                     .set_once(startup_bg.t_start.elapsed());
+
+                if !peek_enabled {
+                    return;
+                }
+
+                // Pre-blur the desktop screenshot for the peek shader.
+                let desktop = screenshot_latch_for_walker.wait();
+                let blurred = img::blur_desktop_bgra(
+                    &desktop.bgra, desktop.width, desktop.height, 6.0,
+                );
+                let blurred = Arc::new(render::BlurredDesktopImage {
+                    bgra: blurred,
+                    width: desktop.width,
+                    height: desktop.height,
+                });
+                for tx in &peek_txs {
+                    let _ = tx.send(render::RenderMsg::BlurredDesktop(blurred.clone()));
+                }
+                info!("walker: desktop blur complete");
 
                 // Capture each obstructed window via PrintWindow and
                 // stream results to render workers as they complete.
