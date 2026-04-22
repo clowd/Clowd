@@ -22,8 +22,9 @@ struct Instance {
     // Straight-alpha border color. Alpha 0 disables the border regardless
     // of border_px.
     @location(2) border_rgba: vec4<f32>,
-    // (border_px, lighten_amount, _, _). border_px=0 disables border.
-    // lighten_amount in [0,1] blends fill toward white (hover effect).
+    // (border_px, lighten_amount, corner_radius, aa_pad). border_px=0
+    // disables border. lighten_amount in [0,1] blends fill toward white
+    // (hover effect). aa_pad inflates the quad for AA fringe on rounded rects.
     @location(3) params: vec4<f32>,
 };
 
@@ -36,6 +37,7 @@ struct VsOut {
     @location(4) border_px: f32,
     @location(5) lighten: f32,
     @location(6) corner_radius: f32,
+    @location(7) aa_pad: f32,
 };
 
 @vertex
@@ -59,15 +61,18 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Instance) -> VsOut {
         1.0 - px.y / u.viewport_px.y * 2.0,
     );
 
+    let pad = inst.params.w;
+
     var out: VsOut;
     out.pos = vec4<f32>(ndc, 0.0, 1.0);
-    out.local_px = c * size;
-    out.size_px = size;
+    out.local_px = c * size - vec2<f32>(pad, pad);
+    out.size_px = size - vec2<f32>(pad * 2.0, pad * 2.0);
     out.fill_rgba = inst.fill_rgba;
     out.border_rgba = inst.border_rgba;
     out.border_px = inst.params.x;
     out.lighten = inst.params.y;
     out.corner_radius = inst.params.z;
+    out.aa_pad = pad;
     return out;
 }
 
@@ -83,14 +88,16 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let half = sz * 0.5;
         let p = abs(lp - half) - (half - vec2<f32>(cr, cr));
         let d = length(max(p, vec2<f32>(0.0))) + min(max(p.x, p.y), 0.0) - cr;
-        if (d > 0.5) {
+        let w = max(0.5 * fwidth(d), 0.5);
+        if (d > w) {
             discard;
         }
-        let alpha_edge = 1.0 - smoothstep(-0.5, 0.5, d);
+        let alpha_edge = 1.0 - smoothstep(-w, w, d);
 
         var rgba = in.fill_rgba;
-        if (bw > 0.0 && in.border_rgba.a > 0.0 && d > -(bw)) {
-            rgba = in.border_rgba;
+        if (bw > 0.0 && in.border_rgba.a > 0.0) {
+            let border_t = smoothstep(-w, w, d + bw);
+            rgba = mix(in.fill_rgba, in.border_rgba, border_t);
         }
 
         let lit = mix(rgba.rgb, vec3<f32>(1.0, 1.0, 1.0), clamp(in.lighten, 0.0, 1.0));
