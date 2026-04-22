@@ -129,7 +129,7 @@ pub fn stage_a_create_device(
         };
 
         let adapter_features = adapter.features();
-        let mut required_features = wgpu::Features::DUAL_SOURCE_BLENDING;
+        let mut required_features = wgpu::Features::empty();
         if crate::ui::gpu::gpu_timing::GPU_TIMING_ENABLED
             && adapter_features.contains(wgpu::Features::TIMESTAMP_QUERY)
         {

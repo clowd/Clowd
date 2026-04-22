@@ -5,9 +5,7 @@
 //! is centered horizontally at the bottom of the selection, clamped to
 //! monitor bounds. Matches `DxScreenCapture.cpp:652-704`.
 
-use cosmic_text::{Attrs, Buffer, Color, Family, Metrics, Shaping, Weight, Wrap};
-
-use super::text::{TextArea, TextBounds};
+use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 use crate::geometry::RectExt;
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE};
@@ -215,6 +213,7 @@ impl AreaRenderer {
                 bottom: vh,
             },
             default_color: Color::rgba(0, 0, 0, 0xFF),
+            custom_glyphs: &[],
         });
     }
 }

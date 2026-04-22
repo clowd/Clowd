@@ -16,8 +16,7 @@
 //! `Self`) — we hand those out via [`TipsRenderer::text_areas`] once
 //! positions are known.
 
-use cosmic_text::{Attrs, Buffer, Color, Family, Metrics, Shaping, Weight, Wrap};
-use super::text::{TextArea, TextBounds};
+use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
 use crate::geometry::RectExt;
 use crate::ui::components::tips::layout::{compute_layout as compute_tips_layout, BODY_FONT_PX, TITLE_FONT_PX};
@@ -375,6 +374,7 @@ impl TipsRenderer {
                 bottom: vh,
             },
             default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
+            custom_glyphs: &[],
         }));
     }
 }

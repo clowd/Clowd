@@ -408,12 +408,11 @@ dependencies = [
  "bytemuck",
  "core-foundation 0.10.1",
  "core-graphics 0.25.0",
- "cosmic-text",
  "etagere",
  "euclid",
+ "glyphon",
  "image",
  "log",
- "lru",
  "num",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
@@ -421,9 +420,7 @@ dependencies = [
  "pollster",
  "resvg",
  "rfd",
- "rustc-hash 2.1.2",
  "simplelog",
- "swash",
  "tiny-skia 0.12.0",
  "usvg",
  "wgpu",
@@ -1073,6 +1070,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyphon"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68dde9640ec6f986f59a265b4c0a5177f61e87e3ba71983b2195dab119cda0fa"
+dependencies = [
+ "cosmic-text",
+ "etagere",
+ "lru",
+ "rustc-hash 2.1.2",
+ "wgpu",
+]
+
+[[package]]
 name = "gpu-allocator"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1158,11 +1168,6 @@ name = "hashbrown"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
-dependencies = [
- "allocator-api2",
- "equivalent",
- "foldhash 0.2.0",
-]
 
 [[package]]
 name = "hermit-abi"
@@ -1478,12 +1483,9 @@ dependencies = [
 
 [[package]]
 name = "lru"
-version = "0.17.0"
+version = "0.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0b564323a0fb6d54b864f625ae139de9612e27edb944dda37c109f05aac531"
-dependencies = [
- "hashbrown 0.17.0",
-]
+checksum = "7f66e8d5d03f609abc3a39e6f08e4164ebf1447a732906d39eb9b99b7919ef39"
 
 [[package]]
 name = "lyon_geom"
