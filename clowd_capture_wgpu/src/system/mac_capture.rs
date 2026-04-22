@@ -1,6 +1,11 @@
 use anyhow::Result;
 use core_graphics::access::ScreenCaptureAccess;
 use core_graphics::display::CGDisplay;
+use core_graphics::geometry::{CGPoint, CGRect, CGSize};
+use core_graphics::window::{
+    self, kCGWindowImageBestResolution, kCGWindowImageBoundsIgnoreFraming,
+    kCGWindowListOptionIncludingWindow, CGWindowID,
+};
 
 use crate::system::MonitorInfo;
 
@@ -107,4 +112,49 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
         width: vd_w as u32,
         height: vd_h as u32,
     })
+}
+
+/// Capture a single window's image via CGWindowListCreateImage.
+/// Returns BGRA pixel bytes and dimensions, or None on failure.
+pub fn capture_window_image(window_id: CGWindowID) -> Option<(Vec<u8>, u32, u32)> {
+    let cg_null = CGRect::new(
+        &CGPoint::new(f64::INFINITY, f64::INFINITY),
+        &CGSize::new(0.0, 0.0),
+    );
+
+    let image = window::create_image(
+        cg_null,
+        kCGWindowListOptionIncludingWindow,
+        window_id,
+        kCGWindowImageBestResolution | kCGWindowImageBoundsIgnoreFraming,
+    )?;
+
+    let width = image.width();
+    let height = image.height();
+    let bpr = image.bytes_per_row();
+    let bpp = image.bits_per_pixel();
+
+    if bpp != 32 || width == 0 || height == 0 {
+        warn!(
+            "capture_window_image: unexpected format bpp={} {}x{} for window {}",
+            bpp, width, height, window_id
+        );
+        return None;
+    }
+
+    let data = image.data();
+    let src = data.bytes();
+
+    let mut bgra = vec![0u8; width * height * 4];
+    for row in 0..height {
+        let src_start = row * bpr;
+        let src_end = src_start + width * 4;
+        let dst_start = row * width * 4;
+        let dst_end = dst_start + width * 4;
+        if src_end <= src.len() {
+            bgra[dst_start..dst_end].copy_from_slice(&src[src_start..src_end]);
+        }
+    }
+
+    Some((bgra, width as u32, height as u32))
 }

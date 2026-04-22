@@ -14,7 +14,7 @@ mod win_walker;
 pub use win_walker::WindowWalker;
 
 #[cfg(target_os = "macos")]
-mod mac_capture;
+pub(crate) mod mac_capture;
 
 #[cfg(target_os = "macos")]
 mod mac_monitor;
@@ -44,10 +44,11 @@ pub struct ObstructedWindow {
     pub window_index: usize,
     #[cfg(windows)]
     pub hwnd: windows::Win32::Foundation::HWND,
+    #[cfg(target_os = "macos")]
+    pub window_id: u32,
     /// DWM extended frame bounds (true visual bounds).
     pub rect: ScreenRect,
-    /// Raw GetWindowRect bounds (includes invisible resize border).
-    /// PrintWindow captures at these dimensions.
+    #[allow(dead_code)]
     pub raw_rect: ScreenRect,
     pub obstruction_rects: Vec<ScreenRect>,
 }
@@ -55,6 +56,11 @@ pub struct ObstructedWindow {
 #[cfg(windows)]
 unsafe impl Send for ObstructedWindow {}
 #[cfg(windows)]
+unsafe impl Sync for ObstructedWindow {}
+
+#[cfg(target_os = "macos")]
+unsafe impl Send for ObstructedWindow {}
+#[cfg(target_os = "macos")]
 unsafe impl Sync for ObstructedWindow {}
 
 /// A captured window image ready for GPU upload by render workers.

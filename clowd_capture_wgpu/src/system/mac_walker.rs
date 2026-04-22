@@ -22,9 +22,12 @@ use super::{HitTestResult, ObstructedWindow};
 const MIN_WINDOW_SIZE: i32 = 25;
 
 struct WindowEntry {
+    window_id: u32,
     rect: ScreenRect,
     /// Window title text.
     title: String,
+    obstructed: bool,
+    obstruction_rects: Vec<ScreenRect>,
 }
 
 /// Snapshot of the top-level window list in Z-order. Created once at capture
@@ -89,19 +92,27 @@ impl WindowWalker {
             rect: top.rect,
             title: top.title.clone(),
             window_index: idx,
-            obstructed: false,
+            obstructed: top.obstructed,
         })
     }
 
-    /// Return metadata for all obstructed windows (for PrintWindow capture).
-    /// On macOS this always returns an empty vec — window image capture is
-    /// not yet implemented.
+    /// Return metadata for all obstructed windows (for CGWindowListCreateImage capture).
     pub fn obstructed_windows(&self) -> Vec<ObstructedWindow> {
-        Vec::new()
+        self.windows
+            .iter()
+            .enumerate()
+            .filter(|(_, w)| w.obstructed)
+            .map(|(i, w)| ObstructedWindow {
+                window_index: i,
+                window_id: w.window_id,
+                rect: w.rect,
+                raw_rect: w.rect,
+                obstruction_rects: w.obstruction_rects.clone(),
+            })
+            .collect()
     }
 
-    /// Same as [`hit_test`] but also returns the title of the top-level window
-    /// that contains the point.
+    #[allow(dead_code)]
     pub fn hit_test_with_title(&self, point: ScreenPoint) -> Option<(ScreenRect, String)> {
         self.windows
             .iter()
@@ -120,6 +131,9 @@ fn evaluate_window(
     monitors: &[MonitorInfo],
     visibility_threshold: f32,
 ) -> Option<WindowEntry> {
+    // 0. Extract the CG window ID (needed for CGWindowListCreateImage).
+    let window_id = get_number_i64(dict, unsafe { window::kCGWindowNumber })? as u32;
+
     // 1. Layer == 0 (normal windows only; skip menu bar, dock, overlays).
     let layer = get_number_i64(dict, unsafe { window::kCGWindowLayer })?;
     if layer != 0 {
@@ -171,6 +185,8 @@ fn evaluate_window(
     let rect = ScreenRect::from_xy_size(phys_x, phys_y, phys_w, phys_h);
 
     // 6. Visibility threshold — drop windows with too little visible area.
+    //    Also collect obstruction rects for the peek feature.
+    let mut obstruction_rects = Vec::new();
     let window_area = (phys_w as i64) * (phys_h as i64);
     if window_area > 0 {
         let mut obstructed_area: i64 = 0;
@@ -178,6 +194,9 @@ fn evaluate_window(
             if let Some(isect) = w.rect.intersection(&rect) {
                 if isect.width() > 0 && isect.height() > 0 {
                     obstructed_area += (isect.width() as i64) * (isect.height() as i64);
+                    if obstruction_rects.len() < 16 {
+                        obstruction_rects.push(isect);
+                    }
                 }
             }
         }
@@ -186,6 +205,7 @@ fn evaluate_window(
             return None;
         }
     }
+    let obstructed = !obstruction_rects.is_empty();
 
     // Read the window title (kCGWindowName), defaulting to empty string.
     let title = get_raw_value(dict, unsafe { window::kCGWindowName })
@@ -199,7 +219,7 @@ fn evaluate_window(
         })
         .unwrap_or_default();
 
-    Some(WindowEntry { rect, title })
+    Some(WindowEntry { window_id, rect, title, obstructed, obstruction_rects })
 }
 
 fn find_monitor_for_cg_point<'a>(
