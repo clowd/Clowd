@@ -34,27 +34,72 @@ pub fn apply_capture_window_tweaks(window: &winit::window::Window) {
     };
 
     unsafe {
-        use objc2_app_kit::{NSColor, NSView, NSWindowAnimationBehavior};
+        use objc2_app_kit::{NSColor, NSView, NSWindowAnimationBehavior, NSWindowCollectionBehavior};
 
         let ns_view: &NSView = &*(h.ns_view.as_ptr() as *const NSView);
         let Some(ns_window) = ns_view.window() else {
             return;
         };
 
-        // Place above the Dock (level 20) and menu bar (level 24).
-        // winit's AlwaysOnTop only maps to NSFloatingWindowLevel (3).
         ns_window.setLevel(25); // NSStatusWindowLevel
+        ns_window.setAnimationBehavior(NSWindowAnimationBehavior::None);
+        ns_window.setCollectionBehavior(
+            NSWindowCollectionBehavior::Stationary
+                | NSWindowCollectionBehavior::CanJoinAllSpaces
+                | NSWindowCollectionBehavior::FullScreenAuxiliary
+                | NSWindowCollectionBehavior::IgnoresCycle,
+        );
 
         let black = NSColor::blackColor();
         ns_window.setBackgroundColor(Some(&black));
         ns_window.setOpaque(true);
-        ns_window.setAnimationBehavior(NSWindowAnimationBehavior::None);
-
-        // Window is created visible (so Metal can render into it) but
-        // fully transparent — invisible to the user until we snap alpha
-        // to 1.0 after frame 0 is ready.
-        ns_window.setAlphaValue(0.0);
     }
+}
+
+/// Create a CGImage from the monitor's region of the desktop screenshot.
+#[cfg(target_os = "macos")]
+pub fn crop_screenshot_to_cgimage(
+    screenshot: &crate::system::CapturedDesktop,
+    monitor_bounds: crate::geometry::ScreenRect,
+) -> Option<core_graphics::image::CGImage> {
+    use core_graphics::color_space::CGColorSpace;
+    use core_graphics::context::CGContext;
+
+    let vd = screenshot.bounds;
+    let crop_x = (monitor_bounds.min_x() - vd.min_x()) as usize;
+    let crop_y = (monitor_bounds.min_y() - vd.min_y()) as usize;
+    let crop_w = monitor_bounds.width() as usize;
+    let crop_h = monitor_bounds.height() as usize;
+    if crop_w == 0 || crop_h == 0 {
+        return None;
+    }
+    let vd_stride = screenshot.width as usize * 4;
+
+    let mut crop_buf = vec![0u8; crop_w * crop_h * 4];
+    for row in 0..crop_h {
+        let src_off = (crop_y + row) * vd_stride + crop_x * 4;
+        let dst_off = row * crop_w * 4;
+        let end = (src_off + crop_w * 4).min(screenshot.bgra.len());
+        let len = end.saturating_sub(src_off).min(crop_w * 4);
+        if len > 0 {
+            crop_buf[dst_off..dst_off + len]
+                .copy_from_slice(&screenshot.bgra[src_off..src_off + len]);
+        }
+    }
+
+    let color_space = CGColorSpace::create_device_rgb();
+    let bitmap_info: u32 = (2 << 12) // kCGBitmapByteOrder32Little
+        | 6; // kCGImageAlphaNoneSkipFirst
+    let ctx = CGContext::create_bitmap_context(
+        Some(crop_buf.as_mut_ptr() as *mut _),
+        crop_w,
+        crop_h,
+        8,
+        crop_w * 4,
+        &color_space,
+        bitmap_info,
+    );
+    ctx.create_image()
 }
 
 /// Hide or show the hardware cursor at the compositor/system level.
@@ -108,33 +153,26 @@ pub fn set_hardware_cursor_visible(_visible: bool) {}
 
 /// Reveal all capture windows after frame 0 is rendered.
 ///
-/// On macOS: windows were created visible but alpha=0. We snap alpha to
-/// 1.0 and the GPU shader then runs its normal colour→grayscale fade.
+/// On macOS: the window already shows the static screenshot; we snap the
+/// render subview's CALayer opacity to 1.0 so the wgpu content takes over.
 ///
 /// On Windows: windows were created hidden. `set_visible(true)` is
 /// instantaneous thanks to `WS_EX_NOREDIRECTIONBITMAP`.
 #[cfg(target_os = "macos")]
-pub fn show_windows_atomically<'a>(windows: impl Iterator<Item = &'a std::sync::Arc<winit::window::Window>>) {
-    use objc2_app_kit::NSView;
-    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-    for w in windows {
-        let Ok(handle) = w.window_handle() else { continue };
-        let RawWindowHandle::AppKit(h) = handle.as_raw() else { continue };
-
-        unsafe {
-            let ns_view: &NSView = &*(h.ns_view.as_ptr() as *const NSView);
-            if let Some(ns_window) = ns_view.window() {
-                ns_window.setAlphaValue(1.0);
+pub fn show_windows_atomically<'a>(handles: impl Iterator<Item = &'a crate::render::WindowHandle>) {
+    for h in handles {
+        if let Some(ref subview) = h.render_subview {
+            if let Some(layer) = subview.layer() {
+                layer.setOpacity(1.0);
             }
         }
     }
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn show_windows_atomically<'a>(windows: impl Iterator<Item = &'a std::sync::Arc<winit::window::Window>>) {
-    for w in windows {
-        w.set_visible(true);
+pub fn show_windows_atomically<'a>(handles: impl Iterator<Item = &'a crate::render::WindowHandle>) {
+    for h in handles {
+        h.window.set_visible(true);
     }
 }
 
