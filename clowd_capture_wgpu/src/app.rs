@@ -531,15 +531,23 @@ impl ApplicationHandler for App {
             let width = m.bounds.size.width.max(1) as u32;
             let height = m.bounds.size.height.max(1) as u32;
 
-            let logical_pos = m.screen_to_logical(ScreenPoint::new(
-                m.bounds.origin.x,
-                m.bounds.origin.y,
-            ));
-            let logical_size = m.physical_to_logical_size(width, height);
-            let win_pos: winit::dpi::Position =
-                winit::dpi::LogicalPosition::new(logical_pos.x, logical_pos.y).into();
-            let win_size: winit::dpi::Size =
-                winit::dpi::LogicalSize::new(logical_size.width, logical_size.height).into();
+            #[cfg(windows)]
+            let (win_pos, win_size): (winit::dpi::Position, winit::dpi::Size) = (
+                winit::dpi::PhysicalPosition::new(m.bounds.origin.x, m.bounds.origin.y).into(),
+                winit::dpi::PhysicalSize::new(width, height).into(),
+            );
+            #[cfg(not(windows))]
+            let (win_pos, win_size): (winit::dpi::Position, winit::dpi::Size) = {
+                let logical_pos = m.screen_to_logical(ScreenPoint::new(
+                    m.bounds.origin.x,
+                    m.bounds.origin.y,
+                ));
+                let logical_size = m.physical_to_logical_size(width, height);
+                (
+                    winit::dpi::LogicalPosition::new(logical_pos.x, logical_pos.y).into(),
+                    winit::dpi::LogicalSize::new(logical_size.width, logical_size.height).into(),
+                )
+            };
 
             #[allow(unused_mut)]
             let mut attrs = Window::default_attributes()
