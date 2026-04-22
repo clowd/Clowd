@@ -25,7 +25,9 @@ mod mac_mouse;
 #[cfg(target_os = "macos")]
 mod mac_walker;
 
-use crate::geometry::{LogicalPoint, LogicalSize, RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
+use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
+#[cfg(target_os = "macos")]
+use crate::geometry::{LogicalPoint, LogicalSize};
 
 /// Full hit-test result including peek metadata.
 #[derive(Debug, Clone)]
@@ -101,9 +103,9 @@ pub struct MonitorInfo {
     /// per window, matching the C++ version's per-monitor `AdapterIdx`.
     /// `None` if DXGI enumeration failed (fallback to wgpu's default).
     pub adapter_id: Option<(u32, u32)>,
-    /// OS logical-coordinate origin for this display. On macOS this is the
-    /// raw `CGDisplayBounds().origin` (CG points). On Windows it is
-    /// computed via BFS topology walk from the physical-pixel positions.
+    /// CG-point origin for this display (macOS only). Used to convert
+    /// between the CG logical coordinate space and physical pixels.
+    #[cfg(target_os = "macos")]
     pub logical_origin: LogicalPoint,
 }
 
@@ -122,7 +124,10 @@ impl MonitorInfo {
             pt.y - self.bounds.min_y() as f32,
         )
     }
+}
 
+#[cfg(target_os = "macos")]
+impl MonitorInfo {
     pub fn logical_to_screen(&self, pt: LogicalPoint) -> ScreenPoint {
         let s = self.scale_factor as f64;
         ScreenPoint::new(
@@ -232,7 +237,6 @@ impl SystemInterop {
                     refresh_hz: m.frequency,
                     name: m.name,
                     adapter_id,
-                    logical_origin: LogicalPoint::new(m.x as f64, m.y as f64),
                 }
             })
             .collect()
