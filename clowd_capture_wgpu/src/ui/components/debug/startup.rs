@@ -36,6 +36,11 @@ impl std::fmt::Debug for AtomicDuration {
 /// Per-render-worker timing breakdown recorded during stages A/B/C.
 pub struct WorkerTimings {
     pub render_prep: AtomicDuration,
+    pub prep_adapter: AtomicDuration,
+    pub prep_device: AtomicDuration,
+    pub prep_pipelines: AtomicDuration,
+    pub prep_ui_pipelines: AtomicDuration,
+    pub prep_fonts: AtomicDuration,
     pub upload: AtomicDuration,
     pub surface_bind: AtomicDuration,
     pub first_render: AtomicDuration,
@@ -45,6 +50,11 @@ impl WorkerTimings {
     pub fn new() -> Self {
         Self {
             render_prep: AtomicDuration::new(),
+            prep_adapter: AtomicDuration::new(),
+            prep_device: AtomicDuration::new(),
+            prep_pipelines: AtomicDuration::new(),
+            prep_ui_pipelines: AtomicDuration::new(),
+            prep_fonts: AtomicDuration::new(),
             upload: AtomicDuration::new(),
             surface_bind: AtomicDuration::new(),
             first_render: AtomicDuration::new(),
@@ -88,6 +98,11 @@ impl BackgroundGroup {
         for w in &self.workers {
             for d in [
                 w.render_prep.get(),
+                w.prep_adapter.get(),
+                w.prep_device.get(),
+                w.prep_pipelines.get(),
+                w.prep_ui_pipelines.get(),
+                w.prep_fonts.get(),
                 w.upload.get(),
                 w.surface_bind.get(),
                 w.first_render.get(),

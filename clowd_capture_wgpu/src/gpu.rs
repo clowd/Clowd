@@ -1,9 +1,11 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::Result;
 use winit::window::Window;
 
 use crate::system::CapturedDesktop;
+use crate::ui::components::debug::startup::WorkerTimings;
 
 /// Non-sRGB format used by every pipeline and surface. On DX12 and Metal
 /// this is universally supported as a swapchain format. Verified at
@@ -95,6 +97,8 @@ pub struct WindowGpu {
 pub fn stage_a_create_device(
     instance: Arc<wgpu::Instance>,
     adapter_hint: Option<(u32, u32)>,
+    t_start: Instant,
+    timings: &WorkerTimings,
 ) -> Result<DeviceBundle> {
     pollster::block_on(async {
         #[cfg(windows)]
@@ -141,6 +145,8 @@ pub fn stage_a_create_device(
                     .await?
             }
         };
+        timings.prep_adapter.set_once(t_start.elapsed());
+
         let adapter_info = adapter.get_info();
         info!(
             "selected adapter: \"{}\" (vendor=0x{:04X} device=0x{:04X} type={:?})",
@@ -171,6 +177,8 @@ pub fn stage_a_create_device(
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
             })
             .await?;
+
+        timings.prep_device.set_once(t_start.elapsed());
 
         // Pre-build the desktop snapshot bind-group layout and sampler.
         // These only depend on the Device, not on the actual texture.
@@ -338,6 +346,8 @@ pub fn stage_a_create_device(
                 multiview_mask: None,
                 cache: None,
             });
+
+        timings.prep_pipelines.set_once(t_start.elapsed());
 
         Ok(DeviceBundle {
             instance,
