@@ -9,6 +9,7 @@ use windows::{
             BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateDCW, DeleteDC, DeleteObject, GetDIBits, GetWindowDC, ReleaseDC,
             SelectObject, BITMAPINFO, BITMAPINFOHEADER, CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, SRCCOPY,
         },
+        Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS},
         UI::WindowsAndMessaging::GetDesktopWindow,
     },
 };
@@ -114,7 +115,7 @@ impl BoxHBITMAP {
 /// sampler hardware does the channel reorder for free. Skipping the CPU
 /// swap removes ~50 MB of memory traffic on a 4K capture and lops the
 /// rayon dispatch overhead off startup latency entirely.
-fn read_dibits_bgra(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, height: i32) -> Result<Vec<u8>> {
+pub(super) fn read_dibits_bgra(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, width: i32, height: i32) -> Result<Vec<u8>> {
     let byte_count = (width as usize)
         .checked_mul(height as usize)
         .and_then(|n| n.checked_mul(4))
@@ -196,5 +197,39 @@ pub fn capture_desktop(bounds: &ScreenRect) -> Result<DesktopBitmap> {
             height: vh as u32,
             bounds,
         })
+    }
+}
+
+/// Capture a single window's content via PrintWindow.
+/// `raw_rect` should be the GetWindowRect bounds (includes invisible border).
+/// Returns BGRA bytes at those dimensions, or None on failure.
+pub fn capture_window_image(hwnd: HWND, raw_rect: &ScreenRect) -> Option<(Vec<u8>, u32, u32)> {
+    let w = raw_rect.width();
+    let h = raw_rect.height();
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+
+    unsafe {
+        let desktop_hwnd = GetDesktopWindow();
+        let hdc_screen = BoxHDC::from(desktop_hwnd);
+        let hdc_mem = BoxHDC::new(CreateCompatibleDC(Some(*hdc_screen)), None);
+        let hbitmap = BoxHBITMAP::new(CreateCompatibleBitmap(*hdc_screen, w, h));
+        SelectObject(*hdc_mem, (*hbitmap).into());
+
+        // PW_RENDERFULLCONTENT = 0x0002
+        let ok = PrintWindow(hwnd, *hdc_mem, PRINT_WINDOW_FLAGS(2));
+        if !ok.as_bool() {
+            warn!("PrintWindow failed for hwnd {:?}", hwnd);
+            return None;
+        }
+
+        match read_dibits_bgra(hdc_mem, hbitmap, w, h) {
+            Ok(bgra) => Some((bgra, w as u32, h as u32)),
+            Err(e) => {
+                warn!("GetDIBits failed after PrintWindow: {e}");
+                None
+            }
+        }
     }
 }

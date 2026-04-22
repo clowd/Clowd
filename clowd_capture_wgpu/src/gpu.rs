@@ -26,6 +26,27 @@ pub struct WindowUniforms {
 
 pub const WINDOW_UNIFORMS_SIZE: u64 = std::mem::size_of::<WindowUniforms>() as u64;
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PeekUniforms {
+    pub selection_rect: [f32; 4],
+    pub window_uv: [f32; 4],
+    pub desktop_uv: [f32; 4],
+    /// (num_obstruction_rects, ghost_opacity, viewport_w, viewport_h)
+    pub params: [f32; 4],
+    /// (cursor_x, cursor_y, dpi_scale, 0) in monitor-local pixels
+    pub cursor_params: [f32; 4],
+    pub obstruction_rects: [[f32; 4]; 16],
+}
+
+impl PeekUniforms {
+    pub fn zeroed() -> Self {
+        bytemuck::Zeroable::zeroed()
+    }
+}
+
+pub const PEEK_UNIFORMS_SIZE: u64 = std::mem::size_of::<PeekUniforms>() as u64;
+
 /// The frozen-desktop snapshot uploaded to the GPU at startup. One per
 /// render thread — each thread uploads its own copy to its own device.
 pub struct DesktopSnapshot {
@@ -50,6 +71,8 @@ pub struct DeviceBundle {
     pub desktop_pipeline: wgpu::RenderPipeline,
     pub desktop_bgl: wgpu::BindGroupLayout,
     pub desktop_sampler: wgpu::Sampler,
+    pub peek_pipeline: wgpu::RenderPipeline,
+    pub peek_bgl: wgpu::BindGroupLayout,
 }
 
 /// GPU state used during the render loop. Built from `DeviceBundle` after
@@ -58,6 +81,8 @@ pub struct WindowGpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub pipeline: wgpu::RenderPipeline,
+    pub peek_pipeline: wgpu::RenderPipeline,
+    pub peek_bgl: wgpu::BindGroupLayout,
     #[allow(dead_code)]
     pub surface_format: wgpu::TextureFormat,
     #[allow(dead_code)]
@@ -232,6 +257,88 @@ pub fn stage_a_create_device(
                 cache: None,
             });
 
+        // Peek window pipeline.
+        let peek_bgl =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("peek BGL"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: wgpu::BufferSize::new(PEEK_UNIFORMS_SIZE),
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        let peek_shader =
+            device.create_shader_module(wgpu::include_wgsl!("../shaders/peek.wgsl"));
+        let peek_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("peek pipeline layout"),
+            bind_group_layouts: &[Some(&peek_bgl)],
+            immediate_size: 0,
+        });
+        let peek_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("peek pipeline"),
+                layout: Some(&peek_layout),
+                vertex: wgpu::VertexState {
+                    module: &peek_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[],
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &peek_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: SURFACE_FORMAT,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: crate::render::MSAA_SAMPLES,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview_mask: None,
+                cache: None,
+            });
+
         Ok(DeviceBundle {
             instance,
             adapter,
@@ -241,6 +348,8 @@ pub fn stage_a_create_device(
             desktop_pipeline,
             desktop_bgl,
             desktop_sampler,
+            peek_pipeline,
+            peek_bgl,
         })
     })
 }
@@ -423,6 +532,8 @@ pub fn finalise_window_gpu(
         device: bundle.device,
         queue: bundle.queue,
         pipeline: bundle.desktop_pipeline,
+        peek_pipeline: bundle.peek_pipeline,
+        peek_bgl: bundle.peek_bgl,
         surface_format: SURFACE_FORMAT,
         adapter_name: bundle.adapter_name,
         snapshot,

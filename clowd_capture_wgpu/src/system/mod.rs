@@ -1,5 +1,5 @@
 #[cfg(windows)]
-mod win_capture;
+pub(crate) mod win_capture;
 
 #[cfg(windows)]
 mod win_monitor;
@@ -26,6 +26,52 @@ mod mac_mouse;
 mod mac_walker;
 
 use crate::geometry::{LogicalPoint, LogicalSize, RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
+
+/// Full hit-test result including peek metadata.
+#[derive(Debug, Clone)]
+pub struct HitTestResult {
+    pub rect: ScreenRect,
+    pub title: String,
+    pub window_index: usize,
+    pub obstructed: bool,
+}
+
+/// A window partially obstructed by higher-Z windows. Produced by
+/// `WindowWalker::obstructed_windows`, consumed by the background
+/// PrintWindow capture phase.
+#[derive(Debug, Clone)]
+pub struct ObstructedWindow {
+    pub window_index: usize,
+    #[cfg(windows)]
+    pub hwnd: windows::Win32::Foundation::HWND,
+    /// DWM extended frame bounds (true visual bounds).
+    pub rect: ScreenRect,
+    /// Raw GetWindowRect bounds (includes invisible resize border).
+    /// PrintWindow captures at these dimensions.
+    pub raw_rect: ScreenRect,
+    pub obstruction_rects: Vec<ScreenRect>,
+}
+
+#[cfg(windows)]
+unsafe impl Send for ObstructedWindow {}
+#[cfg(windows)]
+unsafe impl Sync for ObstructedWindow {}
+
+/// A captured window image ready for GPU upload by render workers.
+#[derive(Debug)]
+pub struct WindowPeekImage {
+    pub window_index: usize,
+    /// DWM extended frame bounds (true visual bounds).
+    pub window_rect: ScreenRect,
+    pub bgra: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    /// Pixel offset from raw bitmap origin to the visible content.
+    /// `crop_x = true_rect.min_x - raw_rect.min_x`
+    pub crop_x: i32,
+    pub crop_y: i32,
+    pub obstruction_rects: Vec<ScreenRect>,
+}
 
 /// Information about a single monitor, bundled together so callers don't
 /// have to juggle parallel vectors of fields. `bounds` is in raw physical
@@ -202,8 +248,10 @@ impl SystemInterop {
     /// Enumerate visible top-level windows on the current virtual desktop.
     /// Call once at capture startup, after the desktop bitmap is grabbed but
     /// before overlay windows are created.
-    pub fn snapshot_windows(monitors: &[MonitorInfo]) -> WindowWalker {
-        WindowWalker::snapshot(monitors)
+    /// `visibility_threshold`: minimum visible fraction (0.0–1.0) for a
+    /// window to be included. Windows with less visible area are dropped.
+    pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32) -> WindowWalker {
+        WindowWalker::snapshot(monitors, visibility_threshold)
     }
 }
 
@@ -244,7 +292,7 @@ impl SystemInterop {
         mac_monitor::all_monitors().expect("Unable to enumerate monitors")
     }
 
-    pub fn snapshot_windows(monitors: &[MonitorInfo]) -> WindowWalker {
-        WindowWalker::snapshot(monitors)
+    pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32) -> WindowWalker {
+        WindowWalker::snapshot(monitors, visibility_threshold)
     }
 }

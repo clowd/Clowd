@@ -17,6 +17,13 @@ pub struct CapturerSettings {
     /// Whether the Tips & Hotkeys panel is visible when the capturer
     /// first opens. The user can still toggle it with the `T` key.
     pub tips_visible_at_startup: bool,
+    /// When enabled, obstructed windows are captured via PrintWindow
+    /// and a peek-through composite is shown when hovering them.
+    pub obscured_window_peek_enabled: bool,
+    /// Maximum fraction of a window's area that can be obstructed by
+    /// higher-Z windows before it is dropped from hit-test results.
+    /// 0.80 = windows up to 80% covered are still selectable. Range 0.0–1.0.
+    pub obscured_window_detection_threshold: f32,
 }
 
 impl Default for CapturerSettings {
@@ -25,6 +32,8 @@ impl Default for CapturerSettings {
             // #3B97D2 — the legacy "clowd blue" accent.
             accent_color: [0x3B as f32 / 255.0, 0x97 as f32 / 255.0, 0xD2 as f32 / 255.0, 1.0],
             tips_visible_at_startup: true,
+            obscured_window_peek_enabled: true,
+            obscured_window_detection_threshold: 0.80,
         }
     }
 }

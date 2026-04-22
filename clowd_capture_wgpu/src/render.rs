@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, OnceLock};
 use std::thread::{self, JoinHandle};
@@ -7,10 +8,10 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect, WindowPoint};
-use crate::gpu::{self, WindowGpu, WindowUniforms, SURFACE_FORMAT, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::{self, WindowGpu, WindowUniforms, PeekUniforms, PEEK_UNIFORMS_SIZE, SURFACE_FORMAT, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
 use crate::sync::{ReadyGuard, VisibleLatch};
-use crate::system::{CapturedDesktop, MonitorInfo};
+use crate::system::{CapturedDesktop, MonitorInfo, WindowPeekImage};
 use crate::ui::components::debug::perf::{PerfSample, PerfTracker};
 use crate::ui::components::debug::startup::StartupTimings;
 use crate::ui::gpu::gpu_timing::GpuTimings;
@@ -39,7 +40,17 @@ pub enum RenderMsg {
         captured: bool,
     },
     UiState(Arc<UiSharedState>),
+    PeekImage(Arc<WindowPeekImage>),
+    ShowPeek(Option<PeekCommand>),
     Shutdown,
+}
+
+/// Tells render workers which obstructed window to peek at this frame.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PeekCommand {
+    pub window_index: usize,
+    pub window_rect: ScreenRect,
+    pub captured: bool,
 }
 
 /// Bootstrap messages sent to workers before the render loop starts.
@@ -107,6 +118,10 @@ impl WindowHandle {
 
     pub fn update_ui_state(&self, state: Arc<UiSharedState>) {
         let _ = self.tx.send(RenderMsg::UiState(state));
+    }
+
+    pub fn update_peek_state(&self, cmd: Option<PeekCommand>) {
+        let _ = self.tx.send(RenderMsg::ShowPeek(cmd));
     }
 }
 
@@ -358,6 +373,7 @@ fn render_worker_main(
         &gpu,
         &config,
         snapshot_state.as_ref(),
+        None,
         &mut ui_renderer,
         &perf,
         None,
@@ -378,6 +394,18 @@ fn render_worker_main(
     guard.disarm();
 
     visible_latch.wait();
+
+    // ── Peek state ───────────────────────────────────────────────────
+
+    let mut peek_textures: HashMap<usize, PeekTextureEntry> = HashMap::new();
+    let mut active_peek: Option<PeekCommand> = None;
+
+    let peek_ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("peek uniforms"),
+        size: PEEK_UNIFORMS_SIZE,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
 
     // ── Render loop ─────────────────────────────────────────────────
 
@@ -412,6 +440,63 @@ fn render_worker_main(
                     overlays_visible = state.overlays_visible;
                     ui_renderer.set_state(state);
                 }
+                Ok(RenderMsg::PeekImage(peek)) => {
+                    let max_dim = gpu.device.limits().max_texture_dimension_2d;
+                    if peek.width > max_dim || peek.height > max_dim
+                        || peek.width == 0 || peek.height == 0
+                    {
+                        continue;
+                    }
+                    let size = wgpu::Extent3d {
+                        width: peek.width,
+                        height: peek.height,
+                        depth_or_array_layers: 1,
+                    };
+                    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("peek window texture"),
+                        size,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Bgra8Unorm,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_DST,
+                        view_formats: &[],
+                    });
+                    gpu.queue.write_texture(
+                        wgpu::TexelCopyTextureInfo {
+                            texture: &texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        &peek.bgra,
+                        wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(4 * peek.width),
+                            rows_per_image: Some(peek.height),
+                        },
+                        size,
+                    );
+                    let view =
+                        texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    peek_textures.insert(
+                        peek.window_index,
+                        PeekTextureEntry {
+                            _texture: texture,
+                            view,
+                            window_rect: peek.window_rect,
+                            obstruction_rects: peek.obstruction_rects.clone(),
+                            width: peek.width,
+                            height: peek.height,
+                            crop_x: peek.crop_x,
+                            crop_y: peek.crop_y,
+                        },
+                    );
+                }
+                Ok(RenderMsg::ShowPeek(cmd)) => {
+                    active_peek = cmd;
+                }
                 Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
                 Err(mpsc::TryRecvError::Empty) => break,
             }
@@ -433,6 +518,107 @@ fn render_worker_main(
             );
         }
 
+        // Build per-frame peek draw state if active + texture available.
+        let peek_bind_group = active_peek.as_ref().and_then(|cmd| {
+            let pt = peek_textures.get(&cmd.window_index)?;
+            let snap = gpu.snapshot.as_ref()?;
+
+            // Compute peek uniforms in monitor-local coords.
+            let sel = selection?;
+            let cx = mouse_pos.x;
+            let cy = mouse_pos.y;
+            let local_cursor = WindowPoint::new(
+                cx - monitor_bounds.min_x() as f32,
+                cy - monitor_bounds.min_y() as f32,
+            );
+
+            let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
+                if zoom <= 1.0 {
+                    (
+                        vd_x - monitor_bounds.min_x() as f32,
+                        vd_y - monitor_bounds.min_y() as f32,
+                    )
+                } else {
+                    (
+                        (vd_x - cx) * zoom + local_cursor.x,
+                        (vd_y - cy) * zoom + local_cursor.y,
+                    )
+                }
+            };
+
+            let (sl, st) = to_local(sel.left() as f32, sel.top() as f32);
+            let (sr, sb) = to_local(sel.right() as f32, sel.bottom() as f32);
+
+            let wr = pt.window_rect;
+            let (wl, wt) = to_local(wr.left() as f32, wr.top() as f32);
+
+            // Window texture UV: map selection area to portion of window texture.
+            // The texture is captured at raw GetWindowRect dimensions, so we
+            // offset by the crop to skip the invisible resize border.
+            let tw = pt.width as f32;
+            let th = pt.height as f32;
+            let crop_x = pt.crop_x as f32;
+            let crop_y = pt.crop_y as f32;
+            let window_uv = [
+                (crop_x + sl - wl) / tw,
+                (crop_y + st - wt) / th,
+                (sr - sl) / tw,
+                (sb - st) / th,
+            ];
+
+            let base_uv = snapshot_state.as_ref().map(|s| s.base_uv_offset_scale).unwrap_or([0.0; 4]);
+
+            let mut peek_uniforms = PeekUniforms::zeroed();
+            peek_uniforms.selection_rect = [sl, st, sr, sb];
+            peek_uniforms.window_uv = window_uv;
+            peek_uniforms.desktop_uv = base_uv;
+
+            let n = pt.obstruction_rects.len().min(16);
+            peek_uniforms.params = [
+                n as f32,
+                if cmd.captured { 0.0 } else { 0.45 },
+                config.width as f32,
+                config.height as f32,
+            ];
+            peek_uniforms.cursor_params = [
+                local_cursor.x,
+                local_cursor.y,
+                scale_factor,
+                0.0,
+            ];
+            for (i, r) in pt.obstruction_rects.iter().take(16).enumerate() {
+                let (rl, rt) = to_local(r.left() as f32, r.top() as f32);
+                let (rr, rb) = to_local(r.right() as f32, r.bottom() as f32);
+                peek_uniforms.obstruction_rects[i] = [rl, rt, rr, rb];
+            }
+
+            gpu.queue.write_buffer(&peek_ubo, 0, bytemuck::bytes_of(&peek_uniforms));
+
+            let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("peek bind group"),
+                layout: &gpu.peek_bgl,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: peek_ubo.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&pt.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&snap.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&snap.sampler),
+                    },
+                ],
+            });
+            Some(bind_group)
+        });
+
         if gpu_timing.is_some() {
             let _ = gpu.device.poll(wgpu::PollType::Poll);
         }
@@ -453,6 +639,7 @@ fn render_worker_main(
             &gpu,
             &config,
             snapshot_state.as_ref(),
+            peek_bind_group.as_ref(),
             &mut ui_renderer,
             &perf,
             gpu_timing.as_ref(),
@@ -463,6 +650,19 @@ fn render_worker_main(
             perf.record(s);
         }
     }
+}
+
+// ── Peek texture storage ────────────────────────────────────────────
+
+struct PeekTextureEntry {
+    _texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    window_rect: ScreenRect,
+    obstruction_rects: Vec<ScreenRect>,
+    width: u32,
+    height: u32,
+    crop_x: i32,
+    crop_y: i32,
 }
 
 // ── Per-window snapshot state (unchanged) ───────────────────────────
@@ -597,6 +797,7 @@ fn draw_once(
     gpu: &WindowGpu,
     config: &wgpu::SurfaceConfiguration,
     snapshot_state: Option<&SnapshotState>,
+    peek_bind_group: Option<&wgpu::BindGroup>,
     ui_renderer: &mut UiRenderer,
     perf: &PerfTracker,
     gpu_timing: Option<&GpuTimings>,
@@ -659,6 +860,11 @@ fn draw_once(
         if let Some(state) = snapshot_state {
             rpass.set_bind_group(0, &state.bind_group, &[]);
             rpass.draw(0..3, 0..1);
+        }
+        if let Some(peek_bg) = peek_bind_group {
+            rpass.set_pipeline(&gpu.peek_pipeline);
+            rpass.set_bind_group(0, peek_bg, &[]);
+            rpass.draw(0..6, 0..1);
         }
         ui_renderer.draw(&mut rpass);
     }

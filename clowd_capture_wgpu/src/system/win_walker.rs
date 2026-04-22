@@ -28,6 +28,7 @@ use windows::{
 };
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
+use super::{HitTestResult, ObstructedWindow};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;
@@ -75,8 +76,15 @@ struct WindowEntry {
     hwnd: HWND,
     /// True visual bounds in system (virtual-desktop) coordinates.
     rect: ScreenRect,
+    /// Raw GetWindowRect bounds (includes invisible resize border).
+    /// Needed for PrintWindow which captures at these dimensions.
+    raw_rect: ScreenRect,
     /// Window title text.
     title: String,
+    /// Whether this window is partially covered by higher-Z windows.
+    obstructed: bool,
+    /// Regions of this window covered by higher-Z windows, in virtual-desktop coords.
+    obstruction_rects: Vec<ScreenRect>,
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +107,7 @@ impl WindowWalker {
     ///
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
-    pub fn snapshot(_monitors: &[super::MonitorInfo]) -> Self {
+    pub fn snapshot(_monitors: &[super::MonitorInfo], visibility_threshold: f32) -> Self {
         // COM is per-thread; this may run on a background thread.
         unsafe {
             use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
@@ -130,7 +138,7 @@ impl WindowWalker {
         let mut windows: Vec<WindowEntry> = Vec::new();
 
         for hwnd in hwnds {
-            if let Some(entry) = evaluate_window(hwnd, &vdm, &windows) {
+            if let Some(entry) = evaluate_window(hwnd, &vdm, &windows, visibility_threshold) {
                 windows.push(entry);
             }
         }
@@ -224,6 +232,38 @@ impl WindowWalker {
         } else {
             None
         }
+    }
+
+    /// Full hit-test returning window index and obstruction info.
+    pub fn hit_test_full(&self, point: ScreenPoint) -> Option<HitTestResult> {
+        let (idx, top) = self
+            .windows
+            .iter()
+            .enumerate()
+            .find(|(_, w)| w.rect.contains(point))?;
+
+        Some(HitTestResult {
+            rect: top.rect,
+            title: top.title.clone(),
+            window_index: idx,
+            obstructed: top.obstructed,
+        })
+    }
+
+    /// Return metadata for all obstructed windows (for PrintWindow capture).
+    pub fn obstructed_windows(&self) -> Vec<ObstructedWindow> {
+        self.windows
+            .iter()
+            .enumerate()
+            .filter(|(_, w)| w.obstructed)
+            .map(|(i, w)| ObstructedWindow {
+                window_index: i,
+                hwnd: w.hwnd,
+                rect: w.rect,
+                raw_rect: w.raw_rect,
+                obstruction_rects: w.obstruction_rects.clone(),
+            })
+            .collect()
     }
 
     /// Same as [`hit_test`] but also returns the title of the top-level window
@@ -327,7 +367,7 @@ extern "system" fn enum_windows_cb(hwnd: HWND, lparam: LPARAM) -> windows::core:
 
 /// Run the full filter pipeline on a single HWND. Returns `Some(WindowEntry)`
 /// if the window passes all checks, `None` otherwise.
-fn evaluate_window(hwnd: HWND, vdm: &Option<IVirtualDesktopManager>, accepted: &[WindowEntry]) -> Option<WindowEntry> {
+fn evaluate_window(hwnd: HWND, vdm: &Option<IVirtualDesktopManager>, accepted: &[WindowEntry], visibility_threshold: f32) -> Option<WindowEntry> {
     unsafe {
         // 1. Basic visibility.
         if !IsWindowVisible(hwnd).as_bool() {
@@ -357,6 +397,7 @@ fn evaluate_window(hwnd: HWND, vdm: &Option<IVirtualDesktopManager>, accepted: &
         if rc.right <= rc.left || rc.bottom <= rc.top {
             return None;
         }
+        let raw_rect = ScreenRect::from_exact(rc.left, rc.top, rc.right, rc.bottom);
 
         // 5. Virtual desktop.
         if let Some(ref vdm) = vdm {
@@ -399,16 +440,37 @@ fn evaluate_window(hwnd: HWND, vdm: &Option<IVirtualDesktopManager>, accepted: &
             return None;
         }
 
-        // 12. Fully occluded by a single higher-Z window.
-        if is_fully_occluded(&rect, accepted) {
-            return None;
+        // 12–13. Compute obstruction rects and visible fraction.
+        // Drop windows whose visible area falls below the threshold.
+        let mut obstruction_rects = Vec::new();
+        let window_area = (rect.width() as i64) * (rect.height() as i64);
+        let mut obstructed_area: i64 = 0;
+        for w in accepted.iter() {
+            if let Some(isect) = w.rect.intersection(&rect) {
+                if isect.width() > 0 && isect.height() > 0 {
+                    obstructed_area += (isect.width() as i64) * (isect.height() as i64);
+                    if obstruction_rects.len() < 16 {
+                        obstruction_rects.push(isect);
+                    }
+                }
+            }
         }
+        if window_area > 0 {
+            let obstructed_frac = obstructed_area as f64 / window_area as f64;
+            if obstructed_frac > visibility_threshold as f64 {
+                return None;
+            }
+        }
+        let obstructed = !obstruction_rects.is_empty();
 
         let title = get_window_text(hwnd);
         Some(WindowEntry {
             hwnd,
             rect,
+            raw_rect,
             title,
+            obstructed,
+            obstruction_rects,
         })
     }
 }
@@ -507,14 +569,6 @@ fn child_screen_rect(hwnd: HWND) -> Option<ScreenRect> {
             None
         }
     }
-}
-
-/// Conservative occlusion test: returns true if any single previously-accepted
-/// rect fully contains `rect`.
-fn is_fully_occluded(rect: &ScreenRect, accepted: &[WindowEntry]) -> bool {
-    accepted.iter().any(|w| {
-        w.rect.min_x() <= rect.min_x() && w.rect.min_y() <= rect.min_y() && w.rect.max_x() >= rect.max_x() && w.rect.max_y() >= rect.max_y()
-    })
 }
 
 /// Check whether an `ApplicationFrameWindow` has a real `CoreWindow` child

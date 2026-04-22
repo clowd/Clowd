@@ -16,6 +16,7 @@ use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopEl
 
 use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 use crate::system::MonitorInfo;
+use super::{HitTestResult, ObstructedWindow};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;
@@ -37,7 +38,7 @@ impl WindowWalker {
     ///
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
-    pub fn snapshot(monitors: &[MonitorInfo]) -> Self {
+    pub fn snapshot(monitors: &[MonitorInfo], visibility_threshold: f32) -> Self {
         let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
         let window_list = match window::copy_window_info(options, kCGNullWindowID) {
             Some(list) => list,
@@ -54,7 +55,7 @@ impl WindowWalker {
 
         for ptr in ptrs {
             let dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(ptr as CFDictionaryRef) };
-            if let Some(entry) = evaluate_window(&dict, &windows, monitors) {
+            if let Some(entry) = evaluate_window(&dict, &windows, monitors, visibility_threshold) {
                 windows.push(entry);
             }
         }
@@ -76,6 +77,29 @@ impl WindowWalker {
             .map(|w| w.rect)
     }
 
+    /// Full hit-test returning window index and obstruction info.
+    pub fn hit_test_full(&self, point: ScreenPoint) -> Option<HitTestResult> {
+        let (idx, top) = self
+            .windows
+            .iter()
+            .enumerate()
+            .find(|(_, w)| w.rect.contains(point))?;
+
+        Some(HitTestResult {
+            rect: top.rect,
+            title: top.title.clone(),
+            window_index: idx,
+            obstructed: false,
+        })
+    }
+
+    /// Return metadata for all obstructed windows (for PrintWindow capture).
+    /// On macOS this always returns an empty vec — window image capture is
+    /// not yet implemented.
+    pub fn obstructed_windows(&self) -> Vec<ObstructedWindow> {
+        Vec::new()
+    }
+
     /// Same as [`hit_test`] but also returns the title of the top-level window
     /// that contains the point.
     pub fn hit_test_with_title(&self, point: ScreenPoint) -> Option<(ScreenRect, String)> {
@@ -94,6 +118,7 @@ fn evaluate_window(
     dict: &CFDictionary,
     accepted: &[WindowEntry],
     monitors: &[MonitorInfo],
+    visibility_threshold: f32,
 ) -> Option<WindowEntry> {
     // 1. Layer == 0 (normal windows only; skip menu bar, dock, overlays).
     let layer = get_number_i64(dict, unsafe { window::kCGWindowLayer })?;
@@ -145,9 +170,21 @@ fn evaluate_window(
 
     let rect = ScreenRect::from_xy_size(phys_x, phys_y, phys_w, phys_h);
 
-    // 6. Fully occluded by a higher-Z window already accepted.
-    if is_fully_occluded(&rect, accepted) {
-        return None;
+    // 6. Visibility threshold — drop windows with too little visible area.
+    let window_area = (phys_w as i64) * (phys_h as i64);
+    if window_area > 0 {
+        let mut obstructed_area: i64 = 0;
+        for w in accepted.iter() {
+            if let Some(isect) = w.rect.intersection(&rect) {
+                if isect.width() > 0 && isect.height() > 0 {
+                    obstructed_area += (isect.width() as i64) * (isect.height() as i64);
+                }
+            }
+        }
+        let obstructed_frac = obstructed_area as f64 / window_area as f64;
+        if obstructed_frac > visibility_threshold as f64 {
+            return None;
+        }
     }
 
     // Read the window title (kCGWindowName), defaulting to empty string.
@@ -237,10 +274,3 @@ fn display_scale_at_logical_point(x: f64, y: f64) -> f32 {
     2.0
 }
 
-/// Conservative occlusion test: returns true if any single previously-accepted
-/// rect fully contains `rect`.
-fn is_fully_occluded(rect: &ScreenRect, accepted: &[WindowEntry]) -> bool {
-    accepted.iter().any(|w| {
-        w.rect.min_x() <= rect.min_x() && w.rect.min_y() <= rect.min_y() && w.rect.max_x() >= rect.max_x() && w.rect.max_y() >= rect.max_y()
-    })
-}

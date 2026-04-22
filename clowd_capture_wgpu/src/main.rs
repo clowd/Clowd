@@ -128,22 +128,78 @@ fn main() -> anyhow::Result<()> {
     }
 
     // ── Spawn walker thread ─────────────────────────────────────────
+    // After enumerating windows, continues on the same thread to
+    // PrintWindow each obstructed window and stream peek images to
+    // render workers.
+
+    let peek_txs: Vec<_> = worker_setups
+        .iter()
+        .map(|s| s.render_msg_tx.clone())
+        .collect();
 
     let walker_latch = Arc::new(sync::Latch::new());
+    let peek_images_latch: Arc<sync::Latch<Vec<Arc<system::WindowPeekImage>>>> =
+        Arc::new(sync::Latch::new());
     {
         let monitors_for_walker = monitors.clone();
         let latch = walker_latch.clone();
+        let peek_latch = peek_images_latch.clone();
         let startup_bg = startup.clone();
+        let peek_enabled = settings.obscured_window_peek_enabled;
+        let visibility_threshold = settings.obscured_window_detection_threshold;
         std::thread::Builder::new()
             .name("walker".into())
             .spawn(move || {
                 let walker =
-                    system::SystemInterop::snapshot_windows(&monitors_for_walker);
+                    system::SystemInterop::snapshot_windows(&monitors_for_walker, visibility_threshold);
+                let obstructed = if peek_enabled {
+                    walker.obstructed_windows()
+                } else {
+                    Vec::new()
+                };
                 latch.set(Arc::new(walker));
                 startup_bg
                     .background
                     .walker
                     .set_once(startup_bg.t_start.elapsed());
+
+                // Capture each obstructed window via PrintWindow and
+                // stream results to render workers as they complete.
+                #[cfg(windows)]
+                {
+                    use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+                    let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+
+                    info!(
+                        "walker: capturing {} obstructed window images",
+                        obstructed.len()
+                    );
+                    let mut all_peeks = Vec::new();
+                    for ow in &obstructed {
+                        if let Some((bgra, w, h)) =
+                            system::win_capture::capture_window_image(ow.hwnd, &ow.raw_rect)
+                        {
+                            let crop_x = ow.rect.min_x() - ow.raw_rect.min_x();
+                            let crop_y = ow.rect.min_y() - ow.raw_rect.min_y();
+                            let peek = Arc::new(system::WindowPeekImage {
+                                window_index: ow.window_index,
+                                window_rect: ow.rect,
+                                bgra,
+                                width: w,
+                                height: h,
+                                crop_x,
+                                crop_y,
+                                obstruction_rects: ow.obstruction_rects.clone(),
+                            });
+                            for tx in &peek_txs {
+                                let _ = tx.send(render::RenderMsg::PeekImage(peek.clone()));
+                            }
+                            all_peeks.push(peek);
+                        }
+                    }
+                    peek_latch.set(all_peeks);
+                    info!("walker: obstructed window capture complete");
+                }
             })
             .expect("spawn walker thread");
     }
@@ -169,6 +225,7 @@ fn main() -> anyhow::Result<()> {
         worker_setups,
         desktop_buffer,
         walker_latch,
+        peek_images_latch,
         ready_count,
         visible_latch,
         shown_time,

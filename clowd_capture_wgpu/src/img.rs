@@ -2,7 +2,7 @@ use winit::window::Window;
 
 use crate::geometry::RectExt;
 use crate::geometry::ScreenRect;
-use crate::system::CapturedDesktop;
+use crate::system::{CapturedDesktop, WindowPeekImage};
 
 /// Result of a Copy or Save action.
 pub enum ActionResult {
@@ -55,9 +55,72 @@ pub fn extract_selection_rgba(selection: ScreenRect, buffer: &CapturedDesktop) -
     Some((rgba, copy_w, copy_h))
 }
 
+/// Extract selection with a peek window composited on top.
+/// The peek image is painted over the desktop buffer within the selection,
+/// so the saved/copied result matches the on-screen rendering.
+pub fn extract_selection_rgba_with_peek(
+    selection: ScreenRect,
+    buffer: &CapturedDesktop,
+    peek: &WindowPeekImage,
+) -> Option<(Vec<u8>, u32, u32)> {
+    let mut result = extract_selection_rgba(selection, buffer)?;
+    let (ref mut rgba, width, height) = result;
+
+    let sel_left = selection.left();
+    let sel_top = selection.top();
+    let win_left = peek.window_rect.left();
+    let win_top = peek.window_rect.top();
+
+    // For each pixel in the output, check if it falls within the peek
+    // window rect. If so, sample from the peek BGRA buffer (with crop offset).
+    for row in 0..height {
+        for col in 0..width {
+            let vd_x = sel_left + col as i32;
+            let vd_y = sel_top + row as i32;
+
+            // Is this pixel within the peek window's visual bounds?
+            if vd_x < win_left
+                || vd_x >= peek.window_rect.right()
+                || vd_y < win_top
+                || vd_y >= peek.window_rect.bottom()
+            {
+                continue;
+            }
+
+            // Sample from the peek texture with crop offset.
+            let tx = peek.crop_x + (vd_x - win_left);
+            let ty = peek.crop_y + (vd_y - win_top);
+            if tx < 0 || ty < 0 || tx >= peek.width as i32 || ty >= peek.height as i32 {
+                continue;
+            }
+            let src_idx = (ty as usize * peek.width as usize + tx as usize) * 4;
+            if src_idx + 3 >= peek.bgra.len() {
+                continue;
+            }
+
+            let dst_idx = (row as usize * width as usize + col as usize) * 4;
+            // BGRA → RGBA
+            rgba[dst_idx] = peek.bgra[src_idx + 2];
+            rgba[dst_idx + 1] = peek.bgra[src_idx + 1];
+            rgba[dst_idx + 2] = peek.bgra[src_idx];
+            rgba[dst_idx + 3] = 255;
+        }
+    }
+
+    Some(result)
+}
+
 /// Copy the selected region to the clipboard.
-pub fn copy_to_clipboard(selection: ScreenRect, buffer: &CapturedDesktop) -> ActionResult {
-    let Some((rgba, width, height)) = extract_selection_rgba(selection, buffer) else {
+pub fn copy_to_clipboard_with_peek(
+    selection: ScreenRect,
+    buffer: &CapturedDesktop,
+    peek: Option<&WindowPeekImage>,
+) -> ActionResult {
+    let extracted = match peek {
+        Some(p) => extract_selection_rgba_with_peek(selection, buffer, p),
+        None => extract_selection_rgba(selection, buffer),
+    };
+    let Some((rgba, width, height)) = extracted else {
         log::warn!("copy: no selection or failed to extract");
         return ActionResult::Failed("No selection to copy".to_string());
     };
@@ -85,8 +148,17 @@ pub fn copy_to_clipboard(selection: ScreenRect, buffer: &CapturedDesktop) -> Act
 }
 
 /// Save the selected region to a file via save dialog.
-pub fn save_to_file(selection: ScreenRect, buffer: &CapturedDesktop, window: &Window) -> ActionResult {
-    let Some((rgba, width, height)) = extract_selection_rgba(selection, buffer) else {
+pub fn save_to_file_with_peek(
+    selection: ScreenRect,
+    buffer: &CapturedDesktop,
+    peek: Option<&WindowPeekImage>,
+    window: &Window,
+) -> ActionResult {
+    let extracted = match peek {
+        Some(p) => extract_selection_rgba_with_peek(selection, buffer, p),
+        None => extract_selection_rgba(selection, buffer),
+    };
+    let Some((rgba, width, height)) = extracted else {
         log::warn!("save: no selection or failed to extract");
         return ActionResult::Failed("No selection to save".to_string());
     };

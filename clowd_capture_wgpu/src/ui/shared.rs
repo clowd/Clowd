@@ -51,6 +51,8 @@ pub struct UiSharedState {
     pub hovered_monitor_name: Option<String>,
     pub hovered_window_title: Option<String>,
     pub hovered_window_bounds: Option<ScreenRect>,
+    pub hovered_window_index: Option<usize>,
+    pub hovered_window_obstructed: bool,
     pub hovered_pixel_bgra: Option<[u8; 4]>,
 }
 
