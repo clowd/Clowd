@@ -12,7 +12,7 @@
 //                        1.5 = 150 %, …). Used to size the coloured
 //                        crosshair arms so they stay the same physical
 //                        size on every display.
-//   crosshair_color    = RGBA colour used for both the inner thin cross,
+//   accent_color    = RGBA colour used for both the inner thin cross,
 //                        the outer thick segments, AND the marching-ants
 //                        dashes on the selection border. Seeded once from
 //                        `CapturerSettings`; never updated per frame.
@@ -38,7 +38,7 @@
 struct Uniforms {
     uv_offset_scale:  vec4<f32>,
     params:           vec4<f32>,
-    crosshair_color:  vec4<f32>,
+    accent_color:  vec4<f32>,
     selection_rect:   vec4<f32>,
     selection_params: vec4<f32>,
 };
@@ -175,7 +175,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             return mix(base, contrast, fade);
         }
         if (on_thick_v_colour || on_thick_h_colour) {
-            return mix(base, u.crosshair_color, fade);
+            return mix(base, u.accent_color, fade);
         }
 
         if (on_v_line || on_h_line) {
@@ -298,7 +298,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             let raw = f32(arc) - t_offset;
             let phase = raw - period * floor(raw / period);
             if (phase < half_period) {
-                return mix(base, u.crosshair_color, fade);
+                return mix(base, u.accent_color, fade);
             }
             return mix(base, vec4<f32>(1.0, 1.0, 1.0, 1.0), fade);
         }

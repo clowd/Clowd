@@ -10,17 +10,21 @@
 /// via `Arc` — we never mutate it after construction.
 #[derive(Debug, Clone)]
 pub struct CapturerSettings {
-    /// RGBA (each channel in [0, 1]) used for both the inner thin
-    /// crosshair arms and the outer thick segments. Written into the
+    /// RGBA (each channel in [0, 1]) accent colour used for crosshair
+    /// arms, selection borders, and UI highlights. Written into the
     /// per-window uniform buffer once, at render-thread startup.
-    pub crosshair_color: [f32; 4],
+    pub accent_color: [f32; 4],
+    /// Whether the Tips & Hotkeys panel is visible when the capturer
+    /// first opens. The user can still toggle it with the `T` key.
+    pub tips_visible_at_startup: bool,
 }
 
 impl Default for CapturerSettings {
     fn default() -> Self {
         Self {
             // #3B97D2 — the legacy "clowd blue" accent.
-            crosshair_color: [0x3B as f32 / 255.0, 0x97 as f32 / 255.0, 0xD2 as f32 / 255.0, 1.0],
+            accent_color: [0x3B as f32 / 255.0, 0x97 as f32 / 255.0, 0xD2 as f32 / 255.0, 1.0],
+            tips_visible_at_startup: true,
         }
     }
 }
