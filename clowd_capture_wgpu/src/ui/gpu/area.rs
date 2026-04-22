@@ -76,7 +76,6 @@ pub struct AreaRenderer {
     position: Option<PositionedText>,
     text_buf: String,
     last_selection: Option<crate::geometry::ScreenRect>,
-    dpi_scale: f32,
 }
 
 impl AreaRenderer {
@@ -86,7 +85,6 @@ impl AreaRenderer {
             position: None,
             text_buf: String::new(),
             last_selection: None,
-            dpi_scale: 1.0,
         }
     }
 
@@ -116,7 +114,6 @@ impl AreaRenderer {
         };
 
         let dpi = vis.monitor.dpi_scale.max(0.1);
-        self.dpi_scale = dpi;
         let font_px = (AREA_FONT_PX * dpi).floor();
         let padding = (AREA_PADDING_PX * dpi).floor();
 
@@ -183,14 +180,21 @@ impl AreaRenderer {
         origin_x = origin_x.clamp(0.0, (mon_w - area_width).max(0.0));
         origin_y = origin_y.clamp(0.0, (mon_h - area_height).max(0.0));
 
-        // Pill background (rounded rect).
+        // Pill background (rounded rect). Inflate quad by aa_pad so the
+        // shader's fwidth-based AA has room for the full transition fringe.
         let corner_radius = area_height / 2.0;
         let border_px = AREA_BORDER_UNSCALED * dpi.floor().max(1.0);
+        let aa_pad: f32 = 1.5;
         rects.push(RectInstance {
-            dest_px: [origin_x, origin_y, origin_x + area_width, origin_y + area_height],
+            dest_px: [
+                origin_x - aa_pad,
+                origin_y - aa_pad,
+                origin_x + area_width + aa_pad,
+                origin_y + area_height + aa_pad,
+            ],
             fill_rgba: [1.0, 1.0, 1.0, 1.0],
             border_rgba: state.accent_color,
-            params: [border_px, 0.0, corner_radius, 0.0],
+            params: [border_px, 0.0, corner_radius, aa_pad],
         });
 
         self.position = Some(PositionedText {
@@ -218,9 +222,6 @@ impl AreaRenderer {
             default_color: Color::rgba(0, 0, 0, 0xFF),
             custom_glyphs: &[],
         };
-        if self.dpi_scale < 1.01 {
-            out.push(area.clone());
-        }
         out.push(area);
     }
 }
