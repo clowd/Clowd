@@ -302,7 +302,7 @@ fn render_worker_main(
         let uniforms = WindowUniforms {
             uv_offset_scale: base_uv_offset_scale,
             params: [0.0, init_local.x, init_local.y, scale_factor],
-            crosshair_color: settings.crosshair_color,
+            accent_color: settings.accent_color,
             selection_rect: [0.0, 0.0, -1.0, -1.0],
             selection_params: [0.0, 0.0, 0.0, 0.0],
         };

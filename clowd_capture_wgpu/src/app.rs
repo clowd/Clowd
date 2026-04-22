@@ -121,6 +121,7 @@ impl App {
         };
 
         let expected = worker_setups.len();
+        let tips_visible = settings.tips_visible_at_startup;
 
         Self {
             settings,
@@ -158,7 +159,7 @@ impl App {
                 hittest: Hittest::Outside,
                 drag_mode: None,
                 drag_anchor_selection: None,
-                tips_visible: true,
+                tips_visible,
                 debug_visible: false,
                 last_scroll_end: None,
                 scroll_momentum: false,
@@ -283,7 +284,7 @@ impl App {
             dragging: self.input.dragging,
             zoom: self.input.zoom,
             virtual_cursor: self.input.virtual_cursor,
-            accent_color: self.settings.crosshair_color,
+            accent_color: self.settings.accent_color,
             tips_visible: self.input.tips_visible,
             debug_visible: self.input.debug_visible,
             overlays_visible: self.input.overlays_visible,

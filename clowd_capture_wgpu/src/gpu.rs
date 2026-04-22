@@ -19,7 +19,7 @@ pub const SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 pub struct WindowUniforms {
     pub uv_offset_scale: [f32; 4],
     pub params: [f32; 4],
-    pub crosshair_color: [f32; 4],
+    pub accent_color: [f32; 4],
     pub selection_rect: [f32; 4],
     pub selection_params: [f32; 4],
 }
