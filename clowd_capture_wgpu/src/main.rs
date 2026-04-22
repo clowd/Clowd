@@ -200,6 +200,37 @@ fn main() -> anyhow::Result<()> {
                     peek_latch.set(all_peeks);
                     info!("walker: obstructed window capture complete");
                 }
+
+                #[cfg(target_os = "macos")]
+                {
+                    info!(
+                        "walker: capturing {} obstructed window images",
+                        obstructed.len()
+                    );
+                    let mut all_peeks = Vec::new();
+                    for ow in &obstructed {
+                        if let Some((bgra, w, h)) =
+                            system::mac_capture::capture_window_image(ow.window_id)
+                        {
+                            let peek = Arc::new(system::WindowPeekImage {
+                                window_index: ow.window_index,
+                                window_rect: ow.rect,
+                                bgra,
+                                width: w,
+                                height: h,
+                                crop_x: 0,
+                                crop_y: 0,
+                                obstruction_rects: ow.obstruction_rects.clone(),
+                            });
+                            for tx in &peek_txs {
+                                let _ = tx.send(render::RenderMsg::PeekImage(peek.clone()));
+                            }
+                            all_peeks.push(peek);
+                        }
+                    }
+                    peek_latch.set(all_peeks);
+                    info!("walker: obstructed window capture complete");
+                }
             })
             .expect("spawn walker thread");
     }
