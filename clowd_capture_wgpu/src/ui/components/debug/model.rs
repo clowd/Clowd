@@ -263,6 +263,8 @@ pub struct PrimaryPanelData<'a> {
     pub selection: Option<ScreenRect>,
     pub hovered_window_title: Option<&'a str>,
     pub hovered_window_bounds: Option<ScreenRect>,
+    pub hovered_window_index: Option<usize>,
+    pub hovered_window_obstructed: bool,
 }
 
 impl<'a> PrimaryPanelData<'a> {
@@ -347,6 +349,12 @@ impl<'a> PrimaryPanelData<'a> {
             out.push(format_args!("wnd_title: {}", TruncatedTitle(title, 60)));
             if let Some(b) = self.hovered_window_bounds {
                 out.push(format_args!("wnd_bounds: {}", DisplayRect(b)));
+            }
+            if let Some(idx) = self.hovered_window_index {
+                out.push(format_args!(
+                    "wnd_index: {}  obstructed: {}",
+                    idx, self.hovered_window_obstructed
+                ));
             }
         }
     }

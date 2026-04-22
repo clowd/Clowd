@@ -190,6 +190,8 @@ impl DebugRenderer {
                 selection: state.selection,
                 hovered_window_title: state.hovered_window_title.as_deref(),
                 hovered_window_bounds: state.hovered_window_bounds,
+                hovered_window_index: state.hovered_window_index,
+                hovered_window_obstructed: state.hovered_window_obstructed,
             };
             data.write_lines(&mut self.line_buf);
             render_panel_inner(
