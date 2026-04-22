@@ -43,26 +43,6 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
     return out;
 }
 
-// 1D Gaussian weights for sigma = 3.5, offsets -5 .. +5.
-// Normalised so the 1D array sums to 1.
-const W0: f32 = 0.13298;
-const W1: f32 = 0.12583;
-const W2: f32 = 0.10658;
-const W3: f32 = 0.08084;
-const W4: f32 = 0.05493;
-const W5: f32 = 0.03344;
-
-fn gauss_1d(d: i32) -> f32 {
-    switch abs(d) {
-        case 0 { return W0; }
-        case 1 { return W1; }
-        case 2 { return W2; }
-        case 3 { return W3; }
-        case 4 { return W4; }
-        default { return W5; }
-    }
-}
-
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(floor(in.pos.xy));
@@ -126,18 +106,18 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return vec4(window_color.rgb, 1.0);
     }
 
-    // 11x11 Gaussian blur (sigma ≈ 3.5) of desktop texture.
+    // 5×5 box blur with 2-texel stride — covers a 10×10 texel area
+    // with only 25 samples instead of the original 121.
     let texel_size = vec2(1.0) / vec2<f32>(textureDimensions(desktop_tex));
     var blur_sum = vec3(0.0);
-    for (var dy = -5; dy <= 5; dy++) {
-        let wy = gauss_1d(dy);
-        for (var dx = -5; dx <= 5; dx++) {
-            let w = wy * gauss_1d(dx);
-            let offset = vec2<f32>(f32(dx), f32(dy)) * texel_size;
+    for (var dy = -2; dy <= 2; dy++) {
+        for (var dx = -2; dx <= 2; dx++) {
+            let offset = vec2<f32>(f32(dx), f32(dy)) * texel_size * 2.0;
             let s = textureSample(desktop_tex, samp, in.desktop_uv + offset);
-            blur_sum += s.rgb * w;
+            blur_sum += s.rgb;
         }
     }
+    blur_sum /= 25.0;
 
     // Gentle grayscale — keep it readable, just softened.
     let luma = dot(blur_sum, vec3(0.2126, 0.7152, 0.0722)) * 0.82;
