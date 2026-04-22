@@ -103,7 +103,7 @@ pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
     if !state.overlays_visible {
         return None;
     }
-    if state.captured || state.mouse_down || !state.tips_visible {
+    if state.captured || state.mouse_down || !state.tips_visible || state.debug_visible {
         return None;
     }
     let cx = state.virtual_cursor.x.round() as i32;
