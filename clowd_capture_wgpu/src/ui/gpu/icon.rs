@@ -33,15 +33,9 @@ pub struct IconAtlas {
 }
 
 impl IconAtlas {
-    pub fn build(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        trees: &[usvg::Tree],
-        icon_px: u32,
-    ) -> Self {
+    pub fn build(device: &wgpu::Device, queue: &wgpu::Queue, trees: &[usvg::Tree], icon_px: u32) -> Self {
         let atlas_size = if icon_px <= 36 { 256u32 } else { 512 };
-        let mut allocator =
-            etagere::AtlasAllocator::new(etagere::size2(atlas_size as i32, atlas_size as i32));
+        let mut allocator = etagere::AtlasAllocator::new(etagere::size2(atlas_size as i32, atlas_size as i32));
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("icon atlas"),
@@ -70,11 +64,7 @@ impl IconAtlas {
             let vb = tree.size();
             let sx = icon_px as f32 / vb.width();
             let sy = icon_px as f32 / vb.height();
-            resvg::render(
-                tree,
-                tiny_skia::Transform::from_scale(sx, sy),
-                &mut pm.as_mut(),
-            );
+            resvg::render(tree, tiny_skia::Transform::from_scale(sx, sy), &mut pm.as_mut());
             let alloc = allocator
                 .allocate(etagere::size2(icon_px as i32, icon_px as i32))
                 .expect("icon atlas too small");
@@ -140,8 +130,19 @@ pub struct IconPipeline {
 
 impl IconPipeline {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
-        let shader =
-            device.create_shader_module(wgpu::include_wgsl!("../../../shaders/ui_icon.wgsl"));
+        #[cfg(windows)]
+        let (shader_vs, shader_fs) = {
+            const VS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_icon_vs.dxbc"));
+            const PS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_icon_ps.dxbc"));
+            unsafe {
+                (
+                    crate::gpu::create_passthrough_module(device, "ui_icon VS", VS),
+                    crate::gpu::create_passthrough_module(device, "ui_icon FS", PS),
+                )
+            }
+        };
+        #[cfg(not(windows))]
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../../../shaders/ui_icon.wgsl"));
 
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("ui_icon bgl"),
@@ -152,9 +153,7 @@ impl IconPipeline {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(
-                            std::mem::size_of::<IconUniforms>() as u64,
-                        ),
+                        min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<IconUniforms>() as u64),
                     },
                     count: None,
                 },
@@ -162,7 +161,9 @@ impl IconPipeline {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        sample_type: wgpu::TextureSampleType::Float {
+                            filterable: true,
+                        },
                         view_dimension: wgpu::TextureViewDimension::D2,
                         multisampled: false,
                     },
@@ -224,12 +225,18 @@ impl IconPipeline {
             label: Some("ui_icon pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
+                #[cfg(windows)]
+                module: &shader_vs,
+                #[cfg(not(windows))]
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[instance_layout],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
+                #[cfg(windows)]
+                module: &shader_fs,
+                #[cfg(not(windows))]
                 module: &shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {

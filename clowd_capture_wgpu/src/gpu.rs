@@ -7,6 +7,25 @@ use winit::window::Window;
 use crate::system::CapturedDesktop;
 use crate::ui::components::debug::startup::WorkerTimings;
 
+#[cfg(windows)]
+mod compiled_shaders {
+    pub const DESKTOP_VS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/desktop_vs.dxbc"));
+    pub const DESKTOP_PS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/desktop_ps.dxbc"));
+    pub const PEEK_VS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/peek_vs.dxbc"));
+    pub const PEEK_PS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/peek_ps.dxbc"));
+}
+
+#[cfg(windows)]
+pub(crate) unsafe fn create_passthrough_module(device: &wgpu::Device, label: &str, dxbc: &'static [u8]) -> wgpu::ShaderModule {
+    unsafe {
+        device.create_shader_module_passthrough(wgpu::ShaderModuleDescriptorPassthrough {
+            label: Some(label.into()),
+            dxil: Some(std::borrow::Cow::Borrowed(dxbc)),
+            ..Default::default()
+        })
+    }
+}
+
 /// Non-sRGB format used by every pipeline and surface. On DX12 and Metal
 /// this is universally supported as a swapchain format. Verified at
 /// surface-bind time via an assertion.
@@ -110,10 +129,7 @@ pub fn stage_a_create_device(
 
         let adapter = match adapter_hint {
             Some((vendor, device)) => {
-                info!(
-                    "adapter hint: vendor=0x{:04X} device=0x{:04X}",
-                    vendor, device
-                );
+                info!("adapter hint: vendor=0x{:04X} device=0x{:04X}", vendor, device);
                 let adapters = instance.enumerate_adapters(backends).await;
                 let matched = adapters
                     .into_iter()
@@ -145,7 +161,9 @@ pub fn stage_a_create_device(
                     .await?
             }
         };
-        timings.prep_adapter.set_once(t_start.elapsed());
+        timings
+            .prep_adapter
+            .set_once(t_start.elapsed());
 
         let adapter_info = adapter.get_info();
         info!(
@@ -161,10 +179,12 @@ pub fn stage_a_create_device(
 
         let adapter_features = adapter.features();
         let mut required_features = wgpu::Features::empty();
-        if crate::ui::gpu::gpu_timing::GPU_TIMING_ENABLED
-            && adapter_features.contains(wgpu::Features::TIMESTAMP_QUERY)
-        {
+        if crate::ui::gpu::gpu_timing::GPU_TIMING_ENABLED && adapter_features.contains(wgpu::Features::TIMESTAMP_QUERY) {
             required_features |= wgpu::Features::TIMESTAMP_QUERY;
+        }
+        #[cfg(windows)]
+        {
+            required_features |= wgpu::Features::PASSTHROUGH_SHADERS;
         }
 
         let (device, queue) = adapter
@@ -178,42 +198,45 @@ pub fn stage_a_create_device(
             })
             .await?;
 
-        timings.prep_device.set_once(t_start.elapsed());
+        timings
+            .prep_device
+            .set_once(t_start.elapsed());
 
         // Pre-build the desktop snapshot bind-group layout and sampler.
         // These only depend on the Device, not on the actual texture.
-        let desktop_bgl =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("desktop snapshot BGL"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(WINDOW_UNIFORMS_SIZE),
+        let desktop_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("desktop snapshot BGL"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(WINDOW_UNIFORMS_SIZE),
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float {
+                            filterable: true,
                         },
-                        count: None,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
 
         let desktop_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("desktop snapshot sampler"),
@@ -227,127 +250,158 @@ pub fn stage_a_create_device(
         });
 
         // Desktop fullscreen-triangle pipeline.
-        let shader =
-            device.create_shader_module(wgpu::include_wgsl!("../shaders/desktop.wgsl"));
+        #[cfg(windows)]
+        let (desktop_vs, desktop_fs) = unsafe {
+            (
+                create_passthrough_module(&device, "desktop VS", compiled_shaders::DESKTOP_VS),
+                create_passthrough_module(&device, "desktop FS", compiled_shaders::DESKTOP_PS),
+            )
+        };
+        #[cfg(not(windows))]
+        let desktop_shader = device.create_shader_module(wgpu::include_wgsl!("../shaders/desktop.wgsl"));
+
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("desktop pipeline layout"),
             bind_group_layouts: &[Some(&desktop_bgl)],
             immediate_size: 0,
         });
-        let desktop_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("desktop pipeline"),
-                layout: Some(&layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: SURFACE_FORMAT,
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: crate::render::MSAA_SAMPLES,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview_mask: None,
-                cache: None,
-            });
+        let desktop_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("desktop pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                #[cfg(windows)]
+                module: &desktop_vs,
+                #[cfg(not(windows))]
+                module: &desktop_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                #[cfg(windows)]
+                module: &desktop_fs,
+                #[cfg(not(windows))]
+                module: &desktop_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: SURFACE_FORMAT,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: crate::render::MSAA_SAMPLES,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
 
         // Peek window pipeline.
-        let peek_bgl =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("peek BGL"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(PEEK_UNIFORMS_SIZE),
+        let peek_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("peek BGL"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(PEEK_UNIFORMS_SIZE),
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float {
+                            filterable: true,
                         },
-                        count: None,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float {
+                            filterable: true,
                         },
-                        count: None,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
 
-        let peek_shader =
-            device.create_shader_module(wgpu::include_wgsl!("../shaders/peek.wgsl"));
+        #[cfg(windows)]
+        let (peek_vs, peek_fs) = unsafe {
+            (
+                create_passthrough_module(&device, "peek VS", compiled_shaders::PEEK_VS),
+                create_passthrough_module(&device, "peek FS", compiled_shaders::PEEK_PS),
+            )
+        };
+        #[cfg(not(windows))]
+        let peek_shader = device.create_shader_module(wgpu::include_wgsl!("../shaders/peek.wgsl"));
+
         let peek_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("peek pipeline layout"),
             bind_group_layouts: &[Some(&peek_bgl)],
             immediate_size: 0,
         });
-        let peek_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("peek pipeline"),
-                layout: Some(&peek_layout),
-                vertex: wgpu::VertexState {
-                    module: &peek_shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &peek_shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: SURFACE_FORMAT,
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: crate::render::MSAA_SAMPLES,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview_mask: None,
-                cache: None,
-            });
+        let peek_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("peek pipeline"),
+            layout: Some(&peek_layout),
+            vertex: wgpu::VertexState {
+                #[cfg(windows)]
+                module: &peek_vs,
+                #[cfg(not(windows))]
+                module: &peek_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                #[cfg(windows)]
+                module: &peek_fs,
+                #[cfg(not(windows))]
+                module: &peek_shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: SURFACE_FORMAT,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: crate::render::MSAA_SAMPLES,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
 
-        timings.prep_pipelines.set_once(t_start.elapsed());
+        timings
+            .prep_pipelines
+            .set_once(t_start.elapsed());
 
         Ok(DeviceBundle {
             instance,
@@ -428,10 +482,7 @@ pub fn stage_b_upload_snapshot(
         sampler: sampler.clone(),
         bind_group_layout: bgl.clone(),
         vdesktop_origin: [captured.bounds.min_x() as f32, captured.bounds.min_y() as f32],
-        vdesktop_size: [
-            captured.bounds.width() as f32,
-            captured.bounds.height() as f32,
-        ],
+        vdesktop_size: [captured.bounds.width() as f32, captured.bounds.height() as f32],
     }))
 }
 
@@ -449,13 +500,12 @@ pub fn create_surface(
     window: Arc<Window>,
     screenshot_image: Option<core_graphics::image::CGImage>,
 ) -> Result<SurfaceBundle> {
-    use std::ptr::NonNull;
     use objc2::{MainThreadMarker, MainThreadOnly};
     use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
+    use std::ptr::NonNull;
     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    let mtm = MainThreadMarker::new()
-        .expect("create_surface must be called on the main thread");
+    let mtm = MainThreadMarker::new().expect("create_surface must be called on the main thread");
 
     let handle = window.window_handle()?;
     let RawWindowHandle::AppKit(h) = handle.as_raw() else {
@@ -469,18 +519,12 @@ pub fn create_surface(
     // opens looking identical to the desktop.
     if let Some(ref cg_image) = screenshot_image {
         let bg_view = NSView::initWithFrame(NSView::alloc(mtm), frame);
-        bg_view.setAutoresizingMask(
-            NSAutoresizingMaskOptions::ViewWidthSizable
-                | NSAutoresizingMaskOptions::ViewHeightSizable,
-        );
+        bg_view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
         bg_view.setWantsLayer(true);
         if let Some(layer) = bg_view.layer() {
             unsafe {
-                let cg_ptr: *const std::ffi::c_void =
-                    *(&*cg_image as *const _ as *const *const std::ffi::c_void);
-                layer.setContents(Some(
-                    &*(cg_ptr as *const objc2::runtime::AnyObject),
-                ));
+                let cg_ptr: *const std::ffi::c_void = *(&*cg_image as *const _ as *const *const std::ffi::c_void);
+                layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
                 layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
             }
         }
@@ -489,24 +533,16 @@ pub fn create_surface(
 
     // Render subview: wgpu renders into this, starts invisible.
     let subview = NSView::initWithFrame(NSView::alloc(mtm), frame);
-    subview.setAutoresizingMask(
-        NSAutoresizingMaskOptions::ViewWidthSizable
-            | NSAutoresizingMaskOptions::ViewHeightSizable,
-    );
+    subview.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
     content_view.addSubview(&subview);
     subview.setWantsLayer(true);
     if let Some(layer) = subview.layer() {
         layer.setOpacity(0.0);
     }
 
-    let subview_ptr = NonNull::new(objc2::rc::Retained::as_ptr(&subview) as *mut _)
-        .expect("subview pointer is non-null");
-    let raw_window_handle = RawWindowHandle::AppKit(
-        winit::raw_window_handle::AppKitWindowHandle::new(subview_ptr),
-    );
-    let raw_display_handle = winit::raw_window_handle::RawDisplayHandle::AppKit(
-        winit::raw_window_handle::AppKitDisplayHandle::new(),
-    );
+    let subview_ptr = NonNull::new(objc2::rc::Retained::as_ptr(&subview) as *mut _).expect("subview pointer is non-null");
+    let raw_window_handle = RawWindowHandle::AppKit(winit::raw_window_handle::AppKitWindowHandle::new(subview_ptr));
+    let raw_display_handle = winit::raw_window_handle::RawDisplayHandle::AppKit(winit::raw_window_handle::AppKitDisplayHandle::new());
 
     let surface = unsafe {
         instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
@@ -522,11 +558,7 @@ pub fn create_surface(
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn create_surface(
-    instance: &wgpu::Instance,
-    window: Arc<Window>,
-    _screenshot_image: Option<()>,
-) -> Result<SurfaceBundle> {
+pub fn create_surface(instance: &wgpu::Instance, window: Arc<Window>, _screenshot_image: Option<()>) -> Result<SurfaceBundle> {
     Ok(SurfaceBundle {
         surface: instance.create_surface(window)?,
     })
@@ -534,10 +566,7 @@ pub fn create_surface(
 
 // ── Assemble final WindowGpu ────────────────────────────────────────
 
-pub fn finalise_window_gpu(
-    bundle: DeviceBundle,
-    snapshot: Option<Arc<DesktopSnapshot>>,
-) -> WindowGpu {
+pub fn finalise_window_gpu(bundle: DeviceBundle, snapshot: Option<Arc<DesktopSnapshot>>) -> WindowGpu {
     WindowGpu {
         device: bundle.device,
         queue: bundle.queue,
