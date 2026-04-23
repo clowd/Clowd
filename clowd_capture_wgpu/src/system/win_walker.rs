@@ -27,8 +27,8 @@ use windows::{
     },
 };
 
-use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 use super::{HitTestResult, ObstructedWindow};
+use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;
@@ -367,7 +367,12 @@ extern "system" fn enum_windows_cb(hwnd: HWND, lparam: LPARAM) -> windows::core:
 
 /// Run the full filter pipeline on a single HWND. Returns `Some(WindowEntry)`
 /// if the window passes all checks, `None` otherwise.
-fn evaluate_window(hwnd: HWND, vdm: &Option<IVirtualDesktopManager>, accepted: &[WindowEntry], visibility_threshold: f32) -> Option<WindowEntry> {
+fn evaluate_window(
+    hwnd: HWND,
+    vdm: &Option<IVirtualDesktopManager>,
+    accepted: &[WindowEntry],
+    visibility_threshold: f32,
+) -> Option<WindowEntry> {
     unsafe {
         // 1. Basic visibility.
         if !IsWindowVisible(hwnd).as_bool() {

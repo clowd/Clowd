@@ -232,13 +232,7 @@ impl PerfTracker {
         self.samples.push_back(sample);
         self.session.total_frames = self.session.total_frames.saturating_add(1);
 
-        for &series in &[
-            Series::Wait,
-            Series::Draw,
-            Series::Present,
-            Series::Cpu,
-            Series::Overall,
-        ] {
+        for &series in &[Series::Wait, Series::Draw, Series::Present, Series::Cpu, Series::Overall] {
             if let Some(d) = sample.project(series) {
                 self.session
                     .record_value(series, d.as_secs_f64() * 1000.0);
@@ -285,7 +279,10 @@ impl PerfTracker {
     pub fn stats(&self, series: Series) -> PerfStats {
         self.advance_rotation_if_new_frame();
         let cache = self.cached_stats.borrow();
-        let all = &cache.as_ref().expect("cache populated above").all;
+        let all = &cache
+            .as_ref()
+            .expect("cache populated above")
+            .all;
         match series {
             Series::Wait => all.wait,
             Series::Draw => all.draw,
@@ -343,7 +340,9 @@ impl PerfTracker {
             let fresh = self.compute_series(picked);
 
             let mut cache = self.cached_stats.borrow_mut();
-            let entry = cache.as_mut().expect("not-bootstrap implies Some");
+            let entry = cache
+                .as_mut()
+                .expect("not-bootstrap implies Some");
             entry.last_advance_frame = current;
             match picked {
                 Series::Wait => entry.all.wait = fresh,

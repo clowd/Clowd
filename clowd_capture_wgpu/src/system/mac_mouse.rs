@@ -23,10 +23,7 @@ pub fn get_position(monitors: &[MonitorInfo]) -> ScreenPoint {
         m.logical_to_screen(logical_pt)
     } else {
         let s = fallback_scale(monitors) as f64;
-        ScreenPoint::new(
-            (logical_pt.x * s).round() as i32,
-            (logical_pt.y * s).round() as i32,
-        )
+        ScreenPoint::new((logical_pt.x * s).round() as i32, (logical_pt.y * s).round() as i32)
     }
 }
 
@@ -45,10 +42,7 @@ pub fn set_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
     }
 }
 
-fn find_monitor_for_logical_point<'a>(
-    pt: LogicalPoint,
-    monitors: &'a [MonitorInfo],
-) -> Option<&'a MonitorInfo> {
+fn find_monitor_for_logical_point<'a>(pt: LogicalPoint, monitors: &'a [MonitorInfo]) -> Option<&'a MonitorInfo> {
     monitors.iter().find(|m| {
         let ox = m.logical_origin.x;
         let oy = m.logical_origin.y;
@@ -58,11 +52,10 @@ fn find_monitor_for_logical_point<'a>(
     })
 }
 
-fn find_monitor_for_physical_point<'a>(
-    pt: ScreenPoint,
-    monitors: &'a [MonitorInfo],
-) -> Option<&'a MonitorInfo> {
-    monitors.iter().find(|m| m.bounds.contains(pt))
+fn find_monitor_for_physical_point<'a>(pt: ScreenPoint, monitors: &'a [MonitorInfo]) -> Option<&'a MonitorInfo> {
+    monitors
+        .iter()
+        .find(|m| m.bounds.contains(pt))
 }
 
 fn fallback_scale(monitors: &[MonitorInfo]) -> f32 {

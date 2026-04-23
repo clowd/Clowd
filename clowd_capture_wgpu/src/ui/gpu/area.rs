@@ -5,11 +5,11 @@
 //! is centered horizontally at the bottom of the selection, clamped to
 //! monitor bounds. Matches `DxScreenCapture.cpp:652-704`.
 
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 use crate::geometry::RectExt;
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE};
 use crate::ui::shared::{area_indicator_visibility, UiMonitor, UiSharedState};
+use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
 const AREA_FONT_PX: f32 = 14.0;
 const AREA_PADDING_PX: f32 = 10.0;
@@ -88,13 +88,7 @@ impl AreaRenderer {
         }
     }
 
-    pub fn prepare(
-        &mut self,
-        ts: &mut TextStack,
-        state: &UiSharedState,
-        this_monitor: &UiMonitor,
-        rects: &mut Vec<RectInstance>,
-    ) {
+    pub fn prepare(&mut self, ts: &mut TextStack, state: &UiSharedState, this_monitor: &UiMonitor, rects: &mut Vec<RectInstance>) {
         self.position = None;
 
         if !state.dragging {

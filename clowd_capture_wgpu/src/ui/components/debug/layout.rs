@@ -80,12 +80,7 @@ pub fn compute_layout(
     };
     let panel_top = mon_top + margin;
 
-    let panel_rect = ScreenRect::from_xy_size(
-        panel_left.round() as i32,
-        panel_top.round() as i32,
-        panel_w as i32,
-        panel_h as i32,
-    );
+    let panel_rect = ScreenRect::from_xy_size(panel_left.round() as i32, panel_top.round() as i32, panel_w as i32, panel_h as i32);
 
     let graph_rect = if include_graph {
         // Graph sits inside the inner padding, directly below the text

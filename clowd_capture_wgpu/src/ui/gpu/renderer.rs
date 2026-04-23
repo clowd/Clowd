@@ -21,8 +21,8 @@ use crate::ui::components::debug::perf::PerfTracker;
 use crate::ui::components::debug::startup::StartupTimings;
 use crate::ui::gpu::area::AreaRenderer;
 use crate::ui::gpu::debug::DebugRenderer;
-use crate::ui::gpu::panel::PanelRenderer;
 use crate::ui::gpu::icon::{IconInstance, IconPipeline};
+use crate::ui::gpu::panel::PanelRenderer;
 use crate::ui::gpu::rect::{RectInstance, RectPipeline};
 use crate::ui::gpu::text::TextStack;
 use crate::ui::gpu::tips::TipsRenderer;
@@ -130,13 +130,7 @@ impl UiRenderer {
     /// from `draw` so the UI can share the same render pass as the
     /// desktop triangle — on M1 TBDR this avoids an MSAA tile
     /// store+load between passes.
-    pub fn prepare(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        viewport_px: (u32, u32),
-        perf: &PerfTracker,
-    ) {
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), perf: &PerfTracker) {
         self.has_prepared = false;
         self.any_text = false;
 
@@ -169,8 +163,16 @@ impl UiRenderer {
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.tips
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
-        self.panel
-            .prepare(device, queue, &mut self.text, &state, &self.this_monitor, &mut rect_instances, &mut icon_draws, dt);
+        self.panel.prepare(
+            device,
+            queue,
+            &mut self.text,
+            &state,
+            &self.this_monitor,
+            &mut rect_instances,
+            &mut icon_draws,
+            dt,
+        );
         self.debug.prepare(
             &mut self.text,
             &state,
@@ -192,10 +194,14 @@ impl UiRenderer {
         }
 
         let mut text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(48);
-        self.area.text_areas(viewport_px, &mut text_areas);
-        self.tips.text_areas(viewport_px, &mut text_areas);
-        self.panel.text_areas(viewport_px, &mut text_areas);
-        self.debug.text_areas(viewport_px, &mut text_areas);
+        self.area
+            .text_areas(viewport_px, &mut text_areas);
+        self.tips
+            .text_areas(viewport_px, &mut text_areas);
+        self.panel
+            .text_areas(viewport_px, &mut text_areas);
+        self.debug
+            .text_areas(viewport_px, &mut text_areas);
         self.any_text = match self.text.prepare(device, queue, &text_areas) {
             Ok(b) => b,
             Err(e) => {

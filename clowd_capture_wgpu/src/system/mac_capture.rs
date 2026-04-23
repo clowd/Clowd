@@ -3,8 +3,7 @@ use core_graphics::access::ScreenCaptureAccess;
 use core_graphics::display::CGDisplay;
 use core_graphics::geometry::{CGPoint, CGRect, CGSize};
 use core_graphics::window::{
-    self, kCGWindowImageBestResolution, kCGWindowImageBoundsIgnoreFraming,
-    kCGWindowListOptionIncludingWindow, CGWindowID,
+    self, kCGWindowImageBestResolution, kCGWindowImageBoundsIgnoreFraming, kCGWindowListOptionIncludingWindow, CGWindowID,
 };
 
 use crate::system::MonitorInfo;
@@ -53,8 +52,7 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
 
     let mut bgra = vec![0u8; vd_w * vd_h * 4];
 
-    let display_ids = CGDisplay::active_displays()
-        .map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
+    let display_ids = CGDisplay::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
 
     // Zip monitors with display_ids; truncate to the shorter list in
     // case a display connected/disconnected between enumeration and capture.
@@ -65,10 +63,7 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
         let image = match display.image() {
             Some(img) => img,
             None => {
-                warn!(
-                    "CGDisplayCreateImage returned null for display {} — skipping",
-                    display_ids[i]
-                );
+                warn!("CGDisplayCreateImage returned null for display {} — skipping", display_ids[i]);
                 continue;
             }
         };
@@ -79,10 +74,7 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
         let bpp = image.bits_per_pixel();
 
         if bpp != 32 {
-            warn!(
-                "Display {} has unexpected bits_per_pixel={}, skipping",
-                display_ids[i], bpp
-            );
+            warn!("Display {} has unexpected bits_per_pixel={}, skipping", display_ids[i], bpp);
             continue;
         }
 
@@ -117,10 +109,7 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
 /// Capture a single window's image via CGWindowListCreateImage.
 /// Returns BGRA pixel bytes and dimensions, or None on failure.
 pub fn capture_window_image(window_id: CGWindowID) -> Option<(Vec<u8>, u32, u32)> {
-    let cg_null = CGRect::new(
-        &CGPoint::new(f64::INFINITY, f64::INFINITY),
-        &CGSize::new(0.0, 0.0),
-    );
+    let cg_null = CGRect::new(&CGPoint::new(f64::INFINITY, f64::INFINITY), &CGSize::new(0.0, 0.0));
 
     let image = window::create_image(
         cg_null,

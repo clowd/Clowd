@@ -43,8 +43,7 @@ fn main() -> anyhow::Result<()> {
 
     // Snapshot the cursor position before any window exists.
     let initial_mouse = system::SystemInterop::get_mouse_position(&monitors);
-    let initial_mouse_f =
-        geometry::ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
+    let initial_mouse_f = geometry::ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
 
     let settings = Arc::new(settings::CapturerSettings::default());
 
@@ -54,8 +53,7 @@ fn main() -> anyhow::Result<()> {
     let mut backend_options = wgpu::BackendOptions::default();
     #[cfg(windows)]
     {
-        backend_options.dx12.latency_waitable_object =
-            wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
+        backend_options.dx12.latency_waitable_object = wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
     }
     #[cfg(windows)]
     let backends = wgpu::Backends::DX12;
@@ -70,9 +68,7 @@ fn main() -> anyhow::Result<()> {
         ..wgpu::InstanceDescriptor::new_without_display_handle()
     }));
 
-    let startup = Arc::new(
-        ui::components::debug::startup::StartupTimings::new(t_start, monitors.len()),
-    );
+    let startup = Arc::new(ui::components::debug::startup::StartupTimings::new(t_start, monitors.len()));
     startup.mark_initialize();
 
     let shown_time: Arc<OnceLock<Duration>> = Arc::new(OnceLock::new());
@@ -112,9 +108,7 @@ fn main() -> anyhow::Result<()> {
         std::thread::Builder::new()
             .name("screenshot".into())
             .spawn(move || {
-                let captured = Arc::new(system::SystemInterop::capture_desktop_bitmap(
-                    monitors_for_capture,
-                ));
+                let captured = Arc::new(system::SystemInterop::capture_desktop_bitmap(monitors_for_capture));
                 latch.set(captured.clone());
                 startup_bg
                     .background
@@ -138,8 +132,7 @@ fn main() -> anyhow::Result<()> {
         .collect();
 
     let walker_latch = Arc::new(sync::Latch::new());
-    let peek_images_latch: Arc<sync::Latch<Vec<Arc<system::WindowPeekImage>>>> =
-        Arc::new(sync::Latch::new());
+    let peek_images_latch: Arc<sync::Latch<Vec<Arc<system::WindowPeekImage>>>> = Arc::new(sync::Latch::new());
     {
         let monitors_for_walker = monitors.clone();
         let latch = walker_latch.clone();
@@ -151,13 +144,8 @@ fn main() -> anyhow::Result<()> {
         std::thread::Builder::new()
             .name("walker".into())
             .spawn(move || {
-                let walker =
-                    system::SystemInterop::snapshot_windows(&monitors_for_walker, visibility_threshold);
-                let obstructed = if peek_enabled {
-                    walker.obstructed_windows()
-                } else {
-                    Vec::new()
-                };
+                let walker = system::SystemInterop::snapshot_windows(&monitors_for_walker, visibility_threshold);
+                let obstructed = if peek_enabled { walker.obstructed_windows() } else { Vec::new() };
                 latch.set(Arc::new(walker));
                 startup_bg
                     .background
@@ -170,9 +158,7 @@ fn main() -> anyhow::Result<()> {
 
                 // Pre-blur the desktop screenshot for the peek shader.
                 let desktop = screenshot_latch_for_walker.wait();
-                let blurred = img::blur_desktop_bgra(
-                    &desktop.bgra, desktop.width, desktop.height, 6.0,
-                );
+                let blurred = img::blur_desktop_bgra(&desktop.bgra, desktop.width, desktop.height, 6.0);
                 let blurred = Arc::new(render::BlurredDesktopImage {
                     bgra: blurred,
                     width: desktop.width,
@@ -190,15 +176,10 @@ fn main() -> anyhow::Result<()> {
                     use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
                     let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
 
-                    info!(
-                        "walker: capturing {} obstructed window images",
-                        obstructed.len()
-                    );
+                    info!("walker: capturing {} obstructed window images", obstructed.len());
                     let mut all_peeks = Vec::new();
                     for ow in &obstructed {
-                        if let Some((bgra, w, h)) =
-                            system::win_capture::capture_window_image(ow.hwnd, &ow.raw_rect)
-                        {
+                        if let Some((bgra, w, h)) = system::win_capture::capture_window_image(ow.hwnd, &ow.raw_rect) {
                             let crop_x = ow.rect.min_x() - ow.raw_rect.min_x();
                             let crop_y = ow.rect.min_y() - ow.raw_rect.min_y();
                             let peek = Arc::new(system::WindowPeekImage {
@@ -223,15 +204,10 @@ fn main() -> anyhow::Result<()> {
 
                 #[cfg(target_os = "macos")]
                 {
-                    info!(
-                        "walker: capturing {} obstructed window images",
-                        obstructed.len()
-                    );
+                    info!("walker: capturing {} obstructed window images", obstructed.len());
                     let mut all_peeks = Vec::new();
                     for ow in &obstructed {
-                        if let Some((bgra, w, h)) =
-                            system::mac_capture::capture_window_image(ow.window_id)
-                        {
+                        if let Some((bgra, w, h)) = system::mac_capture::capture_window_image(ow.window_id) {
                             let peek = Arc::new(system::WindowPeekImage {
                                 window_index: ow.window_index,
                                 window_rect: ow.rect,

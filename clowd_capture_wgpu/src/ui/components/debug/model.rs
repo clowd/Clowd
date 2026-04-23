@@ -101,12 +101,7 @@ fn budget_color(t: f32) -> [u8; 4] {
     let t = t.clamp(0.0, 1.0);
     let r = (2.0 * t).min(1.0);
     let g = (2.0 * (1.0 - t)).min(1.0);
-    [
-        (r * 255.0) as u8,
-        (g * 255.0) as u8,
-        0x00,
-        0xFF,
-    ]
+    [(r * 255.0) as u8, (g * 255.0) as u8, 0x00, 0xFF]
 }
 
 /// Format helper: wall-clock duration as "x.xx ms" (two decimals).
@@ -229,7 +224,9 @@ impl<'a> MonitorPanelData<'a> {
             cpu_stats
         };
 
-        let budget_ms = self.target_period.map(|p| p.as_secs_f64() * 1000.0);
+        let budget_ms = self
+            .target_period
+            .map(|p| p.as_secs_f64() * 1000.0);
         let color = match budget_ms {
             Some(b) if b > 0.0 => budget_color((work.p50_ms / b) as f32),
             _ => COLOR_WHITE,
@@ -292,11 +289,7 @@ impl<'a> PrimaryPanelData<'a> {
         }
         let multi = bg.workers.len() > 1;
         for (i, w) in bg.workers.iter().enumerate() {
-            let suffix = if multi {
-                format!("[{}]", i)
-            } else {
-                String::new()
-            };
+            let suffix = if multi { format!("[{}]", i) } else { String::new() };
             if let Some(d) = w.render_prep.get() {
                 out.push(format_args!("    prep{}:       {}", suffix, DisplayMs(d)));
             }
@@ -359,10 +352,7 @@ impl<'a> PrimaryPanelData<'a> {
                 out.push(format_args!("wnd_bounds: {}", DisplayRect(b)));
             }
             if let Some(idx) = self.hovered_window_index {
-                out.push(format_args!(
-                    "wnd_index: {}  obstructed: {}",
-                    idx, self.hovered_window_obstructed
-                ));
+                out.push(format_args!("wnd_index: {}  obstructed: {}", idx, self.hovered_window_obstructed));
             }
         }
     }

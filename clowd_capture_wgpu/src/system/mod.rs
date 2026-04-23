@@ -25,9 +25,9 @@ mod mac_mouse;
 #[cfg(target_os = "macos")]
 mod mac_walker;
 
-use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
 #[cfg(target_os = "macos")]
 use crate::geometry::{LogicalPoint, LogicalSize};
+use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
 
 /// Full hit-test result including peek metadata.
 #[derive(Debug, Clone)]
@@ -112,17 +112,11 @@ pub struct MonitorInfo {
 #[allow(dead_code)]
 impl MonitorInfo {
     pub fn window_to_screen(&self, pt: WindowPoint) -> ScreenPointF {
-        ScreenPointF::new(
-            pt.x + self.bounds.min_x() as f32,
-            pt.y + self.bounds.min_y() as f32,
-        )
+        ScreenPointF::new(pt.x + self.bounds.min_x() as f32, pt.y + self.bounds.min_y() as f32)
     }
 
     pub fn screen_to_window(&self, pt: ScreenPointF) -> WindowPoint {
-        WindowPoint::new(
-            pt.x - self.bounds.min_x() as f32,
-            pt.y - self.bounds.min_y() as f32,
-        )
+        WindowPoint::new(pt.x - self.bounds.min_x() as f32, pt.y - self.bounds.min_y() as f32)
     }
 }
 

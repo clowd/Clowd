@@ -25,7 +25,10 @@ impl<T: Clone> Latch<T> {
     #[allow(dead_code)]
     pub fn wait(&self) -> T {
         let guard = self.inner.lock().unwrap();
-        let guard = self.cv.wait_while(guard, |v| v.is_none()).unwrap();
+        let guard = self
+            .cv
+            .wait_while(guard, |v| v.is_none())
+            .unwrap();
         guard.as_ref().unwrap().clone()
     }
 
@@ -59,7 +62,10 @@ impl VisibleLatch {
 
     pub fn wait(&self) {
         let guard = self.inner.lock().unwrap();
-        let _guard = self.cv.wait_while(guard, |signalled| !*signalled).unwrap();
+        let _guard = self
+            .cv
+            .wait_while(guard, |signalled| !*signalled)
+            .unwrap();
     }
 }
 

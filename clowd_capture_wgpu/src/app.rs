@@ -15,7 +15,7 @@ use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRect
 use crate::gpu;
 use crate::img::{self, ActionResult};
 use crate::platform;
-use crate::render::{PeekCommand, WindowHandle, WorkerInput, WorkerSetup, WindowHandoff};
+use crate::render::{PeekCommand, WindowHandle, WindowHandoff, WorkerInput, WorkerSetup};
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
 use crate::settings::CapturerSettings;
 use crate::sync::{Latch, VisibleLatch};
@@ -183,7 +183,8 @@ impl App {
         if self.peek_images.is_empty() {
             if let Some(images) = self.peek_images_latch.try_get() {
                 for img in images.iter() {
-                    self.peek_images.insert(img.window_index, img.clone());
+                    self.peek_images
+                        .insert(img.window_index, img.clone());
                 }
             }
         }
@@ -275,10 +276,14 @@ impl App {
             .walker
             .as_ref()
             .and_then(|w| w.hit_test_full(cursor_pt));
-        self.cached_hovered_title = hovered_full.as_ref().map(|h| h.title.clone());
+        self.cached_hovered_title = hovered_full
+            .as_ref()
+            .map(|h| h.title.clone());
         let hovered_window_bounds = hovered_full.as_ref().map(|h| h.rect);
         let hovered_window_index = hovered_full.as_ref().map(|h| h.window_index);
-        let hovered_window_obstructed = hovered_full.as_ref().is_some_and(|h| h.obstructed);
+        let hovered_window_obstructed = hovered_full
+            .as_ref()
+            .is_some_and(|h| h.obstructed);
 
         let hovered_pixel_bgra = self
             .desktop_buffer
@@ -351,11 +356,14 @@ impl App {
 
     fn finalise_selection_inner(&mut self, rect: ScreenRect, window: &Window, lock_peek: bool) {
         if lock_peek {
-            self.locked_peek = self.cached_peek_command.as_ref().map(|cmd| PeekCommand {
-                window_index: cmd.window_index,
-                window_rect: cmd.window_rect,
-                captured: true,
-            });
+            self.locked_peek = self
+                .cached_peek_command
+                .as_ref()
+                .map(|cmd| PeekCommand {
+                    window_index: cmd.window_index,
+                    window_rect: cmd.window_rect,
+                    captured: true,
+                });
         } else {
             self.locked_peek = None;
         }
@@ -407,25 +415,25 @@ impl App {
             self.input.virtual_cursor.x.round() as i32,
             self.input.virtual_cursor.y.round() as i32,
         );
-        self.input.selection = self.walker.as_ref().and_then(|w| w.hit_test(pt));
+        self.input.selection = self
+            .walker
+            .as_ref()
+            .and_then(|w| w.hit_test(pt));
 
         self.broadcast_mouse_state();
 
         log::info!("selection reset");
     }
 
-    fn dispatch_command(
-        &mut self,
-        command: Command,
-        event_loop: &ActiveEventLoop,
-        window: &Window,
-    ) {
+    fn dispatch_command(&mut self, command: Command, event_loop: &ActiveEventLoop, window: &Window) {
         use xdialog::XDialogIcon::Error as ErrorIcon;
         log::info!("dispatch command: {:?}", command);
 
         self.ensure_peek_images();
         let active_peek_image = self.locked_peek.as_ref().and_then(|cmd| {
-            self.peek_images.get(&cmd.window_index).map(|img| img.as_ref())
+            self.peek_images
+                .get(&cmd.window_index)
+                .map(|img| img.as_ref())
         });
 
         match command {
@@ -439,13 +447,7 @@ impl App {
                     ActionResult::Success => event_loop.exit(),
                     ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel(
-                            "Clowd Capture",
-                            "Copy to Clipboard Failed",
-                            &msg,
-                            ErrorIcon,
-                        )
-                        .unwrap_or(false)
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
                         {
                             self.show_all_windows();
                         } else {
@@ -464,14 +466,7 @@ impl App {
                     ActionResult::Success => event_loop.exit(),
                     ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
-                        if xdialog::show_message_retry_cancel(
-                            "Clowd Capture",
-                            "Save Failed",
-                            &msg,
-                            ErrorIcon,
-                        )
-                        .unwrap_or(false)
-                        {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Save Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
                             event_loop.exit();
@@ -523,8 +518,7 @@ impl ApplicationHandler for App {
         // Create one borderless window per monitor, create a surface for
         // it, and send the (window, surface) pair to the corresponding
         // render worker.
-        let mut handles: HashMap<WindowId, WindowHandle> =
-            HashMap::with_capacity(worker_setups.len());
+        let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(worker_setups.len());
 
         for (i, setup) in worker_setups.into_iter().enumerate() {
             let m = &self.monitors[i];
@@ -538,10 +532,7 @@ impl ApplicationHandler for App {
             );
             #[cfg(target_os = "macos")]
             let (win_pos, win_size): (winit::dpi::Position, winit::dpi::Size) = {
-                let logical_pos = m.screen_to_logical(ScreenPoint::new(
-                    m.bounds.origin.x,
-                    m.bounds.origin.y,
-                ));
+                let logical_pos = m.screen_to_logical(ScreenPoint::new(m.bounds.origin.x, m.bounds.origin.y));
                 let logical_size = m.physical_to_logical_size(width, height);
                 (
                     winit::dpi::LogicalPosition::new(logical_pos.x, logical_pos.y).into(),
@@ -574,7 +565,9 @@ impl ApplicationHandler for App {
             window.set_cursor_visible(false);
 
             #[cfg(target_os = "macos")]
-            let screenshot_image = self.desktop_buffer.as_ref()
+            let screenshot_image = self
+                .desktop_buffer
+                .as_ref()
                 .and_then(|s| platform::crop_screenshot_to_cgimage(s, m.bounds));
             #[cfg(not(target_os = "macos"))]
             let screenshot_image = None;
@@ -643,7 +636,9 @@ impl ApplicationHandler for App {
         if let Some(ref pending) = self.pending_show {
             if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
                 platform::show_windows_atomically(self.windows.values());
-                let _ = self.shown_time.set(self.startup.t_start.elapsed());
+                let _ = self
+                    .shown_time
+                    .set(self.startup.t_start.elapsed());
                 if let Some(first_id) = self.monitor_window_ids.first() {
                     if let Some(h) = self.windows.get(first_id) {
                         h.window.focus_window();
@@ -721,8 +716,10 @@ impl ApplicationHandler for App {
                                     self.input.virtual_cursor.x.round() as i32,
                                     self.input.virtual_cursor.y.round() as i32,
                                 );
-                                if let Some(rect) =
-                                    self.walker.as_ref().and_then(|w| w.hit_test(pt))
+                                if let Some(rect) = self
+                                    .walker
+                                    .as_ref()
+                                    .and_then(|w| w.hit_test(pt))
                                 {
                                     self.finalise_selection_with_peek(rect, handle_window);
                                 }
@@ -755,21 +752,22 @@ impl ApplicationHandler for App {
                 }
             }
             #[cfg(windows)]
-            WindowEvent::ScaleFactorChanged { ref mut inner_size_writer, .. } => {
-                let _ = inner_size_writer.request_inner_size(
-                    winit::dpi::PhysicalSize::new(
-                        handle_monitor_bounds.width() as u32,
-                        handle_monitor_bounds.height() as u32,
-                    )
-                );
+            WindowEvent::ScaleFactorChanged {
+                ref mut inner_size_writer,
+                ..
+            } => {
+                let _ = inner_size_writer.request_inner_size(winit::dpi::PhysicalSize::new(
+                    handle_monitor_bounds.width() as u32,
+                    handle_monitor_bounds.height() as u32,
+                ));
             }
-            WindowEvent::CursorMoved { position, .. } => {
+            WindowEvent::CursorMoved {
+                position,
+                ..
+            } => {
                 let bounds = handle_monitor_bounds;
                 let win_pt = WindowPoint::new(position.x as f32, position.y as f32);
-                let os_vd = ScreenPoint::new(
-                    bounds.min_x() + win_pt.x.round() as i32,
-                    bounds.min_y() + win_pt.y.round() as i32,
-                );
+                let os_vd = ScreenPoint::new(bounds.min_x() + win_pt.x.round() as i32, bounds.min_y() + win_pt.y.round() as i32);
 
                 if self.input.anchored {
                     if os_vd == self.input.anchor {
@@ -779,9 +777,7 @@ impl ApplicationHandler for App {
                         const STALE_THRESHOLD: f32 = 75.0;
                         let raw_dx = (os_vd.x - self.input.anchor.x) as f32;
                         let raw_dy = (os_vd.y - self.input.anchor.y) as f32;
-                        if raw_dx * raw_dx + raw_dy * raw_dy
-                            > STALE_THRESHOLD * STALE_THRESHOLD
-                        {
+                        if raw_dx * raw_dx + raw_dy * raw_dy > STALE_THRESHOLD * STALE_THRESHOLD {
                             SystemInterop::set_mouse_position(self.input.anchor, &self.monitors);
                             return;
                         }
@@ -795,8 +791,7 @@ impl ApplicationHandler for App {
                     clamp_to_nearest_monitor(&mut self.input.virtual_cursor, &self.monitors);
                     SystemInterop::set_mouse_position(self.input.anchor, &self.monitors);
                 } else {
-                    self.input.virtual_cursor =
-                        ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
+                    self.input.virtual_cursor = ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
                 }
 
                 if !self.input.mouse_down && !self.input.captured {
@@ -804,24 +799,19 @@ impl ApplicationHandler for App {
                         self.input.virtual_cursor.x.round() as i32,
                         self.input.virtual_cursor.y.round() as i32,
                     );
-                    self.input.selection = self.walker.as_ref().and_then(|w| w.hit_test(pt));
+                    self.input.selection = self
+                        .walker
+                        .as_ref()
+                        .and_then(|w| w.hit_test(pt));
                 }
 
                 if self.input.mouse_down && !self.input.captured {
                     if let Some(start) = self.input.mouse_down_pt {
-                        let psel = ScreenRect::from_rounded_threshold(
-                            start.x,
-                            start.y,
-                            self.input.virtual_cursor.x,
-                            self.input.virtual_cursor.y,
-                        );
+                        let psel =
+                            ScreenRect::from_rounded_threshold(start.x, start.y, self.input.virtual_cursor.x, self.input.virtual_cursor.y);
                         if !self.input.dragging {
-                            let threshold =
-                                6.0 / (self.input.mouse_down_dpi * self.input.zoom);
-                            let crossed = psel.is_some_and(|r| {
-                                (r.width() as f32) > threshold
-                                    || (r.height() as f32) > threshold
-                            });
+                            let threshold = 6.0 / (self.input.mouse_down_dpi * self.input.zoom);
+                            let crossed = psel.is_some_and(|r| (r.width() as f32) > threshold || (r.height() as f32) > threshold);
                             if crossed {
                                 self.input.dragging = true;
                             }
@@ -833,28 +823,18 @@ impl ApplicationHandler for App {
                 }
 
                 if self.input.captured {
-                    if let (Some(mode), Some(anchor), Some(start)) = (
-                        self.input.drag_mode,
-                        self.input.drag_anchor_selection,
-                        self.input.mouse_down_pt,
-                    ) {
+                    if let (Some(mode), Some(anchor), Some(start)) =
+                        (self.input.drag_mode, self.input.drag_anchor_selection, self.input.mouse_down_pt)
+                    {
                         let cur_x = self.input.virtual_cursor.x.floor() as i32;
                         let cur_y = self.input.virtual_cursor.y.floor() as i32;
                         let new_sel = match mode {
                             DragMode::Move => {
-                                let dx =
-                                    (self.input.virtual_cursor.x - start.x).round() as i32;
-                                let dy =
-                                    (self.input.virtual_cursor.y - start.y).round() as i32;
+                                let dx = (self.input.virtual_cursor.x - start.x).round() as i32;
+                                let dy = (self.input.virtual_cursor.y - start.y).round() as i32;
                                 move_and_crop(anchor, dx, dy, self.vd_bounds)
                             }
-                            DragMode::Resize(handle) => Some(resize_with_clamp(
-                                anchor,
-                                handle,
-                                cur_x,
-                                cur_y,
-                                self.vd_bounds,
-                            )),
+                            DragMode::Resize(handle) => Some(resize_with_clamp(anchor, handle, cur_x, cur_y, self.vd_bounds)),
                         };
                         self.input.selection = new_sel;
                         self.broadcast_ui_state();
@@ -917,27 +897,20 @@ impl ApplicationHandler for App {
                         }
                         self.input.mouse_down = true;
                         self.input.mouse_down_pt = Some(self.input.virtual_cursor);
-                        self.input.mouse_down_dpi =
-                            dpi_at_point(self.input.virtual_cursor, &self.monitors);
+                        self.input.mouse_down_dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
                         self.input.dragging = false;
                         self.broadcast_ui_state();
                     }
                     ElementState::Released => {
-                        let finalising = self.input.mouse_down
-                            && !self.input.captured
-                            && self.input.selection.is_some();
+                        let finalising = self.input.mouse_down && !self.input.captured && self.input.selection.is_some();
                         let was_dragging = self.input.dragging;
-                        let was_move_drag =
-                            matches!(self.input.drag_mode, Some(DragMode::Move));
+                        let was_move_drag = matches!(self.input.drag_mode, Some(DragMode::Move));
                         self.input.mouse_down = false;
                         self.input.mouse_down_pt = None;
                         self.input.dragging = false;
                         self.input.drag_mode = None;
                         self.input.drag_anchor_selection = None;
-                        if was_move_drag
-                            && self.input.captured
-                            && self.input.selection.is_none()
-                        {
+                        if was_move_drag && self.input.captured && self.input.selection.is_none() {
                             self.input.captured = false;
                             self.input.hittest = Hittest::Outside;
                             self.update_cursor_visibility();
@@ -948,11 +921,14 @@ impl ApplicationHandler for App {
                             // Click (no drag) on a peeked window → lock it.
                             // Drag-to-select → no peek lock.
                             if !was_dragging {
-                                self.locked_peek = self.cached_peek_command.as_ref().map(|cmd| PeekCommand {
-                                    window_index: cmd.window_index,
-                                    window_rect: cmd.window_rect,
-                                    captured: true,
-                                });
+                                self.locked_peek = self
+                                    .cached_peek_command
+                                    .as_ref()
+                                    .map(|cmd| PeekCommand {
+                                        window_index: cmd.window_index,
+                                        window_rect: cmd.window_rect,
+                                        captured: true,
+                                    });
                             } else {
                                 self.locked_peek = None;
                             }
@@ -969,10 +945,7 @@ impl ApplicationHandler for App {
                             }
                             self.input.zoom = 1.0;
                             if let Some(sel) = self.input.selection {
-                                let dpi = dpi_at_point(
-                                    self.input.virtual_cursor,
-                                    &self.monitors,
-                                );
+                                let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
                                 let ht = hit_test(self.input.virtual_cursor, sel, dpi);
                                 self.input.hittest = ht;
                                 handle_window.set_cursor(ht.cursor());
@@ -987,7 +960,11 @@ impl ApplicationHandler for App {
                     }
                 }
             }
-            WindowEvent::MouseWheel { delta, phase, .. } => {
+            WindowEvent::MouseWheel {
+                delta,
+                phase,
+                ..
+            } => {
                 if self.input.captured {
                     return;
                 }
@@ -1026,7 +1003,10 @@ impl ApplicationHandler for App {
                 };
                 self.apply_zoom_factor(factor);
             }
-            WindowEvent::PinchGesture { delta, .. } => {
+            WindowEvent::PinchGesture {
+                delta,
+                ..
+            } => {
                 if self.input.captured {
                     return;
                 }

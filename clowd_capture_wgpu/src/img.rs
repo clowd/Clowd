@@ -10,8 +10,7 @@ pub fn blur_desktop_bgra(bgra: &[u8], width: u32, height: u32, sigma: f32) -> Ve
     for chunk in rgba.chunks_exact_mut(4) {
         chunk.swap(0, 2);
     }
-    let img = image::RgbaImage::from_raw(width, height, rgba)
-        .expect("buffer size matches dimensions");
+    let img = image::RgbaImage::from_raw(width, height, rgba).expect("buffer size matches dimensions");
     let blurred = imageops::blur(&img, sigma);
     let mut out = blurred.into_raw();
     for chunk in out.chunks_exact_mut(4) {
@@ -95,11 +94,7 @@ pub fn extract_selection_rgba_with_peek(
             let vd_y = sel_top + row as i32;
 
             // Is this pixel within the peek window's visual bounds?
-            if vd_x < win_left
-                || vd_x >= peek.window_rect.right()
-                || vd_y < win_top
-                || vd_y >= peek.window_rect.bottom()
-            {
+            if vd_x < win_left || vd_x >= peek.window_rect.right() || vd_y < win_top || vd_y >= peek.window_rect.bottom() {
                 continue;
             }
 
@@ -127,11 +122,7 @@ pub fn extract_selection_rgba_with_peek(
 }
 
 /// Copy the selected region to the clipboard.
-pub fn copy_to_clipboard_with_peek(
-    selection: ScreenRect,
-    buffer: &CapturedDesktop,
-    peek: Option<&WindowPeekImage>,
-) -> ActionResult {
+pub fn copy_to_clipboard_with_peek(selection: ScreenRect, buffer: &CapturedDesktop, peek: Option<&WindowPeekImage>) -> ActionResult {
     let extracted = match peek {
         Some(p) => extract_selection_rgba_with_peek(selection, buffer, p),
         None => extract_selection_rgba(selection, buffer),
