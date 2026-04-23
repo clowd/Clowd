@@ -14,7 +14,9 @@ impl AtomicDuration {
 
     pub fn set_once(&self, d: Duration) {
         let nanos = d.as_nanos() as u64;
-        let _ = self.0.compare_exchange(0, nanos, Ordering::Release, Ordering::Relaxed);
+        let _ = self
+            .0
+            .compare_exchange(0, nanos, Ordering::Release, Ordering::Relaxed);
     }
 
     pub fn get(&self) -> Option<Duration> {
@@ -114,7 +116,11 @@ impl BackgroundGroup {
                 any = true;
             }
         }
-        if any { Some(max) } else { None }
+        if any {
+            Some(max)
+        } else {
+            None
+        }
     }
 }
 
@@ -136,11 +142,13 @@ impl StartupTimings {
     }
 
     pub fn mark_initialize(&self) {
-        self.t_initialize.set_once(self.t_start.elapsed());
+        self.t_initialize
+            .set_once(self.t_start.elapsed());
     }
 
     pub fn mark_window_create(&self) {
-        self.t_window_create.set_once(self.t_start.elapsed());
+        self.t_window_create
+            .set_once(self.t_start.elapsed());
     }
 
     /// Total startup time: the latest recorded phase.

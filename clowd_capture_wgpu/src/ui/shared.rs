@@ -138,7 +138,9 @@ pub fn area_indicator_visibility(state: &UiSharedState) -> Option<AreaIndicatorV
         let b = m.bounds;
         cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
     })?;
-    Some(AreaIndicatorVisibility { monitor: *monitor })
+    Some(AreaIndicatorVisibility {
+        monitor: *monitor,
+    })
 }
 
 /// Whether the per-monitor debug panel is visible on `this` monitor. Shown

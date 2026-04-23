@@ -323,121 +323,95 @@ impl DebugRenderer {
         font_px: f32,
         rects: &mut Vec<RectInstance>,
     ) {
-    let mon_left = this_monitor.bounds.left() as f32;
-    let mon_top = this_monitor.bounds.top() as f32;
-    let g_left = graph_rect.left() as f32 - mon_left;
-    let g_top = graph_rect.top() as f32 - mon_top;
-    let g_right = g_left + graph_rect.width() as f32;
-    let g_bottom = g_top + graph_rect.height() as f32;
-    let g_w = graph_rect.width() as f32;
-    let g_h = graph_rect.height() as f32;
+        let mon_left = this_monitor.bounds.left() as f32;
+        let mon_top = this_monitor.bounds.top() as f32;
+        let g_left = graph_rect.left() as f32 - mon_left;
+        let g_top = graph_rect.top() as f32 - mon_top;
+        let g_right = g_left + graph_rect.width() as f32;
+        let g_bottom = g_top + graph_rect.height() as f32;
+        let g_w = graph_rect.width() as f32;
+        let g_h = graph_rect.height() as f32;
 
-    // Subtle graph background so the bars aren't floating on a flat
-    // panel surface.
-    rects.push(RectInstance::filled(
-        g_left,
-        g_top,
-        g_right,
-        g_bottom,
-        [1.0, 1.0, 1.0, 0.04],
-    ));
+        // Subtle graph background so the bars aren't floating on a flat
+        // panel surface.
+        rects.push(RectInstance::filled(g_left, g_top, g_right, g_bottom, [1.0, 1.0, 1.0, 0.04]));
 
-    // Single budget reference line at the refresh rate (e.g. 60 fps on
-    // a 60 Hz monitor). With headroom=2.0 this sits at half the graph
-    // height. Bars that visibly exceed this line are dropped frames —
-    // their `overall` pushed them toward the top of the graph on their
-    // own, so no explicit drop marker is needed.
-    let target_period = perf.target_period();
-    let mut budget_y: Option<f32> = None;
-    if let Some(period) = target_period {
-        let budget_ms = period.as_secs_f64() * 1000.0;
-        let full_scale_ms = budget_ms * SPARK_BUDGET_HEADROOM as f64;
-        let y = g_bottom - ((budget_ms / full_scale_ms) * g_h as f64) as f32;
-        rects.push(RectInstance::filled(
-            g_left,
-            y,
-            g_right,
-            y + 1.0,
-            [1.0, 1.0, 1.0, 0.35],
-        ));
-        budget_y = Some(y);
-    }
+        // Single budget reference line at the refresh rate (e.g. 60 fps on
+        // a 60 Hz monitor). With headroom=2.0 this sits at half the graph
+        // height. Bars that visibly exceed this line are dropped frames —
+        // their `overall` pushed them toward the top of the graph on their
+        // own, so no explicit drop marker is needed.
+        let target_period = perf.target_period();
+        let mut budget_y: Option<f32> = None;
+        if let Some(period) = target_period {
+            let budget_ms = period.as_secs_f64() * 1000.0;
+            let full_scale_ms = budget_ms * SPARK_BUDGET_HEADROOM as f64;
+            let y = g_bottom - ((budget_ms / full_scale_ms) * g_h as f64) as f32;
+            rects.push(RectInstance::filled(g_left, y, g_right, y + 1.0, [1.0, 1.0, 1.0, 0.35]));
+            budget_y = Some(y);
+        }
 
-    // Pick a full-scale height reference. When the monitor's refresh
-    // rate is unknown, use the 95th-percentile-ish top of the recent
-    // samples so the bars still self-normalise instead of all being
-    // zero-height.
-    let full_scale_ms = match target_period {
-        Some(p) => p.as_secs_f64() * 1000.0 * SPARK_BUDGET_HEADROOM as f64,
-        None => 16.67 * SPARK_BUDGET_HEADROOM as f64,
-    };
-    if full_scale_ms <= 0.0 {
-        return;
-    }
+        // Pick a full-scale height reference. When the monitor's refresh
+        // rate is unknown, use the 95th-percentile-ish top of the recent
+        // samples so the bars still self-normalise instead of all being
+        // zero-height.
+        let full_scale_ms = match target_period {
+            Some(p) => p.as_secs_f64() * 1000.0 * SPARK_BUDGET_HEADROOM as f64,
+            None => 16.67 * SPARK_BUDGET_HEADROOM as f64,
+        };
+        if full_scale_ms <= 0.0 {
+            return;
+        }
 
-    // Single fps label anchored to the budget line (= monitor refresh
-    // rate). Placed just above the line on the left edge of the graph.
-    let label_font_px = (font_px * 0.85).floor().max(9.0);
-    if let (Some(period), Some(by)) = (target_period, budget_y) {
-        let budget_fps = 1.0 / period.as_secs_f64();
-        let label_height = label_font_px * 1.2;
-        self.push_graph_label(
-            ts,
-            &format!("{:.0} fps", budget_fps),
-            g_left + 4.0,
-            by - label_height - 1.0,
-            label_font_px,
-        );
-    }
+        // Single fps label anchored to the budget line (= monitor refresh
+        // rate). Placed just above the line on the left edge of the graph.
+        let label_font_px = (font_px * 0.85).floor().max(9.0);
+        if let (Some(period), Some(by)) = (target_period, budget_y) {
+            let budget_fps = 1.0 / period.as_secs_f64();
+            let label_height = label_font_px * 1.2;
+            self.push_graph_label(
+                ts,
+                &format!("{:.0} fps", budget_fps),
+                g_left + 4.0,
+                by - label_height - 1.0,
+                label_font_px,
+            );
+        }
 
-    // Uniform whole-pixel bar width: smallest integer width that
-    // completely fills the graph for the target window size. Newest
-    // samples draw from the right; oldest fall off the left if the
-    // wider bars can't fit them all.
-    let window = perf.window_size().max(1);
-    let bar_w = ((g_w / window as f32).ceil() as usize).max(1);
-    let bar_wf = bar_w as f32;
-    let max_bars = (g_w / bar_wf).floor() as usize;
+        // Uniform whole-pixel bar width: smallest integer width that
+        // completely fills the graph for the target window size. Newest
+        // samples draw from the right; oldest fall off the left if the
+        // wider bars can't fit them all.
+        let window = perf.window_size().max(1);
+        let bar_w = ((g_w / window as f32).ceil() as usize).max(1);
+        let bar_wf = bar_w as f32;
+        let max_bars = (g_w / bar_wf).floor() as usize;
 
-    let mut x_right = g_right;
-    for sample in perf.samples_newest_first().take(max_bars) {
-        let x_left = x_right - bar_wf;
-        if x_left < g_left { break; }
-        emit_bar_stack(x_left, x_right, g_top, g_bottom, g_h, full_scale_ms, sample, rects);
-        x_right -= bar_wf;
-    }
+        let mut x_right = g_right;
+        for sample in perf.samples_newest_first().take(max_bars) {
+            let x_left = x_right - bar_wf;
+            if x_left < g_left {
+                break;
+            }
+            emit_bar_stack(x_left, x_right, g_top, g_bottom, g_h, full_scale_ms, sample, rects);
+            x_right -= bar_wf;
+        }
 
-    // Legend: cpu / gpu. Matches what the bars actually use. Drops
-    // don't get their own colour — a dropped frame shows up naturally
-    // as a ~2× tall bar.
-    self.emit_legend(
-        ts,
-        g_left,
-        g_bottom + label_font_px * 0.8,
-        label_font_px,
-        rects,
-    );
+        // Legend: cpu / gpu. Matches what the bars actually use. Drops
+        // don't get their own colour — a dropped frame shows up naturally
+        // as a ~2× tall bar.
+        self.emit_legend(ts, g_left, g_bottom + label_font_px * 0.8, label_font_px, rects);
     }
 
     /// Emit the sparkline colour legend: 3 swatches + text labels,
     /// one row below the graph.
-    fn emit_legend(
-        &mut self,
-        ts: &mut TextStack,
-        x_start: f32,
-        y: f32,
-        font_px: f32,
-        rects: &mut Vec<RectInstance>,
-    ) {
+    fn emit_legend(&mut self, ts: &mut TextStack, x_start: f32, y: f32, font_px: f32, rects: &mut Vec<RectInstance>) {
         let swatch = font_px; // square, tracking text height
         let gap_swatch_text = 4.0;
         let gap_item = font_px * 0.9;
         let mut x = x_start;
 
-        let items: [([f32; 4], &str); 2] = [
-            (COLOR_CPU, "cpu"),
-            (COLOR_GPU, "gpu"),
-        ];
+        let items: [([f32; 4], &str); 2] = [(COLOR_CPU, "cpu"), (COLOR_GPU, "gpu")];
 
         for (color, label) in items {
             rects.push(RectInstance::filled(x, y, x + swatch, y + swatch, color));
@@ -452,14 +426,7 @@ impl DebugRenderer {
     /// Uses the same CachedLine pool the main panel text uses; these
     /// entries land after all panel text lines in `self.positions`, so
     /// they render on top of the sparkline bars in the UI pass.
-    fn push_graph_label(
-        &mut self,
-        ts: &mut TextStack,
-        text: &str,
-        x: f32,
-        y: f32,
-        font_px: f32,
-    ) {
+    fn push_graph_label(&mut self, ts: &mut TextStack, text: &str, x: f32, y: f32, font_px: f32) {
         let idx = self.positions.len();
         self.ensure_capacity(ts, idx + 1, font_px);
         self.lines[idx].set(ts, text, font_px);
@@ -511,7 +478,10 @@ fn emit_bar_stack(
     let total_h = ((overall_ms * px_per_ms).min(g_h as f64)) as f32;
 
     let cpu_ms = sample.draw.as_secs_f64() * 1000.0 + sample.present.as_secs_f64() * 1000.0;
-    let gpu_ms = sample.gpu.map(|g| g.as_secs_f64() * 1000.0).unwrap_or(0.0);
+    let gpu_ms = sample
+        .gpu
+        .map(|g| g.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
 
     let cpu_h = ((cpu_ms * px_per_ms) as f32).min(total_h);
     let gpu_h = ((gpu_ms * px_per_ms) as f32).min((total_h - cpu_h).max(0.0));

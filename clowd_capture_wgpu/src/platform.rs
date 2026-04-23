@@ -82,8 +82,7 @@ pub fn crop_screenshot_to_cgimage(
         let end = (src_off + crop_w * 4).min(screenshot.bgra.len());
         let len = end.saturating_sub(src_off).min(crop_w * 4);
         if len > 0 {
-            crop_buf[dst_off..dst_off + len]
-                .copy_from_slice(&screenshot.bgra[src_off..src_off + len]);
+            crop_buf[dst_off..dst_off + len].copy_from_slice(&screenshot.bgra[src_off..src_off + len]);
         }
     }
 
@@ -223,11 +222,12 @@ pub fn install_pinch_monitor() -> Option<PinchMonitor> {
         core::ptr::null_mut()
     });
 
-    let token = unsafe {
-        NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::Magnify, &block)
-    }?;
+    let token = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::Magnify, &block) }?;
 
-    Some(PinchMonitor { accum, _token: token })
+    Some(PinchMonitor {
+        accum,
+        _token: token,
+    })
 }
 
 #[cfg(not(target_os = "macos"))]

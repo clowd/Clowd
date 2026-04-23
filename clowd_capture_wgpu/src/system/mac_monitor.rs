@@ -20,8 +20,7 @@ struct RawMonitor {
 }
 
 pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
-    let display_ids = CGDisplay::active_displays()
-        .map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
+    let display_ids = CGDisplay::active_displays().map_err(|e| anyhow!("CGGetActiveDisplayList failed: {:?}", e))?;
 
     let main_id = unsafe { CGMainDisplayID() };
 
@@ -32,17 +31,9 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
 
         let mode = display.display_mode();
         let (phys_w, phys_h, refresh_hz) = if let Some(ref mode) = mode {
-            (
-                mode.pixel_width() as u32,
-                mode.pixel_height() as u32,
-                mode.refresh_rate() as f32,
-            )
+            (mode.pixel_width() as u32, mode.pixel_height() as u32, mode.refresh_rate() as f32)
         } else {
-            (
-                display.pixels_wide() as u32,
-                display.pixels_high() as u32,
-                0.0,
-            )
+            (display.pixels_wide() as u32, display.pixels_high() as u32, 0.0)
         };
 
         let scale = if cg_bounds.size.width > 0.0 {
@@ -127,17 +118,13 @@ fn compute_physical_origins(raw: &[RawMonitor]) -> Vec<(i32, i32)> {
             let y_touch = placed.cg_y <= other_bottom && other.cg_y <= placed_bottom;
             if y_touch {
                 if cg_eq(other.cg_x, placed_right) {
-                    let oy = py
-                        + ((other.cg_y - placed.cg_y) * placed.scale as f64).round()
-                            as i32;
+                    let oy = py + ((other.cg_y - placed.cg_y) * placed.scale as f64).round() as i32;
                     origins[oi] = Some((px + placed.phys_w as i32, oy));
                     queue.push_back(oi);
                     continue;
                 }
                 if cg_eq(other_right, placed.cg_x) {
-                    let oy = py
-                        + ((other.cg_y - placed.cg_y) * placed.scale as f64).round()
-                            as i32;
+                    let oy = py + ((other.cg_y - placed.cg_y) * placed.scale as f64).round() as i32;
                     origins[oi] = Some((px - other.phys_w as i32, oy));
                     queue.push_back(oi);
                     continue;
@@ -148,17 +135,13 @@ fn compute_physical_origins(raw: &[RawMonitor]) -> Vec<(i32, i32)> {
             let x_touch = placed.cg_x <= other_right && other.cg_x <= placed_right;
             if x_touch {
                 if cg_eq(other.cg_y, placed_bottom) {
-                    let ox = px
-                        + ((other.cg_x - placed.cg_x) * placed.scale as f64).round()
-                            as i32;
+                    let ox = px + ((other.cg_x - placed.cg_x) * placed.scale as f64).round() as i32;
                     origins[oi] = Some((ox, py + placed.phys_h as i32));
                     queue.push_back(oi);
                     continue;
                 }
                 if cg_eq(other_bottom, placed.cg_y) {
-                    let ox = px
-                        + ((other.cg_x - placed.cg_x) * placed.scale as f64).round()
-                            as i32;
+                    let ox = px + ((other.cg_x - placed.cg_x) * placed.scale as f64).round() as i32;
                     origins[oi] = Some((ox, py - other.phys_h as i32));
                     queue.push_back(oi);
                     continue;
@@ -171,17 +154,16 @@ fn compute_physical_origins(raw: &[RawMonitor]) -> Vec<(i32, i32)> {
     for (i, origin) in origins.iter_mut().enumerate() {
         if origin.is_none() {
             let m = &raw[i];
-            *origin = Some((
-                (m.cg_x * m.scale as f64).round() as i32,
-                (m.cg_y * m.scale as f64).round() as i32,
-            ));
+            *origin = Some(((m.cg_x * m.scale as f64).round() as i32, (m.cg_y * m.scale as f64).round() as i32));
         }
     }
 
-    origins.into_iter().map(|o| o.unwrap()).collect()
+    origins
+        .into_iter()
+        .map(|o| o.unwrap())
+        .collect()
 }
 
 fn cg_eq(a: f64, b: f64) -> bool {
     (a - b).abs() < 0.5
 }
-

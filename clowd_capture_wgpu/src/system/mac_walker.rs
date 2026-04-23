@@ -14,9 +14,9 @@ use core_graphics::display::CGDisplay;
 use core_graphics::geometry::CGRect;
 use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
+use super::{HitTestResult, ObstructedWindow};
 use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 use crate::system::MonitorInfo;
-use super::{HitTestResult, ObstructedWindow};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;
@@ -148,34 +148,32 @@ fn evaluate_window(
 
     // 3. Parse bounds from the kCGWindowBounds sub-dictionary.
     let bounds_ptr = get_raw_value(dict, unsafe { window::kCGWindowBounds })?;
-    let bounds_dict: CFDictionary =
-        unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
+    let bounds_dict: CFDictionary = unsafe { TCFType::wrap_under_get_rule(bounds_ptr as CFDictionaryRef) };
     let cg_rect = CGRect::from_dict_representation(&bounds_dict)?;
 
     // 4. Convert logical CG points → physical pixels using MonitorInfo.
     let center_x = cg_rect.origin.x + cg_rect.size.width / 2.0;
     let center_y = cg_rect.origin.y + cg_rect.size.height / 2.0;
 
-    let (phys_x, phys_y, phys_w, phys_h) =
-        if let Some(m) = find_monitor_for_cg_point(center_x, center_y, monitors) {
-            let ox = m.logical_origin.x;
-            let oy = m.logical_origin.y;
-            let s = m.scale_factor as f64;
-            (
-                m.bounds.min_x() + ((cg_rect.origin.x - ox) * s).round() as i32,
-                m.bounds.min_y() + ((cg_rect.origin.y - oy) * s).round() as i32,
-                (cg_rect.size.width * s).round() as i32,
-                (cg_rect.size.height * s).round() as i32,
-            )
-        } else {
-            let scale = display_scale_at_logical_point(center_x, center_y) as f64;
-            (
-                (cg_rect.origin.x * scale).round() as i32,
-                (cg_rect.origin.y * scale).round() as i32,
-                (cg_rect.size.width * scale).round() as i32,
-                (cg_rect.size.height * scale).round() as i32,
-            )
-        };
+    let (phys_x, phys_y, phys_w, phys_h) = if let Some(m) = find_monitor_for_cg_point(center_x, center_y, monitors) {
+        let ox = m.logical_origin.x;
+        let oy = m.logical_origin.y;
+        let s = m.scale_factor as f64;
+        (
+            m.bounds.min_x() + ((cg_rect.origin.x - ox) * s).round() as i32,
+            m.bounds.min_y() + ((cg_rect.origin.y - oy) * s).round() as i32,
+            (cg_rect.size.width * s).round() as i32,
+            (cg_rect.size.height * s).round() as i32,
+        )
+    } else {
+        let scale = display_scale_at_logical_point(center_x, center_y) as f64;
+        (
+            (cg_rect.origin.x * scale).round() as i32,
+            (cg_rect.origin.y * scale).round() as i32,
+            (cg_rect.size.width * scale).round() as i32,
+            (cg_rect.size.height * scale).round() as i32,
+        )
+    };
 
     // 5. Size threshold.
     if phys_w < MIN_WINDOW_SIZE || phys_h < MIN_WINDOW_SIZE {
@@ -210,23 +208,21 @@ fn evaluate_window(
     // Read the window title (kCGWindowName), defaulting to empty string.
     let title = get_raw_value(dict, unsafe { window::kCGWindowName })
         .map(|ptr| {
-            let cf_str: CFString = unsafe {
-                TCFType::wrap_under_get_rule(
-                    ptr as core_foundation::string::CFStringRef,
-                )
-            };
+            let cf_str: CFString = unsafe { TCFType::wrap_under_get_rule(ptr as core_foundation::string::CFStringRef) };
             cf_str.to_string()
         })
         .unwrap_or_default();
 
-    Some(WindowEntry { window_id, rect, title, obstructed, obstruction_rects })
+    Some(WindowEntry {
+        window_id,
+        rect,
+        title,
+        obstructed,
+        obstruction_rects,
+    })
 }
 
-fn find_monitor_for_cg_point<'a>(
-    x: f64,
-    y: f64,
-    monitors: &'a [MonitorInfo],
-) -> Option<&'a MonitorInfo> {
+fn find_monitor_for_cg_point<'a>(x: f64, y: f64, monitors: &'a [MonitorInfo]) -> Option<&'a MonitorInfo> {
     monitors.iter().find(|m| {
         let ox = m.logical_origin.x;
         let oy = m.logical_origin.y;
@@ -293,4 +289,3 @@ fn display_scale_at_logical_point(x: f64, y: f64) -> f32 {
     // Fallback: assume Retina 2×.
     2.0
 }
-

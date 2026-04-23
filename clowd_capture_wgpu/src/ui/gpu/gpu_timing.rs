@@ -78,7 +78,10 @@ impl GpuTimings {
         if !GPU_TIMING_ENABLED {
             return None;
         }
-        if !device.features().contains(wgpu::Features::TIMESTAMP_QUERY) {
+        if !device
+            .features()
+            .contains(wgpu::Features::TIMESTAMP_QUERY)
+        {
             return None;
         }
         let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
@@ -128,7 +131,8 @@ impl GpuTimings {
                 }
                 drop(data);
                 slot.readback.unmap();
-                slot.state.store(SLOT_IDLE, Ordering::Release);
+                slot.state
+                    .store(SLOT_IDLE, Ordering::Release);
             }
         }
         out
@@ -164,19 +168,8 @@ impl GpuTimings {
         let slot_idx = id.0;
         let base = slot_idx as u32 * SLOTS_PER_FRAME;
         let byte_offset = slot_idx as u64 * SLOT_STRIDE_BYTES;
-        encoder.resolve_query_set(
-            &self.query_set,
-            base..base + SLOTS_PER_FRAME,
-            &self.resolve,
-            byte_offset,
-        );
-        encoder.copy_buffer_to_buffer(
-            &self.resolve,
-            byte_offset,
-            &self.slots[slot_idx].readback,
-            0,
-            SLOT_USEFUL_BYTES,
-        );
+        encoder.resolve_query_set(&self.query_set, base..base + SLOTS_PER_FRAME, &self.resolve, byte_offset);
+        encoder.copy_buffer_to_buffer(&self.resolve, byte_offset, &self.slots[slot_idx].readback, 0, SLOT_USEFUL_BYTES);
         self.slots[slot_idx]
             .state
             .store(SLOT_IN_FLIGHT, Ordering::Release);
@@ -186,7 +179,8 @@ impl GpuTimings {
     /// can pick up the result once the GPU work finishes.
     pub fn after_submit(&self, id: FrameSlotId) {
         let slot = &self.slots[id.0];
-        slot.state.store(SLOT_MAP_PENDING, Ordering::Release);
+        slot.state
+            .store(SLOT_MAP_PENDING, Ordering::Release);
         let state = slot.state.clone();
         slot.readback
             .slice(..)

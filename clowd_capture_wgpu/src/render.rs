@@ -8,7 +8,7 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect, WindowPoint};
-use crate::gpu::{self, WindowGpu, WindowUniforms, PeekUniforms, PEEK_UNIFORMS_SIZE, SURFACE_FORMAT, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::{self, PeekUniforms, WindowGpu, WindowUniforms, PEEK_UNIFORMS_SIZE, SURFACE_FORMAT, WINDOW_UNIFORMS_SIZE};
 use crate::settings::CapturerSettings;
 use crate::sync::{ReadyGuard, VisibleLatch};
 use crate::system::{CapturedDesktop, MonitorInfo, WindowPeekImage};
@@ -108,13 +108,7 @@ impl WindowHandle {
         let _ = self.tx.send(RenderMsg::Resize(size));
     }
 
-    pub fn update_mouse_state(
-        &self,
-        pos: ScreenPointF,
-        zoom: f32,
-        selection: Option<ScreenRect>,
-        captured: bool,
-    ) {
+    pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32, selection: Option<ScreenRect>, captured: bool) {
         let _ = self.tx.send(RenderMsg::MouseState {
             pos,
             zoom,
@@ -184,11 +178,7 @@ pub fn spawn_render_worker(params: RenderWorkerParams) -> WorkerSetup {
     }
 }
 
-fn render_worker_main(
-    params: RenderWorkerParams,
-    input_rx: mpsc::Receiver<WorkerInput>,
-    msg_rx: mpsc::Receiver<RenderMsg>,
-) {
+fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<WorkerInput>, msg_rx: mpsc::Receiver<RenderMsg>) {
     let RenderWorkerParams {
         monitor,
         monitor_index,
@@ -285,10 +275,7 @@ fn render_worker_main(
         .copied()
         .find(|f| !f.is_srgb())
         .unwrap_or(caps.formats[0]);
-    assert_eq!(
-        actual_format, SURFACE_FORMAT,
-        "surface format mismatch on monitor {monitor_index}"
-    );
+    assert_eq!(actual_format, SURFACE_FORMAT, "surface format mismatch on monitor {monitor_index}");
 
     // ── Stage C: assemble final state, configure surface, draw frame 0 ─
 
@@ -315,12 +302,7 @@ fn render_worker_main(
         let vd_y = snap.vdesktop_origin[1];
         let vd_w = snap.vdesktop_size[0];
         let vd_h = snap.vdesktop_size[1];
-        let base_uv_offset_scale = [
-            (m_x - vd_x) / vd_w,
-            (m_y - vd_y) / vd_h,
-            m_w / vd_w,
-            m_h / vd_h,
-        ];
+        let base_uv_offset_scale = [(m_x - vd_x) / vd_w, (m_y - vd_y) / vd_h, m_w / vd_w, m_h / vd_h];
 
         let init_local = WindowPoint::new(
             initial_mouse.x - monitor_bounds.min_x() as f32,
@@ -335,12 +317,14 @@ fn render_worker_main(
             selection_params: [0.0, 0.0, 0.0, 0.0],
         };
 
-        let ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("window uniforms"),
-            size: WINDOW_UNIFORMS_SIZE,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let ubo = gpu
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("window uniforms"),
+                size: WINDOW_UNIFORMS_SIZE,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
         gpu.queue
             .write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
 
@@ -409,12 +393,14 @@ fn render_worker_main(
     let mut active_peek: Option<PeekCommand> = None;
     let mut blurred_desktop: Option<(wgpu::Texture, wgpu::TextureView)> = None;
 
-    let peek_ubo = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("peek uniforms"),
-        size: PEEK_UNIFORMS_SIZE,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
+    let peek_ubo = gpu
+        .device
+        .create_buffer(&wgpu::BufferDescriptor {
+            label: Some("peek uniforms"),
+            size: PEEK_UNIFORMS_SIZE,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
     // ── Render loop ─────────────────────────────────────────────────
 
@@ -451,9 +437,7 @@ fn render_worker_main(
                 }
                 Ok(RenderMsg::BlurredDesktop(bd)) => {
                     let max_dim = gpu.device.limits().max_texture_dimension_2d;
-                    if bd.width > max_dim || bd.height > max_dim
-                        || bd.width == 0 || bd.height == 0
-                    {
+                    if bd.width > max_dim || bd.height > max_dim || bd.width == 0 || bd.height == 0 {
                         continue;
                     }
                     let size = wgpu::Extent3d {
@@ -461,17 +445,18 @@ fn render_worker_main(
                         height: bd.height,
                         depth_or_array_layers: 1,
                     };
-                    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("blurred desktop texture"),
-                        size,
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Bgra8Unorm,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING
-                            | wgpu::TextureUsages::COPY_DST,
-                        view_formats: &[],
-                    });
+                    let texture = gpu
+                        .device
+                        .create_texture(&wgpu::TextureDescriptor {
+                            label: Some("blurred desktop texture"),
+                            size,
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Bgra8Unorm,
+                            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                            view_formats: &[],
+                        });
                     gpu.queue.write_texture(
                         wgpu::TexelCopyTextureInfo {
                             texture: &texture,
@@ -492,9 +477,7 @@ fn render_worker_main(
                 }
                 Ok(RenderMsg::PeekImage(peek)) => {
                     let max_dim = gpu.device.limits().max_texture_dimension_2d;
-                    if peek.width > max_dim || peek.height > max_dim
-                        || peek.width == 0 || peek.height == 0
-                    {
+                    if peek.width > max_dim || peek.height > max_dim || peek.width == 0 || peek.height == 0 {
                         continue;
                     }
                     let size = wgpu::Extent3d {
@@ -502,17 +485,18 @@ fn render_worker_main(
                         height: peek.height,
                         depth_or_array_layers: 1,
                     };
-                    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("peek window texture"),
-                        size,
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Bgra8Unorm,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING
-                            | wgpu::TextureUsages::COPY_DST,
-                        view_formats: &[],
-                    });
+                    let texture = gpu
+                        .device
+                        .create_texture(&wgpu::TextureDescriptor {
+                            label: Some("peek window texture"),
+                            size,
+                            mip_level_count: 1,
+                            sample_count: 1,
+                            dimension: wgpu::TextureDimension::D2,
+                            format: wgpu::TextureFormat::Bgra8Unorm,
+                            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                            view_formats: &[],
+                        });
                     gpu.queue.write_texture(
                         wgpu::TexelCopyTextureInfo {
                             texture: &texture,
@@ -528,8 +512,7 @@ fn render_worker_main(
                         },
                         size,
                     );
-                    let view =
-                        texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
                     peek_textures.insert(
                         peek.window_index,
                         PeekTextureEntry {
@@ -578,22 +561,13 @@ fn render_worker_main(
             let sel = selection?;
             let cx = mouse_pos.x;
             let cy = mouse_pos.y;
-            let local_cursor = WindowPoint::new(
-                cx - monitor_bounds.min_x() as f32,
-                cy - monitor_bounds.min_y() as f32,
-            );
+            let local_cursor = WindowPoint::new(cx - monitor_bounds.min_x() as f32, cy - monitor_bounds.min_y() as f32);
 
             let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
                 if zoom <= 1.0 {
-                    (
-                        vd_x - monitor_bounds.min_x() as f32,
-                        vd_y - monitor_bounds.min_y() as f32,
-                    )
+                    (vd_x - monitor_bounds.min_x() as f32, vd_y - monitor_bounds.min_y() as f32)
                 } else {
-                    (
-                        (vd_x - cx) * zoom + local_cursor.x,
-                        (vd_y - cy) * zoom + local_cursor.y,
-                    )
+                    ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y)
                 }
             };
 
@@ -610,14 +584,12 @@ fn render_worker_main(
             let th = pt.height as f32;
             let crop_x = pt.crop_x as f32;
             let crop_y = pt.crop_y as f32;
-            let window_uv = [
-                (crop_x + sl - wl) / tw,
-                (crop_y + st - wt) / th,
-                (sr - sl) / tw,
-                (sb - st) / th,
-            ];
+            let window_uv = [(crop_x + sl - wl) / tw, (crop_y + st - wt) / th, (sr - sl) / tw, (sb - st) / th];
 
-            let base_uv = snapshot_state.as_ref().map(|s| s.base_uv_offset_scale).unwrap_or([0.0; 4]);
+            let base_uv = snapshot_state
+                .as_ref()
+                .map(|s| s.base_uv_offset_scale)
+                .unwrap_or([0.0; 4]);
 
             let mut peek_uniforms = PeekUniforms::zeroed();
             peek_uniforms.selection_rect = [sl, st, sr, sb];
@@ -631,42 +603,45 @@ fn render_worker_main(
                 config.width as f32,
                 config.height as f32,
             ];
-            peek_uniforms.cursor_params = [
-                local_cursor.x,
-                local_cursor.y,
-                scale_factor,
-                0.0,
-            ];
-            for (i, r) in pt.obstruction_rects.iter().take(16).enumerate() {
+            peek_uniforms.cursor_params = [local_cursor.x, local_cursor.y, scale_factor, 0.0];
+            for (i, r) in pt
+                .obstruction_rects
+                .iter()
+                .take(16)
+                .enumerate()
+            {
                 let (rl, rt) = to_local(r.left() as f32, r.top() as f32);
                 let (rr, rb) = to_local(r.right() as f32, r.bottom() as f32);
                 peek_uniforms.obstruction_rects[i] = [rl, rt, rr, rb];
             }
 
-            gpu.queue.write_buffer(&peek_ubo, 0, bytemuck::bytes_of(&peek_uniforms));
+            gpu.queue
+                .write_buffer(&peek_ubo, 0, bytemuck::bytes_of(&peek_uniforms));
 
-            let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("peek bind group"),
-                layout: &gpu.peek_bgl,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: peek_ubo.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&pt.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(blurred_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&snap.sampler),
-                    },
-                ],
-            });
+            let bind_group = gpu
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("peek bind group"),
+                    layout: &gpu.peek_bgl,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: peek_ubo.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&pt.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(blurred_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::Sampler(&snap.sampler),
+                        },
+                    ],
+                });
             Some(bind_group)
         });
 
@@ -815,16 +790,9 @@ impl SnapshotState {
         if let Some(sel) = selection {
             let cx = mouse_pos.x;
             let cy = mouse_pos.y;
-            let local_cursor = WindowPoint::new(
-                cx - monitor_bounds.min_x() as f32,
-                cy - monitor_bounds.min_y() as f32,
-            );
-            let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
-                (
-                    (vd_x - cx) * zoom + local_cursor.x,
-                    (vd_y - cy) * zoom + local_cursor.y,
-                )
-            };
+            let local_cursor = WindowPoint::new(cx - monitor_bounds.min_x() as f32, cy - monitor_bounds.min_y() as f32);
+            let to_local =
+                |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y) };
             let (l, t) = to_local(sel.left() as f32, sel.top() as f32);
             let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
             self.uniforms.selection_rect = [l, t, r, b];
@@ -856,8 +824,7 @@ fn draw_once(
 ) {
     let t_wait_start = Instant::now();
     let frame = match surface.get_current_texture() {
-        wgpu::CurrentSurfaceTexture::Success(f)
-        | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
+        wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
         wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return,
         wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
             surface.configure(&gpu.device, config);
@@ -924,7 +891,8 @@ fn draw_once(
         gt.resolve(&mut encoder, id);
     }
 
-    gpu.queue.submit(std::iter::once(encoder.finish()));
+    gpu.queue
+        .submit(std::iter::once(encoder.finish()));
     if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
         gt.after_submit(id);
     }

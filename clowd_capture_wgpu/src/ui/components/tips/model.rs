@@ -68,12 +68,12 @@ const MONITOR_NAME_MAX: usize = 28;
 
 fn truncate_ellipsis(s: &str, max_chars: usize) -> String {
     let mut iter = s.chars();
-    let head: String = iter
-        .by_ref()
-        .take(max_chars)
-        .collect();
+    let head: String = iter.by_ref().take(max_chars).collect();
     if iter.next().is_some() {
-        let mut out: String = head.chars().take(max_chars.saturating_sub(1)).collect();
+        let mut out: String = head
+            .chars()
+            .take(max_chars.saturating_sub(1))
+            .collect();
         out.push('…');
         out
     } else {
