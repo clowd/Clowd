@@ -119,6 +119,10 @@ pub fn stage_a_create_device(
     t_start: Instant,
     timings: &WorkerTimings,
 ) -> Result<DeviceBundle> {
+    timings
+        .prep_start
+        .set_once(t_start.elapsed());
+
     pollster::block_on(async {
         #[cfg(windows)]
         let backends = wgpu::Backends::DX12;
@@ -192,7 +196,7 @@ pub fn stage_a_create_device(
                 label: Some("clowd_capture_wgpu device"),
                 required_features,
                 required_limits,
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
+                memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::Off,
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
             })

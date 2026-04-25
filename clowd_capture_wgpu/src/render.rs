@@ -239,6 +239,9 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     while snapshot.is_none() || handoff.is_none() {
         match input_rx.recv() {
             Ok(WorkerInput::Screenshot(captured)) => {
+                startup.background.workers[monitor_index]
+                    .upload_start
+                    .set_once(startup.t_start.elapsed());
                 snapshot = gpu::stage_b_upload_snapshot(
                     &bundle.device,
                     &bundle.queue,
@@ -252,9 +255,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             }
             Ok(WorkerInput::Handoff(h)) => {
                 handoff = Some(h);
-                startup.background.workers[monitor_index]
-                    .surface_bind
-                    .set_once(startup.t_start.elapsed());
             }
             Err(_) => {
                 error!("render worker {monitor_index}: input channel closed");
@@ -266,6 +266,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     let handoff = handoff.unwrap();
     let _window = handoff.window;
     let surface = handoff.surface;
+
+    startup.background.workers[monitor_index]
+        .first_render_start
+        .set_once(startup.t_start.elapsed());
 
     // Verify surface format.
     let caps = surface.get_capabilities(&bundle.adapter);
