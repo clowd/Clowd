@@ -53,6 +53,10 @@ fn main() -> anyhow::Result<()> {
     let mut backend_options = wgpu::BackendOptions::default();
     #[cfg(windows)]
     {
+        // Runtime shader compilation should not be on the capture startup
+        // path. Windows pipelines use precompiled passthrough shaders, so
+        // avoid DXC auto-discovery/loading during backend setup.
+        backend_options.dx12.shader_compiler = wgpu::Dx12Compiler::Fxc;
         backend_options.dx12.latency_waitable_object = wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
     }
     #[cfg(windows)]
@@ -64,6 +68,11 @@ fn main() -> anyhow::Result<()> {
 
     let instance = Arc::new(wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends,
+        // Capture startup is latency-sensitive, and we issue only direct
+        // draws with fixed internal shaders. Avoid wgpu's build-default
+        // debug/validation flags, which enable the D3D12 debug layer in
+        // debug builds and still keep indirect-call validation in release.
+        flags: wgpu::InstanceFlags::DISCARD_HAL_LABELS,
         backend_options,
         ..wgpu::InstanceDescriptor::new_without_display_handle()
     }));
@@ -108,6 +117,10 @@ fn main() -> anyhow::Result<()> {
         std::thread::Builder::new()
             .name("screenshot".into())
             .spawn(move || {
+                startup_bg
+                    .background
+                    .screenshot_start
+                    .set_once(startup_bg.t_start.elapsed());
                 let captured = Arc::new(system::SystemInterop::capture_desktop_bitmap(monitors_for_capture));
                 latch.set(captured.clone());
                 startup_bg
@@ -144,6 +157,10 @@ fn main() -> anyhow::Result<()> {
         std::thread::Builder::new()
             .name("walker".into())
             .spawn(move || {
+                startup_bg
+                    .background
+                    .walker_start
+                    .set_once(startup_bg.t_start.elapsed());
                 let walker = system::SystemInterop::snapshot_windows(&monitors_for_walker, visibility_threshold);
                 let obstructed = if peek_enabled { walker.obstructed_windows() } else { Vec::new() };
                 latch.set(Arc::new(walker));

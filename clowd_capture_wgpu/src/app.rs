@@ -519,6 +519,7 @@ impl ApplicationHandler for App {
         // it, and send the (window, surface) pair to the corresponding
         // render worker.
         let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(worker_setups.len());
+        self.startup.mark_window_create_start();
 
         for (i, setup) in worker_setups.into_iter().enumerate() {
             let m = &self.monitors[i];
@@ -572,6 +573,9 @@ impl ApplicationHandler for App {
             #[cfg(not(target_os = "macos"))]
             let screenshot_image = None;
 
+            self.startup.background.workers[i]
+                .surface_start
+                .set_once(self.startup.t_start.elapsed());
             let bundle = match gpu::create_surface(&self.instance, window.clone(), screenshot_image) {
                 Ok(b) => b,
                 Err(e) => {
@@ -579,6 +583,9 @@ impl ApplicationHandler for App {
                     continue;
                 }
             };
+            self.startup.background.workers[i]
+                .surface_bind
+                .set_once(self.startup.t_start.elapsed());
 
             let id = window.id();
             let _ = setup
@@ -635,6 +642,7 @@ impl ApplicationHandler for App {
 
         if let Some(ref pending) = self.pending_show {
             if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
+                self.startup.mark_show_start();
                 platform::show_windows_atomically(self.windows.values());
                 let _ = self
                     .shown_time

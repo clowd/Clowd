@@ -113,6 +113,14 @@ impl std::fmt::Display for DisplayMs {
     }
 }
 
+fn phase_between(end: Option<Duration>, start: Option<Duration>) -> Option<Duration> {
+    match (end, start) {
+        (Some(end), Some(start)) => Some(end.saturating_sub(start)),
+        (Some(end), None) => Some(end),
+        _ => None,
+    }
+}
+
 /// Format helper: wall-clock duration as "1h02m03s" / "2m03s" / "5s".
 struct DisplaySessionElapsed(Duration);
 
@@ -273,62 +281,69 @@ impl<'a> PrimaryPanelData<'a> {
             .unwrap_or_else(|| self.startup.total());
         out.push(format_args!("startup: {} total", DisplayMs(total)));
 
-        if let Some(d) = self.startup.t_initialize.get() {
-            out.push(format_args!("  initialize:    {}", DisplayMs(d)));
+        let init_end = self.startup.t_initialize.get();
+
+        if let Some(d) = phase_between(init_end, None) {
+            out.push(format_args!("  initialize:      {}", DisplayMs(d)));
         }
 
         let bg = &self.startup.background;
-        if let Some(gate) = bg.gate() {
-            out.push(format_args!("  background:    {}", DisplayMs(gate)));
+        let bg_start = init_end.unwrap_or(Duration::ZERO);
+        let bg_gate = bg.gate();
+        if let Some(d) = phase_between(bg_gate, Some(bg_start)) {
+            out.push(format_args!("  background:      {}", DisplayMs(d)));
         }
-        if let Some(d) = bg.screenshot.get() {
-            out.push(format_args!("    screenshot:  {}", DisplayMs(d)));
+        if let Some(d) = phase_between(bg.screenshot.get(), bg.screenshot_start.get()) {
+            out.push(format_args!("    screenshot:    {}", DisplayMs(d)));
         }
-        if let Some(d) = bg.walker.get() {
-            out.push(format_args!("    walker:      {}", DisplayMs(d)));
+        if let Some(d) = phase_between(bg.walker.get(), bg.walker_start.get()) {
+            out.push(format_args!("    walker:        {}", DisplayMs(d)));
         }
         let multi = bg.workers.len() > 1;
         for (i, w) in bg.workers.iter().enumerate() {
             let suffix = if multi { format!("[{}]", i) } else { String::new() };
-            if let Some(d) = w.render_prep.get() {
-                out.push(format_args!("    prep{}:       {}", suffix, DisplayMs(d)));
+            let worker_start = w.prep_start.get().unwrap_or(bg_start);
+            let worker_end = [w.render_prep.get(), w.upload.get(), w.surface_bind.get(), w.first_render.get()]
+                .into_iter()
+                .flatten()
+                .max();
+            if let Some(d) = phase_between(worker_end, Some(worker_start)) {
+                out.push(format_args!("    worker{}:      {}", suffix, DisplayMs(d)));
             }
-            if let Some(d) = w.prep_adapter.get() {
-                out.push(format_args!("      adapter{}:  {}", suffix, DisplayMs(d)));
+            if let Some(d) = phase_between(w.render_prep.get(), w.prep_start.get()) {
+                out.push(format_args!("      prep:        {}", DisplayMs(d)));
             }
-            if let Some(d) = w.prep_device.get() {
-                out.push(format_args!("      device{}:   {}", suffix, DisplayMs(d)));
+            if let Some(d) = phase_between(w.prep_adapter.get(), w.prep_start.get()) {
+                out.push(format_args!("        adapter:   {}", DisplayMs(d)));
             }
-            if let Some(d) = w.prep_pipelines.get() {
-                out.push(format_args!("      pipes{}:    {}", suffix, DisplayMs(d)));
+            if let Some(d) = phase_between(w.prep_device.get(), w.prep_adapter.get()) {
+                out.push(format_args!("        device:    {}", DisplayMs(d)));
             }
-            if let Some(d) = w.prep_ui_pipelines.get() {
-                out.push(format_args!("      ui_pipe{}:  {}", suffix, DisplayMs(d)));
+            if let Some(d) = phase_between(w.prep_pipelines.get(), w.prep_device.get()) {
+                out.push(format_args!("        pipes:     {}", DisplayMs(d)));
             }
-            if let Some(d) = w.prep_fonts.get() {
-                out.push(format_args!("      fonts{}:    {}", suffix, DisplayMs(d)));
+            if let Some(d) = phase_between(w.prep_ui_pipelines.get(), w.prep_pipelines.get()) {
+                out.push(format_args!("        ui_pipe:   {}", DisplayMs(d)));
             }
-            if let Some(d) = w.upload.get() {
-                out.push(format_args!("    upload{}:     {}", suffix, DisplayMs(d)));
+            if let Some(d) = phase_between(w.prep_fonts.get(), w.prep_ui_pipelines.get()) {
+                out.push(format_args!("        fonts:     {}", DisplayMs(d)));
             }
-            if let Some(d) = w.surface_bind.get() {
-                out.push(format_args!("    surface{}:    {}", suffix, DisplayMs(d)));
+            if let Some(d) = phase_between(w.upload.get(), w.upload_start.get()) {
+                out.push(format_args!("      upload:      {}", DisplayMs(d)));
+            }
+            if let Some(d) = phase_between(w.surface_bind.get(), w.surface_start.get()) {
+                out.push(format_args!("      surface:     {}", DisplayMs(d)));
+            }
+            if let Some(d) = phase_between(w.first_render.get(), w.first_render_start.get()) {
+                out.push(format_args!("      first render: {}", DisplayMs(d)));
             }
         }
 
-        if let Some(d) = self.startup.t_window_create.get() {
-            out.push(format_args!("  window create: {}", DisplayMs(d)));
+        if let Some(d) = phase_between(self.startup.t_window_create.get(), self.startup.t_window_create_start.get()) {
+            out.push(format_args!("  window create:  {}", DisplayMs(d)));
         }
-        let first_render = bg
-            .workers
-            .iter()
-            .filter_map(|w| w.first_render.get())
-            .max();
-        if let Some(d) = first_render {
-            out.push(format_args!("  first render:  {}", DisplayMs(d)));
-        }
-        if let Some(d) = self.shown_time {
-            out.push(format_args!("  shown:         {}", DisplayMs(d)));
+        if let Some(d) = phase_between(self.shown_time, self.startup.t_show_start.get()) {
+            out.push(format_args!("  shown:          {}", DisplayMs(d)));
         }
         out.push_empty();
 
