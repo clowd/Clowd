@@ -42,10 +42,10 @@ core-foundation = "0.10"
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
-block2 = "0.6"
 objc2-quartz-core = { version = "0.3", features = ["CALayer"] }
+block2 = "0.6"
 
 # naga version must match what wgpu 29.0 uses internally
 [target.'cfg(windows)'.build-dependencies]
 naga = { version = "29.0", features = ["wgsl-in", "hlsl-out"] }
-libloading = "0.8"
+libloading = "0.9"

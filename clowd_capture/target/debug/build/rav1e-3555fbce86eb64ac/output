@@ -1,3 +1,0 @@
-cargo:rustc-env=PROFILE=debug
-cargo:rustc-env=CARGO_CFG_TARGET_FEATURE=cmpxchg16b,fxsr,sse,sse2,sse3
-cargo:rustc-env=CARGO_ENCODED_RUSTFLAGS=
