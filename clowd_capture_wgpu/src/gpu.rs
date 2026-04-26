@@ -9,7 +9,6 @@ pub mod desktop;
 pub mod device;
 pub mod peek;
 pub mod pipeline;
-pub mod surface;
 
 /// Non-sRGB format used by every pipeline and surface. On DX12 and Metal
 /// this is universally supported as a swapchain format. Verified at

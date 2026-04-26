@@ -277,22 +277,6 @@ impl SystemInterop {
         win_capture::capture_window_image(window.capture_ref.hwnd, &window.raw_rect)
     }
 
-    pub fn set_hardware_cursor_visible(visible: bool) {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        use windows::Win32::UI::WindowsAndMessaging::ShowCursor;
-
-        static HIDDEN: AtomicBool = AtomicBool::new(false);
-
-        let currently_hidden = HIDDEN.load(Ordering::Relaxed);
-        if visible && currently_hidden {
-            unsafe { ShowCursor(true) };
-            HIDDEN.store(false, Ordering::Relaxed);
-        } else if !visible && !currently_hidden {
-            unsafe { ShowCursor(false) };
-            HIDDEN.store(true, Ordering::Relaxed);
-        }
-    }
-
     pub fn install_pinch_monitor() -> Option<PinchMonitor> {
         None
     }
@@ -341,22 +325,6 @@ impl SystemInterop {
 
     pub fn capture_peek_image(window: &ObstructedWindow) -> Option<(Vec<u8>, u32, u32)> {
         mac_capture::capture_window_image(window.capture_ref.window_id)
-    }
-
-    pub fn set_hardware_cursor_visible(visible: bool) {
-        use core_graphics::display::{CGDisplay, CGMainDisplayID};
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        static HIDDEN: AtomicBool = AtomicBool::new(false);
-
-        let currently_hidden = HIDDEN.load(Ordering::Relaxed);
-        if visible && currently_hidden {
-            unsafe { CGDisplay::new(CGMainDisplayID()).show_cursor() }.ok();
-            HIDDEN.store(false, Ordering::Relaxed);
-        } else if !visible && !currently_hidden {
-            unsafe { CGDisplay::new(CGMainDisplayID()).hide_cursor() }.ok();
-            HIDDEN.store(true, Ordering::Relaxed);
-        }
     }
 
     pub fn install_pinch_monitor() -> Option<PinchMonitor> {
