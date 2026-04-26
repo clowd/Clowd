@@ -13,8 +13,8 @@ use crate::ui::components::debug::layout::{compute_layout, DebugPanelLayout, Pan
 use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPanelData};
 use std::time::Duration;
 
-use crate::ui::components::debug::perf::{PerfSample, PerfTracker};
-use crate::ui::components::debug::startup::StartupTimings;
+use crate::telemetry::perf::{PerfSample, PerfTracker};
+use crate::telemetry::startup::StartupTimings;
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_MONO};
 use crate::ui::shared::{debug_monitor_visibility, debug_primary_visibility, UiMonitor, UiSharedState};

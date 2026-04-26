@@ -136,8 +136,8 @@ impl IconPipeline {
             const PS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_icon_ps.dxbc"));
             unsafe {
                 (
-                    crate::gpu::create_passthrough_module(device, "ui_icon VS", VS),
-                    crate::gpu::create_passthrough_module(device, "ui_icon FS", PS),
+                    crate::gpu::pipeline::create_passthrough_module(device, "ui_icon VS", VS),
+                    crate::gpu::pipeline::create_passthrough_module(device, "ui_icon FS", PS),
                 )
             }
         };

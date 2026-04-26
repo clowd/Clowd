@@ -10,5 +10,3 @@
 
 pub mod layout;
 pub mod model;
-pub mod perf;
-pub mod startup;

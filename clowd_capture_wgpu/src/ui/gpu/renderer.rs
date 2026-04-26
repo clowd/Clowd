@@ -17,8 +17,8 @@
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use crate::ui::components::debug::perf::PerfTracker;
-use crate::ui::components::debug::startup::StartupTimings;
+use crate::telemetry::perf::PerfTracker;
+use crate::telemetry::startup::StartupTimings;
 use crate::ui::gpu::area::AreaRenderer;
 use crate::ui::gpu::debug::DebugRenderer;
 use crate::ui::gpu::icon::{IconInstance, IconPipeline};

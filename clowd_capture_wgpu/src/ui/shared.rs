@@ -165,3 +165,90 @@ pub fn debug_primary_visibility(state: &UiSharedState, this: &UiMonitor) -> bool
     let b = this.bounds;
     cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn monitor() -> UiMonitor {
+        UiMonitor {
+            bounds: ScreenRect::from_xy_size(0, 0, 200, 120),
+            dpi_scale: 1.0,
+            is_primary: true,
+        }
+    }
+
+    fn state() -> UiSharedState {
+        UiSharedState {
+            monitors: Arc::from([monitor()]),
+            selection: Some(ScreenRect::from_xy_size(20, 20, 80, 40)),
+            captured: false,
+            mouse_down: false,
+            dragging: false,
+            zoom: 1.0,
+            virtual_cursor: ScreenPointF::new(30.0, 30.0),
+            accent_color: [1.0, 0.0, 0.0, 1.0],
+            tips_visible: true,
+            debug_visible: false,
+            overlays_visible: true,
+            hovered_monitor_name: None,
+            hovered_window_title: None,
+            hovered_window_bounds: None,
+            hovered_window_index: None,
+            hovered_window_obstructed: false,
+            hovered_pixel_bgra: None,
+        }
+    }
+
+    #[test]
+    fn panel_only_visible_after_capture() {
+        let mut s = state();
+
+        assert!(panel_visibility(&s).is_none());
+        s.captured = true;
+        assert!(panel_visibility(&s).is_some());
+        s.overlays_visible = false;
+        assert!(panel_visibility(&s).is_none());
+    }
+
+    #[test]
+    fn tips_hide_during_capture_mouse_down_or_debug() {
+        let mut s = state();
+
+        assert!(tips_visibility(&s).is_some());
+        s.mouse_down = true;
+        assert!(tips_visibility(&s).is_none());
+        s.mouse_down = false;
+        s.debug_visible = true;
+        assert!(tips_visibility(&s).is_none());
+        s.debug_visible = false;
+        s.captured = true;
+        assert!(tips_visibility(&s).is_none());
+    }
+
+    #[test]
+    fn area_indicator_visible_only_for_uncaptured_selection() {
+        let mut s = state();
+
+        assert!(area_indicator_visibility(&s).is_some());
+        s.captured = true;
+        assert!(area_indicator_visibility(&s).is_none());
+        s.captured = false;
+        s.selection = None;
+        assert!(area_indicator_visibility(&s).is_none());
+    }
+
+    #[test]
+    fn debug_visibility_respects_overlays_and_cursor_monitor() {
+        let m = monitor();
+        let mut s = state();
+        s.debug_visible = true;
+
+        assert!(debug_monitor_visibility(&s, &m));
+        assert!(debug_primary_visibility(&s, &m));
+        s.virtual_cursor = ScreenPointF::new(300.0, 30.0);
+        assert!(!debug_primary_visibility(&s, &m));
+        s.overlays_visible = false;
+        assert!(!debug_monitor_visibility(&s, &m));
+    }
+}

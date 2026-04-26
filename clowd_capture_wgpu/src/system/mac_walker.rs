@@ -14,7 +14,7 @@ use core_graphics::display::CGDisplay;
 use core_graphics::geometry::CGRect;
 use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
-use super::{HitTestResult, ObstructedWindow};
+use super::{HitTestResult, ObstructedWindow, WindowCaptureRef};
 use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 use crate::system::MonitorInfo;
 
@@ -104,7 +104,7 @@ impl WindowWalker {
             .filter(|(_, w)| w.obstructed)
             .map(|(i, w)| ObstructedWindow {
                 window_index: i,
-                window_id: w.window_id,
+                capture_ref: WindowCaptureRef::from_window_id(w.window_id),
                 rect: w.rect,
                 raw_rect: w.rect,
                 obstruction_rects: w.obstruction_rects.clone(),
