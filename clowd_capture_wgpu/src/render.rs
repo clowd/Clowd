@@ -1,27 +1,32 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, OnceLock};
-use std::thread::{self, JoinHandle};
+use std::sync::atomic::Ordering;
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use winit::dpi::PhysicalSize;
-use winit::window::Window;
-
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect, WindowPoint};
-use crate::gpu::{self, PeekUniforms, WindowGpu, WindowUniforms, PEEK_UNIFORMS_SIZE, SURFACE_FORMAT, WINDOW_UNIFORMS_SIZE};
-use crate::settings::CapturerSettings;
-use crate::sync::{ReadyGuard, VisibleLatch};
-use crate::system::{CapturedDesktop, MonitorInfo, WindowPeekImage};
-use crate::ui::components::debug::perf::{PerfSample, PerfTracker};
-use crate::ui::components::debug::startup::StartupTimings;
+use crate::gpu::desktop::{WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::peek::{PeekUniforms, PEEK_UNIFORMS_SIZE};
+use crate::gpu::{self, SURFACE_FORMAT};
+use crate::sync::ReadyGuard;
+use crate::telemetry::perf::{PerfSample, PerfTracker};
 use crate::ui::gpu::gpu_timing::GpuTimings;
 use crate::ui::gpu::UiRenderer;
-use crate::ui::shared::{UiMonitor, UiSharedState};
+use crate::ui::shared::UiMonitor;
+
+pub mod desktop;
+pub mod frame;
+pub mod peek;
+pub mod protocol;
+pub mod window;
+pub mod worker;
+use desktop::{FrameState, SnapshotState};
+use frame::draw_once;
+use peek::PeekTextureEntry;
+use protocol::{PeekCommand, RenderMsg, WindowHandoff, WorkerInput};
+use worker::RenderWorkerParams;
 
 /// Duration of the colour → grayscale fade after the window first becomes
 /// visible.
-const FADE_DURATION_SECS: f32 = 0.3;
-
 /// MSAA sample count applied to every render pipeline in the frame.
 /// Set to 1 (no multisampling) — all UI geometry is axis-aligned
 /// (rects, textured quads, glyph quads) so MSAA adds cost without
@@ -30,154 +35,13 @@ pub const MSAA_SAMPLES: u32 = 1;
 
 // ── Messages ────────────────────────────────────────────────────────
 
-/// Messages the main thread sends to a render thread during the frame loop.
-pub enum RenderMsg {
-    Resize(PhysicalSize<u32>),
-    MouseState {
-        pos: ScreenPointF,
-        zoom: f32,
-        selection: Option<ScreenRect>,
-        captured: bool,
-    },
-    UiState(Arc<UiSharedState>),
-    BlurredDesktop(Arc<BlurredDesktopImage>),
-    PeekImage(Arc<WindowPeekImage>),
-    ShowPeek(Option<PeekCommand>),
-    Shutdown,
-}
-
-pub struct BlurredDesktopImage {
-    pub bgra: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
-}
-
-/// Tells render workers which obstructed window to peek at this frame.
-#[derive(Debug, Clone, PartialEq)]
-pub struct PeekCommand {
-    pub window_index: usize,
-    pub window_rect: ScreenRect,
-    pub captured: bool,
-}
-
-/// Bootstrap messages sent to workers before the render loop starts.
-pub enum WorkerInput {
-    Screenshot(Arc<CapturedDesktop>),
-    Handoff(WindowHandoff),
-}
-
-/// Window + surface pair created on the main thread and delivered to a
-/// render worker via the bootstrap channel.
-pub struct WindowHandoff {
-    pub window: Arc<Window>,
-    pub surface: wgpu::Surface<'static>,
-}
-
 // ── WindowHandle (main thread side) ─────────────────────────────────
 
 /// Handle to a render thread, held by the main thread. Dropping it sends
 /// `Shutdown` and joins the thread.
-pub struct WindowHandle {
-    pub window: Arc<Window>,
-    pub monitor_bounds: ScreenRect,
-    tx: mpsc::Sender<RenderMsg>,
-    thread: Option<JoinHandle<()>>,
-    #[cfg(target_os = "macos")]
-    pub render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
-}
-
-impl WindowHandle {
-    pub fn new(
-        window: Arc<Window>,
-        monitor_bounds: ScreenRect,
-        tx: mpsc::Sender<RenderMsg>,
-        thread: JoinHandle<()>,
-        #[cfg(target_os = "macos")] render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
-    ) -> Self {
-        Self {
-            window,
-            monitor_bounds,
-            tx,
-            thread: Some(thread),
-            #[cfg(target_os = "macos")]
-            render_subview,
-        }
-    }
-
-    pub fn resize(&self, size: PhysicalSize<u32>) {
-        let _ = self.tx.send(RenderMsg::Resize(size));
-    }
-
-    pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32, selection: Option<ScreenRect>, captured: bool) {
-        let _ = self.tx.send(RenderMsg::MouseState {
-            pos,
-            zoom,
-            selection,
-            captured,
-        });
-    }
-
-    pub fn update_ui_state(&self, state: Arc<UiSharedState>) {
-        let _ = self.tx.send(RenderMsg::UiState(state));
-    }
-
-    pub fn update_peek_state(&self, cmd: Option<PeekCommand>) {
-        let _ = self.tx.send(RenderMsg::ShowPeek(cmd));
-    }
-}
-
-impl Drop for WindowHandle {
-    fn drop(&mut self) {
-        let _ = self.tx.send(RenderMsg::Shutdown);
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
-        }
-    }
-}
-
 // ── Worker spawn + lifecycle ────────────────────────────────────────
 
 /// Per-worker parameters built in main() before the event loop starts.
-pub struct RenderWorkerParams {
-    pub monitor: MonitorInfo,
-    pub monitor_index: usize,
-    pub settings: Arc<CapturerSettings>,
-    pub instance: Arc<wgpu::Instance>,
-    pub initial_mouse: ScreenPointF,
-    pub startup: Arc<StartupTimings>,
-    pub shown_time: Arc<OnceLock<Duration>>,
-    pub ready_count: Arc<AtomicUsize>,
-    pub visible_latch: Arc<VisibleLatch>,
-}
-
-/// Returned from `spawn_render_worker` so the caller can send bootstrap
-/// messages and later build a `WindowHandle`.
-pub struct WorkerSetup {
-    pub input_tx: mpsc::Sender<WorkerInput>,
-    pub render_msg_tx: mpsc::Sender<RenderMsg>,
-    pub thread: JoinHandle<()>,
-    pub monitor_bounds: ScreenRect,
-}
-
-pub fn spawn_render_worker(params: RenderWorkerParams) -> WorkerSetup {
-    let (input_tx, input_rx) = mpsc::channel();
-    let (render_msg_tx, render_msg_rx) = mpsc::channel();
-    let monitor_bounds = params.monitor.bounds;
-    let thread_name = format!("render-worker-{}", params.monitor_index);
-    let thread = thread::Builder::new()
-        .name(thread_name)
-        .spawn(move || {
-            render_worker_main(params, input_rx, render_msg_rx);
-        })
-        .expect("spawn render worker");
-    WorkerSetup {
-        input_tx,
-        render_msg_tx,
-        thread,
-        monitor_bounds,
-    }
-}
-
 fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<WorkerInput>, msg_rx: mpsc::Receiver<RenderMsg>) {
     let RenderWorkerParams {
         monitor,
@@ -233,7 +97,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
     // ── Event-driven wait for Screenshot + Handoff ──────────────────
 
-    let mut snapshot: Option<Arc<gpu::DesktopSnapshot>> = None;
+    let mut snapshot: Option<Arc<gpu::desktop::DesktopSnapshot>> = None;
     let mut handoff: Option<WindowHandoff> = None;
 
     while snapshot.is_none() || handoff.is_none() {
@@ -242,7 +106,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                 startup.background.workers[monitor_index]
                     .upload_start
                     .set_once(startup.t_start.elapsed());
-                snapshot = gpu::stage_b_upload_snapshot(
+                snapshot = gpu::desktop::upload_snapshot(
                     &bundle.device,
                     &bundle.queue,
                     &captured,
@@ -684,234 +548,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
 // ── Peek texture storage ────────────────────────────────────────────
 
-struct PeekTextureEntry {
-    _texture: wgpu::Texture,
-    view: wgpu::TextureView,
-    window_rect: ScreenRect,
-    obstruction_rects: Vec<ScreenRect>,
-    width: u32,
-    height: u32,
-    crop_x: i32,
-    crop_y: i32,
-}
-
 // ── Per-window snapshot state (unchanged) ───────────────────────────
 
-struct SnapshotState {
-    ubo: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
-    uniforms: WindowUniforms,
-    base_uv_offset_scale: [f32; 4],
-}
-
-struct FrameState {
-    monitor_bounds: ScreenRect,
-    mouse_pos: ScreenPointF,
-    zoom: f32,
-    selection: Option<ScreenRect>,
-    captured: bool,
-    overlays_visible: bool,
-    elapsed: f32,
-    surface_size: (u32, u32),
-}
-
-impl SnapshotState {
-    fn update_uniforms(&mut self, queue: &wgpu::Queue, frame: &FrameState) {
-        let FrameState {
-            monitor_bounds,
-            mouse_pos,
-            zoom,
-            selection,
-            captured,
-            overlays_visible,
-            elapsed,
-            surface_size,
-        } = *frame;
-
-        if !overlays_visible {
-            self.uniforms.params[0] = 0.0;
-            let local = WindowPoint::new(
-                mouse_pos.x - monitor_bounds.min_x() as f32,
-                mouse_pos.y - monitor_bounds.min_y() as f32,
-            );
-            self.uniforms.params[1] = -1.0;
-            self.uniforms.params[2] = -1.0;
-            if zoom <= 1.0 {
-                self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
-            } else {
-                let w = surface_size.0 as f32;
-                let h = surface_size.1 as f32;
-                let cu = local.x / w;
-                let cv = local.y / h;
-                let k = 1.0 - 1.0 / zoom;
-                let base = self.base_uv_offset_scale;
-                self.uniforms.uv_offset_scale = [
-                    base[0] + base[2] * cu * k,
-                    base[1] + base[3] * cv * k,
-                    base[2] / zoom,
-                    base[3] / zoom,
-                ];
-            }
-            self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
-            self.uniforms.selection_params[0] = elapsed;
-            self.uniforms.selection_params[1] = 0.0;
-            self.uniforms.selection_params[2] = zoom;
-            queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
-            return;
-        }
-
-        let fade = {
-            let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
-            let inv = 1.0 - t;
-            1.0 - inv * inv * inv * inv
-        };
-        self.uniforms.params[0] = fade;
-
-        let local = WindowPoint::new(
-            mouse_pos.x - monitor_bounds.min_x() as f32,
-            mouse_pos.y - monitor_bounds.min_y() as f32,
-        );
-        self.uniforms.params[1] = local.x;
-        self.uniforms.params[2] = local.y;
-
-        if zoom <= 1.0 {
-            self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
-        } else {
-            let w = surface_size.0 as f32;
-            let h = surface_size.1 as f32;
-            let cu = local.x / w;
-            let cv = local.y / h;
-            let k = 1.0 - 1.0 / zoom;
-            let base = self.base_uv_offset_scale;
-            self.uniforms.uv_offset_scale = [
-                base[0] + base[2] * cu * k,
-                base[1] + base[3] * cv * k,
-                base[2] / zoom,
-                base[3] / zoom,
-            ];
-        }
-
-        if let Some(sel) = selection {
-            let cx = mouse_pos.x;
-            let cy = mouse_pos.y;
-            let local_cursor = WindowPoint::new(cx - monitor_bounds.min_x() as f32, cy - monitor_bounds.min_y() as f32);
-            let to_local =
-                |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y) };
-            let (l, t) = to_local(sel.left() as f32, sel.top() as f32);
-            let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
-            self.uniforms.selection_rect = [l, t, r, b];
-        } else {
-            self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
-        }
-
-        self.uniforms.selection_params[0] = elapsed;
-        self.uniforms.selection_params[1] = if captured { 1.0 } else { 0.0 };
-        self.uniforms.selection_params[2] = zoom;
-
-        queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
-    }
-}
-
 // ── draw_once (unchanged) ───────────────────────────────────────────
-
-#[allow(clippy::too_many_arguments)]
-fn draw_once(
-    surface: &wgpu::Surface<'static>,
-    gpu: &WindowGpu,
-    config: &wgpu::SurfaceConfiguration,
-    snapshot_state: Option<&SnapshotState>,
-    peek_bind_group: Option<&wgpu::BindGroup>,
-    ui_renderer: &mut UiRenderer,
-    perf: &PerfTracker,
-    gpu_timing: Option<&GpuTimings>,
-    out_sample: &mut Option<PerfSample>,
-) {
-    let t_wait_start = Instant::now();
-    let frame = match surface.get_current_texture() {
-        wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
-        wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return,
-        wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-            surface.configure(&gpu.device, config);
-            return;
-        }
-        wgpu::CurrentSurfaceTexture::Validation => return,
-    };
-    let wait = t_wait_start.elapsed();
-
-    let t_draw_start = Instant::now();
-    let view = frame
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("frame encoder"),
-        });
-
-    ui_renderer.prepare(&gpu.device, &gpu.queue, (config.width, config.height), perf);
-
-    let begin_frame = gpu_timing.and_then(|gt| gt.begin_frame());
-    let (pass_ts, slot_id) = match &begin_frame {
-        Some(bf) => (Some(bf.pass.clone()), Some(bf.id)),
-        None => (None, None),
-    };
-
-    {
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("frame pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                depth_slice: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.05,
-                        g: 0.05,
-                        b: 0.08,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: pass_ts,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        rpass.set_pipeline(&gpu.pipeline);
-        if let Some(state) = snapshot_state {
-            rpass.set_bind_group(0, &state.bind_group, &[]);
-            rpass.draw(0..3, 0..1);
-        }
-        if let Some(peek_bg) = peek_bind_group {
-            rpass.set_pipeline(&gpu.peek_pipeline);
-            rpass.set_bind_group(0, peek_bg, &[]);
-            rpass.draw(0..6, 0..1);
-        }
-        ui_renderer.draw(&mut rpass);
-    }
-
-    if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
-        gt.resolve(&mut encoder, id);
-    }
-
-    gpu.queue
-        .submit(std::iter::once(encoder.finish()));
-    if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
-        gt.after_submit(id);
-    }
-    ui_renderer.trim();
-    let draw = t_draw_start.elapsed();
-
-    let t_present_start = Instant::now();
-    frame.present();
-    let present = t_present_start.elapsed();
-
-    *out_sample = Some(PerfSample {
-        wait,
-        draw,
-        present,
-        overall: Duration::ZERO,
-        gpu: None,
-    });
-}

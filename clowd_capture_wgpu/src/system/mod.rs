@@ -45,9 +45,9 @@ pub struct HitTestResult {
 pub struct ObstructedWindow {
     pub window_index: usize,
     #[cfg(windows)]
-    pub hwnd: windows::Win32::Foundation::HWND,
+    capture_ref: WindowCaptureRef,
     #[cfg(target_os = "macos")]
-    pub window_id: u32,
+    capture_ref: WindowCaptureRef,
     /// DWM extended frame bounds (true visual bounds).
     pub rect: ScreenRect,
     #[allow(dead_code)]
@@ -55,14 +55,33 @@ pub struct ObstructedWindow {
     pub obstruction_rects: Vec<ScreenRect>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct WindowCaptureRef {
+    #[cfg(windows)]
+    hwnd: windows::Win32::Foundation::HWND,
+    #[cfg(target_os = "macos")]
+    window_id: u32,
+}
+
 #[cfg(windows)]
-unsafe impl Send for ObstructedWindow {}
-#[cfg(windows)]
-unsafe impl Sync for ObstructedWindow {}
+impl WindowCaptureRef {
+    pub(crate) fn from_hwnd(hwnd: windows::Win32::Foundation::HWND) -> Self {
+        Self {
+            hwnd,
+        }
+    }
+}
 
 #[cfg(target_os = "macos")]
+impl WindowCaptureRef {
+    pub(crate) fn from_window_id(window_id: u32) -> Self {
+        Self {
+            window_id,
+        }
+    }
+}
+
 unsafe impl Send for ObstructedWindow {}
-#[cfg(target_os = "macos")]
 unsafe impl Sync for ObstructedWindow {}
 
 /// A captured window image ready for GPU upload by render workers.
@@ -253,6 +272,30 @@ impl SystemInterop {
     pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32) -> WindowWalker {
         WindowWalker::snapshot(monitors, visibility_threshold)
     }
+
+    pub fn capture_peek_image(window: &ObstructedWindow) -> Option<(Vec<u8>, u32, u32)> {
+        win_capture::capture_window_image(window.capture_ref.hwnd, &window.raw_rect)
+    }
+
+    pub fn set_hardware_cursor_visible(visible: bool) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use windows::Win32::UI::WindowsAndMessaging::ShowCursor;
+
+        static HIDDEN: AtomicBool = AtomicBool::new(false);
+
+        let currently_hidden = HIDDEN.load(Ordering::Relaxed);
+        if visible && currently_hidden {
+            unsafe { ShowCursor(true) };
+            HIDDEN.store(false, Ordering::Relaxed);
+        } else if !visible && !currently_hidden {
+            unsafe { ShowCursor(false) };
+            HIDDEN.store(true, Ordering::Relaxed);
+        }
+    }
+
+    pub fn install_pinch_monitor() -> Option<PinchMonitor> {
+        None
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -294,5 +337,77 @@ impl SystemInterop {
 
     pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32) -> WindowWalker {
         WindowWalker::snapshot(monitors, visibility_threshold)
+    }
+
+    pub fn capture_peek_image(window: &ObstructedWindow) -> Option<(Vec<u8>, u32, u32)> {
+        mac_capture::capture_window_image(window.capture_ref.window_id)
+    }
+
+    pub fn set_hardware_cursor_visible(visible: bool) {
+        use core_graphics::display::{CGDisplay, CGMainDisplayID};
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        static HIDDEN: AtomicBool = AtomicBool::new(false);
+
+        let currently_hidden = HIDDEN.load(Ordering::Relaxed);
+        if visible && currently_hidden {
+            unsafe { CGDisplay::new(CGMainDisplayID()).show_cursor() }.ok();
+            HIDDEN.store(false, Ordering::Relaxed);
+        } else if !visible && !currently_hidden {
+            unsafe { CGDisplay::new(CGMainDisplayID()).hide_cursor() }.ok();
+            HIDDEN.store(true, Ordering::Relaxed);
+        }
+    }
+
+    pub fn install_pinch_monitor() -> Option<PinchMonitor> {
+        crate::system::install_pinch_monitor()
+    }
+}
+
+pub struct PinchMonitor {
+    #[cfg(target_os = "macos")]
+    accum: std::sync::Arc<std::sync::Mutex<f64>>,
+    #[cfg(target_os = "macos")]
+    _token: objc2::rc::Retained<objc2::runtime::AnyObject>,
+}
+
+#[cfg(target_os = "macos")]
+fn install_pinch_monitor() -> Option<PinchMonitor> {
+    use block2::RcBlock;
+    use core::ptr::NonNull;
+    use objc2_app_kit::{NSEvent, NSEventMask};
+    use std::sync::{Arc, Mutex};
+
+    let accum = Arc::new(Mutex::new(0.0f64));
+    let accum_clone = accum.clone();
+
+    let block = RcBlock::new(move |event: NonNull<NSEvent>| -> *mut NSEvent {
+        let mag = unsafe { event.as_ref().magnification() };
+        if let Ok(mut g) = accum_clone.lock() {
+            *g += mag;
+        }
+        core::ptr::null_mut()
+    });
+
+    let token = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::Magnify, &block) }?;
+
+    Some(PinchMonitor {
+        accum,
+        _token: token,
+    })
+}
+
+impl PinchMonitor {
+    #[cfg(target_os = "macos")]
+    pub fn drain(&self) -> f64 {
+        let mut g = self.accum.lock().unwrap();
+        let v = *g;
+        *g = 0.0;
+        v
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn drain(&self) -> f64 {
+        0.0
     }
 }

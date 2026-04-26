@@ -290,3 +290,44 @@ pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[MonitorInfo]) 
     p.x = p.x.clamp(min_x, max_x);
     p.y = p.y.clamp(min_y, max_y);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hit_test_prefers_corner_handles_before_edges() {
+        let sel = ScreenRect::from_xy_size(100, 100, 50, 40);
+        let cursor = ScreenPointF::new(100.0, 100.0);
+
+        assert_eq!(hit_test(cursor, sel, 1.0), Hittest::TopLeft);
+    }
+
+    #[test]
+    fn hit_test_detects_inside_and_outside() {
+        let sel = ScreenRect::from_xy_size(100, 100, 50, 40);
+
+        assert_eq!(hit_test(ScreenPointF::new(120.0, 120.0), sel, 1.0), Hittest::Inside);
+        assert_eq!(hit_test(ScreenPointF::new(10.0, 10.0), sel, 1.0), Hittest::Outside);
+    }
+
+    #[test]
+    fn move_and_crop_clips_to_virtual_desktop() {
+        let vd = ScreenRect::from_xy_size(0, 0, 100, 100);
+        let sel = ScreenRect::from_xy_size(80, 10, 30, 20);
+
+        let moved = move_and_crop(sel, 10, 0, vd).expect("partially visible rect should be clipped");
+
+        assert_eq!(moved, ScreenRect::from_exact(90, 10, 100, 30));
+    }
+
+    #[test]
+    fn resize_with_clamp_normalises_when_dragged_past_opposite_edge() {
+        let vd = ScreenRect::from_xy_size(0, 0, 100, 100);
+        let sel = ScreenRect::from_xy_size(20, 20, 30, 30);
+
+        let resized = resize_with_clamp(sel, Hittest::Right, 10, 0, vd);
+
+        assert_eq!(resized, ScreenRect::from_exact(10, 20, 20, 50));
+    }
+}

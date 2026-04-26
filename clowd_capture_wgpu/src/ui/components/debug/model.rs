@@ -7,8 +7,9 @@ use std::fmt::{Arguments, Write};
 use std::time::Duration;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
-use crate::ui::components::debug::perf::{PerfStats, PerfTracker, Series};
-use crate::ui::components::debug::startup::StartupTimings;
+use crate::telemetry::perf::PerfTracker;
+use crate::telemetry::perf::{PerfStats, Series};
+use crate::telemetry::startup::StartupTimings;
 
 pub const COLOR_WHITE: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
 

@@ -27,7 +27,7 @@ use windows::{
     },
 };
 
-use super::{HitTestResult, ObstructedWindow};
+use super::{HitTestResult, ObstructedWindow, WindowCaptureRef};
 use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
@@ -258,7 +258,7 @@ impl WindowWalker {
             .filter(|(_, w)| w.obstructed)
             .map(|(i, w)| ObstructedWindow {
                 window_index: i,
-                hwnd: w.hwnd,
+                capture_ref: WindowCaptureRef::from_hwnd(w.hwnd),
                 rect: w.rect,
                 raw_rect: w.raw_rect,
                 obstruction_rects: w.obstruction_rects.clone(),

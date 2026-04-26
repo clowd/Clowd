@@ -66,8 +66,8 @@ impl RectPipeline {
             const PS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_rect_ps.dxbc"));
             unsafe {
                 (
-                    crate::gpu::create_passthrough_module(device, "ui_rect VS", VS),
-                    crate::gpu::create_passthrough_module(device, "ui_rect FS", PS),
+                    crate::gpu::pipeline::create_passthrough_module(device, "ui_rect VS", VS),
+                    crate::gpu::pipeline::create_passthrough_module(device, "ui_rect FS", PS),
                 )
             }
         };

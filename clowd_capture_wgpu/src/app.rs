@@ -11,47 +11,25 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
+use crate::capture_output::{copy_to_clipboard_with_peek, ActionResult};
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded, WindowPoint};
 use crate::gpu;
-use crate::img::{self, ActionResult};
-use crate::platform;
-use crate::render::{PeekCommand, WindowHandle, WindowHandoff, WorkerInput, WorkerSetup};
+use crate::interaction::{InteractionController, InteractionEffects, InteractionState};
+use crate::render::protocol::{PeekCommand, WindowHandoff, WorkerInput};
+use crate::render::window::{self, WindowHandle};
+use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
 use crate::settings::CapturerSettings;
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
+use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
-use crate::ui::components::debug::startup::StartupTimings;
 use crate::ui::components::panel;
-use crate::ui::shared::{UiMonitor, UiSharedState};
+use crate::ui_state::{build_ui_shared_state, cursor_point, UiStateBuildInput};
 
-const ZOOM_MIN: f32 = 1.0;
-const ZOOM_MAX: f32 = 256.0;
 const ZOOM_STEP: f32 = 2.0;
 const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
 const MOMENTUM_GAP: Duration = Duration::from_millis(50);
-
-struct InputState {
-    virtual_cursor: ScreenPointF,
-    zoom: f32,
-    anchored: bool,
-    anchor_just_engaged: bool,
-    anchor: ScreenPoint,
-    mouse_down: bool,
-    mouse_down_pt: Option<ScreenPointF>,
-    mouse_down_dpi: f32,
-    dragging: bool,
-    selection: Option<ScreenRect>,
-    captured: bool,
-    hittest: Hittest,
-    drag_mode: Option<DragMode>,
-    drag_anchor_selection: Option<ScreenRect>,
-    tips_visible: bool,
-    debug_visible: bool,
-    last_scroll_end: Option<Instant>,
-    scroll_momentum: bool,
-    overlays_visible: bool,
-}
 
 pub struct App {
     settings: Arc<CapturerSettings>,
@@ -64,7 +42,7 @@ pub struct App {
     /// cleared on reset.
     locked_peek: Option<PeekCommand>,
     vd_bounds: ScreenRect,
-    input: InputState,
+    input: InteractionState,
     desktop_buffer: Option<Arc<CapturedDesktop>>,
     walker: Option<Arc<WindowWalker>>,
     /// Peek images collected from the walker thread, keyed by window_index.
@@ -73,7 +51,7 @@ pub struct App {
     pending_show: Option<PendingShow>,
     startup: Arc<StartupTimings>,
     shown_time: Arc<OnceLock<Duration>>,
-    pinch_monitor: Option<platform::PinchMonitor>,
+    pinch_monitor: Option<crate::system::PinchMonitor>,
 
     // Parallel bootstrap state — consumed in resumed().
     instance: Arc<wgpu::Instance>,
@@ -155,7 +133,7 @@ impl App {
             worker_setups: Some(worker_setups),
             walker_latch,
             peek_images_latch,
-            input: InputState {
+            input: InteractionState {
                 virtual_cursor: initial_mouse,
                 zoom: 1.0,
                 anchored: false,
@@ -202,36 +180,19 @@ impl App {
     }
 
     fn apply_zoom_factor(&mut self, factor: f32) {
-        if !factor.is_finite() || factor <= 0.0 {
-            return;
-        }
-        let new_zoom = (self.input.zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
-        if (new_zoom - self.input.zoom).abs() < f32::EPSILON {
-            return;
-        }
-
-        if !self.input.anchored && new_zoom > 1.0 {
-            self.input.anchored = true;
-            self.input.anchor_just_engaged = true;
-            SystemInterop::set_mouse_position(self.input.anchor, &self.monitors);
-        }
-
-        self.input.zoom = new_zoom;
-        self.broadcast_mouse_state();
-        if self.input.debug_visible {
-            self.broadcast_ui_state();
-        }
+        let effects = InteractionController::apply_zoom_factor(&mut self.input, factor);
+        self.apply_interaction_effects(effects, None);
     }
 
     fn hide_all_windows(&self) {
         for h in self.windows.values() {
-            h.window.set_visible(false);
+            h.set_visible(false);
         }
     }
 
     fn show_all_windows(&self) {
         for h in self.windows.values() {
-            h.window.set_visible(true);
+            h.set_visible(true);
         }
         self.update_cursor_visibility();
     }
@@ -240,12 +201,12 @@ impl App {
         let visible = self.input.captured || self.input.debug_visible;
         // Windows: winit's set_cursor_visible races when broadcast across
         // overlapping desktop-spanning windows — skip it and rely on the
-        // global Win32 ShowCursor call below. See platform.rs.
+        // global Win32 ShowCursor call below.
         #[cfg(not(windows))]
         for h in self.windows.values() {
-            h.window.set_cursor_visible(visible);
+            h.set_cursor_visible(visible);
         }
-        platform::set_hardware_cursor_visible(visible);
+        SystemInterop::set_hardware_cursor_visible(visible);
     }
 
     fn current_panel_layout(&self) -> Option<crate::ui::components::panel::layout::PanelLayout> {
@@ -263,8 +224,7 @@ impl App {
     }
 
     fn broadcast_ui_state(&mut self) {
-        let cursor = self.input.virtual_cursor;
-        let cursor_pt = ScreenPoint::new(cursor.x.floor() as i32, cursor.y.floor() as i32);
+        let cursor_pt = cursor_point(self.input.virtual_cursor);
 
         let hovered_monitor_name = self
             .monitors
@@ -285,23 +245,8 @@ impl App {
             .as_ref()
             .is_some_and(|h| h.obstructed);
 
-        let hovered_pixel_bgra = self
-            .desktop_buffer
-            .as_deref()
-            .and_then(|buf| sample_bgra(buf, cursor_pt));
-
-        let monitors: Arc<[UiMonitor]> = self
-            .monitors
-            .iter()
-            .map(|m| UiMonitor {
-                bounds: m.bounds,
-                dpi_scale: m.scale_factor,
-                is_primary: m.is_primary,
-            })
-            .collect();
-
-        let state = Arc::new(UiSharedState {
-            monitors,
+        let state = Arc::new(build_ui_shared_state(UiStateBuildInput {
+            monitors: &self.monitors,
             selection: self.input.selection,
             captured: self.input.captured,
             mouse_down: self.input.mouse_down,
@@ -317,8 +262,8 @@ impl App {
             hovered_window_bounds,
             hovered_window_index,
             hovered_window_obstructed,
-            hovered_pixel_bgra,
-        });
+            desktop_buffer: self.desktop_buffer.as_deref(),
+        }));
 
         for h in self.windows.values() {
             h.update_ui_state(state.clone());
@@ -346,15 +291,15 @@ impl App {
         }
     }
 
-    fn finalise_selection(&mut self, rect: ScreenRect, window: &Window) {
-        self.finalise_selection_inner(rect, window, false);
+    fn finalise_selection(&mut self, rect: ScreenRect, window_id: WindowId) {
+        self.finalise_selection_inner(rect, window_id, false);
     }
 
-    fn finalise_selection_with_peek(&mut self, rect: ScreenRect, window: &Window) {
-        self.finalise_selection_inner(rect, window, true);
+    fn finalise_selection_with_peek(&mut self, rect: ScreenRect, window_id: WindowId) {
+        self.finalise_selection_inner(rect, window_id, true);
     }
 
-    fn finalise_selection_inner(&mut self, rect: ScreenRect, window: &Window, lock_peek: bool) {
+    fn finalise_selection_inner(&mut self, rect: ScreenRect, window_id: WindowId, lock_peek: bool) {
         if lock_peek {
             self.locked_peek = self
                 .cached_peek_command
@@ -368,48 +313,14 @@ impl App {
             self.locked_peek = None;
         }
 
-        self.input.selection = Some(rect);
-        self.input.mouse_down = false;
-        self.input.mouse_down_pt = None;
-        self.input.dragging = false;
-        self.input.drag_mode = None;
-        self.input.drag_anchor_selection = None;
-        self.input.captured = true;
-        self.input.overlays_visible = true;
-        self.update_cursor_visibility();
-
-        if self.input.anchored {
-            self.input.anchored = false;
-            self.input.anchor_just_engaged = false;
-            let restore = ScreenPoint::new(
-                self.input.virtual_cursor.x.floor() as i32,
-                self.input.virtual_cursor.y.floor() as i32,
-            );
-            SystemInterop::set_mouse_position(restore, &self.monitors);
-        }
-        self.input.zoom = 1.0;
-
-        let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
-        let ht = hit_test(self.input.virtual_cursor, rect, dpi);
-        self.input.hittest = ht;
-        window.set_cursor(ht.cursor());
-
-        self.broadcast_ui_state();
-        self.broadcast_mouse_state();
+        let effects = InteractionController::finalize_selection(&mut self.input, rect, &self.monitors);
+        self.apply_interaction_effects(effects, Some(window_id));
     }
 
-    fn handle_reset(&mut self, window: &Window) {
+    fn handle_reset(&mut self, window_id: WindowId) {
         self.locked_peek = None;
-        self.input.selection = None;
-        self.input.captured = false;
-        self.input.hittest = Hittest::Outside;
-        self.input.drag_mode = None;
-        self.input.drag_anchor_selection = None;
-        self.update_cursor_visibility();
-
-        self.broadcast_ui_state();
-
-        window.set_cursor(CursorIcon::Default);
+        let effects = InteractionController::reset(&mut self.input);
+        self.apply_interaction_effects(effects, Some(window_id));
 
         let pt = ScreenPoint::new(
             self.input.virtual_cursor.x.round() as i32,
@@ -425,7 +336,27 @@ impl App {
         log::info!("selection reset");
     }
 
-    fn dispatch_command(&mut self, command: Command, event_loop: &ActiveEventLoop, window: &Window) {
+    fn apply_interaction_effects(&mut self, effects: InteractionEffects, window_id: Option<WindowId>) {
+        if effects.update_cursor_visibility {
+            self.update_cursor_visibility();
+        }
+        if let Some(pos) = effects.restore_mouse {
+            SystemInterop::set_mouse_position(pos, &self.monitors);
+        }
+        if let (Some(window_id), Some(cursor)) = (window_id, effects.set_cursor) {
+            if let Some(window) = self.windows.get(&window_id) {
+                window.set_cursor(cursor);
+            }
+        }
+        if effects.broadcast_ui {
+            self.broadcast_ui_state();
+        }
+        if effects.broadcast_mouse {
+            self.broadcast_mouse_state();
+        }
+    }
+
+    fn dispatch_command(&mut self, command: Command, event_loop: &ActiveEventLoop, window_id: WindowId) {
         use xdialog::XDialogIcon::Error as ErrorIcon;
         log::info!("dispatch command: {:?}", command);
 
@@ -440,7 +371,7 @@ impl App {
             Command::Copy => {
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => img::copy_to_clipboard_with_peek(sel, buf, active_peek_image),
+                    (Some(sel), Some(buf)) => copy_to_clipboard_with_peek(sel, buf, active_peek_image),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
@@ -459,7 +390,10 @@ impl App {
             Command::Save => {
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => img::save_to_file_with_peek(sel, buf, active_peek_image, window),
+                    (Some(sel), Some(buf)) => match self.windows.get(&window_id) {
+                        Some(handle) => handle.save_to_file_with_peek(sel, buf, active_peek_image),
+                        None => ActionResult::Failed("No active window".into()),
+                    },
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
@@ -474,7 +408,7 @@ impl App {
                     }
                 }
             }
-            Command::Reset => self.handle_reset(window),
+            Command::Reset => self.handle_reset(window_id),
             Command::Exit => {
                 self.hide_all_windows();
                 event_loop.exit();
@@ -493,7 +427,7 @@ impl ApplicationHandler for App {
         }
 
         if self.pinch_monitor.is_none() {
-            self.pinch_monitor = platform::install_pinch_monitor();
+            self.pinch_monitor = SystemInterop::install_pinch_monitor();
         }
 
         // Consume worker setups — each one gets a window + surface handoff.
@@ -561,7 +495,7 @@ impl ApplicationHandler for App {
                     continue;
                 }
             };
-            platform::apply_capture_window_tweaks(&window);
+            window::apply_capture_window_tweaks(&window);
             #[cfg(not(windows))]
             window.set_cursor_visible(false);
 
@@ -569,14 +503,14 @@ impl ApplicationHandler for App {
             let screenshot_image = self
                 .desktop_buffer
                 .as_ref()
-                .and_then(|s| platform::crop_screenshot_to_cgimage(s, m.bounds));
+                .and_then(|s| window::crop_screenshot_to_cgimage(s, m.bounds));
             #[cfg(not(target_os = "macos"))]
             let screenshot_image = None;
 
             self.startup.background.workers[i]
                 .surface_start
                 .set_once(self.startup.t_start.elapsed());
-            let bundle = match gpu::create_surface(&self.instance, window.clone(), screenshot_image) {
+            let bundle = match gpu::surface::create_surface(&self.instance, window.clone(), screenshot_image) {
                 Ok(b) => b,
                 Err(e) => {
                     error!("failed to create surface for monitor {i}: {e:?}");
@@ -617,7 +551,7 @@ impl ApplicationHandler for App {
 
         self.startup.mark_window_create();
         self.windows = handles;
-        platform::set_hardware_cursor_visible(false);
+        SystemInterop::set_hardware_cursor_visible(false);
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
@@ -643,13 +577,13 @@ impl ApplicationHandler for App {
         if let Some(ref pending) = self.pending_show {
             if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
                 self.startup.mark_show_start();
-                platform::show_windows_atomically(self.windows.values());
+                window::show_windows_atomically(self.windows.values());
                 let _ = self
                     .shown_time
                     .set(self.startup.t_start.elapsed());
                 if let Some(first_id) = self.monitor_window_ids.first() {
                     if let Some(h) = self.windows.get(first_id) {
-                        h.window.focus_window();
+                        h.focus();
                     }
                 }
                 self.update_cursor_visibility();
@@ -662,11 +596,10 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
-        let (window, this_monitor_bounds) = match self.windows.get(&id) {
-            Some(h) => (h.window.clone(), h.monitor_bounds),
+        let this_monitor_bounds = match self.windows.get(&id) {
+            Some(h) => h.monitor_bounds(),
             None => return,
         };
-        let handle_window = &window;
         let handle_monitor_bounds = this_monitor_bounds;
 
         match event {
@@ -704,7 +637,7 @@ impl ApplicationHandler for App {
                         self.broadcast_ui_state();
                     } else if self.input.captured {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
-                            self.dispatch_command(cmd, event_loop, handle_window);
+                            self.dispatch_command(cmd, event_loop, id);
                         }
                     } else if self.input.mouse_down {
                         // Mid-drag: swallow keys.
@@ -729,7 +662,7 @@ impl ApplicationHandler for App {
                                     .as_ref()
                                     .and_then(|w| w.hit_test(pt))
                                 {
-                                    self.finalise_selection_with_peek(rect, handle_window);
+                                    self.finalise_selection_with_peek(rect, id);
                                 }
                             }
                             'f' => {
@@ -743,11 +676,11 @@ impl ApplicationHandler for App {
                                     .find(|m| m.bounds.contains(pt))
                                     .map(|m| m.bounds)
                                 {
-                                    self.finalise_selection(bounds, handle_window);
+                                    self.finalise_selection(bounds, id);
                                 }
                             }
                             'a' => {
-                                self.finalise_selection(self.vd_bounds, handle_window);
+                                self.finalise_selection(self.vd_bounds, id);
                             }
                             _ => {}
                         }
@@ -851,7 +784,9 @@ impl ApplicationHandler for App {
                         let ht = hit_test(self.input.virtual_cursor, sel, dpi);
                         if ht != self.input.hittest {
                             self.input.hittest = ht;
-                            handle_window.set_cursor(ht.cursor());
+                            if let Some(handle) = self.windows.get(&id) {
+                                handle.set_cursor(ht.cursor());
+                            }
                         }
 
                         let pos = self.input.virtual_cursor;
@@ -864,7 +799,9 @@ impl ApplicationHandler for App {
                         } else {
                             self.input.hittest.cursor()
                         };
-                        handle_window.set_cursor(cursor);
+                        if let Some(handle) = self.windows.get(&id) {
+                            handle.set_cursor(cursor);
+                        }
                     }
                 }
 
@@ -886,7 +823,7 @@ impl ApplicationHandler for App {
                             if let Some(layout) = self.current_panel_layout() {
                                 if let Some(idx) = layout.hit_test(pos.x, pos.y) {
                                     let cmd = panel::model::button_defs()[idx].command;
-                                    self.dispatch_command(cmd, event_loop, handle_window);
+                                    self.dispatch_command(cmd, event_loop, id);
                                     return;
                                 }
                             }
@@ -922,7 +859,9 @@ impl ApplicationHandler for App {
                             self.input.captured = false;
                             self.input.hittest = Hittest::Outside;
                             self.update_cursor_visibility();
-                            handle_window.set_cursor(CursorIcon::Default);
+                            if let Some(handle) = self.windows.get(&id) {
+                                handle.set_cursor(CursorIcon::Default);
+                            }
                             self.broadcast_ui_state();
                         }
                         if finalising {
@@ -956,7 +895,9 @@ impl ApplicationHandler for App {
                                 let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
                                 let ht = hit_test(self.input.virtual_cursor, sel, dpi);
                                 self.input.hittest = ht;
-                                handle_window.set_cursor(ht.cursor());
+                                if let Some(handle) = self.windows.get(&id) {
+                                    handle.set_cursor(ht.cursor());
+                                }
                             }
                             self.broadcast_ui_state();
                         } else if self.input.captured && self.input.selection.is_some() {
@@ -1026,19 +967,4 @@ impl ApplicationHandler for App {
             _ => {}
         }
     }
-}
-
-fn sample_bgra(buf: &CapturedDesktop, p: ScreenPoint) -> Option<[u8; 4]> {
-    let dx = p.x - buf.bounds.min_x();
-    let dy = p.y - buf.bounds.min_y();
-    if dx < 0 || dy < 0 {
-        return None;
-    }
-    let (w, h) = (buf.width as i32, buf.height as i32);
-    if dx >= w || dy >= h {
-        return None;
-    }
-    let idx = ((dy * w + dx) as usize) * 4;
-    let s = buf.bgra.get(idx..idx + 4)?;
-    Some([s[0], s[1], s[2], s[3]])
 }
