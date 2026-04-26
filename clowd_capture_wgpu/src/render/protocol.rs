@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::geometry::{ScreenPointF, ScreenRect};
@@ -9,7 +8,6 @@ use crate::ui::shared::UiSharedState;
 
 /// Messages the main thread sends to a render thread during the frame loop.
 pub enum RenderMsg {
-    Resize(PhysicalSize<u32>),
     MouseState {
         pos: ScreenPointF,
         zoom: f32,

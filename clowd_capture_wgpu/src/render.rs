@@ -149,7 +149,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
     let gpu = gpu::finalise_window_gpu(bundle, snapshot);
 
-    let mut config = wgpu::SurfaceConfiguration {
+    let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format: SURFACE_FORMAT,
         width: (monitor_bounds.width() as u32).max(1),
@@ -283,11 +283,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     loop {
         loop {
             match msg_rx.try_recv() {
-                Ok(RenderMsg::Resize(new_size)) => {
-                    config.width = new_size.width.max(1);
-                    config.height = new_size.height.max(1);
-                    surface.configure(&gpu.device, &config);
-                }
                 Ok(RenderMsg::MouseState {
                     pos,
                     zoom: z,

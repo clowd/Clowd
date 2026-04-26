@@ -1,20 +1,26 @@
+use std::cell::Cell;
+use std::collections::HashMap;
 use std::sync::{mpsc, Arc};
 use std::thread::JoinHandle;
 
-use winit::dpi::PhysicalSize;
-use winit::window::{CursorIcon, Window};
+use anyhow::Result;
+use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture_output::{save_to_file_with_peek, ActionResult};
 use crate::geometry::{ScreenPointF, ScreenRect};
-use crate::render::protocol::{PeekCommand, RenderMsg};
+use crate::render::protocol::{PeekCommand, RenderMsg, WindowHandoff, WorkerInput};
+use crate::render::worker::WorkerSetup;
 use crate::system::{CapturedDesktop, WindowPeekImage};
 use crate::ui::shared::UiSharedState;
+
+// ── WindowHandle ───────────────────────────────────────────────────
 
 pub struct WindowHandle {
     window: Arc<Window>,
     monitor_bounds: ScreenRect,
     tx: mpsc::Sender<RenderMsg>,
     thread: Option<JoinHandle<()>>,
+    shown: Cell<bool>,
     #[cfg(target_os = "macos")]
     render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
 }
@@ -22,32 +28,81 @@ pub struct WindowHandle {
 impl WindowHandle {
     pub fn new(
         window: Arc<Window>,
-        monitor_bounds: ScreenRect,
-        tx: mpsc::Sender<RenderMsg>,
-        thread: JoinHandle<()>,
-        #[cfg(target_os = "macos")] render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
-    ) -> Self {
-        Self {
+        setup: WorkerSetup,
+        instance: &wgpu::Instance,
+        #[cfg(target_os = "macos")] screenshot: Option<&CapturedDesktop>,
+    ) -> Result<Self> {
+        apply_capture_window_tweaks(&window);
+
+        #[cfg(not(windows))]
+        window.set_cursor_visible(false);
+        set_hardware_cursor_visible(false);
+
+        #[cfg(target_os = "macos")]
+        let screenshot_image = screenshot.and_then(|s| crop_screenshot_to_cgimage(s, setup.monitor_bounds));
+        #[cfg(not(target_os = "macos"))]
+        let screenshot_image: Option<()> = None;
+
+        #[cfg(target_os = "macos")]
+        let (surface, render_subview) = create_surface(instance, window.clone(), screenshot_image)?;
+        #[cfg(not(target_os = "macos"))]
+        let surface = create_surface(instance, window.clone(), screenshot_image)?;
+
+        let _ = setup.input_tx.send(WorkerInput::Handoff(WindowHandoff {
+            window: window.clone(),
+            surface,
+        }));
+
+        Ok(Self {
             window,
-            monitor_bounds,
-            tx,
-            thread: Some(thread),
+            monitor_bounds: setup.monitor_bounds,
+            tx: setup.render_msg_tx,
+            thread: Some(setup.thread),
+            shown: Cell::new(false),
             #[cfg(target_os = "macos")]
             render_subview,
-        }
+        })
+    }
+
+    pub fn window_id(&self) -> WindowId {
+        self.window.id()
     }
 
     pub fn monitor_bounds(&self) -> ScreenRect {
         self.monitor_bounds
     }
 
-    pub fn set_visible(&self, visible: bool) {
-        self.window.set_visible(visible);
+    pub fn show(&self) {
+        if !self.shown.get() {
+            #[cfg(target_os = "macos")]
+            if let Some(ref subview) = self.render_subview {
+                if let Some(layer) = subview.layer() {
+                    layer.setOpacity(1.0);
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            self.window.set_visible(true);
+
+            self.shown.set(true);
+        } else {
+            self.window.set_visible(true);
+        }
     }
 
-    #[cfg(not(windows))]
-    pub fn set_cursor_visible(&self, visible: bool) {
-        self.window.set_cursor_visible(visible);
+    pub fn hide(&self) {
+        self.window.set_visible(false);
+    }
+
+    pub fn show_cursor(&self) {
+        #[cfg(not(windows))]
+        self.window.set_cursor_visible(true);
+        set_hardware_cursor_visible(true);
+    }
+
+    pub fn hide_cursor(&self) {
+        #[cfg(not(windows))]
+        self.window.set_cursor_visible(false);
+        set_hardware_cursor_visible(false);
     }
 
     pub fn set_cursor(&self, cursor: CursorIcon) {
@@ -60,10 +115,6 @@ impl WindowHandle {
 
     pub fn save_to_file_with_peek(&self, selection: ScreenRect, buffer: &CapturedDesktop, peek: Option<&WindowPeekImage>) -> ActionResult {
         save_to_file_with_peek(selection, buffer, peek, &self.window)
-    }
-
-    pub fn resize(&self, size: PhysicalSize<u32>) {
-        let _ = self.tx.send(RenderMsg::Resize(size));
     }
 
     pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32, selection: Option<ScreenRect>, captured: bool) {
@@ -93,8 +144,72 @@ impl Drop for WindowHandle {
     }
 }
 
+// ── WindowSet ──────────────────────────────────────────────────────
+
+pub struct WindowSet {
+    map: HashMap<WindowId, WindowHandle>,
+    order: Vec<WindowId>,
+}
+
+impl WindowSet {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            order: Vec::new(),
+        }
+    }
+
+    pub fn insert(&mut self, handle: WindowHandle) {
+        let id = handle.window_id();
+        self.order.push(id);
+        self.map.insert(id, handle);
+    }
+
+    pub fn get(&self, id: &WindowId) -> Option<&WindowHandle> {
+        self.map.get(id)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &WindowHandle> {
+        self.map.values()
+    }
+
+    pub fn first(&self) -> Option<&WindowHandle> {
+        self.order.first().and_then(|id| self.map.get(id))
+    }
+
+    pub fn show_all(&self) {
+        for h in self.map.values() {
+            h.show();
+        }
+    }
+
+    pub fn hide_all(&self) {
+        for h in self.map.values() {
+            h.hide();
+        }
+    }
+
+    pub fn show_cursors(&self) {
+        for h in self.map.values() {
+            h.show_cursor();
+        }
+    }
+
+    pub fn hide_cursors(&self) {
+        for h in self.map.values() {
+            h.hide_cursor();
+        }
+    }
+}
+
+// ── Platform: window tweaks (private) ──────────────────────────────
+
 #[cfg(windows)]
-pub fn apply_capture_window_tweaks(window: &Window) {
+fn apply_capture_window_tweaks(window: &Window) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_EXCLUDED_FROM_PEEK, DWMWA_TRANSITIONS_FORCEDISABLED};
     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -116,7 +231,7 @@ pub fn apply_capture_window_tweaks(window: &Window) {
 }
 
 #[cfg(target_os = "macos")]
-pub fn apply_capture_window_tweaks(window: &Window) {
+fn apply_capture_window_tweaks(window: &Window) {
     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
     let Ok(handle) = window.window_handle() else {
@@ -149,11 +264,110 @@ pub fn apply_capture_window_tweaks(window: &Window) {
     }
 }
 
+// ── Platform: hardware cursor (private) ────────────────────────────
+
+#[cfg(windows)]
+fn set_hardware_cursor_visible(visible: bool) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use windows::Win32::UI::WindowsAndMessaging::ShowCursor;
+
+    static HIDDEN: AtomicBool = AtomicBool::new(false);
+
+    let currently_hidden = HIDDEN.load(Ordering::Relaxed);
+    if visible && currently_hidden {
+        unsafe { ShowCursor(true) };
+        HIDDEN.store(false, Ordering::Relaxed);
+    } else if !visible && !currently_hidden {
+        unsafe { ShowCursor(false) };
+        HIDDEN.store(true, Ordering::Relaxed);
+    }
+}
+
 #[cfg(target_os = "macos")]
-pub fn crop_screenshot_to_cgimage(
-    screenshot: &crate::system::CapturedDesktop,
-    monitor_bounds: crate::geometry::ScreenRect,
-) -> Option<core_graphics::image::CGImage> {
+fn set_hardware_cursor_visible(visible: bool) {
+    use core_graphics::display::{CGDisplay, CGMainDisplayID};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static HIDDEN: AtomicBool = AtomicBool::new(false);
+
+    let currently_hidden = HIDDEN.load(Ordering::Relaxed);
+    if visible && currently_hidden {
+        unsafe { CGDisplay::new(CGMainDisplayID()).show_cursor() }.ok();
+        HIDDEN.store(false, Ordering::Relaxed);
+    } else if !visible && !currently_hidden {
+        unsafe { CGDisplay::new(CGMainDisplayID()).hide_cursor() }.ok();
+        HIDDEN.store(true, Ordering::Relaxed);
+    }
+}
+
+// ── Platform: surface creation (private) ───────────────────────────
+
+#[cfg(target_os = "macos")]
+fn create_surface(
+    instance: &wgpu::Instance,
+    window: Arc<Window>,
+    screenshot_image: Option<core_graphics::image::CGImage>,
+) -> Result<(wgpu::Surface<'static>, Option<objc2::rc::Retained<objc2_app_kit::NSView>>)> {
+    use objc2::{MainThreadMarker, MainThreadOnly};
+    use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
+    use std::ptr::NonNull;
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let mtm = MainThreadMarker::new().expect("create_surface must be called on the main thread");
+
+    let handle = window.window_handle()?;
+    let RawWindowHandle::AppKit(h) = handle.as_raw() else {
+        anyhow::bail!("expected AppKit window handle");
+    };
+
+    let content_view: &NSView = unsafe { &*(h.ns_view.as_ptr() as *const NSView) };
+    let frame = content_view.frame();
+
+    if let Some(ref cg_image) = screenshot_image {
+        let bg_view = NSView::initWithFrame(NSView::alloc(mtm), frame);
+        bg_view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+        bg_view.setWantsLayer(true);
+        if let Some(layer) = bg_view.layer() {
+            unsafe {
+                let cg_ptr: *const std::ffi::c_void = *(&*cg_image as *const _ as *const *const std::ffi::c_void);
+                layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
+                layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
+            }
+        }
+        content_view.addSubview(&bg_view);
+    }
+
+    let subview = NSView::initWithFrame(NSView::alloc(mtm), frame);
+    subview.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+    content_view.addSubview(&subview);
+    subview.setWantsLayer(true);
+    if let Some(layer) = subview.layer() {
+        layer.setOpacity(0.0);
+    }
+
+    let subview_ptr = NonNull::new(objc2::rc::Retained::as_ptr(&subview) as *mut _).expect("subview pointer is non-null");
+    let raw_window_handle = RawWindowHandle::AppKit(winit::raw_window_handle::AppKitWindowHandle::new(subview_ptr));
+    let raw_display_handle = winit::raw_window_handle::RawDisplayHandle::AppKit(winit::raw_window_handle::AppKitDisplayHandle::new());
+
+    let surface = unsafe {
+        instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+            raw_display_handle: Some(raw_display_handle),
+            raw_window_handle,
+        })?
+    };
+
+    Ok((surface, Some(subview)))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn create_surface(instance: &wgpu::Instance, window: Arc<Window>, _screenshot_image: Option<()>) -> Result<wgpu::Surface<'static>> {
+    Ok(instance.create_surface(window)?)
+}
+
+// ── Platform: screenshot crop (private) ────────────────────────────
+
+#[cfg(target_os = "macos")]
+fn crop_screenshot_to_cgimage(screenshot: &CapturedDesktop, monitor_bounds: ScreenRect) -> Option<core_graphics::image::CGImage> {
     use crate::geometry::RectExt;
     use core_graphics::color_space::CGColorSpace;
     use core_graphics::context::CGContext;
@@ -191,22 +405,4 @@ pub fn crop_screenshot_to_cgimage(
         bitmap_info,
     );
     ctx.create_image()
-}
-
-#[cfg(target_os = "macos")]
-pub fn show_windows_atomically<'a>(handles: impl Iterator<Item = &'a WindowHandle>) {
-    for h in handles {
-        if let Some(ref subview) = h.render_subview {
-            if let Some(layer) = subview.layer() {
-                layer.setOpacity(1.0);
-            }
-        }
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn show_windows_atomically<'a>(handles: impl Iterator<Item = &'a WindowHandle>) {
-    for h in handles {
-        h.set_visible(true);
-    }
 }

@@ -13,10 +13,9 @@ use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture_output::{copy_to_clipboard_with_peek, ActionResult};
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded, WindowPoint};
-use crate::gpu;
 use crate::interaction::{InteractionController, InteractionEffects, InteractionState};
-use crate::render::protocol::{PeekCommand, WindowHandoff, WorkerInput};
-use crate::render::window::{self, WindowHandle};
+use crate::render::protocol::PeekCommand;
+use crate::render::window::{WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
 use crate::settings::CapturerSettings;
@@ -33,8 +32,7 @@ const MOMENTUM_GAP: Duration = Duration::from_millis(50);
 
 pub struct App {
     settings: Arc<CapturerSettings>,
-    windows: HashMap<WindowId, WindowHandle>,
-    monitor_window_ids: Vec<WindowId>,
+    windows: WindowSet,
     monitors: Vec<MonitorInfo>,
     cached_hovered_title: Option<String>,
     cached_peek_command: Option<PeekCommand>,
@@ -111,8 +109,7 @@ impl App {
 
         Self {
             settings,
-            windows: HashMap::new(),
-            monitor_window_ids: Vec::new(),
+            windows: WindowSet::new(),
             monitors,
             cached_hovered_title: None,
             cached_peek_command: None,
@@ -185,28 +182,20 @@ impl App {
     }
 
     fn hide_all_windows(&self) {
-        for h in self.windows.values() {
-            h.set_visible(false);
-        }
+        self.windows.hide_all();
     }
 
     fn show_all_windows(&self) {
-        for h in self.windows.values() {
-            h.set_visible(true);
-        }
+        self.windows.show_all();
         self.update_cursor_visibility();
     }
 
     fn update_cursor_visibility(&self) {
-        let visible = self.input.captured || self.input.debug_visible;
-        // Windows: winit's set_cursor_visible races when broadcast across
-        // overlapping desktop-spanning windows — skip it and rely on the
-        // global Win32 ShowCursor call below.
-        #[cfg(not(windows))]
-        for h in self.windows.values() {
-            h.set_cursor_visible(visible);
+        if self.input.captured || self.input.debug_visible {
+            self.windows.show_cursors();
+        } else {
+            self.windows.hide_cursors();
         }
-        SystemInterop::set_hardware_cursor_visible(visible);
     }
 
     fn current_panel_layout(&self) -> Option<crate::ui::components::panel::layout::PanelLayout> {
@@ -449,10 +438,7 @@ impl ApplicationHandler for App {
             }
         }
 
-        // Create one borderless window per monitor, create a surface for
-        // it, and send the (window, surface) pair to the corresponding
-        // render worker.
-        let mut handles: HashMap<WindowId, WindowHandle> = HashMap::with_capacity(worker_setups.len());
+        let mut windows = WindowSet::new();
         self.startup.mark_window_create_start();
 
         for (i, setup) in worker_setups.into_iter().enumerate() {
@@ -495,25 +481,20 @@ impl ApplicationHandler for App {
                     continue;
                 }
             };
-            window::apply_capture_window_tweaks(&window);
-            #[cfg(not(windows))]
-            window.set_cursor_visible(false);
-
-            #[cfg(target_os = "macos")]
-            let screenshot_image = self
-                .desktop_buffer
-                .as_ref()
-                .and_then(|s| window::crop_screenshot_to_cgimage(s, m.bounds));
-            #[cfg(not(target_os = "macos"))]
-            let screenshot_image = None;
 
             self.startup.background.workers[i]
                 .surface_start
                 .set_once(self.startup.t_start.elapsed());
-            let bundle = match gpu::surface::create_surface(&self.instance, window.clone(), screenshot_image) {
-                Ok(b) => b,
+            let handle = match WindowHandle::new(
+                window,
+                setup,
+                &self.instance,
+                #[cfg(target_os = "macos")]
+                self.desktop_buffer.as_deref(),
+            ) {
+                Ok(h) => h,
                 Err(e) => {
-                    error!("failed to create surface for monitor {i}: {e:?}");
+                    error!("failed to create window handle for monitor {i}: {e:?}");
                     continue;
                 }
             };
@@ -521,37 +502,17 @@ impl ApplicationHandler for App {
                 .surface_bind
                 .set_once(self.startup.t_start.elapsed());
 
-            let id = window.id();
-            let _ = setup
-                .input_tx
-                .send(WorkerInput::Handoff(WindowHandoff {
-                    window: window.clone(),
-                    surface: bundle.surface,
-                }));
-
-            handles.insert(
-                id,
-                WindowHandle::new(
-                    window,
-                    setup.monitor_bounds,
-                    setup.render_msg_tx,
-                    setup.thread,
-                    #[cfg(target_os = "macos")]
-                    bundle.render_subview,
-                ),
-            );
-            self.monitor_window_ids.push(id);
+            windows.insert(handle);
         }
 
-        if handles.is_empty() {
+        if windows.is_empty() {
             error!("no windows created; exiting");
             event_loop.exit();
             return;
         }
 
         self.startup.mark_window_create();
-        self.windows = handles;
-        SystemInterop::set_hardware_cursor_visible(false);
+        self.windows = windows;
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
@@ -577,14 +538,12 @@ impl ApplicationHandler for App {
         if let Some(ref pending) = self.pending_show {
             if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
                 self.startup.mark_show_start();
-                window::show_windows_atomically(self.windows.values());
+                self.windows.show_all();
                 let _ = self
                     .shown_time
                     .set(self.startup.t_start.elapsed());
-                if let Some(first_id) = self.monitor_window_ids.first() {
-                    if let Some(h) = self.windows.get(first_id) {
-                        h.focus();
-                    }
+                if let Some(h) = self.windows.first() {
+                    h.focus();
                 }
                 self.update_cursor_visibility();
                 pending.visible_latch.signal_all();
@@ -685,11 +644,6 @@ impl ApplicationHandler for App {
                             _ => {}
                         }
                     }
-                }
-            }
-            WindowEvent::Resized(new_size) => {
-                if let Some(h) = self.windows.get(&id) {
-                    h.resize(new_size);
                 }
             }
             #[cfg(windows)]

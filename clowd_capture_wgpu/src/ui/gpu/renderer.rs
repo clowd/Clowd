@@ -47,8 +47,8 @@ pub struct UiRenderer {
     startup: Arc<StartupTimings>,
     /// Shared one-shot holding the "all windows visible" timestamp
     /// (offset from `startup.t_start`). The main thread sets it the
-    /// instant `show_windows_atomically` returns; every render thread's
-    /// debug panel reads it. Remains `None` until that moment.
+    /// instant all windows are shown; every render thread's debug panel
+    /// reads it. Remains `None` until that moment.
     shown_time: Arc<OnceLock<Duration>>,
     /// Offset from `startup.t_start` at which THIS display rendered its
     /// first visible (post-barrier) frame. Captured in
