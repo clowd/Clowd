@@ -48,13 +48,18 @@ impl CaptureSession {
             &visible_latch,
         );
 
-        let screenshot_latch = spawn_screenshot_job(monitors.clone(), captured_cursor, &worker_setups, startup.clone());
+        let screenshot_latch = spawn_screenshot_job(
+            monitors.clone(),
+            captured_cursor,
+            &worker_setups,
+            settings.obscured_window_peek_enabled,
+            startup.clone(),
+        );
         let (walker_latch, peek_images_latch) = spawn_walker_job(
             monitors.clone(),
             &worker_setups,
             settings.obscured_window_peek_enabled,
             settings.obscured_window_detection_threshold,
-            screenshot_latch.clone(),
             startup.clone(),
         );
 
@@ -141,13 +146,12 @@ fn spawn_screenshot_job(
     monitors: Vec<MonitorInfo>,
     cursor: Option<CapturedCursor>,
     worker_setups: &[WorkerSetup],
+    peek_enabled: bool,
     startup: Arc<StartupTimings>,
 ) -> Arc<Latch<Arc<CapturedDesktop>>> {
     let screenshot_latch = Arc::new(Latch::new());
-    let input_txs: Vec<_> = worker_setups
-        .iter()
-        .map(|s| s.input_tx.clone())
-        .collect();
+    let input_txs: Vec<_> = worker_setups.iter().map(|s| s.input_tx.clone()).collect();
+    let render_msg_txs: Vec<_> = worker_setups.iter().map(|s| s.render_msg_tx.clone()).collect();
     let latch = screenshot_latch.clone();
     std::thread::Builder::new()
         .name("screenshot".into())
@@ -165,6 +169,18 @@ fn spawn_screenshot_job(
             for tx in &input_txs {
                 let _ = tx.send(WorkerInput::Screenshot(captured.clone()));
             }
+            if peek_enabled {
+                let blurred = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 6.0);
+                let blurred = Arc::new(BlurredDesktopImage {
+                    bgra: blurred,
+                    width: captured.width,
+                    height: captured.height,
+                });
+                for tx in &render_msg_txs {
+                    let _ = tx.send(RenderMsg::BlurredDesktop(blurred.clone()));
+                }
+                info!("screenshot: desktop blur complete");
+            }
         })
         .expect("spawn screenshot thread");
     screenshot_latch
@@ -175,7 +191,6 @@ fn spawn_walker_job(
     worker_setups: &[WorkerSetup],
     peek_enabled: bool,
     visibility_threshold: f32,
-    screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
     startup: Arc<StartupTimings>,
 ) -> (Arc<Latch<Arc<WindowWalker>>>, Arc<Latch<Vec<Arc<WindowPeekImage>>>>) {
     let walker_latch = Arc::new(Latch::new());
@@ -206,18 +221,6 @@ fn spawn_walker_job(
                 return;
             }
 
-            let desktop = screenshot_latch.wait();
-            let blurred = image_extract::blur_desktop_bgra(&desktop.bgra, desktop.width, desktop.height, 6.0);
-            let blurred = Arc::new(BlurredDesktopImage {
-                bgra: blurred,
-                width: desktop.width,
-                height: desktop.height,
-            });
-            for tx in &peek_txs {
-                let _ = tx.send(RenderMsg::BlurredDesktop(blurred.clone()));
-            }
-            info!("walker: desktop blur complete");
-
             capture_peek_images(&obstructed, &peek_txs, &peek_latch);
         })
         .expect("spawn walker thread");
@@ -231,31 +234,36 @@ fn capture_peek_images(
     peek_txs: &[std::sync::mpsc::Sender<RenderMsg>],
     peek_latch: &Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
 ) {
-    use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
-    let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-
     info!("walker: capturing {} obstructed window images", obstructed.len());
-    let mut all_peeks = Vec::new();
-    for ow in obstructed {
-        if let Some((bgra, w, h)) = SystemInterop::capture_peek_image(ow) {
-            let crop_x = ow.rect.min_x() - ow.raw_rect.min_x();
-            let crop_y = ow.rect.min_y() - ow.raw_rect.min_y();
-            let peek = Arc::new(WindowPeekImage {
-                window_index: ow.window_index,
-                window_rect: ow.rect,
-                bgra,
-                width: w,
-                height: h,
-                crop_x,
-                crop_y,
-                obstruction_rects: ow.obstruction_rects.clone(),
-            });
-            for tx in peek_txs {
-                let _ = tx.send(RenderMsg::PeekImage(peek.clone()));
-            }
-            all_peeks.push(peek);
-        }
-    }
+    let all_peeks: Vec<Arc<WindowPeekImage>> = std::thread::scope(|s| {
+        let handles: Vec<_> = obstructed
+            .iter()
+            .map(|ow| {
+                s.spawn(|| {
+                    use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+                    let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+                    let (bgra, w, h) = SystemInterop::capture_peek_image(ow)?;
+                    let crop_x = ow.rect.min_x() - ow.raw_rect.min_x();
+                    let crop_y = ow.rect.min_y() - ow.raw_rect.min_y();
+                    let peek = Arc::new(WindowPeekImage {
+                        window_index: ow.window_index,
+                        window_rect: ow.rect,
+                        bgra,
+                        width: w,
+                        height: h,
+                        crop_x,
+                        crop_y,
+                        obstruction_rects: ow.obstruction_rects.clone(),
+                    });
+                    for tx in peek_txs {
+                        let _ = tx.send(RenderMsg::PeekImage(peek.clone()));
+                    }
+                    Some(peek)
+                })
+            })
+            .collect();
+        handles.into_iter().filter_map(|h| h.join().ok().flatten()).collect()
+    });
     peek_latch.set(all_peeks);
     info!("walker: obstructed window capture complete");
 }
@@ -267,25 +275,31 @@ fn capture_peek_images(
     peek_latch: &Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
 ) {
     info!("walker: capturing {} obstructed window images", obstructed.len());
-    let mut all_peeks = Vec::new();
-    for ow in obstructed {
-        if let Some((bgra, w, h)) = SystemInterop::capture_peek_image(ow) {
-            let peek = Arc::new(WindowPeekImage {
-                window_index: ow.window_index,
-                window_rect: ow.rect,
-                bgra,
-                width: w,
-                height: h,
-                crop_x: 0,
-                crop_y: 0,
-                obstruction_rects: ow.obstruction_rects.clone(),
-            });
-            for tx in peek_txs {
-                let _ = tx.send(RenderMsg::PeekImage(peek.clone()));
-            }
-            all_peeks.push(peek);
-        }
-    }
+    let all_peeks: Vec<Arc<WindowPeekImage>> = std::thread::scope(|s| {
+        let handles: Vec<_> = obstructed
+            .iter()
+            .map(|ow| {
+                s.spawn(|| {
+                    let (bgra, w, h) = SystemInterop::capture_peek_image(ow)?;
+                    let peek = Arc::new(WindowPeekImage {
+                        window_index: ow.window_index,
+                        window_rect: ow.rect,
+                        bgra,
+                        width: w,
+                        height: h,
+                        crop_x: 0,
+                        crop_y: 0,
+                        obstruction_rects: ow.obstruction_rects.clone(),
+                    });
+                    for tx in peek_txs {
+                        let _ = tx.send(RenderMsg::PeekImage(peek.clone()));
+                    }
+                    Some(peek)
+                })
+            })
+            .collect();
+        handles.into_iter().filter_map(|h| h.join().ok().flatten()).collect()
+    });
     peek_latch.set(all_peeks);
     info!("walker: obstructed window capture complete");
 }
