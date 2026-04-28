@@ -1,43 +1,44 @@
-use crate::geometry::ScreenPoint;
 use crate::system::{CapturedCursor, CursorImage, MonitorInfo};
 
 use objc2_app_kit::NSCursor;
-use objc2_foundation::NSPoint;
 
+#[allow(deprecated)]
 pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
     let position = super::mac_mouse::get_position(monitors);
 
-    let cursor = unsafe { NSCursor::currentSystemCursor() }?;
-    let hotspot: NSPoint = unsafe { cursor.hotSpot() };
-    let image = unsafe { cursor.image() };
+    let cursor = NSCursor::currentSystemCursor()?;
+    let hotspot = cursor.hotSpot();
+    let image = cursor.image();
 
-    let size = unsafe { image.size() };
+    let size = image.size();
     let width = size.width as u32;
     let height = size.height as u32;
     if width == 0 || height == 0 {
         return None;
     }
 
-    let representations = unsafe { image.representations() };
+    let representations = image.representations();
     if representations.len() == 0 {
         return None;
     }
 
-    let rep = &representations[0];
-    let bitmap_rep: &objc2_app_kit::NSBitmapImageRep = match unsafe { objc2::msg_send![rep, bitmapData] } {
-        p if !p.is_null() => unsafe { &*(rep as *const _ as *const objc2_app_kit::NSBitmapImageRep) },
-        _ => return None,
-    };
+    let rep = unsafe { representations.objectAtIndex_unchecked(0) };
+    let check: *const u8 = unsafe { objc2::msg_send![rep, bitmapData] };
+    if check.is_null() {
+        return None;
+    }
+    let bitmap_rep: &objc2_app_kit::NSBitmapImageRep =
+        unsafe { &*(rep as *const _ as *const objc2_app_kit::NSBitmapImageRep) };
 
-    let bps = unsafe { bitmap_rep.bitsPerPixel() } as u32;
+    let bps = bitmap_rep.bitsPerPixel() as u32;
     if bps != 32 {
         warn!("cursor bitmap has unexpected bpp={}", bps);
         return None;
     }
 
-    let pixels_wide = unsafe { bitmap_rep.pixelsWide() } as u32;
-    let pixels_high = unsafe { bitmap_rep.pixelsHigh() } as u32;
-    let bytes_per_row = unsafe { bitmap_rep.bytesPerRow() } as usize;
+    let pixels_wide = bitmap_rep.pixelsWide() as u32;
+    let pixels_high = bitmap_rep.pixelsHigh() as u32;
+    let bytes_per_row = bitmap_rep.bytesPerRow() as usize;
 
     let data_ptr: *const u8 = unsafe { objc2::msg_send![bitmap_rep, bitmapData] };
     if data_ptr.is_null() {

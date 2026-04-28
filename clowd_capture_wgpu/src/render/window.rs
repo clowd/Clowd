@@ -375,7 +375,6 @@ fn create_surface(instance: &wgpu::Instance, window: Arc<Window>, _screenshot_im
 
 #[cfg(target_os = "macos")]
 fn crop_screenshot_to_cgimage(screenshot: &CapturedDesktop, monitor_bounds: ScreenRect) -> Option<core_graphics::image::CGImage> {
-    use crate::geometry::RectExt;
     use core_graphics::color_space::CGColorSpace;
     use core_graphics::context::CGContext;
 
