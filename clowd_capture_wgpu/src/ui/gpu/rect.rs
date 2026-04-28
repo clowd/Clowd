@@ -60,19 +60,7 @@ pub struct RectPipeline {
 
 impl RectPipeline {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
-        #[cfg(windows)]
-        let (shader_vs, shader_fs) = {
-            const VS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_rect_vs.dxbc"));
-            const PS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_rect_ps.dxbc"));
-            unsafe {
-                (
-                    crate::gpu::pipeline::create_passthrough_module(device, "ui_rect VS", VS),
-                    crate::gpu::pipeline::create_passthrough_module(device, "ui_rect FS", PS),
-                )
-            }
-        };
-        #[cfg(not(windows))]
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../../../shaders/ui_rect.wgsl"));
+        let shader = crate::gpu::shaders::ui_rect(device);
 
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("ui_rect bgl"),
@@ -142,19 +130,13 @@ impl RectPipeline {
             label: Some("ui_rect pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                #[cfg(windows)]
-                module: &shader_vs,
-                #[cfg(not(windows))]
-                module: &shader,
+                module: shader.vs(),
                 entry_point: Some("vs_main"),
                 buffers: &[instance_layout],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                #[cfg(windows)]
-                module: &shader_fs,
-                #[cfg(not(windows))]
-                module: &shader,
+                module: shader.fs(),
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_format,
