@@ -417,7 +417,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         }
 
         if let Some(state) = snapshot_state.as_mut() {
-            let cursor_textures = gpu.snapshot.as_ref().and_then(|s| s.cursor.as_ref());
+            let cursor_textures = gpu
+                .snapshot
+                .as_ref()
+                .and_then(|s| s.cursor.as_ref());
             state.update_uniforms(
                 &gpu.queue,
                 &FrameState {

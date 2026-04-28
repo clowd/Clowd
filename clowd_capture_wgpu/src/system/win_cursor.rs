@@ -2,12 +2,8 @@ use crate::geometry::ScreenPoint;
 use crate::system::{CapturedCursor, CursorImage};
 
 use std::mem;
-use windows::Win32::Graphics::Gdi::{
-    DeleteObject, GetBitmapBits, GetObjectW, BITMAP,
-};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CopyIcon, DestroyIcon, GetCursorInfo, GetIconInfo, CURSORINFO, CURSOR_SHOWING, ICONINFO,
-};
+use windows::Win32::Graphics::Gdi::{DeleteObject, GetBitmapBits, GetObjectW, BITMAP};
+use windows::Win32::UI::WindowsAndMessaging::{CopyIcon, DestroyIcon, GetCursorInfo, GetIconInfo, CURSORINFO, CURSOR_SHOWING, ICONINFO};
 
 pub fn capture_cursor() -> Option<CapturedCursor> {
     unsafe {
@@ -93,9 +89,17 @@ fn bit_to_alpha(data: &[u8], pixel: usize, invert: bool) -> u8 {
     let byte = data[pixel / 8];
     let alpha = (byte >> (7 - (pixel % 8))) & 1 != 0;
     if invert {
-        if alpha { 0xFF } else { 0 }
+        if alpha {
+            0xFF
+        } else {
+            0
+        }
     } else {
-        if alpha { 0 } else { 0xFF }
+        if alpha {
+            0
+        } else {
+            0xFF
+        }
     }
 }
 

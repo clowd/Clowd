@@ -48,10 +48,12 @@ impl WindowHandle {
         #[cfg(not(target_os = "macos"))]
         let surface = create_surface(instance, window.clone(), screenshot_image)?;
 
-        let _ = setup.input_tx.send(WorkerInput::Handoff(WindowHandoff {
-            window: window.clone(),
-            surface,
-        }));
+        let _ = setup
+            .input_tx
+            .send(WorkerInput::Handoff(WindowHandoff {
+                window: window.clone(),
+                surface,
+            }));
 
         Ok(Self {
             window,
@@ -185,7 +187,9 @@ impl WindowSet {
     }
 
     pub fn first(&self) -> Option<&WindowHandle> {
-        self.order.first().and_then(|id| self.map.get(id))
+        self.order
+            .first()
+            .and_then(|id| self.map.get(id))
     }
 
     pub fn show_all(&self) {

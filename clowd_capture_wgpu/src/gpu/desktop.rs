@@ -117,7 +117,14 @@ pub fn upload_snapshot(
     }))
 }
 
-fn create_small_texture(device: &wgpu::Device, queue: &wgpu::Queue, bgra: &[u8], width: u32, height: u32, label: &str) -> wgpu::TextureView {
+fn create_small_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    bgra: &[u8],
+    width: u32,
+    height: u32,
+    label: &str,
+) -> wgpu::TextureView {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -157,7 +164,11 @@ pub fn create_placeholder_cursor_view(device: &wgpu::Device, queue: &wgpu::Queue
 
 fn upload_cursor_textures(device: &wgpu::Device, queue: &wgpu::Queue, cursor: &CapturedCursor) -> Option<CursorTextures> {
     match &cursor.image {
-        CursorImage::AlphaBlended { bgra, width, height } => {
+        CursorImage::AlphaBlended {
+            bgra,
+            width,
+            height,
+        } => {
             if *width == 0 || *height == 0 || bgra.is_empty() {
                 return None;
             }

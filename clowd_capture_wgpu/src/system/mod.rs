@@ -196,11 +196,7 @@ pub fn virtual_desktop_bounds(monitors: &[MonitorInfo]) -> ScreenRect {
 pub enum CursorImage {
     /// Modern cursor with per-pixel alpha (Windows Aero, all macOS cursors).
     /// Standard premultiplied alpha blending: `out = src + dst * (1 - src_a)`.
-    AlphaBlended {
-        bgra: Vec<u8>,
-        width: u32,
-        height: u32,
-    },
+    AlphaBlended { bgra: Vec<u8>, width: u32, height: u32 },
     /// Legacy/monochrome cursor using AND/XOR compositing.
     /// Per-pixel formula: `output = (screen AND and_mask) XOR xor_color`.
     /// `and_mask_bgra` has each channel 0x00 or 0xFF.
@@ -211,7 +207,6 @@ pub enum CursorImage {
         height: u32,
     },
 }
-
 
 /// OS cursor snapshot captured at screenshot time. Always captured
 /// regardless of user toggle — the toggle only controls rendering
