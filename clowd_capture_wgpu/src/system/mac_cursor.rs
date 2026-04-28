@@ -66,10 +66,7 @@ pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
         CGImage::from_ptr(cg_ref as *mut _)
     };
     ctx.draw_image(
-        CGRect::new(
-            &CGPoint::new(0.0, 0.0),
-            &CGSize::new(phys_w as f64, phys_h as f64),
-        ),
+        CGRect::new(&CGPoint::new(0.0, 0.0), &CGSize::new(phys_w as f64, phys_h as f64)),
         &cg_image,
     );
     drop(cg_image);

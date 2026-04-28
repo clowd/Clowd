@@ -149,9 +149,7 @@ impl SnapshotState {
         let local_cx = cx - monitor_bounds.min_x() as f32;
         let local_cy = cy - monitor_bounds.min_y() as f32;
 
-        let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
-            ((vd_x - cx) * zoom + local_cx, (vd_y - cy) * zoom + local_cy)
-        };
+        let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cx, (vd_y - cy) * zoom + local_cy) };
 
         let (l, t) = to_local(vd_left, vd_top);
         let (r, b) = to_local(vd_right, vd_bottom);

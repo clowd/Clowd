@@ -73,10 +73,7 @@ pub(crate) async fn request_adapter_device(
     if crate::ui::gpu::gpu_timing::GPU_TIMING_ENABLED && adapter_features.contains(wgpu::Features::TIMESTAMP_QUERY) {
         required_features |= wgpu::Features::TIMESTAMP_QUERY;
     }
-    #[cfg(windows)]
-    {
-        required_features |= wgpu::Features::PASSTHROUGH_SHADERS;
-    }
+    required_features |= wgpu::Features::PASSTHROUGH_SHADERS;
 
     let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
