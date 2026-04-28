@@ -1,0 +1,5 @@
+[alias]
+r = "run -p clowd_capture_wgpu"
+b = "build -p clowd_capture_wgpu"
+rr = "run -p clowd_capture_wgpu --release"
+bb = "build -p clowd_capture_wgpu --release"
