@@ -54,7 +54,7 @@ impl IconAtlas {
 
         let mut rects = Vec::with_capacity(trees.len());
         for tree in trees {
-            let Some(mut pm) = tiny_skia::Pixmap::new(icon_px, icon_px) else {
+            let Some(mut pm) = resvg::tiny_skia::Pixmap::new(icon_px, icon_px) else {
                 rects.push(etagere::Rectangle {
                     min: etagere::point2(0, 0),
                     max: etagere::point2(0, 0),
@@ -64,7 +64,7 @@ impl IconAtlas {
             let vb = tree.size();
             let sx = icon_px as f32 / vb.width();
             let sy = icon_px as f32 / vb.height();
-            resvg::render(tree, tiny_skia::Transform::from_scale(sx, sy), &mut pm.as_mut());
+            resvg::render(tree, resvg::tiny_skia::Transform::from_scale(sx, sy), &mut pm.as_mut());
             let alloc = allocator
                 .allocate(etagere::size2(icon_px as i32, icon_px as i32))
                 .expect("icon atlas too small");

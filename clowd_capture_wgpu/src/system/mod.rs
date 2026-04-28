@@ -211,21 +211,6 @@ pub enum CursorImage {
     },
 }
 
-impl CursorImage {
-    pub fn width(&self) -> u32 {
-        match self {
-            CursorImage::AlphaBlended { width, .. } => *width,
-            CursorImage::Masked { width, .. } => *width,
-        }
-    }
-
-    pub fn height(&self) -> u32 {
-        match self {
-            CursorImage::AlphaBlended { height, .. } => *height,
-            CursorImage::Masked { height, .. } => *height,
-        }
-    }
-}
 
 /// OS cursor snapshot captured at screenshot time. Always captured
 /// regardless of user toggle — the toggle only controls rendering
