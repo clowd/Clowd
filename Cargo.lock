@@ -424,7 +424,6 @@ dependencies = [
  "resvg",
  "rfd",
  "simplelog",
- "tiny-skia 0.12.0",
  "usvg",
  "wgpu",
  "windows",
