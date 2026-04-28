@@ -82,6 +82,10 @@ Conversions are explicit methods on `MonitorInfo` (`logical_to_screen`, `screen_
 
 Workers poll mpsc channels each frame for: `MouseState`, `UiState`, `PeekImage`, `ShowPeek`, `BlurredDesktop`. The bootstrap uses `Latch<T>` (blocking one-shot slots) for synchronization between startup phases.
 
+## Dependency Management
+
+Package versions are defined in the workspace root `Cargo.toml` under `[workspace.dependencies]`. Crate-level `Cargo.toml` files reference them with `workspace = true` and only specify features locally. When adding a new dependency, add the version to the workspace root and use `{ workspace = true, features = [...] }` in the crate.
+
 ## Code Style
 
 - `rustfmt.toml`: max_width=140, indent_style=Visual, format_strings=true

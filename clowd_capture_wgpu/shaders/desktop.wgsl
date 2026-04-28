@@ -396,7 +396,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // BT.601, which are defined for gamma-encoded values). The 0.42
     // multiplier reproduces the old "35% darken" effect: 0.65 in sRGB
     // space is roughly 0.65^2 ≈ 0.42 in linear space.
-    let linear = srgb_to_linear(color.rgb);
+    let linear = srgb_to_linear(base.rgb);
     let luma = dot(linear, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.42;
     let gray_linear = vec3<f32>(luma);
     let out_linear = mix(linear, gray_linear, fade);
