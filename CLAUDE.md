@@ -88,6 +88,7 @@ Package versions are defined in the workspace root `Cargo.toml` under `[workspac
 
 ## Code Style
 
+- Run `cargo fmt` after every change to ensure compliance with the repo's formatting rules
 - `rustfmt.toml`: max_width=140, indent_style=Visual, format_strings=true
 - Uses `#[macro_use] extern crate log` and `#[macro_use] extern crate anyhow` (crate-level macros)
 - No async runtime (uses `pollster::block_on` where needed)
