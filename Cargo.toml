@@ -14,6 +14,35 @@ license = "MIT"
 edition = "2021"
 rust-version = "1.75"
 
+[workspace.dependencies]
+anyhow = "1.0"
+image = "0.25"
+euclid = "0.22"
+log = "0.4"
+simplelog = "0.12"
+winit = "0.30"
+wgpu = "29.0"
+num = "0.4"
+pollster = "0.4"
+bytemuck = "1"
+usvg = { version = "0.47", default-features = false }
+resvg = { version = "0.47", default-features = false }
+etagere = "0.3"
+glyphon = "0.11"
+arboard = "3.4"
+rfd = "0.17"
+xdialog = "2.1"
+windows = "0.62"
+core-graphics = "0.25"
+core-foundation = "0.10"
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"
+objc2-quartz-core = "0.3"
+block2 = "0.6"
+naga = "29.0"
+libloading = "0.9"
+
 # default to small, optimized workspace release binaries
 [profile.release]
 opt-level = 3            # optimize for performance
