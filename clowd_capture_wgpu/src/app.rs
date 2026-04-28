@@ -563,7 +563,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let this_monitor_bounds = match self.windows.get(&id) {
             Some(h) => h.monitor_bounds(),
             None => return,

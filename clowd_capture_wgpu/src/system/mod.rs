@@ -192,6 +192,7 @@ pub fn virtual_desktop_bounds(monitors: &[MonitorInfo]) -> ScreenRect {
 /// Preserves the raw AND/XOR mask data for monochrome and legacy cursors
 /// so the GPU shader can render screen-inverse pixels correctly against
 /// the underlying screenshot. Never pre-flatten to a single bitmap.
+#[allow(dead_code)]
 pub enum CursorImage {
     /// Modern cursor with per-pixel alpha (Windows Aero, all macOS cursors).
     /// Standard premultiplied alpha blending: `out = src + dst * (1 - src_a)`.
