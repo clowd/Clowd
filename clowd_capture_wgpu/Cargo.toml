@@ -43,7 +43,7 @@ core-foundation.workspace = true
 objc2.workspace = true
 objc2-app-kit.workspace = true
 objc2-foundation.workspace = true
-objc2-quartz-core = { workspace = true, features = ["CALayer"] }
+objc2-quartz-core = { workspace = true, features = ["CALayer", "CAAnimation", "CAMediaTiming", "CAMediaTimingFunction", "objc2-core-foundation"] }
 block2.workspace = true
 
 # naga version must match what wgpu 29.0 uses internally
