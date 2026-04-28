@@ -410,6 +410,7 @@ dependencies = [
  "core-graphics 0.25.0",
  "etagere",
  "euclid",
+ "foreign-types",
  "glyphon",
  "image",
  "libloading 0.9.0",
@@ -418,6 +419,7 @@ dependencies = [
  "num",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
+ "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
  "pollster",
@@ -1936,10 +1938,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807"
 dependencies = [
  "bitflags 2.11.1",
+ "block2 0.6.2",
  "dispatch2",
+ "libc",
  "objc2 0.6.4",
  "objc2-core-foundation",
  "objc2-io-surface",
+ "objc2-metal 0.3.2",
 ]
 
 [[package]]

@@ -1,6 +1,15 @@
 use crate::system::{CapturedCursor, CursorImage, MonitorInfo};
 
+use core_graphics::color_space::CGColorSpace;
+use core_graphics::context::CGContext;
+use core_graphics::geometry::{CGPoint, CGRect, CGSize};
+use core_graphics::image::CGImage;
+use foreign_types::ForeignType;
 use objc2_app_kit::NSCursor;
+
+extern "C" {
+    fn CGImageRetain(image: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+}
 
 #[allow(deprecated)]
 pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
@@ -11,69 +20,69 @@ pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
     let image = cursor.image();
 
     let size = image.size();
-    let width = size.width as u32;
-    let height = size.height as u32;
-    if width == 0 || height == 0 {
+    if size.width <= 0.0 || size.height <= 0.0 {
+        return None;
+    }
+
+    let scale = monitors
+        .iter()
+        .find(|m| m.bounds.contains(position))
+        .map(|m| m.scale_factor)
+        .unwrap_or(2.0) as f64;
+
+    let phys_w = (size.width * scale).round() as u32;
+    let phys_h = (size.height * scale).round() as u32;
+    if phys_w == 0 || phys_h == 0 {
         return None;
     }
 
     let representations = image.representations();
-    if representations.len() == 0 {
+    if representations.is_empty() {
         return None;
     }
-
     let rep = unsafe { representations.objectAtIndex_unchecked(0) };
-    let check: *const u8 = unsafe { objc2::msg_send![rep, bitmapData] };
-    if check.is_null() {
-        return None;
-    }
-    let bitmap_rep: &objc2_app_kit::NSBitmapImageRep =
-        unsafe { &*(rep as *const _ as *const objc2_app_kit::NSBitmapImageRep) };
-
-    let bps = bitmap_rep.bitsPerPixel() as u32;
-    if bps != 32 {
-        warn!("cursor bitmap has unexpected bpp={}", bps);
+    let cg_ref: *mut objc2_core_graphics::CGImage = unsafe { objc2::msg_send![rep, CGImage] };
+    if cg_ref.is_null() {
         return None;
     }
 
-    let pixels_wide = bitmap_rep.pixelsWide() as u32;
-    let pixels_high = bitmap_rep.pixelsHigh() as u32;
-    let bytes_per_row = bitmap_rep.bytesPerRow() as usize;
-
-    let data_ptr: *const u8 = unsafe { objc2::msg_send![bitmap_rep, bitmapData] };
-    if data_ptr.is_null() {
-        return None;
-    }
-
-    let mut bgra = vec![0u8; (pixels_wide * pixels_high * 4) as usize];
-    for row in 0..pixels_high as usize {
-        let src_start = row * bytes_per_row;
-        for col in 0..pixels_wide as usize {
-            let src = src_start + col * 4;
-            let dst = (row * pixels_wide as usize + col) * 4;
-            unsafe {
-                // NSBitmapImageRep is RGBA; convert to BGRA premultiplied
-                let r = *data_ptr.add(src);
-                let g = *data_ptr.add(src + 1);
-                let b = *data_ptr.add(src + 2);
-                let a = *data_ptr.add(src + 3);
-                bgra[dst] = b;
-                bgra[dst + 1] = g;
-                bgra[dst + 2] = r;
-                bgra[dst + 3] = a;
-            }
-        }
-    }
+    // Render through a CGBitmapContext at the physical pixel size so the
+    // output is always BGRA-premultiplied regardless of the source format.
+    // kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst = BGRA in memory.
+    let bytes_per_row = phys_w as usize * 4;
+    let mut bgra = vec![0u8; bytes_per_row * phys_h as usize];
+    let color_space = CGColorSpace::create_device_rgb();
+    let ctx = CGContext::create_bitmap_context(
+        Some(bgra.as_mut_ptr() as *mut _),
+        phys_w as usize,
+        phys_h as usize,
+        8,
+        bytes_per_row,
+        &color_space,
+        (2 << 12) | 2,
+    );
+    let cg_image = unsafe {
+        CGImageRetain(cg_ref as *mut _);
+        CGImage::from_ptr(cg_ref as *mut _)
+    };
+    ctx.draw_image(
+        CGRect::new(
+            &CGPoint::new(0.0, 0.0),
+            &CGSize::new(phys_w as f64, phys_h as f64),
+        ),
+        &cg_image,
+    );
+    drop(cg_image);
 
     Some(CapturedCursor {
         position,
-        hotspot_x: hotspot.x as i32,
-        hotspot_y: hotspot.y as i32,
+        hotspot_x: (hotspot.x * scale).round() as i32,
+        hotspot_y: (hotspot.y * scale).round() as i32,
         visible: true,
         image: CursorImage::AlphaBlended {
             bgra,
-            width: pixels_wide,
-            height: pixels_high,
+            width: phys_w,
+            height: phys_h,
         },
     })
 }

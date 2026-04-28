@@ -36,6 +36,8 @@ windows = { workspace = true, features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+foreign-types.workspace = true
+objc2-core-graphics = { workspace = true, features = ["objc2", "CGImage"] }
 core-graphics.workspace = true
 core-foundation.workspace = true
 objc2.workspace = true
