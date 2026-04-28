@@ -10,7 +10,7 @@ use crate::capture_output::{save_to_file_with_peek, ActionResult};
 use crate::geometry::{ScreenPointF, ScreenRect};
 use crate::render::protocol::{PeekCommand, RenderMsg, WindowHandoff, WorkerInput};
 use crate::render::worker::WorkerSetup;
-use crate::system::{CapturedDesktop, WindowPeekImage};
+use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
 use crate::ui::shared::UiSharedState;
 
 // ── WindowHandle ───────────────────────────────────────────────────
@@ -113,8 +113,15 @@ impl WindowHandle {
         self.window.focus_window();
     }
 
-    pub fn save_to_file_with_peek(&self, selection: ScreenRect, buffer: &CapturedDesktop, peek: Option<&WindowPeekImage>) -> ActionResult {
-        save_to_file_with_peek(selection, buffer, peek, &self.window)
+    pub fn save_to_file_with_peek(
+        &self,
+        selection: ScreenRect,
+        buffer: &CapturedDesktop,
+        peek: Option<&WindowPeekImage>,
+        cursor: Option<&CapturedCursor>,
+        cursor_visible: bool,
+    ) -> ActionResult {
+        save_to_file_with_peek(selection, buffer, peek, cursor, cursor_visible, &self.window)
     }
 
     pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32, selection: Option<ScreenRect>, captured: bool) {

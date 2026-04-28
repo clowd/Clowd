@@ -41,11 +41,18 @@ struct Uniforms {
     accent_color:  vec4<f32>,
     selection_rect:   vec4<f32>,
     selection_params: vec4<f32>,
+    // cursor_rect.xyzw = left, top, right, bottom in window-local px.
+    // Empty (z <= x) when cursor is hidden or off this monitor.
+    cursor_rect:      vec4<f32>,
+    // cursor_params.x = cursor type: 0=hidden, 1=alpha_blended, 2=masked.
+    cursor_params:    vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var desktop_tex: texture_2d<f32>;
 @group(0) @binding(2) var desktop_samp: sampler;
+@group(0) @binding(3) var cursor_color_tex: texture_2d<f32>;
+@group(0) @binding(4) var cursor_mask_tex: texture_2d<f32>;
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
@@ -97,7 +104,35 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // path and as the base colour that overlay elements (crosshair,
     // selection border) blend on top of during the fade-in.
     let color = textureSample(desktop_tex, desktop_samp, in.uv);
-    let base = vec4<f32>(color.rgb, 1.0);
+    var base = vec4<f32>(color.rgb, 1.0);
+
+    // Composite captured cursor onto the desktop. Done before crosshair,
+    // selection border, and fade so the cursor is part of the desktop content.
+    let cr = u.cursor_rect;
+    let cursor_type = u32(u.cursor_params.x);
+    if cursor_type != 0u && cr.z > cr.x && cr.w > cr.y {
+        let fpos = in.pos.xy;
+        if fpos.x >= cr.x && fpos.x < cr.z && fpos.y >= cr.y && fpos.y < cr.w {
+            let cursor_uv = (fpos - cr.xy) / (cr.zw - cr.xy);
+            let cur_color = textureSample(cursor_color_tex, desktop_samp, cursor_uv);
+            if cursor_type == 1u {
+                // Alpha blended (premultiplied): out = src + dst * (1 - src.a)
+                base = vec4<f32>(
+                    cur_color.rgb + base.rgb * (1.0 - cur_color.a),
+                    1.0,
+                );
+            } else {
+                // Masked (AND/XOR): output = (screen * and_mask) xor'd with xor_color.
+                // Since and_mask values are 0.0 or 1.0 in unorm:
+                //   AND with 0.0 → 0.0, AND with 1.0 → keep
+                //   XOR with 0.0 → keep, XOR with 1.0 → invert
+                // Float-safe: AND = multiply, XOR = abs(a - b) when operands are 0 or 1.
+                let and_mask = textureSample(cursor_mask_tex, desktop_samp, cursor_uv);
+                let masked = base.rgb * and_mask.rgb;
+                base = vec4<f32>(abs(masked - cur_color.rgb), 1.0);
+            }
+        }
+    }
 
     // Crosshair: only when not captured. Once the user has finalised
     // a selection, the OS cursor takes over and the rendered crosshair

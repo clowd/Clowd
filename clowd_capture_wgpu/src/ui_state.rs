@@ -21,6 +21,7 @@ pub struct UiStateBuildInput<'a> {
     pub hovered_window_bounds: Option<ScreenRect>,
     pub hovered_window_index: Option<usize>,
     pub hovered_window_obstructed: bool,
+    pub cursor_overlay_visible: bool,
     pub desktop_buffer: Option<&'a CapturedDesktop>,
 }
 
@@ -56,6 +57,7 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         hovered_window_bounds: input.hovered_window_bounds,
         hovered_window_index: input.hovered_window_index,
         hovered_window_obstructed: input.hovered_window_obstructed,
+        cursor_overlay_visible: input.cursor_overlay_visible,
         hovered_pixel_bgra,
     }
 }

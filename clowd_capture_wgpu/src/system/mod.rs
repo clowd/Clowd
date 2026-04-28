@@ -2,6 +2,9 @@
 pub(crate) mod win_capture;
 
 #[cfg(windows)]
+mod win_cursor;
+
+#[cfg(windows)]
 mod win_monitor;
 
 #[cfg(windows)]
@@ -15,6 +18,9 @@ pub use win_walker::WindowWalker;
 
 #[cfg(target_os = "macos")]
 pub(crate) mod mac_capture;
+
+#[cfg(target_os = "macos")]
+mod mac_cursor;
 
 #[cfg(target_os = "macos")]
 mod mac_monitor;
@@ -181,6 +187,57 @@ pub fn virtual_desktop_bounds(monitors: &[MonitorInfo]) -> ScreenRect {
     ScreenRect::from_exact(min_x, min_y, max_x, max_y)
 }
 
+/// How a captured cursor image should be composited onto the screen.
+///
+/// Preserves the raw AND/XOR mask data for monochrome and legacy cursors
+/// so the GPU shader can render screen-inverse pixels correctly against
+/// the underlying screenshot. Never pre-flatten to a single bitmap.
+pub enum CursorImage {
+    /// Modern cursor with per-pixel alpha (Windows Aero, all macOS cursors).
+    /// Standard premultiplied alpha blending: `out = src + dst * (1 - src_a)`.
+    AlphaBlended {
+        bgra: Vec<u8>,
+        width: u32,
+        height: u32,
+    },
+    /// Legacy/monochrome cursor using AND/XOR compositing.
+    /// Per-pixel formula: `output = (screen AND and_mask) XOR xor_color`.
+    /// `and_mask_bgra` has each channel 0x00 or 0xFF.
+    Masked {
+        and_mask_bgra: Vec<u8>,
+        xor_color_bgra: Vec<u8>,
+        width: u32,
+        height: u32,
+    },
+}
+
+impl CursorImage {
+    pub fn width(&self) -> u32 {
+        match self {
+            CursorImage::AlphaBlended { width, .. } => *width,
+            CursorImage::Masked { width, .. } => *width,
+        }
+    }
+
+    pub fn height(&self) -> u32 {
+        match self {
+            CursorImage::AlphaBlended { height, .. } => *height,
+            CursorImage::Masked { height, .. } => *height,
+        }
+    }
+}
+
+/// OS cursor snapshot captured at screenshot time. Always captured
+/// regardless of user toggle — the toggle only controls rendering
+/// and inclusion in saved/copied output.
+pub struct CapturedCursor {
+    pub position: ScreenPoint,
+    pub hotspot_x: i32,
+    pub hotspot_y: i32,
+    pub visible: bool,
+    pub image: CursorImage,
+}
+
 /// Raw virtual-desktop snapshot. The pixel data is in BGRA byte order
 /// exactly as `GetDIBits` produces it — no CPU swizzle. The GPU uploads it
 /// directly into a `Bgra8UnormSrgb` texture and the sampler hardware
@@ -206,6 +263,10 @@ pub struct CapturedDesktop {
     /// where the topology could change between capture and enumeration.
     #[allow(dead_code)]
     pub monitors: Vec<MonitorInfo>,
+    /// OS cursor state at the instant of capture. `None` if cursor
+    /// capture failed. The cursor is always captured; the user toggle
+    /// controls only whether it is rendered/composited.
+    pub cursor: Option<CapturedCursor>,
 }
 
 pub struct SystemInterop;
@@ -220,10 +281,14 @@ impl SystemInterop {
         win_mouse::set_position(pos)
     }
 
+    pub fn capture_cursor(_monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
+        win_cursor::capture_cursor()
+    }
+
     /// Capture the desktop bitmap using pre-enumerated monitors. The
     /// bitmap is a raw BitBlt of the virtual desktop; the monitors are
     /// bundled into the result for downstream consumers.
-    pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>) -> CapturedDesktop {
+    pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>, cursor: Option<CapturedCursor>) -> CapturedDesktop {
         let vd = virtual_desktop_bounds(&monitors);
         let bitmap = win_capture::capture_desktop(&vd).expect("Unable to capture desktop");
         CapturedDesktop {
@@ -232,6 +297,7 @@ impl SystemInterop {
             height: bitmap.height,
             bounds: bitmap.bounds,
             monitors,
+            cursor,
         }
     }
 
@@ -300,10 +366,14 @@ impl SystemInterop {
         mac_mouse::set_position(pos, monitors)
     }
 
+    pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
+        mac_cursor::capture_cursor(monitors)
+    }
+
     /// Capture the desktop bitmap using pre-enumerated monitors. On
     /// macOS the monitor topology is used to position each display's
     /// capture in the composite buffer.
-    pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>) -> CapturedDesktop {
+    pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>, cursor: Option<CapturedCursor>) -> CapturedDesktop {
         let bitmap = mac_capture::capture_bitmap(&monitors).expect("Unable to capture desktop");
         let vd = virtual_desktop_bounds(&monitors);
         CapturedDesktop {
@@ -312,6 +382,7 @@ impl SystemInterop {
             height: bitmap.height,
             bounds: vd,
             monitors,
+            cursor,
         }
     }
 

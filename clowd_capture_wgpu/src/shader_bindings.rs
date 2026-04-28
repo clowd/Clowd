@@ -28,6 +28,8 @@ pub const DESKTOP_BINDINGS: &[BindingEntry] = &[
     BindingEntry { binding: 0, kind: ResourceKind::UniformBuffer, vertex: true,  fragment: true  },
     BindingEntry { binding: 1, kind: ResourceKind::Texture2D,     vertex: false, fragment: true  },
     BindingEntry { binding: 2, kind: ResourceKind::Sampler,       vertex: false, fragment: true  },
+    BindingEntry { binding: 3, kind: ResourceKind::Texture2D,     vertex: false, fragment: true  },
+    BindingEntry { binding: 4, kind: ResourceKind::Texture2D,     vertex: false, fragment: true  },
 ];
 
 pub const PEEK_BINDINGS: &[BindingEntry] = &[

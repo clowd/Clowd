@@ -109,7 +109,7 @@ pub struct TipsRenderer {
     ///   5: color hotkey "H"
     ///   6: color hex
     ///   7: color rgb
-    ///   8..=10: bottom row 0..2
+    ///   8..=11: bottom row 0..3
     buffers: Vec<CachedBuffer>,
     /// Text positions produced by the latest `prepare`.
     positions: Vec<PositionedText>,
@@ -117,11 +117,11 @@ pub struct TipsRenderer {
 
 const IDX_TITLE: usize = 0;
 const IDX_TOP_BASE: usize = 1;
-const IDX_COLOR_HOTKEY: usize = 5;
-const IDX_COLOR_HEX: usize = 6;
-const IDX_COLOR_RGB: usize = 7;
-const IDX_BOTTOM_BASE: usize = 8;
-const TOTAL_BUFFERS: usize = 11;
+const IDX_COLOR_HOTKEY: usize = IDX_TOP_BASE + TIPS_TOP.len();
+const IDX_COLOR_HEX: usize = IDX_COLOR_HOTKEY + 1;
+const IDX_COLOR_RGB: usize = IDX_COLOR_HEX + 1;
+const IDX_BOTTOM_BASE: usize = IDX_COLOR_RGB + 1;
+const TOTAL_BUFFERS: usize = IDX_BOTTOM_BASE + TIPS_BOTTOM.len();
 
 impl TipsRenderer {
     pub fn new(ts: &mut TextStack) -> Self {
@@ -129,13 +129,13 @@ impl TipsRenderer {
         // Initial font sizes are placeholders — set() updates them on
         // first use.
         buffers.push(CachedBuffer::new(ts, 14.0, true)); // title
-        for _ in 0..4 {
+        for _ in 0..TIPS_TOP.len() {
             buffers.push(CachedBuffer::new(ts, 12.0, false));
         }
         buffers.push(CachedBuffer::new(ts, 12.0, false)); // color hotkey
         buffers.push(CachedBuffer::new(ts, 12.0, false)); // color hex
         buffers.push(CachedBuffer::new(ts, 12.0, false)); // color rgb
-        for _ in 0..3 {
+        for _ in 0..TIPS_BOTTOM.len() {
             buffers.push(CachedBuffer::new(ts, 12.0, false));
         }
         Self {
@@ -187,10 +187,10 @@ impl TipsRenderer {
 
         // Measure widest body row + title + body-row height from glyphon.
         let mut longest_body = 0.0f32;
-        for i in IDX_TOP_BASE..IDX_TOP_BASE + 4 {
+        for i in IDX_TOP_BASE..IDX_TOP_BASE + TIPS_TOP.len() {
             longest_body = longest_body.max(self.buffers[i].width());
         }
-        for i in IDX_BOTTOM_BASE..IDX_BOTTOM_BASE + 3 {
+        for i in IDX_BOTTOM_BASE..IDX_BOTTOM_BASE + TIPS_BOTTOM.len() {
             longest_body = longest_body.max(self.buffers[i].width());
         }
         // Color row: "H" hotkey column + swatch + hex text must fit. Take
@@ -313,7 +313,7 @@ impl TipsRenderer {
 
         let text_y_adjust = 0.0; // glyphon renders from top-left of the run
         let mut y = panel_top_w + layout.top_block_y;
-        for i in 0..4 {
+        for i in 0..TIPS_TOP.len() {
             self.positions.push(PositionedText {
                 buffer_idx: IDX_TOP_BASE + i,
                 x: panel_left_w + layout.col_hotkey_x,
@@ -346,7 +346,7 @@ impl TipsRenderer {
         }
 
         let mut y = panel_top_w + layout.bottom_block_y;
-        for i in 0..3 {
+        for i in 0..TIPS_BOTTOM.len() {
             self.positions.push(PositionedText {
                 buffer_idx: IDX_BOTTOM_BASE + i,
                 x: panel_left_w + layout.col_hotkey_x,

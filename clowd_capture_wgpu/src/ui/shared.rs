@@ -53,6 +53,7 @@ pub struct UiSharedState {
     pub hovered_window_bounds: Option<ScreenRect>,
     pub hovered_window_index: Option<usize>,
     pub hovered_window_obstructed: bool,
+    pub cursor_overlay_visible: bool,
     pub hovered_pixel_bgra: Option<[u8; 4]>,
 }
 
@@ -196,6 +197,7 @@ mod tests {
             hovered_window_bounds: None,
             hovered_window_index: None,
             hovered_window_obstructed: false,
+            cursor_overlay_visible: true,
             hovered_pixel_bgra: None,
         }
     }

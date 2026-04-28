@@ -24,6 +24,11 @@ pub struct CapturerSettings {
     /// higher-Z windows before it is dropped from hit-test results.
     /// 0.80 = windows up to 80% covered are still selectable. Range 0.0–1.0.
     pub obscured_window_detection_threshold: f32,
+    /// Whether the captured OS cursor is rendered in the preview and
+    /// included when saving/copying. The cursor image is always captured
+    /// regardless; this only controls visibility. Toggled at runtime
+    /// with the `M` key.
+    pub cursor_visible_at_startup: bool,
 }
 
 impl Default for CapturerSettings {
@@ -34,6 +39,7 @@ impl Default for CapturerSettings {
             tips_visible_at_startup: true,
             obscured_window_peek_enabled: true,
             obscured_window_detection_threshold: 0.80,
+            cursor_visible_at_startup: true,
         }
     }
 }

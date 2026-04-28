@@ -9,7 +9,7 @@ use crate::render::protocol::{BlurredDesktopImage, RenderMsg, WorkerInput};
 use crate::render::worker::{self, RenderWorkerParams, WorkerSetup};
 use crate::settings::CapturerSettings;
 use crate::sync::{Latch, VisibleLatch};
-use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
+use crate::system::{CapturedCursor, CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::telemetry::startup::StartupTimings;
 
 pub struct CaptureSession {
@@ -35,6 +35,8 @@ impl CaptureSession {
         let ready_count = Arc::new(AtomicUsize::new(0));
         let visible_latch = Arc::new(VisibleLatch::new());
 
+        let captured_cursor = SystemInterop::capture_cursor(&monitors);
+
         let worker_setups = spawn_render_workers(
             &monitors,
             &settings,
@@ -46,7 +48,7 @@ impl CaptureSession {
             &visible_latch,
         );
 
-        let screenshot_latch = spawn_screenshot_job(monitors.clone(), &worker_setups, startup.clone());
+        let screenshot_latch = spawn_screenshot_job(monitors.clone(), captured_cursor, &worker_setups, startup.clone());
         let (walker_latch, peek_images_latch) = spawn_walker_job(
             monitors.clone(),
             &worker_setups,
@@ -137,6 +139,7 @@ fn spawn_render_workers(
 
 fn spawn_screenshot_job(
     monitors: Vec<MonitorInfo>,
+    cursor: Option<CapturedCursor>,
     worker_setups: &[WorkerSetup],
     startup: Arc<StartupTimings>,
 ) -> Arc<Latch<Arc<CapturedDesktop>>> {
@@ -153,7 +156,7 @@ fn spawn_screenshot_job(
                 .background
                 .screenshot_start
                 .set_once(startup.t_start.elapsed());
-            let captured = Arc::new(SystemInterop::capture_desktop_bitmap(monitors));
+            let captured = Arc::new(SystemInterop::capture_desktop_bitmap(monitors, cursor));
             latch.set(captured.clone());
             startup
                 .background

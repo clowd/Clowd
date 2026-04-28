@@ -4,7 +4,7 @@ use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect, WindowPoint};
-use crate::gpu::desktop::{WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::desktop::{create_placeholder_cursor_view, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::gpu::peek::{PeekUniforms, PEEK_UNIFORMS_SIZE};
 use crate::gpu::{self, SURFACE_FORMAT};
 use crate::sync::ReadyGuard;
@@ -183,6 +183,8 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             accent_color: settings.accent_color,
             selection_rect: [0.0, 0.0, -1.0, -1.0],
             selection_params: [0.0, 0.0, 0.0, 0.0],
+            cursor_rect: [0.0, 0.0, -1.0, -1.0],
+            cursor_params: [0.0, 0.0, 0.0, 0.0],
         };
 
         let ubo = gpu
@@ -195,6 +197,12 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             });
         gpu.queue
             .write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
+
+        let placeholder_cursor = create_placeholder_cursor_view(&gpu.device, &gpu.queue);
+        let (cursor_color_view, cursor_mask_view) = match &snap.cursor {
+            Some(ct) => (&ct.color_view, &ct.mask_view),
+            None => (&placeholder_cursor, &placeholder_cursor),
+        };
 
         let bind_group = gpu
             .device
@@ -213,6 +221,14 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     wgpu::BindGroupEntry {
                         binding: 2,
                         resource: wgpu::BindingResource::Sampler(&snap.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(cursor_color_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(cursor_mask_view),
                     },
                 ],
             });
@@ -278,6 +294,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     let mut selection: Option<ScreenRect> = None;
     let mut captured: bool = false;
     let mut overlays_visible: bool = true;
+    let mut cursor_overlay_visible: bool = true;
     let mut last_iter = Instant::now();
 
     loop {
@@ -296,6 +313,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                 }
                 Ok(RenderMsg::UiState(state)) => {
                     overlays_visible = state.overlays_visible;
+                    cursor_overlay_visible = state.cursor_overlay_visible;
                     ui_renderer.set_state(state);
                 }
                 Ok(RenderMsg::BlurredDesktop(bd)) => {
@@ -399,6 +417,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         }
 
         if let Some(state) = snapshot_state.as_mut() {
+            let cursor_textures = gpu.snapshot.as_ref().and_then(|s| s.cursor.as_ref());
             state.update_uniforms(
                 &gpu.queue,
                 &FrameState {
@@ -408,9 +427,11 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     selection,
                     captured,
                     overlays_visible,
+                    cursor_overlay_visible,
                     elapsed: start.elapsed().as_secs_f32(),
                     surface_size: (config.width, config.height),
                 },
+                cursor_textures,
             );
         }
 

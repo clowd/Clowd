@@ -1,8 +1,8 @@
 use winit::window::Window;
 
 use crate::geometry::ScreenRect;
-use crate::image_extract::{extract_selection_rgba, extract_selection_rgba_with_peek};
-use crate::system::{CapturedDesktop, WindowPeekImage};
+use crate::image_extract::{composite_cursor_rgba, extract_selection_rgba, extract_selection_rgba_with_peek};
+use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
 
 /// Result of a Copy or Save action.
 pub enum ActionResult {
@@ -15,15 +15,26 @@ pub enum ActionResult {
 }
 
 /// Copy the selected region to the clipboard.
-pub fn copy_to_clipboard_with_peek(selection: ScreenRect, buffer: &CapturedDesktop, peek: Option<&WindowPeekImage>) -> ActionResult {
+pub fn copy_to_clipboard_with_peek(
+    selection: ScreenRect,
+    buffer: &CapturedDesktop,
+    peek: Option<&WindowPeekImage>,
+    cursor: Option<&CapturedCursor>,
+    cursor_visible: bool,
+) -> ActionResult {
     let extracted = match peek {
         Some(p) => extract_selection_rgba_with_peek(selection, buffer, p),
         None => extract_selection_rgba(selection, buffer),
     };
-    let Some((rgba, width, height)) = extracted else {
+    let Some((mut rgba, width, height)) = extracted else {
         log::warn!("copy: no selection or failed to extract");
         return ActionResult::Failed("No selection to copy".to_string());
     };
+    if cursor_visible {
+        if let Some(cur) = cursor {
+            composite_cursor_rgba(&mut rgba, width, height, selection, cur);
+        }
+    }
 
     match arboard::Clipboard::new() {
         Ok(mut clipboard) => {
@@ -52,16 +63,23 @@ pub fn save_to_file_with_peek(
     selection: ScreenRect,
     buffer: &CapturedDesktop,
     peek: Option<&WindowPeekImage>,
+    cursor: Option<&CapturedCursor>,
+    cursor_visible: bool,
     window: &Window,
 ) -> ActionResult {
     let extracted = match peek {
         Some(p) => extract_selection_rgba_with_peek(selection, buffer, p),
         None => extract_selection_rgba(selection, buffer),
     };
-    let Some((rgba, width, height)) = extracted else {
+    let Some((mut rgba, width, height)) = extracted else {
         log::warn!("save: no selection or failed to extract");
         return ActionResult::Failed("No selection to save".to_string());
     };
+    if cursor_visible {
+        if let Some(cur) = cursor {
+            composite_cursor_rgba(&mut rgba, width, height, selection, cur);
+        }
+    }
 
     let path = rfd::FileDialog::new()
         .add_filter("PNG Image", &["png"])
