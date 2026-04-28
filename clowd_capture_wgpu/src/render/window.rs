@@ -79,7 +79,31 @@ impl WindowHandle {
             #[cfg(target_os = "macos")]
             if let Some(ref subview) = self.render_subview {
                 if let Some(layer) = subview.layer() {
+                    use objc2_foundation::{NSNumber, NSString};
+                    use objc2_quartz_core::{
+                        CABasicAnimation, CAMediaTiming, CAMediaTimingFunction,
+                        kCAMediaTimingFunctionEaseOut,
+                    };
+
+                    let key_path = NSString::from_str("opacity");
+                    let anim = CABasicAnimation::animationWithKeyPath(Some(&key_path));
+
+                    let from_val = NSNumber::new_f32(0.0);
+                    let to_val = NSNumber::new_f32(1.0);
+                    unsafe {
+                        anim.setFromValue(Some(&from_val));
+                        anim.setToValue(Some(&to_val));
+                    }
+                    anim.setDuration(0.3);
+
+                    let timing_fn = unsafe {
+                        CAMediaTimingFunction::functionWithName(kCAMediaTimingFunctionEaseOut)
+                    };
+                    anim.setTimingFunction(Some(&timing_fn));
+
                     layer.setOpacity(1.0);
+                    let anim_key = NSString::from_str("fadeIn");
+                    layer.addAnimation_forKey(&anim, Some(&anim_key));
                 }
             }
             #[cfg(not(target_os = "macos"))]
