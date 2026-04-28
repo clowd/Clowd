@@ -3,18 +3,27 @@ use image::imageops;
 use crate::geometry::{RectExt, ScreenRect};
 use crate::system::{CapturedCursor, CapturedDesktop, CursorImage, WindowPeekImage};
 
-pub fn blur_desktop_bgra(bgra: &[u8], width: u32, height: u32, sigma: f32) -> Vec<u8> {
+/// Blur the desktop bitmap for the peek overlay background.
+/// Downscales 4x before blurring to keep this fast even in debug builds,
+/// then returns the smaller image. The GPU sampler's bilinear filtering
+/// handles the upscale when rendering.
+pub fn blur_desktop_bgra(bgra: &[u8], width: u32, height: u32, sigma: f32) -> (Vec<u8>, u32, u32) {
+    let scale = 4u32;
+    let small_w = (width / scale).max(1);
+    let small_h = (height / scale).max(1);
+
     let mut rgba = bgra.to_vec();
     for chunk in rgba.chunks_exact_mut(4) {
         chunk.swap(0, 2);
     }
     let img = image::RgbaImage::from_raw(width, height, rgba).expect("buffer size matches dimensions");
-    let blurred = imageops::blur(&img, sigma);
+    let small = imageops::resize(&img, small_w, small_h, imageops::FilterType::Triangle);
+    let blurred = imageops::blur(&small, sigma / scale as f32);
     let mut out = blurred.into_raw();
     for chunk in out.chunks_exact_mut(4) {
         chunk.swap(0, 2);
     }
-    out
+    (out, small_w, small_h)
 }
 
 /// Extract the selected region from the desktop buffer, converting BGRA to RGBA.
