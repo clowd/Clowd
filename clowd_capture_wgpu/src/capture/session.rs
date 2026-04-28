@@ -170,12 +170,8 @@ fn spawn_screenshot_job(
                 let _ = tx.send(WorkerInput::Screenshot(captured.clone()));
             }
             if peek_enabled {
-                let blurred = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 6.0);
-                let blurred = Arc::new(BlurredDesktopImage {
-                    bgra: blurred,
-                    width: captured.width,
-                    height: captured.height,
-                });
+                let (bgra, w, h) = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 6.0);
+                let blurred = Arc::new(BlurredDesktopImage { bgra, width: w, height: h });
                 for tx in &render_msg_txs {
                     let _ = tx.send(RenderMsg::BlurredDesktop(blurred.clone()));
                 }
