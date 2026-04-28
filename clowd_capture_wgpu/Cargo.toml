@@ -4,26 +4,26 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
-image = "0.25"
-euclid = "0.22"
-log = "0.4"
-simplelog = "0.12"
-winit = "0.30"
-wgpu = "29.0"
-num = "0.4"
-pollster = "0.4"
-bytemuck = { version = "1", features = ["derive"] }
-usvg = { version = "0.47", default-features = false }
-resvg = { version = "0.47", default-features = false }
-etagere = "0.3"
-glyphon = "0.11"
-arboard = "3.4"
-rfd = "0.17"
-xdialog = { version = "2.1", features = ["win32-direct", "maccf-direct"] }
+anyhow.workspace = true
+image.workspace = true
+euclid.workspace = true
+log.workspace = true
+simplelog.workspace = true
+winit.workspace = true
+wgpu.workspace = true
+num.workspace = true
+pollster.workspace = true
+bytemuck = { workspace = true, features = ["derive"] }
+usvg.workspace = true
+resvg.workspace = true
+etagere.workspace = true
+glyphon.workspace = true
+arboard.workspace = true
+rfd.workspace = true
+xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = [
+windows = { workspace = true, features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
     "Win32_UI_Shell",
@@ -36,15 +36,15 @@ windows = { version = "0.62", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-graphics = "0.25"
-core-foundation = "0.10"
-objc2 = "0.6"
-objc2-app-kit = "0.3"
-objc2-foundation = "0.3"
-objc2-quartz-core = { version = "0.3", features = ["CALayer"] }
-block2 = "0.6"
+core-graphics.workspace = true
+core-foundation.workspace = true
+objc2.workspace = true
+objc2-app-kit.workspace = true
+objc2-foundation.workspace = true
+objc2-quartz-core = { workspace = true, features = ["CALayer"] }
+block2.workspace = true
 
 # naga version must match what wgpu 29.0 uses internally
 [target.'cfg(windows)'.build-dependencies]
-naga = { version = "29.0", features = ["wgsl-in", "hlsl-out"] }
-libloading = "0.9"
+naga = { workspace = true, features = ["wgsl-in", "hlsl-out"] }
+libloading.workspace = true
