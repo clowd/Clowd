@@ -272,6 +272,39 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let outer_left   = sx - half;
         let outer_right  = sz + half - 1;
 
+        // Resize handles: 8 anti-aliased circles (corners + edge
+        // midpoints), shown only after capture.  From edge inward:
+        // sel_step px accent, sel_step px white ring, rest accent.
+        if (captured) {
+            let fpos = in.pos.xy;
+            let step_f = f32(sel_step);
+            let handle_r    = 6.0 * step_f;
+            let white_outer = handle_r - step_f;
+            let white_inner = handle_r - 3.0 * step_f;
+            let aa = 0.5;
+
+            let mid_x = (f32(sx) + f32(sz)) * 0.5;
+            let mid_y = (f32(sy) + f32(sw)) * 0.5;
+
+            var hd = handle_r + aa + 1.0;
+            hd = min(hd, distance(fpos, vec2<f32>(f32(sx), f32(sy))));
+            hd = min(hd, distance(fpos, vec2<f32>(f32(sz), f32(sy))));
+            hd = min(hd, distance(fpos, vec2<f32>(f32(sx), f32(sw))));
+            hd = min(hd, distance(fpos, vec2<f32>(f32(sz), f32(sw))));
+            hd = min(hd, distance(fpos, vec2<f32>(mid_x,   f32(sy))));
+            hd = min(hd, distance(fpos, vec2<f32>(mid_x,   f32(sw))));
+            hd = min(hd, distance(fpos, vec2<f32>(f32(sx), mid_y)));
+            hd = min(hd, distance(fpos, vec2<f32>(f32(sz), mid_y)));
+
+            if (hd < handle_r + aa) {
+                let outer_a = 1.0 - smoothstep(handle_r - aa, handle_r + aa, hd);
+                let white_a = smoothstep(white_inner - aa, white_inner + aa, hd)
+                            * (1.0 - smoothstep(white_outer - aa, white_outer + aa, hd));
+                let hcol = mix(u.accent_color, vec4<f32>(1.0, 1.0, 1.0, 1.0), white_a);
+                return mix(base, hcol, fade * outer_a);
+            }
+        }
+
         // Classify the pixel into one of the four border slabs.
         // Each slab is 2*half px thick. Top/bottom claim the
         // (2*half)×(2*half) corner squares so the left/right slabs
