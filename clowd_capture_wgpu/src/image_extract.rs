@@ -1,7 +1,7 @@
 use image::imageops;
 
 use crate::geometry::{RectExt, ScreenRect};
-use crate::system::{CapturedDesktop, WindowPeekImage};
+use crate::system::{CapturedCursor, CapturedDesktop, CursorImage, WindowPeekImage};
 
 pub fn blur_desktop_bgra(bgra: &[u8], width: u32, height: u32, sigma: f32) -> Vec<u8> {
     let mut rgba = bgra.to_vec();
@@ -100,6 +100,119 @@ pub fn extract_selection_rgba_with_peek(
     Some(result)
 }
 
+/// Composite the captured cursor onto an already-extracted RGBA buffer.
+/// `selection` is the region in virtual-desktop coords that `rgba` covers.
+///
+/// For `AlphaBlended` cursors: premultiplied alpha blend (src over dst).
+/// For `Masked` cursors: `output = (screen AND and_mask) XOR xor_color`,
+/// which correctly handles monochrome screen-inverse pixels.
+pub fn composite_cursor_rgba(rgba: &mut [u8], width: u32, height: u32, selection: ScreenRect, cursor: &CapturedCursor) {
+    if !cursor.visible {
+        return;
+    }
+
+    let cx = cursor.position.x - cursor.hotspot_x;
+    let cy = cursor.position.y - cursor.hotspot_y;
+
+    match &cursor.image {
+        CursorImage::AlphaBlended {
+            bgra,
+            width: cw,
+            height: ch,
+        } => {
+            composite_alpha_blended(rgba, width, height, selection, bgra, *cw, *ch, cx, cy);
+        }
+        CursorImage::Masked {
+            and_mask_bgra,
+            xor_color_bgra,
+            width: cw,
+            height: ch,
+        } => {
+            composite_masked(rgba, width, height, selection, and_mask_bgra, xor_color_bgra, *cw, *ch, cx, cy);
+        }
+    }
+}
+
+fn composite_alpha_blended(
+    rgba: &mut [u8],
+    dst_w: u32,
+    dst_h: u32,
+    selection: ScreenRect,
+    src_bgra: &[u8],
+    src_w: u32,
+    src_h: u32,
+    origin_x: i32,
+    origin_y: i32,
+) {
+    for row in 0..src_h {
+        for col in 0..src_w {
+            let vd_x = origin_x + col as i32;
+            let vd_y = origin_y + row as i32;
+            let sx = vd_x - selection.left();
+            let sy = vd_y - selection.top();
+            if sx < 0 || sy < 0 || sx >= dst_w as i32 || sy >= dst_h as i32 {
+                continue;
+            }
+            let src_idx = (row as usize * src_w as usize + col as usize) * 4;
+            if src_idx + 3 >= src_bgra.len() {
+                continue;
+            }
+            let sa = src_bgra[src_idx + 3];
+            if sa == 0 {
+                continue;
+            }
+            // Source is BGRA premultiplied; dst is RGBA.
+            let sr = src_bgra[src_idx + 2];
+            let sg = src_bgra[src_idx + 1];
+            let sb = src_bgra[src_idx];
+
+            let dst_idx = (sy as usize * dst_w as usize + sx as usize) * 4;
+            let inv_sa = 255 - sa as u16;
+            rgba[dst_idx] = (sr as u16 + (rgba[dst_idx] as u16 * inv_sa / 255)).min(255) as u8;
+            rgba[dst_idx + 1] = (sg as u16 + (rgba[dst_idx + 1] as u16 * inv_sa / 255)).min(255) as u8;
+            rgba[dst_idx + 2] = (sb as u16 + (rgba[dst_idx + 2] as u16 * inv_sa / 255)).min(255) as u8;
+            rgba[dst_idx + 3] = (sa as u16 + (rgba[dst_idx + 3] as u16 * inv_sa / 255)).min(255) as u8;
+        }
+    }
+}
+
+fn composite_masked(
+    rgba: &mut [u8],
+    dst_w: u32,
+    dst_h: u32,
+    selection: ScreenRect,
+    and_mask_bgra: &[u8],
+    xor_color_bgra: &[u8],
+    src_w: u32,
+    src_h: u32,
+    origin_x: i32,
+    origin_y: i32,
+) {
+    for row in 0..src_h {
+        for col in 0..src_w {
+            let vd_x = origin_x + col as i32;
+            let vd_y = origin_y + row as i32;
+            let sx = vd_x - selection.left();
+            let sy = vd_y - selection.top();
+            if sx < 0 || sy < 0 || sx >= dst_w as i32 || sy >= dst_h as i32 {
+                continue;
+            }
+            let src_idx = (row as usize * src_w as usize + col as usize) * 4;
+            if src_idx + 3 >= and_mask_bgra.len() || src_idx + 3 >= xor_color_bgra.len() {
+                continue;
+            }
+
+            let dst_idx = (sy as usize * dst_w as usize + sx as usize) * 4;
+            // output = (screen AND and_mask) XOR xor_color
+            // Dst is RGBA, masks are BGRA → swap channels during operation.
+            rgba[dst_idx] = (rgba[dst_idx] & and_mask_bgra[src_idx + 2]) ^ xor_color_bgra[src_idx + 2];
+            rgba[dst_idx + 1] = (rgba[dst_idx + 1] & and_mask_bgra[src_idx + 1]) ^ xor_color_bgra[src_idx + 1];
+            rgba[dst_idx + 2] = (rgba[dst_idx + 2] & and_mask_bgra[src_idx]) ^ xor_color_bgra[src_idx];
+            rgba[dst_idx + 3] = 255;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,6 +225,7 @@ mod tests {
             height: 2,
             bounds: ScreenRect::from_xy_size(10, 20, 2, 2),
             monitors: Vec::new(),
+            cursor: None,
         }
     }
 
@@ -153,5 +267,153 @@ mod tests {
         let selection = ScreenRect::from_xy_size(20, 20, 2, 2);
 
         assert!(extract_selection_rgba(selection, &desktop).is_none());
+    }
+
+    use crate::geometry::ScreenPoint;
+
+    #[test]
+    fn composite_cursor_alpha_blended_opaque() {
+        // 2x1 RGBA buffer, white pixels
+        let mut rgba = vec![255, 255, 255, 255, 255, 255, 255, 255];
+        let selection = ScreenRect::from_xy_size(0, 0, 2, 1);
+        // 1x1 opaque red cursor (BGRA: B=0, G=0, R=255, A=255) at position (0,0)
+        let cursor = CapturedCursor {
+            position: ScreenPoint::new(0, 0),
+            hotspot_x: 0,
+            hotspot_y: 0,
+            visible: true,
+            image: CursorImage::AlphaBlended {
+                bgra: vec![0, 0, 255, 255],
+                width: 1,
+                height: 1,
+            },
+        };
+
+        composite_cursor_rgba(&mut rgba, 2, 1, selection, &cursor);
+
+        // First pixel should be red (R=255,G=0,B=0,A=255), second unchanged
+        assert_eq!(rgba, vec![255, 0, 0, 255, 255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn composite_cursor_alpha_blended_semi_transparent() {
+        // 1x1 RGBA buffer, white pixel
+        let mut rgba = vec![255, 255, 255, 255];
+        let selection = ScreenRect::from_xy_size(0, 0, 1, 1);
+        // 50% transparent red cursor (premultiplied: B=0, G=0, R=128, A=128)
+        let cursor = CapturedCursor {
+            position: ScreenPoint::new(0, 0),
+            hotspot_x: 0,
+            hotspot_y: 0,
+            visible: true,
+            image: CursorImage::AlphaBlended {
+                bgra: vec![0, 0, 128, 128],
+                width: 1,
+                height: 1,
+            },
+        };
+
+        composite_cursor_rgba(&mut rgba, 1, 1, selection, &cursor);
+
+        // premultiplied: out = src + dst * (1 - src_a/255)
+        // R: 128 + 255 * 127/255 = 128 + 127 = 255
+        // G: 0 + 255 * 127/255 = 127
+        // B: 0 + 255 * 127/255 = 127
+        assert_eq!(rgba[0], 255); // R
+        assert_eq!(rgba[1], 127); // G
+        assert_eq!(rgba[2], 127); // B
+    }
+
+    #[test]
+    fn composite_cursor_masked_black_opaque() {
+        // 1x1 RGBA buffer, white pixel
+        let mut rgba = vec![255, 255, 255, 255];
+        let selection = ScreenRect::from_xy_size(0, 0, 1, 1);
+        // Monochrome black: AND=0x00 (zero screen), XOR=0x00 (no change) → black
+        let cursor = CapturedCursor {
+            position: ScreenPoint::new(0, 0),
+            hotspot_x: 0,
+            hotspot_y: 0,
+            visible: true,
+            image: CursorImage::Masked {
+                and_mask_bgra: vec![0x00, 0x00, 0x00, 0x00],
+                xor_color_bgra: vec![0x00, 0x00, 0x00, 0x00],
+                width: 1,
+                height: 1,
+            },
+        };
+
+        composite_cursor_rgba(&mut rgba, 1, 1, selection, &cursor);
+
+        assert_eq!(rgba, vec![0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn composite_cursor_masked_screen_inverse() {
+        // 1x1 RGBA buffer, arbitrary color (R=100, G=150, B=200)
+        let mut rgba = vec![100, 150, 200, 255];
+        let selection = ScreenRect::from_xy_size(0, 0, 1, 1);
+        // Monochrome inverse: AND=0xFF (keep screen), XOR=0xFF (invert) → ~screen
+        let cursor = CapturedCursor {
+            position: ScreenPoint::new(0, 0),
+            hotspot_x: 0,
+            hotspot_y: 0,
+            visible: true,
+            image: CursorImage::Masked {
+                and_mask_bgra: vec![0xFF, 0xFF, 0xFF, 0xFF],
+                xor_color_bgra: vec![0xFF, 0xFF, 0xFF, 0xFF],
+                width: 1,
+                height: 1,
+            },
+        };
+
+        composite_cursor_rgba(&mut rgba, 1, 1, selection, &cursor);
+
+        // (screen AND 0xFF) XOR 0xFF = ~screen
+        assert_eq!(rgba, vec![155, 105, 55, 255]);
+    }
+
+    #[test]
+    fn composite_cursor_invisible_is_noop() {
+        let mut rgba = vec![100, 150, 200, 255];
+        let selection = ScreenRect::from_xy_size(0, 0, 1, 1);
+        let cursor = CapturedCursor {
+            position: ScreenPoint::new(0, 0),
+            hotspot_x: 0,
+            hotspot_y: 0,
+            visible: false,
+            image: CursorImage::AlphaBlended {
+                bgra: vec![255, 0, 0, 255],
+                width: 1,
+                height: 1,
+            },
+        };
+
+        composite_cursor_rgba(&mut rgba, 1, 1, selection, &cursor);
+
+        assert_eq!(rgba, vec![100, 150, 200, 255]);
+    }
+
+    #[test]
+    fn composite_cursor_clips_outside_selection() {
+        // 1x1 RGBA buffer at position (10,10)
+        let mut rgba = vec![100, 150, 200, 255];
+        let selection = ScreenRect::from_xy_size(10, 10, 1, 1);
+        // Cursor at (0,0) — entirely outside the selection
+        let cursor = CapturedCursor {
+            position: ScreenPoint::new(0, 0),
+            hotspot_x: 0,
+            hotspot_y: 0,
+            visible: true,
+            image: CursorImage::AlphaBlended {
+                bgra: vec![255, 0, 0, 255],
+                width: 1,
+                height: 1,
+            },
+        };
+
+        composite_cursor_rgba(&mut rgba, 1, 1, selection, &cursor);
+
+        assert_eq!(rgba, vec![100, 150, 200, 255]);
     }
 }

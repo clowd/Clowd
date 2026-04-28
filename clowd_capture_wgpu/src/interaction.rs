@@ -28,6 +28,7 @@ pub(crate) struct InteractionState {
     pub last_scroll_end: Option<Instant>,
     pub scroll_momentum: bool,
     pub overlays_visible: bool,
+    pub cursor_overlay_visible: bool,
 }
 
 #[derive(Default)]
@@ -158,6 +159,7 @@ mod tests {
             last_scroll_end: None,
             scroll_momentum: false,
             overlays_visible: true,
+            cursor_overlay_visible: true,
         }
     }
 

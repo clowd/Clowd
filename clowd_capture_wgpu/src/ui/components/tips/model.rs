@@ -41,6 +41,7 @@ pub const TIPS_TOP: &[TipRow] = &[
 /// The bottom block of body rows, below the color-sampler row.
 /// `DxScreenCapture.cpp:750,752`.
 pub const TIPS_BOTTOM: &[TipRow] = &[
+    TipRow::new("M", "Toggle cursor in screenshot"),
     TipRow::new("D", "Toggle debug stats"),
     TipRow::new("T", "Toggle this panel"),
     TipRow::new("Q", "Toggle cursor/crosshair"),

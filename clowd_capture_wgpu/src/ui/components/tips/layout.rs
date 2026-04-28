@@ -9,6 +9,7 @@
 //! scale) at computation time.
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
+use crate::ui::components::tips::model::{TIPS_BOTTOM, TIPS_TOP};
 
 /// Distance from the screen edge (pre-DPI). `DEBUGBOX_MARGIN` in `pch.h:53`.
 pub const SCREEN_MARGIN: f32 = 50.0;
@@ -104,7 +105,7 @@ pub fn compute_layout(
     // breathing room above AND below the color-sampler row, because
     // the 2×height swatch butts up against the adjacent text rows
     // otherwise.
-    let body_lines = 4.0 + 3.0 + 2.0;
+    let body_lines = TIPS_TOP.len() as f32 + TIPS_BOTTOM.len() as f32 + 2.0;
     let color_row_gap = padding_half * 0.4;
     let body_h = body_row_height_px * body_lines + padding * 2.0 + color_row_gap * 2.0;
 
@@ -152,7 +153,7 @@ pub fn compute_layout(
     // Color row starts after the top block plus a half-padding gap so
     // the swatch doesn't visually crowd the "A  Select all monitors"
     // row above it.
-    let color_row_y = top_block_y + body_row_height_px * 4.0 + color_row_gap;
+    let color_row_y = top_block_y + body_row_height_px * TIPS_TOP.len() as f32 + color_row_gap;
     // Bottom block starts after the two-line color row plus another
     // half-padding gap below the swatch.
     let bottom_block_y = color_row_y + body_row_height_px * 2.0 + color_row_gap;

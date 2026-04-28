@@ -1,5 +1,5 @@
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect, WindowPoint};
-use crate::gpu::desktop::WindowUniforms;
+use crate::gpu::desktop::{CursorTextures, WindowUniforms};
 
 /// Duration of the colour to grayscale fade after the window first becomes visible.
 const FADE_DURATION_SECS: f32 = 0.3;
@@ -18,12 +18,13 @@ pub(crate) struct FrameState {
     pub selection: Option<ScreenRect>,
     pub captured: bool,
     pub overlays_visible: bool,
+    pub cursor_overlay_visible: bool,
     pub elapsed: f32,
     pub surface_size: (u32, u32),
 }
 
 impl SnapshotState {
-    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, frame: &FrameState) {
+    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, frame: &FrameState, cursor_textures: Option<&CursorTextures>) {
         let FrameState {
             monitor_bounds,
             mouse_pos,
@@ -31,6 +32,7 @@ impl SnapshotState {
             selection,
             captured,
             overlays_visible,
+            cursor_overlay_visible,
             elapsed,
             surface_size,
         } = *frame;
@@ -63,6 +65,7 @@ impl SnapshotState {
             self.uniforms.selection_params[0] = elapsed;
             self.uniforms.selection_params[1] = 0.0;
             self.uniforms.selection_params[2] = zoom;
+            self.set_cursor_uniforms(cursor_textures, cursor_overlay_visible, monitor_bounds, mouse_pos, zoom);
             queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
             return;
         }
@@ -114,7 +117,45 @@ impl SnapshotState {
         self.uniforms.selection_params[0] = elapsed;
         self.uniforms.selection_params[1] = if captured { 1.0 } else { 0.0 };
         self.uniforms.selection_params[2] = zoom;
+        self.set_cursor_uniforms(cursor_textures, cursor_overlay_visible, monitor_bounds, mouse_pos, zoom);
 
         queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
+    }
+
+    fn set_cursor_uniforms(
+        &mut self,
+        cursor_textures: Option<&CursorTextures>,
+        visible: bool,
+        monitor_bounds: ScreenRect,
+        mouse_pos: ScreenPointF,
+        zoom: f32,
+    ) {
+        let ct = match cursor_textures {
+            Some(ct) if visible && ct.visible => ct,
+            _ => {
+                self.uniforms.cursor_rect = [0.0, 0.0, -1.0, -1.0];
+                self.uniforms.cursor_params = [0.0, 0.0, 0.0, 0.0];
+                return;
+            }
+        };
+
+        let vd_left = (ct.position.x - ct.hotspot_x) as f32;
+        let vd_top = (ct.position.y - ct.hotspot_y) as f32;
+        let vd_right = vd_left + ct.width as f32;
+        let vd_bottom = vd_top + ct.height as f32;
+
+        let cx = mouse_pos.x;
+        let cy = mouse_pos.y;
+        let local_cx = cx - monitor_bounds.min_x() as f32;
+        let local_cy = cy - monitor_bounds.min_y() as f32;
+
+        let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
+            ((vd_x - cx) * zoom + local_cx, (vd_y - cy) * zoom + local_cy)
+        };
+
+        let (l, t) = to_local(vd_left, vd_top);
+        let (r, b) = to_local(vd_right, vd_bottom);
+        self.uniforms.cursor_rect = [l, t, r, b];
+        self.uniforms.cursor_params = [ct.cursor_type as f32, 0.0, 0.0, 0.0];
     }
 }

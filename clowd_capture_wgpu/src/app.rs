@@ -106,6 +106,7 @@ impl App {
 
         let expected = worker_setups.len();
         let tips_visible = settings.tips_visible_at_startup;
+        let cursor_overlay_visible = settings.cursor_visible_at_startup;
 
         Self {
             settings,
@@ -150,6 +151,7 @@ impl App {
                 last_scroll_end: None,
                 scroll_momentum: false,
                 overlays_visible: true,
+                cursor_overlay_visible,
             },
         }
     }
@@ -251,6 +253,7 @@ impl App {
             hovered_window_bounds,
             hovered_window_index,
             hovered_window_obstructed,
+            cursor_overlay_visible: self.input.cursor_overlay_visible,
             desktop_buffer: self.desktop_buffer.as_deref(),
         }));
 
@@ -356,11 +359,17 @@ impl App {
                 .map(|img| img.as_ref())
         });
 
+        let cursor = self
+            .desktop_buffer
+            .as_ref()
+            .and_then(|buf| buf.cursor.as_ref());
+        let cursor_visible = self.input.cursor_overlay_visible;
+
         match command {
             Command::Copy => {
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => copy_to_clipboard_with_peek(sel, buf, active_peek_image),
+                    (Some(sel), Some(buf)) => copy_to_clipboard_with_peek(sel, buf, active_peek_image, cursor, cursor_visible),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
@@ -380,7 +389,7 @@ impl App {
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => match self.windows.get(&window_id) {
-                        Some(handle) => handle.save_to_file_with_peek(sel, buf, active_peek_image),
+                        Some(handle) => handle.save_to_file_with_peek(sel, buf, active_peek_image, cursor, cursor_visible),
                         None => ActionResult::Failed("No active window".into()),
                     },
                     _ => ActionResult::Failed("No selection or buffer".into()),
@@ -593,6 +602,9 @@ impl ApplicationHandler for App {
                     if c_lower == 'd' {
                         self.input.debug_visible = !self.input.debug_visible;
                         self.update_cursor_visibility();
+                        self.broadcast_ui_state();
+                    } else if c_lower == 'm' {
+                        self.input.cursor_overlay_visible = !self.input.cursor_overlay_visible;
                         self.broadcast_ui_state();
                     } else if self.input.captured {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
