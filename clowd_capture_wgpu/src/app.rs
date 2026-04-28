@@ -475,7 +475,8 @@ impl ApplicationHandler for App {
                 .with_title("clowd capture")
                 .with_decorations(false)
                 .with_resizable(false)
-                .with_visible(cfg!(target_os = "macos"))
+                .with_visible(false)
+                .with_active(false)
                 .with_transparent(false)
                 .with_position(win_pos)
                 .with_inner_size(win_size);

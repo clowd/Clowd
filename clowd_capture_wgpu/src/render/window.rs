@@ -48,6 +48,9 @@ impl WindowHandle {
         #[cfg(not(target_os = "macos"))]
         let surface = create_surface(instance, window.clone(), screenshot_image)?;
 
+        #[cfg(target_os = "macos")]
+        show_window_without_focus(&window);
+
         let _ = setup
             .input_tx
             .send(WorkerInput::Handoff(WindowHandoff {
@@ -296,6 +299,25 @@ fn apply_capture_window_tweaks(window: &Window) {
         let black = NSColor::blackColor();
         ns_window.setBackgroundColor(Some(&black));
         ns_window.setOpaque(true);
+    }
+}
+
+/// Show a window without activating the app or making it key.
+/// The window appears at its configured level (above all other windows)
+/// but the previously-focused app retains focus until we explicitly take it.
+#[cfg(target_os = "macos")]
+fn show_window_without_focus(window: &Window) {
+    use objc2_app_kit::NSView;
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let Ok(handle) = window.window_handle() else { return };
+    let RawWindowHandle::AppKit(h) = handle.as_raw() else { return };
+
+    unsafe {
+        let ns_view: &NSView = &*(h.ns_view.as_ptr() as *const NSView);
+        if let Some(ns_window) = ns_view.window() {
+            ns_window.orderFrontRegardless();
+        }
     }
 }
 

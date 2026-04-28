@@ -35,8 +35,26 @@ fn main() -> anyhow::Result<()> {
     let settings = Arc::new(settings::CapturerSettings::default());
     let session = capture::session::CaptureSession::new(settings)?;
 
+    #[cfg(target_os = "macos")]
+    let event_loop = {
+        use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
+        winit::event_loop::EventLoop::builder()
+            .with_activation_policy(ActivationPolicy::Accessory)
+            .with_activate_ignoring_other_apps(false)
+            .build()?
+    };
+    #[cfg(not(target_os = "macos"))]
     let event_loop = winit::event_loop::EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::MainThreadMarker;
+        use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+        let mtm = MainThreadMarker::new().unwrap();
+        NSApplication::sharedApplication(mtm)
+            .setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+    }
 
     let mut app = session.into_app();
     event_loop.run_app(&mut app)?;
