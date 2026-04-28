@@ -47,6 +47,8 @@ objc2-quartz-core = { workspace = true, features = ["CALayer"] }
 block2.workspace = true
 
 # naga version must match what wgpu 29.0 uses internally
+[build-dependencies]
+naga = { workspace = true, features = ["wgsl-in", "hlsl-out", "msl-out"] }
+
 [target.'cfg(windows)'.build-dependencies]
-naga = { workspace = true, features = ["wgsl-in", "hlsl-out"] }
 libloading.workspace = true

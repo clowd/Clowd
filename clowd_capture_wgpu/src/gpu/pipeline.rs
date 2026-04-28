@@ -2,25 +2,6 @@ use crate::gpu::desktop::WINDOW_UNIFORMS_SIZE;
 use crate::gpu::peek::PEEK_UNIFORMS_SIZE;
 use crate::gpu::SURFACE_FORMAT;
 
-#[cfg(windows)]
-mod compiled_shaders {
-    pub const DESKTOP_VS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/desktop_vs.dxbc"));
-    pub const DESKTOP_PS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/desktop_ps.dxbc"));
-    pub const PEEK_VS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/peek_vs.dxbc"));
-    pub const PEEK_PS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/peek_ps.dxbc"));
-}
-
-#[cfg(windows)]
-pub(crate) unsafe fn create_passthrough_module(device: &wgpu::Device, label: &str, dxbc: &'static [u8]) -> wgpu::ShaderModule {
-    unsafe {
-        device.create_shader_module_passthrough(wgpu::ShaderModuleDescriptorPassthrough {
-            label: Some(label.into()),
-            dxil: Some(std::borrow::Cow::Borrowed(dxbc)),
-            ..Default::default()
-        })
-    }
-}
-
 pub(crate) fn create_desktop_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("desktop snapshot BGL"),
@@ -95,15 +76,7 @@ pub(crate) fn create_desktop_sampler(device: &wgpu::Device) -> wgpu::Sampler {
 }
 
 pub(crate) fn create_desktop_pipeline(device: &wgpu::Device, desktop_bgl: &wgpu::BindGroupLayout) -> wgpu::RenderPipeline {
-    #[cfg(windows)]
-    let (desktop_vs, desktop_fs) = unsafe {
-        (
-            create_passthrough_module(device, "desktop VS", compiled_shaders::DESKTOP_VS),
-            create_passthrough_module(device, "desktop FS", compiled_shaders::DESKTOP_PS),
-        )
-    };
-    #[cfg(not(windows))]
-    let desktop_shader = device.create_shader_module(wgpu::include_wgsl!("../../shaders/desktop.wgsl"));
+    let shader = crate::gpu::shaders::desktop(device);
 
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("desktop pipeline layout"),
@@ -114,19 +87,13 @@ pub(crate) fn create_desktop_pipeline(device: &wgpu::Device, desktop_bgl: &wgpu:
         label: Some("desktop pipeline"),
         layout: Some(&layout),
         vertex: wgpu::VertexState {
-            #[cfg(windows)]
-            module: &desktop_vs,
-            #[cfg(not(windows))]
-            module: &desktop_shader,
+            module: shader.vs(),
             entry_point: Some("vs_main"),
             buffers: &[],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
-            #[cfg(windows)]
-            module: &desktop_fs,
-            #[cfg(not(windows))]
-            module: &desktop_shader,
+            module: shader.fs(),
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
                 format: SURFACE_FORMAT,
@@ -196,15 +163,7 @@ pub(crate) fn create_peek_bind_group_layout(device: &wgpu::Device) -> wgpu::Bind
 }
 
 pub(crate) fn create_peek_pipeline(device: &wgpu::Device, peek_bgl: &wgpu::BindGroupLayout) -> wgpu::RenderPipeline {
-    #[cfg(windows)]
-    let (peek_vs, peek_fs) = unsafe {
-        (
-            create_passthrough_module(device, "peek VS", compiled_shaders::PEEK_VS),
-            create_passthrough_module(device, "peek FS", compiled_shaders::PEEK_PS),
-        )
-    };
-    #[cfg(not(windows))]
-    let peek_shader = device.create_shader_module(wgpu::include_wgsl!("../../shaders/peek.wgsl"));
+    let shader = crate::gpu::shaders::peek(device);
 
     let peek_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("peek pipeline layout"),
@@ -215,19 +174,13 @@ pub(crate) fn create_peek_pipeline(device: &wgpu::Device, peek_bgl: &wgpu::BindG
         label: Some("peek pipeline"),
         layout: Some(&peek_layout),
         vertex: wgpu::VertexState {
-            #[cfg(windows)]
-            module: &peek_vs,
-            #[cfg(not(windows))]
-            module: &peek_shader,
+            module: shader.vs(),
             entry_point: Some("vs_main"),
             buffers: &[],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
-            #[cfg(windows)]
-            module: &peek_fs,
-            #[cfg(not(windows))]
-            module: &peek_shader,
+            module: shader.fs(),
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
                 format: SURFACE_FORMAT,
