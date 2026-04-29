@@ -66,6 +66,7 @@ impl InteractionController {
         let restore_mouse = if input.anchored && (new_zoom - 1.0).abs() < f32::EPSILON {
             input.anchored = false;
             input.anchor_just_engaged = false;
+            input.overlays_visible = true;
             Some(ScreenPoint::new(
                 input.virtual_cursor.x.floor() as i32,
                 input.virtual_cursor.y.floor() as i32,

@@ -4,9 +4,6 @@ pub struct HintDef {
     pub template: &'static str,
 }
 
-pub const HINT_COLOR: HintDef = HintDef {
-    template: "Select",
-};
 pub const HINT_WINDOW: HintDef = HintDef {
     template: "Select {window}",
 };

@@ -5,7 +5,7 @@ use crate::ui::components::hints::layout::{
     compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_window_hint, HintLayout, HintRect, CURSOR_SQUARE_PAD,
     HINT_FONT_PX,
 };
-use crate::ui::components::hints::model::{render_hint_text, HINT_COLOR, HINT_MONITOR, HINT_WINDOW};
+use crate::ui::components::hints::model::{render_hint_text, HINT_MONITOR, HINT_WINDOW};
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_MONO};
 use crate::ui::shared::{hints_visibility, UiMonitor, UiSharedState};
@@ -219,8 +219,16 @@ impl HintsRenderer {
 
         // --- [H] Select Color (follows crosshair) ---
         {
+            self.text_buf.clear();
+            match state.hovered_pixel_bgra {
+                Some([b, g, r, _]) => {
+                    use std::fmt::Write;
+                    let _ = write!(self.text_buf, "Select #{:02X}{:02X}{:02X}", r, g, b);
+                }
+                None => self.text_buf.push_str("Select #------"),
+            }
             self.buffers[IDX_KEY_COLOR].set(ts, "H", font_px, true);
-            self.buffers[IDX_DESC_COLOR].set(ts, HINT_COLOR.template, font_px, false);
+            self.buffers[IDX_DESC_COLOR].set(ts, &self.text_buf, font_px, false);
             let key_w = self.buffers[IDX_KEY_COLOR].width();
             let desc_w = self.buffers[IDX_DESC_COLOR].width();
             let swatch_size = (font_px * 1.4).floor();
