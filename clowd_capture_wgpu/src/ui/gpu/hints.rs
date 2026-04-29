@@ -2,17 +2,17 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 
 use crate::geometry::RectExt;
 use crate::ui::components::hints::layout::{
-    compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_window_hint, HintLayout, HintRect, CURSOR_SQUARE_PAD,
+    compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, HintLayout, HintRect, CURSOR_SQUARE_PAD,
     HINT_FONT_PX,
 };
-use crate::ui::components::hints::model::{render_hint_text, HINT_MONITOR, HINT_WINDOW};
+use crate::ui::components::hints::model::{render_hint_text, HINT_MONITOR};
 use crate::ui::gpu::rect::RectInstance;
-use crate::ui::gpu::text::{TextStack, FAMILY_MONO};
+use crate::ui::gpu::text::{TextStack, FAMILY_CODE, FAMILY_MONO};
 use crate::ui::shared::{hints_visibility, UiMonitor, UiSharedState};
 
-const TOOLTIP_FILL: [f32; 4] = [0.38, 0.38, 0.38, 0.70];
-const TOOLTIP_BORDER: [f32; 4] = [0.50, 0.50, 0.50, 0.70];
-const SHADOW_FILL: [f32; 4] = [0.0, 0.0, 0.0, 0.25];
+const TOOLTIP_FILL: [f32; 4] = [0.38, 0.38, 0.38, 0.85];
+const TOOLTIP_BORDER: [f32; 4] = [0.50, 0.50, 0.50, 0.85];
+const SHADOW_FILL: [f32; 4] = [0.0, 0.0, 0.0, 0.40];
 
 // Keycap: 3-layer bevel design.
 // Layer 1 (base): dark gray — visible as bottom-right shadow edge.
@@ -32,10 +32,11 @@ struct CachedBuffer {
     last_text: String,
     last_font_px: f32,
     last_bold: bool,
+    mono: bool,
 }
 
 impl CachedBuffer {
-    fn new(ts: &mut TextStack, font_px: f32, bold: bool) -> Self {
+    fn new(ts: &mut TextStack, font_px: f32, bold: bool, mono: bool) -> Self {
         let metrics = Metrics::new(font_px, font_px * 1.2);
         let mut buffer = Buffer::new(&mut ts.font_system, metrics);
         buffer.set_wrap(&mut ts.font_system, Wrap::None);
@@ -44,6 +45,7 @@ impl CachedBuffer {
             last_text: String::new(),
             last_font_px: font_px,
             last_bold: bold,
+            mono,
         }
     }
 
@@ -59,9 +61,10 @@ impl CachedBuffer {
             self.last_font_px = font_px;
             self.last_bold = bold;
         }
-        let mut attrs = Attrs::new().family(Family::Name(FAMILY_MONO));
+        let family = if self.mono { FAMILY_MONO } else { FAMILY_CODE };
+        let mut attrs = Attrs::new().family(Family::Name(family));
         if bold {
-            attrs = attrs.weight(Weight::BOLD);
+            attrs = attrs.weight(if self.mono { Weight::BOLD } else { Weight::MEDIUM });
         }
         self.buffer
             .set_text(&mut ts.font_system, text, &attrs, Shaping::Advanced, None);
@@ -91,15 +94,13 @@ struct PositionedText {
 
 const IDX_KEY_COLOR: usize = 0;
 const IDX_DESC_COLOR: usize = 1;
-const IDX_KEY_WINDOW: usize = 2;
-const IDX_DESC_WINDOW: usize = 3;
-const IDX_KEY_MONITOR: usize = 4;
-const IDX_DESC_MONITOR: usize = 5;
-const IDX_KEY_CURSOR: usize = 6;
-const IDX_DESC_CURSOR: usize = 7;
-const IDX_KEY_MAGNIFIER: usize = 8;
-const IDX_DESC_MAGNIFIER: usize = 9;
-const TOTAL_BUFFERS: usize = 10;
+const IDX_KEY_MONITOR: usize = 2;
+const IDX_DESC_MONITOR: usize = 3;
+const IDX_KEY_CURSOR: usize = 4;
+const IDX_DESC_CURSOR: usize = 5;
+const IDX_KEY_MAGNIFIER: usize = 6;
+const IDX_DESC_MAGNIFIER: usize = 7;
+const TOTAL_BUFFERS: usize = 8;
 
 pub struct HintsRenderer {
     buffers: Vec<CachedBuffer>,
@@ -111,8 +112,8 @@ impl HintsRenderer {
     pub fn new(ts: &mut TextStack) -> Self {
         let mut buffers = Vec::with_capacity(TOTAL_BUFFERS);
         for i in 0..TOTAL_BUFFERS {
-            let bold = i % 2 == 0;
-            buffers.push(CachedBuffer::new(ts, 11.0, bold));
+            let is_key = i % 2 == 0;
+            buffers.push(CachedBuffer::new(ts, 11.0, is_key, !is_key));
         }
         Self {
             buffers,
@@ -133,6 +134,7 @@ impl HintsRenderer {
 
         let dpi = target.dpi_scale.max(0.1);
         let font_px = (HINT_FONT_PX * dpi).floor();
+        let key_font_px = (HINT_FONT_PX * 1.15 * dpi).floor();
         let text_line_h = font_px * 1.2;
         let mon_left = this_monitor.bounds.min_x() as f32;
         let mon_top = this_monitor.bounds.min_y() as f32;
@@ -148,7 +150,7 @@ impl HintsRenderer {
             } else {
                 "Exit Magnifier"
             };
-            self.buffers[IDX_KEY_MAGNIFIER].set(ts, "Q", font_px, true);
+            self.buffers[IDX_KEY_MAGNIFIER].set(ts, "Q", key_font_px, true);
             self.buffers[IDX_DESC_MAGNIFIER].set(ts, mag_label, font_px, false);
             let key_w = self.buffers[IDX_KEY_MAGNIFIER].width();
             let desc_w = self.buffers[IDX_DESC_MAGNIFIER].width();
@@ -162,7 +164,7 @@ impl HintsRenderer {
                 return;
             }
         } else {
-            // --- [F] Select Monitor (bottom-center) ---
+            // --- [F] Select Monitor (top-center) ---
             if state.hovered_monitor_name.is_some() {
                 self.text_buf.clear();
                 self.text_buf.push_str(&render_hint_text(
@@ -170,31 +172,13 @@ impl HintsRenderer {
                     state.hovered_window_title.as_deref(),
                     state.hovered_monitor_name.as_deref(),
                 ));
-                self.buffers[IDX_KEY_MONITOR].set(ts, "F", font_px, true);
+                self.buffers[IDX_KEY_MONITOR].set(ts, "F", key_font_px, true);
                 self.buffers[IDX_DESC_MONITOR].set(ts, &self.text_buf, font_px, false);
                 let key_w = self.buffers[IDX_KEY_MONITOR].width();
                 let desc_w = self.buffers[IDX_DESC_MONITOR].width();
-                let (layout, hr) = compute_monitor_hint(&target, dpi, key_w, desc_w, text_line_h, &placed);
+                let (layout, hr) = compute_monitor_hint_top(&target, dpi, key_w, desc_w, text_line_h, &placed);
                 self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MONITOR, IDX_DESC_MONITOR);
                 placed.push(hr);
-            }
-
-            // --- [W] Select Window (anchored to window title bar) ---
-            if state.hovered_window_title.is_some() {
-                self.text_buf.clear();
-                self.text_buf.push_str(&render_hint_text(
-                    HINT_WINDOW.template,
-                    state.hovered_window_title.as_deref(),
-                    state.hovered_monitor_name.as_deref(),
-                ));
-                self.buffers[IDX_KEY_WINDOW].set(ts, "W", font_px, true);
-                self.buffers[IDX_DESC_WINDOW].set(ts, &self.text_buf, font_px, false);
-                let key_w = self.buffers[IDX_KEY_WINDOW].width();
-                let desc_w = self.buffers[IDX_DESC_WINDOW].width();
-                if let Some((layout, hr)) = compute_window_hint(state, &target, dpi, key_w, desc_w, text_line_h, &placed) {
-                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_WINDOW, IDX_DESC_WINDOW);
-                    placed.push(hr);
-                }
             }
 
             // --- [M] Toggle Cursor (near hardware cursor, only if cursor is inside selection) ---
@@ -215,7 +199,7 @@ impl HintsRenderer {
                     } else {
                         "Show Cursor"
                     };
-                    self.buffers[IDX_KEY_CURSOR].set(ts, "M", font_px, true);
+                    self.buffers[IDX_KEY_CURSOR].set(ts, "M", key_font_px, true);
                     self.buffers[IDX_DESC_CURSOR].set(ts, cursor_label, font_px, false);
                     let key_w = self.buffers[IDX_KEY_CURSOR].width();
                     let desc_w = self.buffers[IDX_DESC_CURSOR].width();
@@ -235,7 +219,7 @@ impl HintsRenderer {
                 }
                 None => self.text_buf.push_str("Select #------"),
             }
-            self.buffers[IDX_KEY_COLOR].set(ts, "H", font_px, true);
+            self.buffers[IDX_KEY_COLOR].set(ts, "H", key_font_px, true);
             self.buffers[IDX_DESC_COLOR].set(ts, &self.text_buf, font_px, false);
             let key_w = self.buffers[IDX_KEY_COLOR].width();
             let desc_w = self.buffers[IDX_DESC_COLOR].width();
@@ -246,8 +230,8 @@ impl HintsRenderer {
             self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_COLOR, IDX_DESC_COLOR);
 
             if let Some([b, g, r, _]) = state.hovered_pixel_bgra {
-                let swatch_x = layout.desc_text_x - mon_left + desc_w + swatch_gap;
-                let swatch_y = layout.desc_text_y - mon_top + (text_line_h - swatch_size) / 2.0;
+                let swatch_x = (layout.desc_text_x - mon_left + desc_w + swatch_gap).round();
+                let swatch_y = (layout.desc_text_y - mon_top + (text_line_h - swatch_size) / 2.0).round();
                 let swatch_fill = [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0];
                 rects.push(RectInstance {
                     dest_px: [swatch_x, swatch_y, swatch_x + swatch_size, swatch_y + swatch_size],
@@ -375,7 +359,7 @@ impl HintsRenderer {
         let font_px = self.buffers[key_idx].last_font_px;
         let key_line_h = font_px * 1.2;
         let key_text_x = face_x + (face_w - key_text_w) / 2.0;
-        let key_text_y = face_y + (face_h - key_line_h) / 2.0;
+        let key_text_y = (face_y + (face_h - key_line_h) / 2.0 + vert_bias / 2.0).round();
         self.positions.push(PositionedText {
             buffer_idx: key_idx,
             x: key_text_x,

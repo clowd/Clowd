@@ -152,6 +152,7 @@ impl App {
                 scroll_momentum: false,
                 overlays_visible: true,
                 cursor_overlay_visible,
+                peek_suspended: false,
             },
         }
     }
@@ -262,8 +263,10 @@ impl App {
         }
 
         // Update peek command for render workers.
-        // When captured, keep the locked peek; otherwise follow hover.
-        let new_peek = if self.input.captured {
+        // Peek is suppressed in magnifier mode (overlays hidden) and after
+        // a selection has been made (peek_suspended).  When captured, keep
+        // the locked peek; otherwise follow hover.
+        let new_peek = if !self.input.overlays_visible || self.input.peek_suspended || self.input.dragging {
             self.locked_peek.clone()
         } else {
             hovered_full
@@ -304,6 +307,7 @@ impl App {
         } else {
             self.locked_peek = None;
         }
+        self.input.peek_suspended = true;
 
         let effects = InteractionController::finalize_selection(&mut self.input, rect, &self.monitors);
         self.apply_interaction_effects(effects, Some(window_id));
@@ -311,6 +315,7 @@ impl App {
 
     fn handle_reset(&mut self, window_id: WindowId) {
         self.locked_peek = None;
+        self.input.peek_suspended = false;
         let effects = InteractionController::reset(&mut self.input);
         self.apply_interaction_effects(effects, Some(window_id));
 
@@ -564,7 +569,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
         let this_monitor_bounds = match self.windows.get(&id) {
             Some(h) => h.monitor_bounds(),
             None => return,
@@ -832,9 +837,8 @@ impl ApplicationHandler for App {
                             self.broadcast_ui_state();
                         }
                         if finalising {
-                            // Click (no drag) on a peeked window → lock it.
-                            // Drag-to-select → no peek lock.
                             if !was_dragging {
+                                // Click (no drag) on a peeked window → lock it permanently.
                                 self.locked_peek = self
                                     .cached_peek_command
                                     .as_ref()
@@ -844,8 +848,10 @@ impl ApplicationHandler for App {
                                         captured: true,
                                     });
                             } else {
+                                // Drag-to-select → clear peek entirely.
                                 self.locked_peek = None;
                             }
+                            self.input.peek_suspended = true;
                             self.input.captured = true;
                             self.update_cursor_visibility();
                             if self.input.anchored {
