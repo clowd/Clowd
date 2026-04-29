@@ -61,9 +61,22 @@ impl InteractionController {
         };
 
         input.zoom = new_zoom;
+
+        // Auto-exit magnifier mode when zoom returns to 1×.
+        let restore_mouse = if input.anchored && (new_zoom - 1.0).abs() < f32::EPSILON {
+            input.anchored = false;
+            input.anchor_just_engaged = false;
+            Some(ScreenPoint::new(
+                input.virtual_cursor.x.floor() as i32,
+                input.virtual_cursor.y.floor() as i32,
+            ))
+        } else {
+            restore_mouse
+        };
+
         InteractionEffects {
             broadcast_mouse: true,
-            broadcast_ui: input.debug_visible,
+            broadcast_ui: true,
             restore_mouse,
             ..Default::default()
         }

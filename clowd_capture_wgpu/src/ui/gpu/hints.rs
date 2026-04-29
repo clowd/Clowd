@@ -97,7 +97,9 @@ const IDX_KEY_MONITOR: usize = 4;
 const IDX_DESC_MONITOR: usize = 5;
 const IDX_KEY_CURSOR: usize = 6;
 const IDX_DESC_CURSOR: usize = 7;
-const TOTAL_BUFFERS: usize = 8;
+const IDX_KEY_MAGNIFIER: usize = 8;
+const IDX_DESC_MAGNIFIER: usize = 9;
+const TOTAL_BUFFERS: usize = 10;
 
 pub struct HintsRenderer {
     buffers: Vec<CachedBuffer>,
@@ -136,39 +138,82 @@ impl HintsRenderer {
         let mon_top = this_monitor.bounds.min_y() as f32;
 
         let mut placed: Vec<HintRect> = Vec::with_capacity(4);
+        let zoomed = state.zoom > 1.0;
 
-        // --- [F] Select Monitor (placed first — fixed position at top-center) ---
-        if state.hovered_monitor_name.is_some() {
-            self.text_buf.clear();
-            self.text_buf.push_str(&render_hint_text(
-                HINT_MONITOR.template,
-                state.hovered_window_title.as_deref(),
-                state.hovered_monitor_name.as_deref(),
-            ));
-            self.buffers[IDX_KEY_MONITOR].set(ts, "F", font_px, true);
-            self.buffers[IDX_DESC_MONITOR].set(ts, &self.text_buf, font_px, false);
-            let key_w = self.buffers[IDX_KEY_MONITOR].width();
-            let desc_w = self.buffers[IDX_DESC_MONITOR].width();
+        if zoomed {
+            // Magnifier hint is always visible when zoomed, even with
+            // overlays off. Label reflects what Q will do next.
+            let mag_label = if state.overlays_visible { "Enter Magnifier" } else { "Exit Magnifier" };
+            self.buffers[IDX_KEY_MAGNIFIER].set(ts, "Q", font_px, true);
+            self.buffers[IDX_DESC_MAGNIFIER].set(ts, mag_label, font_px, false);
+            let key_w = self.buffers[IDX_KEY_MAGNIFIER].width();
+            let desc_w = self.buffers[IDX_DESC_MAGNIFIER].width();
             let (layout, hr) = compute_monitor_hint(&target, dpi, key_w, desc_w, text_line_h, &placed);
-            self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MONITOR, IDX_DESC_MONITOR);
+            self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MAGNIFIER, IDX_DESC_MAGNIFIER);
             placed.push(hr);
-        }
 
-        // --- [W] Select Window (anchored to window title bar) ---
-        if state.hovered_window_title.is_some() {
-            self.text_buf.clear();
-            self.text_buf.push_str(&render_hint_text(
-                HINT_WINDOW.template,
-                state.hovered_window_title.as_deref(),
-                state.hovered_monitor_name.as_deref(),
-            ));
-            self.buffers[IDX_KEY_WINDOW].set(ts, "W", font_px, true);
-            self.buffers[IDX_DESC_WINDOW].set(ts, &self.text_buf, font_px, false);
-            let key_w = self.buffers[IDX_KEY_WINDOW].width();
-            let desc_w = self.buffers[IDX_DESC_WINDOW].width();
-            if let Some((layout, hr)) = compute_window_hint(state, &target, dpi, key_w, desc_w, text_line_h, &placed) {
-                self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_WINDOW, IDX_DESC_WINDOW);
+            // When overlays are off (magnifier active), only show the
+            // exit hint — skip color picker and everything else.
+            if !state.overlays_visible {
+                return;
+            }
+        } else {
+            // --- [F] Select Monitor (bottom-center) ---
+            if state.hovered_monitor_name.is_some() {
+                self.text_buf.clear();
+                self.text_buf.push_str(&render_hint_text(
+                    HINT_MONITOR.template,
+                    state.hovered_window_title.as_deref(),
+                    state.hovered_monitor_name.as_deref(),
+                ));
+                self.buffers[IDX_KEY_MONITOR].set(ts, "F", font_px, true);
+                self.buffers[IDX_DESC_MONITOR].set(ts, &self.text_buf, font_px, false);
+                let key_w = self.buffers[IDX_KEY_MONITOR].width();
+                let desc_w = self.buffers[IDX_DESC_MONITOR].width();
+                let (layout, hr) = compute_monitor_hint(&target, dpi, key_w, desc_w, text_line_h, &placed);
+                self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MONITOR, IDX_DESC_MONITOR);
                 placed.push(hr);
+            }
+
+            // --- [W] Select Window (anchored to window title bar) ---
+            if state.hovered_window_title.is_some() {
+                self.text_buf.clear();
+                self.text_buf.push_str(&render_hint_text(
+                    HINT_WINDOW.template,
+                    state.hovered_window_title.as_deref(),
+                    state.hovered_monitor_name.as_deref(),
+                ));
+                self.buffers[IDX_KEY_WINDOW].set(ts, "W", font_px, true);
+                self.buffers[IDX_DESC_WINDOW].set(ts, &self.text_buf, font_px, false);
+                let key_w = self.buffers[IDX_KEY_WINDOW].width();
+                let desc_w = self.buffers[IDX_DESC_WINDOW].width();
+                if let Some((layout, hr)) = compute_window_hint(state, &target, dpi, key_w, desc_w, text_line_h, &placed) {
+                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_WINDOW, IDX_DESC_WINDOW);
+                    placed.push(hr);
+                }
+            }
+
+            // --- [M] Toggle Cursor (near hardware cursor, only if cursor is inside selection) ---
+            if let Some(cursor_rect) = state.cursor_image_rect {
+                let cursor_in_selection = state.selection.is_some_and(|sel| {
+                    let cx = (cursor_rect[0] + cursor_rect[2]) / 2.0;
+                    let cy = (cursor_rect[1] + cursor_rect[3]) / 2.0;
+                    cx >= sel.left() as f32 && cx < sel.right() as f32 && cy >= sel.top() as f32 && cy < sel.bottom() as f32
+                });
+
+                if cursor_in_selection {
+                    let pad = (CURSOR_SQUARE_PAD * dpi).floor();
+                    let stroke = dpi.round().max(1.0);
+                    Self::emit_dashed_square(rects, cursor_rect, mon_left, mon_top, pad, stroke, dpi);
+
+                    let cursor_label = if state.cursor_overlay_visible { "Hide Cursor" } else { "Show Cursor" };
+                    self.buffers[IDX_KEY_CURSOR].set(ts, "M", font_px, true);
+                    self.buffers[IDX_DESC_CURSOR].set(ts, cursor_label, font_px, false);
+                    let key_w = self.buffers[IDX_KEY_CURSOR].width();
+                    let desc_w = self.buffers[IDX_DESC_CURSOR].width();
+                    let (layout, _hr) = compute_cursor_hint(cursor_rect, &target, dpi, key_w, desc_w, text_line_h, &placed);
+                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_CURSOR, IDX_DESC_CURSOR);
+                }
             }
         }
 
@@ -197,29 +242,6 @@ impl HintsRenderer {
             }
 
             placed.push(hr);
-        }
-
-        // --- [M] Toggle Cursor (near hardware cursor, only if cursor is inside selection) ---
-        if let Some(cursor_rect) = state.cursor_image_rect {
-            let cursor_in_selection = state.selection.is_some_and(|sel| {
-                let cx = (cursor_rect[0] + cursor_rect[2]) / 2.0;
-                let cy = (cursor_rect[1] + cursor_rect[3]) / 2.0;
-                cx >= sel.left() as f32 && cx < sel.right() as f32 && cy >= sel.top() as f32 && cy < sel.bottom() as f32
-            });
-
-            if cursor_in_selection {
-                let pad = (CURSOR_SQUARE_PAD * dpi).floor();
-                let stroke = dpi.round().max(1.0);
-                Self::emit_dashed_square(rects, cursor_rect, mon_left, mon_top, pad, stroke, dpi);
-
-                let cursor_label = if state.cursor_overlay_visible { "Hide Cursor" } else { "Show Cursor" };
-                self.buffers[IDX_KEY_CURSOR].set(ts, "M", font_px, true);
-                self.buffers[IDX_DESC_CURSOR].set(ts, cursor_label, font_px, false);
-                let key_w = self.buffers[IDX_KEY_CURSOR].width();
-                let desc_w = self.buffers[IDX_DESC_CURSOR].width();
-                let (layout, _hr) = compute_cursor_hint(cursor_rect, &target, dpi, key_w, desc_w, text_line_h, &placed);
-                self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_CURSOR, IDX_DESC_CURSOR);
-            }
         }
     }
 
