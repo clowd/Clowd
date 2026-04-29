@@ -60,6 +60,16 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         })
         .collect();
 
+    let peek_covers_cursor = input.hovered_window_obstructed
+        && cursor_image_rect
+            .zip(input.hovered_window_bounds)
+            .is_some_and(|(cr, wb)| {
+                cr[0] < wb.max_x() as f32
+                    && cr[2] > wb.min_x() as f32
+                    && cr[1] < wb.max_y() as f32
+                    && cr[3] > wb.min_y() as f32
+            });
+
     UiSharedState {
         monitors,
         selection: input.selection,
@@ -77,9 +87,9 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         hovered_window_bounds: input.hovered_window_bounds,
         hovered_window_index: input.hovered_window_index,
         hovered_window_obstructed: input.hovered_window_obstructed,
-        cursor_overlay_visible: input.cursor_overlay_visible,
+        cursor_overlay_visible: input.cursor_overlay_visible && !peek_covers_cursor,
         hovered_pixel_bgra,
-        cursor_image_rect,
+        cursor_image_rect: if peek_covers_cursor { None } else { cursor_image_rect },
     }
 }
 
