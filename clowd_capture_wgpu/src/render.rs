@@ -462,26 +462,29 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             let (sr, sb) = to_local(sel.right() as f32, sel.bottom() as f32);
 
             let wr = pt.window_rect;
-            let (wl, wt) = to_local(wr.left() as f32, wr.top() as f32);
 
             // Window texture UV: map selection area to portion of window texture.
-            // The texture is captured at raw GetWindowRect dimensions, so we
-            // offset by the crop to skip the invisible resize border.
+            // Use un-zoomed virtual-desktop coordinates so the UV range stays
+            // within [0,1] regardless of zoom level.
             let tw = pt.width as f32;
             let th = pt.height as f32;
             let crop_x = pt.crop_x as f32;
             let crop_y = pt.crop_y as f32;
-            let window_uv = [(crop_x + sl - wl) / tw, (crop_y + st - wt) / th, (sr - sl) / tw, (sb - st) / th];
+            let raw_sl = sel.left() as f32 - wr.left() as f32;
+            let raw_st = sel.top() as f32 - wr.top() as f32;
+            let raw_sw = sel.width() as f32;
+            let raw_sh = sel.height() as f32;
+            let window_uv = [(crop_x + raw_sl) / tw, (crop_y + raw_st) / th, raw_sw / tw, raw_sh / th];
 
-            let base_uv = snapshot_state
+            let desktop_uv = snapshot_state
                 .as_ref()
-                .map(|s| s.base_uv_offset_scale)
+                .map(|s| s.uniforms.uv_offset_scale)
                 .unwrap_or([0.0; 4]);
 
             let mut peek_uniforms = PeekUniforms::zeroed();
             peek_uniforms.selection_rect = [sl, st, sr, sb];
             peek_uniforms.window_uv = window_uv;
-            peek_uniforms.desktop_uv = base_uv;
+            peek_uniforms.desktop_uv = desktop_uv;
 
             let n = pt.obstruction_rects.len().min(16);
             peek_uniforms.params = [
