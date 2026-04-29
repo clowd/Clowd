@@ -43,7 +43,7 @@ pub const TIPS_TOP: &[TipRow] = &[
 pub const TIPS_BOTTOM: &[TipRow] = &[
     TipRow::new("M", "Toggle cursor in screenshot"),
     TipRow::new("D", "Toggle debug stats"),
-    TipRow::new("T", "Toggle this panel"),
+    TipRow::new("T", "Cycle tips display"),
     TipRow::new("Q", "Toggle cursor/crosshair"),
 ];
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
+use crate::settings::TipsMode;
 use crate::system::{CapturedDesktop, CursorImage, MonitorInfo};
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
@@ -13,7 +14,7 @@ pub struct UiStateBuildInput<'a> {
     pub zoom: f32,
     pub virtual_cursor: ScreenPointF,
     pub accent_color: [f32; 4],
-    pub tips_visible: bool,
+    pub tips_mode: TipsMode,
     pub debug_visible: bool,
     pub overlays_visible: bool,
     pub hovered_monitor_name: Option<String>,
@@ -68,7 +69,7 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         zoom: input.zoom,
         virtual_cursor: input.virtual_cursor,
         accent_color: input.accent_color,
-        tips_visible: input.tips_visible,
+        tips_mode: input.tips_mode,
         debug_visible: input.debug_visible,
         overlays_visible: input.overlays_visible,
         hovered_monitor_name: input.hovered_monitor_name,

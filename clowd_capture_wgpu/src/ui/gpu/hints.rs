@@ -143,7 +143,11 @@ impl HintsRenderer {
         if zoomed {
             // Magnifier hint is always visible when zoomed, even with
             // overlays off. Label reflects what Q will do next.
-            let mag_label = if state.overlays_visible { "Enter Magnifier" } else { "Exit Magnifier" };
+            let mag_label = if state.overlays_visible {
+                "Enter Magnifier"
+            } else {
+                "Exit Magnifier"
+            };
             self.buffers[IDX_KEY_MAGNIFIER].set(ts, "Q", font_px, true);
             self.buffers[IDX_DESC_MAGNIFIER].set(ts, mag_label, font_px, false);
             let key_w = self.buffers[IDX_KEY_MAGNIFIER].width();
@@ -206,7 +210,11 @@ impl HintsRenderer {
                     let stroke = dpi.round().max(1.0);
                     Self::emit_dashed_square(rects, cursor_rect, mon_left, mon_top, pad, stroke, dpi);
 
-                    let cursor_label = if state.cursor_overlay_visible { "Hide Cursor" } else { "Show Cursor" };
+                    let cursor_label = if state.cursor_overlay_visible {
+                        "Hide Cursor"
+                    } else {
+                        "Show Cursor"
+                    };
                     self.buffers[IDX_KEY_CURSOR].set(ts, "M", font_px, true);
                     self.buffers[IDX_DESC_CURSOR].set(ts, cursor_label, font_px, false);
                     let key_w = self.buffers[IDX_KEY_CURSOR].width();
