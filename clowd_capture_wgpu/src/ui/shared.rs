@@ -55,6 +55,11 @@ pub struct UiSharedState {
     pub hovered_window_obstructed: bool,
     pub cursor_overlay_visible: bool,
     pub hovered_pixel_bgra: Option<[u8; 4]>,
+    /// Bounding rect of the captured cursor image in virtual-desktop
+    /// physical pixels: `(left, top, right, bottom)`. Computed from the
+    /// cursor position minus hotspot + image dimensions. `None` when
+    /// cursor capture failed or the desktop buffer is unavailable.
+    pub cursor_image_rect: Option<[f32; 4]>,
 }
 
 /// Return the monitor whose bounds contain the center of `rect`. `None`
@@ -144,6 +149,27 @@ pub fn area_indicator_visibility(state: &UiSharedState) -> Option<AreaIndicatorV
     })
 }
 
+/// Decide whether the floating hint tooltips are visible and on which
+/// monitor. Follows the cursor — hidden when tips are toggled off.
+pub fn hints_visibility(state: &UiSharedState) -> Option<UiMonitor> {
+    if !state.overlays_visible || !state.tips_visible {
+        return None;
+    }
+    if state.captured || state.mouse_down {
+        return None;
+    }
+    let cx = state.virtual_cursor.x.round() as i32;
+    let cy = state.virtual_cursor.y.round() as i32;
+    state
+        .monitors
+        .iter()
+        .find(|m| {
+            let b = m.bounds;
+            cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+        })
+        .copied()
+}
+
 /// Whether the per-monitor debug panel is visible on `this` monitor. Shown
 /// on **every** monitor when the `D`-key toggle is on, mirroring
 /// `DxScreenCapture.cpp:915-933`.
@@ -199,6 +225,7 @@ mod tests {
             hovered_window_obstructed: false,
             cursor_overlay_visible: true,
             hovered_pixel_bgra: None,
+            cursor_image_rect: None,
         }
     }
 

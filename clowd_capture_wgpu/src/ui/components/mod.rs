@@ -3,5 +3,6 @@
 //! visibility rules in [`crate::ui::shared`].
 
 pub mod debug;
+pub mod hints;
 pub mod panel;
 pub mod tips;

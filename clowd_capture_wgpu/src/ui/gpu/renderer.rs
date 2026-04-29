@@ -21,6 +21,7 @@ use crate::telemetry::perf::PerfTracker;
 use crate::telemetry::startup::StartupTimings;
 use crate::ui::gpu::area::AreaRenderer;
 use crate::ui::gpu::debug::DebugRenderer;
+use crate::ui::gpu::hints::HintsRenderer;
 use crate::ui::gpu::icon::{IconInstance, IconPipeline};
 use crate::ui::gpu::panel::PanelRenderer;
 use crate::ui::gpu::rect::{RectInstance, RectPipeline};
@@ -33,6 +34,7 @@ pub struct UiRenderer {
     icon: IconPipeline,
     text: TextStack,
     area: AreaRenderer,
+    hints: HintsRenderer,
     tips: TipsRenderer,
     panel: PanelRenderer,
     debug: DebugRenderer,
@@ -86,6 +88,7 @@ impl UiRenderer {
             .prep_fonts
             .set_once(startup.t_start.elapsed());
         let area = AreaRenderer::new(&mut text);
+        let hints = HintsRenderer::new(&mut text);
         let tips = TipsRenderer::new(&mut text);
         let panel = PanelRenderer::new(&mut text);
         let debug = DebugRenderer::new(monitor_index);
@@ -94,6 +97,7 @@ impl UiRenderer {
             icon,
             text,
             area,
+            hints,
             tips,
             panel,
             debug,
@@ -161,6 +165,8 @@ impl UiRenderer {
 
         self.area
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
+        self.hints
+            .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.tips
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.panel.prepare(
@@ -195,6 +201,8 @@ impl UiRenderer {
 
         let mut text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(48);
         self.area
+            .text_areas(viewport_px, &mut text_areas);
+        self.hints
             .text_areas(viewport_px, &mut text_areas);
         self.tips
             .text_areas(viewport_px, &mut text_areas);

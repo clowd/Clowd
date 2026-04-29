@@ -11,6 +11,7 @@
 pub mod area;
 pub mod debug;
 pub mod gpu_timing;
+pub mod hints;
 pub mod icon;
 pub mod panel;
 pub mod rect;
