@@ -62,12 +62,12 @@ pub const FALLBACK: &str = "n/a";
 
 /// Max characters (inclusive) before the window title is truncated with an
 /// ellipsis. Keeps long titles from expanding the panel beyond `MIN_PANEL_WIDTH`.
-const WINDOW_TITLE_MAX: usize = 32;
+pub(crate) const WINDOW_TITLE_MAX: usize = 32;
 
 /// Max characters (inclusive) before the monitor name is truncated.
-const MONITOR_NAME_MAX: usize = 28;
+pub(crate) const MONITOR_NAME_MAX: usize = 28;
 
-fn truncate_ellipsis(s: &str, max_chars: usize) -> String {
+pub(crate) fn truncate_ellipsis(s: &str, max_chars: usize) -> String {
     let mut iter = s.chars();
     let head: String = iter.by_ref().take(max_chars).collect();
     if iter.next().is_some() {

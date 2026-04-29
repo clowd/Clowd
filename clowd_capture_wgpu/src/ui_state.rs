@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
-use crate::system::{CapturedDesktop, MonitorInfo};
+use crate::system::{CapturedDesktop, CursorImage, MonitorInfo};
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
 pub struct UiStateBuildInput<'a> {
@@ -29,6 +29,25 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
     let hovered_pixel_bgra = input
         .desktop_buffer
         .and_then(|buf| sample_bgra(buf, cursor_point(input.virtual_cursor)));
+
+    let cursor_image_rect = input.desktop_buffer.and_then(|buf| {
+        let c = buf.cursor.as_ref()?;
+        let (w, h) = match &c.image {
+            CursorImage::AlphaBlended {
+                width,
+                height,
+                ..
+            } => (*width, *height),
+            CursorImage::Masked {
+                width,
+                height,
+                ..
+            } => (*width, *height),
+        };
+        let left = c.position.x as f32 - c.hotspot_x as f32;
+        let top = c.position.y as f32 - c.hotspot_y as f32;
+        Some([left, top, left + w as f32, top + h as f32])
+    });
 
     let monitors: Arc<[UiMonitor]> = input
         .monitors
@@ -59,6 +78,7 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         hovered_window_obstructed: input.hovered_window_obstructed,
         cursor_overlay_visible: input.cursor_overlay_visible,
         hovered_pixel_bgra,
+        cursor_image_rect,
     }
 }
 

@@ -105,6 +105,31 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return vec4<f32>(lit * final_a, final_a);
     }
 
+    // Dashed-border mode: lighten < 0 signals dash mode, with
+    // -lighten = dash length in pixels. The border alternates between
+    // border_rgba and fill_rgba; the interior is transparent.
+    if (in.lighten < 0.0) {
+        let dash_len = -in.lighten;
+        let on_border =
+            lp.x < bw ||
+            lp.y < bw ||
+            lp.x > sz.x - bw ||
+            lp.y > sz.y - bw;
+        if (!on_border) {
+            discard;
+        }
+        var edge_pos: f32;
+        if (lp.y < bw) { edge_pos = lp.x; }
+        else if (lp.y > sz.y - bw) { edge_pos = lp.x; }
+        else if (lp.x < bw) { edge_pos = lp.y; }
+        else { edge_pos = lp.y; }
+        let dash_idx = u32(floor(edge_pos / dash_len));
+        var rgba: vec4<f32>;
+        if (dash_idx % 2u == 0u) { rgba = in.border_rgba; }
+        else { rgba = in.fill_rgba; }
+        return vec4<f32>(rgba.rgb * rgba.a, rgba.a);
+    }
+
     // Axis-aligned path (no rounding).
     var rgba = in.fill_rgba;
     if (bw > 0.0 && in.border_rgba.a > 0.0) {
