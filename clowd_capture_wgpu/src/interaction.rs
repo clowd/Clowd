@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
 use crate::selection::{dpi_at_point, hit_test, DragMode, Hittest};
+use crate::settings::TipsMode;
 use crate::system::MonitorInfo;
 use winit::window::CursorIcon;
 
@@ -23,7 +24,7 @@ pub(crate) struct InteractionState {
     pub hittest: Hittest,
     pub drag_mode: Option<DragMode>,
     pub drag_anchor_selection: Option<ScreenRect>,
-    pub tips_visible: bool,
+    pub tips_mode: TipsMode,
     pub debug_visible: bool,
     pub last_scroll_end: Option<Instant>,
     pub scroll_momentum: bool,
@@ -168,7 +169,7 @@ mod tests {
             hittest: Hittest::Outside,
             drag_mode: None,
             drag_anchor_selection: None,
-            tips_visible: true,
+            tips_mode: TipsMode::Hints,
             debug_visible: false,
             last_scroll_end: None,
             scroll_momentum: false,

@@ -12,6 +12,7 @@
 use std::sync::Arc;
 
 use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
+use crate::settings::TipsMode;
 use crate::ui::components::panel::layout::{compute_layout as compute_panel_layout, PanelLayout};
 
 /// Minimal per-monitor info the UI layout rules need.
@@ -41,7 +42,7 @@ pub struct UiSharedState {
     pub zoom: f32,
     pub virtual_cursor: ScreenPointF,
     pub accent_color: [f32; 4],
-    pub tips_visible: bool,
+    pub tips_mode: TipsMode,
     pub debug_visible: bool,
     /// Master overlay switch. When `false`, every UI overlay (tips,
     /// debug, panel, selection border, crosshair, dim) is suppressed so
@@ -109,7 +110,7 @@ pub fn tips_visibility(state: &UiSharedState) -> Option<(usize, UiMonitor)> {
     if !state.overlays_visible {
         return None;
     }
-    if state.captured || state.mouse_down || !state.tips_visible || state.debug_visible {
+    if state.captured || state.mouse_down || !state.tips_mode.show_tips_panel() || state.debug_visible {
         return None;
     }
     let cx = state.virtual_cursor.x.round() as i32;
@@ -155,7 +156,7 @@ pub fn area_indicator_visibility(state: &UiSharedState) -> Option<AreaIndicatorV
 /// with overlays off (the renderer decides which hints to show).
 pub fn hints_visibility(state: &UiSharedState) -> Option<UiMonitor> {
     let zoomed = state.zoom > 1.0;
-    if !zoomed && (!state.overlays_visible || !state.tips_visible) {
+    if !zoomed && (!state.overlays_visible || !state.tips_mode.show_hints()) {
         return None;
     }
     if state.captured || state.mouse_down {
@@ -218,7 +219,7 @@ mod tests {
             zoom: 1.0,
             virtual_cursor: ScreenPointF::new(30.0, 30.0),
             accent_color: [1.0, 0.0, 0.0, 1.0],
-            tips_visible: true,
+            tips_mode: TipsMode::Tips,
             debug_visible: false,
             overlays_visible: true,
             hovered_monitor_name: None,

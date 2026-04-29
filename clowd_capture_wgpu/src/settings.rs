@@ -6,6 +6,32 @@
 //! knobs (line width, dim amount, hotkeys, …) can be added without
 //! touching every signature in the pipeline.
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum TipsMode {
+    #[default]
+    Hints,
+    Tips,
+    Off,
+}
+
+impl TipsMode {
+    pub fn next(self) -> Self {
+        match self {
+            TipsMode::Hints => TipsMode::Tips,
+            TipsMode::Tips => TipsMode::Off,
+            TipsMode::Off => TipsMode::Hints,
+        }
+    }
+
+    pub fn show_hints(self) -> bool {
+        matches!(self, TipsMode::Hints)
+    }
+
+    pub fn show_tips_panel(self) -> bool {
+        matches!(self, TipsMode::Tips)
+    }
+}
+
 /// Settings that influence how the capturer renders. Cheap to clone
 /// via `Arc` — we never mutate it after construction.
 #[derive(Debug, Clone)]
@@ -14,9 +40,9 @@ pub struct CapturerSettings {
     /// arms, selection borders, and UI highlights. Written into the
     /// per-window uniform buffer once, at render-thread startup.
     pub accent_color: [f32; 4],
-    /// Whether the Tips & Hotkeys panel is visible when the capturer
-    /// first opens. The user can still toggle it with the `T` key.
-    pub tips_visible_at_startup: bool,
+    /// Which tips/hints mode is active when the capturer first opens.
+    /// The user cycles through modes with the `T` key.
+    pub tips_mode_at_startup: TipsMode,
     /// When enabled, obstructed windows are captured via PrintWindow
     /// and a peek-through composite is shown when hovering them.
     pub obscured_window_peek_enabled: bool,
@@ -36,7 +62,7 @@ impl Default for CapturerSettings {
         Self {
             // #3B97D2 — the legacy "clowd blue" accent.
             accent_color: [0x3B as f32 / 255.0, 0x97 as f32 / 255.0, 0xD2 as f32 / 255.0, 1.0],
-            tips_visible_at_startup: true,
+            tips_mode_at_startup: TipsMode::default(),
             obscured_window_peek_enabled: true,
             obscured_window_detection_threshold: 0.80,
             cursor_visible_at_startup: true,
