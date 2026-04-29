@@ -176,7 +176,7 @@ fn spawn_screenshot_job(
                 let _ = tx.send(WorkerInput::Screenshot(captured.clone()));
             }
             if peek_enabled {
-                let (bgra, w, h) = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 6.0);
+                let (bgra, w, h) = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 2.0);
                 let blurred = Arc::new(BlurredDesktopImage {
                     bgra,
                     width: w,
