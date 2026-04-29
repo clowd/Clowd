@@ -5,13 +5,12 @@ edition = "2021"
 
 [dependencies]
 anyhow.workspace = true
-image.workspace = true
+image = { workspace = true, features = ["png", "jpeg"] }
 euclid.workspace = true
 log.workspace = true
 simplelog.workspace = true
 winit.workspace = true
-wgpu.workspace = true
-num.workspace = true
+wgpu = { workspace = true, features = ["dx12", "metal"] }
 pollster.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
 usvg.workspace = true
@@ -49,6 +48,4 @@ block2.workspace = true
 # naga version must match what wgpu 29.0 uses internally
 [build-dependencies]
 naga = { workspace = true, features = ["wgsl-in", "hlsl-out", "msl-out"] }
-
-[target.'cfg(windows)'.build-dependencies]
 libloading.workspace = true
