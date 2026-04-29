@@ -1,7 +1,4 @@
-#![allow(dead_code)]
-
 use euclid::{Point2D, Rect, Size2D};
-use num::traits::real::Real;
 use std::ops;
 
 // Physical pixels in virtual-desktop space.
@@ -64,39 +61,6 @@ impl ScreenRectRounded for ScreenRect {
     }
 }
 
-pub struct LineSegment<T, U>
-where
-    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
-    U: Copy,
-{
-    start: Point2D<T, U>,
-    end: Point2D<T, U>,
-}
-
-impl<T, U> LineSegment<T, U>
-where
-    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default + Real,
-    U: Copy,
-{
-    pub fn start(&self) -> Point2D<T, U> {
-        self.start
-    }
-
-    pub fn end(&self) -> Point2D<T, U> {
-        self.end
-    }
-
-    pub fn to_widened_rect(&self, radius: T) -> Rect<T, U> {
-        let start = self.start();
-        let end = self.end();
-        let x1 = start.x.min(end.x) - radius;
-        let y1 = start.y.min(end.y) - radius;
-        let x2 = start.x.max(end.x) + radius;
-        let y2 = start.y.max(end.y) + radius;
-        Rect::from_exact(x1, y1, x2, y2)
-    }
-}
-
 // Base type extensions
 pub trait PointExt<T, U>
 where
@@ -141,30 +105,6 @@ where
     fn right(&self) -> T;
     fn top(&self) -> T;
     fn bottom(&self) -> T;
-    fn left_line(&self) -> LineSegment<T, U> {
-        LineSegment {
-            start: self.top_left(),
-            end: self.bottom_left(),
-        }
-    }
-    fn right_line(&self) -> LineSegment<T, U> {
-        LineSegment {
-            start: self.top_right(),
-            end: self.bottom_right(),
-        }
-    }
-    fn top_line(&self) -> LineSegment<T, U> {
-        LineSegment {
-            start: self.top_left(),
-            end: self.top_right(),
-        }
-    }
-    fn bottom_line(&self) -> LineSegment<T, U> {
-        LineSegment {
-            start: self.bottom_left(),
-            end: self.bottom_right(),
-        }
-    }
     fn from_exact(x1: T, y1: T, x2: T, y2: T) -> Rect<T, U> {
         Self::from_xy_size(x1, y1, x2 - x1, y2 - y1)
     }

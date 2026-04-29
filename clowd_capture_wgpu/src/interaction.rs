@@ -30,6 +30,7 @@ pub(crate) struct InteractionState {
     pub scroll_momentum: bool,
     pub overlays_visible: bool,
     pub cursor_overlay_visible: bool,
+    pub peek_suspended: bool,
 }
 
 #[derive(Default)]
@@ -175,6 +176,7 @@ mod tests {
             scroll_momentum: false,
             overlays_visible: true,
             cursor_overlay_visible: true,
+            peek_suspended: false,
         }
     }
 

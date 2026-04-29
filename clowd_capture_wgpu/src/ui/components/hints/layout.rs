@@ -16,7 +16,6 @@ pub const KEYCAP_INNER_CORNER_RADIUS: f32 = 3.0;
 const CURSOR_OFFSET_Y: f32 = 6.0;
 const CROSSHAIR_OFFSET_X: f32 = 18.0;
 const CROSSHAIR_OFFSET_Y: f32 = 18.0;
-const WINDOW_OFFSET_Y: f32 = 10.0;
 const MONITOR_INSET_Y: f32 = 40.0;
 
 /// Padding around the cursor image for the dashed highlight square.
@@ -87,8 +86,8 @@ pub fn compute_color_hint(
 ) -> (HintLayout, HintRect) {
     let (tooltip_w, tooltip_h, inner) = tooltip_dimensions(dpi, desc_text_width, text_line_height);
     let mon = monitor.bounds;
-    let cx = state.virtual_cursor.x;
-    let cy = state.virtual_cursor.y;
+    let cx = state.virtual_cursor.x.round();
+    let cy = state.virtual_cursor.y.round();
     let off_x = CROSSHAIR_OFFSET_X * dpi;
     let off_y = CROSSHAIR_OFFSET_Y * dpi;
 
@@ -122,30 +121,22 @@ pub fn compute_color_hint(
     (layout, hr)
 }
 
-/// [W] Select Window — centered above hovered window title bar.
-pub fn compute_window_hint(
-    state: &UiSharedState,
+/// [F] Select Monitor — bottom-center of the current monitor (used by magnifier hint).
+pub fn compute_monitor_hint(
     monitor: &UiMonitor,
     dpi: f32,
     _key_text_width: f32,
     desc_text_width: f32,
     text_line_height: f32,
     placed: &[HintRect],
-) -> Option<(HintLayout, HintRect)> {
-    let window_bounds = state.hovered_window_bounds?;
+) -> (HintLayout, HintRect) {
     let (tooltip_w, tooltip_h, inner) = tooltip_dimensions(dpi, desc_text_width, text_line_height);
     let mon = monitor.bounds;
-    let win_center_x = (window_bounds.left() + window_bounds.right()) as f32 / 2.0;
-    let win_top = window_bounds.top() as f32;
-    let off_y = WINDOW_OFFSET_Y * dpi;
+    let mon_center_x = (mon.left() + mon.right()) as f32 / 2.0;
+    let inset_y = MONITOR_INSET_Y * dpi;
 
-    let mut x = win_center_x - tooltip_w / 2.0;
-    let mut y = win_top - off_y - tooltip_h;
-    if y < mon.top() as f32 {
-        y = win_top + off_y;
-    }
-    x = x.clamp(mon.left() as f32, (mon.right() as f32 - tooltip_w).max(mon.left() as f32));
-    y = y.clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
+    let x = (mon_center_x - tooltip_w / 2.0).clamp(mon.left() as f32, (mon.right() as f32 - tooltip_w).max(mon.left() as f32));
+    let y = (mon.bottom() as f32 - inset_y - tooltip_h).clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
 
     let mut hr = HintRect {
         x,
@@ -163,11 +154,11 @@ pub fn compute_window_hint(
     );
 
     let layout = finalize_layout(hr.x, hr.y, tooltip_w, tooltip_h, dpi, inner);
-    Some((layout, hr))
+    (layout, hr)
 }
 
-/// [F] Select Monitor — bottom-center of the current monitor.
-pub fn compute_monitor_hint(
+/// [F] Select Monitor — top-center of the current monitor.
+pub fn compute_monitor_hint_top(
     monitor: &UiMonitor,
     dpi: f32,
     _key_text_width: f32,
@@ -181,7 +172,7 @@ pub fn compute_monitor_hint(
     let inset_y = MONITOR_INSET_Y * dpi;
 
     let x = (mon_center_x - tooltip_w / 2.0).clamp(mon.left() as f32, (mon.right() as f32 - tooltip_w).max(mon.left() as f32));
-    let y = (mon.bottom() as f32 - inset_y - tooltip_h).clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
+    let y = (mon.top() as f32 + inset_y).clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
 
     let mut hr = HintRect {
         x,
@@ -293,7 +284,7 @@ fn finalize_layout(x: f32, y: f32, w: f32, h: f32, dpi: f32, inner: InnerMetrics
     let desc_text_x = keycap_x + inner.keycap_size + inner.keycap_gap;
     let font_px = (HINT_FONT_PX * dpi).floor();
     let text_line_h = font_px * 1.2;
-    let desc_text_y = y + (h - text_line_h) / 2.0;
+    let desc_text_y = (y + (h - text_line_h) / 2.0 + font_px * 0.1).floor();
 
     HintLayout {
         tooltip_x: x,
