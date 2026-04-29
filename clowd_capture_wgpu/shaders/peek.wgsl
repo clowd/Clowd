@@ -92,6 +92,31 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         discard;
     }
 
+    // ── Preserve resize handles (drawn by desktop shader) ─────────
+    if (captured) {
+        let fpos = in.pos.xy;
+        let step_f = f32(half);
+        let handle_r = 6.0 * step_f;
+        let aa = 0.5;
+
+        let mid_x = (f32(sx) + f32(sz)) * 0.5;
+        let mid_y = (f32(sy) + f32(sw)) * 0.5;
+
+        var hd = handle_r + aa + 1.0;
+        hd = min(hd, distance(fpos, vec2<f32>(f32(sx), f32(sy))));
+        hd = min(hd, distance(fpos, vec2<f32>(f32(sz), f32(sy))));
+        hd = min(hd, distance(fpos, vec2<f32>(f32(sx), f32(sw))));
+        hd = min(hd, distance(fpos, vec2<f32>(f32(sz), f32(sw))));
+        hd = min(hd, distance(fpos, vec2<f32>(mid_x,   f32(sy))));
+        hd = min(hd, distance(fpos, vec2<f32>(mid_x,   f32(sw))));
+        hd = min(hd, distance(fpos, vec2<f32>(f32(sx), mid_y)));
+        hd = min(hd, distance(fpos, vec2<f32>(f32(sz), mid_y)));
+
+        if (hd < handle_r + aa) {
+            discard;
+        }
+    }
+
     // ── Discard pixels outside the window texture ────────────────────
     if (in.window_uv.x < 0.0 || in.window_uv.x >= 1.0 ||
         in.window_uv.y < 0.0 || in.window_uv.y >= 1.0) {
