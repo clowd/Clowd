@@ -146,9 +146,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     let blur_sum = textureSample(desktop_tex, samp, in.desktop_uv).rgb;
-
-    // Gentle grayscale — keep it readable, just softened.
-    let luma = dot(blur_sum, vec3(0.2126, 0.7152, 0.0722)) * 0.82;
+    let luma = dot(blur_sum, vec3(0.2126, 0.7152, 0.0722));
     let gray = vec3(luma);
 
     let result = mix(gray, window_color.rgb, ghost_opacity);
