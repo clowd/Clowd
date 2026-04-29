@@ -151,8 +151,11 @@ pub fn area_indicator_visibility(state: &UiSharedState) -> Option<AreaIndicatorV
 
 /// Decide whether the floating hint tooltips are visible and on which
 /// monitor. Follows the cursor — hidden when tips are toggled off.
+/// Exception: when zoomed in, the magnifier hint stays visible even
+/// with overlays off (the renderer decides which hints to show).
 pub fn hints_visibility(state: &UiSharedState) -> Option<UiMonitor> {
-    if !state.overlays_visible || !state.tips_visible {
+    let zoomed = state.zoom > 1.0;
+    if !zoomed && (!state.overlays_visible || !state.tips_visible) {
         return None;
     }
     if state.captured || state.mouse_down {
