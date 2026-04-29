@@ -28,11 +28,9 @@ fn compile_shaders(manifest_dir: &str) {
         let wgsl_path = format!("{}/{}", manifest_dir, shader.wgsl_path);
         println!("cargo:rerun-if-changed={}", wgsl_path);
 
-        let wgsl_source =
-            std::fs::read_to_string(&wgsl_path).unwrap_or_else(|e| panic!("failed to read {}: {e}", wgsl_path));
+        let wgsl_source = std::fs::read_to_string(&wgsl_path).unwrap_or_else(|e| panic!("failed to read {}: {e}", wgsl_path));
 
-        let module =
-            naga::front::wgsl::parse_str(&wgsl_source).unwrap_or_else(|e| panic!("failed to parse {}: {e}", shader.name));
+        let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap_or_else(|e| panic!("failed to parse {}: {e}", shader.name));
 
         let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty())
             .validate(&module)
@@ -76,13 +74,24 @@ fn build_msl_options(bindings: &[BindingEntry]) -> (naga::back::msl::Options, na
         samplers: u8,
     }
 
-    let mut vs_counters = StageCounters { buffers: 0, textures: 0, samplers: 0 };
-    let mut fs_counters = StageCounters { buffers: 0, textures: 0, samplers: 0 };
+    let mut vs_counters = StageCounters {
+        buffers: 0,
+        textures: 0,
+        samplers: 0,
+    };
+    let mut fs_counters = StageCounters {
+        buffers: 0,
+        textures: 0,
+        samplers: 0,
+    };
     let mut vs_resources = msl::BindingMap::default();
     let mut fs_resources = msl::BindingMap::default();
 
     for entry in bindings {
-        let rb = naga::ResourceBinding { group: 0, binding: entry.binding };
+        let rb = naga::ResourceBinding {
+            group: 0,
+            binding: entry.binding,
+        };
 
         if entry.vertex {
             let mut target = msl::BindTarget::default();
@@ -183,9 +192,7 @@ fn compile_metallib(shader_name: &str, msl_source: &str, out_dir: &str) -> Vec<u
     let output = std::process::Command::new("xcrun")
         .args(["metal", "-c", "-std=macos-metal2.4", "-o", &air_path, &msl_path])
         .output()
-        .unwrap_or_else(|e| {
-            panic!("failed to run xcrun metal for {shader_name}: {e} — is Xcode or Command Line Tools installed?")
-        });
+        .unwrap_or_else(|e| panic!("failed to run xcrun metal for {shader_name}: {e} — is Xcode or Command Line Tools installed?"));
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

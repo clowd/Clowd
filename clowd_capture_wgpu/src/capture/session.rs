@@ -150,8 +150,14 @@ fn spawn_screenshot_job(
     startup: Arc<StartupTimings>,
 ) -> Arc<Latch<Arc<CapturedDesktop>>> {
     let screenshot_latch = Arc::new(Latch::new());
-    let input_txs: Vec<_> = worker_setups.iter().map(|s| s.input_tx.clone()).collect();
-    let render_msg_txs: Vec<_> = worker_setups.iter().map(|s| s.render_msg_tx.clone()).collect();
+    let input_txs: Vec<_> = worker_setups
+        .iter()
+        .map(|s| s.input_tx.clone())
+        .collect();
+    let render_msg_txs: Vec<_> = worker_setups
+        .iter()
+        .map(|s| s.render_msg_tx.clone())
+        .collect();
     let latch = screenshot_latch.clone();
     std::thread::Builder::new()
         .name("screenshot".into())
@@ -171,7 +177,11 @@ fn spawn_screenshot_job(
             }
             if peek_enabled {
                 let (bgra, w, h) = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 6.0);
-                let blurred = Arc::new(BlurredDesktopImage { bgra, width: w, height: h });
+                let blurred = Arc::new(BlurredDesktopImage {
+                    bgra,
+                    width: w,
+                    height: h,
+                });
                 for tx in &render_msg_txs {
                     let _ = tx.send(RenderMsg::BlurredDesktop(blurred.clone()));
                 }
@@ -258,7 +268,10 @@ fn capture_peek_images(
                 })
             })
             .collect();
-        handles.into_iter().filter_map(|h| h.join().ok().flatten()).collect()
+        handles
+            .into_iter()
+            .filter_map(|h| h.join().ok().flatten())
+            .collect()
     });
     peek_latch.set(all_peeks);
     info!("walker: obstructed window capture complete");
@@ -294,7 +307,10 @@ fn capture_peek_images(
                 })
             })
             .collect();
-        handles.into_iter().filter_map(|h| h.join().ok().flatten()).collect()
+        handles
+            .into_iter()
+            .filter_map(|h| h.join().ok().flatten())
+            .collect()
     });
     peek_latch.set(all_peeks);
     info!("walker: obstructed window capture complete");

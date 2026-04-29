@@ -52,8 +52,7 @@ fn main() -> anyhow::Result<()> {
         use objc2::MainThreadMarker;
         use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
         let mtm = MainThreadMarker::new().unwrap();
-        NSApplication::sharedApplication(mtm)
-            .setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+        NSApplication::sharedApplication(mtm).setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
     }
 
     let mut app = session.into_app();

@@ -83,10 +83,7 @@ impl WindowHandle {
             if let Some(ref subview) = self.render_subview {
                 if let Some(layer) = subview.layer() {
                     use objc2_foundation::{NSNumber, NSString};
-                    use objc2_quartz_core::{
-                        CABasicAnimation, CAMediaTiming, CAMediaTimingFunction,
-                        kCAMediaTimingFunctionEaseOut,
-                    };
+                    use objc2_quartz_core::{kCAMediaTimingFunctionEaseOut, CABasicAnimation, CAMediaTiming, CAMediaTimingFunction};
 
                     let key_path = NSString::from_str("opacity");
                     let anim = CABasicAnimation::animationWithKeyPath(Some(&key_path));
@@ -99,9 +96,7 @@ impl WindowHandle {
                     }
                     anim.setDuration(0.3);
 
-                    let timing_fn = unsafe {
-                        CAMediaTimingFunction::functionWithName(kCAMediaTimingFunctionEaseOut)
-                    };
+                    let timing_fn = unsafe { CAMediaTimingFunction::functionWithName(kCAMediaTimingFunctionEaseOut) };
                     anim.setTimingFunction(Some(&timing_fn));
 
                     layer.setOpacity(1.0);
