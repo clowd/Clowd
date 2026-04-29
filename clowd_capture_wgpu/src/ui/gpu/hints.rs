@@ -203,8 +203,9 @@ impl HintsRenderer {
                     self.buffers[IDX_DESC_CURSOR].set(ts, cursor_label, font_px, false);
                     let key_w = self.buffers[IDX_KEY_CURSOR].width();
                     let desc_w = self.buffers[IDX_DESC_CURSOR].width();
-                    let (layout, _hr) = compute_cursor_hint(cursor_rect, &target, dpi, key_w, desc_w, text_line_h, &placed);
+                    let (layout, hr) = compute_cursor_hint(cursor_rect, &target, dpi, key_w, desc_w, text_line_h, &placed);
                     self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_CURSOR, IDX_DESC_CURSOR);
+                    placed.push(hr);
                 }
             }
         }
