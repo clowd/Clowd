@@ -36,6 +36,9 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
 
     let cursor_image_rect = input.desktop_buffer.and_then(|buf| {
         let c = buf.cursor.as_ref()?;
+        if !c.visible {
+            return None;
+        }
         let (w, h) = match &c.image {
             CursorImage::AlphaBlended {
                 width,
