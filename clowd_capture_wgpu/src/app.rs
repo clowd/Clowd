@@ -12,7 +12,7 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture_output::{copy_to_clipboard_with_peek, ActionResult};
-use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded, WindowPoint};
+use crate::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectExt, ScreenRectRounded, WindowPoint};
 use crate::interaction::{InteractionController, InteractionEffects, InteractionState, MouseVelocityTracker};
 use crate::render::protocol::PeekCommand;
 use crate::render::window::{WindowHandle, WindowSet};
@@ -24,7 +24,7 @@ use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage
 use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::panel;
-use crate::ui_state::{build_ui_shared_state, cursor_point, UiStateBuildInput};
+use crate::ui_state::{build_ui_shared_state, UiStateBuildInput};
 
 const ZOOM_STEP: f32 = 2.0;
 const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
@@ -85,10 +85,7 @@ impl App {
             .find(|m| m.is_primary)
             .or_else(|| monitors.first())
             .expect("at least one monitor present");
-        let anchor = ScreenPoint::new(
-            primary.bounds.min_x() + (primary.bounds.width() / 2),
-            primary.bounds.min_y() + (primary.bounds.height() / 2),
-        );
+        let anchor = ScreenPoint::new(primary.bounds.center_x(), primary.bounds.center_y());
 
         let vd_bounds = {
             let mut min_x = i32::MAX;
@@ -210,8 +207,8 @@ impl App {
             return None;
         }
         let sel = self.input.selection?;
-        let cx = (sel.left() + sel.right()) / 2;
-        let cy = (sel.top() + sel.bottom()) / 2;
+        let cx = sel.center_x();
+        let cy = sel.center_y();
         let mon = self.monitors.iter().find(|m| {
             let b = m.bounds;
             cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
@@ -220,7 +217,7 @@ impl App {
     }
 
     fn broadcast_ui_state(&mut self) {
-        let cursor_pt = cursor_point(self.input.virtual_cursor);
+        let cursor_pt = to_screen_point(self.input.virtual_cursor);
 
         let hovered_monitor_name = self
             .monitors

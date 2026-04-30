@@ -119,13 +119,14 @@ pub fn compute_layout(
     // zone where it would occlude the panel. Matches
     // DxScreenCapture.cpp:775-779 (the `mx > tr.left - DEBUGBOX_MARGIN*2`
     // fallback).
-    let right_anchor_left = monitor_bounds.right() as f32 - margin - panel_w;
-    let anchor_top = monitor_bounds.bottom() as f32 - margin - panel_h;
+    let mon_f = monitor_bounds.to_f32();
+    let right_anchor_left = mon_f.right() - margin - panel_w;
+    let anchor_top = mon_f.bottom() - margin - panel_h;
 
     let use_left_fallback = cursor.x > right_anchor_left - margin * 2.0 && cursor.y > anchor_top - margin * 2.0;
 
     let panel_left = if use_left_fallback {
-        monitor_bounds.left() as f32 + margin
+        mon_f.left() + margin
     } else {
         right_anchor_left
     };

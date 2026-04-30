@@ -132,8 +132,9 @@ impl HintsRenderer {
         let font_px = (HINT_FONT_PX * dpi).floor();
         let key_font_px = (HINT_FONT_PX * 1.15 * dpi).floor();
         let text_line_h = font_px * 1.2;
-        let mon_left = this_monitor.bounds.min_x() as f32;
-        let mon_top = this_monitor.bounds.min_y() as f32;
+        let mon_f = this_monitor.bounds.to_f32();
+        let mon_left = mon_f.left();
+        let mon_top = mon_f.top();
 
         let mut placed: Vec<HintRect> = Vec::with_capacity(4);
 
@@ -278,10 +279,11 @@ impl HintsRenderer {
         if cursor_hint_visible {
             if let Some(cursor_rect) = state.cursor_image_rect {
                 let cursor_in_selection = state.selection.filter(|sel| {
-                    cursor_rect[0] >= sel.left() as f32
-                        && cursor_rect[1] >= sel.top() as f32
-                        && cursor_rect[2] <= sel.right() as f32
-                        && cursor_rect[3] <= sel.bottom() as f32
+                    let sf = sel.to_f32();
+                    cursor_rect[0] >= sf.left()
+                        && cursor_rect[1] >= sf.top()
+                        && cursor_rect[2] <= sf.right()
+                        && cursor_rect[3] <= sf.bottom()
                 });
 
                 if let Some(sel) = cursor_in_selection {

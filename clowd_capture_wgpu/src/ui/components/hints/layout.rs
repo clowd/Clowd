@@ -1,4 +1,4 @@
-use crate::geometry::{RectExt, ScreenRect};
+use crate::geometry::{RectExt, ScreenRect, ScreenRectF};
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
 pub const HINT_FONT_PX: f32 = 11.0;
@@ -56,20 +56,20 @@ impl HintRect {
 }
 
 /// Nudge `rect` so it doesn't overlap any of `placed`, staying within monitor bounds.
-pub fn avoid_overlaps(rect: &mut HintRect, placed: &[HintRect], mon_left: f32, mon_top: f32, mon_right: f32, mon_bottom: f32) {
+pub fn avoid_overlaps(rect: &mut HintRect, placed: &[HintRect], mon: ScreenRectF) {
     for existing in placed {
         if rect.overlaps(existing) {
             let gap = 4.0;
             rect.y = existing.y + existing.h + gap;
-            if rect.y + rect.h > mon_bottom {
+            if rect.y + rect.h > mon.bottom() {
                 rect.y = existing.y - rect.h - gap;
             }
             rect.x = rect
                 .x
-                .clamp(mon_left, (mon_right - rect.w).max(mon_left));
+                .clamp(mon.left(), (mon.right() - rect.w).max(mon.left()));
             rect.y = rect
                 .y
-                .clamp(mon_top, (mon_bottom - rect.h).max(mon_top));
+                .clamp(mon.top(), (mon.bottom() - rect.h).max(mon.top()));
         }
     }
 }
@@ -85,7 +85,7 @@ pub fn compute_color_hint(
     placed: &[HintRect],
 ) -> (HintLayout, HintRect) {
     let (tooltip_w, tooltip_h, inner) = tooltip_dimensions(dpi, desc_text_width, text_line_height);
-    let mon = monitor.bounds;
+    let mon = monitor.bounds.to_f32();
     let cx = state.virtual_cursor.x.round();
     let cy = state.virtual_cursor.y.round();
     let off_x = CROSSHAIR_OFFSET_X * dpi;
@@ -93,14 +93,14 @@ pub fn compute_color_hint(
 
     let mut x = cx + off_x;
     let mut y = cy + off_y;
-    if x + tooltip_w > mon.right() as f32 {
+    if x + tooltip_w > mon.right() {
         x = cx - off_x - tooltip_w;
     }
-    if y + tooltip_h > mon.bottom() as f32 {
+    if y + tooltip_h > mon.bottom() {
         y = cy - off_y - tooltip_h;
     }
-    x = x.clamp(mon.left() as f32, (mon.right() as f32 - tooltip_w).max(mon.left() as f32));
-    y = y.clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
+    x = x.clamp(mon.left(), (mon.right() - tooltip_w).max(mon.left()));
+    y = y.clamp(mon.top(), (mon.bottom() - tooltip_h).max(mon.top()));
 
     let mut hr = HintRect {
         x,
@@ -108,14 +108,7 @@ pub fn compute_color_hint(
         w: tooltip_w,
         h: tooltip_h,
     };
-    avoid_overlaps(
-        &mut hr,
-        placed,
-        mon.left() as f32,
-        mon.top() as f32,
-        mon.right() as f32,
-        mon.bottom() as f32,
-    );
+    avoid_overlaps(&mut hr, placed, mon);
 
     let layout = finalize_layout(hr.x, hr.y, tooltip_w, tooltip_h, dpi, inner);
     (layout, hr)
@@ -131,12 +124,12 @@ pub fn compute_monitor_hint(
     placed: &[HintRect],
 ) -> (HintLayout, HintRect) {
     let (tooltip_w, tooltip_h, inner) = tooltip_dimensions(dpi, desc_text_width, text_line_height);
-    let mon = monitor.bounds;
-    let mon_center_x = (mon.left() + mon.right()) as f32 / 2.0;
+    let mon = monitor.bounds.to_f32();
+    let mon_center_x = (mon.left() + mon.right()) / 2.0;
     let inset_y = MONITOR_INSET_Y * dpi;
 
-    let x = (mon_center_x - tooltip_w / 2.0).clamp(mon.left() as f32, (mon.right() as f32 - tooltip_w).max(mon.left() as f32));
-    let y = (mon.bottom() as f32 - inset_y - tooltip_h).clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
+    let x = (mon_center_x - tooltip_w / 2.0).clamp(mon.left(), (mon.right() - tooltip_w).max(mon.left()));
+    let y = (mon.bottom() - inset_y - tooltip_h).clamp(mon.top(), (mon.bottom() - tooltip_h).max(mon.top()));
 
     let mut hr = HintRect {
         x,
@@ -144,14 +137,7 @@ pub fn compute_monitor_hint(
         w: tooltip_w,
         h: tooltip_h,
     };
-    avoid_overlaps(
-        &mut hr,
-        placed,
-        mon.left() as f32,
-        mon.top() as f32,
-        mon.right() as f32,
-        mon.bottom() as f32,
-    );
+    avoid_overlaps(&mut hr, placed, mon);
 
     let layout = finalize_layout(hr.x, hr.y, tooltip_w, tooltip_h, dpi, inner);
     (layout, hr)
@@ -167,12 +153,12 @@ pub fn compute_monitor_hint_top(
     placed: &[HintRect],
 ) -> (HintLayout, HintRect) {
     let (tooltip_w, tooltip_h, inner) = tooltip_dimensions(dpi, desc_text_width, text_line_height);
-    let mon = monitor.bounds;
-    let mon_center_x = (mon.left() + mon.right()) as f32 / 2.0;
+    let mon = monitor.bounds.to_f32();
+    let mon_center_x = (mon.left() + mon.right()) / 2.0;
     let inset_y = MONITOR_INSET_Y * dpi;
 
-    let x = (mon_center_x - tooltip_w / 2.0).clamp(mon.left() as f32, (mon.right() as f32 - tooltip_w).max(mon.left() as f32));
-    let y = (mon.top() as f32 + inset_y).clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
+    let x = (mon_center_x - tooltip_w / 2.0).clamp(mon.left(), (mon.right() - tooltip_w).max(mon.left()));
+    let y = (mon.top() + inset_y).clamp(mon.top(), (mon.bottom() - tooltip_h).max(mon.top()));
 
     let mut hr = HintRect {
         x,
@@ -180,14 +166,7 @@ pub fn compute_monitor_hint_top(
         w: tooltip_w,
         h: tooltip_h,
     };
-    avoid_overlaps(
-        &mut hr,
-        placed,
-        mon.left() as f32,
-        mon.top() as f32,
-        mon.right() as f32,
-        mon.bottom() as f32,
-    );
+    avoid_overlaps(&mut hr, placed, mon);
 
     let layout = finalize_layout(hr.x, hr.y, tooltip_w, tooltip_h, dpi, inner);
     (layout, hr)
@@ -206,12 +185,8 @@ pub fn compute_cursor_hint(
     placed: &[HintRect],
 ) -> (HintLayout, HintRect) {
     let (tooltip_w, tooltip_h, inner) = tooltip_dimensions(dpi, desc_text_width, text_line_height);
-    let mon = monitor.bounds;
-
-    let sel_left = selection.left() as f32;
-    let sel_top = selection.top() as f32;
-    let sel_right = selection.right() as f32;
-    let sel_bottom = selection.bottom() as f32;
+    let mon = monitor.bounds.to_f32();
+    let sel = selection.to_f32();
 
     let pad = (CURSOR_SQUARE_PAD * dpi).floor();
     let cursor_center_x = (cursor_rect[0] + cursor_rect[2]) / 2.0;
@@ -221,15 +196,15 @@ pub fn compute_cursor_hint(
     let padded_top = cursor_rect[1] - pad;
 
     let mut y = padded_bottom + off_y;
-    if y + tooltip_h > sel_bottom {
+    if y + tooltip_h > sel.bottom() {
         y = padded_top - off_y - tooltip_h;
     }
 
     let mut x = cursor_center_x - tooltip_w / 2.0;
-    x = x.clamp(sel_left, (sel_right - tooltip_w).max(sel_left));
-    y = y.clamp(sel_top, (sel_bottom - tooltip_h).max(sel_top));
-    x = x.clamp(mon.left() as f32, (mon.right() as f32 - tooltip_w).max(mon.left() as f32));
-    y = y.clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
+    x = x.clamp(sel.left(), (sel.right() - tooltip_w).max(sel.left()));
+    y = y.clamp(sel.top(), (sel.bottom() - tooltip_h).max(sel.top()));
+    x = x.clamp(mon.left(), (mon.right() - tooltip_w).max(mon.left()));
+    y = y.clamp(mon.top(), (mon.bottom() - tooltip_h).max(mon.top()));
 
     let mut hr = HintRect {
         x,
@@ -237,14 +212,7 @@ pub fn compute_cursor_hint(
         w: tooltip_w,
         h: tooltip_h,
     };
-    avoid_overlaps(
-        &mut hr,
-        placed,
-        mon.left() as f32,
-        mon.top() as f32,
-        mon.right() as f32,
-        mon.bottom() as f32,
-    );
+    avoid_overlaps(&mut hr, placed, mon);
 
     let layout = finalize_layout(hr.x, hr.y, tooltip_w, tooltip_h, dpi, inner);
     (layout, hr)

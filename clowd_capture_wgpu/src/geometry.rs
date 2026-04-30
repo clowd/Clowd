@@ -10,9 +10,12 @@ pub type ScreenPoint = Point2D<i32, ScreenUnit>;
 pub type ScreenPointF = Point2D<f32, ScreenUnit>;
 
 // OS logical coordinates (CG points on macOS, DIPs on Windows).
+#[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LogicalUnit;
+#[cfg(target_os = "macos")]
 pub type LogicalPoint = Point2D<f64, LogicalUnit>;
+#[cfg(target_os = "macos")]
 pub type LogicalSize = Size2D<f64, LogicalUnit>;
 
 // Physical pixels relative to a window's client-area top-left.
@@ -61,55 +64,17 @@ impl ScreenRectRounded for ScreenRect {
     }
 }
 
-// Base type extensions
-pub trait PointExt<T, U>
-where
-    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
-    U: Copy,
-{
-    fn to_widened_rect(&self, radius: T) -> Rect<T, U>;
-}
-
-impl<T, U> PointExt<T, U> for Point2D<T, U>
-where
-    T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
-    U: Copy,
-{
-    fn to_widened_rect(&self, radius: T) -> Rect<T, U> {
-        let x1 = self.x - radius;
-        let y1 = self.y - radius;
-        let x2 = self.x + radius;
-        let y2 = self.y + radius;
-        Rect::from_exact(x1, y1, x2, y2)
-    }
-}
-
 pub trait RectExt<T, U>
 where
     T: ops::Add<Output = T> + ops::Sub<Output = T> + Copy + PartialOrd + Default,
     U: Copy,
 {
-    fn top_left(&self) -> Point2D<T, U> {
-        Point2D::new(self.left(), self.top())
-    }
-    fn top_right(&self) -> Point2D<T, U> {
-        Point2D::new(self.right(), self.top())
-    }
-    fn bottom_left(&self) -> Point2D<T, U> {
-        Point2D::new(self.left(), self.bottom())
-    }
-    fn bottom_right(&self) -> Point2D<T, U> {
-        Point2D::new(self.right(), self.bottom())
-    }
     fn left(&self) -> T;
     fn right(&self) -> T;
     fn top(&self) -> T;
     fn bottom(&self) -> T;
     fn from_exact(x1: T, y1: T, x2: T, y2: T) -> Rect<T, U> {
         Self::from_xy_size(x1, y1, x2 - x1, y2 - y1)
-    }
-    fn from_corners(top_left: Point2D<T, U>, bottom_right: Point2D<T, U>) -> Rect<T, U> {
-        Self::from_exact(top_left.x, top_left.y, bottom_right.x, bottom_right.y)
     }
     fn from_xy_size(x1: T, y1: T, width: T, height: T) -> Rect<T, U> {
         Rect::new(Point2D::new(x1, y1), Size2D::new(width, height))
@@ -133,4 +98,45 @@ where
     fn bottom(&self) -> T {
         self.max_y()
     }
+}
+
+// ── ScreenRect extensions (i32 rects) ──────────────────────────────
+
+pub trait ScreenRectExt<U: Copy> {
+    fn contains_point_f32(&self, p: Point2D<f32, U>) -> bool;
+    fn center_x(&self) -> i32;
+    fn center_y(&self) -> i32;
+}
+
+impl<U: Copy> ScreenRectExt<U> for Rect<i32, U> {
+    fn contains_point_f32(&self, p: Point2D<f32, U>) -> bool {
+        let f = self.to_f32();
+        p.x >= f.left() && p.x < f.right() && p.y >= f.top() && p.y < f.bottom()
+    }
+
+    fn center_x(&self) -> i32 {
+        (self.min_x() + self.max_x()) / 2
+    }
+
+    fn center_y(&self) -> i32 {
+        (self.min_y() + self.max_y()) / 2
+    }
+}
+
+// ── ScreenPointF helpers ───────────────────────────────────────────
+
+pub fn to_screen_point(p: ScreenPointF) -> ScreenPoint {
+    ScreenPoint::new(p.x.floor() as i32, p.y.floor() as i32)
+}
+
+// ── Coordinate space conversions ───────────────────────────────────
+
+pub fn screen_to_window(monitor_bounds: ScreenRect, pt: ScreenPointF) -> WindowPoint {
+    let b = monitor_bounds.to_f32();
+    WindowPoint::new(pt.x - b.left(), pt.y - b.top())
+}
+
+pub fn window_to_screen(monitor_bounds: ScreenRect, pt: WindowPoint) -> ScreenPointF {
+    let b = monitor_bounds.to_f32();
+    ScreenPointF::new(pt.x + b.left(), pt.y + b.top())
 }

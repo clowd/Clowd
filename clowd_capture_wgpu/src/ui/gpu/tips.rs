@@ -226,12 +226,12 @@ impl TipsRenderer {
         };
 
         // Convert VD coords to window-local physical pixels.
-        let mon_left = this_monitor.bounds.min_x() as f32;
-        let mon_top = this_monitor.bounds.min_y() as f32;
-        let panel_left_w = layout.panel_rect.left() as f32 - mon_left;
-        let panel_top_w = layout.panel_rect.top() as f32 - mon_top;
-        let panel_w = layout.panel_rect.width() as f32;
-        let panel_h = layout.panel_rect.height() as f32;
+        let mon_f = this_monitor.bounds.to_f32();
+        let panel_f = layout.panel_rect.to_f32();
+        let panel_left_w = panel_f.left() - mon_f.left();
+        let panel_top_w = panel_f.top() - mon_f.top();
+        let panel_w = panel_f.width();
+        let panel_h = panel_f.height();
         let title_h = layout.title_rect.height() as f32;
         let shadow = layout.shadow_extension_px.round();
 
