@@ -7,8 +7,8 @@
 
 struct Uniforms {
     viewport_px: vec2<f32>,
-    // std140 padding so the struct aligns to a 16-byte boundary.
-    _pad: vec2<f32>,
+    elapsed_secs: f32,
+    _pad: f32,
 };
 
 @group(0) @binding(0)
@@ -89,6 +89,78 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let p = abs(lp - half) - (half - vec2<f32>(cr, cr));
         let d = length(max(p, vec2<f32>(0.0))) + min(max(p.x, p.y), 0.0) - cr;
         let w = max(0.5 * fwidth(d), 0.5);
+
+        if (in.lighten > 1.5) {
+            // ── Trail mode ─────────────────────────────────────────
+            // Animated accent-colored comet orbiting the border.
+            // border_rgba = trail accent color, fill is unused.
+            let glow_radius = 7.0;
+            if (d > glow_radius || d < -(bw + glow_radius)) {
+                discard;
+            }
+
+            // Glow profile: wide soft band centered on the border edge.
+            let glow = clamp(exp(-d * d * 0.15), 0.0, 1.0);
+
+            // Arc-length position along the rounded rect perimeter.
+            // Clockwise from where the TL arc meets the top edge.
+            let rel = lp - half;
+            let cx = half.x - cr;
+            let cy = half.y - cr;
+            let sw = 2.0 * cx;
+            let sh = 2.0 * cy;
+            let qa = 1.5707963 * cr;
+            let perim = 2.0 * sw + 2.0 * sh + 4.0 * qa;
+
+            var t: f32;
+            if (rel.y < -cy) {
+                if (rel.x < -cx) {
+                    let a = atan2(-(rel.y + cy), -(rel.x + cx));
+                    t = 2.0 * sw + 3.0 * qa + 2.0 * sh + a / 1.5707963 * qa;
+                } else if (rel.x > cx) {
+                    let a = atan2(-(rel.y + cy), rel.x - cx);
+                    t = sw + (1.0 - a / 1.5707963) * qa;
+                } else {
+                    t = rel.x + cx;
+                }
+            } else if (rel.y > cy) {
+                if (rel.x > cx) {
+                    let a = atan2(rel.y - cy, rel.x - cx);
+                    t = sw + qa + sh + a / 1.5707963 * qa;
+                } else if (rel.x < -cx) {
+                    let a = atan2(rel.y - cy, -(rel.x + cx));
+                    t = 2.0 * sw + 2.0 * qa + sh + (1.0 - a / 1.5707963) * qa;
+                } else {
+                    t = sw + 2.0 * qa + sh + cx - rel.x;
+                }
+            } else if (rel.x > cx) {
+                t = sw + qa + rel.y + cy;
+            } else {
+                t = 2.0 * sw + 3.0 * qa + sh + cy - rel.y;
+            }
+            let norm_t = t / perim;
+
+            // Trail head orbits at constant speed.
+            let speed = 0.4;
+            let head = fract(u.elapsed_secs * speed);
+
+            // Distance behind the head (wrapping, 0 = at head).
+            let behind = fract(head - norm_t + 1.0);
+
+            // Trail covers 40% of the perimeter with a gentle fade.
+            let trail_len = 0.4;
+            let trail = pow(max(1.0 - behind / trail_len, 0.0), 1.5);
+
+            let intensity = trail * glow;
+            if (intensity < 0.004) {
+                discard;
+            }
+
+            let accent = in.border_rgba;
+            let final_a = accent.a * intensity;
+            return vec4<f32>(accent.rgb * final_a, final_a);
+        }
+
         if (d > w) {
             discard;
         }

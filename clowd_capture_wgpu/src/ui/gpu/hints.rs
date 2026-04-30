@@ -2,16 +2,16 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 
 use crate::geometry::RectExt;
 use crate::ui::components::hints::layout::{
-    compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, HintLayout, HintRect, CURSOR_SQUARE_PAD,
-    HINT_FONT_PX,
+    compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, HintLayout,
+    HintRect, CURSOR_SQUARE_PAD, HINT_FONT_PX,
 };
 use crate::ui::components::hints::model::{render_hint_text, HINT_MONITOR};
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE, FAMILY_MONO};
 use crate::ui::shared::{hints_visibility, UiMonitor, UiSharedState};
 
-const TOOLTIP_FILL: [f32; 4] = [0.38, 0.38, 0.38, 0.85];
-const TOOLTIP_BORDER: [f32; 4] = [0.50, 0.50, 0.50, 0.85];
+const TOOLTIP_FILL: [f32; 4] = [1.0, 1.0, 1.0, 0.80];
+const TOOLTIP_BORDER: [f32; 4] = [0.75, 0.75, 0.75, 0.80];
 const SHADOW_FILL: [f32; 4] = [0.0, 0.0, 0.0, 0.40];
 
 // Keycap: 3-layer bevel design.
@@ -101,7 +101,9 @@ const IDX_KEY_CURSOR: usize = 4;
 const IDX_DESC_CURSOR: usize = 5;
 const IDX_KEY_MAGNIFIER: usize = 6;
 const IDX_DESC_MAGNIFIER: usize = 7;
-const TOTAL_BUFFERS: usize = 8;
+const IDX_KEY_SCROLL: usize = 8;
+const IDX_DESC_SCROLL: usize = 9;
+const TOTAL_BUFFERS: usize = 10;
 
 pub struct HintsRenderer {
     buffers: Vec<CachedBuffer>,
@@ -151,7 +153,8 @@ impl HintsRenderer {
                     let key_w = self.buffers[IDX_KEY_MAGNIFIER].width();
                     let desc_w = self.buffers[IDX_DESC_MAGNIFIER].width();
                     let (layout, hr) = compute_monitor_hint(&target, dpi, key_w, desc_w, text_line_h, &placed);
-                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MAGNIFIER, IDX_DESC_MAGNIFIER, 1.0);
+                    let mag_trail = !state.has_used_magnifier;
+                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MAGNIFIER, IDX_DESC_MAGNIFIER, 1.0, state.accent_color, mag_trail);
                     placed.push(hr);
 
                     if !state.overlays_visible {
@@ -169,7 +172,7 @@ impl HintsRenderer {
                     let key_w = self.buffers[IDX_KEY_MONITOR].width();
                     let desc_w = self.buffers[IDX_DESC_MONITOR].width();
                     let (layout, hr) = compute_monitor_hint_top(&target, dpi, key_w, desc_w, text_line_h, &placed);
-                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MONITOR, IDX_DESC_MONITOR, 1.0);
+                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MONITOR, IDX_DESC_MONITOR, 1.0, state.accent_color, false);
                     placed.push(hr);
                 }
 
@@ -191,7 +194,7 @@ impl HintsRenderer {
                     let swatch_gap = (6.0 * dpi).floor();
                     let total_desc_w = desc_w + swatch_gap + swatch_size;
                     let (layout, hr) = compute_color_hint(state, &target, dpi, key_w, total_desc_w, text_line_h, &placed);
-                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_COLOR, IDX_DESC_COLOR, 1.0);
+                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_COLOR, IDX_DESC_COLOR, 1.0, state.accent_color, false);
 
                     if let Some([b, g, r, _]) = state.hovered_pixel_bgra {
                         let swatch_x = (layout.desc_text_x - mon_left + desc_w + swatch_gap).round();
@@ -207,6 +210,25 @@ impl HintsRenderer {
 
                     placed.push(hr);
                 }
+            }
+        }
+
+        // --- Scroll-to-zoom hint (bottom-right, shown after slow mouse, hidden on first scroll) ---
+        if state.show_scroll_hint && state.overlays_visible && !state.captured && !state.mouse_down {
+            let cx = state.virtual_cursor.x.round() as i32;
+            let cy = state.virtual_cursor.y.round() as i32;
+            let on_this = cx >= this_monitor.bounds.min_x()
+                && cx < this_monitor.bounds.max_x()
+                && cy >= this_monitor.bounds.min_y()
+                && cy < this_monitor.bounds.max_y();
+            if on_this {
+                self.buffers[IDX_KEY_SCROLL].set(ts, "↕", key_font_px, true);
+                self.buffers[IDX_DESC_SCROLL].set(ts, "Scroll to zoom", font_px, false);
+                let key_w = self.buffers[IDX_KEY_SCROLL].width();
+                let desc_w = self.buffers[IDX_DESC_SCROLL].width();
+                let (layout, hr) = compute_monitor_hint(this_monitor, dpi, key_w, desc_w, text_line_h, &placed);
+                self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_SCROLL, IDX_DESC_SCROLL, 1.0, state.accent_color, true);
+                placed.push(hr);
             }
         }
 
@@ -247,7 +269,7 @@ impl HintsRenderer {
                         let key_w = self.buffers[IDX_KEY_CURSOR].width();
                         let desc_w = self.buffers[IDX_DESC_CURSOR].width();
                         let (layout, hr) = compute_cursor_hint(cursor_rect, sel, this_monitor, dpi, key_w, desc_w, text_line_h, &placed);
-                        self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_CURSOR, IDX_DESC_CURSOR, alpha_mul);
+                        self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_CURSOR, IDX_DESC_CURSOR, alpha_mul, state.accent_color, false);
                         placed.push(hr);
                     }
                 }
@@ -294,6 +316,8 @@ impl HintsRenderer {
         key_idx: usize,
         desc_idx: usize,
         alpha_mul: f32,
+        accent: [f32; 4],
+        trail: bool,
     ) {
         let a = |base: [f32; 4]| -> [f32; 4] { [base[0], base[1], base[2], base[3] * alpha_mul] };
 
@@ -313,12 +337,23 @@ impl HintsRenderer {
             params: [0.0, 0.0, shadow_cr, aa],
         });
 
+        let body_border = if trail { [0.0; 4] } else { a(TOOLTIP_BORDER) };
         rects.push(RectInstance {
             dest_px: [lx - aa, ly - aa, lx + lw + aa, ly + lh + aa],
             fill_rgba: a(TOOLTIP_FILL),
-            border_rgba: a(TOOLTIP_BORDER),
+            border_rgba: body_border,
             params: [layout.border_px, 0.0, layout.corner_radius, aa],
         });
+
+        if trail {
+            let glow_pad: f32 = 7.0;
+            rects.push(RectInstance {
+                dest_px: [lx - glow_pad, ly - glow_pad, lx + lw + glow_pad, ly + lh + glow_pad],
+                fill_rgba: [0.0; 4],
+                border_rgba: a(accent),
+                params: [layout.border_px, 2.0, layout.corner_radius, glow_pad],
+            });
+        }
 
         let kx = layout.keycap_x - mon_left;
         let ky = layout.keycap_y - mon_top;
@@ -375,7 +410,7 @@ impl HintsRenderer {
             buffer_idx: desc_idx,
             x: desc_x,
             y: desc_y,
-            color: [0xFF, 0xFF, 0xFF, 0xE0],
+            color: [0x1A, 0x1A, 0x1A, 0xE0],
             alpha_mul,
         });
     }
