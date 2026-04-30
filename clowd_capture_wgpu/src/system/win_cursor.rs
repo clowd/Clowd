@@ -11,7 +11,7 @@ pub fn capture_cursor() -> Option<CapturedCursor> {
             cbSize: mem::size_of::<CURSORINFO>() as u32,
             ..Default::default()
         };
-        if !GetCursorInfo(&mut ci).is_ok() {
+        if GetCursorInfo(&mut ci).is_err() {
             warn!("GetCursorInfo failed");
             return None;
         }
@@ -35,7 +35,7 @@ pub fn capture_cursor() -> Option<CapturedCursor> {
 
         let icon = CopyIcon(ci.hCursor.into()).ok()?;
         let mut ii: ICONINFO = mem::zeroed();
-        let got_info = GetIconInfo(icon.into(), &mut ii).is_ok();
+        let got_info = GetIconInfo(icon, &mut ii).is_ok();
         if !got_info {
             warn!("GetIconInfo failed");
             let _ = DestroyIcon(icon);
@@ -94,12 +94,10 @@ fn bit_to_alpha(data: &[u8], pixel: usize, invert: bool) -> u8 {
         } else {
             0
         }
+    } else if alpha {
+        0
     } else {
-        if alpha {
-            0
-        } else {
-            0xFF
-        }
+        0xFF
     }
 }
 

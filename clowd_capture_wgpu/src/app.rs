@@ -891,12 +891,8 @@ impl ApplicationHandler for App {
                                     handle.set_cursor(ht.cursor());
                                 }
                             }
-                            self.broadcast_ui_state();
-                        } else if self.input.captured && self.input.selection.is_some() {
-                            self.broadcast_ui_state();
-                        } else {
-                            self.broadcast_ui_state();
                         }
+                        self.broadcast_ui_state();
                         self.broadcast_mouse_state();
                     }
                 }
