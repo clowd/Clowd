@@ -2,8 +2,8 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 
 use crate::geometry::RectExt;
 use crate::ui::components::hints::layout::{
-    compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, HintLayout,
-    HintRect, CURSOR_SQUARE_PAD, HINT_FONT_PX,
+    compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, HintLayout, HintRect, CURSOR_SQUARE_PAD,
+    HINT_FONT_PX,
 };
 use crate::ui::components::hints::model::{render_hint_text, HINT_MONITOR};
 use crate::ui::gpu::rect::RectInstance;
@@ -154,7 +154,17 @@ impl HintsRenderer {
                     let desc_w = self.buffers[IDX_DESC_MAGNIFIER].width();
                     let (layout, hr) = compute_monitor_hint(&target, dpi, key_w, desc_w, text_line_h, &placed);
                     let mag_trail = !state.has_used_magnifier;
-                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MAGNIFIER, IDX_DESC_MAGNIFIER, 1.0, state.accent_color, mag_trail);
+                    self.emit_hint(
+                        rects,
+                        &layout,
+                        mon_left,
+                        mon_top,
+                        IDX_KEY_MAGNIFIER,
+                        IDX_DESC_MAGNIFIER,
+                        1.0,
+                        state.accent_color,
+                        mag_trail,
+                    );
                     placed.push(hr);
 
                     if !state.overlays_visible {
@@ -172,7 +182,17 @@ impl HintsRenderer {
                     let key_w = self.buffers[IDX_KEY_MONITOR].width();
                     let desc_w = self.buffers[IDX_DESC_MONITOR].width();
                     let (layout, hr) = compute_monitor_hint_top(&target, dpi, key_w, desc_w, text_line_h, &placed);
-                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_MONITOR, IDX_DESC_MONITOR, 1.0, state.accent_color, false);
+                    self.emit_hint(
+                        rects,
+                        &layout,
+                        mon_left,
+                        mon_top,
+                        IDX_KEY_MONITOR,
+                        IDX_DESC_MONITOR,
+                        1.0,
+                        state.accent_color,
+                        false,
+                    );
                     placed.push(hr);
                 }
 
@@ -194,7 +214,17 @@ impl HintsRenderer {
                     let swatch_gap = (6.0 * dpi).floor();
                     let total_desc_w = desc_w + swatch_gap + swatch_size;
                     let (layout, hr) = compute_color_hint(state, &target, dpi, key_w, total_desc_w, text_line_h, &placed);
-                    self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_COLOR, IDX_DESC_COLOR, 1.0, state.accent_color, false);
+                    self.emit_hint(
+                        rects,
+                        &layout,
+                        mon_left,
+                        mon_top,
+                        IDX_KEY_COLOR,
+                        IDX_DESC_COLOR,
+                        1.0,
+                        state.accent_color,
+                        false,
+                    );
 
                     if let Some([b, g, r, _]) = state.hovered_pixel_bgra {
                         let swatch_x = (layout.desc_text_x - mon_left + desc_w + swatch_gap).round();
@@ -227,7 +257,17 @@ impl HintsRenderer {
                 let key_w = self.buffers[IDX_KEY_SCROLL].width();
                 let desc_w = self.buffers[IDX_DESC_SCROLL].width();
                 let (layout, hr) = compute_monitor_hint(this_monitor, dpi, key_w, desc_w, text_line_h, &placed);
-                self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_SCROLL, IDX_DESC_SCROLL, 1.0, state.accent_color, true);
+                self.emit_hint(
+                    rects,
+                    &layout,
+                    mon_left,
+                    mon_top,
+                    IDX_KEY_SCROLL,
+                    IDX_DESC_SCROLL,
+                    1.0,
+                    state.accent_color,
+                    true,
+                );
                 placed.push(hr);
             }
         }
@@ -269,7 +309,17 @@ impl HintsRenderer {
                         let key_w = self.buffers[IDX_KEY_CURSOR].width();
                         let desc_w = self.buffers[IDX_DESC_CURSOR].width();
                         let (layout, hr) = compute_cursor_hint(cursor_rect, sel, this_monitor, dpi, key_w, desc_w, text_line_h, &placed);
-                        self.emit_hint(rects, &layout, mon_left, mon_top, IDX_KEY_CURSOR, IDX_DESC_CURSOR, alpha_mul, state.accent_color, false);
+                        self.emit_hint(
+                            rects,
+                            &layout,
+                            mon_left,
+                            mon_top,
+                            IDX_KEY_CURSOR,
+                            IDX_DESC_CURSOR,
+                            alpha_mul,
+                            state.accent_color,
+                            false,
+                        );
                         placed.push(hr);
                     }
                 }

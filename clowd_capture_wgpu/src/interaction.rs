@@ -1,4 +1,5 @@
-use std::time::Instant;
+use std::collections::VecDeque;
+use std::time::{Duration, Instant};
 
 use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
 use crate::selection::{dpi_at_point, hit_test, DragMode, Hittest};
@@ -8,6 +9,94 @@ use winit::window::CursorIcon;
 
 pub const ZOOM_MIN: f32 = 1.0;
 pub const ZOOM_MAX: f32 = 256.0;
+
+const VELOCITY_WINDOW: Duration = Duration::from_secs(5);
+const SLOW_SPEED_THRESHOLD: f32 = 15.0;
+const FAST_SPEED_THRESHOLD: f32 = 40.0;
+const HINT_MIN_DISPLAY: Duration = Duration::from_secs(3);
+const MIN_HISTORY: Duration = Duration::from_secs(3);
+const MAX_VELOCITY_SAMPLES: usize = 512;
+
+pub(crate) struct MouseVelocityTracker {
+    samples: VecDeque<(Instant, ScreenPointF)>,
+    hint_shown_at: Option<Instant>,
+}
+
+impl MouseVelocityTracker {
+    pub fn new() -> Self {
+        Self {
+            samples: VecDeque::with_capacity(MAX_VELOCITY_SAMPLES),
+            hint_shown_at: None,
+        }
+    }
+
+    pub fn record(&mut self, now: Instant, pos: ScreenPointF) {
+        let cutoff = now - VELOCITY_WINDOW;
+        while self
+            .samples
+            .front()
+            .is_some_and(|(t, _)| *t < cutoff)
+        {
+            self.samples.pop_front();
+        }
+        if self.samples.len() >= MAX_VELOCITY_SAMPLES {
+            self.samples.pop_front();
+        }
+        self.samples.push_back((now, pos));
+    }
+
+    fn average_speed(&self, now: Instant) -> f32 {
+        if self.samples.len() < 2 {
+            return 0.0;
+        }
+        let mut total_distance: f32 = 0.0;
+        let mut prev: Option<&ScreenPointF> = None;
+        for (_, pos) in &self.samples {
+            if let Some(p) = prev {
+                let dx = pos.x - p.x;
+                let dy = pos.y - p.y;
+                total_distance += (dx * dx + dy * dy).sqrt();
+            }
+            prev = Some(pos);
+        }
+        let first_time = self.samples.front().unwrap().0;
+        let elapsed = now
+            .duration_since(first_time)
+            .max(Duration::from_secs(1));
+        total_distance / elapsed.as_secs_f32()
+    }
+
+    pub fn evaluate(&mut self, now: Instant, currently_shown: bool) -> bool {
+        let speed = self.average_speed(now);
+        if currently_shown {
+            if let Some(shown_at) = self.hint_shown_at {
+                if now.duration_since(shown_at) < HINT_MIN_DISPLAY {
+                    return true;
+                }
+            }
+            if speed > FAST_SPEED_THRESHOLD {
+                self.hint_shown_at = None;
+                return false;
+            }
+            true
+        } else {
+            let has_enough_history = self
+                .samples
+                .front()
+                .is_some_and(|(t, _)| now.duration_since(*t) >= MIN_HISTORY);
+            if has_enough_history && speed < SLOW_SPEED_THRESHOLD {
+                self.hint_shown_at = Some(now);
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    pub fn dismiss_hint(&mut self) {
+        self.hint_shown_at = None;
+    }
+}
 
 pub(crate) struct InteractionState {
     pub virtual_cursor: ScreenPointF,
@@ -33,7 +122,7 @@ pub(crate) struct InteractionState {
     pub peek_suspended: bool,
     pub has_ever_scrolled: bool,
     pub show_scroll_hint: bool,
-    pub slow_origin: Option<(ScreenPointF, Instant)>,
+    pub velocity_tracker: MouseVelocityTracker,
     pub has_used_magnifier: bool,
 }
 
@@ -183,7 +272,7 @@ mod tests {
             peek_suspended: false,
             has_ever_scrolled: false,
             show_scroll_hint: false,
-            slow_origin: None,
+            velocity_tracker: MouseVelocityTracker::new(),
             has_used_magnifier: false,
         }
     }
@@ -232,5 +321,74 @@ mod tests {
         assert_eq!(input.hittest, Hittest::Outside);
         assert!(effects.broadcast_ui);
         assert!(effects.update_cursor_visibility);
+    }
+
+    #[test]
+    fn velocity_tracker_slow_mouse_shows_hint() {
+        let mut tracker = MouseVelocityTracker::new();
+        let start = Instant::now();
+        for i in 0..25 {
+            let t = start + Duration::from_millis(i * 200);
+            tracker.record(t, ScreenPointF::new(100.0 + i as f32 * 0.5, 100.0));
+        }
+        let now = start + Duration::from_millis(24 * 200);
+        assert!(tracker.evaluate(now, false));
+    }
+
+    #[test]
+    fn velocity_tracker_fast_mouse_no_hint() {
+        let mut tracker = MouseVelocityTracker::new();
+        let start = Instant::now();
+        for i in 0..25 {
+            let t = start + Duration::from_millis(i * 200);
+            tracker.record(t, ScreenPointF::new(100.0 + i as f32 * 100.0, 100.0));
+        }
+        let now = start + Duration::from_millis(24 * 200);
+        assert!(!tracker.evaluate(now, false));
+    }
+
+    #[test]
+    fn velocity_tracker_hint_stays_for_min_duration() {
+        let mut tracker = MouseVelocityTracker::new();
+        let start = Instant::now();
+        for i in 0..20 {
+            let t = start + Duration::from_millis(i * 200);
+            tracker.record(t, ScreenPointF::new(100.0, 100.0));
+        }
+        let show_time = start + Duration::from_millis(19 * 200);
+        assert!(tracker.evaluate(show_time, false));
+
+        let fast_time = show_time + Duration::from_secs(1);
+        tracker.record(fast_time, ScreenPointF::new(500.0, 500.0));
+        assert!(tracker.evaluate(fast_time, true));
+    }
+
+    #[test]
+    fn velocity_tracker_hides_after_min_duration_with_fast_movement() {
+        let mut tracker = MouseVelocityTracker::new();
+        let start = Instant::now();
+        for i in 0..20 {
+            let t = start + Duration::from_millis(i * 200);
+            tracker.record(t, ScreenPointF::new(100.0, 100.0));
+        }
+        let show_time = start + Duration::from_millis(19 * 200);
+        assert!(tracker.evaluate(show_time, false));
+
+        let later = show_time + Duration::from_secs(4);
+        for i in 0..30 {
+            let t = show_time + Duration::from_secs(3) + Duration::from_millis(i * 30);
+            tracker.record(t, ScreenPointF::new(100.0 + i as f32 * 80.0, 100.0));
+        }
+        assert!(!tracker.evaluate(later, true));
+    }
+
+    #[test]
+    fn velocity_tracker_no_hint_before_enough_history() {
+        let mut tracker = MouseVelocityTracker::new();
+        let start = Instant::now();
+        tracker.record(start, ScreenPointF::new(100.0, 100.0));
+        let now = start + Duration::from_millis(500);
+        tracker.record(now, ScreenPointF::new(100.0, 100.0));
+        assert!(!tracker.evaluate(now, false));
     }
 }

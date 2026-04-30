@@ -190,7 +190,14 @@ impl RectPipeline {
 
     /// Upload uniforms + instances. Call once per frame before `draw()`.
     /// Empty `instances` is fine — the next `draw()` becomes a no-op.
-    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), elapsed_secs: f32, instances: &[RectInstance]) {
+    pub fn prepare(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        viewport_px: (u32, u32),
+        elapsed_secs: f32,
+        instances: &[RectInstance],
+    ) {
         let uniforms = RectUniforms {
             viewport_px: [viewport_px.0 as f32, viewport_px.1 as f32],
             elapsed_secs,
