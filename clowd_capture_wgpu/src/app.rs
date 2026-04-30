@@ -237,6 +237,23 @@ impl App {
             .as_ref()
             .is_some_and(|h| h.obstructed);
 
+        // Compute peek command first so UI state can use peek_active.
+        // Peek is suppressed in magnifier mode (overlays hidden) and after
+        // a selection has been made (peek_suspended).  When captured, keep
+        // the locked peek; otherwise follow hover.
+        let new_peek = if !self.input.overlays_visible || self.input.peek_suspended || self.input.dragging {
+            self.locked_peek.clone()
+        } else {
+            hovered_full
+                .as_ref()
+                .filter(|hw| hw.obstructed && self.settings.obscured_window_peek_enabled)
+                .map(|hw| PeekCommand {
+                    window_index: hw.window_index,
+                    window_rect: hw.rect,
+                    captured: false,
+                })
+        };
+
         let state = Arc::new(build_ui_shared_state(UiStateBuildInput {
             monitors: &self.monitors,
             selection: self.input.selection,
@@ -254,6 +271,7 @@ impl App {
             hovered_window_bounds,
             hovered_window_index,
             hovered_window_obstructed,
+            peek_active: new_peek.is_some(),
             cursor_overlay_visible: self.input.cursor_overlay_visible,
             desktop_buffer: self.desktop_buffer.as_deref(),
         }));
@@ -262,22 +280,6 @@ impl App {
             h.update_ui_state(state.clone());
         }
 
-        // Update peek command for render workers.
-        // Peek is suppressed in magnifier mode (overlays hidden) and after
-        // a selection has been made (peek_suspended).  When captured, keep
-        // the locked peek; otherwise follow hover.
-        let new_peek = if !self.input.overlays_visible || self.input.peek_suspended || self.input.dragging {
-            self.locked_peek.clone()
-        } else {
-            hovered_full
-                .as_ref()
-                .filter(|hw| hw.obstructed && self.settings.obscured_window_peek_enabled)
-                .map(|hw| PeekCommand {
-                    window_index: hw.window_index,
-                    window_rect: hw.rect,
-                    captured: false,
-                })
-        };
         if new_peek != self.cached_peek_command {
             for h in self.windows.values() {
                 h.update_peek_state(new_peek.clone());

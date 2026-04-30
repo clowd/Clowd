@@ -1,4 +1,4 @@
-use crate::geometry::RectExt;
+use crate::geometry::{RectExt, ScreenRect};
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
 pub const HINT_FONT_PX: f32 = 11.0;
@@ -193,9 +193,11 @@ pub fn compute_monitor_hint_top(
     (layout, hr)
 }
 
-/// [M] Toggle Cursor — below the captured cursor image (within selection).
+/// [M] Toggle Cursor — positioned near the cursor image, kept inside the
+/// selection bounds so it doesn't overlap the selection border.
 pub fn compute_cursor_hint(
     cursor_rect: [f32; 4],
+    selection: ScreenRect,
     monitor: &UiMonitor,
     dpi: f32,
     _key_text_width: f32,
@@ -206,15 +208,26 @@ pub fn compute_cursor_hint(
     let (tooltip_w, tooltip_h, inner) = tooltip_dimensions(dpi, desc_text_width, text_line_height);
     let mon = monitor.bounds;
 
+    let sel_left = selection.left() as f32;
+    let sel_top = selection.top() as f32;
+    let sel_right = selection.right() as f32;
+    let sel_bottom = selection.bottom() as f32;
+
+    let pad = (CURSOR_SQUARE_PAD * dpi).floor();
     let cursor_center_x = (cursor_rect[0] + cursor_rect[2]) / 2.0;
-    let cursor_bottom = cursor_rect[3];
     let off_y = CURSOR_OFFSET_Y * dpi;
 
-    let mut x = cursor_center_x - tooltip_w / 2.0;
-    let mut y = cursor_bottom + off_y;
-    if y + tooltip_h > mon.bottom() as f32 {
-        y = cursor_rect[1] - off_y - tooltip_h;
+    let padded_bottom = cursor_rect[3] + pad;
+    let padded_top = cursor_rect[1] - pad;
+
+    let mut y = padded_bottom + off_y;
+    if y + tooltip_h > sel_bottom {
+        y = padded_top - off_y - tooltip_h;
     }
+
+    let mut x = cursor_center_x - tooltip_w / 2.0;
+    x = x.clamp(sel_left, (sel_right - tooltip_w).max(sel_left));
+    y = y.clamp(sel_top, (sel_bottom - tooltip_h).max(sel_top));
     x = x.clamp(mon.left() as f32, (mon.right() as f32 - tooltip_w).max(mon.left() as f32));
     y = y.clamp(mon.top() as f32, (mon.bottom() as f32 - tooltip_h).max(mon.top() as f32));
 
