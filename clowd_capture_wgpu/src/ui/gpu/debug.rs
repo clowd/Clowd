@@ -276,10 +276,10 @@ fn render_panel_inner(
 
     emit_background_rect(&layout, this_monitor, rects);
 
-    let mon_left = this_monitor.bounds.left() as f32;
-    let mon_top = this_monitor.bounds.top() as f32;
-    let local_panel_left = layout.panel_rect.left() as f32 - mon_left;
-    let local_panel_top = layout.panel_rect.top() as f32 - mon_top;
+    let mon_f = this_monitor.bounds.to_f32();
+    let panel_f = layout.panel_rect.to_f32();
+    let local_panel_left = panel_f.left() - mon_f.left();
+    let local_panel_top = panel_f.top() - mon_f.top();
     let x = local_panel_left + layout.padding_px;
     let mut y = local_panel_top + layout.padding_px;
     for i in 0..text_lines.len() {
@@ -297,12 +297,12 @@ fn render_panel_inner(
 }
 
 fn emit_background_rect(layout: &DebugPanelLayout, this_monitor: &UiMonitor, rects: &mut Vec<RectInstance>) {
-    let mon_left = this_monitor.bounds.left() as f32;
-    let mon_top = this_monitor.bounds.top() as f32;
-    let l = layout.panel_rect.left() as f32 - mon_left;
-    let t = layout.panel_rect.top() as f32 - mon_top;
-    let r = l + layout.panel_rect.width() as f32;
-    let b = t + layout.panel_rect.height() as f32;
+    let mon_f = this_monitor.bounds.to_f32();
+    let panel_f = layout.panel_rect.to_f32();
+    let l = panel_f.left() - mon_f.left();
+    let t = panel_f.top() - mon_f.top();
+    let r = l + panel_f.width();
+    let b = t + panel_f.height();
     rects.push(RectInstance::filled(l, t, r, b, [0.0, 0.0, 0.0, BODY_ALPHA]));
 }
 
@@ -323,14 +323,14 @@ impl DebugRenderer {
         font_px: f32,
         rects: &mut Vec<RectInstance>,
     ) {
-        let mon_left = this_monitor.bounds.left() as f32;
-        let mon_top = this_monitor.bounds.top() as f32;
-        let g_left = graph_rect.left() as f32 - mon_left;
-        let g_top = graph_rect.top() as f32 - mon_top;
-        let g_right = g_left + graph_rect.width() as f32;
-        let g_bottom = g_top + graph_rect.height() as f32;
-        let g_w = graph_rect.width() as f32;
-        let g_h = graph_rect.height() as f32;
+        let mon_f = this_monitor.bounds.to_f32();
+        let gf = graph_rect.to_f32();
+        let g_left = gf.left() - mon_f.left();
+        let g_top = gf.top() - mon_f.top();
+        let g_right = g_left + gf.width();
+        let g_bottom = g_top + gf.height();
+        let g_w = gf.width();
+        let g_h = gf.height();
 
         // Subtle graph background so the bars aren't floating on a flat
         // panel surface.

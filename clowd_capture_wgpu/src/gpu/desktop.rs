@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::geometry::ScreenPoint;
+use crate::geometry::{RectExt, ScreenPoint};
 use crate::system::{CapturedCursor, CapturedDesktop, CursorImage};
 
 #[repr(C)]
@@ -106,13 +106,14 @@ pub fn upload_snapshot(
         upload_cursor_textures(device, queue, c)
     });
 
+    let bounds_f = captured.bounds.to_f32();
     Some(Arc::new(DesktopSnapshot {
         texture,
         view,
         sampler: sampler.clone(),
         bind_group_layout: bgl.clone(),
-        vdesktop_origin: [captured.bounds.min_x() as f32, captured.bounds.min_y() as f32],
-        vdesktop_size: [captured.bounds.width() as f32, captured.bounds.height() as f32],
+        vdesktop_origin: [bounds_f.left(), bounds_f.top()],
+        vdesktop_size: [bounds_f.width(), bounds_f.height()],
         cursor,
     }))
 }

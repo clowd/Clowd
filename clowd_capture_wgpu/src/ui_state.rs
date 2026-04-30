@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
+use crate::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect};
 use crate::settings::TipsMode;
 use crate::system::{CapturedDesktop, CursorImage, MonitorInfo};
 use crate::ui::shared::{UiMonitor, UiSharedState};
@@ -32,7 +32,7 @@ pub struct UiStateBuildInput<'a> {
 pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
     let hovered_pixel_bgra = input
         .desktop_buffer
-        .and_then(|buf| sample_bgra(buf, cursor_point(input.virtual_cursor)));
+        .and_then(|buf| sample_bgra(buf, to_screen_point(input.virtual_cursor)));
 
     let cursor_image_rect = input.desktop_buffer.and_then(|buf| {
         let c = buf.cursor.as_ref()?;
@@ -70,7 +70,8 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         && cursor_image_rect
             .zip(input.hovered_window_bounds)
             .is_some_and(|(cr, wb)| {
-                cr[0] < wb.max_x() as f32 && cr[2] > wb.min_x() as f32 && cr[1] < wb.max_y() as f32 && cr[3] > wb.min_y() as f32
+                let wf = wb.to_f32();
+                cr[0] < wf.right() && cr[2] > wf.left() && cr[1] < wf.bottom() && cr[3] > wf.top()
             });
 
     UiSharedState {
@@ -96,10 +97,6 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         show_scroll_hint: input.show_scroll_hint,
         has_used_magnifier: input.has_used_magnifier,
     }
-}
-
-pub fn cursor_point(cursor: ScreenPointF) -> ScreenPoint {
-    ScreenPoint::new(cursor.x.floor() as i32, cursor.y.floor() as i32)
 }
 
 fn sample_bgra(buf: &CapturedDesktop, p: ScreenPoint) -> Option<[u8; 4]> {

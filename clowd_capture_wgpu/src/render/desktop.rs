@@ -1,4 +1,4 @@
-use crate::geometry::{RectExt, ScreenPointF, ScreenRect, WindowPoint};
+use crate::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::desktop::{CursorTextures, WindowUniforms};
 
 /// Duration of the colour to grayscale fade after the window first becomes visible.
@@ -39,10 +39,7 @@ impl SnapshotState {
 
         if !overlays_visible {
             self.uniforms.params[0] = 0.0;
-            let local = WindowPoint::new(
-                mouse_pos.x - monitor_bounds.min_x() as f32,
-                mouse_pos.y - monitor_bounds.min_y() as f32,
-            );
+            let local = screen_to_window(monitor_bounds, mouse_pos);
             self.uniforms.params[1] = -1.0;
             self.uniforms.params[2] = -1.0;
             if zoom <= 1.0 {
@@ -77,10 +74,7 @@ impl SnapshotState {
         };
         self.uniforms.params[0] = fade;
 
-        let local = WindowPoint::new(
-            mouse_pos.x - monitor_bounds.min_x() as f32,
-            mouse_pos.y - monitor_bounds.min_y() as f32,
-        );
+        let local = screen_to_window(monitor_bounds, mouse_pos);
         self.uniforms.params[1] = local.x;
         self.uniforms.params[2] = local.y;
 
@@ -104,11 +98,12 @@ impl SnapshotState {
         if let Some(sel) = selection {
             let cx = mouse_pos.x;
             let cy = mouse_pos.y;
-            let local_cursor = WindowPoint::new(cx - monitor_bounds.min_x() as f32, cy - monitor_bounds.min_y() as f32);
+            let local_cursor = screen_to_window(monitor_bounds, mouse_pos);
+            let sel_f = sel.to_f32();
             let to_local =
                 |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y) };
-            let (l, t) = to_local(sel.left() as f32, sel.top() as f32);
-            let (r, b) = to_local(sel.right() as f32, sel.bottom() as f32);
+            let (l, t) = to_local(sel_f.left(), sel_f.top());
+            let (r, b) = to_local(sel_f.right(), sel_f.bottom());
             self.uniforms.selection_rect = [l, t, r, b];
         } else {
             self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
@@ -146,10 +141,9 @@ impl SnapshotState {
 
         let cx = mouse_pos.x;
         let cy = mouse_pos.y;
-        let local_cx = cx - monitor_bounds.min_x() as f32;
-        let local_cy = cy - monitor_bounds.min_y() as f32;
+        let local_cursor = screen_to_window(monitor_bounds, mouse_pos);
 
-        let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cx, (vd_y - cy) * zoom + local_cy) };
+        let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y) };
 
         let (l, t) = to_local(vd_left, vd_top);
         let (r, b) = to_local(vd_right, vd_bottom);

@@ -1,6 +1,6 @@
 use winit::window::CursorIcon;
 
-use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
+use crate::geometry::{RectExt, ScreenPointF, ScreenRect, ScreenRectExt};
 use crate::system::MonitorInfo;
 
 /// Pre-DPI radius (in virtual-desktop pixels) of the resize-handle hit
@@ -237,11 +237,7 @@ pub fn resize_with_clamp(anchor: ScreenRect, handle: Hittest, cursor_x: i32, cur
 /// reads `dpizoom` once from the monitor under `mouseDownPt`).
 pub fn dpi_at_point(p: ScreenPointF, monitors: &[MonitorInfo]) -> f32 {
     for m in monitors {
-        let mx = m.bounds.min_x() as f32;
-        let my = m.bounds.min_y() as f32;
-        let mw = m.bounds.width() as f32;
-        let mh = m.bounds.height() as f32;
-        if p.x >= mx && p.x < mx + mw && p.y >= my && p.y < my + mh {
+        if m.bounds.contains_point_f32(p) {
             return m.scale_factor;
         }
     }
@@ -259,11 +255,7 @@ pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[MonitorInfo]) 
     }
     // First try: already inside a monitor? Leave it alone.
     for m in monitors {
-        let mx = m.bounds.min_x() as f32;
-        let my = m.bounds.min_y() as f32;
-        let mw = m.bounds.width() as f32;
-        let mh = m.bounds.height() as f32;
-        if p.x >= mx && p.x < mx + mw && p.y >= my && p.y < my + mh {
+        if m.bounds.contains_point_f32(*p) {
             return;
         }
     }
@@ -275,20 +267,17 @@ pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[MonitorInfo]) 
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            let cx = m.bounds.min_x() as f32 + m.bounds.width() as f32 * 0.5;
-            let cy = m.bounds.min_y() as f32 + m.bounds.height() as f32 * 0.5;
+            let bf = m.bounds.to_f32();
+            let cx = bf.left() + bf.width() * 0.5;
+            let cy = bf.top() + bf.height() * 0.5;
             let dx = p.x - cx;
             let dy = p.y - cy;
             (i, dx * dx + dy * dy)
         })
         .fold((0usize, f32::INFINITY), |(bi, bd), (i, d)| if d < bd { (i, d) } else { (bi, bd) });
-    let m = &monitors[best_ix].bounds;
-    let min_x = m.min_x() as f32;
-    let min_y = m.min_y() as f32;
-    let max_x = (m.min_x() + m.width()) as f32 - 0.001;
-    let max_y = (m.min_y() + m.height()) as f32 - 0.001;
-    p.x = p.x.clamp(min_x, max_x);
-    p.y = p.y.clamp(min_y, max_y);
+    let bf = monitors[best_ix].bounds.to_f32();
+    p.x = p.x.clamp(bf.left(), bf.right() - 0.001);
+    p.y = p.y.clamp(bf.top(), bf.bottom() - 0.001);
 }
 
 #[cfg(test)]

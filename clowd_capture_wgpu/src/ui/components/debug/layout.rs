@@ -70,15 +70,13 @@ pub fn compute_layout(
     }
     let panel_h = panel_h.round();
 
-    let mon_left = monitor_bounds.left() as f32;
-    let mon_top = monitor_bounds.top() as f32;
-    let mon_right = monitor_bounds.right() as f32;
+    let mon_f = monitor_bounds.to_f32();
 
     let panel_left = match anchor {
-        PanelAnchor::TopLeft => mon_left + margin,
-        PanelAnchor::TopRight => mon_right - margin - panel_w,
+        PanelAnchor::TopLeft => mon_f.left() + margin,
+        PanelAnchor::TopRight => mon_f.right() - margin - panel_w,
     };
-    let panel_top = mon_top + margin;
+    let panel_top = mon_f.top() + margin;
 
     let panel_rect = ScreenRect::from_xy_size(panel_left.round() as i32, panel_top.round() as i32, panel_w as i32, panel_h as i32);
 

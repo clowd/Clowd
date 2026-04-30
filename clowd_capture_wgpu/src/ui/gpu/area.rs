@@ -127,8 +127,7 @@ impl AreaRenderer {
 
         // Clip selection to this monitor.
         let mon = this_monitor.bounds;
-        let mon_w = mon.width() as f32;
-        let mon_h = mon.height() as f32;
+        let mon_f = mon.to_f32();
 
         let clip_left = sel.left().max(mon.left());
         let clip_top = sel.top().max(mon.top());
@@ -154,8 +153,8 @@ impl AreaRenderer {
         let bottom_y = sel_local_bottom;
 
         // Apply zoom transform around cursor.
-        let cursor_local_x = state.virtual_cursor.x - mon.left() as f32;
-        let cursor_local_y = state.virtual_cursor.y - mon.top() as f32;
+        let cursor_local_x = state.virtual_cursor.x - mon_f.left();
+        let cursor_local_y = state.virtual_cursor.y - mon_f.top();
 
         let (zoomed_x, zoomed_y) = if zoom > 1.0 {
             (
@@ -171,8 +170,8 @@ impl AreaRenderer {
         let mut origin_y = zoomed_y - padding / 2.0 - area_height;
 
         // Clamp to monitor bounds.
-        origin_x = origin_x.clamp(0.0, (mon_w - area_width).max(0.0));
-        origin_y = origin_y.clamp(0.0, (mon_h - area_height).max(0.0));
+        origin_x = origin_x.clamp(0.0, (mon_f.width() - area_width).max(0.0));
+        origin_y = origin_y.clamp(0.0, (mon_f.height() - area_height).max(0.0));
 
         // Pill background (rounded rect). Inflate quad by aa_pad so the
         // shader's fwidth-based AA has room for the full transition fringe.

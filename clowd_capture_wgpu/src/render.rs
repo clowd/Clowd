@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use crate::geometry::{RectExt, ScreenPointF, ScreenRect, WindowPoint};
+use crate::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::desktop::{create_placeholder_cursor_view, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::gpu::peek::{PeekUniforms, PEEK_UNIFORMS_SIZE};
 use crate::gpu::{self, SURFACE_FORMAT};
@@ -162,20 +162,19 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     surface.configure(&gpu.device, &config);
 
     let mut snapshot_state: Option<SnapshotState> = gpu.snapshot.as_ref().map(|snap| {
-        let m_x = monitor_bounds.min_x() as f32;
-        let m_y = monitor_bounds.min_y() as f32;
-        let m_w = monitor_bounds.width() as f32;
-        let m_h = monitor_bounds.height() as f32;
+        let mf = monitor_bounds.to_f32();
         let vd_x = snap.vdesktop_origin[0];
         let vd_y = snap.vdesktop_origin[1];
         let vd_w = snap.vdesktop_size[0];
         let vd_h = snap.vdesktop_size[1];
-        let base_uv_offset_scale = [(m_x - vd_x) / vd_w, (m_y - vd_y) / vd_h, m_w / vd_w, m_h / vd_h];
+        let base_uv_offset_scale = [
+            (mf.left() - vd_x) / vd_w,
+            (mf.top() - vd_y) / vd_h,
+            mf.width() / vd_w,
+            mf.height() / vd_h,
+        ];
 
-        let init_local = WindowPoint::new(
-            initial_mouse.x - monitor_bounds.min_x() as f32,
-            initial_mouse.y - monitor_bounds.min_y() as f32,
-        );
+        let init_local = screen_to_window(monitor_bounds, initial_mouse);
 
         let uniforms = WindowUniforms {
             uv_offset_scale: base_uv_offset_scale,
@@ -448,20 +447,22 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             let sel = selection?;
             let cx = mouse_pos.x;
             let cy = mouse_pos.y;
-            let local_cursor = WindowPoint::new(cx - monitor_bounds.min_x() as f32, cy - monitor_bounds.min_y() as f32);
+            let local_cursor = screen_to_window(monitor_bounds, ScreenPointF::new(cx, cy));
+            let mon_f = monitor_bounds.to_f32();
 
             let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
                 if zoom <= 1.0 {
-                    (vd_x - monitor_bounds.min_x() as f32, vd_y - monitor_bounds.min_y() as f32)
+                    (vd_x - mon_f.left(), vd_y - mon_f.top())
                 } else {
                     ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y)
                 }
             };
 
-            let (sl, st) = to_local(sel.left() as f32, sel.top() as f32);
-            let (sr, sb) = to_local(sel.right() as f32, sel.bottom() as f32);
+            let sel_f = sel.to_f32();
+            let (sl, st) = to_local(sel_f.left(), sel_f.top());
+            let (sr, sb) = to_local(sel_f.right(), sel_f.bottom());
 
-            let wr = pt.window_rect;
+            let wr = pt.window_rect.to_f32();
 
             // Window texture UV: map selection area to portion of window texture.
             // Use un-zoomed virtual-desktop coordinates so the UV range stays
@@ -470,10 +471,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             let th = pt.height as f32;
             let crop_x = pt.crop_x as f32;
             let crop_y = pt.crop_y as f32;
-            let raw_sl = sel.left() as f32 - wr.left() as f32;
-            let raw_st = sel.top() as f32 - wr.top() as f32;
-            let raw_sw = sel.width() as f32;
-            let raw_sh = sel.height() as f32;
+            let raw_sl = sel_f.left() - wr.left();
+            let raw_st = sel_f.top() - wr.top();
+            let raw_sw = sel_f.width();
+            let raw_sh = sel_f.height();
             let window_uv = [(crop_x + raw_sl) / tw, (crop_y + raw_st) / th, raw_sw / tw, raw_sh / th];
 
             let desktop_uv = snapshot_state
@@ -500,8 +501,9 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                 .take(16)
                 .enumerate()
             {
-                let (rl, rt) = to_local(r.left() as f32, r.top() as f32);
-                let (rr, rb) = to_local(r.right() as f32, r.bottom() as f32);
+                let rf = r.to_f32();
+                let (rl, rt) = to_local(rf.left(), rf.top());
+                let (rr, rb) = to_local(rf.right(), rf.bottom());
                 peek_uniforms.obstruction_rects[i] = [rl, rt, rr, rb];
             }
 

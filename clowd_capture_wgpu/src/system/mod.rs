@@ -137,11 +137,11 @@ pub struct MonitorInfo {
 #[allow(dead_code)]
 impl MonitorInfo {
     pub fn window_to_screen(&self, pt: WindowPoint) -> ScreenPointF {
-        ScreenPointF::new(pt.x + self.bounds.min_x() as f32, pt.y + self.bounds.min_y() as f32)
+        crate::geometry::window_to_screen(self.bounds, pt)
     }
 
     pub fn screen_to_window(&self, pt: ScreenPointF) -> WindowPoint {
-        WindowPoint::new(pt.x - self.bounds.min_x() as f32, pt.y - self.bounds.min_y() as f32)
+        crate::geometry::screen_to_window(self.bounds, pt)
     }
 }
 
