@@ -13,7 +13,7 @@ use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture_output::{copy_to_clipboard_with_peek, ActionResult};
 use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectRounded, WindowPoint};
-use crate::interaction::{InteractionController, InteractionEffects, InteractionState};
+use crate::interaction::{InteractionController, InteractionEffects, InteractionState, MouseVelocityTracker};
 use crate::render::protocol::PeekCommand;
 use crate::render::window::{WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
@@ -155,7 +155,7 @@ impl App {
                 peek_suspended: false,
                 has_ever_scrolled: false,
                 show_scroll_hint: false,
-                slow_origin: None,
+                velocity_tracker: MouseVelocityTracker::new(),
                 has_used_magnifier: false,
             },
         }
@@ -789,20 +789,14 @@ impl ApplicationHandler for App {
                 }
 
                 if !self.input.has_ever_scrolled && !self.input.captured {
-                    const SLOW_RADIUS: f32 = 50.0;
-                    const SLOW_DURATION: std::time::Duration = std::time::Duration::from_secs(3);
-                    let cur = self.input.virtual_cursor;
-                    if let Some((origin, started)) = &self.input.slow_origin {
-                        let dx = cur.x - origin.x;
-                        let dy = cur.y - origin.y;
-                        if dx * dx + dy * dy > SLOW_RADIUS * SLOW_RADIUS {
-                            self.input.slow_origin = Some((cur, Instant::now()));
-                        } else if started.elapsed() > SLOW_DURATION {
-                            self.input.show_scroll_hint = true;
-                        }
-                    } else {
-                        self.input.slow_origin = Some((cur, Instant::now()));
-                    }
+                    let now = Instant::now();
+                    self.input
+                        .velocity_tracker
+                        .record(now, self.input.virtual_cursor);
+                    self.input.show_scroll_hint = self
+                        .input
+                        .velocity_tracker
+                        .evaluate(now, self.input.show_scroll_hint);
                 }
 
                 self.broadcast_ui_state();
@@ -953,6 +947,7 @@ impl ApplicationHandler for App {
                 };
                 self.input.has_ever_scrolled = true;
                 self.input.show_scroll_hint = false;
+                self.input.velocity_tracker.dismiss_hint();
                 self.apply_zoom_factor(factor);
             }
             WindowEvent::PinchGesture {
@@ -967,6 +962,7 @@ impl ApplicationHandler for App {
                 }
                 self.input.has_ever_scrolled = true;
                 self.input.show_scroll_hint = false;
+                self.input.velocity_tracker.dismiss_hint();
                 self.apply_zoom_factor(1.0 + delta as f32);
             }
             _ => {}
