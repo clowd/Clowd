@@ -31,6 +31,10 @@ pub(crate) struct InteractionState {
     pub overlays_visible: bool,
     pub cursor_overlay_visible: bool,
     pub peek_suspended: bool,
+    pub has_ever_scrolled: bool,
+    pub show_scroll_hint: bool,
+    pub slow_origin: Option<(ScreenPointF, Instant)>,
+    pub has_used_magnifier: bool,
 }
 
 #[derive(Default)]
@@ -177,6 +181,10 @@ mod tests {
             overlays_visible: true,
             cursor_overlay_visible: true,
             peek_suspended: false,
+            has_ever_scrolled: false,
+            show_scroll_hint: false,
+            slow_origin: None,
+            has_used_magnifier: false,
         }
     }
 

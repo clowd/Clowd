@@ -39,7 +39,8 @@ impl RectInstance {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct RectUniforms {
     viewport_px: [f32; 2],
-    _pad: [f32; 2],
+    elapsed_secs: f32,
+    _pad: f32,
 }
 
 /// Minimum instance-buffer capacity. The buffer grows by doubling when a
@@ -66,7 +67,7 @@ impl RectPipeline {
             label: Some("ui_rect bgl"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -189,10 +190,11 @@ impl RectPipeline {
 
     /// Upload uniforms + instances. Call once per frame before `draw()`.
     /// Empty `instances` is fine — the next `draw()` becomes a no-op.
-    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), instances: &[RectInstance]) {
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), elapsed_secs: f32, instances: &[RectInstance]) {
         let uniforms = RectUniforms {
             viewport_px: [viewport_px.0 as f32, viewport_px.1 as f32],
-            _pad: [0.0; 2],
+            elapsed_secs,
+            _pad: 0.0,
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&uniforms));
 

@@ -153,6 +153,10 @@ impl App {
                 overlays_visible: true,
                 cursor_overlay_visible,
                 peek_suspended: false,
+                has_ever_scrolled: false,
+                show_scroll_hint: false,
+                slow_origin: None,
+                has_used_magnifier: false,
             },
         }
     }
@@ -274,6 +278,8 @@ impl App {
             peek_active: new_peek.is_some(),
             cursor_overlay_visible: self.input.cursor_overlay_visible,
             desktop_buffer: self.desktop_buffer.as_deref(),
+            show_scroll_hint: self.input.show_scroll_hint,
+            has_used_magnifier: self.input.has_used_magnifier,
         }));
 
         for h in self.windows.values() {
@@ -628,6 +634,9 @@ impl ApplicationHandler for App {
                             }
                             'q' => {
                                 self.input.overlays_visible = !self.input.overlays_visible;
+                                if !self.input.overlays_visible && self.input.zoom > 1.0 {
+                                    self.input.has_used_magnifier = true;
+                                }
                                 self.broadcast_ui_state();
                                 self.broadcast_mouse_state();
                             }
@@ -779,6 +788,23 @@ impl ApplicationHandler for App {
                     }
                 }
 
+                if !self.input.has_ever_scrolled && !self.input.captured {
+                    const SLOW_RADIUS: f32 = 50.0;
+                    const SLOW_DURATION: std::time::Duration = std::time::Duration::from_secs(3);
+                    let cur = self.input.virtual_cursor;
+                    if let Some((origin, started)) = &self.input.slow_origin {
+                        let dx = cur.x - origin.x;
+                        let dy = cur.y - origin.y;
+                        if dx * dx + dy * dy > SLOW_RADIUS * SLOW_RADIUS {
+                            self.input.slow_origin = Some((cur, Instant::now()));
+                        } else if started.elapsed() > SLOW_DURATION {
+                            self.input.show_scroll_hint = true;
+                        }
+                    } else {
+                        self.input.slow_origin = Some((cur, Instant::now()));
+                    }
+                }
+
                 self.broadcast_ui_state();
                 self.broadcast_mouse_state();
             }
@@ -925,6 +951,8 @@ impl ApplicationHandler for App {
                         2_f32.powf(dy / TOUCHPAD_PIXELS_PER_DOUBLING)
                     }
                 };
+                self.input.has_ever_scrolled = true;
+                self.input.show_scroll_hint = false;
                 self.apply_zoom_factor(factor);
             }
             WindowEvent::PinchGesture {
@@ -937,6 +965,8 @@ impl ApplicationHandler for App {
                 if delta == 0.0 {
                     return;
                 }
+                self.input.has_ever_scrolled = true;
+                self.input.show_scroll_hint = false;
                 self.apply_zoom_factor(1.0 + delta as f32);
             }
             _ => {}

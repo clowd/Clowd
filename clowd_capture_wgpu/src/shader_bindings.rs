@@ -40,7 +40,7 @@ pub const PEEK_BINDINGS: &[BindingEntry] = &[
 ];
 
 pub const RECT_BINDINGS: &[BindingEntry] = &[
-    BindingEntry { binding: 0, kind: ResourceKind::UniformBuffer, vertex: true,  fragment: false },
+    BindingEntry { binding: 0, kind: ResourceKind::UniformBuffer, vertex: true,  fragment: true  },
 ];
 
 pub const ICON_BINDINGS: &[BindingEntry] = &[

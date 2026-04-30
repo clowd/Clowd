@@ -61,6 +61,8 @@ pub struct UiSharedState {
     /// cursor position minus hotspot + image dimensions. `None` when
     /// cursor capture failed or the desktop buffer is unavailable.
     pub cursor_image_rect: Option<[f32; 4]>,
+    pub show_scroll_hint: bool,
+    pub has_used_magnifier: bool,
 }
 
 /// Return the monitor whose bounds contain the center of `rect`. `None`
@@ -230,6 +232,8 @@ mod tests {
             cursor_overlay_visible: true,
             hovered_pixel_bgra: None,
             cursor_image_rect: None,
+            show_scroll_hint: false,
+            has_used_magnifier: false,
         }
     }
 

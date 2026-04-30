@@ -63,6 +63,8 @@ pub struct UiRenderer {
     /// Set by `prepare()` when at least one text area was shaped — tells
     /// `draw()` whether to issue the glyphon draw.
     any_text: bool,
+    /// Animation clock origin for UI effects (border trail).
+    start_time: Instant,
 }
 
 impl UiRenderer {
@@ -111,6 +113,7 @@ impl UiRenderer {
             time_to_first_render: None,
             has_prepared: false,
             any_text: false,
+            start_time: Instant::now(),
         }
     }
 
@@ -192,8 +195,9 @@ impl UiRenderer {
             &mut rect_instances,
         );
 
+        let elapsed_secs = self.start_time.elapsed().as_secs_f32();
         self.rect
-            .prepare(device, queue, viewport_px, &rect_instances);
+            .prepare(device, queue, viewport_px, elapsed_secs, &rect_instances);
         if let Some(atlas) = self.panel.atlas() {
             self.icon
                 .prepare(device, queue, viewport_px, atlas, &icon_draws);
