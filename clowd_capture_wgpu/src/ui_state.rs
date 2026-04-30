@@ -22,6 +22,7 @@ pub struct UiStateBuildInput<'a> {
     pub hovered_window_bounds: Option<ScreenRect>,
     pub hovered_window_index: Option<usize>,
     pub hovered_window_obstructed: bool,
+    pub peek_active: bool,
     pub cursor_overlay_visible: bool,
     pub desktop_buffer: Option<&'a CapturedDesktop>,
 }
@@ -60,14 +61,11 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         })
         .collect();
 
-    let peek_covers_cursor = input.hovered_window_obstructed
+    let peek_covers_cursor = input.peek_active
         && cursor_image_rect
             .zip(input.hovered_window_bounds)
             .is_some_and(|(cr, wb)| {
-                cr[0] < wb.max_x() as f32
-                    && cr[2] > wb.min_x() as f32
-                    && cr[1] < wb.max_y() as f32
-                    && cr[3] > wb.min_y() as f32
+                cr[0] < wb.max_x() as f32 && cr[2] > wb.min_x() as f32 && cr[1] < wb.max_y() as f32 && cr[3] > wb.min_y() as f32
             });
 
     UiSharedState {
