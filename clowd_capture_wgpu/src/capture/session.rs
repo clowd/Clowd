@@ -12,6 +12,9 @@ use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedCursor, CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::telemetry::startup::StartupTimings;
 
+type WalkerLatch = Arc<Latch<Arc<WindowWalker>>>;
+type PeekImagesLatch = Arc<Latch<Vec<Arc<WindowPeekImage>>>>;
+
 pub struct CaptureSession {
     app: App,
 }
@@ -198,7 +201,7 @@ fn spawn_walker_job(
     peek_enabled: bool,
     visibility_threshold: f32,
     startup: Arc<StartupTimings>,
-) -> (Arc<Latch<Arc<WindowWalker>>>, Arc<Latch<Vec<Arc<WindowPeekImage>>>>) {
+) -> (WalkerLatch, PeekImagesLatch) {
     let walker_latch = Arc::new(Latch::new());
     let peek_images_latch = Arc::new(Latch::new());
     let peek_txs: Vec<_> = worker_setups

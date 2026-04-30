@@ -79,7 +79,6 @@ pub fn compute_color_hint(
     state: &UiSharedState,
     monitor: &UiMonitor,
     dpi: f32,
-    _key_text_width: f32,
     desc_text_width: f32,
     text_line_height: f32,
     placed: &[HintRect],
@@ -118,7 +117,6 @@ pub fn compute_color_hint(
 pub fn compute_monitor_hint(
     monitor: &UiMonitor,
     dpi: f32,
-    _key_text_width: f32,
     desc_text_width: f32,
     text_line_height: f32,
     placed: &[HintRect],
@@ -147,7 +145,6 @@ pub fn compute_monitor_hint(
 pub fn compute_monitor_hint_top(
     monitor: &UiMonitor,
     dpi: f32,
-    _key_text_width: f32,
     desc_text_width: f32,
     text_line_height: f32,
     placed: &[HintRect],
@@ -179,7 +176,6 @@ pub fn compute_cursor_hint(
     selection: ScreenRect,
     monitor: &UiMonitor,
     dpi: f32,
-    _key_text_width: f32,
     desc_text_width: f32,
     text_line_height: f32,
     placed: &[HintRect],

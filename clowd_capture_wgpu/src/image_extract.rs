@@ -134,6 +134,7 @@ pub fn composite_cursor_rgba(rgba: &mut [u8], width: u32, height: u32, selection
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn composite_alpha_blended(
     rgba: &mut [u8],
     dst_w: u32,
@@ -177,6 +178,7 @@ fn composite_alpha_blended(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn composite_masked(
     rgba: &mut [u8],
     dst_w: u32,

@@ -151,9 +151,8 @@ impl HintsRenderer {
                     };
                     self.buffers[IDX_KEY_MAGNIFIER].set(ts, "Q", key_font_px, true);
                     self.buffers[IDX_DESC_MAGNIFIER].set(ts, mag_label, font_px, false);
-                    let key_w = self.buffers[IDX_KEY_MAGNIFIER].width();
                     let desc_w = self.buffers[IDX_DESC_MAGNIFIER].width();
-                    let (layout, hr) = compute_monitor_hint(&target, dpi, key_w, desc_w, text_line_h, &placed);
+                    let (layout, hr) = compute_monitor_hint(&target, dpi, desc_w, text_line_h, &placed);
                     let mag_trail = !state.has_used_magnifier;
                     self.emit_hint(
                         rects,
@@ -180,9 +179,8 @@ impl HintsRenderer {
                     ));
                     self.buffers[IDX_KEY_MONITOR].set(ts, "F", key_font_px, true);
                     self.buffers[IDX_DESC_MONITOR].set(ts, &self.text_buf, font_px, false);
-                    let key_w = self.buffers[IDX_KEY_MONITOR].width();
                     let desc_w = self.buffers[IDX_DESC_MONITOR].width();
-                    let (layout, hr) = compute_monitor_hint_top(&target, dpi, key_w, desc_w, text_line_h, &placed);
+                    let (layout, hr) = compute_monitor_hint_top(&target, dpi, desc_w, text_line_h, &placed);
                     self.emit_hint(
                         rects,
                         &layout,
@@ -209,12 +207,11 @@ impl HintsRenderer {
                     }
                     self.buffers[IDX_KEY_COLOR].set(ts, "H", key_font_px, true);
                     self.buffers[IDX_DESC_COLOR].set(ts, &self.text_buf, font_px, false);
-                    let key_w = self.buffers[IDX_KEY_COLOR].width();
                     let desc_w = self.buffers[IDX_DESC_COLOR].width();
                     let swatch_size = (font_px * 1.4).floor();
                     let swatch_gap = (6.0 * dpi).floor();
                     let total_desc_w = desc_w + swatch_gap + swatch_size;
-                    let (layout, hr) = compute_color_hint(state, &target, dpi, key_w, total_desc_w, text_line_h, &placed);
+                    let (layout, hr) = compute_color_hint(state, &target, dpi, total_desc_w, text_line_h, &placed);
                     self.emit_hint(
                         rects,
                         &layout,
@@ -255,9 +252,8 @@ impl HintsRenderer {
             if on_this {
                 self.buffers[IDX_KEY_SCROLL].set(ts, "↕", key_font_px, true);
                 self.buffers[IDX_DESC_SCROLL].set(ts, "Scroll to zoom", font_px, false);
-                let key_w = self.buffers[IDX_KEY_SCROLL].width();
                 let desc_w = self.buffers[IDX_DESC_SCROLL].width();
-                let (layout, hr) = compute_monitor_hint(this_monitor, dpi, key_w, desc_w, text_line_h, &placed);
+                let (layout, hr) = compute_monitor_hint(this_monitor, dpi, desc_w, text_line_h, &placed);
                 self.emit_hint(
                     rects,
                     &layout,
@@ -308,9 +304,8 @@ impl HintsRenderer {
                         };
                         self.buffers[IDX_KEY_CURSOR].set(ts, "M", key_font_px, true);
                         self.buffers[IDX_DESC_CURSOR].set(ts, cursor_label, font_px, false);
-                        let key_w = self.buffers[IDX_KEY_CURSOR].width();
                         let desc_w = self.buffers[IDX_DESC_CURSOR].width();
-                        let (layout, hr) = compute_cursor_hint(cursor_rect, sel, this_monitor, dpi, key_w, desc_w, text_line_h, &placed);
+                        let (layout, hr) = compute_cursor_hint(cursor_rect, sel, this_monitor, dpi, desc_w, text_line_h, &placed);
                         self.emit_hint(
                             rects,
                             &layout,
@@ -329,6 +324,7 @@ impl HintsRenderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn emit_dashed_square(
         rects: &mut Vec<RectInstance>,
         cursor_rect: [f32; 4],
@@ -359,6 +355,7 @@ impl HintsRenderer {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn emit_hint(
         &mut self,
         rects: &mut Vec<RectInstance>,

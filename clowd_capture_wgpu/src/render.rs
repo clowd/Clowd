@@ -37,8 +37,8 @@ pub const MSAA_SAMPLES: u32 = 1;
 
 // ── WindowHandle (main thread side) ─────────────────────────────────
 
-/// Handle to a render thread, held by the main thread. Dropping it sends
-/// `Shutdown` and joins the thread.
+// Handle to a render thread, held by the main thread. Dropping it sends
+// `Shutdown` and joins the thread.
 // ── Worker spawn + lifecycle ────────────────────────────────────────
 
 /// Per-worker parameters built in main() before the event loop starts.

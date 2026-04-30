@@ -145,8 +145,8 @@ impl PanelRenderer {
         let usvg_opts = usvg::Options::default();
         let defs = button_defs();
         let mut svg_trees: Vec<usvg::Tree> = Vec::with_capacity(NUM_SVG_BUTTONS);
-        for i in 0..NUM_SVG_BUTTONS {
-            let tree = match usvg::Tree::from_data(defs[i].svg_bytes, &usvg_opts) {
+        for (i, def) in defs.iter().enumerate() {
+            let tree = match usvg::Tree::from_data(def.svg_bytes, &usvg_opts) {
                 Ok(t) => t,
                 Err(e) => {
                     log::error!("failed to parse SVG for button {i}: {e:?}");

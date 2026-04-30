@@ -282,8 +282,7 @@ fn render_panel_inner(
     let local_panel_top = panel_f.top() - mon_f.top();
     let x = local_panel_left + layout.padding_px;
     let mut y = local_panel_top + layout.padding_px;
-    for i in 0..text_lines.len() {
-        let [r, g, b, a] = line_colors[i];
+    for (i, &[r, g, b, a]) in line_colors.iter().enumerate() {
         positions.push(PositionedLine {
             idx: first_idx + i,
             x,
