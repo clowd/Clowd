@@ -56,17 +56,11 @@ pub fn create_audio_encoder() -> Result<ObsEncoder, ObsError> {
 
 fn find_hardware_encoder() -> Option<String> {
     let types = enum_encoder_types();
-    // Look for VideoToolbox H.264 encoders
     for t in &types {
-        if t.contains("apple") || t.contains("videotoolbox") || t.contains("vt_") {
-            if t.contains("h264") || t.contains("avc") {
-                return Some(t.clone());
-            }
-        }
-    }
-    // Also check for com.apple.videotoolbox pattern
-    for t in &types {
-        if t.starts_with("com.apple") && !t.contains("prores") {
+        let lower = t.to_lowercase();
+        if (lower.contains("apple") || lower.contains("videotoolbox"))
+            && (lower.contains("h264") || lower.contains("avc") || lower.contains("264"))
+        {
             return Some(t.clone());
         }
     }

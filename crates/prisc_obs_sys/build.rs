@@ -14,34 +14,15 @@ fn main() {
 
     let config = "RelWithDebInfo";
 
-    cmake_configure(&obs_src, &obs_build, &manifest_dir);
+    cmake_configure(&obs_src, &obs_build);
     cmake_build(&obs_build, config);
     emit_link_directives(&obs_src, &obs_build, config);
     generate_bindings(&manifest_dir, &obs_src, &obs_build);
 }
 
-fn cmake_configure(obs_src: &Path, obs_build: &Path, _manifest_dir: &Path) {
+fn cmake_configure(obs_src: &Path, obs_build: &Path) {
     if obs_build.join("CMakeCache.txt").exists() {
         return;
-    }
-
-    // Patch OBS's CMakeLists.txt to enable Swift language support for libobs-metal.
-    let cmakelists = obs_src.join("CMakeLists.txt");
-    let content = std::fs::read_to_string(&cmakelists).expect("Failed to read OBS CMakeLists.txt");
-    if !content.contains("enable_language(Swift)") {
-        let patched = content.replace(
-            "include(compilerconfig)",
-            "enable_language(Swift)\ninclude(compilerconfig)",
-        );
-        std::fs::write(&cmakelists, patched).expect("Failed to patch OBS CMakeLists.txt");
-    }
-
-    // Patch xcode.cmake to use Swift 6.0 globally (libobs-metal requires it)
-    let xcode_cmake = obs_src.join("cmake/macos/xcode.cmake");
-    let xcode_content = std::fs::read_to_string(&xcode_cmake).expect("Failed to read xcode.cmake");
-    if xcode_content.contains("SWIFT_VERSION 5.0") {
-        let patched = xcode_content.replace("SWIFT_VERSION 5.0", "SWIFT_VERSION 6.0");
-        std::fs::write(&xcode_cmake, patched).expect("Failed to patch xcode.cmake");
     }
 
     let output = Command::new("cmake")
@@ -58,7 +39,12 @@ fn cmake_configure(obs_src: &Path, obs_build: &Path, _manifest_dir: &Path) {
         .arg("-DENABLE_WEBSOCKET=OFF")
         .arg("-DENABLE_AJA=OFF")
         .arg("-DENABLE_NEW_MPEGTS_OUTPUT=OFF")
-        .arg("-DENABLE_VIRTUALCAM=OFF")
+        .arg("-DENABLE_VIRTUALCAM=ON")
+        // These UUIDs are needed so the camera-extension CMakeLists.txt reaches
+        // its enable_language(Swift) call, which is required for libobs-metal.
+        .arg("-DVIRTUALCAM_DEVICE_UUID=7626645E-4425-469E-9D8B-97E0FA59AC75")
+        .arg("-DVIRTUALCAM_SOURCE_UUID=A8D7B8AA-65AD-4D21-9C42-66480DBFA8E1")
+        .arg("-DVIRTUALCAM_SINK_UUID=A3F16177-7044-4DD8-B900-72E2419F7A9A")
         .arg("-Wno-dev")
         .output()
         .expect("Failed to run cmake configure");
@@ -124,14 +110,6 @@ fn emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
     println!("cargo:rustc-link-search=framework={}", framework_search.display());
     println!("cargo:rustc-link-lib=framework=libobs");
 
-    // Add rpaths so the binary can find libobs.framework and FFmpeg dylibs at runtime
-    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", framework_search.display());
-
-    // FFmpeg dylibs are in obs-deps lib directory
-    if let Some(deps_lib) = find_obs_deps_lib(obs_src) {
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", deps_lib.display());
-    }
-
     // Export paths so downstream crates can locate frameworks and plugins at runtime
     println!("cargo:framework_search={}", framework_search.display());
     println!("cargo:obs_build_dir={}", obs_build.display());
@@ -179,31 +157,12 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         .expect("Failed to write bindings");
 }
 
-fn find_obs_deps_lib(obs_src: &Path) -> Option<PathBuf> {
-    let deps_dir = obs_src.join(".deps");
-    if !deps_dir.exists() {
-        return None;
-    }
-    for entry in std::fs::read_dir(&deps_dir).ok()? {
-        let entry = entry.ok()?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let lib = entry.path().join("lib");
-            if lib.exists() {
-                return Some(lib);
-            }
-        }
-    }
-    None
-}
-
 fn find_obs_deps_include(obs_src: &Path) -> Option<PathBuf> {
     let deps_dir = obs_src.join(".deps");
     if !deps_dir.exists() {
         return None;
     }
 
-    // Look for obs-deps-* (not qt6) directories with an include/ subfolder
     for entry in std::fs::read_dir(&deps_dir).ok()? {
         let entry = entry.ok()?;
         let name = entry.file_name().to_string_lossy().to_string();

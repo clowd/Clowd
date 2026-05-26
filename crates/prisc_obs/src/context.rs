@@ -53,7 +53,10 @@ impl ObsContext {
     }
 
     pub fn load_all_modules(&self) {
-        unsafe { obs_sys::obs_load_all_modules() };
+        unsafe {
+            obs_sys::obs_load_all_modules();
+            obs_sys::obs_post_load_modules();
+        }
     }
 
     pub fn get_video(&self) -> *mut obs_sys::video_t {
