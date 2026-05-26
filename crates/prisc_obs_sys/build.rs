@@ -14,15 +14,34 @@ fn main() {
 
     let config = "RelWithDebInfo";
 
-    cmake_configure(&obs_src, &obs_build);
+    cmake_configure(&obs_src, &obs_build, &manifest_dir);
     cmake_build(&obs_build, config);
-    emit_link_directives(&obs_build, config);
+    emit_link_directives(&obs_src, &obs_build, config);
     generate_bindings(&manifest_dir, &obs_src, &obs_build);
 }
 
-fn cmake_configure(obs_src: &Path, obs_build: &Path) {
+fn cmake_configure(obs_src: &Path, obs_build: &Path, _manifest_dir: &Path) {
     if obs_build.join("CMakeCache.txt").exists() {
         return;
+    }
+
+    // Patch OBS's CMakeLists.txt to enable Swift language support for libobs-metal.
+    let cmakelists = obs_src.join("CMakeLists.txt");
+    let content = std::fs::read_to_string(&cmakelists).expect("Failed to read OBS CMakeLists.txt");
+    if !content.contains("enable_language(Swift)") {
+        let patched = content.replace(
+            "include(compilerconfig)",
+            "enable_language(Swift)\ninclude(compilerconfig)",
+        );
+        std::fs::write(&cmakelists, patched).expect("Failed to patch OBS CMakeLists.txt");
+    }
+
+    // Patch xcode.cmake to use Swift 6.0 globally (libobs-metal requires it)
+    let xcode_cmake = obs_src.join("cmake/macos/xcode.cmake");
+    let xcode_content = std::fs::read_to_string(&xcode_cmake).expect("Failed to read xcode.cmake");
+    if xcode_content.contains("SWIFT_VERSION 5.0") {
+        let patched = xcode_content.replace("SWIFT_VERSION 5.0", "SWIFT_VERSION 6.0");
+        std::fs::write(&xcode_cmake, patched).expect("Failed to patch xcode.cmake");
     }
 
     let output = Command::new("cmake")
@@ -47,7 +66,6 @@ fn cmake_configure(obs_src: &Path, obs_build: &Path) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    // Print cmake output for cargo
     for line in stdout.lines() {
         println!("{line}");
     }
@@ -55,9 +73,6 @@ fn cmake_configure(obs_src: &Path, obs_build: &Path) {
         eprintln!("{line}");
     }
 
-    // The Xcode generator may emit "cannot determine linker language" warnings for
-    // Swift-only targets (libobs-metal), but still generates valid Xcode projects.
-    // Check that the xcodeproj was actually created rather than relying on exit code.
     let xcodeproj = obs_build.join("obs-studio.xcodeproj");
     assert!(
         xcodeproj.exists(),
@@ -78,6 +93,7 @@ fn cmake_build(obs_build: &Path, config: &str) {
         "mac-capture",
         "mac-videotoolbox",
         "obs-ffmpeg",
+        "obs-ffmpeg-mux",
         "obs-x264",
         "coreaudio-encoder",
     ];
@@ -97,7 +113,7 @@ fn cmake_build(obs_build: &Path, config: &str) {
     std::fs::write(&marker, "").expect("Failed to write build marker");
 }
 
-fn emit_link_directives(obs_build: &Path, config: &str) {
+fn emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
     let framework_search = obs_build.join("libobs").join(config);
     assert!(
         framework_search.join("libobs.framework").exists(),
@@ -107,6 +123,14 @@ fn emit_link_directives(obs_build: &Path, config: &str) {
 
     println!("cargo:rustc-link-search=framework={}", framework_search.display());
     println!("cargo:rustc-link-lib=framework=libobs");
+
+    // Add rpaths so the binary can find libobs.framework and FFmpeg dylibs at runtime
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", framework_search.display());
+
+    // FFmpeg dylibs are in obs-deps lib directory
+    if let Some(deps_lib) = find_obs_deps_lib(obs_src) {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", deps_lib.display());
+    }
 
     // Export paths so downstream crates can locate frameworks and plugins at runtime
     println!("cargo:framework_search={}", framework_search.display());
@@ -153,6 +177,24 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
     bindings
         .write_to_file(&bindings_path)
         .expect("Failed to write bindings");
+}
+
+fn find_obs_deps_lib(obs_src: &Path) -> Option<PathBuf> {
+    let deps_dir = obs_src.join(".deps");
+    if !deps_dir.exists() {
+        return None;
+    }
+    for entry in std::fs::read_dir(&deps_dir).ok()? {
+        let entry = entry.ok()?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("obs-deps-") && !name.contains("qt6") {
+            let lib = entry.path().join("lib");
+            if lib.exists() {
+                return Some(lib);
+            }
+        }
+    }
+    None
 }
 
 fn find_obs_deps_include(obs_src: &Path) -> Option<PathBuf> {

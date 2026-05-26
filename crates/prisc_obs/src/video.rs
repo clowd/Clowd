@@ -16,7 +16,7 @@ impl VideoInfo {
         ovi.output_height = self.output_height;
         ovi.fps_num = self.fps_num;
         ovi.fps_den = self.fps_den;
-        ovi.graphics_module = b"libobs-metal\0".as_ptr() as *const _;
+        ovi.graphics_module = b"libobs-metal.dylib\0".as_ptr() as *const _;
         ovi.output_format = obs_sys::video_format_VIDEO_FORMAT_NV12;
         ovi
     }
