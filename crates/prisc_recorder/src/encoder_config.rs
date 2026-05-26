@@ -7,8 +7,6 @@ pub struct EncoderConfig {
     pub hw_accel: bool,
     pub crf: u16,
     pub low_cpu: bool,
-    pub output_width: u32,
-    pub output_height: u32,
 }
 
 pub fn create_video_encoder(config: &EncoderConfig) -> Result<ObsEncoder, ObsError> {
@@ -30,7 +28,6 @@ pub fn create_video_encoder(config: &EncoderConfig) -> Result<ObsEncoder, ObsErr
         settings.set_string("preset", preset);
         settings.set_string("profile", "high");
     } else {
-        // VideoToolbox hardware encoder
         settings.set_string("rate_control", "CRF");
         settings.set_int("quality", (51 - config.crf.min(51)) as i64);
         settings.set_string("profile", "high");
@@ -43,7 +40,6 @@ pub fn create_audio_encoder() -> Result<ObsEncoder, ObsError> {
     let settings = ObsData::new();
     settings.set_int("bitrate", 128);
 
-    // Prefer CoreAudio AAC, fall back to ffmpeg_aac
     let encoder_types = enum_encoder_types();
     let id = if encoder_types.iter().any(|t| t == "CoreAudio_AAC") {
         "CoreAudio_AAC"

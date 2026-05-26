@@ -99,7 +99,7 @@ fn cmake_build(obs_build: &Path, config: &str) {
     std::fs::write(&marker, "").expect("Failed to write build marker");
 }
 
-fn emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
+fn emit_link_directives(_obs_src: &Path, obs_build: &Path, config: &str) {
     let framework_search = obs_build.join("libobs").join(config);
     assert!(
         framework_search.join("libobs.framework").exists(),

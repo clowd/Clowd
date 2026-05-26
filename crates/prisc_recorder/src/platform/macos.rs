@@ -1,11 +1,7 @@
-use std::collections::HashMap;
-
 #[derive(Debug, Clone)]
 pub struct MonitorInfo {
     pub id: u32,
     pub uuid: String,
-    pub x: i32,
-    pub y: i32,
     pub width: u32,
     pub height: u32,
     pub is_primary: bool,
@@ -103,8 +99,6 @@ pub fn enumerate_monitors() -> Vec<MonitorInfo> {
         monitors.push(MonitorInfo {
             id,
             uuid,
-            x: bounds.origin.x as i32,
-            y: bounds.origin.y as i32,
             width: bounds.size.width as u32,
             height: bounds.size.height as u32,
             is_primary: id == main_display,
@@ -129,19 +123,3 @@ pub fn find_monitor(id_str: &str) -> Option<MonitorInfo> {
         .cloned()
 }
 
-pub fn list_monitors_json() -> Vec<HashMap<String, serde_json::Value>> {
-    enumerate_monitors()
-        .into_iter()
-        .map(|m| {
-            let mut map = HashMap::new();
-            map.insert("id".to_string(), serde_json::json!(m.id));
-            map.insert("uuid".to_string(), serde_json::json!(m.uuid));
-            map.insert("x".to_string(), serde_json::json!(m.x));
-            map.insert("y".to_string(), serde_json::json!(m.y));
-            map.insert("width".to_string(), serde_json::json!(m.width));
-            map.insert("height".to_string(), serde_json::json!(m.height));
-            map.insert("primary".to_string(), serde_json::json!(m.is_primary));
-            map
-        })
-        .collect()
-}
