@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
@@ -11,10 +12,9 @@ using Clowd.Config;
 namespace Clowd.UI.Config
 {
     /// <summary>
-    /// Gesture editor row for a <see cref="GlobalTrigger"/>. The gesture can be viewed and
-    /// edited (and is persisted), but global hotkeys are never registered in this build —
-    /// the status square always reports the GlobalTrigger stub's "not supported" error
-    /// (§2.6 / decision table #57).
+    /// Gesture editor row for a <see cref="GlobalTrigger"/>. The gesture can be viewed and edited
+    /// (and is persisted); the status square reflects the trigger's live registration state
+    /// (green when the SharpHook host registered it, red with the error in a tooltip otherwise).
     /// </summary>
     public class GlobalTriggerEditor : UserControl
     {
@@ -67,7 +67,21 @@ namespace Clowd.UI.Config
         {
             base.OnPropertyChanged(change);
             if (change.Property == TriggerProperty)
+            {
+                if (change.OldValue is GlobalTrigger oldTrigger)
+                    oldTrigger.PropertyChanged -= OnTriggerPropertyChanged;
+                if (change.NewValue is GlobalTrigger newTrigger)
+                    newTrigger.PropertyChanged += OnTriggerPropertyChanged;
                 UpdateControls();
+            }
+        }
+
+        private void OnTriggerPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            // IsRegistered / Error / KeyGesture can all change asynchronously (e.g. the SharpHook
+            // host failing to start on macOS without the Accessibility permission) — keep the
+            // status square and gesture text live.
+            UpdateControls();
         }
 
         private void OnButtonClick(object sender, RoutedEventArgs e)
@@ -194,7 +208,7 @@ namespace Clowd.UI.Config
                 else
                 {
                     // unlike WPF (which displayed "(error)"), the gesture text is kept visible —
-                    // the red status square + tooltip carry the "not supported" stub state.
+                    // the red status square + tooltip carry the registration error.
                     _button.Content = Trigger.KeyGesture.ToString();
                     if (!Trigger.IsRegistered && !String.IsNullOrEmpty(Trigger.Error))
                     {

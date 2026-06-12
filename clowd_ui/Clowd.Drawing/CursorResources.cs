@@ -14,8 +14,17 @@ namespace Clowd.Drawing
     // WPF Cursor(path, scaleWithDpi) loader is replaced by a runtime .cur parser:
     //   ICONDIR header (u16 reserved, u16 type=2, u16 count), then 16-byte ICONDIRENTRY records —
     //   width byte at offset 0 (0 means 256), hotspot words at entry offsets 4/6, data size at 8,
-    //   data offset at 12. Each frame's image data is a PNG; the frame whose size best matches
-    //   32 * RenderScaling is decoded into an Avalonia Bitmap and paired with that frame's hotspot.
+    //   data offset at 12. Each frame's image data is a PNG; the selected frame is decoded into an
+    //   Avalonia Bitmap and paired with that frame's hotspot.
+    // Frame selection (see GetDesiredFrameSize):
+    //   - Windows: the frame whose size best matches 32 * RenderScaling — Win32 HCURSORs are sized
+    //     in physical pixels, so the high-res frame displays at 32 logical px and stays sharp.
+    //   - macOS: always the 32px frame. Avalonia's macOS backend re-encodes the bitmap to PNG via
+    //     Skia (which writes no pHYs/DPI metadata) and builds the NSCursor with
+    //     [NSImage initWithData:], so the image is treated as 72 DPI and an N px frame displays at
+    //     N *logical* px regardless of the bitmap's DPI. Picking 32 * RenderScaling there made the
+    //     cursors render double size on Retina; per the MIGRATION.md §6 pre-decided fallback we use
+    //     the 32px frame and let the OS scale it (slight blur accepted).
     // Cursors are cached keyed on (file, scaling bucket) and the cache is flushed when any attached
     // TopLevel raises ScalingChanged.
     internal partial class CursorResources : EmbeddedResource
@@ -129,7 +138,45 @@ namespace Clowd.Drawing
             }
         }
 
-        private static Cursor LoadCursor(string fileName, double scaling)
+        /// <summary>
+        /// The frame size (in pixels) that <see cref="GetCursor"/> selects for the given render scaling.
+        /// macOS always uses the 32px frame: Avalonia's macOS cursor backend ignores bitmap DPI (the
+        /// bitmap is re-encoded to PNG without DPI metadata and NSImage assumes 72 DPI), so an N px
+        /// frame displays at N logical px — a 64px frame would render double size on Retina.
+        /// Windows HCURSORs are sized in physical pixels, so the best frame for 32 logical px is
+        /// 32 * scaling.
+        /// </summary>
+        internal static int GetDesiredFrameSize(double scaling)
+        {
+            return GetDesiredFrameSize(scaling, OperatingSystem.IsMacOS());
+        }
+
+        internal static int GetDesiredFrameSize(double scaling, bool isMacOS)
+        {
+            return isMacOS ? BASE_CURSOR_SIZE : (int)Math.Round(BASE_CURSOR_SIZE * scaling);
+        }
+
+        /// <summary>
+        /// Diagnostics/test hook: parses the embedded .cur and reports the frame GetCursor would pick
+        /// for the given scaling — its pixel size, the logical (DIP) size the OS will display it at,
+        /// and its hotspot (in frame pixels).
+        /// </summary>
+        internal static (int FramePixelSize, double LogicalSize, int HotspotX, int HotspotY) MeasureFrame(string fileName, double scaling)
+        {
+            var data = ReadCursorResource(fileName);
+            var chosen = SelectFrameEntry(data, fileName, GetDesiredFrameSize(scaling));
+
+            int size = data[chosen];
+            if (size == 0)
+                size = 256;
+
+            // macOS displays the frame at its pixel size (72 DPI assumption, see GetDesiredFrameSize);
+            // Windows displays it at pixel size / scaling.
+            var logical = OperatingSystem.IsMacOS() ? size : size / scaling;
+            return (size, logical, ReadUInt16(data, chosen + 4), ReadUInt16(data, chosen + 6));
+        }
+
+        private static byte[] ReadCursorResource(string fileName)
         {
             byte[] data;
             using (var stream = GetStream(RSX_NS, fileName, typeof(CursorResources).Assembly))
@@ -147,9 +194,15 @@ namespace Clowd.Drawing
             if (type != 2 || count == 0)
                 throw new InvalidDataException($"Cursor resource \"{fileName}\" is not a valid .cur file.");
 
-            var desired = (int)Math.Round(BASE_CURSOR_SIZE * scaling);
+            return data;
+        }
 
-            // pick the smallest frame >= desired size; if none is large enough, the largest available.
+        /// <summary>Returns the byte offset of the chosen ICONDIRENTRY: the smallest frame >= desired
+        /// size, or the largest available if none is large enough.</summary>
+        private static int SelectFrameEntry(byte[] data, string fileName, int desired)
+        {
+            var count = ReadUInt16(data, 4);
+
             int bestIdx = -1, bestSize = int.MaxValue;
             int largestIdx = -1, largestSize = 0;
             for (int i = 0; i < count; i++)
@@ -175,7 +228,13 @@ namespace Clowd.Drawing
                 }
             }
 
-            var chosen = 6 + ((bestIdx >= 0 ? bestIdx : largestIdx) * 16);
+            return 6 + ((bestIdx >= 0 ? bestIdx : largestIdx) * 16);
+        }
+
+        private static Cursor LoadCursor(string fileName, double scaling)
+        {
+            var data = ReadCursorResource(fileName);
+            var chosen = SelectFrameEntry(data, fileName, GetDesiredFrameSize(scaling));
             var hotspotX = ReadUInt16(data, chosen + 4);
             var hotspotY = ReadUInt16(data, chosen + 6);
             var byteCount = (int)ReadUInt32(data, chosen + 8);
