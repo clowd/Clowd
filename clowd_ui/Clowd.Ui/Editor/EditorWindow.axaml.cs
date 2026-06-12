@@ -24,7 +24,7 @@ namespace Clowd.UI
 {
     public partial class EditorWindow : SystemThemedWindow
     {
-        private ToolType? _shiftPanPreviousTool = null; // null means we're not in a shift-pan
+        private ToolType? _panPreviousTool = null; // null means we're not in a held-key (shift/space) pan
         private SettingsRoot _settings = SettingsRoot.Current;
         private SessionInfo _session;
         private int _nudgeRepeatCount;
@@ -100,6 +100,12 @@ namespace Clowd.UI
             Deactivated += (_, _) =>
             {
                 _pressedKeys.Clear();
+                if (_panPreviousTool != null)
+                {
+                    // the pan key's KeyUp will never arrive; restore the tool now
+                    drawingCanvas.Tool = _panPreviousTool.Value;
+                    _panPreviousTool = null;
+                }
                 UpdateSessionInfo();
             };
             PositionChanged += (_, _) =>
@@ -341,21 +347,30 @@ namespace Clowd.UI
                 icmd.Execute(null);
         }
 
+        private static bool IsPanKey(Key key) => key is Key.LeftShift or Key.RightShift or Key.Space;
+
         private void OnTunnelKeyDown(object sender, KeyEventArgs e)
         {
             // pressed-set repeat tracker (decision table #37)
             bool isRepeat = !_pressedKeys.Add(e.Key);
 
-            // shift-pan: save the current tool and enter pan mode while shift is held
+            if (e.Source is TextBox)
+                return;
+
+            // shift/space-pan: save the current tool and enter pan mode while the key is held
             // (skipped while a tool drag is active, §5.4)
-            if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool == null && !drawingCanvas.IsToolDragActive)
+            if (IsPanKey(e.Key) && _panPreviousTool == null && !drawingCanvas.IsToolDragActive)
             {
-                _shiftPanPreviousTool = drawingCanvas.Tool;
+                _panPreviousTool = drawingCanvas.Tool;
                 drawingCanvas.Tool = ToolType.None;
             }
 
-            if (e.Source is TextBox)
+            // space has no other editor function; swallow it so a focused button isn't activated
+            if (e.Key == Key.Space)
+            {
+                e.Handled = true;
                 return;
+            }
 
             // arrow nudge — the only bare-key path that allows Ctrl (§2.4)
             (int x, int y) = e.Key switch
@@ -440,10 +455,11 @@ namespace Clowd.UI
         {
             _pressedKeys.Remove(e.Key);
 
-            if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && _shiftPanPreviousTool != null)
+            // restore the saved tool once no pan key (shift/space) remains held
+            if (IsPanKey(e.Key) && _panPreviousTool != null && !_pressedKeys.Any(IsPanKey))
             {
-                drawingCanvas.Tool = _shiftPanPreviousTool.Value;
-                _shiftPanPreviousTool = null;
+                drawingCanvas.Tool = _panPreviousTool.Value;
+                _panPreviousTool = null;
             }
         }
 

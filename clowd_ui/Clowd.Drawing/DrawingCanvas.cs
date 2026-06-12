@@ -955,6 +955,11 @@ namespace Clowd.Drawing
             public ArtworkBackgroundVisual(DrawingCanvas canvas)
             {
                 _canvas = canvas;
+
+                // visual-only child (no logical parent): it cannot inherit the canvas Cursor, so it
+                // must not win pointer hit-tests or the cursor resets to the system default within
+                // the artwork bounds. Mouse input is handled by the _clickable surface instead.
+                IsHitTestVisible = false;
             }
 
             public override void Render(DrawingContext context)
@@ -1404,7 +1409,7 @@ namespace Clowd.Drawing
             }
         }
 
-        private double DpiZoom => TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
+        internal double DpiZoom => TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
 
         protected override void OnLoaded(RoutedEventArgs e)
         {
