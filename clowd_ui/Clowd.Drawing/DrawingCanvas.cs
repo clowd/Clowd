@@ -4,7 +4,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
-using System.Xml.Linq;
+using System.Text.Json.Nodes;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
@@ -17,7 +17,6 @@ using Clowd.Config;
 using Clowd.Drawing.Graphics;
 using Clowd.Drawing.Tools;
 using Clowd.UI.Helpers;
-using RT.Util.ExtensionMethods;
 
 namespace Clowd.Drawing
 {
@@ -720,7 +719,7 @@ namespace Clowd.Drawing
             }
         }
 
-        public void RestoreState(XElement data)
+        public void RestoreState(JsonObject data)
         {
             var prev = _syncingState;
             _syncingState = true;
@@ -1044,7 +1043,7 @@ namespace Clowd.Drawing
                     // we do not allow the angle to be set in the tool.
                     skills &= ~Skill.Angle;
 
-                    var settings = SettingsRoot.Current.Editor.Tools[Tool];
+                    var settings = SettingsRoot.Current.Editor.GetToolSettings(Tool);
                     void AddSettingBinding(Skill sk, AvaloniaProperty prop, string path)
                     {
                         if (skills.HasFlag(sk))

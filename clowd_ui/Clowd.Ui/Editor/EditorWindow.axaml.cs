@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -18,7 +19,6 @@ using Clowd.Drawing.Graphics;
 using Clowd.PlatformUtil;
 using Clowd.UI.Helpers;
 using Clowd.Util;
-using RT.Serialization;
 
 namespace Clowd.UI
 {
@@ -31,10 +31,10 @@ namespace Clowd.UI
         private ScreenRect _normalBounds; // tracked manually while WindowState == Normal (decision table #55)
         private readonly HashSet<Key> _pressedKeys = new HashSet<Key>(); // repeat tracker (decision table #37)
 
-        private string _graphicsPath => Path.Combine(Path.GetDirectoryName(_session.FilePath), "graphics.xml");
+        private string _graphicsPath => Path.Combine(Path.GetDirectoryName(_session.FilePath), "graphics.json");
 
-        // §2.11 glue invariants: custom clipboard format carries raw ClassifyBinary bytes of
-        // GraphicBase[]; images travel as "image/png" PNG bytes (decision table #51).
+        // §2.11 glue invariants: custom clipboard format carries UTF-8 JSON bytes of GraphicBase[]
+        // (GraphicsSerializer); images travel as "image/png" PNG bytes (decision table #51).
         private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
         private const string PNG_CLIPBOARD_FORMAT = "image/png";
 
@@ -159,6 +159,12 @@ namespace Clowd.UI
 
         private void EditorWindow_Closing(object sender, WindowClosingEventArgs e)
         {
+            // the property bar mutates Editor.Tools (SavedToolSettings) through two-way bindings;
+            // persist those edits when the editor closes (explicit-save policy). Saved before the
+            // preview render so a rendering failure can't skip the save.
+            try { SettingsService.Save(_settings); }
+            catch {; }
+
             UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
             _session.OpenEditor = null;
             _session = null;
@@ -460,26 +466,12 @@ namespace Clowd.UI
             {
                 try
                 {
-                    drawingCanvas.RestoreState(XElement.Load(_graphicsPath));
+                    var state = (JsonObject)JsonNode.Parse(File.ReadAllText(_graphicsPath));
+                    drawingCanvas.RestoreState(state);
                     return true;
                 }
                 catch {; }
             }
-
-#pragma warning disable CS0612 // Type or member is obsolete
-            if (!String.IsNullOrWhiteSpace(_session.GraphicsStream))
-            {
-                try
-                {
-                    var state = Convert.FromBase64String(_session.GraphicsStream);
-                    foreach (var g in ClassifyBinary.Deserialize<GraphicBase[]>(state))
-                        drawingCanvas.GraphicsList.Add(g);
-                    drawingCanvas.UnselectAll();
-                    return true;
-                }
-                catch {; }
-            }
-#pragma warning restore CS0612 // Type or member is obsolete
 
             // if there is a desktop image, and we failed to load an existing set of graphics
             if (File.Exists(_session.DesktopImgPath))
@@ -511,7 +503,11 @@ namespace Clowd.UI
                 return;
 
             using var fs = File.Create(_graphicsPath);
-            e.State?.Save(fs);
+            if (e.State != null)
+            {
+                using var writer = new Utf8JsonWriter(fs);
+                e.State.WriteTo(writer);
+            }
         }
 
         private void UpdatePreview(Bitmap bitmap)
@@ -580,6 +576,7 @@ namespace Clowd.UI
             if (savedPath != null)
             {
                 _settings.General.LastSavePath = Path.GetDirectoryName(savedPath);
+                SettingsService.Save(_settings); // settings no longer auto-save on PropertyChanged
                 if (_settings.Capture.OpenSavedInExplorer)
                     RevealFileOrFolder(savedPath);
             }
@@ -602,7 +599,7 @@ namespace Clowd.UI
             UpdatePreview(bitmap);
 
             var graphics = drawingCanvas.GraphicsList.GetGraphicList(drawingCanvas.SelectedCount > 0);
-            var bytes = ClassifyBinary.Serialize<GraphicBase[]>(graphics);
+            var bytes = GraphicsSerializer.SerializeToUtf8Bytes(graphics);
 
             byte[] png;
             using (var ms = new MemoryStream())
@@ -650,7 +647,7 @@ namespace Clowd.UI
             if (clipGraphics != null)
             {
                 var sessionDir = Path.GetDirectoryName(_session.FilePath);
-                var graphics = ClassifyBinary.Deserialize<GraphicBase[]>(clipGraphics);
+                var graphics = GraphicsSerializer.DeserializeFromUtf8Bytes(clipGraphics);
 
                 // copy any pasted bitmaps into this session directory
                 foreach (var img in graphics.OfType<GraphicImage>())

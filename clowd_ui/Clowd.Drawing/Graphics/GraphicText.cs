@@ -2,7 +2,6 @@ using System;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
-using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -59,7 +58,7 @@ namespace Clowd.Drawing.Graphics
         private FontStyle _fontStyle = FontStyle.Normal;
         private FontWeight _fontWeight = FontWeight.Normal;
         private FontStretch _fontStretch = FontStretch.Normal;
-        [ClassifyIgnore] private bool _editing;
+        [Transient] private bool _editing; // not persisted by GraphicsSerializer
 
         private static Random _rnd = new Random();
 

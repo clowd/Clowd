@@ -190,15 +190,15 @@ namespace Clowd.UI.Config
                 return stack;
             }
 
-            if (Is(pd, typeof(GlobalTrigger)))
-                return SimpleControlBinding(new GlobalTriggerEditor(), pd, GlobalTriggerEditor.TriggerProperty);
+            if (Is(pd, typeof(SimpleKeyGesture)))
+                return new GlobalTriggerEditor { Entry = HotkeyManager.Current?.GetEntryForProperty(pd.Name) };
 
             if (Is(pd, typeof(Control)))
             {
                 return (Control)pd.GetValue(_obj);
             }
 
-            if (Is(pd, typeof(AutoDictionary<,>)))
+            if (Is(pd, typeof(Dictionary<,>)))
             {
                 return ButtonControl("Reset", "Danger", async (s, e) =>
                 {

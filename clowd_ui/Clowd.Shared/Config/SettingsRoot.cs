@@ -1,146 +1,29 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using RT.Serialization;
-using RT.Util;
 
 namespace Clowd.Config
 {
-    public class SettingsRoot : SimpleNotifyObject, IDisposable
+    /// <summary>
+    /// Plain settings container. Loading and saving is handled by <see cref="SettingsService"/>;
+    /// constructing this type (or any category) has no side effects whatsoever.
+    /// <see cref="Current"/> is assigned explicitly during application startup.
+    /// </summary>
+    public class SettingsRoot : SimpleNotifyObject
     {
-        [Browsable(false), ClassifyIgnore] public static SettingsRoot Current { get; private set; }
+        /// <summary>
+        /// The application-wide settings instance. Assigned explicitly at startup
+        /// (after <see cref="SettingsService.Load()"/>) — never from a constructor.
+        /// </summary>
+        [Browsable(false)]
+        public static SettingsRoot Current { get; set; }
 
-        public SettingsGeneral General { get; private set; } = new SettingsGeneral();
+        public SettingsGeneral General { get; set; } = new SettingsGeneral();
 
-        public SettingsHotkey Hotkeys { get; private set; } = new SettingsHotkey();
+        public SettingsHotkey Hotkeys { get; set; } = new SettingsHotkey();
 
-        public SettingsCapture Capture { get; private set; } = new SettingsCapture();
+        public SettingsCapture Capture { get; set; } = new SettingsCapture();
 
-        public SettingsEditor Editor { get; private set; } = new SettingsEditor();
+        public SettingsEditor Editor { get; set; } = new SettingsEditor();
 
-        public SettingsUpload Uploads { get; private set; } = new SettingsUpload();
-
-        public SettingsVideo Video { get; private set; } = new SettingsVideo();
-
-        private CategoryBase[] All => new CategoryBase[] { General, Hotkeys, Capture, Editor, Uploads, Video };
-
-        public SettingsRoot()
-        {
-            if (Current != null)
-                throw new InvalidOperationException("Dispose old settings before creating a new one");
-            Current = this;
-        }
-
-        static SettingsRoot()
-        {
-            ClassifySubstitutes.EnsureRegistered();
-        }
-
-        private static string FilePath =>
-#if DEBUG
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd", "Clowd.DEBUG.Settings.xml");
-#else
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd", "Clowd.Settings.xml");
-#endif
-
-        private static ClassifyOptions GetClassifyOptions()
-        {
-            return ClassifySubstitutes.CreateOptions();
-        }
-
-        public static void LoadDefault()
-        {
-            if (!File.Exists(FilePath))
-            {
-                CreateNew();
-                return;
-            }
-
-            try
-            {
-                var opt = GetClassifyOptions();
-                opt.Errors = new List<ClassifyError>();
-
-                Ut.WaitSharingVio(maximum: TimeSpan.FromSeconds(5), func: () =>
-                {
-                    var settings = ClassifyXml.DeserializeFile<SettingsRoot>(FilePath, opt);
-                    settings.RegisterEvents();
-
-                    if (opt.Errors.Any())
-                    {
-                        Debug.WriteLine("Settings were deserialized with errors:");
-                        foreach (var e in opt.Errors)
-                            Debug.WriteLine($"Exception on field: {e.ObjectPath} - {e.Exception}");
-                    }
-                    else
-                    {
-                        Debug.WriteLine("Settings were loaded.");
-                    }
-
-                    return true;
-                });
-            }
-            catch
-            {
-                Current?.Dispose();
-                throw;
-            }
-        }
-
-        public static void CreateNew()
-        {
-            var tmp = new SettingsRoot();
-            tmp.RegisterEvents();
-        }
-
-        public void Dispose()
-        {
-            All.ToList().ForEach(a => a.PropertyChanged -= Item_PropertyChanged);
-            All.ToList().ForEach(a => a.Dispose());
-
-            if (Current == this)
-                Current = null;
-        }
-
-        private void RegisterEvents()
-        {
-            Uploads.DiscoverProviders();
-            All.ToList().ForEach(a => a.PropertyChanged += Item_PropertyChanged);
-        }
-
-        private void Item_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            Save();
-        }
-
-        public void Save()
-        {
-            var filename = FilePath;
-            var tempname = filename + ".~tmp";
-
-            var opt = GetClassifyOptions();
-            opt.Errors = new List<ClassifyError>();
-
-            Directory.CreateDirectory(Path.GetDirectoryName(filename));
-
-            Ut.WaitSharingVio(maximum: TimeSpan.FromSeconds(5), func: () =>
-            {
-                ClassifyXml.SerializeToFile(this, tempname, opt, format: ClassifyXmlFormat.Create("Settings"));
-                File.Delete(filename);
-                File.Move(tempname, filename);
-
-                if (opt.Errors.Any())
-                {
-                    Debug.WriteLine("Settings were saved with errors:");
-                    foreach (var e in opt.Errors)
-                        Debug.WriteLine($"{e.ObjectPath} - {e.Exception}");
-                }
-
-                return true;
-            });
-        }
+        public SettingsUpload Uploads { get; set; } = new SettingsUpload();
     }
 }

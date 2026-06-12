@@ -4,7 +4,6 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -132,10 +131,11 @@ namespace Clowd.Drawing.Graphics
         private PixelRect _crop;
         private Size _originalSize;
         private ObscuredShape[] _obscuredShapes = new ObscuredShape[0];
-        [ClassifyIgnore] private Bitmap _imageSource;
-        [ClassifyIgnore] private Bitmap _imageObscured;
-        [ClassifyIgnore] private Rect _editingAnchor;
-        [ClassifyIgnore] private DrawingCanvas _editingCanvas;
+        // not persisted by GraphicsSerializer
+        [Transient] private Bitmap _imageSource;
+        [Transient] private Bitmap _imageObscured;
+        [Transient] private Rect _editingAnchor;
+        [Transient] private DrawingCanvas _editingCanvas;
 
         protected GraphicImage()
         { }

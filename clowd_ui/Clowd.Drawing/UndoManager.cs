@@ -1,25 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Xml.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Avalonia.Media;
-using Clowd.Config;
 using Clowd.Drawing.Graphics;
-using RT.Serialization;
-using RT.Util.ExtensionMethods;
 
 namespace Clowd.Drawing
 {
     internal class UndoManager
     {
-        static UndoManager()
-        {
-            ClassifySubstitutes.EnsureRegistered();
-        }
-
         class SimpleLinkedListNode
         {
-            public XElement Value { get; set; }
+            public JsonObject Value { get; set; }
             public SimpleLinkedListNode Next { get; set; }
             public SimpleLinkedListNode Previous { get; set; }
             public SortedSet<string> Changes { get; set; }
@@ -47,20 +40,20 @@ namespace Clowd.Drawing
             ClearHistory();
         }
 
-        public void ClearHistory(XElement initialState = null)
+        public void ClearHistory(JsonObject initialState = null)
         {
-            initialState ??= ClassifyXml.Serialize(new GraphicState { BackgroundColor = _drawingCanvas.ArtworkBackground });
+            initialState ??= SerializeState(new GraphicState { BackgroundColor = _drawingCanvas.ArtworkBackground });
             _canMergeNext = false;
             SetState(new SimpleLinkedListNode { Value = initialState });
         }
 
         public void AddCommandStep(bool mergable)
         {
-            var xml = ClassifyXml.Serialize(GetNextState());
+            var json = SerializeState(GetNextState());
 
             if (_node?.Value == null)
             {
-                _node = new SimpleLinkedListNode { Value = xml };
+                _node = new SimpleLinkedListNode { Value = json };
                 return;
             }
 
@@ -69,7 +62,7 @@ namespace Clowd.Drawing
             _canMergeNext = mergable;
 
             // do nothing if nothing was changed.
-            var nextChanges = GetChangedXmlNodes(_node.Value, xml);
+            var nextChanges = GetChangedNodes(_node.Value, json);
             if (nextChanges.Count == 0)
             {
                 return;
@@ -79,51 +72,72 @@ namespace Clowd.Drawing
             // if only the same properties were changed
             if (mergable && _canMergeNext && _node?.Changes?.SequenceEqual(nextChanges) == true)
             {
-                _node.Value = xml;
+                _node.Value = json;
                 _node.Next = null;
                 return;
             }
 
-            _node.Next = new SimpleLinkedListNode { Value = xml, Previous = _node, Changes = nextChanges };
+            _node.Next = new SimpleLinkedListNode { Value = json, Previous = _node, Changes = nextChanges };
             _node = _node.Next;
 
             RaiseStateChangedEvent(_node.Value);
         }
 
-        internal static SortedSet<string> GetChangedXmlNodes(XElement prev, XElement next)
+        /// <summary>
+        /// Computes the set of changed property paths between two state snapshots, at per-property
+        /// granularity (one path per changed leaf, recursing into objects/arrays). Array items that
+        /// are objects carrying an "id" property (the graphics) are keyed by that id, so a pure
+        /// reorder produces no changes and per-graphic edits diff against the same graphic; other
+        /// array items are keyed positionally ("item.N"). The undo merge logic compares these sets
+        /// to decide whether consecutive edits collapse into one step.
+        /// </summary>
+        internal static SortedSet<string> GetChangedNodes(JsonObject prev, JsonObject next)
         {
-            string GetElementName(XElement e, int index)
+            bool HasChildren(JsonNode node) => node is JsonObject || node is JsonArray;
+
+            string GetItemName(JsonNode node, int index)
             {
-                if (e.HasElements)
+                if (node is JsonObject obj &&
+                    obj.TryGetPropertyValue("id", out var id) &&
+                    id is JsonValue value &&
+                    value.TryGetValue<string>(out var name))
                 {
-                    var id = e.Element("id");
-                    if (id?.Value != null) return id.Value;
+                    return name;
                 }
 
-                if (index >= 0 && e.Name.LocalName == "item")
-                {
-                    return e.Name.LocalName + "." + index;
-                }
-
-                return e.Name.LocalName;
+                return "item." + index;
             }
 
-            IEnumerable<IEnumerable<string>> GetChangedPathsInternal(IEnumerable<string> path, XElement prevEl, XElement nextEl)
+            IEnumerable<KeyValuePair<string, JsonNode>> NamedChildren(JsonNode node)
             {
-                Dictionary<string, XElement> dict = new();
+                if (node is JsonObject obj)
+                {
+                    foreach (var kvp in obj)
+                        yield return kvp;
+                }
+                else if (node is JsonArray arr)
+                {
+                    for (int i = 0; i < arr.Count; i++)
+                        yield return new KeyValuePair<string, JsonNode>(GetItemName(arr[i], i), arr[i]);
+                }
+            }
+
+            IEnumerable<IEnumerable<string>> GetChangedPathsInternal(IEnumerable<string> path, JsonNode prevEl, JsonNode nextEl)
+            {
+                Dictionary<string, JsonNode> dict = new();
 
                 // add all of prev properties to dictionary
-                foreach (var e in prevEl.Elements().Select((Item, Index) => new { Index, Item }))
+                foreach (var e in NamedChildren(prevEl))
                 {
-                    dict.Add(GetElementName(e.Item, e.Index), e.Item);
+                    dict.Add(e.Key, e.Value);
                 }
 
                 // iterate next properties, find matches in dictionary
-                foreach (var e in nextEl.Elements().Select((Item, Index) => new { Index, Item }))
+                foreach (var e in NamedChildren(nextEl))
                 {
-                    var eNext = e.Item;
-                    var elName = GetElementName(eNext, e.Index);
-                    var elPath = path.Concat(elName);
+                    var eNext = e.Value;
+                    var elName = e.Key;
+                    var elPath = path.Append(elName);
 
                     if (!dict.TryGetValue(elName, out var ePrev))
                     {
@@ -134,17 +148,17 @@ namespace Clowd.Drawing
                     {
                         dict.Remove(elName);
 
-                        if (ePrev.HasElements != eNext.HasElements)
+                        if (HasChildren(ePrev) != HasChildren(eNext))
                         {
                             // the structure of this element has changed
-                            yield return path.Concat(elName);
+                            yield return elPath;
                         }
                         else
                         {
-                            if (ePrev.HasElements)
+                            if (HasChildren(ePrev))
                             {
-                                // they both have sub elements to check
-                                foreach (var f in GetChangedPathsInternal(path.Concat(elName), ePrev, eNext))
+                                // they both have children to check
+                                foreach (var f in GetChangedPathsInternal(elPath, ePrev, eNext))
                                 {
                                     yield return f;
                                 }
@@ -152,9 +166,9 @@ namespace Clowd.Drawing
                             else
                             {
                                 // they both have an absolute value and it's changed
-                                if (!ePrev.Value.Equals((string)eNext.Value))
+                                if (!JsonNode.DeepEquals(ePrev, eNext))
                                 {
-                                    yield return path.Concat(elName);
+                                    yield return elPath;
                                 }
                             }
                         }
@@ -164,7 +178,7 @@ namespace Clowd.Drawing
                 // anything not removed from the dictionary was not in 'next'
                 foreach (var e in dict)
                 {
-                    yield return path.Concat(e.Key);
+                    yield return path.Append(e.Key);
                 }
             }
 
@@ -200,9 +214,14 @@ namespace Clowd.Drawing
             };
         }
 
+        static JsonObject SerializeState(GraphicState state)
+        {
+            return (JsonObject)JsonSerializer.SerializeToNode(state, GraphicsSerializer.Options);
+        }
+
         void SetState(SimpleLinkedListNode node)
         {
-            var state = ClassifyXml.Deserialize<GraphicState>(node.Value);
+            var state = node.Value.Deserialize<GraphicState>(GraphicsSerializer.Options);
             var nextGraphics = new GraphicCollection(_drawingCanvas);
             foreach (var s in state.Graphics)
             {
@@ -215,7 +234,7 @@ namespace Clowd.Drawing
             _node = node;
         }
 
-        private void RaiseStateChangedEvent(XElement state)
+        private void RaiseStateChangedEvent(JsonObject state)
         {
             StateChanged?.Invoke(this, new StateChangedEventArgs(state));
         }

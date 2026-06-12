@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="clowd_ui/Clowd.Drawing/Clowd.Drawing.csproj" />
+  <Project Path="clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj" />
   <Project Path="clowd_ui/Clowd.Shared/Clowd.Shared.csproj" />
+  <Project Path="clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj" />
   <Project Path="clowd_ui/Clowd.Ui/Clowd.Ui.csproj" />
 </Solution>

@@ -1,7 +1,6 @@
 using System.Linq;
 using Avalonia;
 using Clowd.Drawing.Graphics;
-using RT.Util.ExtensionMethods;
 
 namespace Clowd.Drawing.Tools
 {
@@ -18,7 +17,9 @@ namespace Clowd.Drawing.Tools
             var maxNum = canvas.GraphicsList
                 .OfType<GraphicCount>()
                 .Where(g => int.TryParse(g.Body, out _))
-                .MaxOrDefault(g => int.Parse(g.Body));
+                .Select(g => int.Parse(g.Body))
+                .DefaultIfEmpty(0)
+                .Max();
 
             _currentArrow = new GraphicArrow(canvas.ObjectColor, canvas.LineWidth, pt, pt);
 

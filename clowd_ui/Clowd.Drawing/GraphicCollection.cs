@@ -201,6 +201,7 @@ namespace Clowd.Drawing
         public bool Contains(GraphicBase graphic) => _graphics.Contains(graphic);
         public void CopyTo(GraphicBase[] array, int arrayIndex) => throw new NotSupportedException();
         public int IndexOf(GraphicBase item) => _graphics.IndexOf(item);
+        public int IndexOf(Predicate<GraphicBase> predicate) => _graphics.FindIndex(predicate);
         public IEnumerator<GraphicBase> GetEnumerator() => _graphics.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => _graphics.GetEnumerator();
 

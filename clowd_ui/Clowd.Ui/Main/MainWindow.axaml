@@ -34,7 +34,6 @@
             <u:NavMenuItem Header="Capture" Tag="SettingsCapture" />
             <u:NavMenuItem Header="Editor" Tag="SettingsEditor" />
             <u:NavMenuItem Header="Uploads" Tag="SettingsUploads" />
-            <u:NavMenuItem Header="Video" Tag="SettingsVideo" />
             <u:NavMenuItem Header="About" Tag="About" />
         </u:NavMenu>
 

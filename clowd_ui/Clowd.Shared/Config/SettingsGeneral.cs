@@ -1,31 +1,9 @@
-using System;
 using System.ComponentModel;
 
 namespace Clowd.Config
 {
-    public class SettingsGeneral : CategoryBase
+    public class SettingsGeneral : SimpleNotifyObject
     {
-        // compat field: retained so existing settings files round-trip cleanly
-        public bool ExperimentalUpdateChannel
-        {
-            get => _experimentalUpdateChannel;
-            set => Set(ref _experimentalUpdateChannel, value);
-        }
-
-        [Browsable(false)]
-        public string LastUploadPath
-        {
-            get => _lastUploadPath;
-            set => Set(ref _lastUploadPath, value);
-        }
-
-        [Browsable(false)]
-        public string ClientId
-        {
-            get => _clientId;
-            set => Set(ref _clientId, value);
-        }
-
         [Browsable(false)]
         public string LastSavePath
         {
@@ -55,11 +33,8 @@ namespace Clowd.Config
             set => Set(ref _confirmClose, value);
         }
 
-        private string _clientId = Guid.NewGuid().ToString().ToLower();
-        private string _lastUploadPath;
         private string _lastSavePath;
         private bool _confirmClose = true;
-        private bool _experimentalUpdateChannel;
         private bool _registerExplorerContextMenu = true;
         private bool _registerAutoStart = true;
     }

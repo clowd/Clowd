@@ -10,7 +10,7 @@ namespace Clowd.Config
         Off,
     }
 
-    public class SettingsCapture : CategoryBase
+    public class SettingsCapture : SimpleNotifyObject
     {
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]

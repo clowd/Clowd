@@ -13,7 +13,6 @@ namespace Clowd
         SettingsCapture,
         SettingsEditor,
         SettingsUploads,
-        SettingsVideo,
         About,
     }
 

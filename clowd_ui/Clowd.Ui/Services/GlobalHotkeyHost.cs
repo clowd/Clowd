@@ -3,17 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Avalonia.Threading;
-using Clowd.Config;
 using SharpHook;
 using SharpHook.Data;
 
 namespace Clowd.UI
 {
     /// <summary>
-    /// SharpHook (libuiohook) implementation of <see cref="IGlobalTriggerHost"/>. Installed as
-    /// <see cref="GlobalTrigger.Host"/> at startup so the settings layer (Clowd.Drawing) never
-    /// references SharpHook itself. The underlying keyboard hook is started lazily on the first
-    /// registration and runs until the host is disposed on app exit.
+    /// SharpHook (libuiohook) implementation of <see cref="IGlobalTriggerHost"/>. Owned by
+    /// <see cref="HotkeyManager"/> so the settings layer never references SharpHook itself.
+    /// The underlying keyboard hook is started lazily on the first registration and runs until
+    /// the host is disposed on app exit.
     /// </summary>
     /// <remarks>
     /// Threading: <see cref="SimpleGlobalHook"/> raises events on its dedicated hook thread, which is
@@ -30,6 +29,15 @@ namespace Clowd.UI
         private SimpleGlobalHook _hook;
         private string _hookError; // non-null once the hook failed to start
         private bool _disposed;
+        private volatile bool _isPaused;
+
+        /// <summary>While true, hotkeys neither fire nor swallow key presses (checked on the hook
+        /// thread before <see cref="HookEventArgs.SuppressEvent"/> is applied).</summary>
+        public bool IsPaused
+        {
+            get => _isPaused;
+            set => _isPaused = value;
+        }
 
         public IGlobalTriggerRegistration RegisterTrigger(SimpleKeyGesture gesture, Action executed)
         {
@@ -120,7 +128,7 @@ namespace Clowd.UI
         private void OnKeyPressed(object sender, KeyboardHookEventArgs e)
         {
             // while a gesture is being edited in settings, hotkeys must neither fire nor swallow keys.
-            if (GlobalTrigger.IsPaused)
+            if (_isPaused)
                 return;
 
             Registration match = null;

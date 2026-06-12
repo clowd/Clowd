@@ -1,15 +1,19 @@
 using System;
 
-namespace Clowd.Config
+namespace Clowd.UI
 {
     /// <summary>
-    /// Pluggable OS hotkey backend for <see cref="GlobalTrigger"/>. Clowd.Drawing contains no
-    /// platform hook code — the UI layer installs an implementation via <see cref="GlobalTrigger.Host"/>
-    /// at startup (SharpHook in Clowd.Ui). While no host is installed every trigger behaves like an
-    /// inert stub: never registered, never fires.
+    /// OS hotkey backend used by <see cref="HotkeyManager"/>. The settings layer (Clowd.Shared)
+    /// only stores gestures — all registration machinery lives in the UI layer.
     /// </summary>
     public interface IGlobalTriggerHost
     {
+        /// <summary>
+        /// While true, registered gestures neither fire nor swallow key presses (used while a
+        /// gesture is being captured in the settings editor).
+        /// </summary>
+        bool IsPaused { get; set; }
+
         /// <summary>
         /// Begin listening for <paramref name="gesture"/>. The returned handle reports live
         /// registration status (raising <see cref="IGlobalTriggerRegistration.StatusChanged"/> on the
