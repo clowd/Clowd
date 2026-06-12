@@ -7,8 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.13" />
-    <PackageReference Include="RT.Util.Core" Version="2.0.1719" />
-    <PackageReference Include="RT.Serialization.Xml" Version="2.0.1719" />
-    <PackageReference Include="RT.Serialization.Binary" Version="2.0.1719" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.2" />
   </ItemGroup>
 </Project>

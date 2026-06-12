@@ -4,7 +4,6 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Media;
 using Clowd.Drawing.Curves;
-using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -12,9 +11,11 @@ namespace Clowd.Drawing.Graphics
     public class GraphicPolyLine : GraphicRectangle
     {
         private List<Point> _points;
-        [ClassifyIgnore] private List<Geometry> _segments;
-        [ClassifyIgnore] private bool _drawing;
-        [ClassifyIgnore] private Geometry _final;
+
+        // not persisted by GraphicsSerializer
+        [Transient] private List<Geometry> _segments;
+        [Transient] private bool _drawing;
+        [Transient] private Geometry _final;
 
 #if DEBUG
         static GraphicPolyLine()

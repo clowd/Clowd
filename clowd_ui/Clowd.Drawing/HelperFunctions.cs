@@ -62,7 +62,6 @@ namespace Clowd.Drawing
                 closest45 = Math.Round(angle / 45d) * 45d;
             }
 
-            // inlined replacement for RT.Util PointD/LengthProjectedOnto:
             // projection of the drag vector onto the unit vector at the snapped angle.
             var theta = closest45 / 180 * Math.PI;
             var ux = Math.Cos(theta);

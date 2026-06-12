@@ -7,24 +7,24 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Clowd.Config;
 
 namespace Clowd.UI.Config
 {
     /// <summary>
-    /// Gesture editor row for a <see cref="GlobalTrigger"/>. The gesture can be viewed and edited
-    /// (and is persisted); the status square reflects the trigger's live registration state
-    /// (green when the SharpHook host registered it, red with the error in a tooltip otherwise).
+    /// Gesture editor row for a <see cref="HotkeyEntry"/>. The gesture can be viewed and edited
+    /// (writing it persists the settings and re-registers immediately); the status square reflects
+    /// the hotkey's live registration state (green when the SharpHook host registered it, red with
+    /// the error in a tooltip otherwise).
     /// </summary>
     public class GlobalTriggerEditor : UserControl
     {
-        public static readonly StyledProperty<GlobalTrigger> TriggerProperty =
-            AvaloniaProperty.Register<GlobalTriggerEditor, GlobalTrigger>(nameof(Trigger));
+        public static readonly StyledProperty<HotkeyEntry> EntryProperty =
+            AvaloniaProperty.Register<GlobalTriggerEditor, HotkeyEntry>(nameof(Entry));
 
-        public GlobalTrigger Trigger
+        public HotkeyEntry Entry
         {
-            get => GetValue(TriggerProperty);
-            set => SetValue(TriggerProperty, value);
+            get => GetValue(EntryProperty);
+            set => SetValue(EntryProperty, value);
         }
 
         public bool IsEditing { get; private set; }
@@ -66,19 +66,19 @@ namespace Clowd.UI.Config
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
-            if (change.Property == TriggerProperty)
+            if (change.Property == EntryProperty)
             {
-                if (change.OldValue is GlobalTrigger oldTrigger)
-                    oldTrigger.PropertyChanged -= OnTriggerPropertyChanged;
-                if (change.NewValue is GlobalTrigger newTrigger)
-                    newTrigger.PropertyChanged += OnTriggerPropertyChanged;
+                if (change.OldValue is HotkeyEntry oldEntry)
+                    oldEntry.PropertyChanged -= OnEntryPropertyChanged;
+                if (change.NewValue is HotkeyEntry newEntry)
+                    newEntry.PropertyChanged += OnEntryPropertyChanged;
                 UpdateControls();
             }
         }
 
-        private void OnTriggerPropertyChanged(object sender, PropertyChangedEventArgs e)
+        private void OnEntryPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            // IsRegistered / Error / KeyGesture can all change asynchronously (e.g. the SharpHook
+            // IsRegistered / Error / Gesture can all change asynchronously (e.g. the SharpHook
             // host failing to start on macOS without the Accessibility permission) — keep the
             // status square and gesture text live.
             UpdateControls();
@@ -86,12 +86,13 @@ namespace Clowd.UI.Config
 
         private void OnButtonClick(object sender, RoutedEventArgs e)
         {
-            if (IsEditing || GlobalTrigger.IsPaused || Trigger == null)
+            var manager = HotkeyManager.Current;
+            if (IsEditing || Entry == null || manager == null || manager.IsPaused)
                 return;
-            GlobalTrigger.IsPaused = true;
+            manager.IsPaused = true;
             IsEditing = true;
             _editModifiers = KeyModifiers.None;
-            Trigger.KeyGesture = null;
+            Entry.Gesture = null;
             KeyDown += OnKeyDown;
             KeyUp += OnKeyUp;
             LostFocus += OnLostFocus;
@@ -143,16 +144,17 @@ namespace Clowd.UI.Config
         private void FinishEditing(Key key, KeyModifiers modifiers)
         {
             IsEditing = false;
-            GlobalTrigger.IsPaused = false;
+            if (HotkeyManager.Current != null)
+                HotkeyManager.Current.IsPaused = false;
             KeyDown -= OnKeyDown;
             KeyUp -= OnKeyUp;
             LostFocus -= OnLostFocus;
 
-            if (!IsBlacklisted(key, modifiers) && Trigger != null)
+            if (!IsBlacklisted(key, modifiers) && Entry != null)
             {
                 try
                 {
-                    Trigger.KeyGesture = new SimpleKeyGesture(key, modifiers);
+                    Entry.Gesture = new SimpleKeyGesture(key, modifiers);
                 }
                 catch
                 {
@@ -199,20 +201,20 @@ namespace Clowd.UI.Config
             }
             else
             {
-                if (Trigger == null || Trigger.KeyGesture == null)
+                if (Entry == null || Entry.Gesture == null)
                 {
                     _button.Content = "(not set)";
-                    ToolTip.SetTip(_status, Trigger?.Error ?? "The gesture is not set or is an invalid gesture.");
+                    ToolTip.SetTip(_status, Entry?.Error ?? "The gesture is not set or is an invalid gesture.");
                     _status.Background = Brushes.PaleVioletRed;
                 }
                 else
                 {
                     // unlike WPF (which displayed "(error)"), the gesture text is kept visible —
                     // the red status square + tooltip carry the registration error.
-                    _button.Content = Trigger.KeyGesture.ToString();
-                    if (!Trigger.IsRegistered && !String.IsNullOrEmpty(Trigger.Error))
+                    _button.Content = Entry.Gesture.ToString();
+                    if (!Entry.IsRegistered && !String.IsNullOrEmpty(Entry.Error))
                     {
-                        ToolTip.SetTip(_status, Trigger.Error);
+                        ToolTip.SetTip(_status, Entry.Error);
                         _status.Background = Brushes.PaleVioletRed;
                     }
                     else

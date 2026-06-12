@@ -17,6 +17,15 @@ namespace Clowd.Drawing
         BlurRadius = 1 << 8,
     }
 
+    /// <summary>
+    /// Marks a graphic field as transient (selection/editing state, caches): it is excluded from
+    /// graphics serialization (undo snapshots, session file, clipboard) by
+    /// <see cref="GraphicsSerializer"/> and resets to its constructed default on deserialization.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+    public sealed class TransientAttribute : Attribute
+    { }
+
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public class GraphicDescAttribute : Attribute
     {

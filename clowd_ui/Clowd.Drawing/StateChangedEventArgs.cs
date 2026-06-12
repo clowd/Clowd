@@ -1,13 +1,13 @@
 using System;
-using System.Xml.Linq;
+using System.Text.Json.Nodes;
 
 namespace Clowd.Drawing
 {
     public class StateChangedEventArgs : EventArgs
     {
-        public XElement State { get; }
+        public JsonObject State { get; }
 
-        public StateChangedEventArgs(XElement state)
+        public StateChangedEventArgs(JsonObject state)
         {
             State = state;
         }

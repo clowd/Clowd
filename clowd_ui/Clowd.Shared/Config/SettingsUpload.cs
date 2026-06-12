@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json.Serialization;
 
 namespace Clowd.Config
 {
@@ -46,8 +47,10 @@ namespace Clowd.Config
         private SupportedUploadType _defaultFor;
     }
 
-    public class SettingsUpload : CategoryBase
+    public class SettingsUpload : SimpleNotifyObject
     {
+        // runtime-discovered state (no providers ship in this build) — not persisted.
+        [Browsable(false), JsonIgnore]
         public UploadProviderInfo[] Providers => _providers.ToArray();
 
         private List<UploadProviderInfo> _providers = new();
@@ -88,12 +91,13 @@ namespace Clowd.Config
                 .Select(p => p);
         }
 
+        /// <summary>Discovers IUploadProvider implementations in loaded assemblies. Called
+        /// explicitly from application startup — never as a side effect of settings parsing.</summary>
         public void DiscoverProviders()
         {
             // this function searches for and adds any 'IUploadProvider' classes
             // it can find that are not currently listed in the settings.
             // also, it removes any info classes which have a null provider
-            // (eg. if it failed to be deserialized)
             // note: no providers ship in this build, so this typically finds nothing.
 
             foreach (var i in _providers.ToArray())
@@ -116,13 +120,6 @@ namespace Clowd.Config
             }
 
             _providers = _providers.OrderBy(p => p.Provider.Name, StringComparer.Ordinal).ToList();
-
-            // need to subscribe to all the providers so we can propegate property changed events
-            foreach (var p in _providers)
-            {
-                Subscribe(p);
-                Subscribe(p.Provider);
-            }
         }
 
         private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)

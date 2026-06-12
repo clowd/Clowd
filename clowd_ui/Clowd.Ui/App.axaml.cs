@@ -21,7 +21,7 @@ namespace Clowd
 
         private MutexArgsForwarder _processor;
         private TrayIcon _trayIcon;
-        private GlobalHotkeyHost _hotkeyHost;
+        private HotkeyManager _hotkeys;
         private bool _exiting;
 
         public override void Initialize()
@@ -55,14 +55,9 @@ namespace Clowd
                 SetupTrayIcon();
 
                 // rebuild the tray menu when any hotkey gesture changes so the appended gesture
-                // text stays current (decision table #48 / §6). IsRegistered/Error are live
-                // status updates bubbled from the hotkey host and don't affect menu headers.
-                SettingsRoot.Current.Hotkeys.PropertyChanged += (s, e) =>
-                {
-                    if (e.PropertyName is nameof(GlobalTrigger.IsRegistered) or nameof(GlobalTrigger.Error))
-                        return;
-                    Dispatcher.UIThread.Post(SetupTrayIcon);
-                };
+                // text stays current (decision table #48 / §6). SettingsHotkey is pure data now —
+                // every PropertyChanged is a gesture change.
+                SettingsRoot.Current.Hotkeys.PropertyChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
 
                 SetupGlobalHotkeys();
 
@@ -93,8 +88,7 @@ namespace Clowd
             bool firstRun;
             try
             {
-                firstRun = !Directory.Exists(PathConstants.SettingsData)
-                           || !Directory.EnumerateFiles(PathConstants.SettingsData, "*Settings.xml").Any();
+                firstRun = !File.Exists(SettingsService.FilePath);
             }
             catch
             {
@@ -103,7 +97,8 @@ namespace Clowd
 
             try
             {
-                SettingsRoot.LoadDefault();
+                // pure parse — no side effects; Current is assigned explicitly here.
+                SettingsRoot.Current = SettingsService.Load();
             }
             catch (Exception ex)
             {
@@ -112,14 +107,17 @@ namespace Clowd
                         "There was an error loading the application configuration.\r\nWould you like to reset the config to default or exit the application?",
                         "Error loading app config", "Reset Config", "Exit Application", NiceDialogIcon.Information, ex.ToString()))
                 {
-                    SettingsRoot.CreateNew();
-                    SettingsRoot.Current.Save();
+                    SettingsRoot.Current = new SettingsRoot();
+                    SettingsService.Save(SettingsRoot.Current);
                 }
                 else
                 {
                     Environment.Exit(1);
                 }
             }
+
+            // formerly a hidden side effect of settings deserialization; now an explicit startup step.
+            SettingsRoot.Current.Uploads.DiscoverProviders();
 
             return firstRun;
         }
@@ -167,10 +165,10 @@ namespace Clowd
                 TrayIcon.SetIcons(this, new TrayIcons { _trayIcon });
             }
 
-            static string WithGesture(string header, GlobalTrigger trigger)
+            static string WithGesture(string header, SimpleKeyGesture gesture)
             {
                 // gesture text is appended to the header (NativeMenuItem has no InputGestureText).
-                var g = trigger?.KeyGestureText;
+                var g = gesture?.ToString();
                 return String.IsNullOrEmpty(g) ? header : $"{header} ({g})";
             }
 
@@ -217,40 +215,38 @@ namespace Clowd
         }
 
         /// <summary>
-        /// Wires the <see cref="GlobalTrigger"/> actions (mirroring the WPF App.SetupSettings wiring,
-        /// adapted to what exists in this build) and installs the SharpHook-backed
-        /// <see cref="GlobalHotkeyHost"/> as <see cref="GlobalTrigger.Host"/>. Installing the host
-        /// registers every trigger that has both a gesture and a listener; the OS keyboard hook itself
-        /// starts lazily on the first such registration, so no hook runs if no gestures are set.
+        /// Creates the <see cref="HotkeyManager"/> over the SharpHook-backed
+        /// <see cref="GlobalHotkeyHost"/> and wires the hotkey actions explicitly (mirroring the WPF
+        /// App.SetupSettings wiring, adapted to what exists in this build). Gestures are read from
+        /// settings; the OS keyboard hook itself starts lazily on the first registration, so no hook
+        /// runs if no gestures are set.
         /// </summary>
         private void SetupGlobalHotkeys()
         {
-            var keys = SettingsRoot.Current.Hotkeys;
+            _hotkeys = new HotkeyManager(new GlobalHotkeyHost(), SettingsRoot.Current.Hotkeys);
 
             // capture/upload/recording are provided by the separate Rust process (or not yet ported)
-            // — those triggers route to the existing stub page or a NiceDialog notice.
-            keys.FileUploadShortcut.TriggerExecuted += (s, e) => NiceDialog.ShowNoticeAsync(
-                null, NiceDialogIcon.Information, "Upload providers are not available in this build.", "Upload unavailable");
-            keys.ClipboardUploadShortcut.TriggerExecuted += (s, e) => NiceDialog.ShowNoticeAsync(
-                null, NiceDialogIcon.Information, "Upload providers are not available in this build.", "Upload unavailable");
-            keys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
-            keys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => StartCapture();
-            keys.CaptureActiveShortcut.TriggerExecuted += (s, e) => StartCapture();
-            keys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
-            keys.StartStopRecordingShortcut.TriggerExecuted += (s, e) => NiceDialog.ShowNoticeAsync(
-                null, NiceDialogIcon.Information, "Screen recording is not available in this build.", "Recording unavailable");
+            // — those hotkeys route to the existing stub page or a NiceDialog notice.
+            _hotkeys.SetAction(HotkeyId.FileUpload, () => NiceDialog.ShowNoticeAsync(
+                null, NiceDialogIcon.Information, "Upload providers are not available in this build.", "Upload unavailable"));
+            _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => NiceDialog.ShowNoticeAsync(
+                null, NiceDialogIcon.Information, "Upload providers are not available in this build.", "Upload unavailable"));
+            _hotkeys.SetAction(HotkeyId.CaptureRegion, () => StartCapture());
+            _hotkeys.SetAction(HotkeyId.CaptureFullscreen, () => StartCapture());
+            _hotkeys.SetAction(HotkeyId.CaptureActive, () => StartCapture());
+            _hotkeys.SetAction(HotkeyId.DrawOnScreen, () => PageManager.Current.GetLiveDrawPage().Open());
+            _hotkeys.SetAction(HotkeyId.StartStopRecording, () => NiceDialog.ShowNoticeAsync(
+                null, NiceDialogIcon.Information, "Screen recording is not available in this build.", "Recording unavailable"));
 
-            _hotkeyHost = new GlobalHotkeyHost();
-            GlobalTrigger.Host = _hotkeyHost;
+            HotkeyManager.Current = _hotkeys;
         }
 
         private void ShutdownGlobalHotkeys()
         {
             try
             {
-                GlobalTrigger.Host = null;
-                _hotkeyHost?.Dispose();
-                _hotkeyHost = null;
+                _hotkeys?.Dispose(); // also disposes the underlying GlobalHotkeyHost
+                _hotkeys = null;
             }
             catch { }
         }
@@ -286,7 +282,11 @@ namespace Clowd
 
             ShutdownGlobalHotkeys();
 
-            try { SettingsRoot.Current?.Save(); }
+            try
+            {
+                if (SettingsRoot.Current != null)
+                    SettingsService.Save(SettingsRoot.Current);
+            }
             catch { }
 
             try { _trayIcon?.Dispose(); }
@@ -307,7 +307,11 @@ namespace Clowd
 
             ShutdownGlobalHotkeys();
 
-            try { SettingsRoot.Current?.Save(); }
+            try
+            {
+                if (SettingsRoot.Current != null)
+                    SettingsService.Save(SettingsRoot.Current);
+            }
             catch { }
 
             try { _processor?.Dispose(); }

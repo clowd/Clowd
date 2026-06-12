@@ -715,7 +715,7 @@ impl ApplicationHandler for App {
             }
             #[cfg(windows)]
             WindowEvent::ScaleFactorChanged {
-                ref mut inner_size_writer,
+                mut inner_size_writer,
                 ..
             } => {
                 let _ = inner_size_writer.request_inner_size(winit::dpi::PhysicalSize::new(

@@ -1,10 +1,9 @@
+using System.Collections.Generic;
 using System.ComponentModel;
 using Avalonia.Media;
-using RT.Serialization;
 
 namespace Clowd.Config
 {
-    [ClassifyIgnoreIfDefault, ClassifyIgnoreIfEmpty]
     public class SavedToolSettings : SimpleNotifyObject
     {
         public bool AutoColor
@@ -72,7 +71,7 @@ namespace Clowd.Config
         private double? _blurRadius;
     }
 
-    public class SettingsEditor : CategoryBase
+    public class SettingsEditor : SimpleNotifyObject
     {
         public bool RestoreSessionsOnClowdStart
         {
@@ -94,7 +93,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Tool preferences")]
-        public AutoDictionary<ToolType, SavedToolSettings> Tools
+        public Dictionary<ToolType, SavedToolSettings> Tools
         {
             get => _tools;
             set => Set(ref _tools, value);
@@ -106,15 +105,19 @@ namespace Clowd.Config
             set => Set(ref _deleteSessionsAfter, value);
         }
 
+        /// <summary>Lazily creates the per-tool settings entry (replaces the old AutoDictionary
+        /// indexer behaviour).</summary>
+        public SavedToolSettings GetToolSettings(ToolType tool)
+        {
+            if (!_tools.TryGetValue(tool, out var settings) || settings == null)
+                _tools[tool] = settings = new SavedToolSettings();
+            return settings;
+        }
+
         private Color _canvasBackground = Colors.Transparent;
         private int _startupPadding = 30;
         private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
-        private AutoDictionary<ToolType, SavedToolSettings> _tools = new AutoDictionary<ToolType, SavedToolSettings>();
+        private Dictionary<ToolType, SavedToolSettings> _tools = new Dictionary<ToolType, SavedToolSettings>();
         private bool _restoreSessionsOnClowdStart = true;
-
-        public SettingsEditor()
-        {
-            Subscribe(Tools);
-        }
     }
 }

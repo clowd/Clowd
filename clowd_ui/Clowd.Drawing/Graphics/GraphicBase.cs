@@ -3,7 +3,6 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
-using RT.Serialization;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -43,7 +42,7 @@ namespace Clowd.Drawing.Graphics
         private Color _objectColor;
         private double _lineWidth;
         private bool _dropShadowEffect;
-        [ClassifyIgnore] private bool _isSelected;
+        [Transient] private bool _isSelected; // not persisted by GraphicsSerializer
 
         protected GraphicBase()
         { }

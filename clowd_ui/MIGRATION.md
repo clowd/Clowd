@@ -1239,3 +1239,43 @@ right-click provider menu — empty in this build so no menu), Copy (IconCopySma
 | `sgblank` empty StreamGeometry parse failure | Not ported (placeholder with no consumers). |
 | NumericUpDown decimal? vs int/double settings | `NumericTypeConverter` per TypeCode in SettingsControlFactory. |
 | Trimming/AOT vs reflection bindings | Trimming and AOT disabled (default); reflection bindings in SettingsControlFactory are fine. |
+
+## 7. Settings system rewrite (post-migration; supersedes §2.6/§2.9 settings notes)
+
+The RT.Serialization (Classify XML) settings stack was replaced with standard .NET appsettings
+infrastructure. The old `Clowd.Settings.xml` format is **not** migrated — first launch after this
+change starts from defaults.
+
+- **File:** `%AppData%\Clowd\Clowd.Settings.json` (`Clowd.DEBUG.Settings.json` in debug builds).
+- **Load:** `SettingsService.Load()` (Clowd.Shared) builds a `ConfigurationBuilder` +
+  `AddJsonFile(optional: true)` and binds with `Get<SettingsRoot>()`. It is a pure parse with zero
+  side effects: missing file/sections/values fall back to compiled-in defaults; it throws only on
+  malformed JSON (App offers a reset). `SettingsRoot.Current` is assigned explicitly in
+  `App.SetupSettings` — never inside a constructor (the old singleton enforcement, auto-save-on-
+  PropertyChanged cascade, `CategoryBase` subscribe machinery and `DiscoverProviders()`-on-load are
+  all gone; provider discovery is an explicit App startup step).
+- **Save:** `SettingsService.Save(root)` writes indented System.Text.Json atomically (temp file +
+  move-overwrite) with a 5 s retry loop on sharing violations (replaces `Ut.WaitSharingVio`).
+- **Representation (shared by both paths):** enums by name (`JsonStringEnumConverter` / binder);
+  `Color` as `"#AARRGGBB"` (a `TypeConverter` registered via `TypeDescriptor.AddAttributes` for the
+  binder + a `JsonConverter` for save); `SimpleKeyGesture` as `"Control+Shift+S"`
+  (`SimpleKeyGesture.ToSerializedString`/`Parse`; a cleared gesture is written as `"None"` because
+  the binder never assigns null converted values — `SettingsHotkey` normalizes `Key.None` back to
+  null); `Editor.Tools` is a plain `Dictionary<ToolType, SavedToolSettings>`
+  (`SettingsEditor.GetToolSettings` provides the old AutoDictionary lazy-create behaviour).
+- **Explicit-save policy:** settings classes are inert INPC data; every user-visible mutation path
+  saves at the UI layer — MainWindow attaches a PropertyChanged→Save hook per settings tab
+  (incl. one level of nested objects like `TimeOption`), EditorWindow saves after `LastSavePath`
+  changes and on close (tool preferences), HotkeyManager saves on gesture edits, and App saves on
+  exit/shutdown.
+- **Hotkeys decoupled:** `SettingsHotkey` holds only 7 `SimpleKeyGesture` properties.
+  `Clowd.Ui/Services/HotkeyManager.cs` owns the `IGlobalTriggerHost` (SharpHook
+  `GlobalHotkeyHost`), maps `HotkeyId` → `Action` (wired in `App.SetupGlobalHotkeys`), exposes
+  per-hotkey `HotkeyEntry` (gesture write-through + live IsRegistered/Error) for
+  `GlobalTriggerEditor`, supports `Refresh()` and `IsPaused` (gesture capture). The old
+  `GlobalTrigger`/static-Host model was deleted.
+- **RT.* status:** removed from Clowd.Shared entirely; Clowd.Drawing keeps RT for the graphics
+  undo/clipboard serialization (`ClassifySubstitutes.cs` moved into Clowd.Drawing) — replacing that
+  is a later phase.
+- **Tests:** `clowd_ui/Clowd.Shared.Tests` (xunit) proves Save→Load round-trips a non-default graph
+  (Color, gestures incl. cleared, Tools entry, TimeOption, enums).
