@@ -22,6 +22,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
+    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
