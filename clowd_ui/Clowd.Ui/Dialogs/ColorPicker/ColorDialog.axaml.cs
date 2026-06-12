@@ -178,7 +178,13 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
             pathPrevColor.Fill = new SolidColorBrush(PreviousColor.ToColor());
 
-            HandleSet(txtHex, ColorTextHelper.FromHex, (c) => CurrentColor = HslRgbColor.FromColor(c));
+            // value guard: replacing CurrentColor with an RGB round-trip loses hue/saturation
+            // for desaturated colors, so ignore hex input that matches the current color
+            HandleSet(txtHex, ColorTextHelper.FromHex, (c) =>
+            {
+                if (CurrentColor == null || c != CurrentColor.ToColor())
+                    CurrentColor = HslRgbColor.FromColor(c);
+            });
             HandleSet(txtClrR, int.Parse, (c) => CurrentColor.R = c);
             HandleSet(txtClrG, int.Parse, (c) => CurrentColor.G = c);
             HandleSet(txtClrB, int.Parse, (c) => CurrentColor.B = c);
@@ -186,6 +192,16 @@ namespace Clowd.UI.Dialogs.ColorPicker
             HandleSet(txtClrH, double.Parse, (c) => CurrentColor.Hue = c);
             HandleSet(txtClrS, double.Parse, (c) => CurrentColor.Saturation = c / 100d);
             HandleSet(txtClrL, double.Parse, (c) => CurrentColor.Lightness = c / 100d);
+
+            // ValueChanged only fires on user drag, so syncing slider positions back in
+            // UpdateBrushes cannot loop.
+            sliderR.ValueChanged += (s, v) => CurrentColor.R = (int)Math.Round(v);
+            sliderG.ValueChanged += (s, v) => CurrentColor.G = (int)Math.Round(v);
+            sliderB.ValueChanged += (s, v) => CurrentColor.B = (int)Math.Round(v);
+            sliderA.ValueChanged += (s, v) => CurrentColor.Alpha = v;
+            sliderH.ValueChanged += (s, v) => CurrentColor.Hue = v;
+            sliderS.ValueChanged += (s, v) => CurrentColor.Saturation = v;
+            sliderL.ValueChanged += (s, v) => CurrentColor.Lightness = v;
 
             // Reset focus when clicking on anything other than a textbox (the WPF
             // OnPreviewMouseLeftButtonDown + tabReset mechanism).
@@ -286,6 +302,15 @@ namespace Clowd.UI.Dialogs.ColorPicker
             // converter is not ported so the brush is assigned here instead.
             currentSwatch.Background = new SolidColorBrush(rgb);
 
+            var clr = CurrentColor;
+            sliderR.Value = clr.R;
+            sliderG.Value = clr.G;
+            sliderB.Value = clr.B;
+            sliderA.Value = clr.Alpha;
+            sliderH.Value = clr.Hue;
+            sliderS.Value = clr.Saturation;
+            sliderL.Value = clr.Lightness;
+
             TextRgb = ColorTextHelper.GetRgb(CurrentColor);
             TextHsl = ColorTextHelper.GetHsl(CurrentColor);
             UpdateTextComponents();
@@ -359,7 +384,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
             {
                 try
                 {
-                    if (!HandleTextEvents) return;
+                    // TextChanged is dispatcher-posted in Avalonia (unlike WPF), so the
+                    // HandleTextEvents flag cannot mask programmatic writes — the echo arrives
+                    // after the flag is reset. UpdateTextComponents only writes unfocused boxes,
+                    // so a change while unfocused is always an echo, never user input.
+                    if (!HandleTextEvents || !txt.IsFocused) return;
                     set(parse(txt.Text));
                 }
                 catch {; }

@@ -56,12 +56,14 @@
                 </Border>
             </Canvas>
 
-            <local:ColorSlider Grid.Row="1"
+            <!-- Slider values are synced from code-behind (Update / ValueChanged); TwoWay
+                 bindings to CurrentColor.* were unreliable and moved other controls. -->
+            <local:ColorSlider x:Name="HueSlider"
+                               Grid.Row="1"
                                Height="16"
                                Margin="0,8"
                                CornerRadius="2"
-                               ValueMax="360"
-                               Value="{Binding CurrentColor.Hue, Mode=TwoWay}">
+                               ValueMax="360">
                 <local:ColorSlider.SliderBrush>
                     <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
                         <GradientStop Offset="0" Color="Red" />
@@ -83,8 +85,7 @@
                 <local:ColorSlider x:Name="AlphaSlider"
                                    Height="16"
                                    CornerRadius="2"
-                                   ValueMax="1"
-                                   Value="{Binding CurrentColor.Alpha, Mode=TwoWay}" />
+                                   ValueMax="1" />
             </Border>
 
             <TextBox x:Name="txtHex"
