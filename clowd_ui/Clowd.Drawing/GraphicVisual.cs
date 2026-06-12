@@ -58,6 +58,13 @@ namespace Clowd.Drawing
         {
             Graphic = graphic;
             _collection = collection;
+
+            // Graphic hit-testing is geometry-based (ToolPointer.MakeHitTest); the canvas receives
+            // pointer events through its _clickable surface. As a visual-only child (no logical
+            // parent) this control cannot inherit the canvas Cursor, so letting it win pointer
+            // hit-tests would reset the cursor to the system default over every graphic.
+            IsHitTestVisible = false;
+
             UpdateEffect();
         }
 

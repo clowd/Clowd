@@ -95,21 +95,22 @@ namespace Clowd.UI.Helpers
             var menu = new MenuItem();
             menu.Header = Text?.Replace("_", "");
 
-            var gesture = Gesture?.ToKeyGesture();
-            if (gesture == null && !string.IsNullOrEmpty(GestureText))
-            {
-                try
-                {
-                    gesture = KeyGesture.Parse(GestureText);
-                }
-                catch
-                {
-                    // display-only; ignore unparseable gesture text
-                }
-            }
+            if (Gesture != null)
+                menu.InputGesture = Gesture.ToKeyGesture();
 
-            if (gesture != null)
-                menu.InputGesture = gesture;
+            if (!string.IsNullOrEmpty(GestureText))
+            {
+                // KeyGesture cannot carry display texts like "Ctrl+0": digits parse as raw Key enum
+                // values (0 → Key.None, 1 → Key.Cancel) and even Key.D0 renders as "Ctrl+D0". Write
+                // the display text straight into the template's gesture TextBlock instead, so every
+                // item shows the same SimpleKeyGesture-style text ("Ctrl+Z", "Del", "Ctrl+0", ...).
+                var gestureText = GestureText;
+                menu.TemplateApplied += (_, e) =>
+                {
+                    if (e.NameScope.Find<TextBlock>("PART_InputGestureText") is { } textBlock)
+                        textBlock.Text = gestureText;
+                };
+            }
 
             if (Icon != null)
                 menu.Icon = Icon;

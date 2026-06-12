@@ -211,7 +211,7 @@
                 ToolTip.Tip="Crop Image" />
 
             <controls:ToolButton
-                Padding="5"
+                Padding="6"
                 CanToggle="True"
                 IconPath="{StaticResource IconToolPointerFilled}"
                 IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectCursorVisible, Mode=TwoWay}"
@@ -220,28 +220,28 @@
 
             <controls:ToolButton
                 x:Name="btnUpload"
-                Padding="5"
+                Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{Binding CommandUpload}"
                 IconPath="{StaticResource IconClowd}"
                 ToolTip.Tip="Upload&#10;Right-click to choose upload destination." />
 
             <controls:ToolButton
-                Padding="5"
+                Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{Binding CommandCopy}"
                 IconPath="{StaticResource IconCopySmall}"
                 ToolTip.Tip="Copy" />
 
             <controls:ToolButton
-                Padding="4"
+                Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{Binding CommandSave}"
                 IconPath="{StaticResource IconSaveSmall}"
                 ToolTip.Tip="Save" />
 
             <controls:ToolButton
-                Padding="4"
+                Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 CanToggle="True"
                 IconPath="{StaticResource IconPinned}"
@@ -276,7 +276,7 @@
                     CommandParameter="None"
                     IconPath="{StaticResource IconToolNone}"
                     IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=None}"
-                    ToolTip.Tip="Pan Tool (D)&#10;Can also hold SHIFT to enter Pan Mode." />
+                    ToolTip.Tip="Pan Tool (D)&#10;Can also hold SHIFT or SPACE to enter Pan Mode." />
 
                 <controls:ToolButton
                     Command="{Binding SelectToolCommand}"

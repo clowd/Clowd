@@ -71,7 +71,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
             var pos = e.GetPosition(this);
             var max = ValueMax;
             if (Bounds.Width > 0 && max > 0)
-                Value = Math.Max(Math.Min(pos.X / Bounds.Width, 1), 0) * max;
+            {
+                // SetCurrentValue (not a plain local set) so the TwoWay [Binding CurrentColor.Hue]
+                // stays intact and the dragged value is written back to the bound color.
+                SetCurrentValue(ValueProperty, Math.Max(Math.Min(pos.X / Bounds.Width, 1), 0) * max);
+            }
         }
 
         protected override void OnPointerPressed(PointerPressedEventArgs e)

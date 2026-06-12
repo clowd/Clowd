@@ -77,6 +77,45 @@ namespace Clowd.Drawing.Tests
         }
 
         [AvaloniaFact]
+        public void MergableEdit_AfterNonMergableEdit_DoesNotMergeIntoIt()
+        {
+            var (canvas, rect) = CreateCanvasWithRect();
+
+            rect.ObjectColor = Colors.Green;
+            canvas.AddCommandToHistory(false);
+            rect.ObjectColor = Colors.Blue;
+            canvas.AddCommandToHistory(true);
+
+            // the non-mergable step must survive as its own step
+            canvas.Undo();
+            Assert.Equal(Colors.Green, CurrentRect(canvas).ObjectColor);
+            canvas.Undo();
+            Assert.Equal(Colors.Red, CurrentRect(canvas).ObjectColor);
+        }
+
+        [AvaloniaFact]
+        public void MoveToFront_IsItsOwnUndoStep()
+        {
+            var canvas = new DrawingCanvas();
+            var red = new GraphicRectangle(Colors.Red, 2, new Rect(0, 0, 5, 5));
+            var blue = new GraphicRectangle(Colors.Blue, 2, new Rect(10, 10, 5, 5));
+            canvas.GraphicsList.Add(red);
+            canvas.GraphicsList.Add(blue);
+            canvas.AddCommandToHistory(false);
+
+            red.IsSelected = true;
+            canvas.MoveToFront();
+            Assert.Equal(Colors.Blue, Assert.IsType<GraphicRectangle>(canvas.GraphicsList[0]).ObjectColor);
+            Assert.Equal(Colors.Red, Assert.IsType<GraphicRectangle>(canvas.GraphicsList[1]).ObjectColor);
+
+            // a pure z-order change must be undoable
+            Assert.True(CanExecute(canvas.CommandUndo));
+            canvas.Undo();
+            Assert.Equal(Colors.Red, Assert.IsType<GraphicRectangle>(canvas.GraphicsList[0]).ObjectColor);
+            Assert.Equal(Colors.Blue, Assert.IsType<GraphicRectangle>(canvas.GraphicsList[1]).ObjectColor);
+        }
+
+        [AvaloniaFact]
         public void NonMergableEdits_ToSameProperty_DoNotMerge()
         {
             var (canvas, rect) = CreateCanvasWithRect();
@@ -185,6 +224,16 @@ namespace Clowd.Drawing.Tests
             var changes = UndoManager.GetChangedNodes(prev, next);
             Assert.Contains("root/Graphics/a", changes);
             Assert.Contains("root/Graphics/b", changes);
+        }
+
+        [AvaloniaFact]
+        public void Diff_PureReorder_IsReported()
+        {
+            var prev = State("""{"Graphics":[{"id":"a","objectColor":"#FFFF0000"},{"id":"b","objectColor":"#FF00FF00"}]}""");
+            var next = State("""{"Graphics":[{"id":"b","objectColor":"#FF00FF00"},{"id":"a","objectColor":"#FFFF0000"}]}""");
+
+            var changes = UndoManager.GetChangedNodes(prev, next);
+            Assert.Equal(new[] { "root/Graphics/(order)" }, changes);
         }
 
         [AvaloniaFact]

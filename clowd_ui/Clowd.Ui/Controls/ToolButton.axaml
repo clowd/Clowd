@@ -20,7 +20,11 @@
                                VerticalAlignment="Stretch"
                                Fill="{TemplateBinding Background}" />
                     <Border Name="content" Padding="{TemplateBinding Padding}">
-                        <Path Data="{TemplateBinding IconPath}"
+                        <!-- Center the icon: a uniformly-stretched Path is otherwise pinned to the
+                             top-left, which visibly offsets non-square geometries. -->
+                        <Path HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Data="{TemplateBinding IconPath}"
                               Fill="{TemplateBinding Foreground}"
                               Stretch="Uniform" />
                     </Border>

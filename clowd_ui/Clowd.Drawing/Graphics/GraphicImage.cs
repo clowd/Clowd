@@ -441,7 +441,7 @@ namespace Clowd.Drawing.Graphics
 
             if (compositeCursor || normalizeDpi)
             {
-                var rtb = new RenderTargetBitmap(bi.PixelSize, new Vector(96, 96));
+                using var rtb = new RenderTargetBitmap(bi.PixelSize, new Vector(96, 96));
                 using (var ctx = rtb.CreateDrawingContext())
                 {
                     ctx.DrawImage(bi, new Rect(0, 0, bi.PixelSize.Width, bi.PixelSize.Height));
@@ -454,7 +454,12 @@ namespace Clowd.Drawing.Graphics
                     }
                 }
 
-                _imageSource = rtb;
+                // a RenderTargetBitmap is not a readable bitmap — CreateScaledBitmap (obscure cache)
+                // throws "invalid source bitmap type" on it — so decode it back into a plain Bitmap.
+                using var ms = new MemoryStream();
+                rtb.Save(ms);
+                ms.Position = 0;
+                _imageSource = new Bitmap(ms);
             }
             else
             {

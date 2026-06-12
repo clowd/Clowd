@@ -57,8 +57,9 @@ namespace Clowd.Drawing
                 return;
             }
 
-            // 'mergable' prevents this event from being merged with current
-            // but also the next event from being merged with it.
+            // 'mergable=false' prevents this event from being merged with the current step
+            // but also the next event from being merged with this one.
+            var canMergeWithCurrent = _canMergeNext;
             _canMergeNext = mergable;
 
             // do nothing if nothing was changed.
@@ -70,10 +71,11 @@ namespace Clowd.Drawing
 
             // merge the previous/next changes into a single step
             // if only the same properties were changed
-            if (mergable && _canMergeNext && _node?.Changes?.SequenceEqual(nextChanges) == true)
+            if (mergable && canMergeWithCurrent && _node?.Changes?.SequenceEqual(nextChanges) == true)
             {
                 _node.Value = json;
                 _node.Next = null;
+                RaiseStateChangedEvent(_node.Value); // keep session persistence current
                 return;
             }
 
@@ -86,10 +88,11 @@ namespace Clowd.Drawing
         /// <summary>
         /// Computes the set of changed property paths between two state snapshots, at per-property
         /// granularity (one path per changed leaf, recursing into objects/arrays). Array items that
-        /// are objects carrying an "id" property (the graphics) are keyed by that id, so a pure
-        /// reorder produces no changes and per-graphic edits diff against the same graphic; other
-        /// array items are keyed positionally ("item.N"). The undo merge logic compares these sets
-        /// to decide whether consecutive edits collapse into one step.
+        /// are objects carrying an "id" property (the graphics) are keyed by that id, so per-graphic
+        /// edits diff against the same graphic; a pure reorder (same ids, different order — i.e. a
+        /// z-order change) is reported as a single "(order)" path on the array. Other array items
+        /// are keyed positionally ("item.N"). The undo merge logic compares these sets to decide
+        /// whether consecutive edits collapse into one step.
         /// </summary>
         internal static SortedSet<string> GetChangedNodes(JsonObject prev, JsonObject next)
         {
@@ -124,6 +127,21 @@ namespace Clowd.Drawing
 
             IEnumerable<IEnumerable<string>> GetChangedPathsInternal(IEnumerable<string> path, JsonNode prevEl, JsonNode nextEl)
             {
+                // id-keyed matching makes a pure reorder invisible to the per-item diff, but list
+                // order is the z-order of the graphics — report it explicitly. (Adds/removes change
+                // membership and already produce their own paths.)
+                if (prevEl is JsonArray && nextEl is JsonArray)
+                {
+                    var prevNames = NamedChildren(prevEl).Select(c => c.Key).ToList();
+                    var nextNames = NamedChildren(nextEl).Select(c => c.Key).ToList();
+                    if (prevNames.Count == nextNames.Count &&
+                        !prevNames.SequenceEqual(nextNames) &&
+                        new HashSet<string>(prevNames).SetEquals(nextNames))
+                    {
+                        yield return path.Append("(order)");
+                    }
+                }
+
                 Dictionary<string, JsonNode> dict = new();
 
                 // add all of prev properties to dictionary

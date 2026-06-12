@@ -96,24 +96,21 @@ namespace Clowd.Drawing.Tools
             // decision #15: Avalonia defaults to center; WPF rotated around the top-left implicitly
             _txtBox.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
 
-            if (newGraphic)
-            {
-                _txtBox.Text = graphicsText.Body;
-                _txtBox.SelectAll();
-                _oldText = "";
-            }
-            else
-            {
-                _oldText = graphicsText.Body;
-                _txtBox.CaretIndex = int.MaxValue;
-            }
+            _oldText = newGraphic ? "" : graphicsText.Body;
 
             drawingCanvas.Children.Add(_txtBox);
 
             Canvas.SetLeft(_txtBox, graphicsText.Left);
             Canvas.SetTop(_txtBox, graphicsText.Top);
 
-            Dispatcher.UIThread.Post(() => _txtBox?.Focus());
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_txtBox == null)
+                    return;
+                _txtBox.Focus();
+                // all text starts selected, for new graphics and double-click edits alike
+                _txtBox.SelectAll();
+            });
 
             // decision #39: WPF LostFocus + LostKeyboardFocus → LostFocus once + TopLevel.Deactivated
             _txtBox.LostFocus += (_, _) => FinishEdit(drawingCanvas, newGraphic);
