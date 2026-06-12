@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Clowd.UI.Dialogs.MessageDialog"
+        Title="Clowd"
+        Width="420"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="{DynamicResource ApplicationBackgroundBrush}"
+        WindowStartupLocation="CenterOwner">
+
+    <DockPanel LastChildFill="True">
+
+        <!-- button strip -->
+        <Border DockPanel.Dock="Bottom" Background="#18808080">
+            <DockPanel Margin="16,10" LastChildFill="False">
+                <StackPanel x:Name="FooterPanel"
+                            DockPanel.Dock="Left"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Center"
+                            IsVisible="False">
+                    <Ellipse x:Name="FooterIconShape" Width="13" Height="13" VerticalAlignment="Center" />
+                    <TextBlock x:Name="FooterText"
+                               FontSize="11"
+                               MaxWidth="200"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="TrueButton"
+                            MinWidth="80"
+                            HorizontalContentAlignment="Center"
+                            IsDefault="True" />
+                    <Button x:Name="FalseButton"
+                            MinWidth="80"
+                            HorizontalContentAlignment="Center"
+                            IsVisible="False" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- icon + heading + content -->
+        <DockPanel Margin="16,18,16,20" LastChildFill="True">
+            <Border x:Name="IconHost"
+                    DockPanel.Dock="Left"
+                    Width="32" Height="32"
+                    CornerRadius="16"
+                    Margin="0,2,12,0"
+                    VerticalAlignment="Top"
+                    IsVisible="False">
+                <TextBlock x:Name="IconGlyph"
+                           Foreground="White"
+                           FontWeight="Bold"
+                           FontSize="17"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Spacing="8" VerticalAlignment="Center">
+                <TextBlock x:Name="MainInstructionText"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           TextWrapping="Wrap"
+                           IsVisible="False" />
+                <TextBlock x:Name="ContentText"
+                           FontSize="13"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </DockPanel>
+
+    </DockPanel>
+
+</Window>

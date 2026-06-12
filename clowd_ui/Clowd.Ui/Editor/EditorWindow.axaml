@@ -1,0 +1,390 @@
+<local:SystemThemedWindow
+    x:Class="Clowd.UI.EditorWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:colors="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:conv="clr-namespace:Clowd.UI.Converters"
+    xmlns:draw="clr-namespace:Clowd.Drawing;assembly=Clowd.Drawing"
+    xmlns:local="clr-namespace:Clowd.UI"
+    xmlns:util="clr-namespace:Clowd.Util"
+    Title="Edit - Clowd"
+    Width="1050"
+    Height="750"
+    Foreground="White"
+    UseLayoutRounding="True"
+    WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <draw:ToolTypeConverter x:Key="convToolType" />
+        <conv:ColorToBrushConverter x:Key="convColorToBrush" />
+        <conv:EnumMatchToBooleanConverter x:Key="enumMatch" />
+
+        <!--  WPF "InnerToolButtonStyle" (the font preview button)  -->
+        <ControlTheme x:Key="InnerToolButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="#454545" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#666666" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Padding" Value="10,2" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid>
+                        <Rectangle
+                            Name="_bg"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch" />
+                        <Border
+                            Padding="{TemplateBinding Padding}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter
+                                Name="PART_ContentPresenter"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^ /template/ Rectangle#_bg">
+                <Setter Property="Fill" Value="#454545" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Rectangle#_bg">
+                <Setter Property="Fill" Value="#66FFFFFF" />
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid x:Name="rootGrid" Background="#535353">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <controls:DockAndWrapPanel
+            x:Name="PropertiesBar"
+            HorizontalAlignment="Stretch"
+            ItemHeight="30"
+            Orientation="Horizontal">
+            <controls:DockAndWrapPanel.Styles>
+                <Style Selector="StackPanel">
+                    <Setter Property="Margin" Value="4,0,4,0" />
+                    <Setter Property="Height" Value="30" />
+                    <Setter Property="Orientation" Value="Horizontal" />
+                </Style>
+            </controls:DockAndWrapPanel.Styles>
+
+            <StackPanel>
+                <TextBlock VerticalAlignment="Center">
+                    <Run Text="{Binding ElementName=drawingCanvas, Path=SubjectType, Mode=OneWay}" />
+                    <Run FontWeight="Bold" Text="{Binding ElementName=drawingCanvas, Path=SubjectName, Mode=OneWay}" />
+                </TextBlock>
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock VerticalAlignment="Center" Text="Zoom:" />
+                <controls:SpinnerTextBox
+                    DisplayScale="100"
+                    Min="0.1"
+                    SpinAmount="0.1"
+                    Suffix="%"
+                    Value="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}" />
+                <controls:ResetDefaultButton
+                    Margin="4,0,0,0"
+                    CurrentValue="{Binding ElementName=drawingCanvas, Path=ContentScale, Mode=TwoWay}"
+                    DefaultValue="1" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=CanvasBackground}">
+                <TextBlock VerticalAlignment="Center" Text="Canvas:" />
+                <Border
+                    Width="22"
+                    Height="22"
+                    Margin="4,0,0,0"
+                    BorderBrush="Black"
+                    BorderThickness="1">
+                    <Border
+                        Background="{x:Static util:CheckerBrushes.Light}"
+                        BorderBrush="White"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        PointerPressed="backgroundColor_Click">
+                        <Rectangle Fill="{Binding ElementName=drawingCanvas, Path=ArtworkBackground, Mode=OneWay, Converter={StaticResource convColorToBrush}}" />
+                    </Border>
+                </Border>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Stroke}">
+                <TextBlock VerticalAlignment="Center" Text="Stroke:" />
+                <controls:SpinnerTextBox
+                    Min="0"
+                    SnapToWholeNumber="True"
+                    SpinAmount="1"
+                    Suffix="px"
+                    Value="{Binding ElementName=drawingCanvas, Path=LineWidth, Mode=TwoWay}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Color}">
+                <TextBlock VerticalAlignment="Center" Text="Color:" />
+                <Border
+                    Width="22"
+                    Height="22"
+                    Margin="4,0,0,0"
+                    BorderBrush="Black"
+                    BorderThickness="1"
+                    IsVisible="{Binding ElementName=chkColorAuto, Path=!IsChecked}">
+                    <Border
+                        Background="{x:Static util:CheckerBrushes.Light}"
+                        BorderBrush="White"
+                        BorderThickness="1"
+                        Cursor="Hand"
+                        PointerPressed="objectColor_Click">
+                        <Rectangle Fill="{Binding ElementName=drawingCanvas, Path=ObjectColor, Mode=OneWay, Converter={StaticResource convColorToBrush}}" />
+                    </Border>
+                </Border>
+                <StackPanel
+                    Height="20"
+                    Margin="4,0,0,0"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=AutoColor}"
+                    Orientation="Vertical">
+                    <Viewbox Width="10" Height="10">
+                        <CheckBox
+                            x:Name="chkColorAuto"
+                            Margin="0"
+                            Padding="0"
+                            HorizontalAlignment="Center"
+                            MinWidth="0"
+                            MinHeight="0"
+                            IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectColorAuto, Mode=TwoWay}" />
+                    </Viewbox>
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        FontSize="8"
+                        Text="Auto" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Font}">
+                <TextBlock VerticalAlignment="Center" Text="Font:" />
+                <Button
+                    Click="font_Click"
+                    Content="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay}"
+                    FontFamily="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay}"
+                    FontStretch="{Binding ElementName=drawingCanvas, Path=TextFontStretch, Mode=OneWay}"
+                    FontStyle="{Binding ElementName=drawingCanvas, Path=TextFontStyle, Mode=OneWay}"
+                    Theme="{StaticResource InnerToolButtonTheme}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Angle}">
+                <TextBlock VerticalAlignment="Center" Text="Angle:" />
+                <controls:SpinnerTextBox
+                    Max="180"
+                    Min="-180"
+                    SnapToWholeNumber="True"
+                    SpinAmount="10"
+                    Suffix="°"
+                    Value="{Binding ElementName=drawingCanvas, Path=ObjectAngle, Mode=TwoWay}" />
+                <controls:ResetDefaultButton
+                    Margin="4,0,0,0"
+                    CurrentValue="{Binding ElementName=drawingCanvas, Path=ObjectAngle, Mode=TwoWay}"
+                    DefaultValue="0" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=BlurRadius}">
+                <TextBlock VerticalAlignment="Center" Text="Blur:" />
+                <controls:SpinnerTextBox
+                    Min="1"
+                    SnapToWholeNumber="True"
+                    SpinAmount="1"
+                    Suffix="px"
+                    Value="{Binding ElementName=drawingCanvas, Path=BlurRadius, Mode=TwoWay}" />
+            </StackPanel>
+
+            <controls:ToolButton
+                Padding="6"
+                Command="{Binding ElementName=drawingCanvas, Path=CommandCropImage}"
+                IconPath="{StaticResource IconCrop}"
+                IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Crop}"
+                ToolTip.Tip="Crop Image" />
+
+            <controls:ToolButton
+                Padding="5"
+                CanToggle="True"
+                IconPath="{StaticResource IconToolPointerFilled}"
+                IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectCursorVisible, Mode=TwoWay}"
+                IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Cursor}"
+                ToolTip.Tip="Toggle Captured Mouse Cursor" />
+
+            <controls:ToolButton
+                x:Name="btnUpload"
+                Padding="5"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{Binding CommandUpload}"
+                IconPath="{StaticResource IconClowd}"
+                ToolTip.Tip="Upload&#10;Right-click to choose upload destination." />
+
+            <controls:ToolButton
+                Padding="5"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{Binding CommandCopy}"
+                IconPath="{StaticResource IconCopySmall}"
+                ToolTip.Tip="Copy" />
+
+            <controls:ToolButton
+                Padding="4"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{Binding CommandSave}"
+                IconPath="{StaticResource IconSaveSmall}"
+                ToolTip.Tip="Save" />
+
+            <controls:ToolButton
+                Padding="4"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                CanToggle="True"
+                IconPath="{StaticResource IconPinned}"
+                IsChecked="{Binding Topmost, Mode=TwoWay}"
+                ToolTip.Tip="Always on top" />
+
+        </controls:DockAndWrapPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Rectangle
+                Grid.Column="0"
+                Height="1"
+                Margin="4,0,4,0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                Fill="#666666" />
+
+            <WrapPanel
+                x:Name="ToolBar"
+                Grid.Column="0"
+                Margin="0,4,0,0"
+                Orientation="Vertical"
+                UseLayoutRounding="True">
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="None"
+                    IconPath="{StaticResource IconToolNone}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=None}"
+                    ToolTip.Tip="Pan Tool (D)&#10;Can also hold SHIFT to enter Pan Mode." />
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="Pointer"
+                    IconPath="{StaticResource IconToolPointer}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pointer}"
+                    ToolTip.Tip="Selection Tool (S)" />
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="Rectangle"
+                    IconPath="{StaticResource IconToolRectangle}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Rectangle}"
+                    ToolTip.Tip="Rectangle (R)" />
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="FilledRectangle"
+                    IconPath="{StaticResource IconToolFilledRectangle}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=FilledRectangle}"
+                    ToolTip.Tip="Filled Rectangle (F)" />
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="Ellipse"
+                    IconPath="{StaticResource IconToolEllipse}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Ellipse}"
+                    ToolTip.Tip="Ellipse (E)" />
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="Line"
+                    IconPath="{StaticResource IconToolLine}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Line}"
+                    ToolTip.Tip="Line (L)" />
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="Arrow"
+                    IconPath="{StaticResource IconToolArrow}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Arrow}"
+                    ToolTip.Tip="Arrow (A)" />
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="PolyLine"
+                    IconPath="{StaticResource IconToolPolyLine}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=PolyLine}"
+                    ToolTip.Tip="Pencil (P)" />
+
+                <controls:ToolButton
+                    Padding="8"
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="Count"
+                    IconPath="{StaticResource IconToolNumericCount}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Count}"
+                    ToolTip.Tip="Numerical Step Count (N)" />
+
+                <controls:ToolButton
+                    Padding="8"
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="Text"
+                    IconPath="{StaticResource IconToolText}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Text}"
+                    ToolTip.Tip="Text (T)" />
+
+                <controls:ToolButton
+                    Command="{Binding SelectToolCommand}"
+                    CommandParameter="Pixelate"
+                    IconPath="{StaticResource IconToolPixelate}"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pixelate}"
+                    ToolTip.Tip="Obscure (O)" />
+
+                <controls:ToolButton
+                    Command="{Binding ElementName=drawingCanvas, Path=CommandUndo, Mode=OneWay}"
+                    IconPath="{StaticResource IconUndo}"
+                    ToolTip.Tip="Undo (Ctrl+Z)" />
+
+                <controls:ToolButton
+                    Command="{Binding ElementName=drawingCanvas, Path=CommandRedo, Mode=OneWay}"
+                    IconPath="{StaticResource IconRedo}"
+                    ToolTip.Tip="Redo (Ctrl+Y)" />
+
+            </WrapPanel>
+
+            <Border
+                Grid.Column="1"
+                Background="#1e1e1e"
+                ClipToBounds="True">
+                <draw:DrawingCanvas
+                    x:Name="drawingCanvas"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch" />
+            </Border>
+
+        </Grid>
+
+        <Popup
+            x:Name="miniColorPopup"
+            HorizontalOffset="-5"
+            IsLightDismissEnabled="True"
+            Placement="Pointer"
+            VerticalOffset="-5">
+            <colors:MiniColorDialog
+                x:Name="miniColor"
+                Margin="10"
+                Realtime="True" />
+        </Popup>
+
+    </Grid>
+</local:SystemThemedWindow>

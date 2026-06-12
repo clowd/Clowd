@@ -1,0 +1,100 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:Clowd.UI.Controls">
+
+    <!-- Minimal chrome-free TextBox theme for the spinner entry (replaces the WPF
+         "SimpleTextBox" template: a bare content host with Margin 0,2,0,0). -->
+    <ControlTheme x:Key="ClowdSpinnerTextBoxEntry" TargetType="TextBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="CaretBrush" Value="White" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ScrollViewer Name="PART_ScrollViewer"
+                              Margin="0,2,0,0"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled">
+                    <TextPresenter Name="PART_TextPresenter"
+                                   Text="{TemplateBinding Text, Mode=TwoWay}"
+                                   CaretIndex="{TemplateBinding CaretIndex}"
+                                   SelectionStart="{TemplateBinding SelectionStart}"
+                                   SelectionEnd="{TemplateBinding SelectionEnd}"
+                                   TextAlignment="{TemplateBinding TextAlignment}"
+                                   TextWrapping="{TemplateBinding TextWrapping}"
+                                   PasswordChar="{TemplateBinding PasswordChar}"
+                                   RevealPassword="{TemplateBinding RevealPassword}"
+                                   SelectionBrush="{TemplateBinding SelectionBrush}"
+                                   SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                   CaretBrush="{TemplateBinding CaretBrush}" />
+                </ScrollViewer>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- The 16px-wide up/down buttons (replaces the WPF "SimpleButton" template:
+         #33FFFFFF background fading to #66FFFFFF on hover over 0.1s). -->
+    <ControlTheme x:Key="ClowdSpinnerSpinButton" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontSize" Value="6" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="_bg">
+                    <Border.Transitions>
+                        <Transitions>
+                            <BrushTransition Property="Background" Duration="0:0:0.1" />
+                        </Transitions>
+                    </Border.Transitions>
+                    <TextBlock Text="{TemplateBinding Content}" TextAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^ /template/ Border#_bg">
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#_bg">
+            <Setter Property="Background" Value="#66FFFFFF" />
+        </Style>
+    </ControlTheme>
+
+    <!-- 70x22 spinner: #454545 fill, #666666 1px border, centered white text and a
+         16px column of FontSize 6 arrow buttons. -->
+    <ControlTheme x:Key="{x:Type controls:SpinnerTextBox}" TargetType="controls:SpinnerTextBox">
+        <Setter Property="Width" Value="70" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="*,16" RowDefinitions="*,*">
+                    <Border Grid.RowSpan="2"
+                            Grid.ColumnSpan="2"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            CornerRadius="0" />
+                    <TextBox Name="PART_TextBox"
+                             Grid.RowSpan="2"
+                             Theme="{StaticResource ClowdSpinnerTextBoxEntry}"
+                             TextAlignment="Center" />
+                    <Button Name="PART_SpinUp"
+                            Grid.Column="1"
+                            Margin="0,2,2,1"
+                            Content="&#x25B2;"
+                            Theme="{StaticResource ClowdSpinnerSpinButton}" />
+                    <Button Name="PART_SpinDown"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Margin="0,1,2,2"
+                            Content="&#x25BC;"
+                            Theme="{StaticResource ClowdSpinnerSpinButton}" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+</ResourceDictionary>

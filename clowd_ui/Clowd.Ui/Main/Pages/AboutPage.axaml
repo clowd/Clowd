@@ -1,0 +1,48 @@
+<UserControl
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Class="Clowd.UI.Pages.AboutPage">
+
+    <ScrollViewer>
+        <StackPanel Margin="0,0,24,24" Spacing="8">
+            <Viewbox Width="60" HorizontalAlignment="Left">
+                <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="#00AFF0" />
+            </Viewbox>
+
+            <TextBlock Classes="Title" Text="Clowd" />
+            <TextBlock Classes="Base" Text="{Binding ClowdVersion}" />
+
+            <TextBlock Classes="Body"
+                       Text="Ever wanted a screen capturing tool that just had everything you needed and doesn't need to be tweaked endlessly? This is what Clowd strives to be." />
+            <TextBlock Classes="Body"
+                       Text="From quick but powerful pixel-perfect screen selection and extremely fast 1-button screen recording, to editing/composing images and uploading to share." />
+            <TextBlock Classes="Body"
+                       Text="My settings (this window) can be accessed from the tray icon. Explore to see what I can do!" />
+
+            <HyperlinkButton Padding="0" Content="Read more online" NavigateUri="https://github.com/clowd/Clowd" />
+
+            <TextBlock Classes="Body"
+                       Text="Clowd is made possible in part by each of the following open source projects -" />
+
+            <ItemsControl Margin="12,0,0,0" ItemsSource="{Binding Dependencies}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Center"
+                                       Classes="Body"
+                                       Text="{Binding LibraryName}" />
+                            <HyperlinkButton Margin="12,0,0,0"
+                                             Padding="0"
+                                             VerticalAlignment="Center"
+                                             Command="{Binding ClickLicenseCommand}"
+                                             Content="(see license)" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Classes="Body"
+                       Text="Missed your project in this list? Feel free to reach out through our GitHub." />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

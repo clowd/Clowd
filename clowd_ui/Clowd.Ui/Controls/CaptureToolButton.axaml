@@ -1,0 +1,81 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:Clowd.UI.Controls">
+
+    <!-- Ported from the WPF App.xaml implicit CaptureToolButton style (50x50, stacked icon +
+         text content, optional overlay, #33FFFFFF hover veil fading over 0.1s, and a 5s
+         infinite background opacity pulse 0.2 -> 0.8 -> 0.2 while PulseBackground is set). -->
+    <ControlTheme x:Key="{x:Type controls:CaptureToolButton}" TargetType="controls:CaptureToolButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Height" Value="50" />
+        <Setter Property="Width" Value="50" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Rectangle Name="_bg" Fill="{TemplateBinding Background}" />
+                    <Grid Name="contentGrid">
+                        <StackPanel HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Orientation="Vertical">
+                            <Viewbox Width="{TemplateBinding IconSize}"
+                                     Height="{TemplateBinding IconSize}"
+                                     IsVisible="{TemplateBinding ShowAlternateIcon, Converter={x:Static BoolConverters.Not}}">
+                                <Path Data="{TemplateBinding IconPath}"
+                                      Fill="{TemplateBinding Foreground}"
+                                      Stretch="Uniform" />
+                            </Viewbox>
+                            <Viewbox Width="{TemplateBinding IconSize}"
+                                     Height="{TemplateBinding IconSize}"
+                                     IsVisible="{TemplateBinding ShowAlternateIcon}">
+                                <Path Data="{TemplateBinding IconPathAlternate}"
+                                      Fill="{TemplateBinding Foreground}"
+                                      Stretch="Uniform" />
+                            </Viewbox>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}" />
+                        </StackPanel>
+                        <ContentPresenter Content="{TemplateBinding Overlay}" />
+                    </Grid>
+                    <Rectangle Name="_hover" Fill="#33FFFFFF">
+                        <Rectangle.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                            </Transitions>
+                        </Rectangle.Transitions>
+                    </Rectangle>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Rectangle#_hover">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^[ShowHover=True]:pointerover /template/ Rectangle#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:disabled /template/ Grid#contentGrid">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="^[PulseBackground=True][IsEnabled=True] /template/ Rectangle#_bg">
+            <Style.Animations>
+                <Animation Duration="0:0:5" IterationCount="Infinite">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.2" />
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Opacity" Value="0.8" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.2" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>
