@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using Avalonia.Input;
 using RT.Serialization;
@@ -6,33 +7,79 @@ using RT.Serialization;
 namespace Clowd.Config
 {
     /// <summary>
-    /// STUB: no OS hotkey registration is performed in this migration. The gesture is kept
-    /// (and persisted) so the settings UI can render it alongside the "not supported" status.
+    /// A serializable manager for global hotkeys. The gesture is the only persisted value; actual OS
+    /// registration is delegated to the pluggable <see cref="Host"/> (installed by the UI layer at
+    /// startup) so this library never references a platform hook itself. While no host is installed,
+    /// triggers behave like inert stubs: never registered, <see cref="TriggerExecuted"/> never fires.
     /// </summary>
     public sealed class GlobalTrigger : SimpleNotifyObject, IDisposable
     {
         public static bool IsPaused { get; set; }
+
+        private const string ERROR_NO_HOST = "Global hotkeys are not supported in this build.";
+
+        private static readonly List<GlobalTrigger> Instances = new();
+        private static IGlobalTriggerHost _host;
+
+        /// <summary>
+        /// The OS hotkey backend. Installing (or clearing) the host re-evaluates the registration of
+        /// every live trigger. Must be accessed from the UI thread.
+        /// </summary>
+        public static IGlobalTriggerHost Host
+        {
+            get => _host;
+            set
+            {
+                if (ReferenceEquals(_host, value))
+                    return;
+
+                _host = value;
+                foreach (var inst in Instances.ToArray())
+                    inst.RefreshHotkey();
+            }
+        }
 
         public string KeyGestureText => KeyGesture?.ToString();
 
         public SimpleKeyGesture KeyGesture
         {
             get => _keyGesture;
-            set => Set(ref _keyGesture, value, nameof(KeyGesture), nameof(KeyGestureText));
+            set
+            {
+                if (Set(ref _keyGesture, value, nameof(KeyGesture), nameof(KeyGestureText)))
+                    RefreshHotkey();
+            }
         }
 
-        public bool IsRegistered => false;
+        public bool IsRegistered
+        {
+            get => _isRegistered;
+            private set => Set(ref _isRegistered, value);
+        }
 
-        public string Error => "Global hotkeys are not supported in this build.";
+        public string Error
+        {
+            get => _error;
+            private set => Set(ref _error, value);
+        }
 
         public event EventHandler TriggerExecuted
         {
-            add => _triggerExecuted += value; // never fires in this build
+            add
+            {
+                _triggerExecuted += value;
+                if (!IsRegistered)
+                    RefreshHotkey();
+            }
             remove => _triggerExecuted -= value;
         }
 
         private SimpleKeyGesture _keyGesture; // only persisted value
         [ClassifyIgnore] private EventHandler _triggerExecuted;
+        [ClassifyIgnore] private bool _isRegistered;
+        [ClassifyIgnore] private string _error = ERROR_NO_HOST;
+        [ClassifyIgnore] private IGlobalTriggerRegistration _registration;
+        [ClassifyIgnore] private bool _disposed;
 
         public GlobalTrigger(Key key, KeyModifiers modifier)
             : this(new SimpleKeyGesture(key, modifier))
@@ -49,11 +96,78 @@ namespace Clowd.Config
         public GlobalTrigger(SimpleKeyGesture gesture)
         {
             _keyGesture = gesture;
+            Instances.Add(this);
+        }
+
+        private void RefreshHotkey()
+        {
+            if (_registration != null)
+            {
+                _registration.StatusChanged -= OnRegistrationStatusChanged;
+                _registration.Dispose();
+                _registration = null;
+            }
+
+            if (_disposed)
+                return;
+
+            if (_host == null)
+            {
+                IsRegistered = false;
+                Error = ERROR_NO_HOST;
+                return;
+            }
+
+            if (_triggerExecuted == null)
+            {
+                // do not register if nothing is listening (matches the WPF behaviour)
+                IsRegistered = false;
+                Error = "";
+                return;
+            }
+
+            if (_keyGesture == null || _keyGesture.Key == Key.None)
+            {
+                IsRegistered = false;
+                Error = "Gesture is empty.";
+                return;
+            }
+
+            _registration = _host.RegisterTrigger(_keyGesture, OnHostTriggerExecuted);
+            _registration.StatusChanged += OnRegistrationStatusChanged;
+            OnRegistrationStatusChanged(_registration, EventArgs.Empty);
+        }
+
+        private void OnRegistrationStatusChanged(object sender, EventArgs e)
+        {
+            if (!ReferenceEquals(sender, _registration))
+                return;
+
+            IsRegistered = _registration.IsRegistered;
+            Error = _registration.Error ?? "";
+        }
+
+        private void OnHostTriggerExecuted()
+        {
+            if (!IsPaused && !_disposed)
+                _triggerExecuted?.Invoke(this, EventArgs.Empty);
         }
 
         public void Dispose()
         {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            Instances.Remove(this);
             _triggerExecuted = null;
+
+            if (_registration != null)
+            {
+                _registration.StatusChanged -= OnRegistrationStatusChanged;
+                _registration.Dispose();
+                _registration = null;
+            }
         }
 
         public override string ToString()

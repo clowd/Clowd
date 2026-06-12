@@ -1,0 +1,195 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using Avalonia.Threading;
+using Clowd.PlatformUtil;
+using Clowd.UI.Helpers;
+
+namespace Clowd.UI
+{
+    /// <summary>
+    /// Locates the external Rust capture binary (<c>clowd_capture_wgpu</c>, see CAPTURE_PROTOCOL.md).
+    /// Probe order: the <c>CLOWD_CAPTURE_PATH</c> environment variable, then alongside the Clowd.Ui
+    /// executable (release layout), then walking up from the app base directory to a cargo workspace
+    /// root and probing <c>target/debug</c> followed by <c>target/release</c> (debug-time layout).
+    /// </summary>
+    public static class CaptureBinaryLocator
+    {
+        public const string EnvVarName = "CLOWD_CAPTURE_PATH";
+
+        public static string BinaryFileName =>
+            OperatingSystem.IsWindows() ? "clowd_capture_wgpu.exe" : "clowd_capture_wgpu";
+
+        public static string Resolve() =>
+            Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory);
+
+        /// <summary>Testable overload. Returns null when the binary cannot be found.</summary>
+        public static string Resolve(string envVarValue, string baseDirectory)
+        {
+            // (a) explicit override via environment variable
+            if (!String.IsNullOrWhiteSpace(envVarValue) && File.Exists(envVarValue))
+                return Path.GetFullPath(envVarValue);
+
+            // (b) next to the Clowd.Ui executable (release layout copies the binary alongside)
+            var local = Path.Combine(baseDirectory, BinaryFileName);
+            if (File.Exists(local))
+                return Path.GetFullPath(local);
+
+            // (c) walk up to a directory containing Cargo.toml (the cargo workspace root) and
+            // probe target/debug, then target/release. Keep walking if a Cargo.toml has no
+            // built binary (a crate manifest may sit below the workspace root that owns target/).
+            var dir = new DirectoryInfo(Path.GetFullPath(baseDirectory));
+            while (dir != null)
+            {
+                if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
+                {
+                    var debug = Path.Combine(dir.FullName, "target", "debug", BinaryFileName);
+                    if (File.Exists(debug))
+                        return debug;
+
+                    var release = Path.Combine(dir.FullName, "target", "release", BinaryFileName);
+                    if (File.Exists(release))
+                        return release;
+                }
+
+                dir = dir.Parent;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="IScreenCapturePage"/> backed by the external Rust capture process
+    /// (CAPTURE_PROTOCOL.md). Mirrors the WPF CaptureWindow.SessionCaptureImpl dispatch: a
+    /// completed capture (session.json present) loads the session, names it "Screenshot" and
+    /// opens the editor; a cancelled capture (no session.json) deletes the pre-created
+    /// session directory. The protocol has no upload/save callback — COPY/SAVE are handled
+    /// inside the capturer itself and never produce a session.
+    /// </summary>
+    internal sealed class ScreenCapturePage : IScreenCapturePage
+    {
+        public event EventHandler Closed;
+
+        // one capture process at a time, across all page instances.
+        private static int _captureActive;
+
+        public async void Open(ScreenRect captureArea)
+        {
+            // the protocol has no region/fullscreen hint — the capturer always starts with
+            // free region selection, so captureArea is intentionally ignored.
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                var area = captureArea;
+                Dispatcher.UIThread.Post(() => Open(area));
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref _captureActive, 1, 0) != 0)
+            {
+                Debug.WriteLine("Screen capture is already in progress; ignoring re-entrant request.");
+                return;
+            }
+
+            try
+            {
+                var binary = CaptureBinaryLocator.Resolve();
+                if (binary == null)
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
+                        $"The screen capture binary ({CaptureBinaryLocator.BinaryFileName}) could not be found. " +
+                        $"Run 'cargo build' in the clowd-rust repository, or set the {CaptureBinaryLocator.EnvVarName} " +
+                        "environment variable to its location.",
+                        "Screen capture unavailable");
+                    return;
+                }
+
+                Debug.WriteLine("Resolved capture binary: " + binary);
+
+                var sessionDir = SessionManager.Current.GetNextSessionDirectory();
+                Directory.CreateDirectory(sessionDir);
+
+                var psi = new ProcessStartInfo(binary)
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = Path.GetDirectoryName(binary),
+                };
+                psi.ArgumentList.Add("--session-dir");
+                psi.ArgumentList.Add(sessionDir);
+
+                using var process = Process.Start(psi);
+                if (process == null)
+                    throw new InvalidOperationException("Failed to start capture process: " + binary);
+
+                await process.WaitForExitAsync();
+
+                var session = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
+                if (session != null)
+                    EditorWindow.ShowSession(session);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Screen capture failed: " + ex);
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.Message,
+                    "An error occurred while capturing the screen");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _captureActive, 0);
+                Closed?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        public void Close()
+        {
+            // the capture process owns its own lifetime (Escape / X closes it); nothing to do here.
+            Closed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Post-exit handling for a capture session directory, factored out of the page so it is
+    /// testable without spawning the capture process.
+    /// </summary>
+    public static class CaptureSessionDispatcher
+    {
+        /// <summary>
+        /// Inspects <paramref name="sessionDir"/> after the capture process has exited.
+        /// If session.json exists the capture succeeded: the session is loaded (and registered
+        /// with <see cref="SessionManager"/>), renamed to "Screenshot" and returned — the caller
+        /// then opens it in the editor. Otherwise the capture was cancelled: the pre-created
+        /// directory is deleted and null is returned.
+        /// </summary>
+        public static SessionInfo ProcessFinishedSession(string sessionDir)
+        {
+            var jsonPath = Path.Combine(sessionDir, "session.json");
+            if (File.Exists(jsonPath))
+            {
+                var session = SessionManager.Current.GetSessionFromPath(jsonPath);
+                if (session != null)
+                {
+                    // the legacy C# shell named sessions after the capture callback fired.
+                    session.Name = "Screenshot";
+                    return session;
+                }
+
+                Debug.WriteLine("session.json exists but the session could not be loaded: " + jsonPath);
+                return null;
+            }
+
+            // cancelled — nothing was written; remove the directory we created.
+            try
+            {
+                if (Directory.Exists(sessionDir))
+                    Directory.Delete(sessionDir, true);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to delete cancelled session directory: " + ex);
+            }
+
+            return null;
+        }
+    }
+}

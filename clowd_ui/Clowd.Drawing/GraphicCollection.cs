@@ -158,12 +158,30 @@ namespace Clowd.Drawing
                 });
             }
 
-            // draw all graphics (without any selection handles etc)
+            // draw all graphics (without any selection handles etc). each visual is pinned at
+            // (0,0) spanning the whole bitmap — RenderTargetBitmap.Render culls visuals whose
+            // arranged rect misses the target (zero-sized or offset out of view), so the
+            // graphic-space translation happens inside GraphicVisual.Render instead.
+            // NOTE: per-graphic DropShadowEffect is not honored by RenderTargetBitmap.Render
+            // (immediate path; compositor-only feature) — so shadows are baked into bitmaps via
+            // ShadowRenderer and composited directly under each graphic, preserving z-order.
             foreach (var g in gl)
             {
-                var vis = new GraphicVisual(g) { ObjectOnly = true };
-                Canvas.SetLeft(vis, -bounds.Left);
-                Canvas.SetTop(vis, -bounds.Top);
+                var vis = new GraphicVisual(g)
+                {
+                    ObjectOnly = true,
+                    Width = width,
+                    Height = height,
+                    ObjectOffset = new Vector(-bounds.Left, -bounds.Top),
+                    Effect = null, // ignored by RTB.Render today; cleared so a future compositing backend can't double the shadow
+                };
+
+                if (g.DropShadowEffect)
+                {
+                    vis.ShadowBitmap = ShadowRenderer.Render(g, out var shadowPos);
+                    vis.ShadowPosition = shadowPos;
+                }
+
                 canvas.Children.Add(vis);
             }
 

@@ -21,6 +21,7 @@ namespace Clowd
 
         private MutexArgsForwarder _processor;
         private TrayIcon _trayIcon;
+        private GlobalHotkeyHost _hotkeyHost;
         private bool _exiting;
 
         public override void Initialize()
@@ -54,9 +55,16 @@ namespace Clowd
                 SetupTrayIcon();
 
                 // rebuild the tray menu when any hotkey gesture changes so the appended gesture
-                // text stays current (decision table #48 / §6).
-                SettingsRoot.Current.Hotkeys.PropertyChanged +=
-                    (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
+                // text stays current (decision table #48 / §6). IsRegistered/Error are live
+                // status updates bubbled from the hotkey host and don't affect menu headers.
+                SettingsRoot.Current.Hotkeys.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName is nameof(GlobalTrigger.IsRegistered) or nameof(GlobalTrigger.Error))
+                        return;
+                    Dispatcher.UIThread.Post(SetupTrayIcon);
+                };
+
+                SetupGlobalHotkeys();
 
                 // start receiving command line arguments forwarded from secondary instances
                 _processor.Ready();
@@ -146,6 +154,10 @@ namespace Clowd
                 {
                     Icon = AppStyles.AppIcon,
                     ToolTipText = "Clowd",
+                    // the macOS native-menu exporter binds to the first Menu instance and
+                    // throws "The menu being updated does not match" if it is replaced, so
+                    // this single NativeMenu is only ever mutated in place (below).
+                    Menu = new NativeMenu(),
                 };
 
                 // decision table #48: no double-click on Avalonia TrayIcon — a single click
@@ -162,7 +174,8 @@ namespace Clowd
                 return String.IsNullOrEmpty(g) ? header : $"{header} ({g})";
             }
 
-            var menu = new NativeMenu();
+            var menu = _trayIcon.Menu;
+            menu.Items.Clear();
 
             var capture = new NativeMenuItem(WithGesture("Capture Screen", SettingsRoot.Current.Hotkeys.CaptureRegionShortcut));
             capture.Click += async (s, e) =>
@@ -196,13 +209,50 @@ namespace Clowd
             var exit = new NativeMenuItem("Exit");
             exit.Click += async (s, e) => await ExitAppWithConfirmation();
             menu.Add(exit);
-
-            _trayIcon.Menu = menu;
         }
 
         public void StartCapture(PlatformUtil.ScreenRect region = null)
         {
             PageManager.Current.GetScreenCapturePage().Open(region);
+        }
+
+        /// <summary>
+        /// Wires the <see cref="GlobalTrigger"/> actions (mirroring the WPF App.SetupSettings wiring,
+        /// adapted to what exists in this build) and installs the SharpHook-backed
+        /// <see cref="GlobalHotkeyHost"/> as <see cref="GlobalTrigger.Host"/>. Installing the host
+        /// registers every trigger that has both a gesture and a listener; the OS keyboard hook itself
+        /// starts lazily on the first such registration, so no hook runs if no gestures are set.
+        /// </summary>
+        private void SetupGlobalHotkeys()
+        {
+            var keys = SettingsRoot.Current.Hotkeys;
+
+            // capture/upload/recording are provided by the separate Rust process (or not yet ported)
+            // — those triggers route to the existing stub page or a NiceDialog notice.
+            keys.FileUploadShortcut.TriggerExecuted += (s, e) => NiceDialog.ShowNoticeAsync(
+                null, NiceDialogIcon.Information, "Upload providers are not available in this build.", "Upload unavailable");
+            keys.ClipboardUploadShortcut.TriggerExecuted += (s, e) => NiceDialog.ShowNoticeAsync(
+                null, NiceDialogIcon.Information, "Upload providers are not available in this build.", "Upload unavailable");
+            keys.CaptureRegionShortcut.TriggerExecuted += (s, e) => StartCapture();
+            keys.CaptureFullscreenShortcut.TriggerExecuted += (s, e) => StartCapture();
+            keys.CaptureActiveShortcut.TriggerExecuted += (s, e) => StartCapture();
+            keys.DrawOnScreenShortcut.TriggerExecuted += (s, e) => PageManager.Current.GetLiveDrawPage().Open();
+            keys.StartStopRecordingShortcut.TriggerExecuted += (s, e) => NiceDialog.ShowNoticeAsync(
+                null, NiceDialogIcon.Information, "Screen recording is not available in this build.", "Recording unavailable");
+
+            _hotkeyHost = new GlobalHotkeyHost();
+            GlobalTrigger.Host = _hotkeyHost;
+        }
+
+        private void ShutdownGlobalHotkeys()
+        {
+            try
+            {
+                GlobalTrigger.Host = null;
+                _hotkeyHost?.Dispose();
+                _hotkeyHost = null;
+            }
+            catch { }
         }
 
         public async Task ExitAppWithConfirmation()
@@ -234,6 +284,8 @@ namespace Clowd
             // (EditorWindow.Closing renders the session preview and clears OpenEditor, §5.7).
             CloseAllWindows();
 
+            ShutdownGlobalHotkeys();
+
             try { SettingsRoot.Current?.Save(); }
             catch { }
 
@@ -252,6 +304,8 @@ namespace Clowd
             // Closing persistence runs (§5.7), persist settings, release the single-instance
             // pipe, and let the shutdown proceed.
             CloseAllWindows();
+
+            ShutdownGlobalHotkeys();
 
             try { SettingsRoot.Current?.Save(); }
             catch { }

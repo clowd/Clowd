@@ -17,8 +17,12 @@ namespace Clowd.Drawing.Tools
 {
     internal class ToolText : ToolBase
     {
-        // alignment fudge so the TextBox text lines up with the rendered GraphicText body (re-tuned in WP15)
-        internal const double TEXTBOX_ALIGN_X = -2;
+        // Alignment fudge so the TextBox text lines up with the rendered GraphicText body (re-tuned in
+        // WP15). WPF needed -2 because its TextBox kept a 2px internal inset even with Style=null;
+        // Avalonia's chrome-less ControlTheme below (Padding 0, template = ScrollViewer+TextPresenter)
+        // has no inset, so the correct value here is 0 — measured empirically by diffing rendered vs.
+        // edit-mode frames (leftmost text ink matched exactly; Y needed no fudge in either port).
+        internal const double TEXTBOX_ALIGN_X = 0;
 
         private GraphicText _newText;
         private GraphicText _editText;

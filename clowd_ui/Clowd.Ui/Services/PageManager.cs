@@ -69,7 +69,9 @@ namespace Clowd.UI
 
         public IScreenCapturePage GetScreenCapturePage()
         {
-            return new StubScreenCapturePage();
+            // backed by the external Rust capture process (CAPTURE_PROTOCOL.md); the page
+            // itself guards against concurrent captures, so a fresh instance per call is fine.
+            return new ScreenCapturePage();
         }
 
         private T GetOrCreate<T>(Action closing = null) where T : IPage
@@ -96,24 +98,6 @@ namespace Clowd.UI
                     closing();
             });
             instance.Closed += handler;
-        }
-
-        // screen capture is provided by the separate Rust capture process in this build —
-        // this stub just logs and immediately reports itself closed.
-        private sealed class StubScreenCapturePage : IScreenCapturePage
-        {
-            public event EventHandler Closed;
-
-            public void Open(ScreenRect captureArea)
-            {
-                Debug.WriteLine($"IScreenCapturePage.Open({captureArea}) — screen capture is not available in this build.");
-                Closed?.Invoke(this, EventArgs.Empty);
-            }
-
-            public void Close()
-            {
-                Closed?.Invoke(this, EventArgs.Empty);
-            }
         }
 
         // LiveDraw was dropped in the Avalonia migration.
