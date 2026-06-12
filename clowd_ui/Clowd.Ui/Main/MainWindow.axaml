@@ -1,6 +1,7 @@
 <ui:SystemThemedWindow
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:u="https://irihi.tech/ursa"
     xmlns:ui="using:Clowd.UI"
     x:Class="Clowd.UI.MainWindow"
     Title="Clowd"
@@ -9,7 +10,7 @@
     WindowStartupLocation="CenterScreen">
 
     <!-- Replaces the WPFUI NavigationFluent / Breadcrumb / Frame shell (decision table #53):
-         ListBox navigation on the left + a cached ContentControl hosting the pages. -->
+         Ursa NavMenu navigation on the left + a cached ContentControl hosting the pages. -->
     <Grid Margin="12,6,0,12" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
 
         <Grid Grid.Row="0" Grid.Column="0" Margin="6,0,0,24" ColumnDefinitions="Auto,*">
@@ -22,21 +23,20 @@
             </StackPanel>
         </Grid>
 
-        <ListBox x:Name="NavList"
-                 Grid.Row="1"
-                 Grid.Column="0"
-                 Margin="0,0,12,0"
-                 MinWidth="150"
-                 Background="Transparent">
-            <ListBoxItem Content="Recent" Tag="RecentSessions" />
-            <ListBoxItem Content="General" Tag="SettingsGeneral" />
-            <ListBoxItem Content="Hotkeys" Tag="SettingsHotkeys" />
-            <ListBoxItem Content="Capture" Tag="SettingsCapture" />
-            <ListBoxItem Content="Editor" Tag="SettingsEditor" />
-            <ListBoxItem Content="Uploads" Tag="SettingsUploads" />
-            <ListBoxItem Content="Video" Tag="SettingsVideo" />
-            <ListBoxItem Content="About" Tag="About" />
-        </ListBox>
+        <u:NavMenu x:Name="NavList"
+                   Grid.Row="1"
+                   Grid.Column="0"
+                   Margin="0,0,12,0"
+                   MinWidth="150">
+            <u:NavMenuItem Header="Recent" Tag="RecentSessions" />
+            <u:NavMenuItem Header="General" Tag="SettingsGeneral" />
+            <u:NavMenuItem Header="Hotkeys" Tag="SettingsHotkeys" />
+            <u:NavMenuItem Header="Capture" Tag="SettingsCapture" />
+            <u:NavMenuItem Header="Editor" Tag="SettingsEditor" />
+            <u:NavMenuItem Header="Uploads" Tag="SettingsUploads" />
+            <u:NavMenuItem Header="Video" Tag="SettingsVideo" />
+            <u:NavMenuItem Header="About" Tag="About" />
+        </u:NavMenu>
 
         <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" RowDefinitions="Auto,*">
             <TextBlock x:Name="PageTitle" Classes="Subtitle" Margin="0,0,0,18" />

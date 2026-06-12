@@ -7,6 +7,7 @@ mod image_extract;
 mod interaction;
 mod render;
 mod selection;
+mod session_output;
 mod settings;
 mod sync;
 mod system;
@@ -22,7 +23,11 @@ extern crate anyhow;
 
 use std::sync::Arc;
 
+use clap::Parser;
+
 fn main() -> anyhow::Result<()> {
+    let args = settings::CliArgs::parse();
+
     let _ = simplelog::TermLogger::init(
         log::LevelFilter::Info,
         simplelog::Config::default(),
@@ -32,7 +37,10 @@ fn main() -> anyhow::Result<()> {
 
     system::SystemInterop::init();
 
-    let settings = Arc::new(settings::CapturerSettings::default());
+    let settings = Arc::new(args.into_settings());
+    if let Some(dir) = &settings.session_dir {
+        info!("session mode: payload will be written to {:?}", dir);
+    }
     let session = capture::session::CaptureSession::new(settings)?;
 
     #[cfg(target_os = "macos")]

@@ -42,6 +42,8 @@ namespace Clowd.UI.Pages
         private const string _nugetPackages = @"
 Avalonia                            https://github.com/AvaloniaUI/Avalonia/blob/master/licence.md
 Avalonia.Fonts.Inter                https://github.com/rsms/inter/blob/master/LICENSE.txt
+Semi.Avalonia                       https://github.com/irihitech/Semi.Avalonia/blob/main/LICENSE
+Irihi.Ursa                          https://github.com/irihitech/Ursa.Avalonia/blob/main/LICENSE
 Newtonsoft.Json                     https://licenses.nuget.org/MIT
 RT.Serialization.Binary             https://github.com/RT-Projects/RT.Util/blob/master/LICENSE
 RT.Serialization.Xml                https://github.com/RT-Projects/RT.Util/blob/master/LICENSE

@@ -18,6 +18,7 @@ use crate::render::protocol::PeekCommand;
 use crate::render::window::{WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
+use crate::session_output::write_session;
 use crate::settings::CapturerSettings;
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
@@ -416,12 +417,37 @@ impl App {
                     }
                 }
             }
+            Command::Edit => {
+                // EDIT writes the session payload for the shell to open
+                // in its editor (CAPTURE_PROTOCOL.md). Without a
+                // --session-dir there is no shell listening — ignore.
+                let Some(session_dir) = self.settings.session_dir.clone() else {
+                    log::info!("command Edit ignored: no --session-dir provided");
+                    return;
+                };
+                self.hide_all_windows();
+                let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
+                    (Some(sel), Some(buf)) => write_session(&session_dir, sel, buf, active_peek_image, cursor_visible),
+                    _ => ActionResult::Failed("No selection or buffer".into()),
+                };
+                match result {
+                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Failed(msg) => {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Session Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                            self.show_all_windows();
+                        } else {
+                            event_loop.exit();
+                        }
+                    }
+                }
+            }
             Command::Reset => self.handle_reset(window_id),
             Command::Exit => {
                 self.hide_all_windows();
                 event_loop.exit();
             }
-            Command::Upload | Command::Edit | Command::Video => {
+            Command::Upload | Command::Video => {
                 log::info!("command {:?} not yet implemented", command);
             }
         }
@@ -574,7 +600,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, mut event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let this_monitor_bounds = match self.windows.get(&id) {
             Some(h) => h.monitor_bounds(),
             None => return,
@@ -597,6 +623,21 @@ impl ApplicationHandler for App {
             } => {
                 self.hide_all_windows();
                 event_loop.exit();
+            }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        state: ElementState::Pressed,
+                        logical_key: Key::Named(NamedKey::Enter),
+                        ..
+                    },
+                ..
+            } => {
+                // Mirrors the Dx capturer: Return acts as the default
+                // accept ("open in editor") once a selection is made.
+                if self.input.captured {
+                    self.dispatch_command(Command::Edit, event_loop, id);
+                }
             }
             WindowEvent::KeyboardInput {
                 event:

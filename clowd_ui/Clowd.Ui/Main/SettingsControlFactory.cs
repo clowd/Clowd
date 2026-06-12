@@ -122,7 +122,7 @@ namespace Clowd.UI.Config
                 var txt = SimpleControlBinding(new TextBox(), pd, TextBox.TextProperty);
                 if (pd.Name.EndsWith("Directory"))
                 {
-                    var btn = ButtonControl("Browse", async (s, e) =>
+                    var btn = ButtonControl("Browse", "Secondary", async (s, e) =>
                     {
                         var storage = _wndFn()?.StorageProvider;
                         if (storage == null)
@@ -200,7 +200,7 @@ namespace Clowd.UI.Config
 
             if (Is(pd, typeof(AutoDictionary<,>)))
             {
-                return ButtonControl("Reset", async (s, e) =>
+                return ButtonControl("Reset", "Danger", async (s, e) =>
                 {
                     if (await NiceDialog.ShowYesNoPromptAsync(s as Visual, NiceDialogIcon.Warning,
                             "Are you sure you wish to reset these settings to defaults?"))
@@ -340,6 +340,7 @@ namespace Clowd.UI.Config
             {
                 var panel = new DockPanel();
                 var reset = new Button();
+                reset.Classes.Add("Tertiary"); // Semi tertiary button for the low-emphasis clear action
                 DockPanel.SetDock(reset, Dock.Right);
                 reset.Margin = new Thickness(5, 0, 0, 0);
                 reset.Padding = new Thickness(10, 0, 10, 0);
@@ -355,13 +356,15 @@ namespace Clowd.UI.Config
             }
         }
 
-        Control ButtonControl(string buttonText, EventHandler<RoutedEventArgs> buttonClick, Control top = null, Control right = null,
-            Control bottom = null)
+        Control ButtonControl(string buttonText, string buttonClass, EventHandler<RoutedEventArgs> buttonClick, Control top = null,
+            Control right = null, Control bottom = null)
         {
             StackPanel panel = new StackPanel();
             panel.Orientation = Orientation.Vertical;
 
             var btn = new Button();
+            if (!String.IsNullOrEmpty(buttonClass))
+                btn.Classes.Add(buttonClass); // Semi style class (Secondary/Tertiary/Danger/...)
             btn.Margin = new Thickness(0, top == null ? 0 : 5, right == null ? 0 : 5, bottom == null ? 0 : 5);
             btn.Content = buttonText;
             btn.Click += buttonClick;

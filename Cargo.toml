@@ -16,6 +16,7 @@ rust-version = "1.75"
 
 [workspace.dependencies]
 anyhow = "1.0"
+clap = "4.6"
 image = { version = "0.25", default-features = false }
 euclid = "0.22"
 log = "0.4"

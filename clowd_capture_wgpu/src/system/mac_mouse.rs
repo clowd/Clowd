@@ -42,7 +42,7 @@ pub fn set_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
     }
 }
 
-fn find_monitor_for_logical_point<'a>(pt: LogicalPoint, monitors: &'a [MonitorInfo]) -> Option<&'a MonitorInfo> {
+fn find_monitor_for_logical_point(pt: LogicalPoint, monitors: &[MonitorInfo]) -> Option<&MonitorInfo> {
     monitors.iter().find(|m| {
         let ox = m.logical_origin.x;
         let oy = m.logical_origin.y;
@@ -52,7 +52,7 @@ fn find_monitor_for_logical_point<'a>(pt: LogicalPoint, monitors: &'a [MonitorIn
     })
 }
 
-fn find_monitor_for_physical_point<'a>(pt: ScreenPoint, monitors: &'a [MonitorInfo]) -> Option<&'a MonitorInfo> {
+fn find_monitor_for_physical_point(pt: ScreenPoint, monitors: &[MonitorInfo]) -> Option<&MonitorInfo> {
     monitors
         .iter()
         .find(|m| m.bounds.contains(pt))

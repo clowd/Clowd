@@ -381,7 +381,7 @@ fn create_surface(
         bg_view.setWantsLayer(true);
         if let Some(layer) = bg_view.layer() {
             unsafe {
-                let cg_ptr: *const std::ffi::c_void = *(&*cg_image as *const _ as *const *const std::ffi::c_void);
+                let cg_ptr: *const std::ffi::c_void = *(cg_image as *const _ as *const *const std::ffi::c_void);
                 layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
                 layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
             }
