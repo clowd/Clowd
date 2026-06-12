@@ -4,7 +4,7 @@
     x:Class="Clowd.UI.Pages.GeneralSettingsPage">
 
     <ScrollViewer>
-        <StackPanel Margin="0,0,24,24" Spacing="16">
+        <StackPanel Margin="0,0,16,16" Spacing="16">
             <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
                  (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
                  the groupbox look is the keyed "GroupBox" theme). -->
