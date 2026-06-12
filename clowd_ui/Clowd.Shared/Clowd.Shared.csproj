@@ -3,18 +3,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <RootNamespace>Clowd.Drawing</RootNamespace>
+    <RootNamespace>Clowd</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.13" />
     <PackageReference Include="RT.Util.Core" Version="2.0.1719" />
     <PackageReference Include="RT.Serialization.Xml" Version="2.0.1719" />
     <PackageReference Include="RT.Serialization.Binary" Version="2.0.1719" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Cursors\*.cur" />
   </ItemGroup>
 </Project>
