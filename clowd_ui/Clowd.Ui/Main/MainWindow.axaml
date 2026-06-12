@@ -1,0 +1,46 @@
+<ui:SystemThemedWindow
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="using:Clowd.UI"
+    x:Class="Clowd.UI.MainWindow"
+    Title="Clowd"
+    Width="800"
+    Height="600"
+    WindowStartupLocation="CenterScreen">
+
+    <!-- Replaces the WPFUI NavigationFluent / Breadcrumb / Frame shell (decision table #53):
+         ListBox navigation on the left + a cached ContentControl hosting the pages. -->
+    <Grid Margin="12,6,0,12" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
+
+        <Grid Grid.Row="0" Grid.Column="0" Margin="6,0,0,24" ColumnDefinitions="Auto,*">
+            <Viewbox Width="40" Height="40" HorizontalAlignment="Left">
+                <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="#00AFF0" />
+            </Viewbox>
+            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock FontWeight="Medium" Text="CLOWD" />
+                <TextBlock Opacity="0.6" Text="Screen Capture Tool" />
+            </StackPanel>
+        </Grid>
+
+        <ListBox x:Name="NavList"
+                 Grid.Row="1"
+                 Grid.Column="0"
+                 Margin="0,0,12,0"
+                 MinWidth="150"
+                 Background="Transparent">
+            <ListBoxItem Content="Recent" Tag="RecentSessions" />
+            <ListBoxItem Content="General" Tag="SettingsGeneral" />
+            <ListBoxItem Content="Hotkeys" Tag="SettingsHotkeys" />
+            <ListBoxItem Content="Capture" Tag="SettingsCapture" />
+            <ListBoxItem Content="Editor" Tag="SettingsEditor" />
+            <ListBoxItem Content="Uploads" Tag="SettingsUploads" />
+            <ListBoxItem Content="Video" Tag="SettingsVideo" />
+            <ListBoxItem Content="About" Tag="About" />
+        </ListBox>
+
+        <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" RowDefinitions="Auto,*">
+            <TextBlock x:Name="PageTitle" Classes="Subtitle" Margin="0,0,0,18" />
+            <ContentControl x:Name="PageHost" Grid.Row="1" />
+        </Grid>
+    </Grid>
+</ui:SystemThemedWindow>

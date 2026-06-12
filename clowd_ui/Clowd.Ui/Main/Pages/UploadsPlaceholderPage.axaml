@@ -1,0 +1,9 @@
+<UserControl
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Class="Clowd.UI.Pages.UploadsPlaceholderPage">
+
+    <TextBlock Margin="0,12,24,0"
+               Classes="Body"
+               Text="Upload providers are not available in this build." />
+</UserControl>

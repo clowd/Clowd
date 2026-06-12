@@ -1,0 +1,163 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Clowd.UI.Controls"
+             xmlns:local="using:Clowd.UI.Dialogs.ColorPicker"
+             xmlns:util="using:Clowd.Util"
+             x:Class="Clowd.UI.Dialogs.ColorPicker.MiniColorDialog">
+
+    <!-- WPF DropShadowEffect replaced by BoxShadow (decision table #61). -->
+    <Border Padding="8"
+            Background="#202124"
+            BorderBrush="#464648"
+            BorderThickness="1"
+            CornerRadius="8"
+            BoxShadow="0 2 8 0 #80000000">
+        <Grid Width="192" RowDefinitions="120,Auto,Auto,Auto,Auto,Auto">
+
+            <Border x:Name="CanvasBackground"
+                    Grid.Row="0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Background="Black"
+                    CornerRadius="2">
+                <!-- SV square: horizontal white->hue gradient (set from code) under a vertical
+                     white->transparent OpacityMask (decision table #62). -->
+                <Border x:Name="SvSquare"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        CornerRadius="2"
+                        IsHitTestVisible="False">
+                    <Border.OpacityMask>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                            <GradientStop Offset="0" Color="White" />
+                            <GradientStop Offset="1" Color="Transparent" />
+                        </LinearGradientBrush>
+                    </Border.OpacityMask>
+                </Border>
+            </Border>
+
+            <Canvas Grid.Row="0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    IsHitTestVisible="False">
+                <Border x:Name="CanvasPointer"
+                        Width="12"
+                        Height="12"
+                        BorderBrush="Black"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                    <Border Width="10"
+                            Height="10"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            BorderBrush="White"
+                            BorderThickness="1"
+                            CornerRadius="10" />
+                </Border>
+            </Canvas>
+
+            <local:ColorSlider Grid.Row="1"
+                               Height="16"
+                               Margin="0,8"
+                               CornerRadius="2"
+                               ValueMax="360"
+                               Value="{Binding CurrentColor.Hue, Mode=TwoWay}">
+                <local:ColorSlider.SliderBrush>
+                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                        <GradientStop Offset="0" Color="Red" />
+                        <GradientStop Offset="0.1666" Color="Yellow" />
+                        <GradientStop Offset="0.3333" Color="Lime" />
+                        <GradientStop Offset="0.5" Color="Cyan" />
+                        <GradientStop Offset="0.6666" Color="Blue" />
+                        <GradientStop Offset="0.8333" Color="Magenta" />
+                        <GradientStop Offset="1" Color="Red" />
+                    </LinearGradientBrush>
+                </local:ColorSlider.SliderBrush>
+            </local:ColorSlider>
+
+            <Border Grid.Row="2"
+                    Margin="0,4"
+                    Background="{x:Static util:CheckerBrushes.Medium}"
+                    CornerRadius="2">
+                <!-- SliderBrush (transparent -> opaque current color) is set from code. -->
+                <local:ColorSlider x:Name="AlphaSlider"
+                                   Height="16"
+                                   CornerRadius="2"
+                                   ValueMax="1"
+                                   Value="{Binding CurrentColor.Alpha, Mode=TwoWay}" />
+            </Border>
+
+            <TextBox x:Name="txtHex"
+                     Grid.Row="3"
+                     Height="26"
+                     MinHeight="0"
+                     Margin="0,8"
+                     VerticalContentAlignment="Center"
+                     Background="Transparent"
+                     BorderBrush="#5A5A5A"
+                     CaretBrush="White"
+                     FontFamily="Consolas"
+                     Foreground="White"
+                     TextAlignment="Center" />
+
+            <WrapPanel x:Name="pnlPalette"
+                       Grid.Row="4"
+                       HorizontalAlignment="Stretch"
+                       VerticalAlignment="Bottom"
+                       Background="{x:Static util:CheckerBrushes.Medium}"
+                       ItemHeight="16"
+                       ItemWidth="16"
+                       Orientation="Horizontal">
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Transparent" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Black" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#404040" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#808080" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#A0A0A0" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#C0C0C0" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="White" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Firebrick" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Red" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="OrangeRed" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Salmon" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Orange" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Yellow" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="GreenYellow" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Lime" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="LightSeaGreen" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Cyan" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#0094FF" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#0026FF" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#4800FF" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#B200FF" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="#FF00DC" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="HotPink" />
+                <local:ColorPaletteItem Clicked="PaletteItemClicked" Color="Pink" />
+            </WrapPanel>
+
+            <DockPanel Grid.Row="5"
+                       Margin="0,8,0,0"
+                       HorizontalAlignment="Stretch"
+                       IsVisible="{Binding !Realtime}">
+                <Border Margin="5"
+                        CornerRadius="10"
+                        DockPanel.Dock="Right"
+                        Background="{x:Static util:CheckerBrushes.Swatch}">
+                    <Ellipse x:Name="CurrentColorEllipse"
+                             Width="20"
+                             Height="20" />
+                </Border>
+                <controls:ToolButton Click="ButtonCheckClicked"
+                                     DockPanel.Dock="Right"
+                                     IconPath="{StaticResource IconCheckmark}" />
+                <controls:ToolButton Click="ButtonCancelClicked"
+                                     DockPanel.Dock="Right"
+                                     IconPath="{StaticResource IconThinClose}" />
+                <controls:ToolButton Click="ButtonPopoutClicked"
+                                     DockPanel.Dock="Left"
+                                     IconPath="{StaticResource IconPopout}" />
+                <Rectangle />
+            </DockPanel>
+        </Grid>
+    </Border>
+
+</UserControl>

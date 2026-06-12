@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:Clowd.UI.Controls">
+
+    <!-- Ported from the WPF App.xaml implicit ToolButton style (30x30 toggle button with
+         transparent bg, #55FFFFFF checked fill and a #33FFFFFF hover veil fading over 0.1s). -->
+    <ControlTheme x:Key="{x:Type controls:ToolButton}" TargetType="controls:ToolButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Padding" Value="7" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Rectangle Name="_bg"
+                               HorizontalAlignment="Stretch"
+                               VerticalAlignment="Stretch"
+                               Fill="{TemplateBinding Background}" />
+                    <Border Name="content" Padding="{TemplateBinding Padding}">
+                        <Path Data="{TemplateBinding IconPath}"
+                              Fill="{TemplateBinding Foreground}"
+                              Stretch="Uniform" />
+                    </Border>
+                    <Rectangle Name="_hover" Fill="#33FFFFFF">
+                        <Rectangle.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                            </Transitions>
+                        </Rectangle.Transitions>
+                    </Rectangle>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Rectangle#_hover">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Rectangle#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:checked /template/ Rectangle#_bg">
+            <Setter Property="Fill" Value="#55FFFFFF" />
+        </Style>
+        <Style Selector="^:disabled /template/ Border#content">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

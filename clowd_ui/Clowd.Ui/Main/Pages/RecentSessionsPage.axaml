@@ -1,0 +1,83 @@
+<UserControl
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Clowd.UI"
+    xmlns:clowd="using:Clowd"
+    x:Class="Clowd.UI.RecentSessionsPage">
+
+    <UserControl.Resources>
+        <local:ImagePathToBitmapConverter x:Key="ConvCacheImage" />
+        <local:UiDateTimeConverter x:Key="ConvUiDateTime" />
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Border.sessionItem">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.sessionItem:pointerover">
+            <Setter Property="Background" Value="#20808080" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <!-- VM-side grouping replaces the WPF CollectionViewSource (decision table #52). -->
+        <ItemsControl ItemsSource="{Binding Groups}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel>
+                        <TextBlock Margin="0,8" Text="{Binding Name}" />
+                        <ItemsControl ItemsSource="{Binding Items}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Classes="sessionItem" DoubleTapped="ViewDoubleClick">
+                                        <Border.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Open" Click="OpenItemClicked" />
+                                                <MenuItem Header="Copy" Click="CopyItemClicked" />
+                                                <MenuItem Header="Delete" Click="DeleteItemClicked" />
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
+                                        <Grid HorizontalAlignment="Stretch"
+                                              RowDefinitions="25,25,25"
+                                              ColumnDefinitions="Auto,12,*,24">
+                                            <Border Grid.RowSpan="3"
+                                                    Width="110"
+                                                    Height="75"
+                                                    Margin="4"
+                                                    Background="{x:Static clowd:AppStyles.CheckerboardBrushSmall}">
+                                                <Image Source="{Binding PreviewImgPath, Converter={StaticResource ConvCacheImage}}"
+                                                       Stretch="Uniform" />
+                                            </Border>
+                                            <TextBlock Grid.Row="0"
+                                                       Grid.Column="2"
+                                                       VerticalAlignment="Center"
+                                                       Classes="Base"
+                                                       Text="{Binding Name}" />
+                                            <TextBlock Grid.Row="1"
+                                                       Grid.Column="2"
+                                                       VerticalAlignment="Center"
+                                                       Classes="Body"
+                                                       Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.Column="2"
+                                                       VerticalAlignment="Center"
+                                                       Text="--"
+                                                       IsVisible="{Binding UploadUrl, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
+                                            <HyperlinkButton Grid.Row="2"
+                                                             Grid.Column="2"
+                                                             Padding="0"
+                                                             VerticalAlignment="Center"
+                                                             Content="{Binding UploadUrl}"
+                                                             NavigateUri="{Binding UploadUrl}"
+                                                             IsVisible="{Binding UploadUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </ScrollViewer>
+</UserControl>
