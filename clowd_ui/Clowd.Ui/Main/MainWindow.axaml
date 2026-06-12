@@ -10,8 +10,11 @@
     WindowStartupLocation="CenterScreen">
 
     <!-- Replaces the WPFUI NavigationFluent / Breadcrumb / Frame shell (decision table #53):
-         Ursa NavMenu navigation on the left + a cached ContentControl hosting the pages. -->
-    <Grid Margin="12,6,0,12" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
+         Ursa NavMenu navigation on the left + a cached ContentControl hosting the pages.
+         Spacing: 16px window padding on the left/top edges; right/bottom are left to the
+         content column so page ScrollViewers can run their scrollbars to the window edge
+         (pages keep a 0,0,16,16 content margin for clearance). -->
+    <Grid Margin="16,16,0,0" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
 
         <Grid Grid.Row="0" Grid.Column="0" Margin="6,0,0,24" ColumnDefinitions="Auto,*">
             <Viewbox Width="40" Height="40" HorizontalAlignment="Left">
@@ -26,7 +29,7 @@
         <u:NavMenu x:Name="NavList"
                    Grid.Row="1"
                    Grid.Column="0"
-                   Margin="0,0,12,0"
+                   Margin="0,0,0,16"
                    MinWidth="150">
             <u:NavMenuItem Header="Recent" Tag="RecentSessions" />
             <u:NavMenuItem Header="General" Tag="SettingsGeneral" />
@@ -37,8 +40,8 @@
             <u:NavMenuItem Header="About" Tag="About" />
         </u:NavMenu>
 
-        <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" RowDefinitions="Auto,*">
-            <TextBlock x:Name="PageTitle" Classes="Subtitle" Margin="0,0,0,18" />
+        <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="24,0,0,0" RowDefinitions="Auto,*">
+            <TextBlock x:Name="PageTitle" Classes="Subtitle" Margin="0,8,16,16" />
             <ContentControl x:Name="PageHost" Grid.Row="1" />
         </Grid>
     </Grid>

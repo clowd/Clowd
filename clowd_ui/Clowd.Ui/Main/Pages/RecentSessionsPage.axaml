@@ -23,7 +23,7 @@
 
     <ScrollViewer>
         <!-- VM-side grouping replaces the WPF CollectionViewSource (decision table #52). -->
-        <ItemsControl ItemsSource="{Binding Groups}">
+        <ItemsControl Margin="0,0,16,16" ItemsSource="{Binding Groups}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <StackPanel>
