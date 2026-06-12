@@ -7,3 +7,4 @@ bin/
 .claude/
 obj/
 bin/
+.DS_Store
