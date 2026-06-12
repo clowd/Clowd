@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Clowd.Upload</RootNamespace>
+    <!-- providers are ported verbatim from the WPF repo (kept diffable); no sync-context to deadlock on -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Embed\azure.png" />
+    <EmbeddedResource Include="Embed\imgur.png" />
+    <EmbeddedResource Include="Embed\backblaze.png" />
+    <EmbeddedResource Include="Embed\languages.yml" />
+    <EmbeddedResource Include="Embed\mime-db.json" />
+    <EmbeddedResource Include="Embed\picsur.png" />
+    <EmbeddedResource Include="Embed\vgyme.png" />
+    <EmbeddedResource Include="Embed\catbox.png" />
+    <EmbeddedResource Include="Embed\hastebin.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="B2Net" Version="0.7.5" />
+    <PackageReference Include="WindowsAzure.Storage" Version="9.3.3" />
+    <PackageReference Include="YamlDotNet" Version="12.0.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.9" />
+  </ItemGroup>
+</Project>
