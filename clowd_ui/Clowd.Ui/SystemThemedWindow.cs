@@ -8,7 +8,7 @@ namespace Clowd.UI
     /// Window base class for all Clowd shell windows. Replaces the WPF SystemThemedWindow /
     /// CustomUiWindow style combination: app icon, default sizing, dynamic theme background
     /// and (on Windows) a Mica transparency hint. Dark titlebar / WM hooks are not ported —
-    /// Avalonia follows the system theme via FluentTheme + RequestedThemeVariant=Default.
+    /// Avalonia follows the system theme via SemiTheme + RequestedThemeVariant=Default.
     /// </summary>
     public class SystemThemedWindow : Window
     {

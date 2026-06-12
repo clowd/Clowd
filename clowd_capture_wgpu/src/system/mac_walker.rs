@@ -222,7 +222,7 @@ fn evaluate_window(
     })
 }
 
-fn find_monitor_for_cg_point<'a>(x: f64, y: f64, monitors: &'a [MonitorInfo]) -> Option<&'a MonitorInfo> {
+fn find_monitor_for_cg_point(x: f64, y: f64, monitors: &[MonitorInfo]) -> Option<&MonitorInfo> {
     monitors.iter().find(|m| {
         let ox = m.logical_origin.x;
         let oy = m.logical_origin.y;

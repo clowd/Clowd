@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading;
+using Avalonia.Media;
 using Avalonia.Threading;
+using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Helpers;
 
@@ -115,8 +119,8 @@ namespace Clowd.UI
                     UseShellExecute = false,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
-                psi.ArgumentList.Add("--session-dir");
-                psi.ArgumentList.Add(sessionDir);
+                foreach (var arg in CaptureArguments.Build(sessionDir, AppStyles.AccentColor, SettingsRoot.Current.Capture))
+                    psi.ArgumentList.Add(arg);
 
                 using var process = Process.Start(psi);
                 if (process == null)
@@ -145,6 +149,44 @@ namespace Clowd.UI
         {
             // the capture process owns its own lifetime (Escape / X closes it); nothing to do here.
             Closed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Maps Clowd.Ui state onto the capturer's clap CLI (CAPTURE_PROTOCOL.md / `clowd_capture_wgpu
+    /// --help`). Flags are only emitted when they differ from the capturer's own defaults, so the
+    /// command line stays minimal. Factored out of the page so it is testable without a process.
+    /// </summary>
+    public static class CaptureArguments
+    {
+        public static IReadOnlyList<string> Build(string sessionDir, Color accent, SettingsCapture settings)
+        {
+            var args = new List<string>
+            {
+                "--session-dir", sessionDir,
+                "--accent-color", $"#{accent.R:X2}{accent.G:X2}{accent.B:X2}",
+            };
+
+            if (settings.TipsMode != CapturerTipsMode.Hints)
+            {
+                args.Add("--tips-mode");
+                args.Add(settings.TipsMode.ToString().ToLowerInvariant());
+            }
+
+            if (!settings.ObscuredWindowPeek)
+                args.Add("--no-peek");
+
+            var threshold = Math.Clamp(settings.ObscuredWindowDetectionThreshold, 0.0, 1.0);
+            if (Math.Abs(threshold - 0.80) > 0.0001)
+            {
+                args.Add("--peek-threshold");
+                args.Add(threshold.ToString("0.###", CultureInfo.InvariantCulture));
+            }
+
+            if (!settings.ScreenshotWithCursor)
+                args.Add("--no-cursor");
+
+            return args;
         }
     }
 

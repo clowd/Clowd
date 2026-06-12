@@ -14,9 +14,6 @@
                     <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#202020" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
-
-            <!-- FluentTheme provides SystemAccentColor (decision table #45). -->
-            <SolidColorBrush x:Key="AccentColorBrush" Color="{DynamicResource SystemAccentColor}" />
         </ResourceDictionary>
     </Styles.Resources>
 

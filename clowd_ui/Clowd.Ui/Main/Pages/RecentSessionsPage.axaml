@@ -13,9 +13,11 @@
     <UserControl.Styles>
         <Style Selector="Border.sessionItem">
             <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="6" />
         </Style>
         <Style Selector="Border.sessionItem:pointerover">
-            <Setter Property="Background" Value="#20808080" />
+            <!-- Semi fill token replaces the hardcoded #20808080 hover tint. -->
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
         </Style>
     </UserControl.Styles>
 
@@ -25,7 +27,7 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <StackPanel>
-                        <TextBlock Margin="0,8" Text="{Binding Name}" />
+                        <TextBlock Margin="0,8" Classes="H6" Text="{Binding Name}" />
                         <ItemsControl ItemsSource="{Binding Items}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>

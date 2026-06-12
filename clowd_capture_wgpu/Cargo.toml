@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
 image = { workspace = true, features = ["png", "jpeg"] }
 euclid.workspace = true
 log.workspace = true

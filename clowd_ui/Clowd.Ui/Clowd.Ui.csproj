@@ -12,8 +12,10 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.13" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.13" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.13" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.13" />
+    <PackageReference Include="Semi.Avalonia" Version="11.3.7.3" />
+    <PackageReference Include="Irihi.Ursa" Version="1.15.1" />
+    <PackageReference Include="Irihi.Ursa.Themes.Semi" Version="1.15.1" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.13" Condition="'$(Configuration)'=='Debug'" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SharpHook" Version="7.1.2" />

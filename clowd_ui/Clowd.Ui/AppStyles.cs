@@ -61,8 +61,15 @@ namespace Clowd
             get
             {
                 var app = Application.Current;
-                if (app != null && app.TryGetResource("SystemAccentColor", app.ActualThemeVariant, out var value) && value is Color c)
-                    return c;
+                if (app != null)
+                {
+                    // Semi theme accent token (SolidColorBrush per theme variant).
+                    if (app.TryGetResource("SemiColorPrimary", app.ActualThemeVariant, out var brushValue) && brushValue is ISolidColorBrush brush)
+                        return brush.Color;
+                    // Underlying palette color the primary brush is fed from.
+                    if (app.TryGetResource("SemiBlue5Color", app.ActualThemeVariant, out var colorValue) && colorValue is Color c)
+                        return c;
+                }
                 return Color.FromRgb(0, 120, 215);
             }
         }

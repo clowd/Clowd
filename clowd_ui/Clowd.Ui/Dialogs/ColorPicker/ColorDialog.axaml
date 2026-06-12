@@ -208,6 +208,8 @@
                         IsCancel="True"
                         Content="Cancel" />
                 <Button x:Name="btnOK"
+                        Theme="{StaticResource SolidButton}"
+                        Classes="Primary"
                         Padding="14,0"
                         Click="OKClicked"
                         IsDefault="True"

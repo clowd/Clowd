@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Clowd.Config;
 using Clowd.UI.Config;
 using Clowd.UI.Pages;
+using Ursa.Controls;
 
 namespace Clowd.UI
 {
@@ -17,18 +18,18 @@ namespace Clowd.UI
         {
             InitializeComponent();
             NavList.SelectionChanged += OnNavSelectionChanged;
-            NavList.SelectedIndex = 0;
+            NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault();
         }
 
         private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (NavList.SelectedItem is not ListBoxItem item || item.Tag is not string tag)
+            if (NavList.SelectedItem is not NavMenuItem item || item.Tag is not string tag)
                 return;
 
             if (!Enum.TryParse<SettingsPageTab>(tag, out var tab))
                 return;
 
-            PageTitle.Text = item.Content as string ?? tab.ToString();
+            PageTitle.Text = item.Header as string ?? tab.ToString();
             PageHost.Content = GetPageForTab(tab);
         }
 
@@ -73,7 +74,7 @@ namespace Clowd.UI
         private void SelectTab(SettingsPageTab tab)
         {
             var tag = tab.ToString();
-            var item = NavList.Items.OfType<ListBoxItem>().FirstOrDefault(i => Equals(i.Tag, tag));
+            var item = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => Equals(i.Tag, tag));
             if (item != null)
                 NavList.SelectedItem = item;
         }

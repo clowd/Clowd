@@ -3,41 +3,20 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     x:Class="Clowd.UI.Pages.GeneralSettingsPage">
 
-    <UserControl.Resources>
-        <!-- WPF GroupBox -> HeaderedContentControl with a simple ControlTheme (decision table #54). -->
-        <ControlTheme x:Key="{x:Type HeaderedContentControl}" TargetType="HeaderedContentControl">
-            <Setter Property="Template">
-                <ControlTemplate TargetType="HeaderedContentControl">
-                    <StackPanel>
-                        <ContentPresenter Content="{TemplateBinding Header}"
-                                          ContentTemplate="{TemplateBinding HeaderTemplate}"
-                                          FontSize="16"
-                                          FontWeight="SemiBold"
-                                          Margin="0,0,0,8" />
-                        <Border BorderBrush="#40808080"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                                Padding="12">
-                            <ContentPresenter Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}" />
-                        </Border>
-                    </StackPanel>
-                </ControlTemplate>
-            </Setter>
-        </ControlTheme>
-    </UserControl.Resources>
-
     <ScrollViewer>
         <StackPanel Margin="0,0,24,24" Spacing="16">
+            <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
+                 (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
+                 the groupbox look is the keyed "GroupBox" theme). -->
             <!-- The WPF "Updates" group (Squirrel) is not available in this build. -->
-            <HeaderedContentControl Header="Behavior">
+            <HeaderedContentControl Header="Behavior" Theme="{StaticResource GroupBox}">
                 <StackPanel Spacing="8">
                     <CheckBox IsChecked="{Binding ConfirmClose}">
                         <TextBlock Text="Ask/confirm before exiting" />
                     </CheckBox>
                 </StackPanel>
             </HeaderedContentControl>
-            <HeaderedContentControl Header="Shell">
+            <HeaderedContentControl Header="Shell" Theme="{StaticResource GroupBox}">
                 <StackPanel Spacing="8">
                     <CheckBox IsChecked="{Binding RegisterExplorerContextMenu}" IsEnabled="False">
                         <TextBlock Text="Add context menu to Explorer (not available in this build)" />
