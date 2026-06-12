@@ -92,11 +92,13 @@
                     Content="Copy RGB" />
 
             <TextBlock Classes="lbl" Grid.Row="3" Text="R:" />
-            <cp:ColorSlider Grid.Row="3"
+            <!-- Slider values are synced from code-behind (UpdateBrushes / ValueChanged);
+                 TwoWay bindings to CurrentColor.* do not reliably write drag values back. -->
+            <cp:ColorSlider x:Name="sliderR"
+                            Grid.Row="3"
                             Grid.Column="1"
                             SliderBrush="{Binding SliderR}"
-                            ValueMax="255"
-                            Value="{Binding CurrentColor.R, Mode=TwoWay}" />
+                            ValueMax="255" />
             <TextBox x:Name="txtClrR"
                      Grid.Row="3"
                      Grid.Column="2"
@@ -104,11 +106,11 @@
                      helpers:SelectTextOnFocus.Active="True" />
 
             <TextBlock Classes="lbl" Grid.Row="4" Text="G:" />
-            <cp:ColorSlider Grid.Row="4"
+            <cp:ColorSlider x:Name="sliderG"
+                            Grid.Row="4"
                             Grid.Column="1"
                             SliderBrush="{Binding SliderG}"
-                            ValueMax="255"
-                            Value="{Binding CurrentColor.G, Mode=TwoWay}" />
+                            ValueMax="255" />
             <TextBox x:Name="txtClrG"
                      Grid.Row="4"
                      Grid.Column="2"
@@ -116,11 +118,11 @@
                      helpers:SelectTextOnFocus.Active="True" />
 
             <TextBlock Classes="lbl" Grid.Row="5" Text="B:" />
-            <cp:ColorSlider Grid.Row="5"
+            <cp:ColorSlider x:Name="sliderB"
+                            Grid.Row="5"
                             Grid.Column="1"
                             SliderBrush="{Binding SliderB}"
-                            ValueMax="255"
-                            Value="{Binding CurrentColor.B, Mode=TwoWay}" />
+                            ValueMax="255" />
             <TextBox x:Name="txtClrB"
                      Grid.Row="5"
                      Grid.Column="2"
@@ -128,11 +130,11 @@
                      helpers:SelectTextOnFocus.Active="True" />
 
             <TextBlock Classes="lbl" Grid.Row="6" Text="A:" />
-            <cp:ColorSlider Grid.Row="6"
+            <cp:ColorSlider x:Name="sliderA"
+                            Grid.Row="6"
                             Grid.Column="1"
                             SliderBrush="{Binding SliderA}"
-                            ValueMax="1"
-                            Value="{Binding CurrentColor.Alpha, Mode=TwoWay}" />
+                            ValueMax="1" />
             <TextBox x:Name="txtClrA"
                      Grid.Row="6"
                      Grid.Column="2"
@@ -152,11 +154,11 @@
                     Content="Copy HSL" />
 
             <TextBlock Classes="lbl" Grid.Row="9" Text="H:" />
-            <cp:ColorSlider Grid.Row="9"
+            <cp:ColorSlider x:Name="sliderH"
+                            Grid.Row="9"
                             Grid.Column="1"
                             SliderBrush="{Binding SliderH}"
-                            ValueMax="360"
-                            Value="{Binding CurrentColor.Hue, Mode=TwoWay}" />
+                            ValueMax="360" />
             <TextBox x:Name="txtClrH"
                      Grid.Row="9"
                      Grid.Column="2"
@@ -164,11 +166,11 @@
                      helpers:SelectTextOnFocus.Active="True" />
 
             <TextBlock Classes="lbl" Grid.Row="10" Text="S:" />
-            <cp:ColorSlider Grid.Row="10"
+            <cp:ColorSlider x:Name="sliderS"
+                            Grid.Row="10"
                             Grid.Column="1"
                             SliderBrush="{Binding SliderS}"
-                            ValueMax="1"
-                            Value="{Binding CurrentColor.Saturation, Mode=TwoWay}" />
+                            ValueMax="1" />
             <TextBox x:Name="txtClrS"
                      Grid.Row="10"
                      Grid.Column="2"
@@ -176,11 +178,11 @@
                      helpers:SelectTextOnFocus.Active="True" />
 
             <TextBlock Classes="lbl" Grid.Row="11" Text="L:" />
-            <cp:ColorSlider Grid.Row="11"
+            <cp:ColorSlider x:Name="sliderL"
+                            Grid.Row="11"
                             Grid.Column="1"
                             SliderBrush="{Binding SliderL}"
-                            ValueMax="1"
-                            Value="{Binding CurrentColor.Lightness, Mode=TwoWay}" />
+                            ValueMax="1" />
             <TextBox x:Name="txtClrL"
                      Grid.Row="11"
                      Grid.Column="2"

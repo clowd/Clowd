@@ -60,6 +60,14 @@ namespace Clowd.UI.Dialogs.ColorPicker
             set => SetValue(CornerRadiusProperty, value);
         }
 
+        /// <summary>
+        /// Raised when the user changes <see cref="Value"/> by clicking or dragging the slider.
+        /// Not raised when Value is set programmatically — dialogs update the bound color from
+        /// this event in code-behind (TwoWay path bindings like [Binding CurrentColor.Hue] do
+        /// not reliably write drag values back to the INPC leaf).
+        /// </summary>
+        public event EventHandler<double> ValueChanged;
+
         static ColorSlider()
         {
             AffectsRender<ColorSlider>(ValueProperty, ValueMaxProperty, SliderBrushProperty,
@@ -72,9 +80,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
             var max = ValueMax;
             if (Bounds.Width > 0 && max > 0)
             {
-                // SetCurrentValue (not a plain local set) so the TwoWay [Binding CurrentColor.Hue]
-                // stays intact and the dragged value is written back to the bound color.
-                SetCurrentValue(ValueProperty, Math.Max(Math.Min(pos.X / Bounds.Width, 1), 0) * max);
+                var value = Math.Max(Math.Min(pos.X / Bounds.Width, 1), 0) * max;
+                SetCurrentValue(ValueProperty, value);
+                ValueChanged?.Invoke(this, value);
             }
         }
 
