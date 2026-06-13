@@ -1,0 +1,133 @@
+<UserControl
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="using:Clowd.UI.Converters"
+    x:Class="Clowd.UI.Pages.UploadSettingsPage">
+
+    <UserControl.Resources>
+        <conv:StreamToBitmapConverter x:Key="Stream2Bitmap" />
+        <conv:EnumMatchToBooleanConverter x:Key="HasEnum2Bool" />
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Border.providerItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
+        <Style Selector="Border.providerItem:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+        </Style>
+        <Style Selector="Grid.dimmed">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <!-- "supports" chips: plain when merely supported, accent-filled when this provider
+             is the default destination for that upload type. Click toggles the default. -->
+        <Style Selector="Button.chip">
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+        </Style>
+        <Style Selector="Button.chip.isDefault">
+            <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="0,0,16,16" Spacing="4">
+            <TextBlock Classes="Body"
+                       Margin="0,0,0,8"
+                       Opacity="0.7"
+                       TextWrapping="Wrap"
+                       Text="Enable the upload destinations you wish to use, then click a category chip (e.g. Image) to make a provider the default destination for that kind of file. Double click a provider to edit its settings." />
+
+            <TextBlock Classes="Body"
+                       IsVisible="{Binding !Providers.Length}"
+                       Text="No upload providers available." />
+
+            <ItemsControl ItemsSource="{Binding Providers}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Classes="providerItem" DoubleTapped="ProviderDoubleTapped">
+                            <Grid ColumnDefinitions="Auto,12,40,12,*,Auto"
+                                  RowDefinitions="Auto,Auto,Auto"
+                                  Classes.dimmed="{Binding !IsEnabled}">
+
+                                <ToggleSwitch Grid.RowSpan="3"
+                                              VerticalAlignment="Center"
+                                              IsChecked="{Binding IsEnabled}" />
+
+                                <Image Grid.Column="2"
+                                       Grid.RowSpan="3"
+                                       MaxWidth="32"
+                                       MaxHeight="32"
+                                       VerticalAlignment="Center"
+                                       Stretch="Uniform"
+                                       Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
+
+                                <TextBlock Grid.Column="4"
+                                           Grid.Row="0"
+                                           FontWeight="Bold"
+                                           Text="{Binding Provider.Name}" />
+                                <TextBlock Grid.Column="4"
+                                           Grid.Row="1"
+                                           Opacity="0.8"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding Provider.Description}" />
+
+                                <StackPanel Grid.Column="4"
+                                            Grid.Row="2"
+                                            Margin="0,6,0,0"
+                                            Orientation="Horizontal"
+                                            Spacing="6">
+                                    <Button Classes="chip"
+                                            Content="Image"
+                                            Tag="Image"
+                                            Click="DefaultChipClicked"
+                                            IsEnabled="{Binding IsEnabled}"
+                                            IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
+                                            Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
+                                            ToolTip.Tip="Use this provider as the default destination for images" />
+                                    <Button Classes="chip"
+                                            Content="Video"
+                                            Tag="Video"
+                                            Click="DefaultChipClicked"
+                                            IsEnabled="{Binding IsEnabled}"
+                                            IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
+                                            Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
+                                            ToolTip.Tip="Use this provider as the default destination for videos" />
+                                    <Button Classes="chip"
+                                            Content="Text"
+                                            Tag="Text"
+                                            Click="DefaultChipClicked"
+                                            IsEnabled="{Binding IsEnabled}"
+                                            IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
+                                            Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
+                                            ToolTip.Tip="Use this provider as the default destination for text" />
+                                    <Button Classes="chip"
+                                            Content="File"
+                                            Tag="Binary"
+                                            Click="DefaultChipClicked"
+                                            IsEnabled="{Binding IsEnabled}"
+                                            IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
+                                            Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
+                                            ToolTip.Tip="Use this provider as the default destination for other files" />
+                                </StackPanel>
+
+                                <Button Grid.Column="5"
+                                        Grid.RowSpan="3"
+                                        VerticalAlignment="Center"
+                                        Margin="10,0,0,0"
+                                        Content="Settings"
+                                        Click="ProviderSettingsClicked"
+                                        ToolTip.Tip="Edit this provider's settings" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

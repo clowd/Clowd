@@ -14,7 +14,9 @@ namespace Clowd
         public ScreenRect Position { get; set; }
     }
 
-    public sealed class SessionOpenEditor
+    // a record so FileSyncObject.Set's equality check can skip the (synchronous) disk write when
+    // a freshly built instance carries the same values as the stored one (ScreenRect is a record).
+    public sealed record SessionOpenEditor
     {
         public Guid? VirtualDesktopId { get; set; }
         public bool IsTopMost { get; set; }
