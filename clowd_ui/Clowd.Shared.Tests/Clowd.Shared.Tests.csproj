@@ -12,5 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
+    <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
   </ItemGroup>
 </Project>

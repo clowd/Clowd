@@ -29,6 +29,21 @@ namespace Clowd
             AvaloniaXamlLoader.Load(this);
         }
 
+        /// <summary>Best-effort clipboard access for code with no window of its own (e.g.
+        /// UploadManager): borrows the clipboard of any open window.</summary>
+        public static Avalonia.Input.Platform.IClipboard GetPrimaryClipboard()
+        {
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                var window = desktop.MainWindow
+                             ?? desktop.Windows.FirstOrDefault(w => w.IsActive)
+                             ?? desktop.Windows.FirstOrDefault();
+                return window?.Clipboard;
+            }
+
+            return null;
+        }
+
         public override void OnFrameworkInitializationCompleted()
         {
             SetupExceptionHandling();
@@ -117,6 +132,8 @@ namespace Clowd
             }
 
             // formerly a hidden side effect of settings deserialization; now an explicit startup step.
+            // DiscoverProviders scans loaded assemblies, so Clowd.Upload must be pulled in first.
+            _ = typeof(Upload.MimeProvider).Assembly;
             SettingsRoot.Current.Uploads.DiscoverProviders();
 
             return firstRun;
@@ -198,6 +215,10 @@ namespace Clowd
             uploads.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
             menu.Add(uploads);
 
+            var progress = new NativeMenuItem("Upload Progress");
+            progress.Click += (s, e) => (PageManager.Current.Tasks as TasksViewManager)?.ShowOverlay();
+            menu.Add(progress);
+
             var settings = new NativeMenuItem("Settings");
             settings.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
             menu.Add(settings);
@@ -225,12 +246,10 @@ namespace Clowd
         {
             _hotkeys = new HotkeyManager(new GlobalHotkeyHost(), SettingsRoot.Current.Hotkeys);
 
-            // capture/upload/recording are provided by the separate Rust process (or not yet ported)
+            // capture/recording are provided by the separate Rust process (or not yet ported)
             // — those hotkeys route to the existing stub page or a NiceDialog notice.
-            _hotkeys.SetAction(HotkeyId.FileUpload, () => NiceDialog.ShowNoticeAsync(
-                null, NiceDialogIcon.Information, "Upload providers are not available in this build.", "Upload unavailable"));
-            _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => NiceDialog.ShowNoticeAsync(
-                null, NiceDialogIcon.Information, "Upload providers are not available in this build.", "Upload unavailable"));
+            _hotkeys.SetAction(HotkeyId.FileUpload, () => UploadFilePrompt());
+            _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => UploadClipboard());
             _hotkeys.SetAction(HotkeyId.CaptureRegion, () => StartCapture());
             _hotkeys.SetAction(HotkeyId.CaptureFullscreen, () => StartCapture());
             _hotkeys.SetAction(HotkeyId.CaptureActive, () => StartCapture());
@@ -330,12 +349,50 @@ namespace Clowd
             }
         }
 
-        private void OnFilesReceived(string[] filePaths)
+        private async void OnFilesReceived(string[] filePaths)
         {
-            // the WPF app uploaded forwarded files; upload providers do not ship in this build.
             Debug.WriteLine("Files received from secondary instance: " + String.Join(", ", filePaths));
-            NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information,
-                "Upload providers are not available in this build.", "Upload unavailable");
+            await UploadManager.UploadSeveralFiles(filePaths);
+        }
+
+        private async void UploadFilePrompt()
+        {
+            var files = await NiceDialog.ShowSelectFilesDialog(null, "Select files to upload",
+                SettingsRoot.Current.General.LastSavePath, true);
+
+            if (files != null)
+                await UploadManager.UploadSeveralFiles(files);
+        }
+
+        /// <summary>Uploads the current clipboard contents (image, else text), mirroring the WPF
+        /// Paste() hotkey handler.</summary>
+        private async void UploadClipboard()
+        {
+            var clipboard = GetPrimaryClipboard();
+
+            try
+            {
+                var (bitmap, _) = await ClipboardImpl.GetClipboardCanvasData(clipboard);
+                if (bitmap != null)
+                {
+                    await UploadManager.UploadImage(bitmap, "Clipboard Image");
+                    return;
+                }
+
+                var text = clipboard != null ? await clipboard.GetTextAsync() : null;
+                if (!String.IsNullOrEmpty(text))
+                {
+                    await UploadManager.UploadText(text, "Clipboard Text");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Clipboard upload failed: " + ex);
+            }
+
+            await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information,
+                "The clipboard does not contain content that can be uploaded.", "Nothing to upload");
         }
 
         // decision table #68: replaces WPF DispatcherUnhandledException.

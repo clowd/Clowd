@@ -1,0 +1,115 @@
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Class="Clowd.UI.TaskWindow"
+    Title="Clowd Uploads"
+    Width="320"
+    SizeToContent="Height"
+    SystemDecorations="None"
+    TransparencyLevelHint="Transparent"
+    Background="Transparent"
+    CanResize="False"
+    Topmost="True"
+    ShowInTaskbar="False"
+    ShowActivated="False">
+
+    <Window.Styles>
+        <Style Selector="Button.icon">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4" />
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+        </Style>
+        <Style Selector="Button.icon:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+        </Style>
+        <Style Selector="TextBlock.status">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+        <Style Selector="TextBlock.status.error">
+            <Setter Property="Foreground" Value="#E54D42" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </Window.Styles>
+
+    <!-- outer margin leaves room for the drop shadow -->
+    <Border Margin="10"
+            CornerRadius="8"
+            BorderThickness="1"
+            BorderBrush="{DynamicResource SemiColorBorder}"
+            Background="{DynamicResource ApplicationBackgroundBrush}"
+            BoxShadow="0 2 12 0 #50000000">
+        <StackPanel>
+            <Grid Margin="12,8,8,4" ColumnDefinitions="*,Auto">
+                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Uploads" />
+                <Button Grid.Column="1"
+                        Classes="icon"
+                        Click="MinimizeClicked"
+                        ToolTip.Tip="Minimize (reopen from the tray menu)">
+                    <Viewbox>
+                        <Path Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconChevronDown}" />
+                    </Viewbox>
+                </Button>
+            </Grid>
+
+            <TextBlock Margin="12,4,12,12"
+                       Classes="status"
+                       IsVisible="{Binding !Tasks.Count}"
+                       Text="No active uploads." />
+
+            <ItemsControl Margin="4,0,4,8" ItemsSource="{Binding Tasks}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Padding="8,6" Margin="0,2" CornerRadius="6" Background="{DynamicResource SemiColorFill0}">
+                            <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+                                <TextBlock VerticalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding Name}" />
+                                <Button Grid.Column="1"
+                                        Classes="icon"
+                                        Click="DismissClicked"
+                                        ToolTip.Tip="Cancel / dismiss">
+                                    <Viewbox>
+                                        <Path Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClose}" />
+                                    </Viewbox>
+                                </Button>
+
+                                <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
+                                           Classes="status"
+                                           Classes.error="{Binding IsError}"
+                                           TextWrapping="Wrap"
+                                           MaxLines="3"
+                                           Text="{Binding Status}" />
+
+                                <ProgressBar Grid.Row="2" Grid.ColumnSpan="2"
+                                             Margin="0,6,0,2"
+                                             Minimum="0"
+                                             Maximum="100"
+                                             Value="{Binding Progress, Mode=OneWay}"
+                                             IsVisible="{Binding IsInProgress}" />
+
+                                <Button Grid.Row="2" Grid.ColumnSpan="2"
+                                        Margin="0,6,0,2"
+                                        Classes="Primary"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Click="CopyClicked"
+                                        IsVisible="{Binding CanCopy}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Viewbox Width="14" Height="14">
+                                            <Path Fill="White" Data="{StaticResource IconCopySmall}" />
+                                        </Viewbox>
+                                        <TextBlock Text="Copy to Clipboard" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Border>
+</Window>
