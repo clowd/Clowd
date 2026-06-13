@@ -6,4 +6,6 @@
   <Project Path="clowd_ui/Clowd.Ui/Clowd.Ui.csproj" />
   <Project Path="clowd_ui/Clowd.Upload/Clowd.Upload.csproj" />
   <Project Path="clowd_ui/CursorGenerator/CursorGenerator.csproj" />
+  <Project Path="clowd_server/Clowd.Server/Clowd.Server.csproj" />
+  <Project Path="clowd_server/Clowd.Server.Tests/Clowd.Server.Tests.csproj" />
 </Solution>
