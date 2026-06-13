@@ -1,0 +1,2 @@
+# local dev cache/redirect mounts (docker uses /data volumes instead)
+**/data/

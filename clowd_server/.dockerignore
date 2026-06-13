@@ -1,0 +1,5 @@
+**/bin/
+**/obj/
+**/data/
+Clowd.Server.Tests/
+README.md
