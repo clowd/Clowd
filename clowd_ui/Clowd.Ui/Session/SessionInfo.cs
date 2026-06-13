@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization.Metadata;
 using Clowd.PlatformUtil;
 using Clowd.Util;
 
@@ -29,6 +30,8 @@ namespace Clowd
     {
         public SessionInfo(string file) : base(file)
         { }
+
+        protected override JsonTypeInfo GetJsonTypeInfo() => ClowdUiJsonContext.Default.SessionInfo;
 
         public DateTime CreatedUtc
         {

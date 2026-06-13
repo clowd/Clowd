@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
+using System.Text.Json;
 using YamlDotNet.Serialization;
 
 namespace Clowd.Upload
@@ -36,7 +36,7 @@ namespace Clowd.Upload
                 _languages = deserializer.Deserialize<Dictionary<string, LanguageEntry>>(new System.IO.StreamReader(res.LanguageDb));
 
                 var mimetxt = new System.IO.StreamReader(res.MimeDb).ReadToEnd();
-                var mimedb = JsonConvert.DeserializeObject<Dictionary<string, MimeDbMimeEntry>>(mimetxt);
+                var mimedb = JsonSerializer.Deserialize(mimetxt, UploadJsonContext.Default.DictionaryStringMimeDbMimeEntry);
                 foreach (var kvp in mimedb)
                 {
                     kvp.Value.ContentType = kvp.Key;
@@ -137,15 +137,6 @@ namespace Clowd.Upload
             return ContentCategory.Text;
         }
 
-        private class MimeDbMimeEntry : IMimeEntry
-        {
-            public string ContentType { get; set; }
-            public string Source { get; set; }
-            public string[] Extensions { get; set; }
-            public bool? Compressible { get; set; }
-            public string Charset { get; set; }
-        }
-
         private class LanguageEntry
         {
             public string fs_name { get; set; }
@@ -164,6 +155,15 @@ namespace Clowd.Upload
             public string tm_scope { get; set; }
             public string group { get; set; }
         }
+    }
+
+    internal class MimeDbMimeEntry : IMimeEntry
+    {
+        public string ContentType { get; set; }
+        public string Source { get; set; }
+        public string[] Extensions { get; set; }
+        public bool? Compressible { get; set; }
+        public string Charset { get; set; }
     }
 
     public interface IMimeProvider

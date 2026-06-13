@@ -13,7 +13,7 @@ using B2Net;
 using B2Net.Http;
 using B2Net.Http.RequestGenerators;
 using B2Net.Models;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Clowd.Upload
 {
@@ -127,11 +127,9 @@ namespace Clowd.Upload
 
             using var http = GetHttpClient(TimeSpan.FromSeconds(15));
 
-            var json = JsonConvert.SerializeObject(new
-            {
-                accountId = options.AccountId,
-                bucketName
-            });
+            var json = JsonSerializer.Serialize(
+                new B2ListBucketsRequest { accountId = options.AccountId, bucketName = bucketName },
+                UploadJsonContext.Default.B2ListBucketsRequest);
             var req = BaseRequestGenerator.PostRequest("b2_list_buckets", json, options);
             var response = await http.SendAsync(req, token);
 
@@ -173,5 +171,11 @@ namespace Clowd.Upload
 
             return sb.ToString();
         }
+    }
+
+    internal class B2ListBucketsRequest
+    {
+        public string accountId { get; set; }
+        public string bucketName { get; set; }
     }
 }

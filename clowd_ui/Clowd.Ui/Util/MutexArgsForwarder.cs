@@ -7,7 +7,7 @@ using System.IO.Pipes;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Clowd.Util
 {
@@ -105,7 +105,7 @@ namespace Clowd.Util
         private async Task SendArgsToRemote(string[] args)
         {
             var req = new SendArgsRequestModel(Process.GetCurrentProcess().Id, args);
-            var payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(req));
+            var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(req, ClowdUiJsonContext.Default.SendArgsRequestModel));
             var prefix = new byte[4];
             BinaryPrimitives.WriteInt32LittleEndian(prefix, payload.Length);
 
@@ -145,7 +145,7 @@ namespace Clowd.Util
                 var payload = new byte[length];
                 await ReadExactAsync(server, payload, token.Token);
 
-                var req = JsonConvert.DeserializeObject<SendArgsRequestModel>(Encoding.UTF8.GetString(payload));
+                var req = JsonSerializer.Deserialize(Encoding.UTF8.GetString(payload), ClowdUiJsonContext.Default.SendArgsRequestModel);
                 if (req != null)
                     ProcessArgs(req.pid, req.args);
             }
