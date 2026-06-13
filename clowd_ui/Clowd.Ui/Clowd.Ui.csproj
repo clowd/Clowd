@@ -7,7 +7,9 @@
     <RootNamespace>Clowd.UI</RootNamespace>
     <ApplicationIcon>Assets\clowd-default.ico</ApplicationIcon>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
-    <ApplicationManifest></ApplicationManifest>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.13" />
