@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -31,12 +33,14 @@ namespace Clowd.UI
         private ScreenRect _normalBounds; // tracked manually while WindowState == Normal (decision table #55)
         private readonly HashSet<Key> _pressedKeys = new HashSet<Key>(); // repeat tracker (decision table #37)
 
-        private string _graphicsPath => Path.Combine(Path.GetDirectoryName(_session.FilePath), "graphics.json");
+        private readonly string _graphicsPath;
 
-        // §2.11 glue invariants: custom clipboard format carries UTF-8 JSON bytes of GraphicBase[]
-        // (GraphicsSerializer); images travel as "image/png" PNG bytes (decision table #51).
-        private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
-        private const string PNG_CLIPBOARD_FORMAT = "image/png";
+        private DispatcherTimer _sessionInfoDebounce;
+
+        // graphics.json persistence is latest-wins on a background thread (see StateUpdated handler)
+        private byte[] _pendingGraphicsJson;
+        private Task _graphicsWriteTask = Task.CompletedTask;
+        private readonly object _graphicsWriteLock = new object();
 
         public RelayCommand SelectToolCommand { get; }
         public RelayCommand CommandSave { get; }
@@ -48,6 +52,7 @@ namespace Clowd.UI
         public EditorWindow(SessionInfo info)
         {
             _session = info;
+            _graphicsPath = Path.Combine(Path.GetDirectoryName(info.FilePath), "graphics.json");
 
             SelectToolCommand = new RelayCommand { Executed = SelectToolExecuted, Text = "Select tool" };
             CommandSave = new RelayCommand { Executed = SaveCommandExecuted, Text = "_Save", Gesture = new SimpleKeyGesture(Key.S, KeyModifiers.Control) };
@@ -97,21 +102,20 @@ namespace Clowd.UI
             Opened += EditorWindow_Opened;
             Closing += EditorWindow_Closing;
             Activated += (_, _) => UpdateSessionInfo();
-            Deactivated += (_, _) =>
-            {
+            Deactivated += (_, _) => {
                 _pressedKeys.Clear();
-                if (_panPreviousTool != null)
-                {
+                if (_panPreviousTool != null) {
                     // the pan key's KeyUp will never arrive; restore the tool now
                     drawingCanvas.Tool = _panPreviousTool.Value;
                     _panPreviousTool = null;
                 }
                 UpdateSessionInfo();
             };
-            PositionChanged += (_, _) =>
-            {
+            PositionChanged += (_, _) => {
                 TrackNormalBounds();
-                UpdateSessionInfo();
+                // fires for every pixel of a window drag, and a session write is a synchronous
+                // disk serialize (FileSyncObject) — record the final position once the move settles
+                ScheduleUpdateSessionInfo();
             };
             SizeChanged += (_, _) => TrackNormalBounds();
             ScalingChanged += (_, _) => drawingCanvas.UpdateScaleTransform(); // decision table #56
@@ -122,12 +126,20 @@ namespace Clowd.UI
             miniColor.Cancelled += (_, _) => miniColorPopup.IsOpen = false;
         }
 
+        private void ScheduleUpdateSessionInfo()
+        {
+            _sessionInfoDebounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => {
+                _sessionInfoDebounce.Stop();
+                UpdateSessionInfo();
+            });
+            _sessionInfoDebounce.Stop();
+            _sessionInfoDebounce.Start();
+        }
+
         private void UpdateSessionInfo()
         {
-            if (_session != null)
-            {
-                _session.OpenEditor = new SessionOpenEditor()
-                {
+            if (_session != null) {
+                _session.OpenEditor = new SessionOpenEditor() {
                     IsTopMost = Topmost,
                     IsMaximized = WindowState == WindowState.Maximized,
                     IsMinimized = WindowState == WindowState.Minimized,
@@ -147,8 +159,8 @@ namespace Clowd.UI
             _normalBounds = new ScreenRect(
                 Position.X,
                 Position.Y,
-                (int)Math.Round(ClientSize.Width * scaling),
-                (int)Math.Round(ClientSize.Height * scaling));
+                (int) Math.Round(ClientSize.Width * scaling),
+                (int) Math.Round(ClientSize.Height * scaling));
         }
 
         private void EditorWindow_Opened(object sender, EventArgs e)
@@ -165,11 +177,19 @@ namespace Clowd.UI
 
         private void EditorWindow_Closing(object sender, WindowClosingEventArgs e)
         {
+            _sessionInfoDebounce?.Stop();
+
+            // flush any pending background graphics.json write before the session is torn down
+            Task pendingWrite;
+            lock (_graphicsWriteLock)
+                pendingWrite = _graphicsWriteTask;
+            try { pendingWrite.Wait(TimeSpan.FromSeconds(5)); } catch {; }
+            WritePendingGraphicsJson();
+
             // the property bar mutates Editor.Tools (SavedToolSettings) through two-way bindings;
             // persist those edits when the editor closes (explicit-save policy). Saved before the
             // preview render so a rendering failure can't skip the save.
-            try { SettingsService.Save(_settings); }
-            catch {; }
+            try { SettingsService.Save(_settings); } catch {; }
 
             UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
             _session.OpenEditor = null;
@@ -179,11 +199,9 @@ namespace Clowd.UI
         public static void ShowSession(SessionInfo session)
         {
             // check if there is already a window open with this session in it
-            if (session != null)
-            {
+            if (session != null) {
                 var openWnd = GetOpenEditors().FirstOrDefault(f => f._session == session);
-                if (openWnd != null)
-                {
+                if (openWnd != null) {
                     if (openWnd.WindowState == WindowState.Minimized)
                         openWnd.WindowState = WindowState.Normal;
                     openWnd.Activate();
@@ -199,8 +217,7 @@ namespace Clowd.UI
 
             var wnd = new EditorWindow(session);
 
-            if (isExistingSession)
-            {
+            if (isExistingSession) {
                 // this session was not closed properly, restore it to its previous location
                 var restore = session.OpenEditor.RestorePosition;
                 wnd.Topmost = session.OpenEditor.IsTopMost;
@@ -214,9 +231,7 @@ namespace Clowd.UI
                     wnd.WindowState = WindowState.Minimized;
 
                 wnd.Show();
-            }
-            else if (canPlaceExactly)
-            {
+            } else if (canPlaceExactly) {
                 // this is a brand new session. we'll show it on top of the captured area.
                 // (practical subset per §3 #55: no border compensation, constant padding only)
                 var origRect = session.OriginalBounds;
@@ -233,17 +248,15 @@ namespace Clowd.UI
                 var requiredSize = new Size(logicalImageSize.Width + 30 + padding, logicalImageSize.Height + 30 + padding);
 
                 double toolBarWidth = 30, propBarHeight = 30;
-                try
-                {
+                try {
                     wnd.rootGrid.Measure(requiredSize);
                     if (wnd.ToolBar.DesiredSize.Width > 0)
                         toolBarWidth = wnd.ToolBar.DesiredSize.Width;
                     if (wnd.PropertiesBar.DesiredSize.Height > 0)
                         propBarHeight = wnd.PropertiesBar.DesiredSize.Height;
-                }
-                catch {; }
+                } catch {; }
 
-                int ToScreenWH(double logical) => (int)Math.Round(logical * scaling);
+                int ToScreenWH(double logical) => (int) Math.Round(logical * scaling);
 
                 var rect = new PixelRect(
                     origPx.X - ToScreenWH(toolBarWidth) - padding,
@@ -265,9 +278,7 @@ namespace Clowd.UI
                 wnd.SetWindowRect(rect);
                 wnd.Show();
                 wnd.Activate();
-            }
-            else
-            {
+            } else {
                 // it is a new or empty session with no specific area to restore to.
                 wnd.WindowStartupLocation = WindowStartupLocation.CenterScreen;
                 wnd.Show();
@@ -280,8 +291,7 @@ namespace Clowd.UI
             var sessions = SessionManager.Current.Sessions
                                          .Where(s => s.OpenEditor != null).ToArray();
 
-            foreach (var g in sessions)
-            {
+            foreach (var g in sessions) {
                 ShowSession(g);
             }
         }
@@ -317,8 +327,7 @@ namespace Clowd.UI
             KeyBindings.Add(kb);
 
             // macOS: every Ctrl gesture is also registered with Meta (§2.4)
-            if (OperatingSystem.IsMacOS() && (command.Gesture.Modifiers & KeyModifiers.Control) != 0)
-            {
+            if (OperatingSystem.IsMacOS() && (command.Gesture.Modifiers & KeyModifiers.Control) != 0) {
                 var metaMods = (command.Gesture.Modifiers & ~KeyModifiers.Control) | KeyModifiers.Meta;
                 KeyBindings.Add(new KeyBinding { Command = command, Gesture = new KeyGesture(command.Gesture.Key, metaMods) });
             }
@@ -342,7 +351,7 @@ namespace Clowd.UI
 
         private static void ExecuteCommand(RelayCommand command)
         {
-            var icmd = (System.Windows.Input.ICommand)command;
+            var icmd = (System.Windows.Input.ICommand) command;
             if (icmd.CanExecute(null))
                 icmd.Execute(null);
         }
@@ -359,22 +368,19 @@ namespace Clowd.UI
 
             // shift/space-pan: save the current tool and enter pan mode while the key is held
             // (skipped while a tool drag is active, §5.4)
-            if (IsPanKey(e.Key) && _panPreviousTool == null && !drawingCanvas.IsToolDragActive)
-            {
+            if (IsPanKey(e.Key) && _panPreviousTool == null && !drawingCanvas.IsToolDragActive) {
                 _panPreviousTool = drawingCanvas.Tool;
                 drawingCanvas.Tool = ToolType.None;
             }
 
             // space has no other editor function; swallow it so a focused button isn't activated
-            if (e.Key == Key.Space)
-            {
+            if (e.Key == Key.Space) {
                 e.Handled = true;
                 return;
             }
 
             // arrow nudge — the only bare-key path that allows Ctrl (§2.4)
-            (int x, int y) = e.Key switch
-            {
+            (int x, int y) = e.Key switch {
                 Key.Left => (-1, 0),
                 Key.Up => (0, -1),
                 Key.Right => (1, 0),
@@ -382,8 +388,7 @@ namespace Clowd.UI
                 _ => (0, 0),
             };
 
-            if (x != 0 || y != 0)
-            {
+            if (x != 0 || y != 0) {
                 e.Handled = true;
 
                 var ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
@@ -392,8 +397,7 @@ namespace Clowd.UI
 
                 if (!ctrl || !isRepeat) _nudgeRepeatCount = 0;
 
-                if (ctrl)
-                {
+                if (ctrl) {
                     if (isRepeat) _nudgeRepeatCount++;
                     var distance = Math.Min(Math.Max(10, _nudgeRepeatCount * 2), 40);
                     x *= distance;
@@ -407,29 +411,27 @@ namespace Clowd.UI
             if (e.KeyModifiers != KeyModifiers.None)
                 return;
 
-            switch (e.Key)
-            {
-                case Key.Escape:
-                    drawingCanvas.CancelCurrentOperation();
-                    e.Handled = true;
-                    return;
-                case Key.Delete:
-                    ExecuteCommand(drawingCanvas.CommandDelete);
-                    e.Handled = true;
-                    return;
-                case Key.Home:
-                    ExecuteCommand(drawingCanvas.CommandMoveToFront);
-                    e.Handled = true;
-                    return;
-                case Key.End:
-                    ExecuteCommand(drawingCanvas.CommandMoveToBack);
-                    e.Handled = true;
-                    return;
+            switch (e.Key) {
+            case Key.Escape:
+                drawingCanvas.CancelCurrentOperation();
+                e.Handled = true;
+                return;
+            case Key.Delete:
+                ExecuteCommand(drawingCanvas.CommandDelete);
+                e.Handled = true;
+                return;
+            case Key.Home:
+                ExecuteCommand(drawingCanvas.CommandMoveToFront);
+                e.Handled = true;
+                return;
+            case Key.End:
+                ExecuteCommand(drawingCanvas.CommandMoveToBack);
+                e.Handled = true;
+                return;
             }
 
             // bare tool letters (replaces the WPF BareKeyBindings, decision table #36)
-            ToolType? tool = e.Key switch
-            {
+            ToolType? tool = e.Key switch {
                 Key.D => ToolType.None,
                 Key.S => ToolType.Pointer,
                 Key.R => ToolType.Rectangle,
@@ -444,8 +446,7 @@ namespace Clowd.UI
                 _ => null,
             };
 
-            if (tool != null)
-            {
+            if (tool != null) {
                 e.Handled = true;
                 SelectToolExecuted(tool.Value.ToString());
             }
@@ -456,8 +457,7 @@ namespace Clowd.UI
             _pressedKeys.Remove(e.Key);
 
             // restore the saved tool once no pan key (shift/space) remains held
-            if (IsPanKey(e.Key) && _panPreviousTool != null && !_pressedKeys.Any(IsPanKey))
-            {
+            if (IsPanKey(e.Key) && _panPreviousTool != null && !_pressedKeys.Any(IsPanKey)) {
                 drawingCanvas.Tool = _panPreviousTool.Value;
                 _panPreviousTool = null;
             }
@@ -468,7 +468,7 @@ namespace Clowd.UI
             if (drawingCanvas.IsToolDragActive)
                 return;
 
-            var tool = (ToolType)Enum.Parse(typeof(ToolType), (string)parameter);
+            var tool = (ToolType) Enum.Parse(typeof(ToolType), (string) parameter);
             drawingCanvas.Tool = tool;
         }
 
@@ -478,20 +478,16 @@ namespace Clowd.UI
 
         private bool LoadSessionState()
         {
-            if (File.Exists(_graphicsPath))
-            {
-                try
-                {
-                    var state = (JsonObject)JsonNode.Parse(File.ReadAllText(_graphicsPath));
+            if (File.Exists(_graphicsPath)) {
+                try {
+                    var state = (JsonObject) JsonNode.Parse(File.ReadAllText(_graphicsPath));
                     drawingCanvas.RestoreState(state);
                     return true;
-                }
-                catch {; }
+                } catch {; }
             }
 
             // if there is a desktop image, and we failed to load an existing set of graphics
-            if (File.Exists(_session.DesktopImgPath))
-            {
+            if (File.Exists(_session.DesktopImgPath)) {
                 var sel = _session.CroppedRect ?? ScreenRect.Empty;
                 var crop = new PixelRect(sel.X, sel.Y, sel.Width, sel.Height);
 
@@ -518,11 +514,34 @@ namespace Clowd.UI
             if (_session == null)
                 return;
 
-            using var fs = File.Create(_graphicsPath);
-            if (e.State != null)
-            {
-                using var writer = new Utf8JsonWriter(fs);
-                e.State.WriteTo(writer);
+            // serialize in memory on the UI thread (cheap), then hand the bytes to a latest-wins
+            // background writer — undo/redo and merged drag steps fire this on every step, and a
+            // synchronous File.Create here stalls the canvas for the duration of the disk write.
+            byte[] bytes;
+            if (e.State != null) {
+                using var ms = new MemoryStream();
+                using (var writer = new Utf8JsonWriter(ms))
+                    e.State.WriteTo(writer);
+                bytes = ms.ToArray();
+            } else {
+                bytes = Array.Empty<byte>();
+            }
+
+            Interlocked.Exchange(ref _pendingGraphicsJson, bytes);
+            lock (_graphicsWriteLock)
+                _graphicsWriteTask = _graphicsWriteTask.ContinueWith(_ => WritePendingGraphicsJson(), TaskScheduler.Default);
+        }
+
+        private void WritePendingGraphicsJson()
+        {
+            var bytes = Interlocked.Exchange(ref _pendingGraphicsJson, null);
+            if (bytes == null)
+                return;
+
+            try {
+                File.WriteAllBytes(_graphicsPath, bytes);
+            } catch (Exception ex) {
+                Debug.WriteLine($"failed to persist graphics.json: {ex.Message}");
             }
         }
 
@@ -536,13 +555,11 @@ namespace Clowd.UI
             var oldpreview = _session.PreviewImgPath;
             _session.PreviewImgPath = newpreview;
 
-            try
-            {
+            try {
                 // it could be locked by something else
                 if (File.Exists(oldpreview))
                     File.Delete(oldpreview);
-            }
-            catch {; }
+            } catch {; }
         }
 
         private string SaveImageToSessionDir(Bitmap src)
@@ -567,8 +584,7 @@ namespace Clowd.UI
         private bool VerifyArtworkExists()
         {
             var b = drawingCanvas.GraphicsList.ContentBounds;
-            if (b.Height < 1 || b.Width < 1)
-            {
+            if (b.Height < 1 || b.Width < 1) {
                 NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error,
                                            "This operation could not be completed because there are no objects on the canvas.", "Canvas Empty");
                 return false;
@@ -589,8 +605,7 @@ namespace Clowd.UI
             UpdatePreview(bitmap);
 
             var savedPath = await NiceDialog.ShowSaveImageDialog(this, bitmap, _settings.General.LastSavePath, _settings.Capture.FilenamePattern);
-            if (savedPath != null)
-            {
+            if (savedPath != null) {
                 _settings.General.LastSavePath = Path.GetDirectoryName(savedPath);
                 SettingsService.Save(_settings); // settings no longer auto-save on PropertyChanged
                 if (_settings.Capture.OpenSavedInExplorer)
@@ -616,22 +631,7 @@ namespace Clowd.UI
 
             var graphics = drawingCanvas.GraphicsList.GetGraphicList(drawingCanvas.SelectedCount > 0);
             var bytes = GraphicsSerializer.SerializeToUtf8Bytes(graphics);
-
-            byte[] png;
-            using (var ms = new MemoryStream())
-            {
-                bitmap.Save(ms);
-                png = ms.ToArray();
-            }
-
-            var clipboard = Clipboard;
-            if (clipboard == null)
-                return;
-
-            var data = new DataObject();
-            data.Set(PNG_CLIPBOARD_FORMAT, png);
-            data.Set(CANVAS_CLIPBOARD_FORMAT, bytes);
-            await clipboard.SetDataObjectAsync(data);
+            await ClipboardImpl.SetClipboardCanvasData(Clipboard, bitmap, bytes);
         }
 
         private async void CutCommandExecuted(object parameter)
@@ -643,40 +643,27 @@ namespace Clowd.UI
 
         private async void PasteCommandExecuted(object parameter)
         {
-            var clipboard = Clipboard;
-            if (clipboard == null)
-                return;
-
             byte[] clipGraphics = null;
-            byte[] clipImage = null;
+            Bitmap clipBitmap = null;
 
-            try
-            {
-                var formats = await clipboard.GetFormatsAsync() ?? Array.Empty<string>();
-                if (formats.Contains(CANVAS_CLIPBOARD_FORMAT))
-                    clipGraphics = await clipboard.GetDataAsync(CANVAS_CLIPBOARD_FORMAT) as byte[];
-                if (clipGraphics == null && formats.Contains(PNG_CLIPBOARD_FORMAT))
-                    clipImage = await clipboard.GetDataAsync(PNG_CLIPBOARD_FORMAT) as byte[];
-            }
-            catch {; }
+            try {
+                (clipBitmap, clipGraphics) = await ClipboardImpl.GetClipboardCanvasData(Clipboard);
+            } catch {; }
 
-            if (clipGraphics != null)
-            {
+            if (clipGraphics != null) {
+                clipBitmap?.Dispose();
                 var sessionDir = Path.GetDirectoryName(_session.FilePath);
                 var graphics = GraphicsSerializer.DeserializeFromUtf8Bytes(clipGraphics);
 
                 // copy any pasted bitmaps into this session directory
-                foreach (var img in graphics.OfType<GraphicImage>())
-                {
+                foreach (var img in graphics.OfType<GraphicImage>()) {
                     if (!String.IsNullOrEmpty(img.CursorFilePath) &&
-                        !img.CursorFilePath.StartsWith(sessionDir, StringComparison.InvariantCultureIgnoreCase))
-                    {
+                        !img.CursorFilePath.StartsWith(sessionDir, StringComparison.InvariantCultureIgnoreCase)) {
                         img.CursorFilePath = CopyFileToSessionDir(img.CursorFilePath);
                     }
 
                     if (!String.IsNullOrEmpty(img.BitmapFilePath) &&
-                        !img.BitmapFilePath.StartsWith(sessionDir, StringComparison.InvariantCultureIgnoreCase))
-                    {
+                        !img.BitmapFilePath.StartsWith(sessionDir, StringComparison.InvariantCultureIgnoreCase)) {
                         img.BitmapFilePath = CopyFileToSessionDir(img.BitmapFilePath);
                     }
                 }
@@ -685,20 +672,16 @@ namespace Clowd.UI
                 return;
             }
 
-            if (clipImage != null)
-            {
-                try
-                {
+            if (clipBitmap != null) {
+                try {
                     // save pasted image into session folder + add to canvas
-                    using var ms = new MemoryStream(clipImage);
-                    using var bmp = new Bitmap(ms);
+                    using var bmp = clipBitmap;
                     var imgPath = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
-                    File.WriteAllBytes(imgPath, clipImage);
+                    bmp.Save(imgPath);
                     var graphic = new GraphicImage(imgPath, new Size(bmp.PixelSize.Width, bmp.PixelSize.Height));
                     drawingCanvas.AddGraphic(graphic);
                     return;
-                }
-                catch {; }
+                } catch {; }
             }
 
             await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "The clipboard does not contain an image.", "Failed to paste");
@@ -729,21 +712,18 @@ namespace Clowd.UI
 
             var ctx = new ContextMenu() { Placement = PlacementMode.Pointer };
 
-            ctx.Items.Add(new MenuItem()
-            {
+            ctx.Items.Add(new MenuItem() {
                 Header = "Upload to:",
                 IsEnabled = false,
             });
 
             var providers = UploadManager.GetAvailableProviders(SupportedUploadType.Image).ToArray();
-            if (providers.Length < 2)
-            {
+            if (providers.Length < 2) {
                 btnUpload.ContextMenu = null;
                 return;
             }
 
-            for (var i = 0; i < providers.Length; i++)
-            {
+            for (var i = 0; i < providers.Length; i++) {
                 var f = providers[i];
 
                 var mu = new MenuItem();
@@ -761,16 +741,14 @@ namespace Clowd.UI
 
         private static void RevealFileOrFolder(string path)
         {
-            try
-            {
+            try {
                 if (OperatingSystem.IsWindows())
                     Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
                 else if (OperatingSystem.IsMacOS())
                     Process.Start("open", new[] { "-R", path });
                 else
                     Process.Start(new ProcessStartInfo(Path.GetDirectoryName(path)) { UseShellExecute = true });
-            }
-            catch {; }
+            } catch {; }
         }
 
         // ====================================================================
@@ -802,8 +780,7 @@ namespace Clowd.UI
                 drawingCanvas.TextFontStyle,
                 drawingCanvas.TextFontWeight);
 
-            if (result != null)
-            {
+            if (result != null) {
                 drawingCanvas.TextFontFamilyName = result.TextFontFamilyName;
                 drawingCanvas.TextFontSize = result.TextFontSize;
                 drawingCanvas.TextFontStyle = result.TextFontStyle;

@@ -402,22 +402,19 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private async void CopyHexExecuted(object sender, RoutedEventArgs e)
         {
-            if (Clipboard != null)
-                await Clipboard.SetTextAsync(ColorTextHelper.GetHex(CurrentColor));
+            await ClipboardImpl.SetClipboardText(Clipboard, ColorTextHelper.GetHex(CurrentColor));
             Close();
         }
 
         private async void CopyRgbExecuted(object sender, RoutedEventArgs e)
         {
-            if (Clipboard != null)
-                await Clipboard.SetTextAsync(ColorTextHelper.GetRgb(CurrentColor));
+            await ClipboardImpl.SetClipboardText(Clipboard, ColorTextHelper.GetRgb(CurrentColor));
             Close();
         }
 
         private async void CopyHslExecuted(object sender, RoutedEventArgs e)
         {
-            if (Clipboard != null)
-                await Clipboard.SetTextAsync(ColorTextHelper.GetHsl(CurrentColor));
+            await ClipboardImpl.SetClipboardText(Clipboard, ColorTextHelper.GetHsl(CurrentColor));
             Close();
         }
 

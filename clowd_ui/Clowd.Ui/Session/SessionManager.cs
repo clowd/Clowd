@@ -156,13 +156,7 @@ namespace Clowd
             if (String.IsNullOrEmpty(path) || !File.Exists(path))
                 return;
 
-            var clipboard = GetClipboard();
-            if (clipboard == null)
-                return;
-
-            var data = new DataObject();
-            data.Set("image/png", File.ReadAllBytes(path));
-            _ = clipboard.SetDataObjectAsync(data);
+            _ = ClipboardImpl.SetClipboardImage(GetClipboard(), File.ReadAllBytes(path));
         }
 
         public string GetNextSessionDirectory()
