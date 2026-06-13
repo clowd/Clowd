@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using Clowd.Drawing.Graphics;
 
 namespace Clowd.Drawing.Tools
@@ -26,38 +28,57 @@ namespace Clowd.Drawing.Tools
         private double _handleRatio;
 
         // Keep state about last and current point (used to edit objects via dragging, e.g. move and resize).
-        // Drag bookkeeping stays screen-space (PixelPoint) via canvas.PointToScreen / PointToClient.
-        private PixelPoint _lastPointScr = new PixelPoint(0, 0);
+        // Drag bookkeeping is root-window space in DOUBLE precision. The previous screen-space scheme
+        // (PointToScreen/PointToClient) rounds to whole physical pixels on every event; at canvas zoom
+        // or DPI scale != 1 each pointer move injects a sub-pixel error into the delta, and over a drag
+        // the errors accumulate into visible drift between the pointer and the dragged object. Root
+        // space keeps the original property that mattered: the delta stays correct if the canvas
+        // transform changes mid-drag (e.g. wheel zoom while dragging).
+        private Point _lastPointRoot;
 
         bool _wasEdit;
 
         public ToolPointer() : base(() => HelperFunctions.DefaultCursor)
         { }
 
+        private static Point CanvasToRoot(DrawingCanvas canvas, Point canvasPt) =>
+            canvas.TranslatePoint(canvasPt, (Visual)TopLevel.GetTopLevel(canvas) ?? canvas) ?? canvasPt;
+
+        private static Point RootToCanvas(DrawingCanvas canvas, Point rootPt) =>
+            ((Visual)TopLevel.GetTopLevel(canvas) ?? canvas).TranslatePoint(rootPt, canvas) ?? rootPt;
+
         public GraphicBase MakeHitTest(DrawingCanvas drawingCanvas, Point point, out int handleNumber)
         {
+            // runs on every hover pointer-move, so it is a plain top-most-first loop (no LINQ).
+            // a selected graphic's handle wins over any object body, even a body above it in
+            // z-order — so body hits are remembered but the handle scan covers the whole list.
             var dpi = drawingCanvas.CanvasUiElementScale;
-            var controls = drawingCanvas.GraphicsList.Select(gv => new
-            {
-                gv,
-                gv.IsSelected,
-                HitTest = gv.MakeHitTest(point, dpi)
-            }).Reverse().ToArray();
+            var list = drawingCanvas.GraphicsList;
 
-            // Test if we start dragging a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
-            var grabHandle = controls.FirstOrDefault(g => g.IsSelected && g.HitTest > 0);
-            if (grabHandle != null)
+            GraphicBase hitBody = null;
+            for (int i = list.Count - 1; i >= 0; i--)
             {
-                handleNumber = grabHandle.HitTest;
-                return grabHandle.gv;
+                var g = list[i];
+                var hit = g.MakeHitTest(point, dpi);
+
+                // Test if we start dragging a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
+                if (g.IsSelected && hit > 0)
+                {
+                    handleNumber = hit;
+                    return g;
+                }
+
+                // Test if we start dragging an object
+                if (hit == 0 && hitBody == null)
+                {
+                    hitBody = g;
+                }
             }
 
-            // Test if we start dragging an object
-            var grabObject = controls.FirstOrDefault(g => g.HitTest == 0);
-            if (grabObject != null)
+            if (hitBody != null)
             {
                 handleNumber = 0;
-                return grabObject.gv;
+                return hitBody;
             }
 
             handleNumber = -1;
@@ -71,7 +92,7 @@ namespace Clowd.Drawing.Tools
         public override void OnMouseDown(DrawingCanvas drawingCanvas, PointerState s, int clickCount)
         {
             var wpfPt = s.Position;
-            _lastPointScr = drawingCanvas.PointToScreen(s.Position);
+            _lastPointRoot = CanvasToRoot(drawingCanvas, s.Position);
 
             int handleNumber;
             var graphic = MakeHitTest(drawingCanvas, wpfPt, out handleNumber);
@@ -157,7 +178,7 @@ namespace Clowd.Drawing.Tools
             }
 
             var wpfPt = s.Position;
-            var lastWpfPt = drawingCanvas.PointToClient(_lastPointScr);
+            var lastWpfPt = RootToCanvas(drawingCanvas, _lastPointRoot);
 
             // Set cursor when left button is not pressed
             if (!s.LeftPressed)
@@ -175,7 +196,7 @@ namespace Clowd.Drawing.Tools
             double dx = wpfPt.X - lastWpfPt.X;
             double dy = wpfPt.Y - lastWpfPt.Y;
 
-            _lastPointScr = drawingCanvas.PointToScreen(wpfPt);
+            _lastPointRoot = CanvasToRoot(drawingCanvas, wpfPt);
 
             switch (_selectMode)
             {
