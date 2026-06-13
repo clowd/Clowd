@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -81,23 +82,42 @@ namespace Clowd.Drawing
             if (info.Kind != JsonTypeInfoKind.Object || !typeof(GraphicBase).IsAssignableFrom(info.Type))
                 return;
 
-            // replace the default (public property) contract with a field-based one
+            // replace the default (public property) contract with a field-based one. the contract
+            // is built once per type but the accessors run on every undo snapshot / restore, so
+            // FieldInfo.GetValue/SetValue reflection is replaced with compiled delegates.
             info.Properties.Clear();
             foreach (var field in EnumeratePersistedFields(info.Type))
             {
-                var f = field; // capture
-                var prop = info.CreateJsonPropertyInfo(f.FieldType, GetJsonName(f.Name));
-                prop.Get = f.GetValue;
-                prop.Set = (obj, value) => f.SetValue(obj, value);
+                var prop = info.CreateJsonPropertyInfo(field.FieldType, GetJsonName(field.Name));
+                prop.Get = CompileGetter(field);
+                prop.Set = CompileSetter(field);
                 info.Properties.Add(prop);
             }
 
             if (!info.Type.IsAbstract)
             {
                 // the graphics declare protected parameterless constructors for deserialization
-                var type = info.Type;
-                info.CreateObject = () => Activator.CreateInstance(type, nonPublic: true);
+                var ctor = info.Type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                                                    null, Type.EmptyTypes, null)
+                           ?? throw new InvalidOperationException($"{info.Type.Name} must declare a parameterless constructor.");
+                info.CreateObject = Expression.Lambda<Func<object>>(Expression.New(ctor)).Compile();
             }
+        }
+
+        private static Func<object, object> CompileGetter(FieldInfo field)
+        {
+            var obj = Expression.Parameter(typeof(object), "obj");
+            var body = Expression.Convert(Expression.Field(Expression.Convert(obj, field.DeclaringType), field), typeof(object));
+            return Expression.Lambda<Func<object, object>>(body, obj).Compile();
+        }
+
+        private static Action<object, object> CompileSetter(FieldInfo field)
+        {
+            var obj = Expression.Parameter(typeof(object), "obj");
+            var value = Expression.Parameter(typeof(object), "value");
+            var body = Expression.Assign(Expression.Field(Expression.Convert(obj, field.DeclaringType), field),
+                                         Expression.Convert(value, field.FieldType));
+            return Expression.Lambda<Action<object, object>>(body, obj, value).Compile();
         }
 
         /// <summary>

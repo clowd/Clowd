@@ -902,19 +902,22 @@ namespace Clowd.Drawing
         /// </summary>
         private void SyncGraphicVisuals()
         {
-            foreach (var v in _attachedGraphicVisuals)
-                VisualChildren.Remove(v);
-            _attachedGraphicVisuals.Clear();
+            // the graphic visuals are one contiguous block (inserted together below), so they can
+            // be detached/attached with single range operations instead of per-item Remove/Insert
+            // (each of which is an O(n) scan plus its own change notification).
+            if (_attachedGraphicVisuals.Count > 0)
+            {
+                var start = VisualChildren.IndexOf(_attachedGraphicVisuals[0]);
+                VisualChildren.RemoveRange(start, _attachedGraphicVisuals.Count);
+                _attachedGraphicVisuals.Clear();
+            }
 
             var list = GraphicsList;
-            if (list != null)
+            if (list != null && list.VisualCount > 0)
             {
                 for (int i = 0; i < list.VisualCount; i++)
-                {
-                    var vis = list.GetVisual(i);
-                    VisualChildren.Insert(2 + i, vis);
-                    _attachedGraphicVisuals.Add(vis);
-                }
+                    _attachedGraphicVisuals.Add(list.GetVisual(i));
+                VisualChildren.InsertRange(2, _attachedGraphicVisuals);
             }
 
             InvalidateArrange();

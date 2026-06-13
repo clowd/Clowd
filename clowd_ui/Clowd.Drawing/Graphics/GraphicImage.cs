@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -131,6 +134,16 @@ namespace Clowd.Drawing.Graphics
         private PixelRect _crop;
         private Size _originalSize;
         private ObscuredShape[] _obscuredShapes = new ObscuredShape[0];
+        /// <summary>The decoded source bitmap (exposed for tests of the shared decode cache).</summary>
+        internal Bitmap ImageSource
+        {
+            get
+            {
+                if (_imageSource == null) UpdateImageCache();
+                return _imageSource;
+            }
+        }
+
         // not persisted by GraphicsSerializer
         [Transient] private Bitmap _imageSource;
         [Transient] private Bitmap _imageObscured;
@@ -427,7 +440,67 @@ namespace Clowd.Drawing.Graphics
             return geo;
         }
 
+        // Decoding the screenshot (disk read + PNG decode + optional cursor composite) costs far
+        // more than everything else on the undo/redo and editor-open paths, and undo/redo restores
+        // snapshots into brand new GraphicImage instances whose [Transient] caches start out null.
+        // The decoded result is therefore shared process-wide, keyed by every input that affects
+        // it (paths include mtime/size so a rewritten file is not served stale). Entries are never
+        // disposed on eviction — live graphics may still be drawing them; the GC reclaims them.
+        private readonly record struct ImageCacheKey(string BitmapPath, long BitmapStamp, string CursorPath, long CursorStamp,
+                                                     PixelRect CursorPosition);
+
+        private const int SourceCacheCapacity = 8;
+        private static readonly object _sourceCacheLock = new object();
+        private static readonly Dictionary<ImageCacheKey, Bitmap> _sourceCache = new Dictionary<ImageCacheKey, Bitmap>();
+        private static readonly List<ImageCacheKey> _sourceCacheLru = new List<ImageCacheKey>(); // most recently used last
+
+        private static long GetFileStamp(string path)
+        {
+            var fi = new FileInfo(path);
+            return fi.Exists ? fi.LastWriteTimeUtc.Ticks ^ (fi.Length << 1) : 0;
+        }
+
         private void UpdateImageCache()
+        {
+            bool compositeCursor = HasCursor && CursorVisible;
+            var key = new ImageCacheKey(
+                _bitmapFilePath,
+                GetFileStamp(_bitmapFilePath),
+                compositeCursor ? _cursorFilePath : null,
+                compositeCursor ? GetFileStamp(_cursorFilePath) : 0,
+                compositeCursor ? _cursorPosition : default);
+
+            lock (_sourceCacheLock)
+            {
+                if (_sourceCache.TryGetValue(key, out var cached))
+                {
+                    _sourceCacheLru.Remove(key);
+                    _sourceCacheLru.Add(key);
+                    _imageSource = cached;
+                    return;
+                }
+            }
+
+            var loaded = LoadImageSource(compositeCursor);
+
+            lock (_sourceCacheLock)
+            {
+                if (!_sourceCache.ContainsKey(key))
+                {
+                    _sourceCache.Add(key, loaded);
+                    _sourceCacheLru.Add(key);
+                    if (_sourceCacheLru.Count > SourceCacheCapacity)
+                    {
+                        _sourceCache.Remove(_sourceCacheLru[0]);
+                        _sourceCacheLru.RemoveAt(0);
+                    }
+                }
+            }
+
+            _imageSource = loaded;
+        }
+
+        private Bitmap LoadImageSource(bool compositeCursor)
         {
             // decision #22: BitmapFactory.FromStream + Blit → new Bitmap(stream), composited into a
             // RenderTargetBitmap at image pixel size / 96 DPI (image first, then cursor rect).
@@ -436,10 +509,23 @@ namespace Clowd.Drawing.Graphics
             using (var bifs = File.OpenRead(_bitmapFilePath))
                 bi = new Bitmap(bifs);
 
-            bool compositeCursor = HasCursor && CursorVisible;
             bool normalizeDpi = Math.Abs(bi.Dpi.X - 96) > 0.01 || Math.Abs(bi.Dpi.Y - 96) > 0.01;
 
-            if (compositeCursor || normalizeDpi)
+            if (!compositeCursor && !normalizeDpi)
+                return bi;
+
+            if (!compositeCursor)
+            {
+                // DPI is metadata only — re-tag the pixels as 96 DPI with a raw copy (no render pass)
+                var copied = TryCopyPixels(bi);
+                if (copied != null)
+                {
+                    bi.Dispose();
+                    return copied;
+                }
+            }
+
+            using (bi)
             {
                 using var rtb = new RenderTargetBitmap(bi.PixelSize, new Vector(96, 96));
                 using (var ctx = rtb.CreateDrawingContext())
@@ -449,21 +535,51 @@ namespace Clowd.Drawing.Graphics
                     if (compositeCursor)
                     {
                         using var curfs = File.OpenRead(_cursorFilePath);
-                        var wcursor = new Bitmap(curfs);
+                        using var wcursor = new Bitmap(curfs);
                         ctx.DrawImage(wcursor, new Rect(wcursor.Size), _cursorPosition.ToRect());
                     }
                 }
 
                 // a RenderTargetBitmap is not a readable bitmap — CreateScaledBitmap (obscure cache)
-                // throws "invalid source bitmap type" on it — so decode it back into a plain Bitmap.
+                // throws "invalid source bitmap type" on it — so copy the pixels out into a plain
+                // (readable) bitmap, falling back to a PNG round-trip if the copy is unsupported.
+                var copied = TryCopyPixels(rtb);
+                if (copied != null)
+                    return copied;
+
                 using var ms = new MemoryStream();
                 rtb.Save(ms);
                 ms.Position = 0;
-                _imageSource = new Bitmap(ms);
+                return new Bitmap(ms);
             }
-            else
+        }
+
+        /// <summary>Raw-copies a bitmap's pixels into a readable 96-DPI bitmap, avoiding a render
+        /// pass / PNG round-trip. The raw-data Bitmap constructor is used (not a WriteableBitmap)
+        /// because it produces an immutable bitmap — the only kind Skia's CreateScaledBitmap (the
+        /// pixelate obscure cache) accepts. Returns null if the source does not support
+        /// CopyPixels.</summary>
+        private static Bitmap TryCopyPixels(Bitmap source)
+        {
+            if (source.Format == null)
+                return null;
+
+            var format = source.Format.Value;
+            var size = source.PixelSize;
+            var stride = (size.Width * format.BitsPerPixel + 7) / 8;
+            var buffer = Marshal.AllocHGlobal(stride * size.Height);
+            try
             {
-                _imageSource = bi;
+                source.CopyPixels(new PixelRect(size), buffer, stride * size.Height, stride);
+                return new Bitmap(format, AlphaFormat.Premul, buffer, size, new Vector(96, 96), stride);
+            }
+            catch (NotSupportedException)
+            {
+                return null;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
             }
         }
 
@@ -499,6 +615,7 @@ namespace Clowd.Drawing.Graphics
                         var scaledSize = new PixelSize(
                             Math.Max(1, (int)Math.Round(pixelW * sc)),
                             Math.Max(1, (int)Math.Round(pixelH * sc)));
+                        blurCache?.Dispose();
                         blurCache = _imageSource.CreateScaledBitmap(scaledSize, BitmapInterpolationMode.LowQuality);
                     }
 
@@ -507,7 +624,22 @@ namespace Clowd.Drawing.Graphics
                 }
             }
 
-            _imageObscured = obscured;
+            blurCache?.Dispose();
+
+            // this overlay is drawn over the image every frame it renders; a live RenderTargetBitmap
+            // is a surface-backed image (slower to draw repeatedly, and it pins a full GPU surface),
+            // so copy the pixels out into an immutable bitmap and release the surface.
+            var copied = TryCopyPixels(obscured);
+            if (copied != null)
+            {
+                obscured.Dispose();
+                _imageObscured = copied;
+            }
+            else
+            {
+                _imageObscured = obscured;
+            }
+
             return true;
         }
     }
