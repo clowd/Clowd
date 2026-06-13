@@ -200,8 +200,16 @@ namespace Clowd.UI.Helpers
             // screen (replaces the WPF "fake owner window" mechanism).
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                return desktop.Windows.FirstOrDefault(w => w.IsActive && w.IsVisible)
-                       ?? desktop.Windows.FirstOrDefault(w => w.IsVisible);
+                // Exclude Avalonia-internal transient top-levels (e.g. TrayPopupRoot, the window
+                // that hosts the tray context menu). When a dialog is opened from a tray menu item,
+                // that popup is still listed and reports IsVisible/IsActive, but it is torn down as
+                // the menu dismisses — picking it as the dialog owner makes ShowDialog's CenterOwner
+                // placement throw "Windowing backend wasn't properly initialized." once its backend
+                // is gone. Our own windows all live under Clowd.* namespaces.
+                static bool IsAppWindow(Window w) => !w.GetType().FullName!.StartsWith("Avalonia", StringComparison.Ordinal);
+
+                return desktop.Windows.FirstOrDefault(w => w.IsActive && w.IsVisible && IsAppWindow(w))
+                       ?? desktop.Windows.FirstOrDefault(w => w.IsVisible && IsAppWindow(w));
             }
 
             return null;
