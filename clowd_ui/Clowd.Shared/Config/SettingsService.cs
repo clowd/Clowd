@@ -68,14 +68,36 @@ namespace Clowd.Config
                 throw new ArgumentNullException(nameof(settings));
 
             var json = JsonSerializer.Serialize(settings, CreateJsonOptions());
-            var tempPath = path + ".~tmp";
+
+            // unique temp name: a fixed name races when two instances save concurrently
+            var tempPath = path + "." + Path.GetRandomFileName() + ".~tmp";
 
             Directory.CreateDirectory(Path.GetDirectoryName(path));
 
             WithSharingVioRetry<object>(() =>
             {
                 File.WriteAllText(tempPath, json);
-                File.Move(tempPath, path, overwrite: true);
+                try
+                {
+                    File.Move(tempPath, path, overwrite: true);
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    // the atomic replace is denied while another process (editor tab, file
+                    // watcher, AV scan) holds the settings file open without delete sharing.
+                    // Fall back to writing in place — open handles normally share read/write.
+                    File.WriteAllText(path, json);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (File.Exists(tempPath))
+                            File.Delete(tempPath);
+                    }
+                    catch {; }
+                }
+
                 return null;
             });
         }

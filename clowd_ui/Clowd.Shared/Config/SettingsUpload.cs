@@ -32,26 +32,42 @@ namespace Clowd.Config
             get => _provider;
         }
 
-        private UploadProviderInfo()
-        {
-            // for serializer only
-        }
-
         public UploadProviderInfo(IUploadProvider provider)
         {
             _provider = provider;
         }
 
         private bool _isEnabled;
-        private IUploadProvider _provider;
+        private readonly IUploadProvider _provider;
         private SupportedUploadType _defaultFor;
+    }
+
+    /// <summary>
+    /// Persisted state for a single provider. The settings file is read back through the
+    /// Microsoft.Extensions.Configuration binder (string-keyed), so polymorphic provider objects
+    /// cannot be serialized directly — instead each provider's writable settings properties are
+    /// flattened to strings here and re-applied after <see cref="SettingsUpload.DiscoverProviders"/>
+    /// instantiates the provider.
+    /// </summary>
+    public class UploadProviderConfig
+    {
+        public bool IsEnabled { get; set; }
+
+        public SupportedUploadType DefaultFor { get; set; } = SupportedUploadType.None;
+
+        public Dictionary<string, string> Settings { get; set; } = new();
     }
 
     public class SettingsUpload : SimpleNotifyObject
     {
-        // runtime-discovered state (no providers ship in this build) — not persisted.
+        // runtime-discovered state — populated by DiscoverProviders(), not persisted directly.
         [Browsable(false), JsonIgnore]
         public UploadProviderInfo[] Providers => _providers.ToArray();
+
+        /// <summary>Persisted provider state, keyed by provider type name (e.g. "ImgurUploadProvider").
+        /// Kept in sync with the runtime <see cref="Providers"/> wrappers automatically.</summary>
+        [Browsable(false)]
+        public Dictionary<string, UploadProviderConfig> ProviderConfig { get; set; } = new(StringComparer.Ordinal);
 
         private List<UploadProviderInfo> _providers = new();
 
@@ -68,6 +84,11 @@ namespace Clowd.Config
                 if (p == provider) continue;
                 p.DefaultFor &= ~types;
             }
+        }
+
+        public void ClearDefaultProvider(UploadProviderInfo provider, SupportedUploadType types)
+        {
+            provider.DefaultFor &= ~types;
         }
 
         public void ClearAllDefaultProviders()
@@ -91,21 +112,12 @@ namespace Clowd.Config
                 .Select(p => p);
         }
 
-        /// <summary>Discovers IUploadProvider implementations in loaded assemblies. Called
-        /// explicitly from application startup — never as a side effect of settings parsing.</summary>
+        /// <summary>Discovers IUploadProvider implementations in loaded assemblies, applies any
+        /// persisted <see cref="ProviderConfig"/> to them, and starts mirroring further changes
+        /// back into <see cref="ProviderConfig"/>. Called explicitly from application startup —
+        /// never as a side effect of settings parsing.</summary>
         public void DiscoverProviders()
         {
-            // this function searches for and adds any 'IUploadProvider' classes
-            // it can find that are not currently listed in the settings.
-            // also, it removes any info classes which have a null provider
-            // note: no providers ship in this build, so this typically finds nothing.
-
-            foreach (var i in _providers.ToArray())
-            {
-                if (i.Provider == null)
-                    _providers.Remove(i);
-            }
-
             var assembliesToSearch = AppDomain.CurrentDomain.GetAssemblies();
             var type = typeof(IUploadProvider);
             var types = assembliesToSearch
@@ -116,10 +128,74 @@ namespace Clowd.Config
             foreach (var toAdd in types.Except(_providers.Select(p => p.Provider.GetType())))
             {
                 var instance = (IUploadProvider)Activator.CreateInstance(toAdd);
-                _providers.Add(new UploadProviderInfo(instance) { IsEnabled = false });
+                var info = new UploadProviderInfo(instance);
+
+                if (ProviderConfig.TryGetValue(toAdd.Name, out var config))
+                {
+                    ApplyConfig(info, config);
+                }
+
+                // subscribe after applying saved state so startup does not look like a user edit
+                info.PropertyChanged += (s, e) => SyncToConfig((UploadProviderInfo)s);
+                instance.PropertyChanged += (s, e) => SyncToConfig(info);
+
+                _providers.Add(info);
             }
 
             _providers = _providers.OrderBy(p => p.Provider.Name, StringComparer.Ordinal).ToList();
+        }
+
+        private static void ApplyConfig(UploadProviderInfo info, UploadProviderConfig config)
+        {
+            info.IsEnabled = config.IsEnabled;
+            info.DefaultFor = config.DefaultFor;
+
+            if (config.Settings == null)
+                return;
+
+            foreach (PropertyDescriptor pd in TypeDescriptor.GetProperties(info.Provider))
+            {
+                if (pd.IsReadOnly || !pd.IsBrowsable)
+                    continue;
+
+                if (!config.Settings.TryGetValue(pd.Name, out var raw) || raw == null)
+                    continue;
+
+                try
+                {
+                    pd.SetValue(info.Provider, pd.Converter.ConvertFromInvariantString(raw));
+                }
+                catch
+                {
+                    // a stale/invalid saved value should not prevent the provider from loading
+                }
+            }
+        }
+
+        /// <summary>Mirrors the current state of a provider wrapper into <see cref="ProviderConfig"/>
+        /// and raises PropertyChanged so the UI layer's auto-save persists it.</summary>
+        private void SyncToConfig(UploadProviderInfo info)
+        {
+            var config = new UploadProviderConfig
+            {
+                IsEnabled = info.IsEnabled,
+                DefaultFor = info.DefaultFor,
+            };
+
+            foreach (PropertyDescriptor pd in TypeDescriptor.GetProperties(info.Provider))
+            {
+                if (pd.IsReadOnly || !pd.IsBrowsable)
+                    continue;
+
+                var value = pd.GetValue(info.Provider);
+                if (value == null)
+                    continue;
+
+                config.Settings[pd.Name] = pd.Converter.ConvertToInvariantString(value);
+            }
+
+            ProviderConfig[info.Provider.GetType().Name] = config;
+            OnPropertyChanged(nameof(ProviderConfig));
         }
 
         private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
