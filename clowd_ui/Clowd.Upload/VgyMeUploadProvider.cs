@@ -7,7 +7,7 @@ using System.Net.Http.Handlers;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Clowd.Upload
 {
@@ -37,7 +37,7 @@ namespace Clowd.Upload
             };
 
             var resp = await SendFileAsFormData("https://vgy.me/upload", fileStream, "file", progress, uploadName, args);
-            var obj = JsonConvert.DeserializeObject<VgyResponse>(resp);
+            var obj = JsonSerializer.Deserialize(resp, UploadJsonContext.Default.VgyResponse);
 
             return new UploadResult()
             {
@@ -50,16 +50,17 @@ namespace Clowd.Upload
             };
         }
 
-        class VgyResponse
-        {
-            public bool error { get; set; }
-            public int filesize { get; set; }
-            public string filename { get; set; }
-            public string ext { get; set; }
-            public string url { get; set; }
-            public string image { get; set; }
-            public string delete { get; set; }
-            public Dictionary<string, string> messages { get; set; }
-        }
+    }
+
+    internal class VgyResponse
+    {
+        public bool error { get; set; }
+        public int filesize { get; set; }
+        public string filename { get; set; }
+        public string ext { get; set; }
+        public string url { get; set; }
+        public string image { get; set; }
+        public string delete { get; set; }
+        public Dictionary<string, string> messages { get; set; }
     }
 }

@@ -44,7 +44,6 @@ Avalonia                            https://github.com/AvaloniaUI/Avalonia/blob/
 Avalonia.Fonts.Inter                https://github.com/rsms/inter/blob/master/LICENSE.txt
 Semi.Avalonia                       https://github.com/irihitech/Semi.Avalonia/blob/main/LICENSE
 Irihi.Ursa                          https://github.com/irihitech/Ursa.Avalonia/blob/main/LICENSE
-Newtonsoft.Json                     https://licenses.nuget.org/MIT
 burningmime.curves                  https://github.com/burningmime/curves
 ";
 

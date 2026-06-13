@@ -19,7 +19,6 @@
     <PackageReference Include="Irihi.Ursa" Version="1.15.1" />
     <PackageReference Include="Irihi.Ursa.Themes.Semi" Version="1.15.1" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.13" Condition="'$(Configuration)'=='Debug'" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SharpHook" Version="7.1.2" />
   </ItemGroup>
   <ItemGroup>

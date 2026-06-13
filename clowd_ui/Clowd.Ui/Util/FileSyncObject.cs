@@ -3,18 +3,22 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using Avalonia.Threading;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Clowd.Util
 {
-    public class FileSyncObject : INotifyPropertyChanged, IDisposable
+    public abstract class FileSyncObject : INotifyPropertyChanged, IDisposable
     {
         public DateTime LastModifiedUtc { get; set; }
 
         [JsonIgnore] public string FilePath { get; }
+
+        protected abstract JsonTypeInfo GetJsonTypeInfo();
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -93,7 +97,7 @@ namespace Clowd.Util
         {
             DoRetryDiskAction(() =>
             {
-                var json = JsonConvert.SerializeObject(this);
+                var json = JsonSerializer.Serialize(this, GetJsonTypeInfo());
                 File.WriteAllText(FilePath, json);
             });
         }
@@ -109,18 +113,35 @@ namespace Clowd.Util
                 // loop (especially via the less precise FSW on macOS), so skip it.
                 if (_initialized)
                 {
-                    var jobj = JObject.Parse(json);
-                    var modifiedToken = jobj["LastModifiedUtc"];
-                    if (modifiedToken != null && modifiedToken.Type != JTokenType.Null)
+                    var node = JsonNode.Parse(json);
+                    var modifiedNode = node?["LastModifiedUtc"];
+                    if (modifiedNode != null)
                     {
-                        var fileModified = modifiedToken.Value<DateTime>().ToUniversalTime();
+                        var fileModified = modifiedNode.GetValue<DateTime>().ToUniversalTime();
                         if (fileModified == LastModifiedUtc)
                             return;
                     }
                 }
 
-                JsonConvert.PopulateObject(json, this);
+                PopulateFromJson(json);
             });
+        }
+
+        private void PopulateFromJson(string json)
+        {
+            var node = JsonNode.Parse(json);
+            if (node is not JsonObject obj) return;
+
+            var typeInfo = GetJsonTypeInfo();
+            foreach (var prop in typeInfo.Properties)
+            {
+                if (prop.Set == null) continue;
+                if (!obj.ContainsKey(prop.Name)) continue;
+
+                var valueNode = obj[prop.Name];
+                object value = valueNode?.Deserialize(prop.PropertyType, typeInfo.Options);
+                prop.Set(this, value);
+            }
         }
 
         private void DoRetryDiskAction(Action fn)

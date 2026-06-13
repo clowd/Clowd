@@ -6,7 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Clowd.Upload
 {
@@ -58,7 +58,7 @@ namespace Clowd.Upload
             var bu = BaseUrl.TrimEnd('/', '\\');
             var ulu = bu + "/api/image/upload";
             var json = await SendFileAsFormData(ulu, fileStream, "image", progress, uploadName, auth: auth);
-            var parsed = JsonConvert.DeserializeObject<PicsurResponse>(json);
+            var parsed = JsonSerializer.Deserialize(json, UploadJsonContext.Default.PicsurResponse);
             if (!parsed.success || parsed.data == null || parsed.data.id == null)
                 throw new Exception("Failed to upload file. " + (parsed?.data?.message ?? parsed.statusCode.ToString()));
 
@@ -77,18 +77,19 @@ namespace Clowd.Upload
             };
         }
 
-        private class PicsurData
-        {
-            public string id { get; set; }
-            public string delete_key { get; set; }
-            public string message { get; set; }
-        }
+    }
 
-        private class PicsurResponse
-        {
-            public bool success { get; set; }
-            public int statusCode { get; set; }
-            public PicsurData data { get; set; }
-        }
+    internal class PicsurData
+    {
+        public string id { get; set; }
+        public string delete_key { get; set; }
+        public string message { get; set; }
+    }
+
+    internal class PicsurResponse
+    {
+        public bool success { get; set; }
+        public int statusCode { get; set; }
+        public PicsurData data { get; set; }
     }
 }

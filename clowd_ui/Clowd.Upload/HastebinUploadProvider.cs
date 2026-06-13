@@ -2,7 +2,7 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Clowd.Upload
 {
@@ -41,7 +41,7 @@ namespace Clowd.Upload
         {
             var url = HasteBinUrl.TrimEnd('/');
             var result = await SendFileAsContent(url + "/documents", fileStream, progress);
-            var resp = JsonConvert.DeserializeObject<HasebinResponse>(result);
+            var resp = JsonSerializer.Deserialize(result, UploadJsonContext.Default.HasebinResponse);
 
             if (resp?.key == null)
                 throw new Exception("Empty response");
@@ -61,12 +61,13 @@ namespace Clowd.Upload
             };
         }
 
-        private class HasebinResponse
-        {
-            public string key { get; set; }
-            
-            // pastie.io only, native hastebin does not support 
-            public string secret { get; set; } 
-        }
+    }
+
+    internal class HasebinResponse
+    {
+        public string key { get; set; }
+
+        // pastie.io only, native hastebin does not support
+        public string secret { get; set; }
     }
 }
