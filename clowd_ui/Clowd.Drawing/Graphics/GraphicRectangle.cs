@@ -78,12 +78,16 @@ namespace Clowd.Drawing.Graphics
                 if (Angle == 0)
                     return UnrotatedBounds;
 
-                var points = new[] { new Point(Left, Top), new Point(Right, Top), new Point(Left, Bottom), new Point(Right, Bottom) };
-                var rotated = points.Select(ApplyRotation).ToArray();
-                var l = rotated.Min(p => p.X);
-                var t = rotated.Min(p => p.Y);
-                var r = rotated.Max(p => p.X);
-                var b = rotated.Max(p => p.Y);
+                // hot path: the artwork-bounds recompute reads Bounds of every graphic on every
+                // property change while dragging — no LINQ/array allocations
+                var p0 = ApplyRotation(new Point(Left, Top));
+                var p1 = ApplyRotation(new Point(Right, Top));
+                var p2 = ApplyRotation(new Point(Left, Bottom));
+                var p3 = ApplyRotation(new Point(Right, Bottom));
+                var l = Math.Min(Math.Min(p0.X, p1.X), Math.Min(p2.X, p3.X));
+                var t = Math.Min(Math.Min(p0.Y, p1.Y), Math.Min(p2.Y, p3.Y));
+                var r = Math.Max(Math.Max(p0.X, p1.X), Math.Max(p2.X, p3.X));
+                var b = Math.Max(Math.Max(p0.Y, p1.Y), Math.Max(p2.Y, p3.Y));
                 return new Rect(l, t, r - l, b - t);
             }
         }

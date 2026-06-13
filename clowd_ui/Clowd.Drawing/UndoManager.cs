@@ -96,113 +96,131 @@ namespace Clowd.Drawing
         /// </summary>
         internal static SortedSet<string> GetChangedNodes(JsonObject prev, JsonObject next)
         {
-            bool HasChildren(JsonNode node) => node is JsonObject || node is JsonArray;
+            // this runs on every command step (including each merged step of a drag), so it is
+            // written iteratively over materialized child arrays with plain string paths — no
+            // LINQ/iterator allocations per node.
+            var changes = new SortedSet<string>(StringComparer.Ordinal);
+            DiffChildren("root", prev, next, changes);
+            return changes;
+        }
 
-            string GetItemName(JsonNode node, int index)
+        private static bool HasChildren(JsonNode node) => node is JsonObject || node is JsonArray;
+
+        private static string GetItemName(JsonNode node, int index)
+        {
+            if (node is JsonObject obj &&
+                obj.TryGetPropertyValue("id", out var id) &&
+                id is JsonValue value &&
+                value.TryGetValue<string>(out var name))
             {
-                if (node is JsonObject obj &&
-                    obj.TryGetPropertyValue("id", out var id) &&
-                    id is JsonValue value &&
-                    value.TryGetValue<string>(out var name))
-                {
-                    return name;
-                }
-
-                return "item." + index;
+                return name;
             }
 
-            IEnumerable<KeyValuePair<string, JsonNode>> NamedChildren(JsonNode node)
+            return "item." + index;
+        }
+
+        private static KeyValuePair<string, JsonNode>[] GetNamedChildren(JsonNode node)
+        {
+            if (node is JsonObject obj)
             {
-                if (node is JsonObject obj)
-                {
-                    foreach (var kvp in obj)
-                        yield return kvp;
-                }
-                else if (node is JsonArray arr)
-                {
-                    for (int i = 0; i < arr.Count; i++)
-                        yield return new KeyValuePair<string, JsonNode>(GetItemName(arr[i], i), arr[i]);
-                }
+                var children = new KeyValuePair<string, JsonNode>[obj.Count];
+                int i = 0;
+                foreach (var kvp in obj)
+                    children[i++] = kvp;
+                return children;
             }
 
-            IEnumerable<IEnumerable<string>> GetChangedPathsInternal(IEnumerable<string> path, JsonNode prevEl, JsonNode nextEl)
+            if (node is JsonArray arr)
             {
-                // id-keyed matching makes a pure reorder invisible to the per-item diff, but list
-                // order is the z-order of the graphics — report it explicitly. (Adds/removes change
-                // membership and already produce their own paths.)
-                if (prevEl is JsonArray && nextEl is JsonArray)
+                var children = new KeyValuePair<string, JsonNode>[arr.Count];
+                for (int i = 0; i < arr.Count; i++)
+                    children[i] = new KeyValuePair<string, JsonNode>(GetItemName(arr[i], i), arr[i]);
+                return children;
+            }
+
+            return Array.Empty<KeyValuePair<string, JsonNode>>();
+        }
+
+        private static void DiffChildren(string path, JsonNode prevEl, JsonNode nextEl, SortedSet<string> changes)
+        {
+            var prevChildren = GetNamedChildren(prevEl);
+            var nextChildren = GetNamedChildren(nextEl);
+
+            // id-keyed matching makes a pure reorder invisible to the per-item diff, but list
+            // order is the z-order of the graphics — report it explicitly. (Adds/removes change
+            // membership and already produce their own paths.)
+            if (prevEl is JsonArray && nextEl is JsonArray && prevChildren.Length == nextChildren.Length)
+            {
+                bool sameOrder = true;
+                for (int i = 0; i < prevChildren.Length; i++)
                 {
-                    var prevNames = NamedChildren(prevEl).Select(c => c.Key).ToList();
-                    var nextNames = NamedChildren(nextEl).Select(c => c.Key).ToList();
-                    if (prevNames.Count == nextNames.Count &&
-                        !prevNames.SequenceEqual(nextNames) &&
-                        new HashSet<string>(prevNames).SetEquals(nextNames))
+                    if (!string.Equals(prevChildren[i].Key, nextChildren[i].Key, StringComparison.Ordinal))
                     {
-                        yield return path.Append("(order)");
+                        sameOrder = false;
+                        break;
                     }
                 }
 
-                Dictionary<string, JsonNode> dict = new();
-
-                // add all of prev properties to dictionary
-                foreach (var e in NamedChildren(prevEl))
+                if (!sameOrder)
                 {
-                    dict.Add(e.Key, e.Value);
-                }
+                    var prevNames = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var c in prevChildren)
+                        prevNames.Add(c.Key);
 
-                // iterate next properties, find matches in dictionary
-                foreach (var e in NamedChildren(nextEl))
-                {
-                    var eNext = e.Value;
-                    var elName = e.Key;
-                    var elPath = path.Append(elName);
-
-                    if (!dict.TryGetValue(elName, out var ePrev))
+                    bool sameMembers = true;
+                    foreach (var c in nextChildren)
                     {
-                        // prev does not contain this property
-                        yield return elPath;
-                    }
-                    else // match found
-                    {
-                        dict.Remove(elName);
-
-                        if (HasChildren(ePrev) != HasChildren(eNext))
+                        if (!prevNames.Contains(c.Key))
                         {
-                            // the structure of this element has changed
-                            yield return elPath;
-                        }
-                        else
-                        {
-                            if (HasChildren(ePrev))
-                            {
-                                // they both have children to check
-                                foreach (var f in GetChangedPathsInternal(elPath, ePrev, eNext))
-                                {
-                                    yield return f;
-                                }
-                            }
-                            else
-                            {
-                                // they both have an absolute value and it's changed
-                                if (!JsonNode.DeepEquals(ePrev, eNext))
-                                {
-                                    yield return elPath;
-                                }
-                            }
+                            sameMembers = false;
+                            break;
                         }
                     }
-                }
 
-                // anything not removed from the dictionary was not in 'next'
-                foreach (var e in dict)
-                {
-                    yield return path.Append(e.Key);
+                    if (sameMembers)
+                        changes.Add(path + "/(order)");
                 }
             }
 
-            return new SortedSet<string>(
-                GetChangedPathsInternal(new[] { "root" }, prev, next)
-                    .Select(s => String.Join("/", s)));
+            // add all of prev properties to dictionary
+            var dict = new Dictionary<string, JsonNode>(prevChildren.Length, StringComparer.Ordinal);
+            foreach (var e in prevChildren)
+                dict.Add(e.Key, e.Value);
+
+            // iterate next properties, find matches in dictionary
+            foreach (var e in nextChildren)
+            {
+                var elPath = path + "/" + e.Key;
+
+                if (!dict.TryGetValue(e.Key, out var ePrev))
+                {
+                    // prev does not contain this property
+                    changes.Add(elPath);
+                    continue;
+                }
+
+                dict.Remove(e.Key);
+
+                if (HasChildren(ePrev) != HasChildren(e.Value))
+                {
+                    // the structure of this element has changed
+                    changes.Add(elPath);
+                }
+                else if (HasChildren(ePrev))
+                {
+                    // they both have children to check
+                    DiffChildren(elPath, ePrev, e.Value, changes);
+                }
+                else if (!JsonNode.DeepEquals(ePrev, e.Value))
+                {
+                    // they both have an absolute value and it's changed
+                    changes.Add(elPath);
+                }
+            }
+
+            // anything not removed from the dictionary was not in 'next'
+            foreach (var e in dict)
+                changes.Add(path + "/" + e.Key);
         }
 
         public void Undo()
@@ -240,12 +258,11 @@ namespace Clowd.Drawing
         void SetState(SimpleLinkedListNode node)
         {
             var state = node.Value.Deserialize<GraphicState>(GraphicsSerializer.Options);
-            var nextGraphics = new GraphicCollection(_drawingCanvas);
             foreach (var s in state.Graphics)
-            {
                 s.Normalize();
-                nextGraphics.Add(s);
-            }
+
+            var nextGraphics = new GraphicCollection(_drawingCanvas);
+            nextGraphics.AddRange(state.Graphics);
 
             _drawingCanvas.GraphicsList = nextGraphics;
             _drawingCanvas.ArtworkBackground = state.BackgroundColor;

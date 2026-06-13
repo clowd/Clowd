@@ -74,7 +74,11 @@ namespace Clowd.Drawing.Graphics
             }
             else
             {
-                if (_final == null) EndDrawing(false);
+                // _final is [Transient] so it must be rebuilt lazily after deserialization. This
+                // runs inside the render pass, so it must not raise PropertyChanged — that calls
+                // InvalidateVisual, which Avalonia forbids mid-render ("Visual was invalidated
+                // during the render pass").
+                if (_final == null) BuildFinalGeometry();
 
                 // geometry points will be at the original location they were drawn. we need to translate them into
                 // the correct location as this rectangle may have been moved or resized.
@@ -130,6 +134,24 @@ namespace Clowd.Drawing.Graphics
             _drawing = false;
             _segments = null;
 
+            BuildFinalGeometry();
+
+            if (updateBounds)
+            {
+                Left = _points.Min(p => p.X);
+                Right = _points.Max(p => p.X);
+                Top = _points.Min(p => p.Y);
+                Bottom = _points.Max(p => p.Y);
+            }
+
+            Normalize(); // set CenterOfRotation
+            OnPropertyChanged(nameof(Bounds));
+        }
+
+        // Fits the recorded points into the final bezier geometry. No notifications / side
+        // effects, so it is safe to call from DrawRectangle during the render pass.
+        private void BuildFinalGeometry()
+        {
             List<Vector> ppPts = CurvePreprocess.Linearize(_points.Select(p => new Vector(p.X, p.Y)).ToList(), 8);
             CubicBezier[] curves = CurveFit.Fit(ppPts, 2);
 
@@ -146,17 +168,6 @@ namespace Clowd.Drawing.Graphics
             }
 
             _final = geo;
-
-            if (updateBounds)
-            {
-                Left = _points.Min(p => p.X);
-                Right = _points.Max(p => p.X);
-                Top = _points.Min(p => p.Y);
-                Bottom = _points.Max(p => p.Y);
-            }
-
-            Normalize(); // set CenterOfRotation
-            OnPropertyChanged(nameof(Bounds));
         }
 
         internal void AddPoint(Point p)

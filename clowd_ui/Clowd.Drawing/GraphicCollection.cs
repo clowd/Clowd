@@ -87,9 +87,47 @@ namespace Clowd.Drawing
             OnPropertyChanged(nameof(Count));
         }
 
+        /// <summary>
+        /// Bulk add used when restoring an undo snapshot: one bounds/selection/Count invalidation
+        /// for the whole batch instead of per graphic, and a single id set for the duplicate check
+        /// instead of an O(n) scan per add.
+        /// </summary>
+        internal void AddRange(IEnumerable<GraphicBase> graphics)
+        {
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var g in _graphics)
+                ids.Add(g.Id);
+
+            bool anySelected = false;
+            foreach (var graphic in graphics)
+            {
+                // we should not ever allow duplicate object id's
+                if (!ids.Add(graphic.Id))
+                {
+                    graphic.Id = Guid.NewGuid().ToString();
+                    ids.Add(graphic.Id);
+                }
+
+                var vis = new GraphicVisual(graphic, this);
+                var captured = graphic;
+                _graphics.Add(graphic);
+                _visuals.Add(vis);
+                graphic.PropertyChanged += (sender, args) => GraphicPropertyChanged(captured, vis, args);
+                anySelected |= graphic.IsSelected;
+            }
+
+            InvalidateBounds();
+            if (anySelected) InvalidateSelected();
+            OnPropertyChanged(nameof(Count));
+        }
+
         private void GraphicPropertyChanged(GraphicBase graphic, GraphicVisual visual, PropertyChangedEventArgs e)
         {
-            visual.UpdateEffect();
+            // every property change of every graphic funnels through here — a drag raises several
+            // of these per pointer move — so only do the work the change can actually require
+            if (e.PropertyName == nameof(GraphicBase.DropShadowEffect))
+                visual.UpdateEffect();
+
             visual.InvalidateVisual();
             InvalidateBounds();
 
@@ -232,24 +270,19 @@ namespace Clowd.Drawing
 
         private Rect GetArtworkBounds()
         {
-            if (_graphics.Count == 0)
-                return default;
-
-            var artwork = _graphics.Where(g => !(g is GraphicSelectionRectangle));
-
-            Rect result = new Rect(0, 0, 0, 0);
+            // recomputed on every property change of every graphic (several times per pointer
+            // move during a drag) — plain loop, no LINQ/iterator allocations
+            Rect result = default;
             bool first = true;
-            foreach (var item in artwork)
+            for (int i = 0; i < _graphics.Count; i++)
             {
-                var rect = item.Bounds;
-                if (first)
-                {
-                    result = rect;
-                    first = false;
+                var item = _graphics[i];
+                if (item is GraphicSelectionRectangle)
                     continue;
-                }
 
-                result = result.Union(rect);
+                var rect = item.Bounds;
+                result = first ? rect : result.Union(rect);
+                first = false;
             }
 
             return result;
