@@ -3,31 +3,29 @@
 
     <Styles.Resources>
         <ResourceDictionary>
+            <!-- Clowd brand color — single source for the logo (and anything else brand-tinted). -->
+            <Color x:Key="ClowdAccentColor">#00AFF0</Color>
+            <SolidColorBrush x:Key="ClowdAccentBrush" Color="#00AFF0" />
             <ResourceDictionary.ThemeDictionaries>
                 <!-- WPFUI exact theme colors replaced by hardcoded Light #FAFAFA / Dark #202020 (§6). -->
                 <ResourceDictionary x:Key="Light">
                     <Color x:Key="ApplicationBackgroundColor">#FAFAFA</Color>
                     <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#FAFAFA" />
+                    <!-- translucent variant used only while a Mica backdrop is actually active -->
+                    <SolidColorBrush x:Key="ApplicationBackgroundMicaBrush" Color="#B3FAFAFA" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="ApplicationBackgroundColor">#202020</Color>
                     <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="ApplicationBackgroundMicaBrush" Color="#B3202020" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Styles.Resources>
 
-    <!-- Text styles ported from WpfUICustomStyles.xaml (keyed TextBlock styles -> classes). -->
-    <Style Selector="TextBlock.Header">
-        <Setter Property="FontSize" Value="46" />
-        <Setter Property="FontWeight" Value="Light" />
-        <Setter Property="TextWrapping" Value="Wrap" />
-    </Style>
-    <Style Selector="TextBlock.Subheader">
-        <Setter Property="FontSize" Value="34" />
-        <Setter Property="FontWeight" Value="Light" />
-        <Setter Property="TextWrapping" Value="Wrap" />
-    </Style>
+    <!-- Text styles ported from WpfUICustomStyles.xaml (keyed TextBlock styles -> classes).
+         Only the classes actually used by the shell remain; Semi's own classes (H1-H9 etc.)
+         cover everything else. -->
     <Style Selector="TextBlock.Title">
         <!-- WPF used numeric FontWeight 350. -->
         <Setter Property="FontSize" Value="24" />
@@ -41,11 +39,6 @@
     </Style>
     <Style Selector="TextBlock.Body">
         <Setter Property="FontSize" Value="14" />
-        <Setter Property="FontWeight" Value="Normal" />
-        <Setter Property="TextWrapping" Value="Wrap" />
-    </Style>
-    <Style Selector="TextBlock.Caption">
-        <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>

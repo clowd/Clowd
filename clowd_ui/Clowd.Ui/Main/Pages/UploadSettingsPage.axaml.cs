@@ -69,7 +69,10 @@ namespace Clowd.UI.Pages
             root.RowDefinitions.Add(new RowDefinition(GridLength.Star));
             root.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
 
-            root.Children.Add(new SettingsControlFactory(getWnd, info).GetSettingsPanel());
+            // the factory panel has no outer padding of its own (the settings shell supplies it)
+            var panel = new SettingsControlFactory(getWnd, info).GetSettingsPanel();
+            panel.Margin = new Thickness(24, 16, 8, 0);
+            root.Children.Add(panel);
 
             var close = new Button
             {

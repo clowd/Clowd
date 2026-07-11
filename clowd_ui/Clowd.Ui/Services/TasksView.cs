@@ -108,14 +108,15 @@ namespace Clowd.UI
         public double Progress
         {
             get => _progress;
-            private set => Set(ref _progress, value);
+            private set => Set(ref _progress, value, nameof(Progress), nameof(ProgressText));
         }
 
         public UploadTaskState State
         {
             get => _state;
             private set => Set(ref _state, value, nameof(State),
-                nameof(IsInProgress), nameof(IsFinished), nameof(CanCopy), nameof(IsError));
+                nameof(IsInProgress), nameof(IsFinished), nameof(CanCopy), nameof(IsError),
+                nameof(DismissTooltip));
         }
 
         public string Url
@@ -128,6 +129,12 @@ namespace Clowd.UI
         public bool IsFinished => State != UploadTaskState.InProgress;
         public bool IsError => State == UploadTaskState.Error;
         public bool CanCopy => State == UploadTaskState.Complete && !String.IsNullOrEmpty(Url);
+
+        public string ProgressText => $"{Progress:0}%";
+
+        /// <summary>The ✕ button aborts a running upload but merely dismisses a finished row —
+        /// the tooltip reflects which of the two it will do.</summary>
+        public string DismissTooltip => IsInProgress ? "Cancel upload" : "Dismiss";
 
         public CancellationToken CancelToken => _source.Token;
 

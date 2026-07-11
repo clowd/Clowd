@@ -4,17 +4,17 @@
         xmlns:helpers="using:Clowd.UI.Helpers"
         xmlns:util="using:Clowd.Util"
         x:Class="Clowd.UI.Dialogs.ColorPicker.ColorDialog"
-        Title="ColorEditor"
+        Title="Color Editor"
         SizeToContent="WidthAndHeight"
         CanResize="False"
         UseLayoutRounding="True"
         Background="{DynamicResource ApplicationBackgroundBrush}">
 
     <Window.Styles>
+        <!-- labels follow the theme font; only the hex value itself stays monospaced -->
         <Style Selector="TextBlock.lbl">
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="FontFamily" Value="Consolas" />
         </Style>
         <Style Selector="cp|ColorSlider">
             <Setter Property="CornerRadius" Value="4" />
@@ -31,9 +31,9 @@
         </Style>
         <Style Selector="Button.copy">
             <Setter Property="Margin" Value="10,0,0,0" />
-            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="Padding" Value="6,0" />
             <Setter Property="MinWidth" Value="0" />
-            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontSize" Value="11" />
             <Setter Property="VerticalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -72,6 +72,7 @@
                      Grid.Column="1"
                      Classes="val"
                      Margin="0"
+                     FontFamily="Consolas"
                      helpers:SelectTextOnFocus.Active="True" />
             <Button x:Name="btnCopyHex"
                     Grid.Column="2"
@@ -204,11 +205,7 @@
                               PointerPressed="PrevColorClicked" />
                     </Border>
                 </Border>
-                <Button x:Name="btnCancel"
-                        Padding="12,0"
-                        Click="CloseClicked"
-                        IsCancel="True"
-                        Content="Cancel" />
+                <!-- affirmative-first, matching MessageDialog / FontDialog (Windows order) -->
                 <Button x:Name="btnOK"
                         Theme="{StaticResource SolidButton}"
                         Classes="Primary"
@@ -216,6 +213,11 @@
                         Click="OKClicked"
                         IsDefault="True"
                         Content="OK" />
+                <Button x:Name="btnCancel"
+                        Padding="12,0"
+                        Click="CloseClicked"
+                        IsCancel="True"
+                        Content="Cancel" />
             </StackPanel>
         </Grid>
     </Grid>

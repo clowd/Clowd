@@ -8,22 +8,33 @@
             <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
                  (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
                  the groupbox look is the keyed "GroupBox" theme). -->
-            <!-- The WPF "Updates" group (Squirrel) is not available in this build. -->
+            <!-- The WPF "Updates" (Squirrel) and "Shell" (auto-start / context menu) groups are
+                 not available in this build and are hidden until implemented. -->
+            <HeaderedContentControl Header="Appearance" Theme="{StaticResource GroupBox}">
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock VerticalAlignment="Center" Text="Theme" />
+                        <ComboBox x:Name="ThemeCombo" MinWidth="160" />
+                    </StackPanel>
+                    <TextBlock FontSize="12"
+                               Opacity="0.65"
+                               TextWrapping="Wrap"
+                               Text="Choose the light or dark appearance, or follow the Windows setting." />
+                </StackPanel>
+            </HeaderedContentControl>
             <HeaderedContentControl Header="Behavior" Theme="{StaticResource GroupBox}">
                 <StackPanel Spacing="8">
                     <CheckBox IsChecked="{Binding ConfirmClose}">
                         <TextBlock Text="Ask/confirm before exiting" />
                     </CheckBox>
-                </StackPanel>
-            </HeaderedContentControl>
-            <HeaderedContentControl Header="Shell" Theme="{StaticResource GroupBox}">
-                <StackPanel Spacing="8">
-                    <CheckBox IsChecked="{Binding RegisterExplorerContextMenu}" IsEnabled="False">
-                        <TextBlock Text="Add context menu to Explorer (not available in this build)" />
-                    </CheckBox>
-                    <CheckBox IsChecked="{Binding RegisterAutoStart}" IsEnabled="False">
-                        <TextBlock Text="Start Clowd with Windows (not available in this build)" />
-                    </CheckBox>
+                    <StackPanel Margin="0,4,0,0" Orientation="Horizontal" Spacing="12">
+                        <TextBlock VerticalAlignment="Center" Text="Tray icon click" />
+                        <ComboBox x:Name="TrayClickCombo" MinWidth="160" />
+                    </StackPanel>
+                    <TextBlock FontSize="12"
+                               Opacity="0.65"
+                               TextWrapping="Wrap"
+                               Text="What a single click on the tray icon does. The right-click menu always offers everything." />
                 </StackPanel>
             </HeaderedContentControl>
         </StackPanel>

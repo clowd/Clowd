@@ -18,6 +18,7 @@
         <draw:ToolTypeConverter x:Key="convToolType" />
         <conv:ColorToBrushConverter x:Key="convColorToBrush" />
         <conv:EnumMatchToBooleanConverter x:Key="enumMatch" />
+        <conv:StringToFontFamilyConverter x:Key="convFontFamily" />
 
         <!--  WPF "InnerToolButtonStyle" (the font preview button)  -->
         <ControlTheme x:Key="InnerToolButtonTheme" TargetType="Button">
@@ -172,7 +173,7 @@
                 <Button
                     Click="font_Click"
                     Content="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay}"
-                    FontFamily="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay}"
+                    FontFamily="{Binding ElementName=drawingCanvas, Path=TextFontFamilyName, Mode=OneWay, Converter={StaticResource convFontFamily}}"
                     FontStretch="{Binding ElementName=drawingCanvas, Path=TextFontStretch, Mode=OneWay}"
                     FontStyle="{Binding ElementName=drawingCanvas, Path=TextFontStyle, Mode=OneWay}"
                     Theme="{StaticResource InnerToolButtonTheme}" />

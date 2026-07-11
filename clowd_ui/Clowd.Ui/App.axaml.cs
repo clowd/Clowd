@@ -67,6 +67,13 @@ namespace Clowd
                 await SetupMutex(args);
                 bool firstRun = await SetupSettings();
 
+                ApplyTheme();
+                SettingsRoot.Current.General.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(SettingsGeneral.Theme))
+                        Dispatcher.UIThread.Post(ApplyTheme);
+                };
+
                 SetupTrayIcon();
 
                 // rebuild the tray menu when any hotkey gesture changes so the appended gesture
@@ -175,9 +182,15 @@ namespace Clowd
                     Menu = new NativeMenu(),
                 };
 
-                // decision table #48: no double-click on Avalonia TrayIcon — a single click
-                // opens the settings window.
-                _trayIcon.Clicked += (s, e) => PageManager.Current.GetSettingsPage().Open();
+                // decision table #48: no double-click on Avalonia TrayIcon — the single-click
+                // action is user-configurable (General settings).
+                _trayIcon.Clicked += (s, e) =>
+                {
+                    if (SettingsRoot.Current?.General?.TrayClick == TrayClickAction.CaptureRegion)
+                        StartCapture();
+                    else
+                        PageManager.Current.GetSettingsPage().Open();
+                };
 
                 TrayIcon.SetIcons(this, new TrayIcons { _trayIcon });
             }
@@ -201,6 +214,15 @@ namespace Clowd
             };
             menu.Add(capture);
 
+            var draw = new NativeMenuItem(WithGesture("Draw on Screen", SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut));
+            draw.Click += async (s, e) =>
+            {
+                // same menu-close delay as capture — this also overlays the screen.
+                await Task.Delay(400);
+                PageManager.Current.GetLiveDrawPage().Open();
+            };
+            menu.Add(draw);
+
             var colorp = new NativeMenuItem("Color Picker");
             colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
             menu.Add(colorp);
@@ -208,6 +230,18 @@ namespace Clowd
             var editor = new NativeMenuItem("Image Editor");
             editor.Click += (s, e) => EditorWindow.ShowSession(null);
             menu.Add(editor);
+
+            menu.Add(new NativeMenuItemSeparator());
+
+            // every action that has a global hotkey is also reachable from this menu — the menu
+            // is the fallback when a hotkey fails to register (see the Hotkeys settings page).
+            var uploadFile = new NativeMenuItem(WithGesture("Upload File…", SettingsRoot.Current.Hotkeys.FileUploadShortcut));
+            uploadFile.Click += (s, e) => UploadFilePrompt();
+            menu.Add(uploadFile);
+
+            var uploadClip = new NativeMenuItem(WithGesture("Upload Clipboard", SettingsRoot.Current.Hotkeys.ClipboardUploadShortcut));
+            uploadClip.Click += (s, e) => UploadClipboard();
+            menu.Add(uploadClip);
 
             menu.Add(new NativeMenuItemSeparator());
 
@@ -233,6 +267,16 @@ namespace Clowd
         public void StartCapture(PlatformUtil.ScreenRect region = null)
         {
             PageManager.Current.GetScreenCapturePage().Open(region);
+        }
+
+        private void ApplyTheme()
+        {
+            RequestedThemeVariant = SettingsRoot.Current?.General?.Theme switch
+            {
+                AppTheme.Light => Avalonia.Styling.ThemeVariant.Light,
+                AppTheme.Dark => Avalonia.Styling.ThemeVariant.Dark,
+                _ => Avalonia.Styling.ThemeVariant.Default,
+            };
         }
 
         /// <summary>

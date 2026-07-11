@@ -12,6 +12,8 @@ namespace Clowd.UI
     /// </summary>
     public class SystemThemedWindow : Window
     {
+        private IDisposable _backgroundBinding;
+
         public SystemThemedWindow()
         {
             Icon = AppStyles.AppIcon;
@@ -21,21 +23,38 @@ namespace Clowd.UI
             Height = 600;
             MinWidth = 460;
             MinHeight = 100;
-            FontSize = 13;
+            FontSize = 14; // Semi's base size; keeps generated pages in step with the Body class
 
-            // Light #FAFAFA / Dark #202020 (Assets/AppResources.axaml theme dictionaries).
-            this.Bind(BackgroundProperty, this.GetResourceObservable("ApplicationBackgroundBrush"));
-
-            // Decision table #45: Mica hint on Windows only (falls back to acrylic, then opaque).
+            // Decision table #45: Mica hint on Windows only. The opaque background would paint
+            // over the backdrop, so the translucent variant is used only while the compositor
+            // actually grants Mica (Win10 / remoting fall back to the opaque brush).
             if (OperatingSystem.IsWindows())
             {
                 TransparencyLevelHint = new[]
                 {
                     WindowTransparencyLevel.Mica,
-                    WindowTransparencyLevel.AcrylicBlur,
                     WindowTransparencyLevel.None,
                 };
             }
+
+            UpdateBackgroundForTransparency();
+        }
+
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+            if (change.Property == ActualTransparencyLevelProperty)
+                UpdateBackgroundForTransparency();
+        }
+
+        private void UpdateBackgroundForTransparency()
+        {
+            // Light #FAFAFA / Dark #202020 (Assets/AppResources.axaml theme dictionaries).
+            var key = ActualTransparencyLevel == WindowTransparencyLevel.Mica
+                ? "ApplicationBackgroundMicaBrush"
+                : "ApplicationBackgroundBrush";
+            _backgroundBinding?.Dispose();
+            _backgroundBinding = this.Bind(BackgroundProperty, this.GetResourceObservable(key));
         }
     }
 }

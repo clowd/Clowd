@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 
 namespace Clowd.Config
 {
@@ -45,19 +46,24 @@ namespace Clowd.Config
         }
 
         [DisplayName("Obscured window threshold")]
-        [Description("Maximum fraction (0.0 - 1.0) of a window's area that may be covered by other windows before it can no longer be selected")]
+        [Description("How much of a window may be covered by other windows before it can no longer be selected")]
+        [Range(0.0, 1.0)]
         public double ObscuredWindowDetectionThreshold
         {
             get => _obscuredWindowDetectionThreshold;
             set => Set(ref _obscuredWindowDetectionThreshold, value);
         }
 
+        [DisplayName("Open saved files in Explorer")]
+        [Description("Reveal the file in Explorer after a capture is saved to disk")]
         public bool OpenSavedInExplorer
         {
             get => _openSavedInExplorer;
             set => Set(ref _openSavedInExplorer, value);
         }
 
+        [DisplayName("Filename pattern")]
+        [Description("Date format used to name saved captures and uploads (.NET date format string)")]
         public string FilenamePattern
         {
             get => _filenamePattern;

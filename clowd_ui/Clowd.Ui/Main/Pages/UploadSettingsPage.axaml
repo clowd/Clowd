@@ -15,23 +15,30 @@
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="Padding" Value="8" />
         </Style>
-        <Style Selector="Border.providerItem:pointerover">
-            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
-        </Style>
         <Style Selector="Grid.dimmed">
             <Setter Property="Opacity" Value="0.5" />
         </Style>
-        <!-- "supports" chips: plain when merely supported, accent-filled when this provider
-             is the default destination for that upload type. Click toggles the default. -->
+        <!-- "supports" chips: outlined toggles when merely supported, accent-filled with a
+             check glyph when this provider is the default destination for that upload type.
+             Click toggles the default. -->
         <Style Selector="Button.chip">
             <Setter Property="Padding" Value="8,2" />
             <Setter Property="CornerRadius" Value="10" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+        </Style>
+        <Style Selector="Button.chip Path.chipCheck">
+            <Setter Property="IsVisible" Value="False" />
         </Style>
         <Style Selector="Button.chip.isDefault">
             <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorWhite}" />
+        </Style>
+        <Style Selector="Button.chip.isDefault Path.chipCheck">
+            <Setter Property="IsVisible" Value="True" />
         </Style>
     </UserControl.Styles>
 
@@ -41,7 +48,7 @@
                        Margin="0,0,0,8"
                        Opacity="0.7"
                        TextWrapping="Wrap"
-                       Text="Enable the upload destinations you wish to use, then click a category chip (e.g. Image) to make a provider the default destination for that kind of file. Double click a provider to edit its settings." />
+                       Text="Enable the upload destinations you wish to use, then click a category chip (e.g. Image) to make a provider the default destination for that kind of file." />
 
             <TextBlock Classes="Body"
                        IsVisible="{Binding !Providers.Length}"
@@ -51,79 +58,121 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Border Classes="providerItem" DoubleTapped="ProviderDoubleTapped">
-                            <Grid ColumnDefinitions="Auto,12,40,12,*,Auto"
-                                  RowDefinitions="Auto,Auto,Auto"
-                                  Classes.dimmed="{Binding !IsEnabled}">
-
-                                <ToggleSwitch Grid.RowSpan="3"
+                            <DockPanel>
+                                <!-- the switch stays outside the dimmed part: it is the control
+                                     that un-dims the row -->
+                                <ToggleSwitch DockPanel.Dock="Left"
                                               VerticalAlignment="Center"
-                                              IsChecked="{Binding IsEnabled}" />
+                                              IsChecked="{Binding IsEnabled}"
+                                              ToolTip.Tip="Enable this upload destination"
+                                              AutomationProperties.Name="{Binding Provider.Name}" />
 
-                                <Image Grid.Column="2"
-                                       Grid.RowSpan="3"
-                                       MaxWidth="32"
-                                       MaxHeight="32"
-                                       VerticalAlignment="Center"
-                                       Stretch="Uniform"
-                                       Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
+                                <Grid Margin="12,0,0,0"
+                                      ColumnDefinitions="40,12,*,Auto"
+                                      RowDefinitions="Auto,Auto,Auto"
+                                      Classes.dimmed="{Binding !IsEnabled}">
 
-                                <TextBlock Grid.Column="4"
-                                           Grid.Row="0"
-                                           FontWeight="Bold"
-                                           Text="{Binding Provider.Name}" />
-                                <TextBlock Grid.Column="4"
-                                           Grid.Row="1"
-                                           Opacity="0.8"
-                                           TextTrimming="CharacterEllipsis"
-                                           Text="{Binding Provider.Description}" />
+                                    <Image Grid.RowSpan="3"
+                                           MaxWidth="32"
+                                           MaxHeight="32"
+                                           VerticalAlignment="Center"
+                                           Stretch="Uniform"
+                                           Source="{Binding Provider.Icon, Converter={StaticResource Stream2Bitmap}}" />
 
-                                <StackPanel Grid.Column="4"
-                                            Grid.Row="2"
-                                            Margin="0,6,0,0"
-                                            Orientation="Horizontal"
-                                            Spacing="6">
-                                    <Button Classes="chip"
-                                            Content="Image"
-                                            Tag="Image"
-                                            Click="DefaultChipClicked"
-                                            IsEnabled="{Binding IsEnabled}"
-                                            IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
-                                            Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
-                                            ToolTip.Tip="Use this provider as the default destination for images" />
-                                    <Button Classes="chip"
-                                            Content="Video"
-                                            Tag="Video"
-                                            Click="DefaultChipClicked"
-                                            IsEnabled="{Binding IsEnabled}"
-                                            IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
-                                            Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
-                                            ToolTip.Tip="Use this provider as the default destination for videos" />
-                                    <Button Classes="chip"
-                                            Content="Text"
-                                            Tag="Text"
-                                            Click="DefaultChipClicked"
-                                            IsEnabled="{Binding IsEnabled}"
-                                            IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
-                                            Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
-                                            ToolTip.Tip="Use this provider as the default destination for text" />
-                                    <Button Classes="chip"
-                                            Content="File"
-                                            Tag="Binary"
-                                            Click="DefaultChipClicked"
-                                            IsEnabled="{Binding IsEnabled}"
-                                            IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
-                                            Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
-                                            ToolTip.Tip="Use this provider as the default destination for other files" />
-                                </StackPanel>
+                                    <TextBlock Grid.Column="2"
+                                               Grid.Row="0"
+                                               FontWeight="Bold"
+                                               Text="{Binding Provider.Name}" />
+                                    <TextBlock Grid.Column="2"
+                                               Grid.Row="1"
+                                               Opacity="0.8"
+                                               TextTrimming="CharacterEllipsis"
+                                               Text="{Binding Provider.Description}" />
 
-                                <Button Grid.Column="5"
-                                        Grid.RowSpan="3"
-                                        VerticalAlignment="Center"
-                                        Margin="10,0,0,0"
-                                        Content="Settings"
-                                        Click="ProviderSettingsClicked"
-                                        ToolTip.Tip="Edit this provider's settings" />
-                            </Grid>
+                                    <StackPanel Grid.Column="2"
+                                                Grid.Row="2"
+                                                Margin="0,6,0,0"
+                                                Orientation="Horizontal"
+                                                Spacing="6">
+                                        <Button Classes="chip"
+                                                Tag="Image"
+                                                Click="DefaultChipClicked"
+                                                IsEnabled="{Binding IsEnabled}"
+                                                IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
+                                                Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Image}"
+                                                ToolTip.Tip="Use this provider as the default destination for images">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <Path Classes="chipCheck"
+                                                      Width="10" Height="10"
+                                                      Stretch="Uniform"
+                                                      VerticalAlignment="Center"
+                                                      Fill="{DynamicResource SemiColorWhite}"
+                                                      Data="{StaticResource IconCheckmark}" />
+                                                <TextBlock VerticalAlignment="Center" Text="Image" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="chip"
+                                                Tag="Video"
+                                                Click="DefaultChipClicked"
+                                                IsEnabled="{Binding IsEnabled}"
+                                                IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
+                                                Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Video}"
+                                                ToolTip.Tip="Use this provider as the default destination for videos">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <Path Classes="chipCheck"
+                                                      Width="10" Height="10"
+                                                      Stretch="Uniform"
+                                                      VerticalAlignment="Center"
+                                                      Fill="{DynamicResource SemiColorWhite}"
+                                                      Data="{StaticResource IconCheckmark}" />
+                                                <TextBlock VerticalAlignment="Center" Text="Video" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="chip"
+                                                Tag="Text"
+                                                Click="DefaultChipClicked"
+                                                IsEnabled="{Binding IsEnabled}"
+                                                IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
+                                                Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Text}"
+                                                ToolTip.Tip="Use this provider as the default destination for text">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <Path Classes="chipCheck"
+                                                      Width="10" Height="10"
+                                                      Stretch="Uniform"
+                                                      VerticalAlignment="Center"
+                                                      Fill="{DynamicResource SemiColorWhite}"
+                                                      Data="{StaticResource IconCheckmark}" />
+                                                <TextBlock VerticalAlignment="Center" Text="Text" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="chip"
+                                                Tag="Binary"
+                                                Click="DefaultChipClicked"
+                                                IsEnabled="{Binding IsEnabled}"
+                                                IsVisible="{Binding Provider.SupportedUpload, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
+                                                Classes.isDefault="{Binding DefaultFor, Converter={StaticResource HasEnum2Bool}, ConverterParameter=Binary}"
+                                                ToolTip.Tip="Use this provider as the default destination for other files">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <Path Classes="chipCheck"
+                                                      Width="10" Height="10"
+                                                      Stretch="Uniform"
+                                                      VerticalAlignment="Center"
+                                                      Fill="{DynamicResource SemiColorWhite}"
+                                                      Data="{StaticResource IconCheckmark}" />
+                                                <TextBlock VerticalAlignment="Center" Text="File" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="3"
+                                            Grid.RowSpan="3"
+                                            VerticalAlignment="Center"
+                                            Margin="10,0,0,0"
+                                            Content="Settings"
+                                            Click="ProviderSettingsClicked"
+                                            ToolTip.Tip="Edit this provider's settings" />
+                                </Grid>
+                            </DockPanel>
                         </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

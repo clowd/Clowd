@@ -57,20 +57,38 @@ namespace Clowd.UI.Config
             }
         }
 
-        public Control GetSettingsPanel()
+        public Control GetSettingsPanel(string introText = null)
         {
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
             grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
 
             int row = 0;
+
+            if (!String.IsNullOrEmpty(introText))
+            {
+                grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                var intro = new TextBlock
+                {
+                    Text = introText,
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.7,
+                    Margin = new Thickness(0, 0, 0, 12),
+                };
+                Grid.SetColumnSpan(intro, 2);
+                grid.Children.Add(intro);
+                row++;
+            }
+
             AddRowsToGrid(ref row, grid);
 
             grid.RowDefinitions.Add(new RowDefinition(new GridLength(10)));
 
             return new ScrollViewer
             {
-                Padding = new Thickness(24, 10, 24, 24),
+                // matches the hand-written pages (0 left — the shell supplies the 24px content
+                // margin — and 16 right/bottom clearance for the scrollbar).
+                Padding = new Thickness(0, 0, 16, 16),
                 Content = grid,
             };
         }
@@ -83,11 +101,30 @@ namespace Clowd.UI.Config
                 {
                     var child = pd.GetValue(_obj);
                     new SettingsControlFactory(_wndFn, child).AddRowsToGrid(ref row, grid);
+                    continue;
+                }
+
+                var description = GetFirstAttributeOrDefault<DescriptionAttribute>(pd)?.Description;
+                var editor = GetRowForProperty(pd);
+
+                grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+                if (editor is CheckBox checkbox)
+                {
+                    // the label lives inside the CheckBox so the whole text is clickable (and the
+                    // control is properly labelled for screen readers).
+                    checkbox.Content = new TextBlock
+                    {
+                        Text = FromCamelCase(pd.DisplayName),
+                        TextWrapping = TextWrapping.Wrap,
+                    };
+                    checkbox.Margin = new Thickness(0, 2, 4, 2);
+                    Grid.SetRow(checkbox, row);
+                    Grid.SetColumnSpan(checkbox, 2);
+                    grid.Children.Add(checkbox);
                 }
                 else
                 {
-                    grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-
                     var rowLabel = new TextBlock();
                     rowLabel.VerticalAlignment = VerticalAlignment.Center;
                     rowLabel.HorizontalAlignment = HorizontalAlignment.Left;
@@ -98,15 +135,38 @@ namespace Clowd.UI.Config
 
                     var rowContent = new Border();
                     rowContent.VerticalAlignment = VerticalAlignment.Center;
-                    rowContent.HorizontalAlignment = HorizontalAlignment.Stretch;
-                    rowContent.Child = GetRowForProperty(pd);
+                    // left-aligned with a width cap so rows read as label→control pairs instead
+                    // of full-width bands (editors carry their own MinWidth).
+                    rowContent.HorizontalAlignment = HorizontalAlignment.Left;
+                    rowContent.MaxWidth = 460;
+                    rowContent.Child = editor;
                     rowContent.Margin = new Thickness(24, 4, 4, 4);
                     Grid.SetRow(rowContent, row);
                     Grid.SetColumn(rowContent, 1);
 
                     grid.Children.Add(rowLabel);
                     grid.Children.Add(rowContent);
+                }
 
+                row++;
+
+                if (!String.IsNullOrEmpty(description))
+                {
+                    grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                    var caption = new TextBlock
+                    {
+                        Text = description,
+                        TextWrapping = TextWrapping.Wrap,
+                        FontSize = 12,
+                        Opacity = 0.65,
+                        MaxWidth = 560,
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        // indent under a checkbox's own text; flush with the label otherwise
+                        Margin = new Thickness(editor is CheckBox ? 24 : 0, 0, 4, 10),
+                    };
+                    Grid.SetRow(caption, row);
+                    Grid.SetColumnSpan(caption, 2);
+                    grid.Children.Add(caption);
                     row++;
                 }
             }
@@ -119,7 +179,7 @@ namespace Clowd.UI.Config
 
             if (Is(pd, typeof(string)))
             {
-                var txt = SimpleControlBinding(new TextBox(), pd, TextBox.TextProperty);
+                var txt = SimpleControlBinding(new TextBox { MinWidth = 280 }, pd, TextBox.TextProperty);
                 if (pd.Name.EndsWith("Directory"))
                 {
                     var btn = ButtonControl("Browse", "Secondary", async (s, e) =>
@@ -142,10 +202,30 @@ namespace Clowd.UI.Config
                     btn.VerticalAlignment = VerticalAlignment.Center;
                     return DockCtrl(txt, btn, Dock.Right);
                 }
-                else
+
+                if (pd.Name == nameof(SettingsCapture.FilenamePattern))
                 {
-                    return txt;
+                    // live example makes the date-format string self-documenting.
+                    var preview = new TextBlock
+                    {
+                        FontSize = 12,
+                        Opacity = 0.65,
+                        Margin = new Thickness(2, 4, 0, 0),
+                    };
+                    preview.Bind(TextBlock.TextProperty, new Binding(pd.Name)
+                    {
+                        Source = _obj,
+                        Mode = BindingMode.OneWay,
+                        Converter = new FuncValueConverter<string, string>(FormatFilenamePreview),
+                    });
+
+                    var panel = new StackPanel { Orientation = Orientation.Vertical };
+                    panel.Children.Add(txt);
+                    panel.Children.Add(preview);
+                    return panel;
                 }
+
+                return txt;
             }
 
             if (Is(pd, typeof(bool)))
@@ -156,10 +236,46 @@ namespace Clowd.UI.Config
 
             if ((int)tcode >= (int)TypeCode.Char && (int)tcode <= (int)TypeCode.Decimal)
             {
+                var range = GetFirstAttributeOrDefault<System.ComponentModel.DataAnnotations.RangeAttribute>(pd);
+
+                // a 0..1 fraction reads much better as a percentage slider than a spinner.
+                if (range != null && Convert.ToDouble(range.Minimum) == 0.0 && Convert.ToDouble(range.Maximum) == 1.0)
+                {
+                    var slider = new Slider
+                    {
+                        Minimum = 0,
+                        Maximum = 1,
+                        TickFrequency = 0.05,
+                        IsSnapToTickEnabled = true,
+                        Width = 200,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    };
+                    slider.Bind(Slider.ValueProperty, CreateBinding(pd.Name));
+
+                    var valueLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 40 };
+                    valueLabel.Bind(TextBlock.TextProperty, new Binding(pd.Name)
+                    {
+                        Source = _obj,
+                        Mode = BindingMode.OneWay,
+                        Converter = new FuncValueConverter<double, string>(d => d.ToString("P0")),
+                    });
+
+                    return StackCtrl(slider, valueLabel);
+                }
+
                 // decision table #53: WPFUI NumberBox -> NumericUpDown (decimal?) bridged to the
-                // int/double settings property by NumericTypeConverter.
-                return SimpleControlBinding(new NumericUpDown { MinWidth = 160 }, pd, NumericUpDown.ValueProperty,
-                                            new NumericTypeConverter());
+                // int/double settings property by NumericTypeConverter. [Range] bounds the spinner
+                // so it cannot walk the value out of the valid domain.
+                var numeric = new NumericUpDown { MinWidth = 160, Increment = 1, FormatString = "0.##" };
+                if (range != null)
+                {
+                    numeric.Minimum = Convert.ToDecimal(range.Minimum);
+                    numeric.Maximum = Convert.ToDecimal(range.Maximum);
+                    if (numeric.Maximum - numeric.Minimum <= 2)
+                        numeric.Increment = 0.05m;
+                }
+
+                return SimpleControlBinding(numeric, pd, NumericUpDown.ValueProperty, new NumericTypeConverter());
             }
 
             if (Is(pd, typeof(Color)))
@@ -200,10 +316,10 @@ namespace Clowd.UI.Config
 
             if (Is(pd, typeof(Dictionary<,>)))
             {
-                return ButtonControl("Reset", "Danger", async (s, e) =>
+                return ButtonControl("Reset all tool defaults…", "Danger", async (s, e) =>
                 {
                     if (await NiceDialog.ShowYesNoPromptAsync(s as Visual, NiceDialogIcon.Warning,
-                            "Are you sure you wish to reset these settings to defaults?"))
+                            "Reset every tool's saved color, line width and font back to the defaults? This cannot be undone."))
                     {
                         pd.SetValue(_obj, Activator.CreateInstance(pd.PropertyType));
                     }
@@ -215,7 +331,8 @@ namespace Clowd.UI.Config
                 var child = new SettingsControlFactory(_wndFn, pd.GetValue(_obj));
                 var pdNum = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Number));
                 var pdUnit = pd.GetChildProperties().OfType<PropertyDescriptor>().FirstOrDefault(t => t.Name == nameof(TimeOption.Unit));
-                var ctNum = child.SimpleControlBinding(new TextBox { MinWidth = 60 }, pdNum, TextBox.TextProperty);
+                var ctNum = child.SimpleControlBinding(new NumericUpDown { MinWidth = 120, Minimum = 1, Increment = 1, FormatString = "0" },
+                                                       pdNum, NumericUpDown.ValueProperty, new NumericTypeConverter());
                 var ctUnit = child.ComboSelectBinding(() => Enum.GetValues(pdUnit.PropertyType), pdUnit, null, false);
                 return StackCtrl(ctNum, ctUnit);
             }
@@ -251,6 +368,27 @@ namespace Clowd.UI.Config
             return sb.ToString();
         }
 
+        /// <summary>Renders an example output filename for a date-format pattern (mirrors
+        /// UploadManager.GetPatternFileName / NiceDialog.ShowSaveImageDialog).</summary>
+        private static string FormatFilenamePreview(string pattern)
+        {
+            try
+            {
+                if (String.IsNullOrWhiteSpace(pattern))
+                    pattern = "yyyy-MM-dd HH-mm-ss";
+
+                var name = DateTime.Now.ToString(System.IO.Path.GetFileNameWithoutExtension(pattern));
+                if (name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
+                    return "⚠ The pattern produces characters that are not allowed in file names.";
+
+                return $"Example: {name}.png";
+            }
+            catch
+            {
+                return "⚠ Invalid .NET date format pattern.";
+            }
+        }
+
         private static bool Is(PropertyDescriptor pd, Type type)
         {
             if (type.IsGenericTypeDefinition)
@@ -264,7 +402,7 @@ namespace Clowd.UI.Config
             return pd.Attributes.OfType<T>().FirstOrDefault();
         }
 
-        private static string GetEnumDisplayString(object arg)
+        public static string GetEnumDisplayString(object arg)
         {
             if (arg == null)
                 return null;
