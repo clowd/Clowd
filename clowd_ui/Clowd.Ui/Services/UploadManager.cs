@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -26,14 +27,21 @@ namespace Clowd
 
         public static async Task<UploadResult> UploadSession(SessionInfo session, IUploadProvider provider = null)
         {
-            provider ??= await GetUploadProvider(SupportedUploadType.Image);
+            // video sessions upload the recording itself (via the Video provider), not the poster
+            // frame that PreviewImgPath points at (see the video-recording design, §4.4).
+            var isVideo = session.ContentKind == "video"
+                          && !String.IsNullOrEmpty(session.VideoPath) && File.Exists(session.VideoPath);
+
+            provider ??= await GetUploadProvider(isVideo ? SupportedUploadType.Video : SupportedUploadType.Image);
             if (provider == null)
                 return null;
 
             var upload = _uploads.StartUpload(session.Name, session);
+            if (upload == null)
+                return null; // an upload is already in flight for this session
             upload.SetStatus("Uploading...");
 
-            var info = new FileInfo(session.PreviewImgPath);
+            var info = new FileInfo(isVideo ? session.VideoPath : session.PreviewImgPath);
 
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, info.Length, true);
 
@@ -50,12 +58,31 @@ namespace Clowd
             if (provider == null)
                 return null;
 
+            var session = SessionManager.Current.CreateNewSession();
+            session.Name = imgDisplayName;
+            session.ContentKind = "image";
+
             using var ms = new MemoryStream();
             image.Save(ms);
+
+            // persist the image into the session dir so the recents list shows a preview.
+            try
+            {
+                var previewPath = Path.Combine(Path.GetDirectoryName(session.FilePath), "content.png");
+                File.WriteAllBytes(previewPath, ms.ToArray());
+                session.PreviewImgPath = previewPath;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("failed to write session preview: " + ex);
+            }
+
             ms.Position = 0;
             var fileName = GetPatternFileName(".png");
 
-            var upload = _uploads.StartUpload(imgDisplayName);
+            var upload = _uploads.StartUpload(imgDisplayName, session);
+            if (upload == null)
+                return null;
             upload.SetStatus("Uploading...");
 
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, ms.Length, true);
@@ -69,9 +96,25 @@ namespace Clowd
             if (provider == null)
                 return null;
 
+            var session = SessionManager.Current.CreateNewSession();
+            session.Name = textType;
+            session.ContentKind = "text";
+
+            // keep a copy of the uploaded text in the session dir for reference.
+            try
+            {
+                File.WriteAllText(Path.Combine(Path.GetDirectoryName(session.FilePath), "content.txt"), text);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("failed to write session text: " + ex);
+            }
+
             var ms = new MemoryStream(Encoding.UTF8.GetBytes(text));
 
-            var upload = _uploads.StartUpload(textType);
+            var upload = _uploads.StartUpload(textType, session);
+            if (upload == null)
+                return null;
             upload.SetStatus("Uploading...");
 
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, ms.Length, true);
@@ -100,7 +143,34 @@ namespace Clowd
             if (provider == null)
                 return null;
 
-            var upload = _uploads.StartUpload($"{stype} ({fileName})");
+            var session = SessionManager.Current.CreateNewSession();
+            session.Name = "File Upload";
+            session.ContentKind = category switch
+            {
+                ContentCategory.Image => "image",
+                ContentCategory.Video => "video",
+                ContentCategory.Text => "text",
+                _ => "file",
+            };
+
+            // for images, copy the file into the session dir so the recents list shows a preview.
+            if (category == ContentCategory.Image)
+            {
+                try
+                {
+                    var dest = Path.Combine(Path.GetDirectoryName(session.FilePath), "content" + extension);
+                    File.Copy(filePath, dest, true);
+                    session.PreviewImgPath = dest;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("failed to copy session preview: " + ex);
+                }
+            }
+
+            var upload = _uploads.StartUpload($"{stype} ({fileName})", session);
+            if (upload == null)
+                return null;
             upload.SetStatus("Uploading...");
 
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, fileInfo.Length, true);
@@ -166,13 +236,23 @@ namespace Clowd
             if (provider == null)
                 return null;
 
+            var session = SessionManager.Current.CreateNewSession();
+            session.Name = "File Upload";
+            session.ContentKind = "file";
+
             var tmpFolder = Directory.CreateTempSubdirectory("clowd-zip").FullName;
             var zipPath = Path.Combine(tmpFolder, GetRandomName(8) + ".zip");
 
             ActiveUpload upload = null;
             try
             {
-                upload = _uploads.StartUpload("Archive");
+                upload = _uploads.StartUpload("Archive", session);
+                if (upload == null)
+                {
+                    // no in-flight upload is possible on a fresh session; bail and clean up.
+                    TryDeleteSession(session);
+                    return null;
+                }
                 upload.SetStatus("Compressing...");
 
                 var anyAdded = await Task.Run(() =>
@@ -297,6 +377,12 @@ namespace Clowd
                 return provider.Provider;
 
             return await SelectProvider(type);
+        }
+
+        private static void TryDeleteSession(SessionInfo session)
+        {
+            try { SessionManager.Current.DeleteSession(session); }
+            catch (Exception ex) { Debug.WriteLine("failed to delete session: " + ex); }
         }
 
         private static string GetPatternFileName(string extension)

@@ -2,6 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="using:Clowd.UI.Controls">
 
+    <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
+
     <!-- Ported from the WPF App.xaml implicit ToolButton style (30x30 toggle button with
          transparent bg, #55FFFFFF checked fill and a #33FFFFFF hover veil fading over 0.1s). -->
     <ControlTheme x:Key="{x:Type controls:ToolButton}" TargetType="controls:ToolButton">
@@ -28,6 +30,30 @@
                               Fill="{TemplateBinding Foreground}"
                               Stretch="Uniform" />
                     </Border>
+                    <!-- Determinate upload ring, shown in place of the icon while ShowProgress is set.
+                         Coordinates live in a 16x16 box centered in the button; the arc is drawn from
+                         an absolute-coordinate geometry (see ProgressToArcGeometryConverter), so the
+                         Path fills the box (Stretch=None) rather than centering to its own bounds. -->
+                    <Grid Name="_progress"
+                          Width="16"
+                          Height="16"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          IsVisible="False">
+                        <Ellipse Width="14"
+                                 Height="14"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Stroke="#44FFFFFF"
+                                 StrokeThickness="2" />
+                        <Path HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Data="{TemplateBinding Progress, Converter={StaticResource progressToArc}}"
+                              Stretch="None"
+                              Stroke="{TemplateBinding Foreground}"
+                              StrokeLineCap="Round"
+                              StrokeThickness="2" />
+                    </Grid>
                     <Rectangle Name="_hover" Fill="#33FFFFFF">
                         <Rectangle.Transitions>
                             <Transitions>
@@ -50,6 +76,18 @@
         </Style>
         <Style Selector="^:disabled /template/ Border#content">
             <Setter Property="Opacity" Value="0.5" />
+        </Style>
+
+        <!-- Progress mode: swap the icon for the ring and suppress the hover veil so the button reads
+             as busy. Listed after the :pointerover veil rule so it wins while an upload is in flight. -->
+        <Style Selector="^[ShowProgress=True] /template/ Border#content">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^[ShowProgress=True] /template/ Grid#_progress">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^[ShowProgress=True] /template/ Rectangle#_hover">
+            <Setter Property="Opacity" Value="0" />
         </Style>
     </ControlTheme>
 

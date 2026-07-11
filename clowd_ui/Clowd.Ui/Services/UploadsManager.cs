@@ -1,21 +1,22 @@
 using System;
-using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using Clowd.UI.Helpers;
 
 namespace Clowd.UI
 {
-    /// <summary>A single in-flight upload. Progress and status are surfaced on the Recent page
-    /// (standalone uploads bind through <see cref="UploadsManager.Standalone"/>, session uploads
-    /// through <see cref="SessionInfo.ActiveUpload"/>).</summary>
+    /// <summary>A single in-flight upload. Progress and status are surfaced on the Recent page (and
+    /// on an editor window) through <see cref="SessionInfo.ActiveUpload"/>. Every upload is owned by
+    /// a session.</summary>
     public sealed class ActiveUpload : SimpleNotifyObject
     {
         public string Name { get; }
 
-        // may be null for standalone uploads (clipboard / loose files) that have no session.
+        // the owning session; every upload has one.
         public SessionInfo Session { get; }
 
         public string Status
@@ -40,7 +41,7 @@ namespace Clowd.UI
         private string _status;
         private double _progress;
 
-        public ActiveUpload(string name, SessionInfo session = null)
+        public ActiveUpload(string name, SessionInfo session)
         {
             Name = name;
             Session = session;
@@ -73,54 +74,49 @@ namespace Clowd.UI
 
                 Progress = total > 0 ? Math.Min(100, completed / (double)total * 100d) : 0;
                 Status = isBytes
-                    ? $"{PrettyBytes(completed)} / {PrettyBytes(total)}"
+                    ? FixedWidthMegabytes(completed, total)
                     : $"{completed} / {total}";
             });
         }
 
-        private static string PrettyBytes(long bytes)
+        // always whole MB, zero-padded to 3 digits, so the recents-page status text keeps a stable
+        // width as the upload progresses ("000 / 001 MB"; multi-GB uploads grow to 4+ digits).
+        private static string FixedWidthMegabytes(long completed, long total)
         {
-            string[] units = { "B", "KB", "MB", "GB" };
-            double size = bytes;
-            int unit = 0;
-            while (size >= 1024 && unit < units.Length - 1)
-            {
-                size /= 1024;
-                unit++;
-            }
-
-            return $"{size:0.#} {units[unit]}";
+            const double mb = 1024d * 1024d;
+            var totalMb = Math.Max(1, (long)Math.Ceiling(total / mb));
+            var doneMb = Math.Min(totalMb, (long)Math.Round(completed / mb));
+            return $"{doneMb:000} / {totalMb:000} MB";
         }
     }
 
-    /// <summary>Owns the in-flight uploads and finished standalone upload records surfaced on the
-    /// Recent page. Replaces the tray-adjacent TaskWindow overlay: the page's Recent tab is opened
-    /// whenever an upload starts or reaches a terminal state.</summary>
+    /// <summary>Owns the in-flight uploads surfaced on the Recent page and on editor windows. Every
+    /// upload is attached to a session (an upload-only session for clipboard / file / tray uploads);
+    /// there is no standalone upload list any more. Replaces the tray-adjacent TaskWindow overlay:
+    /// the page's Recent tab is opened when an upload starts or reaches a terminal state, unless the
+    /// session is already open in an editor (which shows its own progress).</summary>
     public sealed class UploadsManager
     {
-        /// <summary>Active uploads with no owning session.</summary>
-        public ObservableCollection<ActiveUpload> Standalone { get; } = new();
-
-        /// <summary>Finished standalone uploads, newest first. In-memory only — session uploads
-        /// persist on the session itself.</summary>
-        public ObservableCollection<UploadRecord> Completed { get; } = new();
-
-        public ActiveUpload StartUpload(string name, SessionInfo session = null)
+        /// <summary>Begins an upload owned by <paramref name="session"/>. The single-active-upload
+        /// check and the <see cref="SessionInfo.ActiveUpload"/> assignment are done atomically on the
+        /// UI thread (marshalled synchronously when a caller resumes on a background thread). Returns
+        /// null when the session already has an in-flight upload — callers must handle null.</summary>
+        public ActiveUpload StartUpload(string name, SessionInfo session)
         {
-            // constructed synchronously so the caller has CancelToken before the UI post runs.
-            var item = new ActiveUpload(name, session);
-
-            Dispatcher.UIThread.Post(() =>
+            return Dispatcher.UIThread.Invoke(() =>
             {
-                if (session != null)
-                    session.ActiveUpload = item;
-                else
-                    Standalone.Add(item);
+                if (session.ActiveUpload != null)
+                    return null;
 
-                OpenRecentTab();
+                var item = new ActiveUpload(name, session);
+                session.ActiveUpload = item;
+
+                // an open editor shows its own progress — don't steal focus to the recents tab.
+                if (EditorWindow.FindWindowForSession(session) == null)
+                    OpenRecentTab();
+
+                return item;
             });
-
-            return item;
         }
 
         public void CompleteUpload(ActiveUpload upload, UploadResult result)
@@ -145,21 +141,15 @@ namespace Clowd.UI
                     UploadedUtc = DateTime.UtcNow,
                 };
 
-                if (upload.Session != null)
-                {
-                    var session = upload.Session;
-                    session.Uploads = (session.Uploads ?? Array.Empty<UploadRecord>()).Append(record).ToArray();
+                var session = upload.Session;
+                session.Uploads = (session.Uploads ?? Array.Empty<UploadRecord>()).Append(record).ToArray();
 
-                    // keep the legacy single-upload fields in sync for older readers of session.json.
-                    session.UploadUrl = result.PublicUrl;
-                    session.UploadFileKey = result.UploadKey;
-                }
-                else
-                {
-                    Completed.Insert(0, record);
-                }
+                // keep the legacy single-upload fields in sync for older readers of session.json.
+                session.UploadUrl = result.PublicUrl;
+                session.UploadFileKey = result.UploadKey;
 
-                OpenRecentTab();
+                // always copy the resulting URL to the clipboard and notify the user.
+                CopyUrlAndToast(session, result.PublicUrl);
             });
         }
 
@@ -172,13 +162,17 @@ namespace Clowd.UI
             }
 
             var message = (ex is AggregateException agg ? agg.GetBaseException() : ex)?.Message ?? "Unknown error";
+            var session = upload.Session;
 
             await Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                OpenRecentTab();
+                // an open editor shows its own progress — don't steal focus to the recents tab.
+                if (EditorWindow.FindWindowForSession(session) == null)
+                    OpenRecentTab();
                 // spec: show the error first, then drop the row from the page.
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, message, "Upload failed");
                 Detach(upload);
+                CleanupEmptyUploadOnly(session);
             });
         }
 
@@ -187,20 +181,76 @@ namespace Clowd.UI
         public void DiscardUpload(ActiveUpload upload)
         {
             if (Dispatcher.UIThread.CheckAccess())
-                Detach(upload);
+                DetachAndCleanup(upload);
             else
-                Dispatcher.UIThread.Post(() => Detach(upload));
+                Dispatcher.UIThread.Post(() => DetachAndCleanup(upload));
         }
 
-        private void Detach(ActiveUpload upload)
+        private void DetachAndCleanup(ActiveUpload upload)
         {
             if (upload == null)
                 return;
 
-            if (upload.Session != null && ReferenceEquals(upload.Session.ActiveUpload, upload))
-                upload.Session.ActiveUpload = null;
+            var session = upload.Session;
+            Detach(upload);
+            CleanupEmptyUploadOnly(session);
+        }
+
+        private static void Detach(ActiveUpload upload)
+        {
+            if (upload == null)
+                return;
+
+            var session = upload.Session;
+            if (session != null && ReferenceEquals(session.ActiveUpload, upload))
+                session.ActiveUpload = null;
+        }
+
+        /// <summary>Copies the finished upload's URL to the clipboard and shows a confirmation toast:
+        /// in the editor window when the session is open there, otherwise on the recents/settings
+        /// window (which is opened first).</summary>
+        private static void CopyUrlAndToast(SessionInfo session, string url)
+        {
+            if (!String.IsNullOrEmpty(url))
+            {
+                try { _ = ClipboardImpl.SetClipboardText(Toast.GetPrimaryClipboard(), url); }
+                catch (Exception ex) { Debug.WriteLine("failed to copy upload url to clipboard: " + ex); }
+            }
+
+            const string message = "Upload URL Copied to Clipboard";
+
+            var editor = EditorWindow.FindWindowForSession(session);
+            if (editor != null)
+            {
+                Toast.Show(editor, message);
+            }
             else
-                Standalone.Remove(upload);
+            {
+                OpenRecentTab();
+                Toast.Show(PageManager.Current.GetSettingsPage() as Window, message);
+            }
+        }
+
+        /// <summary>Deletes an upload-only session that never produced a completed upload, so a
+        /// cancelled/failed clipboard or file upload doesn't linger as a junk row.</summary>
+        private static void CleanupEmptyUploadOnly(SessionInfo session)
+        {
+            if (session == null || !session.IsUploadOnly)
+                return;
+
+            var hasUpload = (session.Uploads != null && session.Uploads.Length > 0) || !String.IsNullOrEmpty(session.UploadUrl);
+            if (hasUpload)
+                return;
+
+            try
+            {
+                // upload-only sessions are never open in an editor, so DeleteSession won't refuse.
+                SessionManager.Current.DeleteSession(session);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("failed to delete empty upload session: " + ex);
+            }
         }
 
         private static void OpenRecentTab()
