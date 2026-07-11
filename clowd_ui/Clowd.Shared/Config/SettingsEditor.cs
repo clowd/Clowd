@@ -73,6 +73,7 @@ namespace Clowd.Config
 
     public class SettingsEditor : SimpleNotifyObject
     {
+        [Category("Sessions")]
         [DisplayName("Restore sessions on startup")]
         [Description("Reopen the editor sessions that were still open when Clowd last exited")]
         public bool RestoreSessionsOnClowdStart
@@ -81,6 +82,7 @@ namespace Clowd.Config
             set => Set(ref _restoreSessionsOnClowdStart, value);
         }
 
+        [Category("Drawing")]
         [DisplayName("Canvas background")]
         [Description("Color drawn behind transparent areas of the image in the editor")]
         public Color CanvasBackground
@@ -96,6 +98,7 @@ namespace Clowd.Config
             set => Set(ref _startupPadding, value);
         }
 
+        [Category("Drawing")]
         [DisplayName("Tool preferences")]
         [Description("Every drawing tool remembers the color, line width and font last used with it")]
         public Dictionary<ToolType, SavedToolSettings> Tools
@@ -104,12 +107,41 @@ namespace Clowd.Config
             set => Set(ref _tools, value);
         }
 
+        [Category("Sessions")]
         [DisplayName("Delete sessions after")]
         [Description("Captures older than this are removed from Recent sessions automatically")]
         public TimeOption DeleteSessionsAfter
         {
             get => _deleteSessionsAfter;
             set => Set(ref _deleteSessionsAfter, value);
+        }
+
+        [Browsable(false)]
+        public bool RasterToolsEnabled
+        {
+            get => _rasterToolsEnabled;
+            set => Set(ref _rasterToolsEnabled, value);
+        }
+
+        [Browsable(false)]
+        public bool SidebarVisible
+        {
+            get => _sidebarVisible;
+            set => Set(ref _sidebarVisible, value);
+        }
+
+        [Browsable(false)]
+        public List<string> ToolbarOrder
+        {
+            get => _toolbarOrder;
+            set => Set(ref _toolbarOrder, value);
+        }
+
+        [Browsable(false)]
+        public List<string> HiddenTools
+        {
+            get => _hiddenTools;
+            set => Set(ref _hiddenTools, value);
         }
 
         /// <summary>Lazily creates the per-tool settings entry (replaces the old AutoDictionary
@@ -126,5 +158,9 @@ namespace Clowd.Config
         private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
         private Dictionary<ToolType, SavedToolSettings> _tools = new Dictionary<ToolType, SavedToolSettings>();
         private bool _restoreSessionsOnClowdStart = true;
+        private bool _rasterToolsEnabled;
+        private bool _sidebarVisible;
+        private List<string> _toolbarOrder;
+        private List<string> _hiddenTools;
     }
 }

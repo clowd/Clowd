@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
@@ -15,6 +16,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using Clowd.Config;
 using Clowd.UI.Converters;
 using Clowd.UI.Helpers;
@@ -59,116 +61,154 @@ namespace Clowd.UI.Config
 
         public Control GetSettingsPanel(string introText = null)
         {
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            var rows = EnumerateRows().ToList();
 
-            int row = 0;
+            // pages whose properties carry [Category] render as GroupBox sections (matching the
+            // hand-written General page); pages without categories (Hotkeys, upload provider
+            // settings) keep the flat list.
+            var grouped = rows.Any(r => GetFirstAttributeOrDefault<CategoryAttribute>(r.Pd) != null);
 
-            if (!String.IsNullOrEmpty(introText))
-            {
-                grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-                var intro = new TextBlock
-                {
-                    Text = introText,
-                    TextWrapping = TextWrapping.Wrap,
-                    Opacity = 0.7,
-                    Margin = new Thickness(0, 0, 0, 12),
-                };
-                Grid.SetColumnSpan(intro, 2);
-                grid.Children.Add(intro);
-                row++;
-            }
+            var content = grouped ? BuildGroupedPanel(rows, introText) : BuildFlatPanel(rows, introText);
 
-            AddRowsToGrid(ref row, grid);
+            // margin on the *content* (not ScrollViewer padding) exactly like the hand-written
+            // pages: the 16px right/bottom clearance then scrolls with the content, so the last
+            // group keeps its gap at the bottom and the right edge never runs under the scrollbar.
+            content.Margin = new Thickness(0, 0, 16, 16);
 
-            grid.RowDefinitions.Add(new RowDefinition(new GridLength(10)));
-
-            return new ScrollViewer
-            {
-                // matches the hand-written pages (0 left — the shell supplies the 24px content
-                // margin — and 16 right/bottom clearance for the scrollbar).
-                Padding = new Thickness(0, 0, 16, 16),
-                Content = grid,
-            };
+            return new ScrollViewer { Content = content };
         }
 
-        private void AddRowsToGrid(ref int row, Grid grid)
+        /// <summary>All rows of this object in declaration order, with [FlattenSettingsObject]
+        /// children expanded inline. The owning factory is kept so bindings target the right
+        /// source object.</summary>
+        private IEnumerable<(SettingsControlFactory Owner, PropertyDescriptor Pd)> EnumerateRows()
         {
             foreach (PropertyDescriptor pd in GetObjectProperties(_obj))
             {
                 if (GetFirstAttributeOrDefault<FlattenSettingsObjectAttribute>(pd) != null)
                 {
-                    var child = pd.GetValue(_obj);
-                    new SettingsControlFactory(_wndFn, child).AddRowsToGrid(ref row, grid);
-                    continue;
-                }
-
-                var description = GetFirstAttributeOrDefault<DescriptionAttribute>(pd)?.Description;
-                var editor = GetRowForProperty(pd);
-
-                grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-
-                if (editor is CheckBox checkbox)
-                {
-                    // the label lives inside the CheckBox so the whole text is clickable (and the
-                    // control is properly labelled for screen readers).
-                    checkbox.Content = new TextBlock
-                    {
-                        Text = FromCamelCase(pd.DisplayName),
-                        TextWrapping = TextWrapping.Wrap,
-                    };
-                    checkbox.Margin = new Thickness(0, 2, 4, 2);
-                    Grid.SetRow(checkbox, row);
-                    Grid.SetColumnSpan(checkbox, 2);
-                    grid.Children.Add(checkbox);
+                    var child = new SettingsControlFactory(_wndFn, pd.GetValue(_obj));
+                    foreach (var row in child.EnumerateRows())
+                        yield return row;
                 }
                 else
                 {
-                    var rowLabel = new TextBlock();
-                    rowLabel.VerticalAlignment = VerticalAlignment.Center;
-                    rowLabel.HorizontalAlignment = HorizontalAlignment.Left;
-                    rowLabel.Margin = new Thickness(0, 4, 0, 4);
-                    rowLabel.Text = FromCamelCase(pd.DisplayName);
-                    Grid.SetRow(rowLabel, row);
-                    Grid.SetColumn(rowLabel, 0);
-
-                    var rowContent = new Border();
-                    rowContent.VerticalAlignment = VerticalAlignment.Center;
-                    // left-aligned with a width cap so rows read as label→control pairs instead
-                    // of full-width bands (editors carry their own MinWidth).
-                    rowContent.HorizontalAlignment = HorizontalAlignment.Left;
-                    rowContent.MaxWidth = 460;
-                    rowContent.Child = editor;
-                    rowContent.Margin = new Thickness(24, 4, 4, 4);
-                    Grid.SetRow(rowContent, row);
-                    Grid.SetColumn(rowContent, 1);
-
-                    grid.Children.Add(rowLabel);
-                    grid.Children.Add(rowContent);
+                    yield return (this, pd);
                 }
+            }
+        }
 
-                row++;
+        private static TextBlock NewIntroText(string introText) => new()
+        {
+            Text = introText,
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.7,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
 
-                if (!String.IsNullOrEmpty(description))
+        private static Grid NewRowsGrid()
+        {
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            return grid;
+        }
+
+        private Control BuildFlatPanel(List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> rows, string introText)
+        {
+            var stack = new StackPanel { Spacing = 8 };
+
+            if (!String.IsNullOrEmpty(introText))
+                stack.Children.Add(NewIntroText(introText));
+
+            var grid = NewRowsGrid();
+            int row = 0;
+            foreach (var (owner, pd) in rows)
+                owner.AddRowToGrid(grid, ref row, pd);
+
+            stack.Children.Add(grid);
+            return stack;
+        }
+
+        private Control BuildGroupedPanel(List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> rows, string introText)
+        {
+            var stack = new StackPanel { Spacing = 16 };
+
+            if (!String.IsNullOrEmpty(introText))
+                stack.Children.Add(NewIntroText(introText));
+
+            // GroupBy preserves first-appearance order, so a category's rows collect together
+            // even when declarations interleave.
+            foreach (var group in rows.GroupBy(r => GetFirstAttributeOrDefault<CategoryAttribute>(r.Pd)?.Category ?? "Other"))
+            {
+                var grid = NewRowsGrid();
+                int row = 0;
+                foreach (var (owner, pd) in group)
+                    owner.AddRowToGrid(grid, ref row, pd);
+
+                var box = new HeaderedContentControl { Header = group.Key, Content = grid };
+                var app = Application.Current;
+                if (app != null && app.TryGetResource("GroupBox", app.ActualThemeVariant, out var theme) && theme is ControlTheme groupBoxTheme)
+                    box.Theme = groupBoxTheme;
+
+                stack.Children.Add(box);
+            }
+
+            return stack;
+        }
+
+        private void AddRowToGrid(Grid grid, ref int row, PropertyDescriptor pd)
+        {
+            var description = GetFirstAttributeOrDefault<DescriptionAttribute>(pd)?.Description;
+            var editor = GetRowForProperty(pd);
+
+            // the caption hugs its own row (2px); rows without one carry the full bottom gap
+            // themselves so vertical rhythm stays even either way (12+12 = ~24px between settings).
+            var bottom = String.IsNullOrEmpty(description) ? 12d : 2d;
+
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+            var rowLabel = new TextBlock();
+            rowLabel.VerticalAlignment = VerticalAlignment.Center;
+            rowLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            rowLabel.Margin = new Thickness(0, 12, 0, bottom);
+            rowLabel.Text = FromCamelCase(pd.DisplayName);
+            Grid.SetRow(rowLabel, row);
+            Grid.SetColumn(rowLabel, 0);
+
+            var rowContent = new Border();
+            rowContent.VerticalAlignment = VerticalAlignment.Center;
+            // left-aligned with a width cap so rows read as label→control pairs instead
+            // of full-width bands (editors carry their own MinWidth).
+            rowContent.HorizontalAlignment = HorizontalAlignment.Left;
+            rowContent.MaxWidth = 460;
+            rowContent.Child = editor;
+            rowContent.Margin = new Thickness(24, 12, 4, bottom);
+            Grid.SetRow(rowContent, row);
+            Grid.SetColumn(rowContent, 1);
+
+            grid.Children.Add(rowLabel);
+            grid.Children.Add(rowContent);
+
+            row++;
+
+            if (!String.IsNullOrEmpty(description))
+            {
+                grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                var caption = new TextBlock
                 {
-                    grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-                    var caption = new TextBlock
-                    {
-                        Text = description,
-                        TextWrapping = TextWrapping.Wrap,
-                        FontSize = 12,
-                        Opacity = 0.65,
-                        MaxWidth = 560,
-                        HorizontalAlignment = HorizontalAlignment.Left,
-                        // indent under a checkbox's own text; flush with the label otherwise
-                        Margin = new Thickness(editor is CheckBox ? 24 : 0, 0, 4, 10),
-                    };
-                    Grid.SetRow(caption, row);
-                    Grid.SetColumnSpan(caption, 2);
-                    grid.Children.Add(caption);
-                    row++;
-                }
+                    Text = description,
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                    Opacity = 0.65,
+                    MaxWidth = 560,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Margin = new Thickness(0, 0, 4, 12),
+                };
+                Grid.SetRow(caption, row);
+                Grid.SetColumnSpan(caption, 2);
+                grid.Children.Add(caption);
+                row++;
             }
         }
 
@@ -229,7 +269,13 @@ namespace Clowd.UI.Config
             }
 
             if (Is(pd, typeof(bool)))
-                return SimpleControlBinding(new CheckBox(), pd, CheckBox.IsCheckedProperty);
+            {
+                // the visible label lives in the row's label column (consistent with every other
+                // editor); the checkbox itself still carries the name for screen readers.
+                var checkbox = new CheckBox();
+                Avalonia.Automation.AutomationProperties.SetName(checkbox, FromCamelCase(pd.DisplayName));
+                return SimpleControlBinding(checkbox, pd, CheckBox.IsCheckedProperty);
+            }
 
             if (pd.PropertyType.IsEnum)
                 return ComboSelectBinding(() => Enum.GetValues(type), pd, GetEnumDisplayString, false);
@@ -280,13 +326,19 @@ namespace Clowd.UI.Config
 
             if (Is(pd, typeof(Color)))
             {
-                var inner = new Border { BorderBrush = Brushes.White, BorderThickness = new Thickness(1) };
+                var inner = new Border
+                {
+                    BorderBrush = Brushes.White,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(3),
+                };
                 inner.Bind(Border.BackgroundProperty, CreateBinding(pd.Name, new ColorToBrushConverter()));
 
                 var border = new Border
                 {
                     BorderBrush = Brushes.Black,
                     BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
                     Child = inner,
                     Background = AppStyles.CheckerboardBrushSmall,
                     Width = 24,

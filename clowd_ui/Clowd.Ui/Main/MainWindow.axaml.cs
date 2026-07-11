@@ -68,6 +68,11 @@ namespace Clowd.UI
                 $"{Position.X},{Position.Y},{Width},{Height}");
         }
 
+        private void NewImage_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            EditorWindow.ShowSession(null);
+        }
+
         private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (NavList.SelectedItem is not NavMenuItem item || item.Tag is not string tag)

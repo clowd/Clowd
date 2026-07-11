@@ -13,6 +13,7 @@ namespace Clowd.Config
 
     public class SettingsCapture : SimpleNotifyObject
     {
+        [Category("Behavior")]
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]
         public bool ScreenshotWithCursor
@@ -29,6 +30,7 @@ namespace Clowd.Config
             set => Set(ref _detectWindows, value);
         }
 
+        [Category("Behavior")]
         [DisplayName("Tips overlay")]
         [Description("Which tips/hints overlay the capture window shows at startup (cycled at runtime with T)")]
         public CapturerTipsMode TipsMode
@@ -37,6 +39,7 @@ namespace Clowd.Config
             set => Set(ref _tipsMode, value);
         }
 
+        [Category("Behavior")]
         [DisplayName("Obscured window peek")]
         [Description("Capture obstructed windows and show a peek-through composite when hovering them")]
         public bool ObscuredWindowPeek
@@ -45,6 +48,7 @@ namespace Clowd.Config
             set => Set(ref _obscuredWindowPeek, value);
         }
 
+        [Category("Behavior")]
         [DisplayName("Obscured window threshold")]
         [Description("How much of a window may be covered by other windows before it can no longer be selected")]
         [Range(0.0, 1.0)]
@@ -54,6 +58,7 @@ namespace Clowd.Config
             set => Set(ref _obscuredWindowDetectionThreshold, value);
         }
 
+        [Category("Saving")]
         [DisplayName("Open saved files in Explorer")]
         [Description("Reveal the file in Explorer after a capture is saved to disk")]
         public bool OpenSavedInExplorer
@@ -62,6 +67,7 @@ namespace Clowd.Config
             set => Set(ref _openSavedInExplorer, value);
         }
 
+        [Category("Saving")]
         [DisplayName("Filename pattern")]
         [Description("Date format used to name saved captures and uploads (.NET date format string)")]
         public string FilenamePattern
