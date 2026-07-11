@@ -60,6 +60,13 @@ namespace Clowd.Drawing.Tools
             for (int i = list.Count - 1; i >= 0; i--)
             {
                 var g = list[i];
+
+                // hidden graphics are invisible to hit-testing; locked graphics are transparent to
+                // canvas selection/move/resize (body and handle both), though the Layers panel can
+                // still select them programmatically.
+                if (g.Hidden || g.Locked)
+                    continue;
+
                 var hit = g.MakeHitTest(point, dpi);
 
                 // Test if we start dragging a handle (e.g. resize, rotate, etc.; only if control is selected and cursor is on the handle)
@@ -279,6 +286,10 @@ namespace Clowd.Drawing.Tools
 
                 foreach (var g in drawingCanvas.GraphicsList)
                 {
+                    // hidden and locked graphics are excluded from marquee selection
+                    if (g.Hidden || g.Locked)
+                        continue;
+
                     if (rect.Contains(g.Bounds))
                     {
                         g.IsSelected = true;

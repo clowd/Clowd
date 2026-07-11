@@ -74,6 +74,15 @@ namespace Clowd.Drawing
         /// (re-)baked by the frame validator (final-design §A.3).</summary>
         internal ShadowSpriteCache ShadowCache { get; }
 
+        /// <summary>
+        /// Raised on every membership/order mutation (Add/Insert/AddRange/RemoveAt/Clear — reorders
+        /// are RemoveAt+Insert). Exists because <c>Count</c> alone is not a reliable reorder signal
+        /// for panels: a RemoveAt+Insert reorder round-trips the count to its original value, so a
+        /// panel watching the count value sees no net change. The Layers panel subscribes to this to
+        /// rebuild its row list whenever the document structure changes.
+        /// </summary>
+        public event EventHandler StructureChanged;
+
         private Rect _contentBounds;
         private DpiScale _dpi;
         private GraphicBase[] _selectedItems = new GraphicBase[0];
@@ -234,6 +243,10 @@ namespace Clowd.Drawing
                 _selectionDirty = true;
             ScheduleFrameValidation();
             OnPropertyChanged(nameof(Count));
+
+            // unconditional structural signal (subscribers are first-party): panels need a reorder
+            // signal that Count does not provide, since a RemoveAt+Insert reorder nets no count change
+            StructureChanged?.Invoke(this, EventArgs.Empty);
         }
 
         // ====================================================================
@@ -466,7 +479,7 @@ namespace Clowd.Drawing
             for (int i = 0; i < _graphics.Count; i++)
             {
                 var g = _graphics[i];
-                if (g.DropShadowEffect && !(g is GraphicSelectionRectangle))
+                if (g.DropShadowEffect && !g.Hidden && !(g is GraphicSelectionRectangle))
                     ShadowCache.GetOrBakeFullRes(g);
             }
 
@@ -521,6 +534,8 @@ namespace Clowd.Drawing
                 var item = _graphics[i];
                 if (item is GraphicSelectionRectangle)
                     continue;
+                if (item.Hidden)
+                    continue; // hidden graphics don't contribute to content/export bounds
 
                 var rect = item.Bounds;
                 result = first ? rect : result.Union(rect);

@@ -7,8 +7,7 @@ namespace Clowd.Config
     /// (and potentially stale/invalid) settings, tolerating unknown enum names.</summary>
     public static class ToolbarConfig
     {
-        /// <summary>The current default editor toolbar order. Raster tools are intentionally
-        /// excluded — they are gated by <see cref="SettingsEditor.RasterToolsEnabled"/>.</summary>
+        /// <summary>The current default editor toolbar order.</summary>
         public static readonly IReadOnlyList<ToolType> DefaultOrder = new List<ToolType>
         {
             ToolType.None,
@@ -24,14 +23,10 @@ namespace Clowd.Config
             ToolType.Pixelate,
         };
 
-        public static bool IsRasterTool(ToolType t)
-        {
-            return t == ToolType.Brush || t == ToolType.Eraser;
-        }
-
         /// <summary>Resolves the effective toolbar order: leniently parses the persisted names
-        /// (dropping unknown names, duplicates and raster tools) then appends any default tool not
-        /// already present, in default order. Null/empty persisted order returns the default.</summary>
+        /// (dropping unknown names — including stale ones from removed tools — and duplicates) then
+        /// appends any default tool not already present, in default order. Null/empty persisted
+        /// order returns the default.</summary>
         public static IReadOnlyList<ToolType> ResolveToolbarOrder(SettingsEditor editor)
         {
             var persisted = editor == null ? null : editor.ToolbarOrder;
@@ -44,8 +39,6 @@ namespace Clowd.Config
             foreach (var name in persisted)
             {
                 if (!Enum.TryParse<ToolType>(name, out var tool))
-                    continue;
-                if (IsRasterTool(tool))
                     continue;
                 if (!seen.Add(tool))
                     continue;
@@ -62,7 +55,7 @@ namespace Clowd.Config
         }
 
         /// <summary>Resolves the set of hidden tools. <see cref="ToolType.Pointer"/> may never be
-        /// hidden and raster tools are dropped (they are gated by the master flag).</summary>
+        /// hidden and unknown names are dropped.</summary>
         public static ISet<ToolType> ResolveHiddenTools(SettingsEditor editor)
         {
             var result = new HashSet<ToolType>();
@@ -75,8 +68,6 @@ namespace Clowd.Config
                 if (!Enum.TryParse<ToolType>(name, out var tool))
                     continue;
                 if (tool == ToolType.Pointer)
-                    continue;
-                if (IsRasterTool(tool))
                     continue;
                 result.Add(tool);
             }

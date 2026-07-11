@@ -68,6 +68,9 @@ namespace Clowd.Drawing.Rendering
                 if (!o.DrawChrome && g is GraphicSelectionRectangle)
                     continue; // the marquee is never exported
 
+                if (g.Hidden)
+                    continue; // hidden graphics neither render nor export, and their shadow is not blitted
+
                 // while a text graphic is being edited the screen pass hides its text (pastel rect
                 // only) but the sprite was baked from the committed text — blitting it would show
                 // a ghost shadow of the OLD body. Skip on the chrome (screen) path only; export

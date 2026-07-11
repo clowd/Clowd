@@ -51,10 +51,34 @@ namespace Clowd.Drawing.Graphics
             set => Set(ref _isSelected, value);
         }
 
+        /// <summary>
+        /// When true the graphic is excluded from rendering, export, content bounds and canvas
+        /// hit-testing (the Layers panel can still toggle it). Persisted — flows through the
+        /// session file, undo history and clipboard; defaults false so old documents load unchanged.
+        /// </summary>
+        public virtual bool Hidden
+        {
+            get => _hidden;
+            set => Set(ref _hidden, value);
+        }
+
+        /// <summary>
+        /// When true the graphic is transparent to canvas hit-testing and marquee selection, so it
+        /// cannot be canvas-selected, moved or resized (it still renders, exports and counts toward
+        /// bounds; the Layers panel can select it programmatically). Persisted — defaults false.
+        /// </summary>
+        public virtual bool Locked
+        {
+            get => _locked;
+            set => Set(ref _locked, value);
+        }
+
         private string _id = Guid.NewGuid().ToString();
         private Color _objectColor;
         private double _lineWidth;
         private bool _dropShadowEffect;
+        private bool _hidden;
+        private bool _locked;
         [Transient] private bool _isSelected; // not persisted by GraphicsSerializer
 
         /// <summary>
@@ -158,6 +182,9 @@ namespace Clowd.Drawing.Graphics
         {
             map[nameof(Id)] = InvalidationAspects.None;
             map[nameof(IsSelected)] = InvalidationAspects.None; // selection never dirties caches (select-all must not queue shadow re-bakes)
+            map[nameof(Locked)] = InvalidationAspects.None; // lock is a hit-test-only flag; no visual/bounds change (same idiom as IsSelected)
+            // Hidden is deliberately UNMAPPED: it falls back to the conservative Bounds|Geometry|Shadow
+            // so toggling it dirties content bounds (a hidden graphic drops out of the export size).
             map[nameof(ObjectColor)] = InvalidationAspects.None; // ink repaints via the view invalidation; only the ALPHA feeds the shadow silhouette — the setter clears Shadow itself when alpha changes
             map[nameof(LineWidth)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
             map[nameof(DropShadowEffect)] = InvalidationAspects.Shadow;

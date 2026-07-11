@@ -149,16 +149,32 @@ namespace Clowd
             return await ZipUpload(filePaths);
         }
 
-        public static IEnumerable<IUploadProvider> GetAvailableProviders(SupportedUploadType type)
+        /// <summary>Prompts the user to pick an upload destination for the given content type
+        /// (optionally saving it as the new default), even when a default is already set.</summary>
+        public static async Task<IUploadProvider> SelectProvider(SupportedUploadType type)
         {
             var settings = SettingsRoot.Current.Uploads;
-            var defaultProvider = settings.GetDefaultProvider(type)?.Provider;
+            var enabled = settings.GetEnabledProviders(type).ToArray();
+            if (enabled.Length == 0)
+            {
+                if (await NiceDialog.ShowYesNoPromptAsync(null, NiceDialogIcon.Information,
+                        $"There is no upload provider configured/enabled for '{type}'. Would you like to open settings and configure one now?",
+                        "No upload provider available"))
+                {
+                    PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsUploads);
+                }
 
-            // callers (e.g. the editor's right-click upload menu) rely on the default coming first
-            return settings.GetEnabledProviders(type)
-                .Select(p => p.Provider)
-                .OrderByDescending(p => ReferenceEquals(p, defaultProvider))
-                .ToArray();
+                return null;
+            }
+
+            var selection = await ProviderSelectionDialog.ShowAsync(type, enabled);
+            if (selection == null)
+                return null;
+
+            if (selection.SetAsDefault)
+                settings.SetDefaultProvider(selection.Info, type);
+
+            return selection.Info.Provider;
         }
 
         private static async Task<UploadResult> ZipUpload(string[] filePaths)
@@ -261,33 +277,12 @@ namespace Clowd
 
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
         {
-            var settings = SettingsRoot.Current.Uploads;
-            UploadProviderInfo provider = settings.GetDefaultProvider(type);
+            UploadProviderInfo provider = SettingsRoot.Current.Uploads.GetDefaultProvider(type);
 
             if (provider != null)
                 return provider.Provider;
 
-            var enabled = settings.GetEnabledProviders(type).ToArray();
-            if (enabled.Length == 0)
-            {
-                if (await NiceDialog.ShowYesNoPromptAsync(null, NiceDialogIcon.Information,
-                        $"There is no upload provider configured/enabled for '{type}'. Would you like to open settings and configure one now?",
-                        "No upload provider available"))
-                {
-                    PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsUploads);
-                }
-
-                return null;
-            }
-
-            var selection = await ProviderSelectionDialog.ShowAsync(type, enabled);
-            if (selection == null)
-                return null;
-
-            if (selection.SetAsDefault)
-                settings.SetDefaultProvider(selection.Info, type);
-
-            return selection.Info.Provider;
+            return await SelectProvider(type);
         }
 
         private static string GetPatternFileName(string extension)
