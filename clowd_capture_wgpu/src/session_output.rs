@@ -23,7 +23,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::capture_output::ActionResult;
 use crate::geometry::{RectExt, ScreenRect};
 use crate::image_extract::{composite_cursor_rgba, extract_selection_rgba, extract_selection_rgba_with_peek};
-use crate::system::{CapturedDesktop, CursorImage, WindowPeekImage};
+use crate::system::{CapturedDesktop, CursorImage, MonitorInfo, WindowPeekImage};
 
 /// Name of the sidecar file the shell reads to route the finished
 /// capture. Matches `CaptureSessionDispatcher` in Clowd.Ui.
@@ -76,6 +76,115 @@ pub fn write_color_action(session_dir: &Path, r: u8, g: u8, b: u8) -> ActionResu
             log::error!("color action write failed: {e:#}");
             ActionResult::Failed(format!("Failed to write color: {e}"))
         }
+    }
+}
+
+/// Write a VIDEO action payload: `cropped.png` (the recording's poster
+/// frame) plus an `action.txt` = `video X,Y,W,H` marker written LAST so
+/// its appearance is the completion signal. No `desktop.png` and no
+/// `session.json` — the session is created by Clowd.Ui when recording
+/// finishes (DESIGN §3.2).
+///
+/// Unlike the screenshot path this **never composites peeked windows**:
+/// obs-express records the real screen (obstructions included), so a
+/// peek-composited poster would show content the video does not.
+///
+/// The rect in `action.txt` is emitted in the platform capture
+/// coordinate space (DESIGN §1.1): physical pixels (virtual-desktop,
+/// NOT origin-shifted) on Windows, CG points on macOS — so Clowd.Ui
+/// passes it through verbatim to obs-express `--region`.
+pub fn write_video_action(
+    session_dir: &Path,
+    selection: ScreenRect,
+    buffer: &CapturedDesktop,
+    cursor_visible: bool,
+    monitors: &[MonitorInfo],
+) -> ActionResult {
+    match write_video_action_inner(session_dir, selection, buffer, cursor_visible, monitors) {
+        Ok(action_path) => {
+            log::info!("video action written to {:?}", action_path);
+            ActionResult::Success
+        }
+        Err(e) => {
+            log::error!("video action write failed: {e:#}");
+            ActionResult::Failed(format!("Failed to write video action: {e}"))
+        }
+    }
+}
+
+fn write_video_action_inner(
+    session_dir: &Path,
+    selection: ScreenRect,
+    buffer: &CapturedDesktop,
+    cursor_visible: bool,
+    monitors: &[MonitorInfo],
+) -> anyhow::Result<PathBuf> {
+    std::fs::create_dir_all(session_dir)?;
+    let session_dir = absolute_path(session_dir);
+
+    // Selection clamped to the desktop bitmap — this is the region the
+    // poster contains and the rect obs-express records.
+    let selection = selection
+        .intersection(&buffer.bounds)
+        .ok_or_else(|| anyhow!("selection {:?} does not intersect desktop bounds {:?}", selection, buffer.bounds))?;
+
+    // cropped.png — poster frame. No peek compositing (see doc above);
+    // cursor included only if the user has it visible, matching the
+    // screenshot preview.
+    let preview_path = session_dir.join("cropped.png");
+    {
+        let (mut rgba, w, h) = extract_selection_rgba(selection, buffer).ok_or_else(|| anyhow!("failed to extract selection preview"))?;
+        if cursor_visible {
+            if let Some(cur) = buffer.cursor.as_ref() {
+                composite_cursor_rgba(&mut rgba, w, h, selection, cur);
+            }
+        }
+        save_png(&preview_path, rgba, w, h)?;
+    }
+
+    // action.txt — written LAST so its presence is the completion signal.
+    let (x, y, w, h) = video_action_rect(selection, monitors);
+    let action_path = session_dir.join(ACTION_FILE);
+    std::fs::write(&action_path, format!("video {x},{y},{w},{h}\n"))?;
+    Ok(action_path)
+}
+
+/// The `action.txt` rect in the platform capture coordinate space
+/// (DESIGN §1.1). Windows: the clamped selection verbatim (physical px,
+/// virtual desktop).
+#[cfg(not(target_os = "macos"))]
+fn video_action_rect(selection: ScreenRect, _monitors: &[MonitorInfo]) -> (i32, i32, i32, i32) {
+    (selection.min_x(), selection.min_y(), selection.width(), selection.height())
+}
+
+/// macOS: convert the physical-pixel selection to CG points via the
+/// monitor under its top-left corner (ScreenUnit is physical px on both
+/// platforms — emitting raw ScreenUnit on a Retina display would hand
+/// obs-express a 2× rect). Untested; compile-guarded (DESIGN §3.2).
+#[cfg(target_os = "macos")]
+fn video_action_rect(selection: ScreenRect, monitors: &[MonitorInfo]) -> (i32, i32, i32, i32) {
+    let origin = crate::geometry::ScreenPoint::new(selection.min_x(), selection.min_y());
+    let monitor = monitors
+        .iter()
+        .find(|m| m.bounds.contains(origin))
+        .or_else(|| {
+            monitors
+                .iter()
+                .find(|m| m.bounds.intersects(&selection))
+        })
+        .or_else(|| monitors.first());
+    match monitor {
+        Some(m) => {
+            let tl = m.screen_to_logical(origin);
+            let size = m.physical_to_logical_size(selection.width() as u32, selection.height() as u32);
+            (
+                tl.x.round() as i32,
+                tl.y.round() as i32,
+                size.width.round() as i32,
+                size.height.round() as i32,
+            )
+        }
+        None => (selection.min_x(), selection.min_y(), selection.width(), selection.height()),
     }
 }
 

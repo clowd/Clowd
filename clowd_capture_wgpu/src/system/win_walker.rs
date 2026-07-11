@@ -19,9 +19,9 @@ use windows::{
         UI::{
             Shell::{IVirtualDesktopManager, VirtualDesktopManager},
             WindowsAndMessaging::{
-                EnumWindows, FindWindowExW, GetClassNameW, GetClientRect, GetWindowLongPtrW, GetWindowRect, GetWindowTextW, IsIconic,
-                IsWindowVisible, IsZoomed, RealChildWindowFromPoint, GWL_EXSTYLE, GWL_STYLE, WS_CAPTION, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
-                WS_VISIBLE,
+                EnumWindows, FindWindowExW, GetClassNameW, GetClientRect, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect,
+                GetWindowTextW, IsIconic, IsWindowVisible, IsZoomed, RealChildWindowFromPoint, GWL_EXSTYLE, GWL_STYLE, WS_CAPTION,
+                WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_VISIBLE,
             },
         },
     },
@@ -95,6 +95,10 @@ struct WindowEntry {
 /// startup; queried per cursor-move via [`hit_test`].
 pub struct WindowWalker {
     windows: Vec<WindowEntry>,
+    /// True bounds of the foreground window at snapshot time, if it survived
+    /// the enumeration filters. Used by `--capture-mode window` to pre-select
+    /// the active window (see [`foreground_capture_rect`]).
+    foreground_rect: Option<ScreenRect>,
 }
 
 // SAFETY: WindowWalker holds HWND values which are plain integer handles.
@@ -108,6 +112,12 @@ impl WindowWalker {
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
     pub fn snapshot(_monitors: &[super::MonitorInfo], visibility_threshold: f32) -> Self {
+        // Grab the foreground window first — before overlay windows exist —
+        // so `--capture-mode window` can pre-select the truly active window
+        // regardless of where the cursor is. Matched to an enumerated entry
+        // below; a foreground window that fails the filters yields None.
+        let foreground_hwnd = unsafe { GetForegroundWindow() };
+
         // COM is per-thread; this may run on a background thread.
         unsafe {
             use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
@@ -143,10 +153,31 @@ impl WindowWalker {
             }
         }
 
+        // Resolve the foreground window to a capture rect. Only accept it if it
+        // survived enumeration (a normal, on-screen app window); otherwise leave
+        // it None so the caller can fall back to the active screen.
+        let foreground_rect = if foreground_hwnd.0.is_null() {
+            None
+        } else {
+            windows
+                .iter()
+                .find(|w| w.hwnd == foreground_hwnd)
+                .map(|w| w.rect)
+        };
+
         info!("WindowWalker: captured {} top-level windows", windows.len());
         WindowWalker {
             windows,
+            foreground_rect,
         }
+    }
+
+    /// Capture rect for `--capture-mode window`: the true bounds of the window
+    /// that was in the foreground when the capture began, or `None` if that
+    /// window is not a valid capture target (the caller should fall back to the
+    /// active screen).
+    pub fn foreground_capture_rect(&self) -> Option<ScreenRect> {
+        self.foreground_rect
     }
 
     /// Given a cursor position in virtual-desktop physical pixels, return the

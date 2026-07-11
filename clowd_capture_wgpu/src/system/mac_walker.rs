@@ -119,6 +119,14 @@ impl WindowWalker {
             .find(|w| w.rect.contains(point))
             .map(|w| (w.rect, w.title.clone()))
     }
+
+    /// Capture rect for `--capture-mode window`: best-effort active window,
+    /// taken as the topmost enumerated window (CGWindowList is front-to-back
+    /// Z-order). `None` if no windows were captured, so the caller falls back
+    /// to the active screen.
+    pub fn foreground_capture_rect(&self) -> Option<ScreenRect> {
+        self.windows.first().map(|w| w.rect)
+    }
 }
 
 // ---------------------------------------------------------------------------

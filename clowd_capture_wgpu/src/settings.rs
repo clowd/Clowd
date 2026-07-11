@@ -36,6 +36,27 @@ impl TipsMode {
     }
 }
 
+/// What the capturer should have selected when it opens. `Region` is the
+/// default free-selection crosshair; `Screen` and `Window` pre-select the
+/// active monitor / foreground window and show the action panel so the
+/// user can confirm or adjust (mirrors pressing `F` / `W` at startup).
+/// Chosen by the shell from which capture hotkey fired.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum CaptureMode {
+    #[default]
+    Region,
+    Screen,
+    Window,
+}
+
+impl CaptureMode {
+    /// Whether this mode pre-selects a region at startup (vs. free
+    /// crosshair selection).
+    pub fn is_preselect(self) -> bool {
+        !matches!(self, CaptureMode::Region)
+    }
+}
+
 /// Settings that influence how the capturer renders. Cheap to clone
 /// via `Arc` — we never mutate it after construction.
 #[derive(Debug, Clone)]
@@ -66,6 +87,17 @@ pub struct CapturerSettings {
     /// only `action.txt`, and the capturer exits (see
     /// CAPTURE_PROTOCOL.md). `None` = standalone mode.
     pub session_dir: Option<PathBuf>,
+    /// What to have selected when the capturer opens. `Region` starts with
+    /// the free-selection crosshair; `Screen`/`Window` pre-select the
+    /// active monitor / foreground window (see `CaptureMode`). Set by the
+    /// shell per the capture hotkey the user pressed.
+    pub capture_mode: CaptureMode,
+    /// When true, the shell launched the overlay specifically to pick a
+    /// recording region (StartStopRecording hotkey / tray). As soon as a
+    /// selection becomes captured the app dispatches `Command::Video`
+    /// instead of waiting for a panel click. The VIDEO panel button still
+    /// works in normal mode.
+    pub video_mode: bool,
 }
 
 impl Default for CapturerSettings {
@@ -78,6 +110,8 @@ impl Default for CapturerSettings {
             obscured_window_detection_threshold: 0.80,
             cursor_visible_at_startup: true,
             session_dir: None,
+            capture_mode: CaptureMode::default(),
+            video_mode: false,
         }
     }
 }
@@ -114,6 +148,19 @@ pub struct CliArgs {
     /// Start with the captured cursor hidden (toggled at runtime with M).
     #[arg(long)]
     pub no_cursor: bool,
+
+    /// What to have selected when the capturer opens. `region` (default)
+    /// starts the free-selection crosshair; `screen` pre-selects the
+    /// active monitor and `window` the foreground window, in both cases
+    /// showing the action panel so the user can confirm or adjust.
+    #[arg(long, value_enum, default_value_t = CaptureMode::Region)]
+    pub capture_mode: CaptureMode,
+
+    /// Open the overlay in video mode: as soon as a region is selected,
+    /// write the VIDEO action and exit (the shell then starts recording).
+    /// Requires `--session-dir`.
+    #[arg(long)]
+    pub video: bool,
 }
 
 impl CliArgs {
@@ -125,6 +172,8 @@ impl CliArgs {
             obscured_window_detection_threshold: self.peek_threshold,
             cursor_visible_at_startup: !self.no_cursor,
             session_dir: self.session_dir,
+            capture_mode: self.capture_mode,
+            video_mode: self.video,
         }
     }
 }
@@ -168,6 +217,22 @@ mod tests {
         );
         assert_eq!(from_cli.cursor_visible_at_startup, default.cursor_visible_at_startup);
         assert_eq!(from_cli.session_dir, default.session_dir);
+        assert_eq!(from_cli.capture_mode, default.capture_mode);
+        assert_eq!(from_cli.video_mode, default.video_mode);
+    }
+
+    #[test]
+    fn capture_mode_defaults_to_region_and_parses_variants() {
+        let default = CliArgs::parse_from(["clowd_capture_wgpu"]);
+        assert_eq!(default.capture_mode, CaptureMode::Region);
+        assert!(!default.capture_mode.is_preselect());
+
+        let window = CliArgs::parse_from(["clowd_capture_wgpu", "--capture-mode", "window"]);
+        assert_eq!(window.capture_mode, CaptureMode::Window);
+        assert!(window.capture_mode.is_preselect());
+
+        let screen = CliArgs::parse_from(["clowd_capture_wgpu", "--capture-mode", "screen"]);
+        assert_eq!(screen.capture_mode, CaptureMode::Screen);
     }
 
     #[test]
