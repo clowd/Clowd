@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-07-10T20:48:47Z",
+  "gitCommit": "a7095bcb0a421a8140b0b8f3a41c7a02b7449691",
+  "build": "new",
+  "machine": {
+    "os": "Microsoft Windows 10.0.28000",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "dotnet": "8.0.26"
+  },
+  "scenarios": [
+    {
+      "id": "S1",
+      "name": "commit_scrub",
+      "n": 10,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 1.8698,
+        "wallMsTotalP95": 2.4741,
+        "wallUsPerCommitMedian": 3.7396,
+        "allocBytesPerCommitMedian": 3616.16,
+        "gen0PerIteration": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S1",
+      "name": "commit_scrub",
+      "n": 50,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 1.9219,
+        "wallMsTotalP95": 1.9687,
+        "wallUsPerCommitMedian": 3.8438,
+        "allocBytesPerCommitMedian": 3616.16,
+        "gen0PerIteration": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S1",
+      "name": "commit_scrub",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 1.8415,
+        "wallMsTotalP95": 1.938,
+        "wallUsPerCommitMedian": 3.683,
+        "allocBytesPerCommitMedian": 3616.16,
+        "gen0PerIteration": 0
+      },
+      "counters": {
+        "scaleRatio1000v200": 1.2096117295682869
+      },
+      "notes": ""
+    },
+    {
+      "id": "S1",
+      "name": "commit_scrub",
+      "n": 1000,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 2.2275,
+        "wallMsTotalP95": 2.3006,
+        "wallUsPerCommitMedian": 4.455,
+        "allocBytesPerCommitMedian": 3616.16,
+        "gen0PerIteration": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S2",
+      "name": "nudge_scrub",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 4.5442,
+        "wallMsTotalP95": 4.7442,
+        "wallUsPerOpMedian": 22.721,
+        "allocBytesPerOpMedian": 24824.4,
+        "gen0PerIteration": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S3",
+      "name": "undo_redo",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerOpMedian": 0.5405530000000001,
+        "wallMsTotalMedian": 108.1106,
+        "allocBytesPerOpMedian": 615950.4
+      },
+      "counters": {
+        "graphicsListIdentityPreserved": true,
+        "instanceIdentityPreserved": true
+      },
+      "notes": "identity counters are informational on the old build (recorded FALSE), hard pass on new"
+    },
+    {
+      "id": "S4",
+      "name": "drag_funnel",
+      "n": 10,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 0.6884,
+        "wallUsPerMoveMedian": 0.6884,
+        "allocBytesPerMoveMedian": 344.512,
+        "gen0PerIteration": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S4",
+      "name": "drag_funnel",
+      "n": 50,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 0.7667,
+        "wallUsPerMoveMedian": 0.7667,
+        "allocBytesPerMoveMedian": 344.512,
+        "gen0PerIteration": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S4",
+      "name": "drag_funnel",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 0.7986,
+        "wallUsPerMoveMedian": 0.7986,
+        "allocBytesPerMoveMedian": 344.512,
+        "gen0PerIteration": 0
+      },
+      "counters": {
+        "scaleRatio1000v200": 1.2816178312046083
+      },
+      "notes": ""
+    },
+    {
+      "id": "S4",
+      "name": "drag_funnel",
+      "n": 1000,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 1.0235,
+        "wallUsPerMoveMedian": 1.0235,
+        "allocBytesPerMoveMedian": 344.512,
+        "gen0PerIteration": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S5",
+      "name": "hover_hittest",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallUsPerTestMedian": 14.1906,
+        "allocBytesPerTestMedian": 0.16,
+        "gen0PerIteration": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S6",
+      "name": "render_record",
+      "n": 10,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerFrameMedian": 7.460145,
+        "wallMsTotalMedian": 746.0145
+      },
+      "counters": {},
+      "notes": "baseline includes per-visual record but NOT compositor effect cost"
+    },
+    {
+      "id": "S6",
+      "name": "render_record",
+      "n": 50,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerFrameMedian": 10.176889,
+        "wallMsTotalMedian": 1017.6889
+      },
+      "counters": {},
+      "notes": "baseline includes per-visual record but NOT compositor effect cost"
+    },
+    {
+      "id": "S6",
+      "name": "render_record",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerFrameMedian": 16.73083,
+        "wallMsTotalMedian": 1673.083
+      },
+      "counters": {},
+      "notes": "baseline includes per-visual record but NOT compositor effect cost"
+    },
+    {
+      "id": "S7",
+      "name": "shadow_bake",
+      "n": 0,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerBake_100x100": 0.199,
+        "wallMsPerBake_500x500": 2.8017,
+        "wallMsPerBake_2000x1000": 22.7743
+      },
+      "counters": {},
+      "notes": "ShadowRenderer.Render(GraphicBase,Double,Vector\u0026)"
+    },
+    {
+      "id": "S8",
+      "name": "autosave_count",
+      "n": 200,
+      "warmup": 0,
+      "iterations": 1,
+      "metrics": {},
+      "counters": {
+        "stateUpdatedRaises": 2,
+        "lastPayloadNonNull": true,
+        "flushMethodPresent": true
+      },
+      "notes": "new build: debounced autosave"
+    },
+    {
+      "id": "S9",
+      "name": "export",
+      "n": 50,
+      "warmup": 0,
+      "iterations": 6,
+      "metrics": {
+        "wallMsCold_shadowless": 6.3152,
+        "wallMsWarm_shadowless": 6.085,
+        "maxChannelDelta_shadowless": 0,
+        "meanAbsDelta_shadowless": 0,
+        "pctOver16_shadowless": 0,
+        "wallMsCold_shadowed": 7.2922,
+        "wallMsWarm_shadowed": 7.2667,
+        "wallMsColdShadowed": 7.2922,
+        "wallMsWarmShadowed": 7.2667,
+        "maxChannelDelta_shadowed": 0,
+        "meanAbsDelta_shadowed": 0,
+        "pctOver16_shadowed": 0,
+        "wallMsCold_image": 141.7588,
+        "wallMsWarm_image": 37.937,
+        "maxChannelDelta_image": 0,
+        "meanAbsDelta_image": 0,
+        "pctOver16_image": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S10",
+      "name": "history_memory",
+      "n": 200,
+      "warmup": 0,
+      "iterations": 1,
+      "metrics": {
+        "totalMemoryDeltaMB": 0.176849365234375,
+        "totalMemoryDeltaBytes": 185440
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S11",
+      "name": "structural",
+      "n": 0,
+      "warmup": 0,
+      "iterations": 1,
+      "metrics": {},
+      "counters": {
+        "effectVisualCount": 0,
+        "dragSerializeRaises": 0
+      },
+      "notes": "old build records effectVisualCount \u2248 shadowed-graphic count (informational)"
+    }
+  ]
+}

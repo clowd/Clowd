@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -14,11 +15,12 @@ namespace Clowd.Drawing.Graphics
             : base(objectColor, 0, unrotatedBounds, angle, false)
         { }
 
+        // PORT NOTE (RenderResources): fill brush only — bounds/hit-test inherit GraphicRectangle's
+        // cached ComputeBounds unchanged.
         internal override void DrawRectangle(DrawingContext drawingContext)
         {
-            var brush = new SolidColorBrush(ObjectColor);
             drawingContext.DrawRectangle(
-                brush,
+                RenderResources.GetBrush(ObjectColor),
                 null,
                 new Rect(UnrotatedBounds.Left,
                          UnrotatedBounds.Top,

@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
 using Clowd.Drawing.Graphics;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Tools
 {
@@ -289,6 +290,18 @@ namespace Clowd.Drawing.Tools
 
             Point point = s.Position;
             SetHitTest(drawingCanvas, point);
+
+            if (_wasEdit && _selectMode == SelectionMode.Move)
+            {
+                // Body-move deltas are root-space doubles, so TranslateCachedBounds leaves each
+                // graphic's cached Bounds at a fractional offset of the pre-drag ROUNDED bounds —
+                // and no later invalidation ever re-rounds it. Drop the Bounds caches so the next
+                // read recomputes (and re-rounds) at the final position, exactly like the old
+                // per-read getter; the export offset for a screenshot doc stays integral.
+                foreach (var g in drawingCanvas.GraphicsList.SelectedItems)
+                    g.RenderCache.Clear(InvalidationAspects.Bounds);
+                drawingCanvas.GraphicsList.RequestValidation();
+            }
 
             _selectMode = SelectionMode.None;
             if (_wasEdit)

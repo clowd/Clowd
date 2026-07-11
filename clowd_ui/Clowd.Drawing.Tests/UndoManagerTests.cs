@@ -167,6 +167,61 @@ namespace Clowd.Drawing.Tests
             Assert.Single(canvas.GraphicsList);
         }
 
+        [AvaloniaFact]
+        public void ZOrderCommand_KeepsPropertyBarCommitHookAlive()
+        {
+            // Regression: MoveToIndex is RemoveAt+Insert per selected graphic, and RemoveAt →
+            // DisconnectFromParent clears the graphic's ENTIRE PropertyChanged delegate — including
+            // the skill bindings and BoundGraphicPropertyChanged that SyncObjectState wired up.
+            // Because the selection array instance is unchanged, SyncObjectState's early-out used
+            // to skip the rebind, permanently killing the mergable-undo hook for the selected
+            // graphic. MoveToIndex must set _syncStateForced so the StateChanged-driven resync
+            // rebinds.
+            var canvas = new DrawingCanvas { Tool = ToolType.Pointer };
+            var rectA = new GraphicRectangle(Colors.Red, 2, new Rect(10, 10, 50, 40));
+            var rectB = new GraphicRectangle(Colors.Yellow, 2, new Rect(100, 10, 50, 40));
+            canvas.GraphicsList.Add(rectA);
+            canvas.GraphicsList.Add(rectB);
+            rectA.IsSelected = true;
+            canvas.AddCommandToHistory(false); // commit → SyncObjectState binds rectA
+
+            canvas.MoveToFront(); // RemoveAt+Insert; must force a rebind
+
+            // a property-bar-style write on the still-selected graphic must land in history
+            rectA.ObjectColor = Colors.Green;
+
+            canvas.Undo(); // must undo the COLOR step (not the z-order step)
+            Assert.Equal(Colors.Red, rectA.ObjectColor);
+            Assert.Same(rectA, canvas.GraphicsList[1]); // z-order change still in place
+        }
+
+        [AvaloniaFact]
+        public void NoOpZOrderCommand_KeepsPropertyBarCommitHookAlive()
+        {
+            // Companion to the test above for the NO-OP case: MoveToFront on an already-frontmost
+            // graphic still runs RemoveAt+Add (clearing the graphic's PropertyChanged delegates)
+            // but commits an EMPTY change set, so no StateChanged fires and the forced resync
+            // cannot ride on it — MoveToIndex must invoke SyncObjectState itself or the
+            // mergable-undo hook dies silently until the next selection/tool change.
+            var canvas = new DrawingCanvas { Tool = ToolType.Pointer };
+            var rectA = new GraphicRectangle(Colors.Red, 2, new Rect(10, 10, 50, 40));
+            var rectB = new GraphicRectangle(Colors.Yellow, 2, new Rect(100, 10, 50, 40));
+            canvas.GraphicsList.Add(rectB);
+            canvas.GraphicsList.Add(rectA); // rectA is already frontmost
+            rectA.IsSelected = true;
+            canvas.AddCommandToHistory(false); // commit → SyncObjectState binds rectA
+
+            canvas.MoveToFront(); // no-op: same order → empty commit, no StateChanged raise
+
+            // a property-bar-style write on the still-selected graphic must land in history
+            rectA.ObjectColor = Colors.Green;
+
+            canvas.Undo(); // must undo the COLOR step — not fall through to the baseline add step
+            Assert.Equal(Colors.Red, rectA.ObjectColor);
+            Assert.Equal(2, canvas.GraphicsList.Count);
+            Assert.Same(rectA, canvas.GraphicsList[1]);
+        }
+
         // ====================================================================
         // GetChangedNodes — the per-property diff feeding the merge decision
         // ====================================================================

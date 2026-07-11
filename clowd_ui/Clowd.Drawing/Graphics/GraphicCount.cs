@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -29,7 +30,7 @@ namespace Clowd.Drawing.Graphics
         protected override void DrawObjectImpl(DrawingContext context, bool showText)
         {
             // NOTE: the rotation transform is pushed by the callers (Draw/DrawObject), not here.
-            var lineBrush = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
+            var lineBrush = RenderResources.GetPen(ObjectColor, LineWidth);
             Point center = new Point((Left + Right) / 2.0, (Top + Bottom) / 2.0);
 
             var ubounds = UnrotatedBounds;
@@ -66,23 +67,22 @@ namespace Clowd.Drawing.Graphics
             Right = Math.Max(Right, test);
         }
 
-        public override Rect Bounds
+        // PORT NOTE (ComputeBounds): the old Bounds override body (closed-form rotated ellipse
+        // AABB) moves here verbatim; the cached base Bounds getter now serves reads.
+        protected override Rect ComputeBounds()
         {
-            get
-            {
-                var a = (Right - Left) / 2; // one axis’s radius
-                var b = (Bottom - Top) / 2; // the other axis’s radius
+            var a = (Right - Left) / 2; // one axis’s radius
+            var b = (Bottom - Top) / 2; // the other axis’s radius
 
-                var cos = Math.Cos(Angle * Math.PI / 180);
-                var sin = Math.Sin(Angle * Math.PI / 180);
-                var x = Math.Sqrt(a * a * cos * cos + b * b * sin * sin);
-                var y = Math.Sqrt(a * a * sin * sin + b * b * cos * cos);
-                return new Rect(
-                    (Left + Right) / 2.0 - x,
-                    (Top + Bottom) / 2.0 - y,
-                    2 * x,
-                    2 * y);
-            }
+            var cos = Math.Cos(Angle * Math.PI / 180);
+            var sin = Math.Sin(Angle * Math.PI / 180);
+            var x = Math.Sqrt(a * a * cos * cos + b * b * sin * sin);
+            var y = Math.Sqrt(a * a * sin * sin + b * b * cos * cos);
+            return new Rect(
+                (Left + Right) / 2.0 - x,
+                (Top + Bottom) / 2.0 - y,
+                2 * x,
+                2 * y);
         }
 
         internal override bool Contains(Point point)
@@ -91,8 +91,11 @@ namespace Clowd.Drawing.Graphics
             if (IsSelected)
                 return UnrotatedBounds.Contains(point);
 
-            EllipseGeometry g = new EllipseGeometry(UnrotatedBounds);
-            return g.FillContains(point) || g.StrokeContains(new Pen(Brushes.Black, LineWidth), point);
+            // PORT NOTE (Geometry cache): the ellipse hit geometry is cached in RenderCache.Geometry
+            // (cleared by the Geometry aspect whenever the rectangle edges/angle move); the stroke
+            // pen comes from the process-wide cache.
+            var g = (EllipseGeometry)(RenderCache.Geometry ??= new EllipseGeometry(UnrotatedBounds));
+            return g.FillContains(point) || g.StrokeContains(RenderResources.GetPen(Colors.Black, LineWidth), point);
         }
     }
 }

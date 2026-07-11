@@ -10,6 +10,7 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Clowd.Drawing.Tests" />
+    <InternalsVisibleTo Include="Clowd.Drawing.Benchmarks" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />

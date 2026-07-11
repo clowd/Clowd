@@ -1,18 +1,16 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Clowd.Drawing.Graphics;
+using Clowd.Drawing.History;
 
 namespace Clowd.Drawing
 {
     /// <summary>
-    /// System.Text.Json contract for graphics serialization (undo snapshots, the graphics.json
-    /// session file and the clipboard payload).
+    /// System.Text.Json contract for graphics serialization (session persistence via the
+    /// graphics.json file, the clipboard payload, and the autosave StateUpdated snapshots).
     ///
     /// The contract mirrors what the legacy (WPF-era) serializer used to persist:
     /// - <see cref="GraphicBase"/>-derived types serialize their instance FIELDS (public and
@@ -29,6 +27,10 @@ namespace Clowd.Drawing
     /// - Avalonia value types (Color/Point/Size/Rect/PixelRect) and font enums serialize as single
     ///   strings, which keeps one JSON leaf per property — the per-property undo merge diff in
     ///   <see cref="UndoManager"/> depends on this shape.
+    ///
+    /// The field enumeration, JSON naming and compiled accessors live in
+    /// <see cref="GraphicFieldMap"/> (final-design §B.1), which the history delta engine consumes
+    /// too — one definition of "persisted field", so the two can never disagree.
     /// </summary>
     public static class GraphicsSerializer
     {
@@ -82,71 +84,22 @@ namespace Clowd.Drawing
             if (info.Kind != JsonTypeInfoKind.Object || !typeof(GraphicBase).IsAssignableFrom(info.Type))
                 return;
 
-            // replace the default (public property) contract with a field-based one. the contract
-            // is built once per type but the accessors run on every undo snapshot / restore, so
-            // FieldInfo.GetValue/SetValue reflection is replaced with compiled delegates.
+            // replace the default (public property) contract with the field-based one from the
+            // shared field map — same slot order (base-most-first), names and compiled delegates
+            // as always, so the serialized bytes are unchanged.
+            var map = GraphicFieldMap.For(info.Type);
+
             info.Properties.Clear();
-            foreach (var field in EnumeratePersistedFields(info.Type))
+            foreach (var slot in map.Slots)
             {
-                var prop = info.CreateJsonPropertyInfo(field.FieldType, GetJsonName(field.Name));
-                prop.Get = CompileGetter(field);
-                prop.Set = CompileSetter(field);
+                var prop = info.CreateJsonPropertyInfo(slot.FieldType, slot.JsonName);
+                prop.Get = slot.Get;
+                prop.Set = slot.Set;
                 info.Properties.Add(prop);
             }
 
             if (!info.Type.IsAbstract)
-            {
-                // the graphics declare protected parameterless constructors for deserialization
-                var ctor = info.Type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                                                    null, Type.EmptyTypes, null)
-                           ?? throw new InvalidOperationException($"{info.Type.Name} must declare a parameterless constructor.");
-                info.CreateObject = Expression.Lambda<Func<object>>(Expression.New(ctor)).Compile();
-            }
+                info.CreateObject = map.CreateObject;
         }
-
-        private static Func<object, object> CompileGetter(FieldInfo field)
-        {
-            var obj = Expression.Parameter(typeof(object), "obj");
-            var body = Expression.Convert(Expression.Field(Expression.Convert(obj, field.DeclaringType), field), typeof(object));
-            return Expression.Lambda<Func<object, object>>(body, obj).Compile();
-        }
-
-        private static Action<object, object> CompileSetter(FieldInfo field)
-        {
-            var obj = Expression.Parameter(typeof(object), "obj");
-            var value = Expression.Parameter(typeof(object), "value");
-            var body = Expression.Assign(Expression.Field(Expression.Convert(obj, field.DeclaringType), field),
-                                         Expression.Convert(value, field.FieldType));
-            return Expression.Lambda<Action<object, object>>(body, obj, value).Compile();
-        }
-
-        /// <summary>
-        /// All persisted instance fields for a graphic type, base-most class first
-        /// (GraphicBase → ... → concrete type). Transient ([Transient]) and
-        /// compiler-generated fields are excluded; statics are excluded by the binding flags.
-        /// </summary>
-        private static IEnumerable<FieldInfo> EnumeratePersistedFields(Type type)
-        {
-            var chain = new List<Type>();
-            for (var t = type; t != null && t != typeof(SimpleNotifyObject); t = t.BaseType)
-                chain.Add(t);
-            chain.Reverse();
-
-            foreach (var t in chain)
-            {
-                foreach (var f in t.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
-                {
-                    if (f.IsDefined(typeof(TransientAttribute), false))
-                        continue; // [Transient] = not persisted
-                    if (f.Name.IndexOf('<') >= 0)
-                        continue; // compiler-generated backing field
-                    yield return f;
-                }
-            }
-        }
-
-        /// <summary>"_objectColor" → "objectColor" (lets the undo diff key graphics array items by
-        /// their "id" property).</summary>
-        private static string GetJsonName(string fieldName) => fieldName.TrimStart('_');
     }
 }

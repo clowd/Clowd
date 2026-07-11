@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-07-10T17:15:59Z",
+  "gitCommit": "a7095bcb0a421a8140b0b8f3a41c7a02b7449691",
+  "build": "old",
+  "machine": {
+    "os": "Microsoft Windows 10.0.28000",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "dotnet": "8.0.26"
+  },
+  "scenarios": [
+    {
+      "id": "S1",
+      "name": "commit_scrub",
+      "n": 10,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 200.3114,
+        "wallMsTotalP95": 273.6802,
+        "wallUsPerCommitMedian": 400.6228,
+        "allocBytesPerCommitMedian": 249051.104,
+        "gen0PerIteration": 7
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S1",
+      "name": "commit_scrub",
+      "n": 50,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 302.6776,
+        "wallMsTotalP95": 311.5376,
+        "wallUsPerCommitMedian": 605.3552,
+        "allocBytesPerCommitMedian": 1202750.736,
+        "gen0PerIteration": 34
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S1",
+      "name": "commit_scrub",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 1346.9315,
+        "wallMsTotalP95": 1357.6716,
+        "wallUsPerCommitMedian": 2693.863,
+        "allocBytesPerCommitMedian": 4945096.4,
+        "gen0PerIteration": 149
+      },
+      "counters": {
+        "scaleRatio1000v200": 5.843173168049007
+      },
+      "notes": ""
+    },
+    {
+      "id": "S1",
+      "name": "commit_scrub",
+      "n": 1000,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 7870.354,
+        "wallMsTotalP95": 7882.2445,
+        "wallUsPerCommitMedian": 15740.708,
+        "allocBytesPerCommitMedian": 24123115.696,
+        "gen0PerIteration": 784
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S2",
+      "name": "nudge_scrub",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 1192.6859,
+        "wallMsTotalP95": 1208.364,
+        "wallUsPerOpMedian": 5963.4295,
+        "allocBytesPerOpMedian": 9193550.92,
+        "gen0PerIteration": 109
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S3",
+      "name": "undo_redo",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerOpMedian": 1.3660855,
+        "wallMsTotalMedian": 273.2171,
+        "allocBytesPerOpMedian": 1584438.76
+      },
+      "counters": {
+        "graphicsListIdentityPreserved": false,
+        "instanceIdentityPreserved": false
+      },
+      "notes": "identity counters are informational on the old build (recorded FALSE), hard pass on new"
+    },
+    {
+      "id": "S4",
+      "name": "drag_funnel",
+      "n": 10,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 25.4442,
+        "wallUsPerMoveMedian": 25.4442,
+        "allocBytesPerMoveMedian": 36792.08,
+        "gen0PerIteration": 2
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S4",
+      "name": "drag_funnel",
+      "n": 50,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 158.5637,
+        "wallUsPerMoveMedian": 158.5637,
+        "allocBytesPerMoveMedian": 240960.08,
+        "gen0PerIteration": 13
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S4",
+      "name": "drag_funnel",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 658.6411,
+        "wallUsPerMoveMedian": 658.6411,
+        "allocBytesPerMoveMedian": 1021344.08,
+        "gen0PerIteration": 59
+      },
+      "counters": {
+        "scaleRatio1000v200": 4.922066661190745
+      },
+      "notes": ""
+    },
+    {
+      "id": "S4",
+      "name": "drag_funnel",
+      "n": 1000,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsTotalMedian": 3241.8754,
+        "wallUsPerMoveMedian": 3241.8754,
+        "allocBytesPerMoveMedian": 5105184.08,
+        "gen0PerIteration": 295
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S5",
+      "name": "hover_hittest",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallUsPerTestMedian": 227.2258,
+        "allocBytesPerTestMedian": 234629.392,
+        "gen0PerIteration": 6
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S6",
+      "name": "render_record",
+      "n": 10,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerFrameMedian": 4.91748,
+        "wallMsTotalMedian": 491.748
+      },
+      "counters": {},
+      "notes": "baseline includes per-visual record but NOT compositor effect cost"
+    },
+    {
+      "id": "S6",
+      "name": "render_record",
+      "n": 50,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerFrameMedian": 5.059133,
+        "wallMsTotalMedian": 505.9133
+      },
+      "counters": {},
+      "notes": "baseline includes per-visual record but NOT compositor effect cost"
+    },
+    {
+      "id": "S6",
+      "name": "render_record",
+      "n": 200,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerFrameMedian": 5.624694,
+        "wallMsTotalMedian": 562.4694
+      },
+      "counters": {},
+      "notes": "baseline includes per-visual record but NOT compositor effect cost"
+    },
+    {
+      "id": "S7",
+      "name": "shadow_bake",
+      "n": 0,
+      "warmup": 2,
+      "iterations": 7,
+      "metrics": {
+        "wallMsPerBake_100x100": 0.3099,
+        "wallMsPerBake_500x500": 3.0526,
+        "wallMsPerBake_2000x1000": 23.5999
+      },
+      "counters": {},
+      "notes": "ShadowRenderer.Render(GraphicBase,Point\u0026)"
+    },
+    {
+      "id": "S8",
+      "name": "autosave_count",
+      "n": 200,
+      "warmup": 0,
+      "iterations": 1,
+      "metrics": {},
+      "counters": {
+        "stateUpdatedRaises": 300,
+        "lastPayloadNonNull": true,
+        "flushMethodPresent": false
+      },
+      "notes": "old build: StateUpdated fires per commit"
+    },
+    {
+      "id": "S9",
+      "name": "export",
+      "n": 50,
+      "warmup": 0,
+      "iterations": 6,
+      "metrics": {
+        "wallMsCold_shadowless": 8.0183,
+        "wallMsWarm_shadowless": 6.2076,
+        "maxChannelDelta_shadowless": 0,
+        "meanAbsDelta_shadowless": 0,
+        "pctOver16_shadowless": 0,
+        "wallMsCold_shadowed": 23.4037,
+        "wallMsWarm_shadowed": 23.3913,
+        "wallMsColdShadowed": 23.4037,
+        "wallMsWarmShadowed": 23.3913,
+        "maxChannelDelta_shadowed": 0,
+        "meanAbsDelta_shadowed": 0,
+        "pctOver16_shadowed": 0,
+        "wallMsCold_image": 164.5282,
+        "wallMsWarm_image": 51.6602,
+        "maxChannelDelta_image": 0,
+        "meanAbsDelta_image": 0,
+        "pctOver16_image": 0
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S10",
+      "name": "history_memory",
+      "n": 200,
+      "warmup": 0,
+      "iterations": 1,
+      "metrics": {
+        "totalMemoryDeltaMB": 302.958984375,
+        "totalMemoryDeltaBytes": 317675520
+      },
+      "counters": {},
+      "notes": ""
+    },
+    {
+      "id": "S11",
+      "name": "structural",
+      "n": 0,
+      "warmup": 0,
+      "iterations": 1,
+      "metrics": {},
+      "counters": {
+        "effectVisualCount": 195,
+        "dragSerializeRaises": 0
+      },
+      "notes": "old build records effectVisualCount \u2248 shadowed-graphic count (informational)"
+    }
+  ]
+}
