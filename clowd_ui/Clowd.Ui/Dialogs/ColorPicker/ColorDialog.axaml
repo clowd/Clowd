@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Clowd.UI.Controls"
         xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
         xmlns:helpers="using:Clowd.UI.Helpers"
         xmlns:util="using:Clowd.Util"
@@ -83,23 +84,23 @@
                      Classes="val"
                      Margin="0"
                      helpers:SelectTextOnFocus.Active="True" />
-            <Button x:Name="btnCopyHex"
-                    Grid.Column="2"
-                    Classes="copy"
-                    Click="CopyHexExecuted"
-                    Content="Copy HEX" />
+            <controls:AcceleratedButton x:Name="btnCopyHex"
+                                        Grid.Column="2"
+                                        Classes="copy"
+                                        Click="CopyHexExecuted"
+                                        Content="Copy HE_X" />
 
             <TextBlock Classes="lbl"
                        Grid.Row="2"
                        Grid.Column="1"
                        HorizontalAlignment="Left"
                        Text="{Binding TextRgb}" />
-            <Button x:Name="btnCopyRgb"
-                    Grid.Row="2"
-                    Grid.Column="2"
-                    Classes="copy"
-                    Click="CopyRgbExecuted"
-                    Content="Copy RGB" />
+            <controls:AcceleratedButton x:Name="btnCopyRgb"
+                                        Grid.Row="2"
+                                        Grid.Column="2"
+                                        Classes="copy"
+                                        Click="CopyRgbExecuted"
+                                        Content="Copy _RGB" />
 
             <TextBlock Classes="lbl" Grid.Row="3" Text="R:" />
             <!-- Slider values are synced from code-behind (UpdateBrushes / ValueChanged);
@@ -156,12 +157,12 @@
                        Grid.Column="1"
                        HorizontalAlignment="Left"
                        Text="{Binding TextHsl}" />
-            <Button x:Name="btnCopyHsl"
-                    Grid.Row="8"
-                    Grid.Column="2"
-                    Classes="copy"
-                    Click="CopyHslExecuted"
-                    Content="Copy HSL" />
+            <controls:AcceleratedButton x:Name="btnCopyHsl"
+                                        Grid.Row="8"
+                                        Grid.Column="2"
+                                        Classes="copy"
+                                        Click="CopyHslExecuted"
+                                        Content="Copy _HSL" />
 
             <TextBlock Classes="lbl" Grid.Row="9" Text="H:" />
             <cp:ColorSlider x:Name="sliderH"
@@ -223,18 +224,18 @@
                     </Border>
                 </Border>
                 <!-- affirmative-first, matching MessageDialog / FontDialog (Windows order) -->
-                <Button x:Name="btnOK"
-                        Theme="{StaticResource SolidButton}"
-                        Classes="Primary"
-                        Padding="14,0"
-                        Click="OKClicked"
-                        IsDefault="True"
-                        Content="OK" />
-                <Button x:Name="btnCancel"
-                        Padding="12,0"
-                        Click="CloseClicked"
-                        IsCancel="True"
-                        Content="Cancel" />
+                <controls:AcceleratedButton x:Name="btnOK"
+                                            Theme="{StaticResource SolidButton}"
+                                            Classes="Primary"
+                                            Padding="14,0"
+                                            Click="OKClicked"
+                                            IsDefault="True"
+                                            Content="_OK" />
+                <controls:AcceleratedButton x:Name="btnCancel"
+                                            Padding="12,0"
+                                            Click="CloseClicked"
+                                            IsCancel="True"
+                                            Content="_Cancel" />
             </StackPanel>
         </Grid>
     </Grid>
