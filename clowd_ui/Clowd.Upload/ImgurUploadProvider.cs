@@ -53,6 +53,20 @@ namespace Clowd.Upload
             };
         }
 
+        public override bool CanDelete(UploadDeleteInfo info) => !String.IsNullOrEmpty(info.DeleteKey);
+
+        public override async Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
+        {
+            var auth = new System.Net.Http.Headers.AuthenticationHeaderValue("Client-ID", "c3bda1f4e978e28");
+
+            // the delete endpoint returns { data: true }, which does not match ImgurApiResponse —
+            // only the status code is checked here.
+            using var http = GetHttpClient(TimeSpan.FromSeconds(30), auth: auth);
+            using var resp = await http.DeleteAsync($"https://api.imgur.com/3/image/{info.DeleteKey}", cancelToken);
+            if (!resp.IsSuccessStatusCode)
+                throw new Exception($"Failed to delete upload (error {resp.StatusCode}).");
+        }
+
         private static readonly DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         private static DateTime FromUnixTime(long unixTime)

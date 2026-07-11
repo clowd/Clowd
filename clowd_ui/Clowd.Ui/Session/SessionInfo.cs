@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Clowd.PlatformUtil;
 using Clowd.Util;
@@ -102,20 +103,62 @@ namespace Clowd
         public string UploadUrl
         {
             get => Get<string>();
-            set => Set(value);
-        }
-
-        // this does not need to be persisted
-        public double UploadProgress
-        {
-            get => _uploadProgress;
             set
             {
-                _uploadProgress = value;
-                OnPropertyChanged();
+                if (Set(value))
+                {
+                    OnPropertyChanged(nameof(AllUploads));
+                    OnPropertyChanged(nameof(ShowNotUploaded));
+                }
             }
         }
 
-        private double _uploadProgress;
+        public UploadRecord[] Uploads
+        {
+            get => Get<UploadRecord[]>();
+            set
+            {
+                if (Set(value))
+                {
+                    OnPropertyChanged(nameof(AllUploads));
+                    OnPropertyChanged(nameof(ShowNotUploaded));
+                }
+            }
+        }
+
+        // not persisted — the in-flight upload for this session, set by UploadsManager.
+        [JsonIgnore]
+        public Clowd.UI.ActiveUpload ActiveUpload
+        {
+            get => _activeUpload;
+            set
+            {
+                _activeUpload = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowNotUploaded));
+            }
+        }
+
+        // the full upload history: the persisted list when present, otherwise a single synthesized
+        // record from the legacy UploadUrl/UploadFileKey fields (Provider null → not deletable).
+        [JsonIgnore]
+        public UploadRecord[] AllUploads
+        {
+            get
+            {
+                var uploads = Uploads;
+                if (uploads != null && uploads.Length > 0)
+                    return uploads;
+
+                if (!String.IsNullOrEmpty(UploadUrl))
+                    return new[] { new UploadRecord { Url = UploadUrl, UploadKey = UploadFileKey } };
+
+                return Array.Empty<UploadRecord>();
+            }
+        }
+
+        [JsonIgnore] public bool ShowNotUploaded => ActiveUpload == null && AllUploads.Length == 0;
+
+        private Clowd.UI.ActiveUpload _activeUpload;
     }
 }

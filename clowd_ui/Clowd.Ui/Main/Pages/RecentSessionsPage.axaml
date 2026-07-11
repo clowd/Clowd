@@ -8,6 +8,59 @@
     <UserControl.Resources>
         <local:ImagePathToBitmapConverter x:Key="ConvCacheImage" />
         <local:UiDateTimeConverter x:Key="ConvUiDateTime" />
+
+        <!-- one finished upload: link + date + copy/delete, shared by the standalone list and session rows -->
+        <DataTemplate x:Key="UploadRecordTemplate" DataType="clowd:UploadRecord">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <HyperlinkButton Padding="0"
+                                 MaxWidth="360"
+                                 VerticalAlignment="Center"
+                                 NavigateUri="{Binding Url}"
+                                 ToolTip.Tip="{Binding Url}">
+                    <TextBlock Text="{Binding Url}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </HyperlinkButton>
+                <TextBlock VerticalAlignment="Center"
+                           Opacity="0.6"
+                           Text="{Binding UploadedUtc, Converter={StaticResource ConvUiDateTime}}" />
+                <Button Classes="rowActionSmall"
+                        Click="CopyUrlClicked"
+                        ToolTip.Tip="Copy link"
+                        AutomationProperties.Name="Copy link">
+                    <Viewbox>
+                        <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopySmall}" />
+                    </Viewbox>
+                </Button>
+                <Button Classes="rowActionSmall"
+                        Click="DeleteUploadClicked"
+                        IsVisible="{Binding CanDelete}"
+                        ToolTip.Tip="Delete upload"
+                        AutomationProperties.Name="Delete upload">
+                    <Viewbox>
+                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconDelete}" />
+                    </Viewbox>
+                </Button>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- one in-flight upload: progress + status + cancel -->
+        <DataTemplate x:Key="ActiveUploadTemplate" DataType="local:ActiveUpload">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <ProgressBar Width="140"
+                             Minimum="0"
+                             Maximum="100"
+                             VerticalAlignment="Center"
+                             Value="{Binding Progress, Mode=OneWay}" />
+                <TextBlock VerticalAlignment="Center" Opacity="0.6" Text="{Binding Status}" />
+                <Button Classes="rowActionSmall"
+                        Click="CancelUploadClicked"
+                        ToolTip.Tip="Cancel upload"
+                        AutomationProperties.Name="Cancel upload">
+                    <Viewbox>
+                        <Path Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClose}" />
+                    </Viewbox>
+                </Button>
+            </StackPanel>
+        </DataTemplate>
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -41,6 +94,17 @@
         <Style Selector="Button.rowAction:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
         </Style>
+        <!-- compact inline action used by the upload rows -->
+        <Style Selector="Button.rowActionSmall">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="3" />
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+        </Style>
+        <Style Selector="Button.rowActionSmall:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer>
@@ -50,6 +114,43 @@
             <StackPanel IsVisible="{Binding !Groups.Count}" Margin="0,24,0,0" Spacing="6">
                 <TextBlock Classes="Base" Text="No captures yet" />
                 <TextBlock Opacity="0.7" TextWrapping="Wrap" Text="{Binding EmptyHint}" />
+            </StackPanel>
+
+            <!-- uploads: in-flight standalone uploads and finished (non-session) upload results -->
+            <StackPanel>
+                <TextBlock Margin="0,8" Classes="H6" Text="Uploads">
+                    <TextBlock.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                            <Binding Path="!!Uploads.Standalone.Count" />
+                            <Binding Path="!!Uploads.Completed.Count" />
+                        </MultiBinding>
+                    </TextBlock.IsVisible>
+                </TextBlock>
+
+                <ItemsControl ItemsSource="{Binding Uploads.Standalone}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="local:ActiveUpload">
+                            <StackPanel Margin="0,2">
+                                <TextBlock Classes="Base" TextTrimming="CharacterEllipsis" Text="{Binding Name}" />
+                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ActiveUploadTemplate}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <ItemsControl ItemsSource="{Binding Uploads.Completed}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="clowd:UploadRecord">
+                            <StackPanel Margin="0,2">
+                                <TextBlock Classes="Base"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding FileName}"
+                                           IsVisible="{Binding FileName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource UploadRecordTemplate}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
 
             <!-- VM-side grouping replaces the WPF CollectionViewSource (decision table #52). -->
@@ -66,7 +167,7 @@
                                     <DataTemplate>
                                         <Grid Background="Transparent"
                                               DoubleTapped="ViewDoubleClick"
-                                              RowDefinitions="25,25,25"
+                                              RowDefinitions="25,25,Auto"
                                               ColumnDefinitions="Auto,12,*,Auto">
                                             <Grid.ContextMenu>
                                                 <ContextMenu>
@@ -96,19 +197,18 @@
                                                        VerticalAlignment="Center"
                                                        Classes="Body"
                                                        Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
-                                            <TextBlock Grid.Row="2"
-                                                       Grid.Column="2"
-                                                       VerticalAlignment="Center"
-                                                       Opacity="0.6"
-                                                       Text="Not uploaded"
-                                                       IsVisible="{Binding UploadUrl, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
-                                            <HyperlinkButton Grid.Row="2"
-                                                             Grid.Column="2"
-                                                             Padding="0"
-                                                             VerticalAlignment="Center"
-                                                             Content="{Binding UploadUrl}"
-                                                             NavigateUri="{Binding UploadUrl}"
-                                                             IsVisible="{Binding UploadUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                            <StackPanel Grid.Row="2"
+                                                        Grid.Column="2"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Opacity="0.6"
+                                                           Text="Not uploaded"
+                                                           IsVisible="{Binding ShowNotUploaded}" />
+                                                <ItemsControl ItemsSource="{Binding AllUploads}"
+                                                              ItemTemplate="{StaticResource UploadRecordTemplate}" />
+                                                <ContentControl Content="{Binding ActiveUpload}"
+                                                                ContentTemplate="{StaticResource ActiveUploadTemplate}"
+                                                                IsVisible="{Binding ActiveUpload, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                            </StackPanel>
 
                                             <StackPanel Grid.Column="3"
                                                         Grid.RowSpan="3"

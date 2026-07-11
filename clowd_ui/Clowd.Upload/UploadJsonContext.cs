@@ -9,6 +9,7 @@ namespace Clowd.Upload;
 [JsonSerializable(typeof(ImgurApiResponse))]
 [JsonSerializable(typeof(HasebinResponse))]
 [JsonSerializable(typeof(B2ListBucketsRequest))]
+[JsonSerializable(typeof(B2DeleteFileRequest))]
 [JsonSerializable(typeof(MimeDbMimeEntry))]
 [JsonSerializable(typeof(Dictionary<string, MimeDbMimeEntry>))]
 internal partial class UploadJsonContext : JsonSerializerContext { }

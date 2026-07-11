@@ -10,6 +10,7 @@ using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Clowd.UI.Helpers;
@@ -30,6 +31,10 @@ namespace Clowd.UI
     public partial class RecentSessionsPage : UserControl
     {
         public ObservableCollection<SessionGroupVm> Groups { get; } = new();
+
+        /// <summary>In-flight standalone uploads and finished upload records, surfaced by the
+        /// top "Uploads" section of the page.</summary>
+        public UploadsManager Uploads => PageManager.Current.Uploads;
 
         /// <summary>Call-to-action shown while there are no sessions.</summary>
         public string EmptyHint
@@ -211,6 +216,72 @@ namespace Clowd.UI
                 await DeleteWithConfirmation(session);
             }
         }
+
+        private void CancelUploadClicked(object sender, RoutedEventArgs e)
+        {
+            ((sender as Control)?.DataContext as ActiveUpload)?.Cancel();
+        }
+
+        private async void CopyUrlClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Control)?.DataContext is not UploadRecord record || String.IsNullOrEmpty(record.Url))
+                return;
+
+            try
+            {
+                var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+                if (clipboard != null)
+                    await clipboard.SetTextAsync(record.Url);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Copy upload link failed: " + ex);
+            }
+        }
+
+        private async void DeleteUploadClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Control)?.DataContext is not UploadRecord record)
+                return;
+
+            if (!await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning,
+                    "Delete this upload from the remote server? The link will stop working."))
+                return;
+
+            try
+            {
+                await UploadManager.DeleteUploadAsync(record);
+            }
+            catch (Exception ex)
+            {
+                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, ex.Message, "Delete failed");
+                return;
+            }
+
+            // drop the record from its owning session, else from the standalone Completed list.
+            var session = (sender as Control)?.GetLogicalAncestors()
+                                              .OfType<Control>()
+                                              .Select(c => c.DataContext)
+                                              .OfType<SessionInfo>()
+                                              .FirstOrDefault();
+
+            if (session != null)
+            {
+                session.Uploads = (session.Uploads ?? Array.Empty<UploadRecord>())
+                                  .Where(u => !ReferenceEquals(u, record))
+                                  .ToArray();
+
+                if (record.Url == session.UploadUrl)
+                {
+                    session.UploadUrl = null;
+                    session.UploadFileKey = null;
+                }
+            }
+            else
+            {
+                PageManager.Current.Uploads.Completed.Remove(record);
+            }
+        }
     }
 
     /// <summary>
@@ -273,7 +344,8 @@ namespace Clowd.UI
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is DateTime time)
+            // legacy synthesized records carry no upload date — hide it rather than show the epoch.
+            if (value is DateTime time && time != default)
                 return RecentSessionsPage.ToLocalTime(time).ToString(AppStyles.UiDateTimePattern, culture);
 
             return null;

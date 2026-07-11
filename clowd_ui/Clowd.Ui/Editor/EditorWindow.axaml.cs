@@ -813,13 +813,30 @@ namespace Clowd.UI
             customizePopup.IsOpen = true;
         }
 
-        private void customizeReset_Click(object sender, RoutedEventArgs e)
+        private void customizeResetOrder_Click(object sender, RoutedEventArgs e)
         {
             _settings.Editor.ToolbarOrder = null;
             _settings.Editor.HiddenTools = null;
             RebuildToolStrip();
             TrySaveSettings();
             RebuildCustomizePopup();
+        }
+
+        private async void customizeResetSettings_Click(object sender, RoutedEventArgs e)
+        {
+            // close the light-dismiss popup before showing the modal prompt
+            customizePopup.IsOpen = false;
+
+            // same wording as the settings window's "Reset all tool defaults…" button
+            if (!await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning,
+                    "Reset every tool's saved color, line width and font back to the defaults? This cannot be undone."))
+                return;
+
+            _settings.Editor.Tools = new Dictionary<ToolType, SavedToolSettings>();
+            TrySaveSettings();
+            // the property bar is bound to the old SavedToolSettings instances; rebind it to the
+            // (lazily re-created) defaults in the new dictionary
+            drawingCanvas.ResyncToolSettings();
         }
 
         private void TrySaveSettings()

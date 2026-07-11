@@ -74,8 +74,8 @@ namespace Clowd.Upload
             var requestMessage = GetUploadReq(options, uploadUrlObject.UploadUrl, fileStream, uploadName);
             var response = await http.SendAsync(requestMessage, cancelToken);
 
-            // check for errors
-            await ResponseParser.ParseResponse<B2File>(response, "Files");
+            // check for errors, and capture the file id so the upload can later be deleted.
+            var file = await ResponseParser.ParseResponse<B2File>(response, "Files");
 
             var url = $"{options.DownloadUrl}/file/{_bucketName}/{uploadName}";
 
@@ -85,8 +85,37 @@ namespace Clowd.Upload
                 Provider = this,
                 FileName = uploadName,
                 PublicUrl = url,
+                UploadKey = file.FileId,
                 UploadTime = DateTimeOffset.Now,
             };
+        }
+
+        public override bool CanDelete(UploadDeleteInfo info)
+            => !String.IsNullOrEmpty(info.UploadKey)
+               && !String.IsNullOrEmpty(info.FileName)
+               && !String.IsNullOrEmpty(_keyId)
+               && !String.IsNullOrEmpty(_applicationKey);
+
+        public override async Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
+        {
+            var options = new B2Options()
+            {
+                KeyId = _keyId,
+                ApplicationKey = _applicationKey,
+            };
+
+            options = await B2Client.AuthorizeAsync(options);
+
+            using var http = GetHttpClient(TimeSpan.FromSeconds(30));
+
+            var json = JsonSerializer.Serialize(
+                new B2DeleteFileRequest { fileId = info.UploadKey, fileName = info.FileName },
+                UploadJsonContext.Default.B2DeleteFileRequest);
+            var req = BaseRequestGenerator.PostRequest("b2_delete_file_version", json, options);
+            var response = await http.SendAsync(req, cancelToken);
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"Failed to delete upload (error {response.StatusCode}).");
         }
 
         private static HttpRequestMessage GetUploadReq(B2Options options, string uploadUrl, Stream fileData, string fileName,
@@ -177,5 +206,11 @@ namespace Clowd.Upload
     {
         public string accountId { get; set; }
         public string bucketName { get; set; }
+    }
+
+    internal class B2DeleteFileRequest
+    {
+        public string fileId { get; set; }
+        public string fileName { get; set; }
     }
 }

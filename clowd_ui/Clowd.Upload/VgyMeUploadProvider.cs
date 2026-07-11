@@ -50,6 +50,17 @@ namespace Clowd.Upload
             };
         }
 
+        // the upload response's `delete` field is a full delete URL.
+        public override bool CanDelete(UploadDeleteInfo info)
+            => !String.IsNullOrEmpty(info.DeleteKey) && info.DeleteKey.StartsWith("http", StringComparison.OrdinalIgnoreCase);
+
+        public override async Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
+        {
+            using var http = GetHttpClient(TimeSpan.FromSeconds(30));
+            using var resp = await http.GetAsync(info.DeleteKey, cancelToken);
+            if (!resp.IsSuccessStatusCode)
+                throw new Exception($"Failed to delete upload (error {resp.StatusCode}).");
+        }
     }
 
     internal class VgyResponse
