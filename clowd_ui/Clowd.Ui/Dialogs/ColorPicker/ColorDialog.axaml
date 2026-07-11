@@ -11,29 +11,37 @@
         Background="{DynamicResource ApplicationBackgroundBrush}">
 
     <Window.Styles>
-        <!-- labels follow the theme font; only the hex value itself stays monospaced -->
+        <!-- labels and value readouts are monospaced (channel data aligns nicely); the grid is
+             sized generously so Consolas at theme size never clips -->
         <Style Selector="TextBlock.lbl">
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="FontFamily" Value="Consolas" />
         </Style>
         <Style Selector="cp|ColorSlider">
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Height" Value="16" />
             <Setter Property="Background" Value="{x:Static util:CheckerBrushes.Medium}" />
         </Style>
+        <!-- .val and .copy share the fixed value column: identical left margin + Stretch keeps
+             the textboxes and copy buttons the exact same width -->
         <Style Selector="TextBox.val">
-            <Setter Property="Margin" Value="10,2,0,1" />
+            <Setter Property="Margin" Value="10,2,0,2" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="4,2" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="FontFamily" Value="Consolas" />
         </Style>
         <Style Selector="Button.copy">
             <Setter Property="Margin" Value="10,0,0,0" />
             <Setter Property="Padding" Value="6,0" />
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="FontSize" Value="11" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -60,10 +68,12 @@
                        Orientation="Horizontal" />
         </Grid>
 
+        <!-- rows/columns are sized for the theme font (the old 24px rows and 58px value
+             column were tuned for 9px Consolas and clipped anything larger) -->
         <Grid Grid.Column="1"
-              Margin="10"
-              ColumnDefinitions="Auto,180,58"
-              RowDefinitions="24,16,24,24,24,24,24,16,24,24,24,24,16,*,28">
+              Margin="12"
+              ColumnDefinitions="Auto,190,86"
+              RowDefinitions="30,12,30,30,30,30,30,12,30,30,30,30,16,*,32">
 
             <Control x:Name="tabReset" Focusable="True" />
 
@@ -72,7 +82,6 @@
                      Grid.Column="1"
                      Classes="val"
                      Margin="0"
-                     FontFamily="Consolas"
                      helpers:SelectTextOnFocus.Active="True" />
             <Button x:Name="btnCopyHex"
                     Grid.Column="2"
@@ -196,10 +205,18 @@
                         Orientation="Horizontal"
                         Spacing="10">
                 <Border Width="108"
+                        Height="30"
+                        VerticalAlignment="Center"
+                        CornerRadius="4"
                         Background="{x:Static util:CheckerBrushes.Medium}"
                         BorderBrush="{Binding Foreground}"
                         BorderThickness="1">
-                    <Border x:Name="currentSwatch" ClipToBounds="True">
+                    <!-- the rounded Clip (not just ClipToBounds) keeps the previous-color
+                         wedge from poking out of the corners -->
+                    <Border x:Name="currentSwatch" ClipToBounds="True" CornerRadius="3">
+                        <Border.Clip>
+                            <RectangleGeometry Rect="0,0,106,28" RadiusX="3" RadiusY="3" />
+                        </Border.Clip>
                         <Path x:Name="pathPrevColor"
                               Data="M 0,0 H 60 L 48,28 H 0 Z"
                               PointerPressed="PrevColorClicked" />

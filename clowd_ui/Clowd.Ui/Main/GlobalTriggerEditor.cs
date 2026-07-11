@@ -60,7 +60,9 @@ namespace Clowd.UI.Config
             _clearButton = new Button
             {
                 Content = "✕",
-                Padding = new Thickness(8, 0),
+                Width = 28,
+                Padding = new Thickness(0),
+                HorizontalContentAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Stretch,
             };
             _clearButton.Classes.Add("Tertiary");
@@ -85,7 +87,9 @@ namespace Clowd.UI.Config
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 6,
-                MinWidth = 92,
+                // wide enough for the longest status ("Not registered") so every row's grid —
+                // and therefore every gesture button — ends up the same width.
+                MinWidth = 110,
                 VerticalAlignment = VerticalAlignment.Center,
                 Background = Brushes.Transparent, // hit-testable so the error tooltip shows
             };
@@ -256,6 +260,17 @@ namespace Clowd.UI.Config
             ToolTip.SetTip(_statusPanel, tooltip);
         }
 
+        /// <summary>The clear button always reserves its 28px column; when it is not applicable
+        /// the gesture button spans across it, so "(not set)" rows end at exactly the same right
+        /// edge as [gesture][✕] rows.</summary>
+        private void SetClearVisible(bool visible)
+        {
+            _clearButton.Opacity = visible ? 1 : 0;
+            _clearButton.IsHitTestVisible = visible;
+            _clearButton.Focusable = visible;
+            Grid.SetColumnSpan(_button, visible ? 1 : 3);
+        }
+
         private void UpdateControls()
         {
             if (_button == null || _statusDot == null)
@@ -264,7 +279,7 @@ namespace Clowd.UI.Config
             if (IsEditing)
             {
                 SetStatus("SemiColorWarning", Brushes.Orange, "Listening…", null);
-                _clearButton.IsVisible = false;
+                SetClearVisible(false);
 
                 StringBuilder key = new StringBuilder();
                 if (_editModifiers.HasFlag(KeyModifiers.Control))
@@ -284,7 +299,7 @@ namespace Clowd.UI.Config
             if (Entry == null || Entry.Gesture == null)
             {
                 _button.Content = "(not set)";
-                _clearButton.IsVisible = false;
+                SetClearVisible(false);
                 SetStatus("SemiColorText2", Brushes.Gray, "Not set",
                           Entry?.Error ?? "No key combination is assigned to this action.");
             }
@@ -293,7 +308,7 @@ namespace Clowd.UI.Config
                 // the gesture text is kept visible even on error — the red dot + tooltip carry
                 // the registration failure.
                 _button.Content = Entry.Gesture.ToString();
-                _clearButton.IsVisible = true;
+                SetClearVisible(true);
                 if (!Entry.IsRegistered && !String.IsNullOrEmpty(Entry.Error))
                 {
                     SetStatus("SemiColorDanger", Brushes.IndianRed, "Not registered", Entry.Error);

@@ -13,5 +13,7 @@ namespace Clowd
         Text,
         Count,
         Pixelate,
+        Brush,
+        Eraser,
     };
 }

@@ -11,6 +11,7 @@
     Title="Edit - Clowd"
     Width="1050"
     Height="750"
+    FontSize="13"
     Foreground="White"
     UseLayoutRounding="True"
     WindowStartupLocation="CenterScreen">

@@ -28,49 +28,64 @@
             </StackPanel>
         </Grid>
 
-        <u:NavMenu x:Name="NavList"
-                   Grid.Row="1"
-                   Grid.Column="0"
-                   Margin="0,0,0,16"
-                   MinWidth="150">
-            <u:NavMenuItem Header="Recent" Tag="RecentSessions">
-                <u:NavMenuItem.Icon>
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavRecent}" />
-                </u:NavMenuItem.Icon>
-            </u:NavMenuItem>
-            <u:NavMenuItem IsSeparator="True" />
-            <u:NavMenuItem Header="General" Tag="SettingsGeneral">
-                <u:NavMenuItem.Icon>
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavGeneral}" />
-                </u:NavMenuItem.Icon>
-            </u:NavMenuItem>
-            <u:NavMenuItem Header="Hotkeys" Tag="SettingsHotkeys">
-                <u:NavMenuItem.Icon>
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavHotkeys}" />
-                </u:NavMenuItem.Icon>
-            </u:NavMenuItem>
-            <u:NavMenuItem Header="Capture" Tag="SettingsCapture">
-                <u:NavMenuItem.Icon>
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavCapture}" />
-                </u:NavMenuItem.Icon>
-            </u:NavMenuItem>
-            <u:NavMenuItem Header="Editor" Tag="SettingsEditor">
-                <u:NavMenuItem.Icon>
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavEditor}" />
-                </u:NavMenuItem.Icon>
-            </u:NavMenuItem>
-            <u:NavMenuItem Header="Uploads" Tag="SettingsUploads">
-                <u:NavMenuItem.Icon>
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavUploads}" />
-                </u:NavMenuItem.Icon>
-            </u:NavMenuItem>
-            <u:NavMenuItem IsSeparator="True" />
-            <u:NavMenuItem Header="About" Tag="About">
-                <u:NavMenuItem.Icon>
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavAbout}" />
-                </u:NavMenuItem.Icon>
-            </u:NavMenuItem>
-        </u:NavMenu>
+        <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*">
+
+            <Button x:Name="NewImageButton"
+                    Grid.Row="0"
+                    Margin="0,0,0,12"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    Click="NewImage_Click">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <PathIcon Width="16" Height="16" Data="{StaticResource IconAdd}" />
+                    <TextBlock Text="New Image" />
+                </StackPanel>
+            </Button>
+
+            <u:NavMenu x:Name="NavList"
+                       Grid.Row="1"
+                       Margin="0,0,0,16"
+                       MinWidth="150">
+                <u:NavMenuItem Header="Recent" Tag="RecentSessions">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavRecent}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem IsSeparator="True" />
+                <u:NavMenuItem Header="General" Tag="SettingsGeneral">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavGeneral}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Hotkeys" Tag="SettingsHotkeys">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavHotkeys}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Capture" Tag="SettingsCapture">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavCapture}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Editor" Tag="SettingsEditor">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavEditor}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem Header="Uploads" Tag="SettingsUploads">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavUploads}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+                <u:NavMenuItem IsSeparator="True" />
+                <u:NavMenuItem Header="About" Tag="About">
+                    <u:NavMenuItem.Icon>
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavAbout}" />
+                    </u:NavMenuItem.Icon>
+                </u:NavMenuItem>
+            </u:NavMenu>
+
+        </Grid>
 
         <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="24,0,0,0" RowDefinitions="Auto,*">
             <TextBlock x:Name="PageTitle" Classes="Subtitle" Margin="0,8,16,16" />
