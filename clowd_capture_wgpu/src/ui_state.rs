@@ -99,7 +99,9 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
     }
 }
 
-fn sample_bgra(buf: &CapturedDesktop, p: ScreenPoint) -> Option<[u8; 4]> {
+/// Sample one desktop pixel as BGRA. Shared by the info overlay and the
+/// SELECT-COLOR command.
+pub fn sample_bgra(buf: &CapturedDesktop, p: ScreenPoint) -> Option<[u8; 4]> {
     let dx = p.x - buf.bounds.min_x();
     let dy = p.y - buf.bounds.min_y();
     if dx < 0 || dy < 0 {

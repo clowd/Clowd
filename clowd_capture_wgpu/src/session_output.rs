@@ -9,6 +9,11 @@
 //! with `Clowd.Ui` (`SessionInfo`, MIGRATION.md §2.11) and documented in
 //! CAPTURE_PROTOCOL.md at the repo root.
 //!
+//! Actions the shell must perform are signalled through an `action.txt`
+//! sidecar in the same directory: `upload` (session payload present,
+//! upload instead of edit) or `select-color #RRGGBB` (no session
+//! payload). No file means edit — the historical default.
+//!
 //! The repo intentionally has no serde; the fixed-schema JSON is written
 //! by hand below.
 
@@ -20,6 +25,19 @@ use crate::geometry::{RectExt, ScreenRect};
 use crate::image_extract::{composite_cursor_rgba, extract_selection_rgba, extract_selection_rgba_with_peek};
 use crate::system::{CapturedDesktop, CursorImage, WindowPeekImage};
 
+/// Name of the sidecar file the shell reads to route the finished
+/// capture. Matches `CaptureSessionDispatcher` in Clowd.Ui.
+const ACTION_FILE: &str = "action.txt";
+
+/// Which shell action a session payload is for. `Edit` is the default
+/// and writes no marker, so shells that pre-date `action.txt` behave
+/// unchanged; `Upload` writes the marker alongside the payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionAction {
+    Edit,
+    Upload,
+}
+
 /// Write the full session payload into `session_dir`. Returns
 /// `ActionResult` so the app can route failures through the same
 /// retry/cancel dialog used by Copy and Save.
@@ -29,8 +47,9 @@ pub fn write_session(
     buffer: &CapturedDesktop,
     peek: Option<&WindowPeekImage>,
     cursor_visible: bool,
+    action: SessionAction,
 ) -> ActionResult {
-    match write_session_inner(session_dir, selection, buffer, peek, cursor_visible) {
+    match write_session_inner(session_dir, selection, buffer, peek, cursor_visible, action) {
         Ok(json_path) => {
             log::info!("session written to {:?}", json_path);
             ActionResult::Success
@@ -42,12 +61,31 @@ pub fn write_session(
     }
 }
 
+/// Write only the `action.txt` marker for a SELECT-COLOR capture: the
+/// shell opens its colour viewer with this colour and deletes the
+/// directory — no session payload is produced.
+pub fn write_color_action(session_dir: &Path, r: u8, g: u8, b: u8) -> ActionResult {
+    let write = std::fs::create_dir_all(session_dir)
+        .and_then(|_| std::fs::write(session_dir.join(ACTION_FILE), format!("select-color #{r:02X}{g:02X}{b:02X}\n")));
+    match write {
+        Ok(()) => {
+            log::info!("color action written to {:?}", session_dir.join(ACTION_FILE));
+            ActionResult::Success
+        }
+        Err(e) => {
+            log::error!("color action write failed: {e:#}");
+            ActionResult::Failed(format!("Failed to write color: {e}"))
+        }
+    }
+}
+
 fn write_session_inner(
     session_dir: &Path,
     selection: ScreenRect,
     buffer: &CapturedDesktop,
     peek: Option<&WindowPeekImage>,
     cursor_visible: bool,
+    action: SessionAction,
 ) -> anyhow::Result<PathBuf> {
     std::fs::create_dir_all(session_dir)?;
     let session_dir = absolute_path(session_dir);
@@ -106,6 +144,18 @@ fn write_session_inner(
             }
         }
         save_png(&preview_path, rgba, w, h)?;
+    }
+
+    // action.txt — routing marker, written before session.json so the
+    // payload stays the last file to appear. Edit removes any marker a
+    // previously failed-and-retried action left behind.
+    match action {
+        SessionAction::Upload => std::fs::write(session_dir.join(ACTION_FILE), "upload\n")?,
+        SessionAction::Edit => match std::fs::remove_file(session_dir.join(ACTION_FILE)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        },
     }
 
     // session.json — written last; the shell treats its presence as the

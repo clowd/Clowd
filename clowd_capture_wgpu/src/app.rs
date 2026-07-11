@@ -18,14 +18,14 @@ use crate::render::protocol::PeekCommand;
 use crate::render::window::{WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
-use crate::session_output::write_session;
+use crate::session_output::{write_color_action, write_session, SessionAction};
 use crate::settings::CapturerSettings;
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::panel;
-use crate::ui_state::{build_ui_shared_state, UiStateBuildInput};
+use crate::ui_state::{build_ui_shared_state, sample_bgra, UiStateBuildInput};
 
 const ZOOM_STEP: f32 = 2.0;
 const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
@@ -417,17 +417,24 @@ impl App {
                     }
                 }
             }
-            Command::Edit => {
-                // EDIT writes the session payload for the shell to open
-                // in its editor (CAPTURE_PROTOCOL.md). Without a
-                // --session-dir there is no shell listening — ignore.
+            Command::Edit | Command::Upload => {
+                // EDIT and UPLOAD write the same session payload for the
+                // shell (CAPTURE_PROTOCOL.md); UPLOAD adds the action.txt
+                // marker so the shell uploads instead of opening the
+                // editor. Without a --session-dir there is no shell
+                // listening — ignore.
                 let Some(session_dir) = self.settings.session_dir.clone() else {
-                    log::info!("command Edit ignored: no --session-dir provided");
+                    log::info!("command {:?} ignored: no --session-dir provided", command);
                     return;
+                };
+                let action = if command == Command::Upload {
+                    SessionAction::Upload
+                } else {
+                    SessionAction::Edit
                 };
                 self.hide_all_windows();
                 let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => write_session(&session_dir, sel, buf, active_peek_image, cursor_visible),
+                    (Some(sel), Some(buf)) => write_session(&session_dir, sel, buf, active_peek_image, cursor_visible, action),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
@@ -442,12 +449,42 @@ impl App {
                     }
                 }
             }
+            Command::SelectColor => {
+                // H in crosshair mode (DxScreenCapture.cpp:1223): report
+                // the pixel under the cursor to the shell — it opens its
+                // color viewer. Without a shell there is nothing to show
+                // the color in — ignore.
+                let Some(session_dir) = self.settings.session_dir.clone() else {
+                    log::info!("command SelectColor ignored: no --session-dir provided");
+                    return;
+                };
+                let sampled = self
+                    .desktop_buffer
+                    .as_deref()
+                    .and_then(|buf| sample_bgra(buf, to_screen_point(self.input.virtual_cursor)));
+                let Some(bgra) = sampled else {
+                    log::warn!("command SelectColor ignored: cursor is not over the desktop bitmap");
+                    return;
+                };
+                self.hide_all_windows();
+                match write_color_action(&session_dir, bgra[2], bgra[1], bgra[0]) {
+                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Failed(msg) => {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Color Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                            self.show_all_windows();
+                        } else {
+                            event_loop.exit();
+                        }
+                    }
+                }
+            }
             Command::Reset => self.handle_reset(window_id),
             Command::Exit => {
                 self.hide_all_windows();
                 event_loop.exit();
             }
-            Command::Upload | Command::Video => {
+            Command::Video => {
                 log::info!("command {:?} not yet implemented", command);
             }
         }
@@ -707,6 +744,10 @@ impl ApplicationHandler for App {
                             }
                             'a' => {
                                 self.finalise_selection(self.vd_bounds, id);
+                            }
+                            'h' => {
+                                // color-sampler row in the tips panel.
+                                self.dispatch_command(Command::SelectColor, event_loop, id);
                             }
                             _ => {}
                         }

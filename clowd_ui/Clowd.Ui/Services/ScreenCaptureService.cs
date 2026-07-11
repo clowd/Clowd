@@ -66,11 +66,12 @@ namespace Clowd.UI
 
     /// <summary>
     /// <see cref="IScreenCapturePage"/> backed by the external Rust capture process
-    /// (CAPTURE_PROTOCOL.md). Mirrors the WPF CaptureWindow.SessionCaptureImpl dispatch: a
-    /// completed capture (session.json present) loads the session, names it "Screenshot" and
-    /// opens the editor; a cancelled capture (no session.json) deletes the pre-created
-    /// session directory. The protocol has no upload/save callback — COPY/SAVE are handled
-    /// inside the capturer itself and never produce a session.
+    /// (CAPTURE_PROTOCOL.md). Mirrors the WPF CaptureWindow callback dispatch: a completed
+    /// capture (session.json present) loads the session, names it "Screenshot" and opens the
+    /// editor or the upload flow depending on the action.txt marker; a SELECT-COLOR capture
+    /// (action.txt only) opens the color viewer; a cancelled capture (neither file) deletes
+    /// the pre-created session directory. COPY/SAVE are handled inside the capturer itself
+    /// and never produce a session.
     /// </summary>
     internal sealed class ScreenCapturePage : IScreenCapturePage
     {
@@ -128,9 +129,19 @@ namespace Clowd.UI
 
                 await process.WaitForExitAsync();
 
-                var session = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
-                if (session != null)
-                    EditorWindow.ShowSession(session);
+                var result = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
+                switch (result?.Action)
+                {
+                    case CaptureAction.Edit:
+                        EditorWindow.ShowSession(result.Session);
+                        break;
+                    case CaptureAction.Upload:
+                        await UploadManager.UploadSession(result.Session);
+                        break;
+                    case CaptureAction.SelectColor:
+                        NiceDialog.ShowColorViewer(result.Color);
+                        break;
+                }
             }
             catch (Exception ex)
             {
@@ -190,6 +201,24 @@ namespace Clowd.UI
         }
     }
 
+    /// <summary>What the shell should do with a finished capture (the capturer's counterpart
+    /// of the legacy CaptureType callback argument).</summary>
+    public enum CaptureAction
+    {
+        Edit,
+        Upload,
+        SelectColor,
+    }
+
+    /// <summary>A finished, non-cancelled capture. <see cref="Session"/> is set for
+    /// Edit/Upload; <see cref="Color"/> for SelectColor.</summary>
+    public sealed class CaptureResult
+    {
+        public CaptureAction Action { get; init; }
+        public SessionInfo Session { get; init; }
+        public Color? Color { get; init; }
+    }
+
     /// <summary>
     /// Post-exit handling for a capture session directory, factored out of the page so it is
     /// testable without spawning the capture process.
@@ -199,12 +228,26 @@ namespace Clowd.UI
         /// <summary>
         /// Inspects <paramref name="sessionDir"/> after the capture process has exited.
         /// If session.json exists the capture succeeded: the session is loaded (and registered
-        /// with <see cref="SessionManager"/>), renamed to "Screenshot" and returned — the caller
-        /// then opens it in the editor. Otherwise the capture was cancelled: the pre-created
+        /// with <see cref="SessionManager"/>), renamed to "Screenshot" and returned with the
+        /// action from the action.txt marker (missing marker = Edit). An action.txt of
+        /// "select-color #RRGGBB" without a session carries just the picked color; the
+        /// directory is deleted. Otherwise the capture was cancelled: the pre-created
         /// directory is deleted and null is returned.
         /// </summary>
-        public static SessionInfo ProcessFinishedSession(string sessionDir)
+        public static CaptureResult ProcessFinishedSession(string sessionDir)
         {
+            string action = null;
+            try
+            {
+                var actionPath = Path.Combine(sessionDir, "action.txt");
+                if (File.Exists(actionPath))
+                    action = File.ReadAllText(actionPath).Trim();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to read capture action file: " + ex);
+            }
+
             var jsonPath = Path.Combine(sessionDir, "session.json");
             if (File.Exists(jsonPath))
             {
@@ -213,14 +256,35 @@ namespace Clowd.UI
                 {
                     // the legacy C# shell named sessions after the capture callback fired.
                     session.Name = "Screenshot";
-                    return session;
+                    var kind = String.Equals(action, "upload", StringComparison.OrdinalIgnoreCase)
+                        ? CaptureAction.Upload
+                        : CaptureAction.Edit;
+                    return new CaptureResult { Action = kind, Session = session };
                 }
 
                 Debug.WriteLine("session.json exists but the session could not be loaded: " + jsonPath);
                 return null;
             }
 
-            // cancelled — nothing was written; remove the directory we created.
+            // no session payload — either a color pick or a cancelled capture; in both cases
+            // the pre-created directory has nothing worth keeping.
+            DeleteSessionDir(sessionDir);
+
+            const string colorPrefix = "select-color";
+            if (action != null && action.StartsWith(colorPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var hex = action.Substring(colorPrefix.Length).Trim();
+                if (Color.TryParse(hex, out var color))
+                    return new CaptureResult { Action = CaptureAction.SelectColor, Color = color };
+
+                Debug.WriteLine("Unparseable select-color action: " + action);
+            }
+
+            return null;
+        }
+
+        private static void DeleteSessionDir(string sessionDir)
+        {
             try
             {
                 if (Directory.Exists(sessionDir))
@@ -228,10 +292,8 @@ namespace Clowd.UI
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("Failed to delete cancelled session directory: " + ex);
+                Debug.WriteLine("Failed to delete session directory: " + ex);
             }
-
-            return null;
         }
     }
 }
