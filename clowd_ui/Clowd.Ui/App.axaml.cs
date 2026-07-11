@@ -77,9 +77,9 @@ namespace Clowd
 
                 SetupTrayIcon();
 
-                // rebuild the tray menu when any hotkey gesture changes so the appended gesture
-                // text stays current (decision table #48 / §6). SettingsHotkey is pure data now —
-                // every PropertyChanged is a gesture change.
+                // rebuild the tray menu when any hotkey gesture changes so the shortcut text shown
+                // beside each item stays current (decision table #48 / §6). SettingsHotkey is pure
+                // data now — every PropertyChanged is a gesture change.
                 SettingsRoot.Current.Hotkeys.PropertyChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
 
                 SetupGlobalHotkeys();
@@ -196,17 +196,21 @@ namespace Clowd
                 TrayIcon.SetIcons(this, new TrayIcons { _trayIcon });
             }
 
-            static string WithGesture(string header, SimpleKeyGesture gesture)
+            // Shortcuts are surfaced as separate, right-aligned menu text — Avalonia binds
+            // NativeMenuItem.Gesture → MenuItem.InputGesture on the Windows managed tray menu (the
+            // Semi theme renders it in muted, right-aligned gesture text) and to the native key
+            // equivalent on macOS. Only assign when a gesture is actually set.
+            static void ApplyGesture(NativeMenuItem item, SimpleKeyGesture gesture)
             {
-                // gesture text is appended to the header (NativeMenuItem has no InputGestureText).
-                var g = gesture?.ToString();
-                return String.IsNullOrEmpty(g) ? header : $"{header} ({g})";
+                if (gesture != null && !String.IsNullOrEmpty(gesture.ToString()))
+                    item.Gesture = gesture.ToKeyGesture();
             }
 
             var menu = _trayIcon.Menu;
             menu.Items.Clear();
 
-            var capture = new NativeMenuItem(WithGesture("Capture Screen", SettingsRoot.Current.Hotkeys.CaptureRegionShortcut));
+            var capture = new NativeMenuItem("Capture Screen");
+            ApplyGesture(capture, SettingsRoot.Current.Hotkeys.CaptureRegionShortcut);
             capture.Click += async (s, e) =>
             {
                 // wait long enough for the menu to disappear (matches WPF).
@@ -214,15 +218,6 @@ namespace Clowd
                 StartCapture();
             };
             menu.Add(capture);
-
-            var draw = new NativeMenuItem(WithGesture("Draw on Screen", SettingsRoot.Current.Hotkeys.DrawOnScreenShortcut));
-            draw.Click += async (s, e) =>
-            {
-                // same menu-close delay as capture — this also overlays the screen.
-                await Task.Delay(400);
-                PageManager.Current.GetLiveDrawPage().Open();
-            };
-            menu.Add(draw);
 
             var colorp = new NativeMenuItem("Color Picker");
             colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
@@ -234,13 +229,15 @@ namespace Clowd
 
             menu.Add(new NativeMenuItemSeparator());
 
-            // every action that has a global hotkey is also reachable from this menu — the menu
-            // is the fallback when a hotkey fails to register (see the Hotkeys settings page).
-            var uploadFile = new NativeMenuItem(WithGesture("Upload File…", SettingsRoot.Current.Hotkeys.FileUploadShortcut));
+            // every supported action that has a global hotkey is also reachable from this menu — the
+            // menu is the fallback when a hotkey fails to register (see the Hotkeys settings page).
+            var uploadFile = new NativeMenuItem("Upload File…");
+            ApplyGesture(uploadFile, SettingsRoot.Current.Hotkeys.FileUploadShortcut);
             uploadFile.Click += (s, e) => UploadFilePrompt();
             menu.Add(uploadFile);
 
-            var uploadClip = new NativeMenuItem(WithGesture("Upload Clipboard", SettingsRoot.Current.Hotkeys.ClipboardUploadShortcut));
+            var uploadClip = new NativeMenuItem("Upload Clipboard");
+            ApplyGesture(uploadClip, SettingsRoot.Current.Hotkeys.ClipboardUploadShortcut);
             uploadClip.Click += (s, e) => UploadClipboard();
             menu.Add(uploadClip);
 
@@ -249,10 +246,6 @@ namespace Clowd
             var uploads = new NativeMenuItem("Recents & Uploads");
             uploads.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
             menu.Add(uploads);
-
-            var progress = new NativeMenuItem("Upload Progress");
-            progress.Click += (s, e) => (PageManager.Current.Tasks as TasksViewManager)?.ShowOverlay();
-            menu.Add(progress);
 
             var settings = new NativeMenuItem("Settings");
             settings.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
@@ -291,14 +284,13 @@ namespace Clowd
         {
             _hotkeys = new HotkeyManager(new GlobalHotkeyHost(), SettingsRoot.Current.Hotkeys);
 
-            // capture/recording are provided by the separate Rust process (or not yet ported)
-            // — those hotkeys route to the existing stub page or a NiceDialog notice.
+            // capture is provided by the separate Rust process; recording is not ported yet, so its
+            // hotkey routes to a NiceDialog notice.
             _hotkeys.SetAction(HotkeyId.FileUpload, () => UploadFilePrompt());
             _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => UploadClipboard());
             _hotkeys.SetAction(HotkeyId.CaptureRegion, () => StartCapture());
             _hotkeys.SetAction(HotkeyId.CaptureFullscreen, () => StartCapture());
             _hotkeys.SetAction(HotkeyId.CaptureActive, () => StartCapture());
-            _hotkeys.SetAction(HotkeyId.DrawOnScreen, () => PageManager.Current.GetLiveDrawPage().Open());
             _hotkeys.SetAction(HotkeyId.StartStopRecording, () => NiceDialog.ShowNoticeAsync(
                 null, NiceDialogIcon.Information, "Screen recording is not available in this build.", "Recording unavailable"));
 

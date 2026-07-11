@@ -413,12 +413,18 @@
                         Text="Customize toolbar" />
                     <StackPanel x:Name="customizeRows" />
                     <Button
-                        Margin="4,8,4,2"
+                        Margin="4,8,4,0"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
-                        Click="customizeReset_Click"
-                        Content="Reset to default"
-                        Theme="{StaticResource InnerToolButtonTheme}" />
+                        Click="customizeResetOrder_Click"
+                        Content="Reset Tool Order" />
+                    <Button
+                        Margin="4,4,4,2"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Classes="Danger"
+                        Click="customizeResetSettings_Click"
+                        Content="Reset Tool Settings" />
                 </StackPanel>
             </Border>
         </Popup>

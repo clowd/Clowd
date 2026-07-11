@@ -5,8 +5,8 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI;
 using Clowd.UI.Dialogs;
@@ -17,11 +17,11 @@ namespace Clowd
 {
     // port of the WPF UploadManager: uploads go to the default provider for the content type,
     // falling back to a provider-selection dialog when no default is set. DotNetZip was replaced
-    // with System.IO.Compression; the toast-based progress UI remains a no-op TasksView for now,
-    // so completion feedback is a clipboard copy + notice dialog instead.
+    // with System.IO.Compression. Progress, results, and errors surface on the Recent page via
+    // UploadsManager (the old tray-adjacent TaskWindow overlay was removed).
     public static class UploadManager
     {
-        private static ITasksView _view => PageManager.Current.Tasks;
+        private static UploadsManager _uploads => PageManager.Current.Uploads;
         private static readonly IMimeProvider _mime = new MimeProvider();
 
         public static async Task<UploadResult> UploadSession(SessionInfo session, IUploadProvider provider = null)
@@ -30,32 +30,18 @@ namespace Clowd
             if (provider == null)
                 return null;
 
-            var view = _view.CreateTask(session.Name);
-            view.SetStatus("Uploading...");
-            view.Show();
+            var upload = _uploads.StartUpload(session.Name, session);
+            upload.SetStatus("Uploading...");
 
             var info = new FileInfo(session.PreviewImgPath);
 
-            UploadProgressHandler handler = (bytesUploaded) =>
-            {
-                view.SetProgress(bytesUploaded, info.Length, true);
-                Dispatcher.UIThread.Post(() =>
-                {
-                    session.UploadProgress = bytesUploaded / (double)info.Length * 100d;
-                });
-            };
+            UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, info.Length, true);
 
             var fileName = GetPatternFileName(Path.GetExtension(info.Name));
-            var uploadTask = provider.UploadAsync(info.FullName, handler, fileName, view.CancelToken);
-            var result = await HandleUploadResult(view, uploadTask);
+            var uploadTask = provider.UploadAsync(info.FullName, handler, fileName, upload.CancelToken);
 
-            if (result != null)
-            {
-                session.UploadUrl = result.PublicUrl;
-                session.UploadFileKey = result.UploadKey;
-            }
-
-            return result;
+            // CompleteUpload persists UploadUrl/UploadFileKey (and the new Uploads list) on the session.
+            return await HandleUploadResult(upload, uploadTask);
         }
 
         public static async Task<UploadResult> UploadImage(Avalonia.Media.Imaging.Bitmap image, string imgDisplayName)
@@ -69,13 +55,12 @@ namespace Clowd
             ms.Position = 0;
             var fileName = GetPatternFileName(".png");
 
-            var view = _view.CreateTask(imgDisplayName);
-            view.SetStatus("Uploading...");
-            view.Show();
+            var upload = _uploads.StartUpload(imgDisplayName);
+            upload.SetStatus("Uploading...");
 
-            UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, ms.Length, true);
-            var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
-            return await HandleUploadResult(view, uploadTask);
+            UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, ms.Length, true);
+            var uploadTask = provider.UploadAsync(ms, handler, fileName, upload.CancelToken);
+            return await HandleUploadResult(upload, uploadTask);
         }
 
         public static async Task<UploadResult> UploadText(string text, string textType)
@@ -86,15 +71,14 @@ namespace Clowd
 
             var ms = new MemoryStream(Encoding.UTF8.GetBytes(text));
 
-            var view = _view.CreateTask(textType);
-            view.SetStatus("Uploading...");
-            view.Show();
+            var upload = _uploads.StartUpload(textType);
+            upload.SetStatus("Uploading...");
 
-            UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, ms.Length, true);
+            UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, ms.Length, true);
 
             var fileName = GetRandomName(10);
-            var uploadTask = provider.UploadAsync(ms, handler, fileName, view.CancelToken);
-            return await HandleUploadResult(view, uploadTask);
+            var uploadTask = provider.UploadAsync(ms, handler, fileName, upload.CancelToken);
+            return await HandleUploadResult(upload, uploadTask);
         }
 
         public static async Task<UploadResult> UploadFile(string filePath)
@@ -116,13 +100,12 @@ namespace Clowd
             if (provider == null)
                 return null;
 
-            var view = _view.CreateTask($"{stype} ({fileName})");
-            view.SetStatus("Uploading...");
-            view.Show();
+            var upload = _uploads.StartUpload($"{stype} ({fileName})");
+            upload.SetStatus("Uploading...");
 
-            UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, fileInfo.Length, true);
-            var uploadTask = provider.UploadAsync(filePath, handler, fileName, view.CancelToken);
-            return await HandleUploadResult(view, uploadTask);
+            UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, fileInfo.Length, true);
+            var uploadTask = provider.UploadAsync(filePath, handler, fileName, upload.CancelToken);
+            return await HandleUploadResult(upload, uploadTask);
         }
 
         public static async Task<UploadResult> UploadSeveralFiles(params string[] filePaths)
@@ -186,11 +169,11 @@ namespace Clowd
             var tmpFolder = Directory.CreateTempSubdirectory("clowd-zip").FullName;
             var zipPath = Path.Combine(tmpFolder, GetRandomName(8) + ".zip");
 
+            ActiveUpload upload = null;
             try
             {
-                var view = _view.CreateTask("Archive");
-                view.SetStatus("Compressing...");
-                view.Show();
+                upload = _uploads.StartUpload("Archive");
+                upload.SetStatus("Compressing...");
 
                 var anyAdded = await Task.Run(() =>
                 {
@@ -198,7 +181,7 @@ namespace Clowd
                     var added = false;
                     foreach (var path in filePaths)
                     {
-                        view.CancelToken.ThrowIfCancellationRequested();
+                        upload.CancelToken.ThrowIfCancellationRequested();
 
                         if (Directory.Exists(path))
                         {
@@ -206,7 +189,7 @@ namespace Clowd
                             var rootName = Path.GetFileName(root);
                             foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
                             {
-                                view.CancelToken.ThrowIfCancellationRequested();
+                                upload.CancelToken.ThrowIfCancellationRequested();
                                 var entryName = Path.Combine(rootName, Path.GetRelativePath(root, file)).Replace('\\', '/');
                                 zip.CreateEntryFromFile(file, entryName);
                                 added = true;
@@ -220,28 +203,31 @@ namespace Clowd
                     }
 
                     return added;
-                }, view.CancelToken);
+                }, upload.CancelToken);
 
                 // no files were added to the archive; there is nothing to upload
                 if (!anyAdded)
                 {
-                    view.Hide();
+                    _uploads.DiscardUpload(upload);
                     return null;
                 }
 
                 var size = new FileInfo(zipPath).Length;
 
-                view.SetStatus("Uploading...");
-                view.SetProgress(0, size, true);
+                upload.SetStatus("Uploading...");
+                upload.SetProgress(0, size, true);
 
-                UploadProgressHandler handler = (bytesUploaded) => view.SetProgress(bytesUploaded, size, true);
+                UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, size, true);
 
                 var archiveName = GetRandomName(10) + ".zip";
-                var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, view.CancelToken);
-                return await HandleUploadResult(view, uploadTask);
+                var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, upload.CancelToken);
+                return await HandleUploadResult(upload, uploadTask);
             }
             catch (OperationCanceledException)
             {
+                // cancellation raised during compression leaks the row unless discarded here.
+                if (upload != null)
+                    _uploads.DiscardUpload(upload);
                 return null;
             }
             finally
@@ -250,7 +236,7 @@ namespace Clowd
             }
         }
 
-        private static async Task<UploadResult> HandleUploadResult(ITasksViewItem view, Task<UploadResult> uploadTask)
+        private static async Task<UploadResult> HandleUploadResult(ActiveUpload upload, Task<UploadResult> uploadTask)
         {
             UploadResult result;
 
@@ -260,19 +246,47 @@ namespace Clowd
             }
             catch (OperationCanceledException)
             {
-                view.Hide();
+                _uploads.DiscardUpload(upload);
                 return null;
             }
             catch (Exception ex)
             {
-                // surfaced in the TaskWindow overlay (error state + dismiss)
-                view.SetError(ex);
+                await _uploads.FailUpload(upload, ex);
                 return null;
             }
 
-            // the overlay swaps the progress bar for a "Copy to Clipboard" action
-            view.SetCompleted(result.PublicUrl);
+            _uploads.CompleteUpload(upload, result);
             return result;
+        }
+
+        /// <summary>Resolves the provider an upload was made with; null if it is no longer installed.</summary>
+        private static IUploadProvider FindProvider(string providerTypeName) =>
+            String.IsNullOrEmpty(providerTypeName) ? null :
+            SettingsRoot.Current?.Uploads?.Providers
+                        .Select(p => p.Provider)
+                        .FirstOrDefault(p => p.GetType().Name == providerTypeName);
+
+        private static UploadDeleteInfo ToDeleteInfo(UploadRecord record) => new UploadDeleteInfo
+        {
+            UploadKey = record.UploadKey,
+            DeleteKey = record.DeleteKey,
+            FileName = record.FileName,
+            PublicUrl = record.Url,
+        };
+
+        public static bool CanDeleteUpload(UploadRecord record)
+        {
+            var provider = FindProvider(record?.Provider);
+            return provider != null && provider.CanDelete(ToDeleteInfo(record));
+        }
+
+        public static Task DeleteUploadAsync(UploadRecord record)
+        {
+            var provider = FindProvider(record?.Provider);
+            if (provider == null)
+                throw new InvalidOperationException("The upload provider for this file is no longer available.");
+
+            return provider.DeleteAsync(ToDeleteInfo(record), CancellationToken.None);
         }
 
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)

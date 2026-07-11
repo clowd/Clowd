@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -32,11 +31,6 @@ namespace Clowd
         void Open(SettingsPageTab? selectedTab = null);
     }
 
-    public interface ILiveDrawPage : IPage
-    {
-        void Open();
-    }
-
     public interface IScreenCapturePage : IPage
     {
         void Open(ScreenRect captureArea);
@@ -49,7 +43,7 @@ namespace Clowd.UI
     {
         public static PageManager Current { get; }
 
-        public ITasksView Tasks { get; } = new TasksViewManager();
+        public UploadsManager Uploads { get; } = new UploadsManager();
 
         private readonly Dictionary<Type, object> _singletons = new();
 
@@ -60,11 +54,6 @@ namespace Clowd.UI
 
         private PageManager()
         { }
-
-        public ILiveDrawPage GetLiveDrawPage()
-        {
-            return new StubLiveDrawPage();
-        }
 
         public ISettingsPage GetSettingsPage()
         {
@@ -132,23 +121,6 @@ namespace Clowd.UI
                     closing();
             });
             instance.Closed += handler;
-        }
-
-        // LiveDraw was dropped in the Avalonia migration.
-        private sealed class StubLiveDrawPage : ILiveDrawPage
-        {
-            public event EventHandler Closed;
-
-            public void Open()
-            {
-                Debug.WriteLine("ILiveDrawPage.Open() — LiveDraw is not available in this build.");
-                Closed?.Invoke(this, EventArgs.Empty);
-            }
-
-            public void Close()
-            {
-                Closed?.Invoke(this, EventArgs.Empty);
-            }
         }
     }
 }

@@ -1105,6 +1105,15 @@ namespace Clowd.Drawing
                 command.RaiseCanExecuteChanged();
         }
 
+        /// <summary>Rebinds the property bar to the current tool's SavedToolSettings. Call after
+        /// Editor.Tools is replaced wholesale (reset to defaults) — the skill bindings hold the
+        /// previous instances and would otherwise keep reading/writing orphaned settings.</summary>
+        public void ResyncToolSettings()
+        {
+            _syncStateForced = true;
+            SyncObjectState();
+        }
+
         private void SyncObjectState()
         {
             // we connect the current "object config" properties on this class to the relevant object.

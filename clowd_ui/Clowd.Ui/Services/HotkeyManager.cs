@@ -14,7 +14,6 @@ namespace Clowd.UI
         CaptureRegion,
         CaptureFullscreen,
         CaptureActive,
-        DrawOnScreen,
         StartStopRecording,
     }
 
@@ -137,7 +136,6 @@ namespace Clowd.UI
                 Entry(HotkeyId.CaptureRegion, nameof(SettingsHotkey.CaptureRegionShortcut), s => s.CaptureRegionShortcut, (s, g) => s.CaptureRegionShortcut = g),
                 Entry(HotkeyId.CaptureFullscreen, nameof(SettingsHotkey.CaptureFullscreenShortcut), s => s.CaptureFullscreenShortcut, (s, g) => s.CaptureFullscreenShortcut = g),
                 Entry(HotkeyId.CaptureActive, nameof(SettingsHotkey.CaptureActiveShortcut), s => s.CaptureActiveShortcut, (s, g) => s.CaptureActiveShortcut = g),
-                Entry(HotkeyId.DrawOnScreen, nameof(SettingsHotkey.DrawOnScreenShortcut), s => s.DrawOnScreenShortcut, (s, g) => s.DrawOnScreenShortcut = g),
                 Entry(HotkeyId.StartStopRecording, nameof(SettingsHotkey.StartStopRecordingShortcut), s => s.StartStopRecordingShortcut, (s, g) => s.StartStopRecordingShortcut = g),
             };
 

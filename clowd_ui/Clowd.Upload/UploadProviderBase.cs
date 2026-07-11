@@ -35,6 +35,11 @@ namespace Clowd
 
         public abstract Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
 
+        public virtual bool CanDelete(UploadDeleteInfo info) => false;
+
+        public virtual Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
+            => throw new NotSupportedException($"{Name} does not support deleting uploads.");
+
         protected HttpClient GetHttpClient(
             TimeSpan timeout, UploadProgressHandler progress = null, string accept = "application/json",
             AuthenticationHeaderValue auth = null)

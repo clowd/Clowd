@@ -45,13 +45,6 @@ namespace Clowd.Config
             set => Set(ref _captureActiveShortcut, Normalize(value));
         }
 
-        [DisplayName("Draw on Screen")]
-        public SimpleKeyGesture DrawOnScreenShortcut
-        {
-            get => _drawOnScreenShortcut;
-            set => Set(ref _drawOnScreenShortcut, Normalize(value));
-        }
-
         [DisplayName("Start / Stop Recording")]
         public SimpleKeyGesture StartStopRecordingShortcut
         {
@@ -72,7 +65,6 @@ namespace Clowd.Config
         private SimpleKeyGesture _captureRegionShortcut = new(Key.Snapshot);
         private SimpleKeyGesture _captureFullscreenShortcut = new(Key.Snapshot, KeyModifiers.Control);
         private SimpleKeyGesture _captureActiveShortcut = new(Key.Snapshot, KeyModifiers.Alt);
-        private SimpleKeyGesture _drawOnScreenShortcut = new(Key.Snapshot, KeyModifiers.Control | KeyModifiers.Shift);
         private SimpleKeyGesture _startStopRecordingShortcut = new(Key.Snapshot, KeyModifiers.Shift);
     }
 }

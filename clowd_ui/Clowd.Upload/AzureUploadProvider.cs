@@ -99,6 +99,19 @@ namespace Clowd.Upload
             return await SetPropertiesAndGetResult(blob, uploadName, false);
         }
 
+        public override bool CanDelete(UploadDeleteInfo info)
+            => !String.IsNullOrEmpty(info.UploadKey)
+               && !String.IsNullOrEmpty(ConnectionString)
+               && !String.IsNullOrEmpty(ContainerName);
+
+        public override async Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
+        {
+            var account = CloudStorageAccount.Parse(ConnectionString);
+            var container = account.CreateCloudBlobClient().GetContainerReference(ContainerName);
+            var blob = container.GetBlockBlobReference(info.UploadKey);
+            await blob.DeleteIfExistsAsync();
+        }
+
         private string GetNewBlobKey() => Guid.NewGuid().ToString().Replace("-", "");
 
         private async Task<CloudBlockBlob> CreateBlobAsync(string key)
