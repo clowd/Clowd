@@ -1,15 +1,15 @@
-<Window xmlns="https://github.com/avaloniaui"
+<ui:SystemThemedWindow xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:Clowd.UI.Controls"
         xmlns:cp="using:Clowd.UI.Dialogs.ColorPicker"
         xmlns:helpers="using:Clowd.UI.Helpers"
+        xmlns:ui="using:Clowd.UI"
         xmlns:util="using:Clowd.Util"
         x:Class="Clowd.UI.Dialogs.ColorPicker.ColorDialog"
         Title="Color Editor"
         SizeToContent="WidthAndHeight"
         CanResize="False"
-        UseLayoutRounding="True"
-        Background="{DynamicResource ApplicationBackgroundBrush}">
+        UseLayoutRounding="True">
 
     <Window.Styles>
         <!-- labels and value readouts are monospaced (channel data aligns nicely); the grid is
@@ -239,4 +239,4 @@
             </StackPanel>
         </Grid>
     </Grid>
-</Window>
+</ui:SystemThemedWindow>

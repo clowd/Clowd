@@ -11,13 +11,13 @@
                 <ResourceDictionary x:Key="Light">
                     <Color x:Key="ApplicationBackgroundColor">#FAFAFA</Color>
                     <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#FAFAFA" />
-                    <!-- translucent variant used only while a Mica backdrop is actually active -->
-                    <SolidColorBrush x:Key="ApplicationBackgroundMicaBrush" Color="#B3FAFAFA" />
+                    <!-- 80% wash layered over an AcrylicBlur backdrop (Mica uses no background at all) -->
+                    <SolidColorBrush x:Key="ApplicationBackgroundAcrylicBrush" Color="#CCFAFAFA" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="ApplicationBackgroundColor">#202020</Color>
                     <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#202020" />
-                    <SolidColorBrush x:Key="ApplicationBackgroundMicaBrush" Color="#B3202020" />
+                    <SolidColorBrush x:Key="ApplicationBackgroundAcrylicBrush" Color="#CC202020" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

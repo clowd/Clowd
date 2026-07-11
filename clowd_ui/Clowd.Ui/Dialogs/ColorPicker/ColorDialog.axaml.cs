@@ -12,7 +12,7 @@ using Clowd.Util;
 
 namespace Clowd.UI.Dialogs.ColorPicker
 {
-    public partial class ColorDialog : Window
+    public partial class ColorDialog : SystemThemedWindow
     {
         public static readonly StyledProperty<HslRgbColor> CurrentColorProperty =
             AvaloniaProperty.Register<ColorDialog, HslRgbColor>(nameof(CurrentColor));
@@ -126,7 +126,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         public ColorDialog() : this(null)
         { }
 
-        public ColorDialog(HslRgbColor previousColor = null, bool asDialog = true)
+        public ColorDialog(HslRgbColor previousColor = null, bool asDialog = true) : base(applyDefaultSize: false)
         {
             IsDialogMode = asDialog;
             DataContext = this;
@@ -145,7 +145,6 @@ namespace Clowd.UI.Dialogs.ColorPicker
             InitializeComponent();
             _initialized = true;
 
-            Icon = AppStyles.AppIcon;
             CreateColorPalette();
 
             if (!asDialog)
