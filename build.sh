@@ -46,7 +46,8 @@ OUT="$ROOT/build/$VERSION/$RID"
 
 echo "==> Publishing Clowd.Ui ($RID, version $VERSION)"
 dotnet publish "$ROOT/clowd_ui/Clowd.Ui/Clowd.Ui.csproj" \
-    -c Release -r "$RID" --self-contained false \
+    -c Release -r "$RID" --self-contained true \
+    -p:PublishSingleFile="true" \
     -p:Version="$VERSION" \
     -o "$OUT"
 
