@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Clowd.Config;
@@ -31,7 +32,7 @@ namespace Clowd
 
         /// <summary>Best-effort clipboard access for code with no window of its own (e.g.
         /// UploadManager): borrows the clipboard of any open window.</summary>
-        public static Avalonia.Input.Platform.IClipboard GetPrimaryClipboard()
+        public static IClipboard GetPrimaryClipboard()
         {
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
@@ -423,7 +424,7 @@ namespace Clowd
                     return;
                 }
 
-                var text = clipboard != null ? await clipboard.GetTextAsync() : null;
+                var text = clipboard != null ? await clipboard.TryGetTextAsync() : null;
                 if (!String.IsNullOrEmpty(text))
                 {
                     await UploadManager.UploadText(text, "Clipboard Text");
