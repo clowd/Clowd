@@ -179,6 +179,13 @@ namespace Clowd.UI
         {
             _sessionInfoDebounce?.Stop();
 
+            // an in-place text edit commits on focus loss (ToolText.FinishEdit); force that now,
+            // while _session is still alive: FlushPendingState defers while an edit is active, and
+            // a commit raised after this handler (window Deactivated fires post-close) is dropped
+            // by the null-_session check — losing the typed text AND any armed autosave tail
+            drawingCanvas.Focus();
+
+            drawingCanvas.FlushPendingState(); // deliver any debounced (mid-scrub) canvas state before the writer flush below
             // flush any pending background graphics.json write before the session is torn down
             Task pendingWrite;
             lock (_graphicsWriteLock)
@@ -514,17 +521,17 @@ namespace Clowd.UI
             if (_session == null)
                 return;
 
+            if (e.State == null)
+                return; // never enqueue empty bytes — a truncated graphics.json silently loses the whole session
+
             // serialize in memory on the UI thread (cheap), then hand the bytes to a latest-wins
             // background writer — undo/redo and merged drag steps fire this on every step, and a
             // synchronous File.Create here stalls the canvas for the duration of the disk write.
             byte[] bytes;
-            if (e.State != null) {
-                using var ms = new MemoryStream();
+            using (var ms = new MemoryStream()) {
                 using (var writer = new Utf8JsonWriter(ms))
                     e.State.WriteTo(writer);
                 bytes = ms.ToArray();
-            } else {
-                bytes = Array.Empty<byte>();
             }
 
             Interlocked.Exchange(ref _pendingGraphicsJson, bytes);

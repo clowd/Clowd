@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -91,6 +93,23 @@ namespace Clowd.Drawing.Graphics
             Body = body ?? "Double-Click to edit notes.\r\nUse Shift+Enter for new lines.";
         }
 
+        // PORT NOTE (aspect map entry): text shaping inputs invalidate the cached FormattedText
+        // (Text) on top of the geometry/bounds/shadow a shape change implies. Editing is
+        // transient and left to the conservative default (it repaints, and CreateFormattedText's
+        // key already accounts for the editing trailing-newline suffix).
+        internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
+        {
+            base.DeclarePropertyEffects(map);
+            const InvalidationAspects text =
+                InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow | InvalidationAspects.Text;
+            map[nameof(Body)] = text;
+            map[nameof(FontName)] = text;
+            map[nameof(FontSize)] = text;
+            map[nameof(FontStyle)] = text;
+            map[nameof(FontWeight)] = text;
+            map[nameof(FontStretch)] = text;
+        }
+
         internal override int HandleCount => 1;
 
         internal override Point GetHandle(int handleNumber, DpiScale uiscale)
@@ -137,7 +156,7 @@ namespace Clowd.Drawing.Graphics
         protected virtual void DrawObjectImpl(DrawingContext context, bool showText)
         {
             // NOTE: unlike WPF, the rotation transform is pushed by the callers (Draw/DrawObject), not here.
-            context.DrawRectangle(new SolidColorBrush(ObjectColor), null, UnrotatedBounds);
+            context.DrawRectangle(RenderResources.GetBrush(ObjectColor), null, UnrotatedBounds);
             if (showText)
             {
                 var form = CreateFormattedText();
@@ -171,14 +190,27 @@ namespace Clowd.Drawing.Graphics
             if (Editing && (Body.EndsWith('\r') || Body.EndsWith('\n')))
                 txt += "_";
 
+            // PORT NOTE (Text cache): shaping is the expensive step and Normalize()+Draw both call
+            // this per keystroke — cache the FormattedText in RenderCache keyed by the full shaping
+            // input (the effective text incl. the editing suffix, plus the font 5-tuple). Normalize
+            // and Draw thus share the ONE instance, so their measurements are identical by
+            // construction. The key guards correctness even for aspects not cleared by the map
+            // (e.g. transient Editing toggles); the Text aspect clear is the fast common path.
+            var key = (txt, FontName, FontSize, FontStyle, FontWeight, FontStretch);
+            if (RenderCache.Text is { } cached && key.Equals(RenderCache.TextKey))
+                return cached;
+
             // decision #31: WPF FormattedText(…, Ideal, pixelsPerDip) → Avalonia FormattedText
-            return new FormattedText(
+            var form = new FormattedText(
                 txt,
                 System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
                 new Typeface(new FontFamily(FontName), FontStyle, FontWeight, FontStretch),
                 FontSize,
-                new SolidColorBrush(Color.FromArgb(255, 0, 0, 0)));
+                RenderResources.GetBrush(Color.FromArgb(255, 0, 0, 0)));
+            RenderCache.Text = form;
+            RenderCache.TextKey = key;
+            return form;
         }
     }
 }

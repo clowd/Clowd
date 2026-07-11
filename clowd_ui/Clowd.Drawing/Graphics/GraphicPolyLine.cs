@@ -4,6 +4,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Media;
 using Clowd.Drawing.Curves;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -50,21 +51,29 @@ namespace Clowd.Drawing.Graphics
             AddPoint(start);
         }
 
-        public override Rect Bounds
+        // PORT NOTE (ComputeBounds): the old Bounds override body moves here so the base cached
+        // getter serves reads (allocation-free once warm). Unlike the old per-read getter, `_final`
+        // may carry a STALE fitted transform here (e.g. after an undo restored UnrotatedBounds but
+        // no render pass has refit yet), so we refit before measuring — EnsureFittedTransform makes
+        // Bounds order-independent: the first read after any invalidation fits to the CURRENT
+        // UnrotatedBounds. ComputeBounds must not raise PropertyChanged, but sidecar RenderCache
+        // fills (GeometryBounds/GeometryTransform, like CachedBounds itself) are permitted.
+        protected override Rect ComputeBounds()
         {
-            get
+            if (_final != null)
             {
-                if (_final != null)
-                    return _final.GetRenderBounds(new Pen(null, LineWidth));
-
-                var half = LineWidth / 2;
-                return new Rect(Left - half, Top - half, Right - Left + LineWidth, Bottom - Top + LineWidth);
+                var pen = RenderResources.GetPen(ObjectColor, LineWidth);
+                EnsureFittedTransform(pen);
+                return _final.GetRenderBounds(pen);
             }
+
+            var half = LineWidth / 2;
+            return new Rect(Left - half, Top - half, Right - Left + LineWidth, Bottom - Top + LineWidth);
         }
 
         internal override void DrawRectangle(DrawingContext context)
         {
-            Pen pen = new Pen(new SolidColorBrush(ObjectColor), LineWidth);
+            var pen = RenderResources.GetPen(ObjectColor, LineWidth);
             if (_drawing)
             {
                 foreach (var geo in _segments)
@@ -80,22 +89,7 @@ namespace Clowd.Drawing.Graphics
                 // during the render pass").
                 if (_final == null) BuildFinalGeometry();
 
-                // geometry points will be at the original location they were drawn. we need to translate them into
-                // the correct location as this rectangle may have been moved or resized.
-                _final.Transform = null;
-                var geometryBounds = _final.GetRenderBounds(pen);
-                var desiredBounds = UnrotatedBounds;
-                double offsetX = desiredBounds.Left - geometryBounds.Left;
-                double offsetY = desiredBounds.Top - geometryBounds.Top;
-                double scaleX = (desiredBounds.Right - (geometryBounds.Left + offsetX)) / geometryBounds.Width;
-                double scaleY = (desiredBounds.Bottom - (geometryBounds.Top + offsetY)) / geometryBounds.Height;
-
-                // we set this on the geometry instead of as a PushTransform so that it will also be
-                // respected for MakeHitTest. Render is called every time a property updates, so this should work fine.
-                // (WPF used TransformGroup{Translate, ScaleAt}; same row-vector order: translate first, then scale.)
-                var scaleCenter = new Point(geometryBounds.Left + offsetX, geometryBounds.Top + offsetY);
-                _final.Transform = new MatrixTransform(
-                    Matrix.CreateTranslation(offsetX, offsetY) * MatrixHelper.ScaleAt(scaleX, scaleY, scaleCenter));
+                EnsureFittedTransform(pen);
 
                 context.DrawGeometry(null, pen, _final);
             }
@@ -117,8 +111,24 @@ namespace Clowd.Drawing.Graphics
             }
 
             // decision #25: GetWidenedPathGeometry + FillContains → StrokeContains with a real (black) brush pen.
-            var hit = _final.StrokeContains(new Pen(Brushes.Black, LineWidth + (8 * uiscale.DpiScaleX)), rotatedPt);
+            var hit = _final.StrokeContains(RenderResources.GetPen(Colors.Black, LineWidth + (8 * uiscale.DpiScaleX)), rotatedPt);
             return hit ? 0 : -1;
+        }
+
+        // PORT NOTE (OnFieldsRestored): `_final`/`_segments` are [Transient], so the history engine
+        // never restores them — after an undo/redo that changed the recorded points we must drop
+        // the fitted geometry so DrawRectangle rebuilds it from the restored `_points`
+        // (final-design §D restore rules; pinned by InPlaceRestoreTests). The base call clears the
+        // whole RenderCache (including the fitted-bounds/transform slots).
+        internal override void OnFieldsRestored(IReadOnlyCollection<string> changedJsonNames)
+        {
+            base.OnFieldsRestored(changedJsonNames);
+            if (changedJsonNames.Contains("points"))
+            {
+                _final = null;
+                _segments = null;
+                _drawing = false;
+            }
         }
 
         internal void BeginDrawing()
@@ -146,6 +156,40 @@ namespace Clowd.Drawing.Graphics
 
             Normalize(); // set CenterOfRotation
             OnPropertyChanged(nameof(Bounds));
+        }
+
+        // Fits `_final` (drawn at its original location) onto the current — possibly moved/resized —
+        // UnrotatedBounds. The mapping is derived once and cached in the RenderCache; it is
+        // recomputed only when the Geometry aspect is cleared (move, resize, or a points change),
+        // never per replay, so a warm replay does zero GetRenderBounds calls and zero fresh
+        // transform math. Called from both DrawRectangle (render pass) and ComputeBounds (first
+        // Bounds read after an invalidation), so Bounds is order-independent w.r.t. rendering.
+        // No PropertyChanged raises — only sidecar RenderCache fills — so it is render-pass safe.
+        private void EnsureFittedTransform(IPen pen)
+        {
+            if (RenderCache.GeometryTransform == null)
+            {
+                // geometry points will be at the original location they were drawn. we need to translate them into
+                // the correct location as this rectangle may have been moved or resized.
+                _final.Transform = null;
+                var geometryBounds = RenderCache.GeometryBounds ??= _final.GetRenderBounds(pen);
+                var desiredBounds = UnrotatedBounds;
+                double offsetX = desiredBounds.Left - geometryBounds.Left;
+                double offsetY = desiredBounds.Top - geometryBounds.Top;
+                double scaleX = (desiredBounds.Right - (geometryBounds.Left + offsetX)) / geometryBounds.Width;
+                double scaleY = (desiredBounds.Bottom - (geometryBounds.Top + offsetY)) / geometryBounds.Height;
+
+                // we set this on the geometry instead of as a PushTransform so that it will also be
+                // respected for MakeHitTest. Render is called every time a property updates, so this should work fine.
+                // (WPF used TransformGroup{Translate, ScaleAt}; same row-vector order: translate first, then scale.)
+                var scaleCenter = new Point(geometryBounds.Left + offsetX, geometryBounds.Top + offsetY);
+                RenderCache.GeometryTransform = new MatrixTransform(
+                    Matrix.CreateTranslation(offsetX, offsetY) * MatrixHelper.ScaleAt(scaleX, scaleY, scaleCenter));
+            }
+
+            // Reapply the cached mapping (cheap reference assignment) — a freshly rebuilt
+            // _final starts with a null transform, and MakeHitTest relies on it being set.
+            _final.Transform = RenderCache.GeometryTransform;
         }
 
         // Fits the recorded points into the final bezier geometry. No notifications / side

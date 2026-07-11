@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -174,6 +175,54 @@ namespace Clowd.Drawing.Graphics
             _crop = crop;
             _scaleX = flipX;
             _scaleY = flipY;
+        }
+
+        // PORT NOTE (aspect map entry): images have no shadow. Fields that change the decoded
+        // composite invalidate ImageCache (the setters already null _imageSource/_imageObscured —
+        // kept verbatim; this entry drives the funnel and the OnFieldsRestored path); obscuredShapes
+        // affects only the overlay; crop/flip change the displayed pixels but not the artwork bounds
+        // rectangle, so they map to Bounds (conservative recompute) only.
+        internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
+        {
+            base.DeclarePropertyEffects(map);
+            const InvalidationAspects sourceAspects = InvalidationAspects.Bounds | InvalidationAspects.ImageCache;
+            map[nameof(BitmapFilePath)] = sourceAspects;
+            map[nameof(CursorFilePath)] = sourceAspects;
+            map[nameof(CursorPosition)] = sourceAspects;
+            map[nameof(CursorVisible)] = sourceAspects;
+            map[nameof(ObscuredShapes)] = InvalidationAspects.ImageCache;
+            map[nameof(Crop)] = InvalidationAspects.Bounds;
+            map[nameof(FlipX)] = InvalidationAspects.Bounds;
+            map[nameof(FlipY)] = InvalidationAspects.Bounds;
+        }
+
+        // The history engine writes restored values straight into fields (no setter side-effects
+        // fire), so re-null the decoded caches here — but only the ones whose inputs actually
+        // changed, so undoing a non-image edit (e.g. a resize) does not force a PNG re-decode. The
+        // JSON names mirror the setter side-effects: bitmap/cursor fields drop both source and
+        // overlay; obscuredShapes drops only the overlay.
+        internal override void OnFieldsRestored(IReadOnlyCollection<string> changedJsonNames)
+        {
+            bool sourceAffected = changedJsonNames.Contains("bitmapFilePath")
+                                  || changedJsonNames.Contains("cursorFilePath")
+                                  || changedJsonNames.Contains("cursorPosition")
+                                  || changedJsonNames.Contains("cursorVisible");
+            bool obscureAffected = sourceAffected || changedJsonNames.Contains("obscuredShapes");
+
+            if (sourceAffected) _imageSource = null;
+            if (obscureAffected) _imageObscured = null;
+
+            base.OnFieldsRestored(changedJsonNames); // nuke the derived bounds/geometry sidecar
+        }
+
+        // Retained-instance trim (deleted graphics kept by the history engine): drop the decoded
+        // bitmaps so a retained 4K screenshot costs a field record, not 33 MB. Reload is cheap via
+        // the decode LRU if the graphic is ever re-inserted.
+        internal override void TrimTransientCaches()
+        {
+            _imageSource = null;
+            _imageObscured = null;
+            base.TrimTransientCaches();
         }
 
         internal override void Draw(DrawingContext ctx, DpiScale uiscale)

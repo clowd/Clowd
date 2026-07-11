@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -14,33 +15,35 @@ namespace Clowd.Drawing.Graphics
             : base(objectColor, lineWidth, start, end)
         { }
 
+        // PORT NOTE (ComputeBounds): the old Bounds getter body moves here; the cached base Bounds
+        // getter now serves reads.
         // decision #26: WPF combined the widened shaft and the tip triangle into a single Union geometry.
         // Bounds here are computed as (shaft render bounds) ∪ (tip fill bounds), which is the same rect the
         // WPF union produced. (A CombinedGeometry of an open line and a filled triangle is not reliable for
         // bounds under Skia path-ops, so the union is done on the rects instead.)
-        public override Rect Bounds
+        protected override Rect ComputeBounds()
         {
-            get
-            {
-                ComputeArrowParts(out Point shaftEnd, out bool hasShaft, out Geometry tip);
-                var bounds = tip.Bounds;
-                if (hasShaft)
-                    bounds = bounds.Union(new LineGeometry(LineStart, shaftEnd).GetRenderBounds(new Pen(null, LineWidth)));
-                return bounds;
-            }
+            ComputeArrowParts(out Point shaftEnd, out bool hasShaft, out Geometry tip);
+            var bounds = tip.Bounds;
+            if (hasShaft)
+                bounds = bounds.Union(new LineGeometry(LineStart, shaftEnd).GetRenderBounds(RenderResources.GetPen(default, LineWidth)));
+            return bounds;
         }
 
         internal override void DrawObject(DrawingContext ctx)
         {
             // decision #26: shaft via DrawLine + filled triangle StreamGeometry (opaque colors → visually
-            // identical to the WPF union fill).
+            // identical to the WPF union fill). PORT NOTE (RenderResources): cached pen/brush; the tip
+            // StreamGeometry is cached (see ComputeArrowParts) and shared with ComputeBounds.
             ComputeArrowParts(out Point shaftEnd, out bool hasShaft, out Geometry tip);
-            var brush = new SolidColorBrush(ObjectColor);
             if (hasShaft)
-                ctx.DrawLine(new Pen(brush, LineWidth), LineStart, shaftEnd);
-            ctx.DrawGeometry(brush, null, tip);
+                ctx.DrawLine(RenderResources.GetPen(ObjectColor, LineWidth), LineStart, shaftEnd);
+            ctx.DrawGeometry(RenderResources.GetBrush(ObjectColor), null, tip);
         }
 
+        // The scalar shaft parts (shaftEnd/hasShaft) are cheap struct math and recomputed each call;
+        // the expensive tip StreamGeometry is cached in RenderCache.SecondaryGeometry and cleared with
+        // the Geometry aspect. (RenderCache.Geometry stays reserved for the inherited full-line Contains.)
         private void ComputeArrowParts(out Point shaftEnd, out bool hasShaft, out Geometry tip)
         {
             var tipLength = LineWidth * 8;
@@ -54,6 +57,10 @@ namespace Clowd.Drawing.Graphics
 
             hasShaft = lineLength > 0;
             shaftEnd = LineStart + (lineVector * lineLength);
+
+            tip = RenderCache.SecondaryGeometry;
+            if (tip != null)
+                return;
 
             const int tipAngle = 165;
 
@@ -73,6 +80,7 @@ namespace Clowd.Drawing.Graphics
                 gctx.EndFigure(true);
             }
 
+            RenderCache.SecondaryGeometry = arrow;
             tip = arrow;
         }
     }

@@ -15,6 +15,8 @@ using Avalonia.Media.Imaging;
 using Avalonia.Media.Immutable;
 using Clowd.Config;
 using Clowd.Drawing.Graphics;
+using Clowd.Drawing.History;
+using Clowd.Drawing.Rendering;
 using Clowd.Drawing.Tools;
 using Clowd.UI.Helpers;
 
@@ -240,6 +242,13 @@ namespace Clowd.Drawing
         /// <summary>True while a tool drag operation is in progress (EditorWindow guards on this).</summary>
         public bool IsToolDragActive => _isToolMouseDown;
 
+        /// <summary>
+        /// True while a property-bar scrub's merge tail is armed (AutosaveThrottle debounce
+        /// pending). The frame validator treats it like a tool drag: shadow bakes are capped at
+        /// interactive resolution and re-baked full-res on the scrub's trailing edge (Flush).
+        /// </summary>
+        internal bool IsInteractiveScrubActive => _autosaveThrottle != null && _autosaveThrottle.IsScrubActive;
+
         public RelayCommand CommandSelectAll { get; }
         public RelayCommand CommandUnselectAll { get; }
         public RelayCommand CommandDelete { get; }
@@ -262,7 +271,7 @@ namespace Clowd.Drawing
 
         private readonly Dictionary<ToolType, ToolDesc> _toolStore;
         private readonly CheckeredBackground _clickable;
-        private readonly ArtworkBackgroundVisual _artworkBackground;
+        private readonly ArtworkView _artworkView;
         private readonly UndoManager _undoManager;
         private readonly RelayCommand[] _allCommands;
         private bool _isToolMouseDown;
@@ -278,9 +287,21 @@ namespace Clowd.Drawing
         private readonly HashSet<string> _boundGraphicProps = new HashSet<string>();
         private GraphicBase _boundGraphic;
         private bool _syncingState;
+        private bool _backgroundDirtySinceCommit;
 
-        // graphic visuals currently attached to VisualChildren (indices 2..2+N)
-        private readonly List<GraphicVisual> _attachedGraphicVisuals = new List<GraphicVisual>();
+        // persistence boundary (final-design §B.6): immediate StateUpdated for discrete history
+        // actions, 150ms trailing-edge debounce for merge-in-place rewrites (the scrub path)
+        private readonly AutosaveThrottle _autosaveThrottle;
+
+        // SyncObjectState inputs-changed early-out (final-design §B.6): the rebind (dispose +
+        // recreate every skill binding) only runs when what it depends on actually changed —
+        // history raises StateChanged once per merged scrub step, and rebinding per pointer
+        // event was part of the R2 storm. SelectedItems identity is a valid input because the
+        // collection keeps the same array instance when membership+order are unchanged.
+        private GraphicBase[] _lastSyncSelection;
+        private ToolType _lastSyncTool;
+        private bool _lastSyncPanning;
+        private bool _syncStateForced = true; // force the first run + after undo/redo/restore
 
         private ScaleTransform _scaleTransform2;
         private TranslateTransform _translateTransform;
@@ -294,14 +315,15 @@ namespace Clowd.Drawing
 
             InitializeZoom();
 
-            // visual tree order (bottom→top, §2.2): _clickable (Children[0] → VisualChildren[0]),
-            // _artworkBackground (VisualChildren[1]), graphic visuals (VisualChildren[2 + i]),
-            // then any remaining Children (e.g. ToolText's TextBox overlay) appended at the end.
+            // visual tree order (bottom→top, final-design §A.1): _clickable (Children[0] →
+            // VisualChildren[0], the ONLY hit-testable surface), _artworkView (VisualChildren[1],
+            // the whole document in one SceneRenderer pass), then any remaining Children (e.g.
+            // ToolText's TextBox overlay) appended at the end so they render above the artwork.
             _clickable = new CheckeredBackground();
             Children.Add(_clickable);
 
-            _artworkBackground = new ArtworkBackgroundVisual(this);
-            VisualChildren.Add(_artworkBackground);
+            _artworkView = new ArtworkView(this);
+            VisualChildren.Add(_artworkView);
 
             GraphicsList = new GraphicCollection(this);
 
@@ -353,6 +375,7 @@ namespace Clowd.Drawing
             _toolStore[ToolType.Count] = new ToolDesc("Numeric Step", new ToolCount(), ObjectType: typeof(GraphicCount));
             _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate(), Skills: Skill.BlurRadius);
 
+            _autosaveThrottle = new AutosaveThrottle(this);
             _undoManager = new UndoManager(this);
             _undoManager.StateChanged += UndoManagerStateChanged;
 
@@ -531,6 +554,8 @@ namespace Clowd.Drawing
                 // if there is an operation in progress while the tool changes, try to abort it
                 CurrentTool.Instance.AbortOperation(this);
                 _isToolMouseDown = false;
+                // drag over: re-bake any interactively-capped shadow sprites at rest (§A.3)
+                GraphicsList?.RequestValidation();
             }
 
             CurrentTool = _toolStore[newValue];
@@ -548,18 +573,21 @@ namespace Clowd.Drawing
             }
 
             newValue.PropertyChanged += GraphicsListPropertyChanged;
-            SyncGraphicVisuals();
-            InvalidateBackground();
+            _artworkView.InvalidateVisual();
         }
 
         private void OnHandleColorChanged(Color newValue)
         {
-            GraphicBase.HandleBrush = new SolidColorBrush(newValue);
+            GraphicBase.HandleBrush = RenderResources.GetBrush(newValue);
+            _artworkView?.InvalidateVisual();
         }
 
         private void OnArtworkBackgroundChanged()
         {
-            InvalidateBackground();
+            // history dirt for the commit path (final-design §B.2): the undo engine consumes this
+            // alongside GraphicCollection.ConsumeDirty() to know a background compare is needed
+            _backgroundDirtySinceCommit = true;
+            _artworkView?.InvalidateVisual();
         }
 
         private void OnContentScaleChanged()
@@ -669,26 +697,19 @@ namespace Clowd.Drawing
 
         public void SelectAll()
         {
-            for (int i = 0; i < Count; i++)
-            {
-                this[i].IsSelected = true;
-            }
+            // batch path (final-design §A.4): the collection flips IsSelected in one O(n) sweep
+            // with a single deferred SelectedItems rebuild instead of a rebuild per item
+            GraphicsList.SelectAll();
         }
 
         public void UnselectAll()
         {
-            for (int i = 0; i < this.Count; i++)
-            {
-                this[i].IsSelected = false;
-            }
+            GraphicsList.UnselectAll();
         }
 
         public void UnselectAllExcept(params GraphicBase[] excluded)
         {
-            foreach (var ob in GraphicsList.SelectedItems.Except(excluded.Where(ex => ex != null)))
-            {
-                ob.IsSelected = false;
-            }
+            GraphicsList.UnselectAllExcept(excluded);
         }
 
         public void Delete()
@@ -725,12 +746,30 @@ namespace Clowd.Drawing
             _syncingState = true;
             try
             {
+                // any armed autosave tail belongs to the document being replaced — drop it
+                // (contract #23: no StateUpdated raise on restore-load)
+                _autosaveThrottle.Cancel();
+
+                // in-place load (final-design §B.4): deserialize, Normalize each, Clear+AddRange
+                // into the SAME collection, seed the committed shadow, no StateChanged raise
                 _undoManager.ClearHistory(data);
+
+                // release escape hatch (final-design risk #5): the first commit after a restore
+                // full-scans the document, so a load-time mutation that somehow bypassed the
+                // PropertyChanged funnel still lands in history
+                _undoManager.FullScanNextCommit = true;
+
+                _syncStateForced = true; // property-bar bindings must resync to the loaded doc
             }
             finally
             {
                 _syncingState = prev;
             }
+
+            // ClearHistory raised Count (and requeried) while the OLD history node was still
+            // current, then reset _node without a StateChanged raise (contract #23) — refresh
+            // Undo/Redo CanExecute against the reset history.
+            RequeryCommands();
         }
 
         public void Nudge(int offsetX, int offsetY)
@@ -741,7 +780,9 @@ namespace Clowd.Drawing
                 {
                     obj.Move(offsetX, offsetY);
                 }
-                _undoManager.AddCommandStep(true);
+                // route through AddCommandToHistory so the _syncingState re-entrancy guard is
+                // enforced uniformly at the single commit choke point
+                AddCommandToHistory(true);
             }
         }
 
@@ -801,7 +842,16 @@ namespace Clowd.Drawing
                         GraphicsList.Insert(idx, g);
                     }
                 }
+                // RemoveAt→DisconnectFromParent cleared the selected graphics' PropertyChanged
+                // delegates (skill bindings + BoundGraphicPropertyChanged); force the
+                // StateChanged-driven SyncObjectState to rebind even though the selection array
+                // instance is unchanged.
+                _syncStateForced = true;
                 AddCommandToHistory(false);
+                // a no-op move (graphic already at the target index) commits an empty change set,
+                // which raises no StateChanged — resync here so the forced rebind still happens
+                // (early-outs to O(1) when the commit already ran it)
+                SyncObjectState();
             }
         }
 
@@ -812,6 +862,10 @@ namespace Clowd.Drawing
 
         public void Undo()
         {
+            // the delta apply writes fields directly (bypassing property setters), so the
+            // property bar must rebind even when the selection/tool inputs look unchanged
+            _syncStateForced = true;
+
             var prev = _syncingState;
             _syncingState = true;
             try
@@ -826,6 +880,8 @@ namespace Clowd.Drawing
 
         public void Redo()
         {
+            _syncStateForced = true;
+
             var prev = _syncingState;
             _syncingState = true;
             try
@@ -848,9 +904,9 @@ namespace Clowd.Drawing
 
         /// <summary>
         /// Children added through <see cref="Panel.Children"/> (e.g. ToolText's TextBox overlay) are
-        /// always appended to the END of VisualChildren so they render above the graphic visuals.
+        /// always appended to the END of VisualChildren so they render above the artwork.
         /// The base Panel implementation inserts at the logical index, which would interleave them
-        /// with our manually managed visuals (_clickable, _artworkBackground, graphic visuals).
+        /// with our manually managed visuals (_clickable, _artworkView).
         /// </summary>
         protected override void ChildrenChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
@@ -896,83 +952,33 @@ namespace Clowd.Drawing
             InvalidateMeasure();
         }
 
-        /// <summary>
-        /// Rebuilds the graphic visual segment of VisualChildren (indices 2..2+N) to match
-        /// the current GraphicsList order (list order = z-order).
-        /// </summary>
-        private void SyncGraphicVisuals()
-        {
-            // the graphic visuals are one contiguous block (inserted together below), so they can
-            // be detached/attached with single range operations instead of per-item Remove/Insert
-            // (each of which is an O(n) scan plus its own change notification).
-            if (_attachedGraphicVisuals.Count > 0)
-            {
-                var start = VisualChildren.IndexOf(_attachedGraphicVisuals[0]);
-                VisualChildren.RemoveRange(start, _attachedGraphicVisuals.Count);
-                _attachedGraphicVisuals.Clear();
-            }
-
-            var list = GraphicsList;
-            if (list != null && list.VisualCount > 0)
-            {
-                for (int i = 0; i < list.VisualCount; i++)
-                    _attachedGraphicVisuals.Add(list.GetVisual(i));
-                VisualChildren.InsertRange(2, _attachedGraphicVisuals);
-            }
-
-            InvalidateArrange();
-        }
-
         protected override Size ArrangeOverride(Size finalSize)
         {
             var result = base.ArrangeOverride(finalSize);
 
-            // _artworkBackground and the graphic visuals are visual-only children (not in Children),
-            // so the Canvas layout pass does not see them; arrange them over the full canvas. Their
-            // content draws at absolute canvas coordinates and is not clipped to these bounds.
-            var rect = new Rect(finalSize);
-            _artworkBackground.Measure(Size.Infinity);
-            _artworkBackground.Arrange(rect);
-            foreach (var v in _attachedGraphicVisuals)
-            {
-                v.Measure(Size.Infinity);
-                v.Arrange(rect);
-            }
+            // _artworkView is a visual-only child (not in Children), so the Canvas layout pass
+            // does not see it; arrange it over the full canvas. Its content draws at absolute
+            // canvas coordinates and is not clipped to these bounds (the EditorWindow Border
+            // ClipToBounds provides the viewport clip), same as the old graphic visuals.
+            _artworkView.Measure(Size.Infinity);
+            _artworkView.Arrange(new Rect(finalSize));
+
+#if DEBUG
+            // final-design §A.3: Visual.Effect is never used again anywhere in the canvas tree
+            foreach (var child in VisualChildren)
+                System.Diagnostics.Debug.Assert(child.Effect == null,
+                                                "Visual.Effect must not be used in the DrawingCanvas tree (final-design §A.3)");
+#endif
 
             return result;
         }
 
-        private void InvalidateBackground()
-        {
-            _artworkBackground.InvalidateVisual();
-        }
-
         /// <summary>
-        /// Tiny visual filling GraphicsList.ContentBounds with the ArtworkBackground color
-        /// (replaces the WPF DrawingVisual at visual index 1).
+        /// One re-record of the whole artwork (final-design §A.4). Called by the collection's
+        /// frame validator (once per frame, no matter how many changes arrived) and by the
+        /// Dpi/HandleColor/ArtworkBackground retargets.
         /// </summary>
-        private sealed class ArtworkBackgroundVisual : Control
-        {
-            private readonly DrawingCanvas _canvas;
-
-            public ArtworkBackgroundVisual(DrawingCanvas canvas)
-            {
-                _canvas = canvas;
-
-                // visual-only child (no logical parent): it cannot inherit the canvas Cursor, so it
-                // must not win pointer hit-tests or the cursor resets to the system default within
-                // the artwork bounds. Mouse input is handled by the _clickable surface instead.
-                IsHitTestVisible = false;
-            }
-
-            public override void Render(DrawingContext context)
-            {
-                var list = _canvas.GraphicsList;
-                if (list == null)
-                    return;
-                context.FillRectangle(new ImmutableSolidColorBrush(_canvas.ArtworkBackground), list.ContentBounds);
-            }
-        }
+        internal void InvalidateArtwork() => _artworkView?.InvalidateVisual();
 
         // ====================================================================
         // State synchronization
@@ -987,13 +993,14 @@ namespace Clowd.Drawing
             }
             else if (e.PropertyName == nameof(GraphicCollection.Count))
             {
-                SyncGraphicVisuals();
+                // structural changes need no visual-tree work anymore — the collection's frame
+                // validator re-records the artwork view; only command state depends on Count here
                 RequeryCommands();
             }
             else if (e.PropertyName == nameof(GraphicCollection.ContentBounds))
             {
                 _isAutoFit = false;
-                InvalidateBackground();
+                _artworkView?.InvalidateVisual(); // the background fill covers the new bounds
             }
         }
 
@@ -1011,11 +1018,25 @@ namespace Clowd.Drawing
 
         private void SyncObjectState()
         {
-            // this is only triggered when the current tool or the current selection changes.
             // we connect the current "object config" properties on this class to the relevant object.
             // decision table #11/#12: WPF SetBinding/ClearBinding becomes this.Bind + disposables, and
             // NotifyOnSourceUpdated becomes a PropertyChanged whitelist on the bound graphic, with the
             // _syncingState re-entrancy guard active for the duration of this method.
+
+            // inputs-changed early-out (final-design §B.6): this runs per history mutation, so a
+            // merged scrub must not dispose+recreate every binding per step. The full rebind only
+            // happens when an input changed: the selection array (same instance when membership
+            // and order are unchanged), the tool, panning mode, or a forced resync (first run and
+            // undo/redo/restore, which write fields directly underneath any active bindings).
+            var selected = GraphicsList.SelectedItems;
+            if (!_syncStateForced && ReferenceEquals(selected, _lastSyncSelection) &&
+                Tool == _lastSyncTool && IsPanning == _lastSyncPanning)
+                return;
+            _syncStateForced = false;
+            _lastSyncSelection = selected;
+            _lastSyncTool = Tool;
+            _lastSyncPanning = IsPanning;
+
             var prev = _syncingState;
             _syncingState = true;
             try
@@ -1032,8 +1053,6 @@ namespace Clowd.Drawing
                     SubjectSkill = Skill.None;
                     return;
                 }
-
-                var selected = GraphicsList.SelectedItems;
 
                 // if we are not using the pointer, or if there are no objects selected, use tool skills
                 if (selected.Length == 0 || Tool != ToolType.Pointer)
@@ -1148,8 +1167,13 @@ namespace Clowd.Drawing
 
         private void UndoManagerStateChanged(object sender, StateChangedEventArgs e)
         {
+            // command state still requeries per mutation (cheap); persistence routes through the
+            // autosave throttle (final-design §B.6) — discrete actions (append/undo/redo) carry
+            // the serialized document in the args and raise StateUpdated immediately, merge
+            // rewrites (null State, the scrub path) only re-arm its 150ms trailing edge; and
+            // SyncObjectState early-outs unless its inputs actually changed.
             RequeryCommands();
-            StateUpdated?.Invoke(this, e);
+            _autosaveThrottle.OnHistoryChanged(_undoManager.LastChangeKind, e);
             SyncObjectState();
         }
 
@@ -1232,6 +1256,9 @@ namespace Clowd.Drawing
             {
                 _isToolMouseDown = false;
                 CurrentTool.Instance.OnMouseUp(this, s);
+                // drag over: one more validation re-bakes any interactively-capped shadow
+                // sprites at full resolution (final-design §A.3 "full-res at rest")
+                GraphicsList.RequestValidation();
             }
         }
 
@@ -1364,6 +1391,7 @@ namespace Clowd.Drawing
 
             Tool = ToolType.Pointer;
             _isToolMouseDown = false;
+            GraphicsList.RequestValidation(); // re-bake capped shadow sprites at rest (§A.3)
 
             this.ReleaseMouseCapture();
             this.Cursor = HelperFunctions.DefaultCursor;
@@ -1372,7 +1400,38 @@ namespace Clowd.Drawing
 
         internal void AddCommandToHistory(bool mergable)
         {
+            // the guard is enforced HERE, not just at the callers (final-design §B.4): the
+            // in-place restore resets selection/editing state, and side effects of that (e.g.
+            // GraphicImage.IsSelected=false → EndCrop → AddCommandToHistory) must be inert
+            // while an undo/redo/restore is applying — they would otherwise commit phantom
+            // steps mid-restore
+            if (_syncingState)
+                return;
             _undoManager.AddCommandStep(mergable);
+        }
+
+        /// <summary>
+        /// Fires any armed autosave trailing edge synchronously (final-design §B.6): if a merged
+        /// scrub's 150ms debounce is still pending, the live document is serialized once and
+        /// <see cref="StateUpdated"/> raised before this returns. Called by EditorWindow during
+        /// teardown (before it flushes its background graphics.json writer) and on
+        /// DetachedFromVisualTree, so the latest committed state always reaches disk.
+        /// </summary>
+        public void FlushPendingState() => _autosaveThrottle.Flush();
+
+        /// <summary>Raises <see cref="StateUpdated"/>; the autosave throttle is the only caller
+        /// (every payload funnels through the §B.6 policy).</summary>
+        internal void RaiseStateUpdated(StateChangedEventArgs e) => StateUpdated?.Invoke(this, e);
+
+        /// <summary>
+        /// Companion to <see cref="GraphicCollection.ConsumeDirty"/> (final-design §B.2): true if
+        /// ArtworkBackground changed since the last consume. Read by the history engine at commit.
+        /// </summary>
+        internal bool ConsumeBackgroundDirty()
+        {
+            var dirty = _backgroundDirtySinceCommit;
+            _backgroundDirtySinceCommit = false;
+            return dirty;
         }
 
         // ====================================================================
@@ -1419,6 +1478,14 @@ namespace Clowd.Drawing
             base.OnLoaded(e);
             UpdateScaleTransform();
             UpdateClickableSurface();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnDetachedFromVisualTree(e);
+            // teardown flush (final-design §B.6): a debounced scrub tail must not die with the
+            // visual tree — serialize and raise StateUpdated now so the session writer gets it
+            FlushPendingState();
         }
 
         protected override void OnSizeChanged(SizeChangedEventArgs e)

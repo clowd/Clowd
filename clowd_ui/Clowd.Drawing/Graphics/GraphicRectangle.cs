@@ -1,11 +1,20 @@
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
+    /// <summary>
+    /// PORT NOTE (exemplar): this type is the reference port for the render-cache
+    /// infrastructure. A port touches exactly four pattern points — the aspect map entry
+    /// (DeclarePropertyEffects), the cached bounds (ComputeBounds replacing the Bounds
+    /// override), the _translating fast path (Move), and cached resources (RenderResources in
+    /// every draw/hit-test path) — and changes NOTHING else: fields, JSON names, handle
+    /// numbering, Normalize and the Move/MoveHandleTo raise pattern are contracts.
+    /// </summary>
     [GraphicDesc("Rectangle", Skills = Skill.Angle | Skill.Color | Skill.Stroke)]
     public class GraphicRectangle : GraphicBase
     {
@@ -71,25 +80,39 @@ namespace Clowd.Drawing.Graphics
             Normalize(); // set CenterOfRotation
         }
 
-        public override Rect Bounds
+        // PORT NOTE (ComputeBounds): the old Bounds override body moves here verbatim; the
+        // cached base Bounds getter now serves reads, so this runs only after an invalidating
+        // change (aspect map / bare raise), not on every read.
+        protected override Rect ComputeBounds()
         {
-            get
-            {
-                if (Angle == 0)
-                    return UnrotatedBounds;
+            if (Angle == 0)
+                return UnrotatedBounds;
 
-                // hot path: the artwork-bounds recompute reads Bounds of every graphic on every
-                // property change while dragging — no LINQ/array allocations
-                var p0 = ApplyRotation(new Point(Left, Top));
-                var p1 = ApplyRotation(new Point(Right, Top));
-                var p2 = ApplyRotation(new Point(Left, Bottom));
-                var p3 = ApplyRotation(new Point(Right, Bottom));
-                var l = Math.Min(Math.Min(p0.X, p1.X), Math.Min(p2.X, p3.X));
-                var t = Math.Min(Math.Min(p0.Y, p1.Y), Math.Min(p2.Y, p3.Y));
-                var r = Math.Max(Math.Max(p0.X, p1.X), Math.Max(p2.X, p3.X));
-                var b = Math.Max(Math.Max(p0.Y, p1.Y), Math.Max(p2.Y, p3.Y));
-                return new Rect(l, t, r - l, b - t);
-            }
+            // no LINQ/array allocations — rotate the 4 corners and take the AABB
+            var p0 = ApplyRotation(new Point(Left, Top));
+            var p1 = ApplyRotation(new Point(Right, Top));
+            var p2 = ApplyRotation(new Point(Left, Bottom));
+            var p3 = ApplyRotation(new Point(Right, Bottom));
+            var l = Math.Min(Math.Min(p0.X, p1.X), Math.Min(p2.X, p3.X));
+            var t = Math.Min(Math.Min(p0.Y, p1.Y), Math.Min(p2.Y, p3.Y));
+            var r = Math.Max(Math.Max(p0.X, p1.X), Math.Max(p2.X, p3.X));
+            var b = Math.Max(Math.Max(p0.Y, p1.Y), Math.Max(p2.Y, p3.Y));
+            return new Rect(l, t, r - l, b - t);
+        }
+
+        // PORT NOTE (aspect map entry): call base first, then one entry per persisted property
+        // this type declares. Geometry-defining properties invalidate Bounds|Geometry|Shadow;
+        // IsSelected/ObjectColor exceptions are declared once in GraphicBase.
+        internal override void DeclarePropertyEffects(Dictionary<string, InvalidationAspects> map)
+        {
+            base.DeclarePropertyEffects(map);
+            const InvalidationAspects shape = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
+            map[nameof(Left)] = shape;
+            map[nameof(Top)] = shape;
+            map[nameof(Right)] = shape;
+            map[nameof(Bottom)] = shape;
+            map[nameof(Angle)] = shape;
+            map[nameof(CenterOfRotation)] = shape;
         }
 
         public virtual Rect UnrotatedBounds => HelperFunctions.CreateRectSafeRounded(Left, Top, Right, Bottom);
@@ -170,16 +193,30 @@ namespace Clowd.Drawing.Graphics
             return -1;
         }
 
+        // PORT NOTE (_translating fast path): pure translation must not rebuild geometry or
+        // shadows per pointer event. Set _translating around the existing mutations (do NOT
+        // restructure the raise pattern — DrawingCanvas's BoundGraphicPropertyChanged whitelist
+        // listens to these property names), offset the cached bounds once, then the usual bare
+        // raise. Every raise made while _translating clears only the Geometry aspect.
         internal override void Move(double deltaX, double deltaY)
         {
-            Left += deltaX;
-            Right += deltaX;
-            Top += deltaY;
-            Bottom += deltaY;
-            CenterOfRotation = new Point(
-                CenterOfRotation.X + deltaX,
-                CenterOfRotation.Y + deltaY);
-            OnPropertyChanged();
+            _translating = true;
+            try
+            {
+                Left += deltaX;
+                Right += deltaX;
+                Top += deltaY;
+                Bottom += deltaY;
+                CenterOfRotation = new Point(
+                    CenterOfRotation.X + deltaX,
+                    CenterOfRotation.Y + deltaY);
+                RenderCache.TranslateCachedBounds(deltaX, deltaY);
+                OnPropertyChanged();
+            }
+            finally
+            {
+                _translating = false;
+            }
         }
 
         internal Point ApplyRotation(Point point)
@@ -335,17 +372,19 @@ namespace Clowd.Drawing.Graphics
             var scaledline = 1 * uiscale.DpiScaleX;
             radius -= scaledline;
 
-            var basePen2 = new Pen(Brushes.Green, scaledline);
+            var basePen2 = RenderResources.GetPen(Colors.Green, scaledline);
             drawingContext.DrawLine(basePen2, anchor, center);
             drawingContext.DrawEllipse(Brushes.Green, null, center, radius, radius);
         }
 
+        // PORT NOTE (RenderResources): draw and hit-test paths never allocate brushes/pens —
+        // ask the process-wide cache instead (thickness/dash arguments identical to the old
+        // `new Pen(new SolidColorBrush(...))` calls).
         internal virtual void DrawRectangle(DrawingContext drawingContext)
         {
-            var brush = new SolidColorBrush(ObjectColor);
             drawingContext.DrawRectangle(
                 null,
-                new Pen(brush, LineWidth),
+                RenderResources.GetPen(ObjectColor, LineWidth),
                 new Rect(UnrotatedBounds.Left + (LineWidth / 2),
                          UnrotatedBounds.Top + (LineWidth / 2),
                          Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left - LineWidth),

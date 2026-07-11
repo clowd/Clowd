@@ -1,6 +1,7 @@
 using System;
 using Avalonia;
 using Avalonia.Media;
+using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
@@ -15,6 +16,8 @@ namespace Clowd.Drawing.Graphics
             : base(Colors.Black, 0, rect, 0, false)
         { }
 
+        // PORT NOTE (RenderResources): marquee pens come from the process-wide cache; the
+        // half-pixel snap and DPI-only (not zoom) scaling are preserved bug-for-bug.
         internal override void Draw(DrawingContext drawingContext, DpiScale uiscale)
         {
             var lineWidth = 1 * uiscale.DpiScaleX;
@@ -32,16 +35,14 @@ namespace Clowd.Drawing.Graphics
                 );
             }
 
-            Pen dashedPen = new Pen(Brushes.Black, lineWidth, new DashStyle(new double[] { 4, 4 }, 0));
-
             drawingContext.DrawRectangle(
                 null,
-                new Pen(Brushes.White, lineWidth),
+                RenderResources.GetPen(Colors.White, lineWidth),
                 rect);
 
             drawingContext.DrawRectangle(
                 null,
-                dashedPen,
+                RenderResources.GetPen(Colors.Black, lineWidth, RenderResources.Dash4x4),
                 rect);
         }
     }
