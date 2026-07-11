@@ -298,10 +298,13 @@
                 VerticalAlignment="Top"
                 Fill="#666666" />
 
-            <WrapPanel
+            <!--  ItemWidth is required for DockToEnd to work in a vertical panel (see
+                  DockAndWrapPanel.canDock); ToolButton is a fixed 30x30.  -->
+            <controls:DockAndWrapPanel
                 x:Name="ToolBar"
                 Grid.Column="0"
                 Margin="0,4,0,0"
+                ItemWidth="30"
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 
@@ -322,11 +325,12 @@
                 <controls:ToolButton
                     x:Name="btnCustomize"
                     Padding="6"
+                    controls:DockAndWrapPanel.DockToEnd="True"
                     Click="customize_Click"
                     IconPath="{StaticResource IconCustomize}"
                     ToolTip.Tip="Customize toolbar…" />
 
-            </WrapPanel>
+            </controls:DockAndWrapPanel>
 
             <Border
                 Grid.Column="1"
