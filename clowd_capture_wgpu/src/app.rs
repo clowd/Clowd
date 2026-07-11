@@ -18,8 +18,8 @@ use crate::render::protocol::PeekCommand;
 use crate::render::window::{WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
-use crate::session_output::{write_color_action, write_session, SessionAction};
-use crate::settings::CapturerSettings;
+use crate::session_output::{write_color_action, write_session, write_video_action, SessionAction};
+use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::telemetry::startup::StartupTimings;
@@ -48,6 +48,15 @@ pub struct App {
     /// Used to composite the peeked window into the final copy/save image.
     peek_images: HashMap<usize, Arc<WindowPeekImage>>,
     pending_show: Option<PendingShow>,
+    /// When launched with `--capture-mode screen|window`, the mode to
+    /// pre-select once the overlay is up. Consumed (set to `None`) after the
+    /// one-time pre-selection fires. `None` for free-region mode.
+    pending_preselect: Option<CaptureMode>,
+    /// One-shot guard for `--video` mode: set the first time a selection
+    /// becomes captured so `Command::Video` is auto-dispatched exactly
+    /// once, regardless of which capture path (drag / keyboard / preselect)
+    /// fired (DESIGN §3.3).
+    video_dispatched: bool,
     startup: Arc<StartupTimings>,
     shown_time: Arc<OnceLock<Duration>>,
     pinch_monitor: Option<crate::system::PinchMonitor>,
@@ -105,6 +114,10 @@ impl App {
         let expected = worker_setups.len();
         let tips_mode = settings.tips_mode_at_startup;
         let cursor_overlay_visible = settings.cursor_visible_at_startup;
+        let pending_preselect = settings
+            .capture_mode
+            .is_preselect()
+            .then_some(settings.capture_mode);
 
         Self {
             settings,
@@ -122,6 +135,8 @@ impl App {
                 expected,
                 visible_latch,
             }),
+            pending_preselect,
+            video_dispatched: false,
             startup,
             shown_time,
             pinch_monitor: None,
@@ -292,15 +307,15 @@ impl App {
         }
     }
 
-    fn finalise_selection(&mut self, rect: ScreenRect, window_id: WindowId) {
-        self.finalise_selection_inner(rect, window_id, false);
+    fn finalise_selection(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId) {
+        self.finalise_selection_inner(rect, event_loop, window_id, false);
     }
 
-    fn finalise_selection_with_peek(&mut self, rect: ScreenRect, window_id: WindowId) {
-        self.finalise_selection_inner(rect, window_id, true);
+    fn finalise_selection_with_peek(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId) {
+        self.finalise_selection_inner(rect, event_loop, window_id, true);
     }
 
-    fn finalise_selection_inner(&mut self, rect: ScreenRect, window_id: WindowId, lock_peek: bool) {
+    fn finalise_selection_inner(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId, lock_peek: bool) {
         if lock_peek {
             self.locked_peek = self
                 .cached_peek_command
@@ -317,6 +332,74 @@ impl App {
 
         let effects = InteractionController::finalize_selection(&mut self.input, rect, &self.monitors);
         self.apply_interaction_effects(effects, Some(window_id));
+
+        // Keyboard / preselect captured-transition site (DESIGN §3.3).
+        self.on_captured(event_loop, window_id);
+    }
+
+    /// Auto-dispatch `Command::Video` the first time a selection becomes
+    /// captured, when the overlay was launched with `--video`. Called from
+    /// both captured-transition sites (mouse-release drag-select and the
+    /// keyboard/preselect `finalise_selection` path) so video mode works
+    /// for every entry path (DESIGN §3.3).
+    fn on_captured(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId) {
+        if self.settings.video_mode && !self.video_dispatched {
+            self.video_dispatched = true;
+            self.dispatch_command(Command::Video, event_loop, window_id);
+        }
+    }
+
+    /// Target rect for a `--capture-mode screen|window` pre-selection.
+    /// `Screen` is the monitor under the cursor; `Window` is the foreground
+    /// window, falling back to the active screen when no foreground window is
+    /// available. `Region` never pre-selects.
+    fn preselect_rect(&self, mode: CaptureMode) -> Option<ScreenRect> {
+        let active_screen = || {
+            let pt = to_screen_point(self.input.virtual_cursor);
+            self.monitors
+                .iter()
+                .find(|m| m.bounds.contains(pt))
+                .map(|m| m.bounds)
+        };
+        match mode {
+            CaptureMode::Region => None,
+            CaptureMode::Screen => active_screen(),
+            CaptureMode::Window => self
+                .walker
+                .as_ref()
+                .and_then(|w| w.foreground_capture_rect())
+                .or_else(active_screen),
+        }
+    }
+
+    /// Fire the one-time `--capture-mode screen|window` pre-selection once the
+    /// overlay is visible and (for window mode) the walker has resolved. Enters
+    /// the captured state with the target rect so the action panel is shown for
+    /// the user to confirm or adjust — the same state pressing `F` / `W` yields.
+    fn try_preselect(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(mode) = self.pending_preselect else {
+            return;
+        };
+        // Wait until the overlay is up (panel needs a shown window to render).
+        if self.pending_show.is_some() {
+            return;
+        }
+        // Window mode targets the foreground window, which comes from the walker.
+        if matches!(mode, CaptureMode::Window) && self.walker.is_none() {
+            return;
+        }
+        let Some(window_id) = self.windows.first().map(|h| h.window_id()) else {
+            return;
+        };
+
+        match self.preselect_rect(mode) {
+            Some(rect) => {
+                log::info!("--capture-mode {:?}: pre-selecting {:?}", mode, rect);
+                self.finalise_selection(rect, event_loop, window_id);
+            }
+            None => log::info!("--capture-mode {:?}: no target found; leaving free selection", mode),
+        }
+        self.pending_preselect = None;
     }
 
     fn handle_reset(&mut self, window_id: WindowId) {
@@ -485,7 +568,30 @@ impl App {
                 event_loop.exit();
             }
             Command::Video => {
-                log::info!("command {:?} not yet implemented", command);
+                // Mirrors Edit|Upload: writes the video action payload
+                // (poster + `action.txt`) for the shell to start recording.
+                // Without a --session-dir there is no shell listening —
+                // ignore. (DESIGN §3.2/§3.3.)
+                let Some(session_dir) = self.settings.session_dir.clone() else {
+                    log::info!("command Video ignored: no --session-dir provided");
+                    return;
+                };
+                self.hide_all_windows();
+                let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
+                    (Some(sel), Some(buf)) => write_video_action(&session_dir, sel, buf, cursor_visible, &self.monitors),
+                    _ => ActionResult::Failed("No selection or buffer".into()),
+                };
+                match result {
+                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Failed(msg) => {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Video Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                            self.show_all_windows();
+                        } else {
+                            event_loop.exit();
+                        }
+                    }
+                }
             }
         }
     }
@@ -598,7 +704,7 @@ impl ApplicationHandler for App {
         self.windows = windows;
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(ref m) = self.pinch_monitor {
             let delta = m.drain();
             if delta != 0.0 && !self.input.captured {
@@ -635,6 +741,10 @@ impl ApplicationHandler for App {
                 self.broadcast_ui_state();
             }
         }
+
+        // Pre-select the active screen / foreground window when launched with
+        // `--capture-mode screen|window` (no-op in free-region mode).
+        self.try_preselect(event_loop);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -725,7 +835,7 @@ impl ApplicationHandler for App {
                                     .as_ref()
                                     .and_then(|w| w.hit_test(pt))
                                 {
-                                    self.finalise_selection_with_peek(rect, id);
+                                    self.finalise_selection_with_peek(rect, event_loop, id);
                                 }
                             }
                             'f' => {
@@ -739,11 +849,11 @@ impl ApplicationHandler for App {
                                     .find(|m| m.bounds.contains(pt))
                                     .map(|m| m.bounds)
                                 {
-                                    self.finalise_selection(bounds, id);
+                                    self.finalise_selection(bounds, event_loop, id);
                                 }
                             }
                             'a' => {
-                                self.finalise_selection(self.vd_bounds, id);
+                                self.finalise_selection(self.vd_bounds, event_loop, id);
                             }
                             'h' => {
                                 // color-sampler row in the tips panel.
@@ -973,6 +1083,9 @@ impl ApplicationHandler for App {
                                     handle.set_cursor(ht.cursor());
                                 }
                             }
+                            // Mouse-release drag-select captured-transition
+                            // site (DESIGN §3.3).
+                            self.on_captured(event_loop, id);
                         }
                         self.broadcast_ui_state();
                         self.broadcast_mouse_state();

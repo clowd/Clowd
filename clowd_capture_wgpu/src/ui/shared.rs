@@ -153,12 +153,17 @@ pub fn area_indicator_visibility(state: &UiSharedState) -> Option<AreaIndicatorV
 }
 
 /// Decide whether the floating hint tooltips are visible and on which
-/// monitor. Follows the cursor — hidden when tips are toggled off.
+/// monitor. Follows the cursor — only shown in `Hints` mode.
 /// Exception: when zoomed in, the magnifier hint stays visible even
-/// with overlays off (the renderer decides which hints to show).
+/// with overlays off (the renderer decides which hints to show) so the
+/// user can always find their way out of the magnifier. Zoom does *not*
+/// override the mode gate: `Off`/`Tips` never show floating hints.
 pub fn hints_visibility(state: &UiSharedState) -> Option<UiMonitor> {
+    if !state.tips_mode.show_hints() {
+        return None;
+    }
     let zoomed = state.zoom > 1.0;
-    if !zoomed && (!state.overlays_visible || !state.tips_mode.show_hints()) {
+    if !zoomed && !state.overlays_visible {
         return None;
     }
     if state.captured || state.mouse_down {
@@ -273,6 +278,29 @@ mod tests {
         s.captured = false;
         s.selection = None;
         assert!(area_indicator_visibility(&s).is_none());
+    }
+
+    #[test]
+    fn hints_only_in_hints_mode_even_when_zoomed() {
+        let mut s = state();
+
+        // Hints mode: shown normally, and still shown when zoomed with
+        // overlays toggled off (the exit-magnifier hint must survive).
+        s.tips_mode = TipsMode::Hints;
+        assert!(hints_visibility(&s).is_some());
+        s.zoom = 2.0;
+        s.overlays_visible = false;
+        assert!(hints_visibility(&s).is_some());
+
+        // Off / Tips modes: zoom must NOT force the floating hints on.
+        for mode in [TipsMode::Off, TipsMode::Tips] {
+            s.tips_mode = mode;
+            s.zoom = 1.0;
+            s.overlays_visible = true;
+            assert!(hints_visibility(&s).is_none(), "{mode:?} at zoom 1 should hide hints");
+            s.zoom = 2.0;
+            assert!(hints_visibility(&s).is_none(), "{mode:?} when zoomed should still hide hints");
+        }
     }
 
     #[test]
