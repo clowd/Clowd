@@ -1,0 +1,52 @@
+name: Update credits
+
+# Regenerates the About page's open-source dependency list (tools/gen-credits.sh)
+# once a week and commits the result straight to master. Also runnable on demand
+# from the Actions tab (workflow_dispatch).
+on:
+  schedule:
+    # Mondays at 07:00 UTC. GitHub cron is always UTC.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+# Needed for the built-in GITHUB_TOKEN to push the commit back to the repo.
+permissions:
+  contents: write
+
+# Never let two regen runs race each other onto master.
+concurrency:
+  group: update-credits
+  cancel-in-progress: false
+
+jobs:
+  update-credits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Ensure jq is available
+        run: command -v jq >/dev/null || { sudo apt-get update && sudo apt-get install -y jq; }
+
+      - name: Regenerate credits.json
+        run: bash tools/gen-credits.sh
+
+      - name: Commit and push if changed
+        run: |
+          if git diff --quiet -- clowd_ui/Clowd.Ui/Assets/credits.json; then
+            echo "credits.json is already up to date — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add clowd_ui/Clowd.Ui/Assets/credits.json
+          git commit -m "Update open-source credits list"
+          git push

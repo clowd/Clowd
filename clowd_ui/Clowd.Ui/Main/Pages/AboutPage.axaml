@@ -3,6 +3,30 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     x:Class="Clowd.UI.Pages.AboutPage">
 
+    <UserControl.Styles>
+        <!-- Flat, full-width clickable row for a single open-source dependency. UserControl-level
+             styles override the Semi Button ControlTheme, so the row reads as a list entry with a
+             subtle hover fill rather than a filled button. -->
+        <Style Selector="Button.CreditRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.CreditRow /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Button.CreditRow:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+        </Style>
+        <Style Selector="Button.CreditRow:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+        </Style>
+    </UserControl.Styles>
+
     <ScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="8">
             <Viewbox Width="60" HorizontalAlignment="Left">
@@ -22,26 +46,46 @@
             <HyperlinkButton Padding="0" Content="Read more online" NavigateUri="https://github.com/clowd/Clowd" />
 
             <TextBlock Classes="Body"
-                       Text="Clowd is made possible in part by each of the following open source projects -" />
+                       Text="Clowd is made possible in part by each of the following open source projects. Click any entry to open its project page." />
 
-            <ItemsControl Margin="12,0,0,0" ItemsSource="{Binding Dependencies}">
+            <!-- One section per component (UI / capture engine); rows are generated from
+                 Assets/credits.json — regenerate with tools/gen-credits.sh. -->
+            <ItemsControl ItemsSource="{Binding Sections}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock VerticalAlignment="Center"
-                                       Classes="Body"
-                                       Text="{Binding LibraryName}" />
-                            <HyperlinkButton Margin="12,0,0,0"
-                                             Padding="0"
-                                             VerticalAlignment="Center"
-                                             Command="{Binding ClickLicenseCommand}"
-                                             Content="(see license)" />
+                        <StackPanel Margin="0,8,0,0">
+                            <TextBlock Classes="Base" Margin="0,0,0,2" Text="{Binding Title}" />
+                            <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Classes="CreditRow" Command="{Binding OpenCommand}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <StackPanel Grid.Column="0"
+                                                            Orientation="Horizontal"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Classes="Body" Text="{Binding Name}" />
+                                                    <TextBlock Classes="Body"
+                                                               Margin="8,0,0,0"
+                                                               Opacity="0.4"
+                                                               Text="{Binding Version}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1"
+                                                           Classes="Body"
+                                                           VerticalAlignment="Center"
+                                                           Opacity="0.55"
+                                                           Text="{Binding License}" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
             <TextBlock Classes="Body"
+                       Margin="0,8,0,0"
                        Text="Missed your project in this list? Feel free to reach out through our GitHub." />
         </StackPanel>
     </ScrollViewer>

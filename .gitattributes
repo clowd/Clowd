@@ -1,0 +1,7 @@
+# These files are consumed on Linux CI (the weekly credits-refresh job) and by
+# GitHub's workflow parser, so pin them to LF regardless of core.autocrlf. A
+# CRLF shebang would make the shell script fail on the runner, and CRLF in the
+# generated JSON would show up as a line-ending-only diff every week.
+tools/gen-credits.sh                     text eol=lf
+.github/workflows/update-credits.yml     text eol=lf
+clowd_ui/Clowd.Ui/Assets/credits.json    text eol=lf
