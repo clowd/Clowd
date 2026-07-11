@@ -1,6 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using Clowd.PlatformUtil;
 
 namespace Clowd
@@ -75,10 +80,38 @@ namespace Clowd.UI
 
         private T GetOrCreate<T>(Action closing = null) where T : IPage
         {
-            if (_singletons.ContainsKey(typeof(T)))
-                return (T)_singletons[typeof(T)];
+            // _singletons is not synchronized and window creation must happen on the UI
+            // thread anyway — fail fast instead of racing to a duplicate window.
+            Dispatcher.UIThread.VerifyAccess();
+
+            if (_singletons.TryGetValue(typeof(T), out var cached))
+                return (T)cached;
+
+            // self-heal: if a live window of this type exists but is no longer tracked
+            // (e.g. an exception in another Closed subscriber dropped our bookkeeping),
+            // adopt it rather than opening a second copy.
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                var open = desktop.Windows.OfType<T>().FirstOrDefault();
+                if (open != null)
+                {
+                    HandleClosing(open, closing);
+                    _singletons[typeof(T)] = open;
+                    return open;
+                }
+            }
 
             var inst = Activator.CreateInstance<T>();
+
+            // the constructor may have pumped the dispatcher and let a re-entrant call
+            // (e.g. a second queued tray click) register its own instance first — keep
+            // that one and discard ours before it is ever shown.
+            if (_singletons.TryGetValue(typeof(T), out var raced))
+            {
+                (inst as Window)?.Close();
+                return (T)raced;
+            }
+
             HandleClosing(inst, closing);
 
             _singletons[typeof(T)] = inst;
@@ -91,7 +124,9 @@ namespace Clowd.UI
             handler = new EventHandler((s, ev) =>
             {
                 instance.Closed -= handler;
-                if (_singletons.ContainsKey(typeof(T)))
+                // only evict our own registration — a stale handler must never drop a
+                // newer instance's entry (that would allow a duplicate to be created).
+                if (_singletons.TryGetValue(typeof(T), out var current) && ReferenceEquals(current, instance))
                     _singletons.Remove(typeof(T));
                 if (closing != null)
                     closing();

@@ -60,9 +60,11 @@ pub struct CapturerSettings {
     /// with the `M` key.
     pub cursor_visible_at_startup: bool,
     /// Directory to write the session payload into, supplied by the
-    /// shell via `--session-dir <path>`. When set, the EDIT action
-    /// writes desktop/cursor/preview PNGs plus `session.json` here and
-    /// exits (see CAPTURE_PROTOCOL.md). `None` = standalone mode.
+    /// shell via `--session-dir <path>`. When set, the EDIT/UPLOAD
+    /// actions write desktop/cursor/preview PNGs plus `session.json`
+    /// here (UPLOAD also an `action.txt` marker), SELECT-COLOR writes
+    /// only `action.txt`, and the capturer exits (see
+    /// CAPTURE_PROTOCOL.md). `None` = standalone mode.
     pub session_dir: Option<PathBuf>,
 }
 
@@ -85,9 +87,9 @@ impl Default for CapturerSettings {
 #[derive(Debug, Parser)]
 #[command(version, about = "Clowd screen capturer")]
 pub struct CliArgs {
-    /// Directory to write the session payload into. When set, the EDIT
-    /// action writes desktop/cursor/preview PNGs plus session.json here
-    /// and exits (see CAPTURE_PROTOCOL.md). Omit for standalone mode.
+    /// Directory to write the session payload into. When set, the
+    /// EDIT/UPLOAD/SELECT-COLOR actions write their payload here and
+    /// exit (see CAPTURE_PROTOCOL.md). Omit for standalone mode.
     #[arg(long, value_name = "PATH")]
     pub session_dir: Option<PathBuf>,
 

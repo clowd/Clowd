@@ -22,6 +22,9 @@ pub enum Command {
     Copy,
     /// Save the selection to a file.
     Save,
+    /// Report the pixel colour under the cursor to the shell (H in
+    /// crosshair mode, before a selection exists).
+    SelectColor,
     /// Reset the current selection (return to draw mode).
     Reset,
     /// Exit the capture tool.
