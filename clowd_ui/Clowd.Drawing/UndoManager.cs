@@ -426,6 +426,77 @@ namespace Clowd.Drawing
         }
 
         // ====================================================================
+        // history.json (persistent undo — MIGRATION.md §8.8)
+        // ====================================================================
+
+        /// <summary>Serializes the full undo chain (root→tail, cursor included) for history.json.
+        /// The autosave throttle attaches this to every StateUpdated raise that carries a
+        /// document, so graphics.json and history.json always move in lockstep.</summary>
+        internal JsonObject SerializeHistory() => HistorySerializer.Serialize(_node, _committed);
+
+        /// <summary>
+        /// Replaces the (freshly reset) history with a chain rehydrated from
+        /// <paramref name="history"/>, positioned at its saved cursor. The file is trusted only
+        /// after replaying baseline→cursor reproduces <paramref name="expectedDocument"/> exactly
+        /// (an empty <see cref="GetChangedNodes"/> diff — graphics.json is the authority); any
+        /// parse, shape or replay failure returns false and leaves the current empty history
+        /// untouched. Never raises StateChanged (contract #23 extends to history loading).
+        ///
+        /// The committed shadow is NOT rebuilt here: it already mirrors the live document seeded
+        /// by ClearHistory, which is the engine invariant that matters. The loaded records can
+        /// differ from it by Normalize ulps; the first apply absorbs that exactly like an
+        /// in-session apply would. The load boundary is non-mergable (<c>_canMergeNext</c> stays
+        /// false), so the first post-load commit always appends — a fresh merge chain.
+        /// </summary>
+        internal bool TryRehydrateHistory(JsonObject history, JsonObject expectedDocument)
+        {
+            if (history == null || expectedDocument == null)
+                return false;
+
+            try
+            {
+                var parsed = HistorySerializer.Deserialize(history, MaxSteps);
+                var replayed = HistorySerializer.ReplayToCursor(parsed);
+
+                // fast path: the raw cursor records equal graphics.json byte-for-byte (every
+                // close that followed a plain commit). Otherwise the document may have drifted
+                // off the records only through Normalize's non-idempotent derived fields (undo
+                // re-Normalizes; a text's CenterOfRotation is chronically one Normalize behind)
+                // — those are still the same document, so compare both sides after the SAME
+                // treatment: the normalize-materialized replay against the live document (which
+                // RestoreState just built by normalizing graphics.json). Anything that still
+                // differs is a real inconsistency (stale/tampered file, e.g. a crash between
+                // the graphics/history writes).
+                if (GetChangedNodes(HistorySerializer.SerializeReplayed(replayed, normalize: false), expectedDocument).Count != 0 &&
+                    GetChangedNodes(HistorySerializer.SerializeReplayed(replayed, normalize: true),
+                                    SerializeDocument(_drawingCanvas)).Count != 0)
+                {
+                    return false;
+                }
+
+                var node = new HistoryStep(); // fresh root: Changes == null, nothing merges into it
+                var cursor = node;
+                for (int i = 0; i < parsed.Steps.Count; i++)
+                {
+                    var step = parsed.Steps[i];
+                    step.Previous = node;
+                    node.Next = step;
+                    node = step;
+                    if (i + 1 == parsed.Cursor)
+                        cursor = step;
+                }
+
+                _node = cursor;
+                _canMergeNext = false;
+                return true;
+            }
+            catch
+            {
+                return false; // corrupt/truncated file → today's exact behavior: empty history
+            }
+        }
+
+        // ====================================================================
         // Commit internals
         // ====================================================================
 
@@ -490,6 +561,8 @@ namespace Clowd.Drawing
                 var after = built.Background.Value.After;
                 node.Background = before == after ? default((Color, Color)?) : (before, after);
             }
+
+            node.CachedJson = null; // the fold rewrote the step — re-serialize on the next emission
         }
 
         /// <summary>
@@ -523,6 +596,8 @@ namespace Clowd.Drawing
                 oldest.Background = null;
                 oldest.Changes = null; // it is the new root; nothing may merge into it from below
                 oldest.Previous = null;
+                oldest.CachedJson = null;
+                oldest.CachedBaselineJson = null; // the new root's baseline is a different state
                 root = oldest;
                 depth--;
             }
@@ -601,7 +676,13 @@ namespace Clowd.Drawing
                     g.Normalize();
                     RaiseBare(g);
                     // Normalize can drift by ulps — keep the shadow mirroring the live document
-                    _committed.ById[g.Id] = new FieldRecord(rec.Map, rec.Map.Capture(g), g);
+                    // (drift also stales the cached history baseline, whose fold starts there)
+                    var applied = Recapture(rec, g);
+                    if (!ReferenceEquals(applied.Values, rec.Values))
+                    {
+                        _committed.ById[g.Id] = applied;
+                        InvalidateBaselineCache();
+                    }
                 }
             }
 
@@ -645,6 +726,12 @@ namespace Clowd.Drawing
                     continue;
 
                 var applied = ApplyRecord(collection, delta, target);
+
+                // Normalize drifted off the step's record → the committed shadow moved without a
+                // compensating step record, so the cached baseline fold is stale (see
+                // InvalidateBaselineCache). ApplyRecord shares target.Values when there is none.
+                if (!ReferenceEquals(applied.Values, target.Values))
+                    InvalidateBaselineCache();
 
                 // keep the step record's instance ref current for the opposite direction (a
                 // reconstructed instance replaces a lost retained one) — its VALUES stay the
@@ -719,7 +806,7 @@ namespace Clowd.Drawing
                 live.OnFieldsRestored(changed);
                 live.Normalize();
                 RaiseBare(live); // feeds the frame validator / repaint
-                return new FieldRecord(target.Map, target.Map.Capture(live), live);
+                return Recapture(target, live);
             }
 
             if (present)
@@ -743,7 +830,7 @@ namespace Clowd.Drawing
             {
                 inst.OnFieldsRestored(drift);
                 inst.Normalize();
-                result = new FieldRecord(target.Map, target.Map.Capture(inst), inst);
+                result = Recapture(target, inst);
             }
             else
             {
@@ -785,7 +872,10 @@ namespace Clowd.Drawing
                     continue;
 
                 var delta = new GraphicDelta(targetOrder[i]) { Index = i };
-                _committed.ById[targetOrder[i]] = ApplyRecord(collection, delta, rec);
+                var applied = ApplyRecord(collection, delta, rec);
+                if (!ReferenceEquals(applied.Values, rec.Values))
+                    InvalidateBaselineCache(); // Normalize drift moved the shadow off the records
+                _committed.ById[targetOrder[i]] = applied;
             }
 
             ApplyOrder(collection, targetOrder);
@@ -811,6 +901,45 @@ namespace Clowd.Drawing
                 collection.RemoveAt(j);
                 collection.Insert(i, g);
             }
+        }
+
+        /// <summary>
+        /// Post-Normalize capture of <paramref name="live"/> for the committed shadow. When
+        /// Normalize was bitwise-idempotent (the common case) the returned record SHARES
+        /// <paramref name="target"/>.Values — callers detect real drift by Values identity and
+        /// invalidate the cached history baseline, whose fold sources from the shadow.
+        /// </summary>
+        private static FieldRecord Recapture(FieldRecord target, GraphicBase live)
+        {
+            var recaptured = target.Map.Capture(live);
+            if (RecordsMatch(target.Map, recaptured, target.Values))
+                return ReferenceEquals(target.Instance, live) ? target : new FieldRecord(target.Map, target.Values, live);
+            return new FieldRecord(target.Map, recaptured, live);
+        }
+
+        private static bool RecordsMatch(GraphicFieldMap map, object[] a, object[] b)
+        {
+            for (int i = 0; i < map.Slots.Length; i++)
+            {
+                if (!map.Slots[i].Codec.AreEqual(a[i], b[i]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Drops the root's cached baseline (HistorySerializer emission cache). Needed only when
+        /// the committed shadow moves WITHOUT a compensating step record — the Normalize-ulp
+        /// re-captures on the restore paths — because the baseline fold starts from the shadow.
+        /// Every other shadow move is paired with step data the fold cancels against.
+        /// </summary>
+        private void InvalidateBaselineCache()
+        {
+            var root = _node;
+            while (root.Previous != null)
+                root = root.Previous;
+            root.CachedBaselineJson = null;
         }
 
         /// <summary>Writes every differing slot of <paramref name="target"/> into

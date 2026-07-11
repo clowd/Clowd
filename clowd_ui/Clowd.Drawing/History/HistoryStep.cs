@@ -81,5 +81,22 @@ namespace Clowd.Drawing.History
         /// report, matching the oracle's membership-suppresses-(order) rule).
         /// </summary>
         public (string[] Before, string[] After)? Order;
+
+        /// <summary>
+        /// history.json emission cache (HistorySerializer): a step's serialized form, built once
+        /// and DeepCloned into every emission (JsonNodes are single-parent, so the cached tree
+        /// itself can never be attached to an outgoing document). Steps are immutable after
+        /// append except for a merge fold, which nulls this. The restore-path Instance swap
+        /// inside a FieldRecord does not invalidate it — instances are not serialized.
+        /// </summary>
+        public System.Text.Json.Nodes.JsonObject CachedJson;
+
+        /// <summary>
+        /// Only meaningful on the current ROOT node: the serialized baseline document (the state
+        /// at this root). The baseline can only change by the root node being replaced —
+        /// ClearHistory, rehydration, or the cap trim promoting a newer node — so caching it on
+        /// the root itself makes invalidation automatic.
+        /// </summary>
+        public System.Text.Json.Nodes.JsonObject CachedBaselineJson;
     }
 }

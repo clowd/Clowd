@@ -54,9 +54,11 @@ namespace Clowd.Drawing.History
             }
 
             // append / undo / redo: the payload in the args is the complete current document, so
-            // it supersedes any armed merge tail (latest-wins) and is delivered synchronously
+            // it supersedes any armed merge tail (latest-wins) and is delivered synchronously,
+            // with the matching undo-chain snapshot attached (history.json moves in lockstep).
+            // The history payload is only built when someone consumes the event.
             Cancel();
-            _canvas.RaiseStateUpdated(e);
+            _canvas.RaiseStateUpdated(new StateChangedEventArgs(e.State, _canvas.HasStateUpdatedSubscribers ? _canvas.SerializeHistory() : null));
         }
 
         /// <summary>
@@ -96,7 +98,8 @@ namespace Clowd.Drawing.History
             }
 
             Cancel();
-            _canvas.RaiseStateUpdated(new StateChangedEventArgs(UndoManager.SerializeDocument(_canvas)));
+            _canvas.RaiseStateUpdated(new StateChangedEventArgs(UndoManager.SerializeDocument(_canvas),
+                                                                _canvas.HasStateUpdatedSubscribers ? _canvas.SerializeHistory() : null));
 
             // trailing edge of a property-bar scrub: while _pending was armed the validator capped
             // shadow bakes at interactive resolution (IsInteractiveScrubActive) — one more pass

@@ -1419,9 +1419,36 @@ namespace Clowd.Drawing
         /// </summary>
         public void FlushPendingState() => _autosaveThrottle.Flush();
 
+        /// <summary>Serializes the undo chain for history.json (MIGRATION.md §8.8); the autosave
+        /// throttle attaches it to every <see cref="StateUpdated"/> raise that carries a
+        /// document, so graphics.json and history.json always land as a consistent pair.</summary>
+        internal JsonObject SerializeHistory() => _undoManager.SerializeHistory();
+
+        /// <summary>
+        /// Rehydrates undo/redo history persisted alongside a graphics.json document (session
+        /// reopen — MIGRATION.md §8.8). Call immediately after <see cref="RestoreState"/> with
+        /// the same state object: the history is accepted only if replaying its baseline to its
+        /// saved cursor reproduces <paramref name="expectedState"/> exactly (graphics.json
+        /// remains the authority; null compares against the live document), and is discarded
+        /// silently otherwise — identical to opening with no history file. The load boundary is
+        /// never mergable: the first commit after a successful rehydrate starts a fresh merge
+        /// chain. Raises no <see cref="StateUpdated"/> (contract #23 extends to history loading).
+        /// </summary>
+        public bool TryRestoreHistory(JsonObject history, JsonObject expectedState = null)
+        {
+            var ok = _undoManager.TryRehydrateHistory(history, expectedState ?? UndoManager.SerializeDocument(this));
+            if (ok)
+                RequeryCommands(); // Undo/Redo CanExecute now reflect the rehydrated chain
+            return ok;
+        }
+
         /// <summary>Raises <see cref="StateUpdated"/>; the autosave throttle is the only caller
         /// (every payload funnels through the §B.6 policy).</summary>
         internal void RaiseStateUpdated(StateChangedEventArgs e) => StateUpdated?.Invoke(this, e);
+
+        /// <summary>The throttle skips building the history payload (and its emission caches)
+        /// when nothing consumes the event — e.g. headless/benchmark canvases.</summary>
+        internal bool HasStateUpdatedSubscribers => StateUpdated != null;
 
         /// <summary>
         /// Companion to <see cref="GraphicCollection.ConsumeDirty"/> (final-design §B.2): true if
