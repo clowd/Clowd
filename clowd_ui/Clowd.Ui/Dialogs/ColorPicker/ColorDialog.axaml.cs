@@ -121,6 +121,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private bool _initialized;
 
+        // the optional-parameter ctor is not parameterless in metadata, so without this the
+        // XAML compiler emits AVLN3001 (resource unreachable via runtime loader)
+        public ColorDialog() : this(null)
+        { }
+
         public ColorDialog(HslRgbColor previousColor = null, bool asDialog = true)
         {
             IsDialogMode = asDialog;
@@ -146,7 +151,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (!asDialog)
             {
                 btnOK.IsVisible = false;
-                btnCancel.Content = "Close";
+                btnCancel.Content = "_Close";
                 Title = "Clowd - Color Viewer";
             }
             else

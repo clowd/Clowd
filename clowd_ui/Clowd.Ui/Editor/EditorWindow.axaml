@@ -246,6 +246,14 @@
                 Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 CanToggle="True"
+                IconPath="{StaticResource IconLayers}"
+                IsChecked="{Binding SidebarVisible, Mode=TwoWay}"
+                ToolTip.Tip="Layers panel" />
+
+            <controls:ToolButton
+                Padding="6"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                CanToggle="True"
                 IconPath="{StaticResource IconPinned}"
                 IsChecked="{Binding Topmost, Mode=TwoWay}"
                 ToolTip.Tip="Always on top" />
@@ -256,6 +264,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <Rectangle
@@ -273,84 +282,9 @@
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="None"
-                    IconPath="{StaticResource IconToolNone}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=None}"
-                    ToolTip.Tip="Pan Tool (D)&#10;Can also hold SHIFT or SPACE to enter Pan Mode." />
-
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="Pointer"
-                    IconPath="{StaticResource IconToolPointer}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pointer}"
-                    ToolTip.Tip="Selection Tool (S)" />
-
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="Rectangle"
-                    IconPath="{StaticResource IconToolRectangle}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Rectangle}"
-                    ToolTip.Tip="Rectangle (R)" />
-
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="FilledRectangle"
-                    IconPath="{StaticResource IconToolFilledRectangle}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=FilledRectangle}"
-                    ToolTip.Tip="Filled Rectangle (F)" />
-
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="Ellipse"
-                    IconPath="{StaticResource IconToolEllipse}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Ellipse}"
-                    ToolTip.Tip="Ellipse (E)" />
-
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="Line"
-                    IconPath="{StaticResource IconToolLine}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Line}"
-                    ToolTip.Tip="Line (L)" />
-
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="Arrow"
-                    IconPath="{StaticResource IconToolArrow}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Arrow}"
-                    ToolTip.Tip="Arrow (A)" />
-
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="PolyLine"
-                    IconPath="{StaticResource IconToolPolyLine}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=PolyLine}"
-                    ToolTip.Tip="Pencil (P)" />
-
-                <controls:ToolButton
-                    Padding="8"
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="Count"
-                    IconPath="{StaticResource IconToolNumericCount}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Count}"
-                    ToolTip.Tip="Numerical Step Count (N)" />
-
-                <controls:ToolButton
-                    Padding="8"
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="Text"
-                    IconPath="{StaticResource IconToolText}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Text}"
-                    ToolTip.Tip="Text (T)" />
-
-                <controls:ToolButton
-                    Command="{Binding SelectToolCommand}"
-                    CommandParameter="Pixelate"
-                    IconPath="{StaticResource IconToolPixelate}"
-                    IsChecked="{Binding ElementName=drawingCanvas, Path=Tool, Mode=OneWay, Converter={StaticResource convToolType}, ConverterParameter=Pixelate}"
-                    ToolTip.Tip="Obscure (O)" />
+                <!--  The vector/raster tool buttons are generated in code-behind (RebuildToolStrip)
+                      and inserted at the front of this panel; the fixed Undo/Redo/customize
+                      buttons below always sit at the end of the strip.  -->
 
                 <controls:ToolButton
                     Command="{Binding ElementName=drawingCanvas, Path=CommandUndo, Mode=OneWay}"
@@ -362,6 +296,13 @@
                     IconPath="{StaticResource IconRedo}"
                     ToolTip.Tip="Redo (Ctrl+Y)" />
 
+                <controls:ToolButton
+                    x:Name="btnCustomize"
+                    Padding="6"
+                    Click="customize_Click"
+                    IconPath="{StaticResource IconCustomize}"
+                    ToolTip.Tip="Customize toolbar…" />
+
             </WrapPanel>
 
             <Border
@@ -372,6 +313,37 @@
                     x:Name="drawingCanvas"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch" />
+            </Border>
+
+            <Border
+                x:Name="sidebarBorder"
+                Grid.Column="2"
+                Width="230"
+                Background="#454545"
+                BorderBrush="#666666"
+                BorderThickness="1,0,0,0"
+                IsVisible="False">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border
+                        Grid.Row="0"
+                        Padding="10,6"
+                        Background="#3d3d3d">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Text="LAYERS" />
+                    </Border>
+
+                    <controls:LayersPanel
+                        x:Name="layersPanel"
+                        Grid.Row="1" />
+                </Grid>
             </Border>
 
         </Grid>
@@ -386,6 +358,34 @@
                 x:Name="miniColor"
                 Margin="10"
                 Realtime="True" />
+        </Popup>
+
+        <Popup
+            x:Name="customizePopup"
+            HorizontalOffset="4"
+            IsLightDismissEnabled="True"
+            Placement="Right">
+            <Border
+                Width="240"
+                Background="#454545"
+                BorderBrush="#666666"
+                BorderThickness="1">
+                <StackPanel Margin="8">
+                    <TextBlock
+                        Margin="4,2,4,8"
+                        FontWeight="Bold"
+                        Foreground="White"
+                        Text="Customize toolbar" />
+                    <StackPanel x:Name="customizeRows" />
+                    <Button
+                        Margin="4,8,4,2"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Click="customizeReset_Click"
+                        Content="Reset to default"
+                        Theme="{StaticResource InnerToolButtonTheme}" />
+                </StackPanel>
+            </Border>
         </Popup>
 
     </Grid>

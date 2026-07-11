@@ -13,7 +13,8 @@ namespace Clowd.UI.Dialogs
     /// <summary>
     /// Replaces the WPF TaskDialog command-link prompt shown when an upload has no default
     /// provider for its content type: one button per enabled provider, plus an optional
-    /// "set as default" checkbox.
+    /// "set as default" checkbox. Also opened explicitly (editor upload button right-click)
+    /// to send a single upload somewhere other than the default.
     /// </summary>
     internal static class ProviderSelectionDialog
     {
@@ -46,9 +47,12 @@ namespace Clowd.UI.Dialogs
                 FontWeight = Avalonia.Media.FontWeight.Bold,
             });
 
+            var hasDefault = providers.Any(p => p.DefaultFor.HasFlag(type));
             panel.Children.Add(new TextBlock
             {
-                Text = $"You have not selected a default upload provider for '{type}', where would you like to send your file?",
+                Text = hasDefault
+                    ? "Where would you like to send your file? Your default is only changed if you tick the box below."
+                    : $"You have not selected a default upload provider for '{type}', where would you like to send your file?",
                 TextWrapping = Avalonia.Media.TextWrapping.Wrap,
                 Opacity = 0.8,
             });
@@ -67,7 +71,8 @@ namespace Clowd.UI.Dialogs
                 catch {; }
 
                 var text = new StackPanel { Margin = new Avalonia.Thickness(10, 0, 0, 0) };
-                text.Children.Add(new TextBlock { Text = p.Provider.Name, FontWeight = Avalonia.Media.FontWeight.Bold });
+                var name = p.DefaultFor.HasFlag(type) ? $"{p.Provider.Name} (default)" : p.Provider.Name;
+                text.Children.Add(new TextBlock { Text = name, FontWeight = Avalonia.Media.FontWeight.Bold });
                 text.Children.Add(new TextBlock { Text = p.Provider.Description, Opacity = 0.8, TextWrapping = Avalonia.Media.TextWrapping.Wrap });
 
                 var content = new StackPanel { Orientation = Orientation.Horizontal };
